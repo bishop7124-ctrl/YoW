@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   qa:
@@ -47,3 +54,4 @@ jobs:
             test-results/
             playwright-report/
           if-no-files-found: ignore
+          retention-days: 7

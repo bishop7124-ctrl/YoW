@@ -6,6 +6,7 @@ This project has two QA layers:
 - `npm run qa:smoke` runs browser smoke tests through Playwright in offline mode.
 
 GitHub Actions runs both layers automatically on pushes and pull requests to `main`.
+It also runs once per day and can be started manually from the GitHub Actions tab.
 When browser smoke fails in CI, Playwright artifacts are uploaded for inspection.
 
 Before the first browser run on a machine:
