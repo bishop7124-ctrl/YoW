@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
 import { loadUserData } from './utils/firestoreSync'
 import NovelManager from './components/NovelManager'
+import SeriesDashboard from './components/series/SeriesDashboard'
 import Layout from './components/Layout'
 import LoginPage from './components/auth/LoginPage'
 import AIPanel from './components/ai/AIPanel'
@@ -44,23 +45,31 @@ function parseRoute() {
   const path = window.location.pathname
   const params = new URLSearchParams(window.location.search)
   const accountTab = params.get('tab')
-  const m = path.match(/^\/project\/([^/]+)(?:\/(.+))?$/)
   const settings = params.get('settings')
   const overlay = {
     accountOpen: settings === 'account',
     accountTab: ACCOUNT_SETTINGS_TABS.has(accountTab) ? accountTab : 'profile',
     projectSettingsOpen: settings === 'project',
   }
-  if (!m) return { novelId: null, section: 'dashboard', layoutViewMode: 'planning', ...overlay, projectSettingsOpen: false }
+
+  const seriesMatch = path.match(/^\/series\/([^/]+)(?:\/([^/]+))?$/)
+  if (seriesMatch) {
+    return { novelId: null, seriesId: decodeURIComponent(seriesMatch[1]), section: 'dashboard', layoutViewMode: 'planning', ...overlay, projectSettingsOpen: false }
+  }
+
+  const m = path.match(/^\/project\/([^/]+)(?:\/(.+))?$/)
+  if (!m) return { novelId: null, seriesId: null, section: 'dashboard', layoutViewMode: 'planning', ...overlay, projectSettingsOpen: false }
   const novelId = decodeURIComponent(m[1])
   const sub = m[2]
-  if (sub === 'writing') return { novelId, section: 'dashboard', layoutViewMode: 'writing', ...overlay }
-  return { novelId, section: sub || 'dashboard', layoutViewMode: 'planning', ...overlay }
+  if (sub === 'writing') return { novelId, seriesId: null, section: 'dashboard', layoutViewMode: 'writing', ...overlay }
+  return { novelId, seriesId: null, section: sub || 'dashboard', layoutViewMode: 'planning', ...overlay }
 }
 
-function buildRoute(viewMode, novelId, section, layoutViewMode, overlays = {}) {
+function buildRoute(viewMode, novelId, seriesId, section, layoutViewMode, overlays = {}) {
   let path = '/'
-  if (viewMode === 'editor' && novelId) {
+  if (viewMode === 'series' && seriesId) {
+    path = `/series/${encodeURIComponent(seriesId)}`
+  } else if (viewMode === 'editor' && novelId) {
     if (layoutViewMode === 'writing') path = `/project/${encodeURIComponent(novelId)}/writing`
     else if (!section || section === 'dashboard') path = `/project/${encodeURIComponent(novelId)}`
     else path = `/project/${encodeURIComponent(novelId)}/${section}`
@@ -118,7 +127,13 @@ function AppInner() {
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
   const [section, setSection] = useState(() => initialRouteSnapshot.section)
-  const [viewMode, setViewMode] = useState(() => initialRouteSnapshot.novelId ? 'editor' : 'manager')
+  const [viewMode, setViewMode] = useState(() => {
+    if (initialRouteSnapshot.seriesId) return 'series'
+    if (initialRouteSnapshot.novelId) return 'editor'
+    return 'manager'
+  })
+  const [activeSeriesId, setActiveSeriesId] = useState(() => initialRouteSnapshot.seriesId || null)
+  const [seriesEntryNovelId, setSeriesEntryNovelId] = useState(null)
   const [layoutViewMode, setLayoutViewMode] = useState(() => initialRouteSnapshot.layoutViewMode)
   const [showPricing, setShowPricing] = useState(() => isPricingPath(window.location.pathname))
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
@@ -154,37 +169,40 @@ function AppInner() {
 
   useEffect(() => {
     if (!store.activeNovelId) {
-      setViewMode('manager')
+      if (viewMode === 'editor') {
+        setViewMode(activeSeriesId ? 'series' : 'manager')
+      }
       setLayoutViewMode('planning')
       setProjectSettingsOpen(false)
     }
-  }, [store.activeNovelId])
+  }, [store.activeNovelId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // If the URL pointed to a specific project on load, keep that view active;
     // it will be fully restored once data finishes loading below.
-    if (initialRoute.current.novelId) return
+    if (initialRoute.current.novelId || initialRoute.current.seriesId) return
     setViewMode('manager')
     setLayoutViewMode('planning')
   }, [userId])
 
-  // On mount: if URL points to a project, activate it
+  // On mount: if URL points to a project or series, activate it
   useEffect(() => {
-    const { novelId } = initialRoute.current
+    const { novelId, seriesId } = initialRoute.current
     if (novelId && novelId !== store.activeNovelId) store.setActiveNovelId(novelId)
+    if (seriesId) setActiveSeriesId(seriesId)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync browser URL with navigation state
   useEffect(() => {
     if (firstUrlSync.current) { firstUrlSync.current = false; return }
-    const url = buildRoute(viewMode, store.activeNovelId, section, layoutViewMode, {
+    const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, {
       accountOpen,
       accountTab,
       projectSettingsOpen,
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, section, layoutViewMode, accountOpen, accountTab, projectSettingsOpen])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, accountOpen, accountTab, projectSettingsOpen])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
@@ -204,8 +222,13 @@ function AppInner() {
       if (route.novelId) {
         store.setActiveNovelId(route.novelId)
         setViewMode('editor')
+      } else if (route.seriesId) {
+        store.setActiveNovelId(null)
+        setActiveSeriesId(route.seriesId)
+        setViewMode('series')
       } else {
         store.setActiveNovelId(null)
+        setActiveSeriesId(null)
         setViewMode('manager')
       }
     }
@@ -357,6 +380,7 @@ function AppInner() {
         storageUsedBytes={storageUsedBytes}
         activeTab={accountTab}
         onTabChange={setAccountTab}
+        store={store}
       />
       <HelpContact open={helpOpen} onClose={() => setHelpOpen(false)} />
       {readOnlyNotice && (
@@ -378,6 +402,29 @@ function AppInner() {
     setViewMode('editor')
     setLayoutViewMode('planning')
     setProjectSettingsOpen(false)
+    setSeriesEntryNovelId(null)
+  }
+
+  const handleOpenSeries = (id) => {
+    setActiveSeriesId(id)
+    setViewMode('series')
+    store.setActiveNovelId(null)
+  }
+
+  // Open a book from within a Series Dashboard — remembers which series to return to
+  const handleOpenBookFromSeries = (novelId) => {
+    setSeriesEntryNovelId(activeSeriesId)
+    store.setActiveNovelId(novelId)
+    setSection('dashboard')
+    setViewMode('editor')
+    setLayoutViewMode('planning')
+    setProjectSettingsOpen(false)
+  }
+
+  const handleBackToSeries = () => {
+    store.setActiveNovelId(null)
+    setViewMode('series')
+    setSeriesEntryNovelId(null)
   }
 
   const globalOverlays = (
@@ -389,28 +436,72 @@ function AppInner() {
     </>
   )
 
-  return (viewMode === 'editor' && store.activeNovel)
-    ? (
+  // Resolve which series context the current book was entered from (for breadcrumb)
+  const seriesContextId = seriesEntryNovelId ?? (store.activeNovel?.seriesId || null)
+  const seriesContext = seriesContextId ? store.series?.find(s => s.id === seriesContextId) ?? null : null
+
+  if (viewMode === 'editor' && store.activeNovel) {
+    return (
       <>
-        <Layout key={store.activeNovelId} store={store} userId={userId} section={section} setSection={setSection} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} viewMode={layoutViewMode} setViewMode={setLayoutViewMode} projectSettingsOpen={projectSettingsOpen} setProjectSettingsOpen={setProjectSettingsOpen} />
+        <Layout
+          key={store.activeNovelId}
+          store={store}
+          userId={userId}
+          section={section}
+          setSection={setSection}
+          onOpenAccount={() => setAccountOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
+          onOpenLegal={setLegalPage}
+          onOpenAbout={() => setAboutOpen(true)}
+          membership={membership}
+          viewMode={layoutViewMode}
+          setViewMode={setLayoutViewMode}
+          projectSettingsOpen={projectSettingsOpen}
+          setProjectSettingsOpen={setProjectSettingsOpen}
+          seriesContext={seriesContext}
+          onOpenSeries={seriesContext ? handleBackToSeries : null}
+          onGoHome={() => { store.setActiveNovelId(null); setViewMode('manager') }}
+        />
         {accountPage}
         {globalOverlays}
       </>
     )
-    : (
+  }
+
+  if (viewMode === 'series' && activeSeriesId) {
+    return (
       <>
-        <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} />
-        <AIPanel
+        <SeriesDashboard
           store={store}
-          open={libraryAiOpen}
-          onClose={() => setLibraryAiOpen(false)}
-          initialContext={{ characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '' }}
+          seriesId={activeSeriesId}
+          onOpenBook={handleOpenBookFromSeries}
+          onBack={() => { setActiveSeriesId(null); setViewMode('manager') }}
+          onOpenAccount={() => setAccountOpen(true)}
+          onOpenHelp={() => setHelpOpen(true)}
+          onOpenLegal={setLegalPage}
+          onOpenAbout={() => setAboutOpen(true)}
           membership={membership}
         />
         {accountPage}
         {globalOverlays}
       </>
     )
+  }
+
+  return (
+    <>
+      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} />
+      <AIPanel
+        store={store}
+        open={libraryAiOpen}
+        onClose={() => setLibraryAiOpen(false)}
+        initialContext={{ characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '' }}
+        membership={membership}
+      />
+      {accountPage}
+      {globalOverlays}
+    </>
+  )
 }
 
 export default function App() {

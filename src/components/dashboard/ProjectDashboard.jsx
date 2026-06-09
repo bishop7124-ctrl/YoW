@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { StudioBoard, StudioButton, StudioEmpty } from '../presentation/Studio'
-import { getEnabledSections } from '../../constants/projectTypes'
+import { getEnabledSections, getProjectTypeStage } from '../../constants/projectTypes'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
@@ -387,7 +387,7 @@ const NAV_ROOMS = [
   },
   {
     id: 'ideas',
-    label: 'Notes',
+    label: 'Ideas',
     primarySection: 'ideas',
     requires: ['ideas'],
     icon: (
@@ -396,7 +396,7 @@ const NAV_ROOMS = [
         <path d="M8.5 14.5a6 6 0 1 1 7 0c-.8.7-1.5 1.5-1.5 2.5h-4c0-1-.7-1.8-1.5-2.5z" />
       </svg>
     ),
-    getSummary: (stats) => `${stats.ideaEntries.length} notes`,
+    getSummary: (stats) => `${stats.ideaEntries.length} ideas`,
   },
 ]
 
@@ -421,8 +421,8 @@ const NavCard = ({ room, stats }) => (
   </button>
 )
 
-const LedgerRow = ({ label, value }) => (
-  <div className="overview-row">
+const LedgerRow = ({ label, value, longValue = false }) => (
+  <div className={`overview-row${longValue ? ' overview-row-long' : ''}`}>
     <span>{label}</span>
     <strong>{value}</strong>
   </div>
@@ -520,6 +520,14 @@ export default function ProjectDashboard({ store }) {
   const maxCharacterWords = Math.max(1, ...characterFocus.map(item => item.words))
   const maxStructureWords = Math.max(1, ...structureInsights.map(item => item.value))
   const maxLongestSceneWords = Math.max(1, ...(sceneInsights?.longest || []).map(item => item.words))
+  const projectWordTarget = Number(project.wordTarget || project.targetWords || stats.projectType.defaultWordTarget || 0)
+  const projectWordProgress = projectWordTarget
+    ? Math.min(100, Math.round((stats.manuscriptWords / projectWordTarget) * 100))
+    : null
+  const projectStage = getProjectTypeStage(project.type)
+  const isBetaType = projectStage.stage === 'beta'
+  const workspaceLabel = stats.projectType.workspaceLabel || 'Manuscript'
+  const analyticsLabel = stats.projectType.analyticsLabel || 'Writing Analytics'
 
   const updateDailyGoal = value => {
     const next = value.replace(/[^\d]/g, '')
@@ -535,6 +543,11 @@ export default function ProjectDashboard({ store }) {
             <p className="studio-kicker">{stats.projectType.label}</p>
             <h1>{project.title}</h1>
             <p>{project.description || 'No project description yet.'}</p>
+            {isBetaType && (
+              <p style={{ marginTop: 8, color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
+                {projectStage.label}: {projectStage.note}
+              </p>
+            )}
             <div className="overview-hero-actions">
               <button type="button" onClick={openProjectSettings}>Project settings</button>
             </div>
@@ -584,14 +597,20 @@ export default function ProjectDashboard({ store }) {
                 <div className="overview-list">
                   <LedgerRow label="Created" value={stats.createdLabel} />
                   <LedgerRow label="Project type" value={stats.projectType.label} />
+                  {stats.projectType.workflowSummary && (
+                    <LedgerRow label="Workflow" value={stats.projectType.workflowSummary} longValue />
+                  )}
                   <LedgerRow label="Status" value={project.status || 'Drafting'} />
+                  {projectWordTarget > 0 && (
+                    <LedgerRow label="Word target" value={`${formatNumber(projectWordTarget)} (${projectWordProgress}%)`} />
+                  )}
                 </div>
               </section>
 
               <section className="overview-section panel-soft">
                 <div className="overview-section-head">
                   <div>
-                    <p className="studio-kicker">Manuscript</p>
+                    <p className="studio-kicker">{workspaceLabel}</p>
                     <h2>Structure</h2>
                   </div>
                 </div>
@@ -614,15 +633,15 @@ export default function ProjectDashboard({ store }) {
                   <LedgerRow label="Locations" value={formatNumber(stats.locations.length)} />
                   <LedgerRow label="Lore entries" value={formatNumber(stats.loreEntries.length)} />
                   <LedgerRow label="History events" value={formatNumber(stats.worldHistory.length)} />
-                  <LedgerRow label="Notes" value={formatNumber(stats.ideaEntries.length)} />
+                  <LedgerRow label="Ideas" value={formatNumber(stats.ideaEntries.length)} />
                 </div>
               </section>
 
               <section className="overview-section overview-section-wide panel-soft">
                 <div className="overview-section-head">
                   <div>
-                    <p className="studio-kicker">Recent Draft</p>
-                    <h2>Scenes</h2>
+                    <p className="studio-kicker">Recent {workspaceLabel}</p>
+                    <h2>{stats.projectType.structure?.level3 || 'Scenes'}</h2>
                   </div>
                 </div>
                 <div className="overview-scene-list">
@@ -632,7 +651,7 @@ export default function ProjectDashboard({ store }) {
                       <small>{formatNumber((scene.content || '').trim().match(/\S+/g)?.length || 0)} words</small>
                     </div>
                   )) : (
-                    <StudioEmpty title="No manuscript scenes yet" />
+                    <StudioEmpty title={`No ${String(stats.projectType.structure?.level3 || 'scenes').toLowerCase()} yet`} />
                   )}
                 </div>
               </section>
@@ -642,7 +661,7 @@ export default function ProjectDashboard({ store }) {
           <section className="overview-section overview-insights panel-soft analytics-dashboard">
             <div className="overview-section-head">
               <div>
-                <p className="studio-kicker">Writing Analytics</p>
+                <p className="studio-kicker">{analyticsLabel}</p>
                 <h2>Progress</h2>
               </div>
               <label className="analytics-goal">
@@ -659,7 +678,7 @@ export default function ProjectDashboard({ store }) {
             <div className="analytics-grid">
               <div className="analytics-card analytics-card-wide">
                 <div className="analytics-card-head">
-                  <span>Word progression</span>
+                  <span>{workspaceLabel} progression</span>
                   <strong>{formatNumber(stats.manuscriptWords)}</strong>
                 </div>
                 <Sparkline points={analytics.progression} />
@@ -798,7 +817,7 @@ export default function ProjectDashboard({ store }) {
         )}
 
         {viewMode === 'overview' && !hasPlanning && (
-          <StudioEmpty title="Nothing here yet" body="Add the first characters, locations, scenes, or notes when you are ready." />
+          <StudioEmpty title="Nothing here yet" body={`Add the first characters, locations, ${String(stats.projectType.structure?.level3 || 'scenes').toLowerCase()}, or ideas when you are ready.`} />
         )}
       </div>
     </StudioBoard>

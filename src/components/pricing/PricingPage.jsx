@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { PLANS, FOUNDER_SLOTS_TOTAL } from '../../utils/membership'
 import { supabase } from '../../supabase'
-import YOWLogo from '../brand/YOWLogo'
+import MarketingNav from '../marketing/MarketingNav'
 
 // --------------------------------------------------------------------------
 // Structured data helpers (injected into <head> while the page is mounted)
@@ -54,7 +54,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'How many Founder slots are there?',
-    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they\'re gone, they\'re gone — the Founder tier will not be sold again. If you\'re considering it, don\'t wait.`,
+    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. If you're considering it, don't wait.`,
   },
   {
     q: 'What happens to my data if I downgrade to Free?',
@@ -429,75 +429,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   return (
     <div style={{ minHeight: '100vh', background: pageBg, color: 'var(--text-main)' }}>
-
-      {/* ── Nav strip ── */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: pageBg,
-        borderBottom: '1px solid var(--border)',
-        padding: '0 24px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        height: 56,
-      }}>
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-main)',
-          }}
-          aria-label="Back to Your Own World"
-        >
-          <span style={{ width: 26, height: 26, color: 'var(--accent)', flexShrink: 0 }}>
-            <YOWLogo />
-          </span>
-          <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: '-.01em' }}>
-            Your Own World
-          </span>
-        </button>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {!user && (
-            <>
-              <button
-                type="button"
-                onClick={onSignIn}
-                style={{
-                  background: 'none', border: '1px solid var(--border)',
-                  color: 'var(--text-muted)', borderRadius: 7,
-                  padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                }}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={onGetStarted}
-                style={{
-                  background: 'var(--accent)', border: 'none',
-                  color: 'var(--bg-main)', borderRadius: 7,
-                  padding: '6px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer',
-                }}
-              >
-                Get started free
-              </button>
-            </>
-          )}
-          {user && (
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              style={{
-                background: 'var(--accent)', border: 'none',
-                color: 'var(--bg-main)', borderRadius: 7,
-                padding: '6px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer',
-              }}
-            >
-              Go to my workspace
-            </button>
-          )}
-        </div>
-      </header>
+      <MarketingNav activePath="/pricing/" user={user} onLogin={onSignIn} onGetStarted={onGetStarted} />
 
       <main>
         {/* ── Hero ── */}

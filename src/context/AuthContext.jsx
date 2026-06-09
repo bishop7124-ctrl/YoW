@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { OFFLINE_MODE, OFFLINE_USER } from '../utils/offlineMock'
+import { deleteAllUserData } from '../utils/firestoreSync'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -100,10 +101,22 @@ export function AuthProvider({ children }) {
         return session?.access_token ?? null
       }
 
+  const deleteAccount = OFFLINE_MODE
+    ? async () => { setUser(null) }
+    : async () => {
+        const currentUser = user
+        if (!currentUser) throw new Error('No user is signed in.')
+        await deleteAllUserData(currentUser.id)
+        // Attempt server-side auth deletion via RPC (requires a delete_user Postgres function)
+        try { await supabase.rpc('delete_user') } catch { /* no-op if function not installed */ }
+        await supabase.auth.signOut()
+        setUser(null)
+      }
+
   const isAdmin = user?.app_metadata?.is_admin === true
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )

@@ -60,6 +60,20 @@ async function tryReadYowZip(file) {
   })
 }
 
+// Detect a YOW PDF with embedded project JSON and extract it for lossless re-import.
+// Returns parsed projectData or null if not a YOW export PDF.
+async function tryReadYowPdf(file) {
+  try {
+    const buffer = await file.arrayBuffer()
+    const raw = new TextDecoder('latin1').decode(buffer)
+    const begin = raw.indexOf('%%YOW-DATA-BEGIN%%')
+    const end = raw.indexOf('%%YOW-DATA-END%%')
+    if (begin === -1 || end === -1 || end <= begin) return null
+    const json = raw.slice(begin + '%%YOW-DATA-BEGIN%%'.length, end).trim()
+    return JSON.parse(json)
+  } catch { return null }
+}
+
 // Extract plain text from a YOW visual PDF (uncompressed content streams).
 // Decodes as latin-1 (lossless byte↔char), then extracts (text) Tj operators
 // from BT...ET blocks — the exact format YOW's hand-crafted PDF generator produces.
@@ -574,7 +588,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
   const [files, setFiles] = useState([])
   const [dragging, setDragging] = useState(false)
   const [fileError, setFileError] = useState('')
-  const [streamedText, setStreamedText] = useState('')
+  const [, setStreamedText] = useState('')
   const [parsed, setParsed] = useState(null)
   const [yowImport, setYowImport] = useState(null)   // native YOW export data (no AI needed)
   const [aiError, setAiError] = useState('')
@@ -623,6 +637,20 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
           return
         }
       }
+      // Check if a single PDF is a YOW export PDF (has embedded project JSON)
+      if (accepted.length === 1 && /\.pdf$/i.test(accepted[0].name)) {
+        const yow = await tryReadYowPdf(accepted[0])
+        if (yow) {
+          const initialSel = {}
+          YOW_SECTIONS.forEach(s => { if (yowSectionCount(yow, s.key) > 0) initialSel[s.key] = true })
+          setYowImport(yow)
+          setFiles([])
+          setSelections(initialSel)
+          setPhase('preview')
+          return
+        }
+      }
+
       // Regular AI flow — text/md/docx/zip-of-text
       const result = await processFiles(accepted)
       if (!result.length) { setFileError('No readable text files found.'); return }

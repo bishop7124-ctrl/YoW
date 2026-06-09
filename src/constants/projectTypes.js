@@ -5,8 +5,8 @@
 export const PROJECT_TYPES = {
   novel: {
     label: 'Novel',
-    icon: '📚',
     description: 'Full-length prose fiction with rich worldbuilding',
+    workflowSummary: 'Long-form prose drafting with deep worldbuilding support.',
     structure: { level1: 'Act', level2: 'Chapter', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'hook', label: 'Hook', color: '#38bdf8' },
@@ -19,16 +19,23 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'WRITING',
+    workspaceLabel: 'Manuscript',
+    analyticsLabel: 'Writing Analytics',
+    exportLabel: 'Project Encyclopaedia',
+    defaultWordTarget: 80000,
     defaultSections: [
       'outline','characters','familytree','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','aitools',
+    ],
+    starterOutline: [
+      { title: 'Act 1', children: [{ title: 'Chapter 1', scenes: ['Opening Scene'] }] },
     ],
     // map available but not default — enable via project settings
   },
   novella: {
     label: 'Novella',
-    icon: '📖',
     description: 'Medium-length prose fiction — lighter than a novel',
+    workflowSummary: 'Medium-form prose drafting with lighter default planning.',
     structure: { level1: 'Part', level2: 'Chapter', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'opening_turn', label: 'Opening turn', color: '#38bdf8' },
@@ -40,15 +47,22 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'WRITING',
+    workspaceLabel: 'Manuscript',
+    analyticsLabel: 'Writing Analytics',
+    exportLabel: 'Project Encyclopaedia',
+    defaultWordTarget: 30000,
     defaultSections: [
       'outline','characters','locations','lore','ideas','schedule','timeline','aitools',
+    ],
+    starterOutline: [
+      { title: 'Part 1', children: [{ title: 'Chapter 1', scenes: ['Opening Turn'] }] },
     ],
     // familytree, factions, map, worldhistory available but not default
   },
   short_story: {
     label: 'Short Story',
-    icon: '📄',
     description: 'Brief prose fiction — focused and stripped-down',
+    workflowSummary: 'Short-form drafting with compact planning and a 5,000-word target.',
     structure: { level1: 'Part', level2: 'Section', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'opening_image', label: 'Opening image', color: '#38bdf8' },
@@ -60,15 +74,22 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'WRITING',
+    workspaceLabel: 'Story Draft',
+    analyticsLabel: 'Short Form Analytics',
+    exportLabel: 'Story Project Export',
+    defaultWordTarget: 5000,
     defaultSections: [
       'outline','characters','locations','lore','ideas','schedule','timeline','aitools',
+    ],
+    starterOutline: [
+      { title: 'Story Draft', children: [{ title: 'Main Section', scenes: ['Opening Image'] }] },
     ],
     // heavy sections (factions, map, worldhistory) available but not default
   },
   play: {
     label: 'Play',
-    icon: '🎭',
     description: 'Stage play or theatrical script',
+    workflowSummary: 'Stage-script beta with acts, scenes, beats, and dialogue-first drafting.',
     structure: { level1: 'Act', level2: 'Scene', level3: 'Beat' },
     storyEventIndicators: [
       { id: 'opening_tableau', label: 'Opening tableau', color: '#38bdf8' },
@@ -81,15 +102,21 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'SCRIPT',
+    workspaceLabel: 'Script',
+    analyticsLabel: 'Script Draft Analytics',
+    exportLabel: 'Play Project Export',
     defaultSections: [
       'outline','characters','familytree','locations','lore','ideas','schedule','aitools',
+    ],
+    starterOutline: [
+      { title: 'Act I', children: [{ title: 'Scene 1', scenes: ['Opening Beat'] }] },
     ],
     // map, timeline, factions not default — locations kept for stage settings
   },
   screenplay: {
     label: 'Screenplay',
-    icon: '🎬',
     description: 'Feature film or short film script',
+    workflowSummary: 'Screenplay beta with acts, sequences, scenes, and script element controls.',
     structure: { level1: 'Act', level2: 'Sequence', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'opening_image', label: 'Opening image', color: '#38bdf8' },
@@ -102,16 +129,22 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'SCRIPT',
+    workspaceLabel: 'Script',
+    analyticsLabel: 'Script Draft Analytics',
+    exportLabel: 'Screenplay Project Export',
     defaultSections: [
       'outline','characters','familytree','factions',
       'locations','lore','ideas','schedule','timeline','aitools',
+    ],
+    starterOutline: [
+      { title: 'Act I', children: [{ title: 'Opening Sequence', scenes: ['Opening Image'] }] },
     ],
     // relationships enabled by default for character-heavy scripts
   },
   tv_show: {
     label: 'TV Series',
-    icon: '📺',
     description: 'Multi-episode television series',
+    workflowSummary: 'Episode beta with season, pilot, episode, and act-level structure.',
     structure: { level1: 'Season', level2: 'Episode', level3: 'Act' },
     storyEventIndicators: [
       { id: 'pilot_hook', label: 'Pilot hook', color: '#38bdf8' },
@@ -124,17 +157,24 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'EPISODES',
+    workspaceLabel: 'Episodes',
+    analyticsLabel: 'Episode Draft Analytics',
+    exportLabel: 'TV Series Project Export',
     defaultSections: [
       'outline','characters','familytree','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','aitools',
+    ],
+    starterOutline: [
+      { title: 'Season 1', children: [{ title: 'Pilot', scenes: ['Act One'] }] },
     ],
     // map available but not default
   },
   dnd_campaign: {
     label: 'D&D Campaign',
-    icon: '⚔️',
-    description: 'Dungeons & Dragons fantasy tabletop adventure',
+    description: 'D&D-flavoured fantasy campaign bible with arcs, sessions, encounters, maps, factions, and lore',
+    workflowSummary: 'D&D fantasy campaign bible for sessions, encounters, maps, factions, and lore.',
     hint: 'Designed for D&D — classes, gods, dungeons, monsters, and high-fantasy lore.',
+    launchPositioning: 'D&D-flavoured campaign bible with fantasy-first language, NPCs, factions, maps, sessions, and encounters.',
     structure: { level1: 'Story Arc', level2: 'Session', level3: 'Encounter' },
     storyEventIndicators: [
       { id: 'quest_hook', label: 'Quest hook', color: '#38bdf8' },
@@ -147,16 +187,23 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'WORLDBUILDING',
     writingTab: 'SESSIONS',
+    workspaceLabel: 'Sessions',
+    analyticsLabel: 'Campaign Draft Analytics',
+    exportLabel: 'Campaign Bible Export',
     defaultSections: [
       'outline','characters','familytree','factions',
-      'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools',
+      'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
+    ],
+    starterOutline: [
+      { title: 'Opening Arc', children: [{ title: 'Session 1', scenes: ['Opening Encounter'] }] },
     ],
   },
   tabletop_rpg: {
     label: 'TTRPG Campaign',
-    icon: '🎲',
-    description: 'System-agnostic tabletop roleplaying campaign',
+    description: 'System-neutral tabletop campaign bible for any ruleset, from PF2e to CoC, Blades, homebrew, and more',
+    workflowSummary: 'System-neutral campaign bible for rules-light, horror, fantasy, sci-fi, and homebrew tables.',
     hint: 'System-neutral — works for any ruleset: PF2e, Call of Cthulhu, Blades in the Dark, homebrew, and more.',
+    launchPositioning: 'System-neutral campaign bible for any tabletop ruleset, keeping the workflow generic across sessions and encounters.',
     structure: { level1: 'Story Arc', level2: 'Session', level3: 'Encounter' },
     storyEventIndicators: [
       { id: 'adventure_hook', label: 'Adventure hook', color: '#38bdf8' },
@@ -169,15 +216,21 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'WORLDBUILDING',
     writingTab: 'SESSIONS',
+    workspaceLabel: 'Sessions',
+    analyticsLabel: 'Campaign Draft Analytics',
+    exportLabel: 'Campaign Bible Export',
     defaultSections: [
       'outline','characters','familytree','factions',
-      'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools',
+      'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
+    ],
+    starterOutline: [
+      { title: 'Opening Arc', children: [{ title: 'Session 1', scenes: ['Opening Encounter'] }] },
     ],
   },
   comic: {
     label: 'Comic / Graphic Novel',
-    icon: '💬',
     description: 'Sequential art narrative',
+    workflowSummary: 'Sequential-art beta with volume, issue, and page-level structure.',
     structure: { level1: 'Volume', level2: 'Issue', level3: 'Page' },
     storyEventIndicators: [
       { id: 'splash', label: 'Splash moment', color: '#38bdf8' },
@@ -189,16 +242,22 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING',
     writingTab: 'PAGES',
+    workspaceLabel: 'Pages',
+    analyticsLabel: 'Page Draft Analytics',
+    exportLabel: 'Comic Project Export',
     defaultSections: [
       'outline','characters','familytree','locations',
       'lore','ideas','schedule','timeline','map','aitools',
+    ],
+    starterOutline: [
+      { title: 'Volume 1', children: [{ title: 'Issue 1', scenes: ['Page 1'] }] },
     ],
     // worldhistory available but not default for comics
   },
   video_game: {
     label: 'Video Game',
-    icon: '🎮',
     description: 'Interactive narrative or game world',
+    workflowSummary: 'Game narrative beta for worlds, factions, missions, and story progression.',
     // TODO: future structure options — quests, missions, dialogue trees, branching paths
     structure: { level1: 'Act', level2: 'Chapter', level3: 'Scene' },
     storyEventIndicators: [
@@ -212,9 +271,15 @@ export const PROJECT_TYPES = {
     ],
     planningTab: 'WORLDBUILDING',
     writingTab: 'LEVELS',
+    workspaceLabel: 'Narrative',
+    analyticsLabel: 'Narrative Draft Analytics',
+    exportLabel: 'Game Narrative Bible Export',
     defaultSections: [
       'outline','characters','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools',
+    ],
+    starterOutline: [
+      { title: 'Act 1', children: [{ title: 'Opening Mission', scenes: ['Tutorial Hook'] }] },
     ],
     // familytree intentionally not default for party/faction relationships
     // TODO: quests, missions, dialogue trees, branching paths, choice consequences
@@ -228,10 +293,65 @@ export const getStoryEventIndicators = (type) =>
 
 export const DEFAULT_TYPE = 'novel'
 
+export const PROJECT_TYPE_STAGE = {
+  novel: {
+    stage: 'live',
+    label: 'Live',
+    note: 'Launch-ready long-form prose workflow.',
+  },
+  novella: {
+    stage: 'live',
+    label: 'Live',
+    note: 'Launch-ready medium-form prose workflow.',
+  },
+  short_story: {
+    stage: 'live',
+    label: 'Live',
+    note: 'Launch-ready short-form prose workflow.',
+  },
+  dnd_campaign: {
+    stage: 'live',
+    label: 'Live',
+    note: 'Launch-ready campaign bible workflow.',
+  },
+  tabletop_rpg: {
+    stage: 'live',
+    label: 'Live',
+    note: 'Launch-ready system-neutral campaign bible workflow.',
+  },
+  play: {
+    stage: 'beta',
+    label: 'Beta',
+    note: 'Limited workflow: stage-play structure, script controls, and readable beta DOCX export are available; full theatre production formatting is still in progress.',
+  },
+  screenplay: {
+    stage: 'beta',
+    label: 'Beta',
+    note: 'Limited workflow: screenplay structure, script controls, and readable beta DOCX export are available; industry-perfect formatting and FDX/PDF script export are still in progress.',
+  },
+  tv_show: {
+    stage: 'beta',
+    label: 'Beta',
+    note: 'Limited workflow: season and episode structure plus script controls are available; dedicated episode tracking and series-bible fields are still in progress.',
+  },
+  comic: {
+    stage: 'beta',
+    label: 'Beta',
+    note: 'Limited workflow: page-level structure is available; panel planning and art-direction fields are still in progress.',
+  },
+  video_game: {
+    stage: 'beta',
+    label: 'Beta',
+    note: 'Limited workflow: narrative-bible structure is available; quests, dialogue trees, and branching paths are still in progress.',
+  },
+}
+
+export const getProjectTypeStage = (type) => PROJECT_TYPE_STAGE[type] ?? PROJECT_TYPE_STAGE.novel
+
 // All section IDs that exist in the app — used to validate enabledSections overrides.
 export const ALL_SECTION_IDS = [
   'outline','characters','familytree','factions',
-  'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools',
+  'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
 ]
 
 // Returns the active section list for a project, supporting per-project overrides.

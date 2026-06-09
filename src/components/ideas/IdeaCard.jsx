@@ -1,12 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 
-const STATUS_DOT = {
-  raw:        'var(--accent)',
-  developing: '#7aa8d8',
-  inStory:    '#7ac4a0',
-  archived:   'var(--muted)',
-}
-
 function truncate(str, len) {
   if (!str) return ''
   return str.length > len ? str.slice(0, len) + '…' : str

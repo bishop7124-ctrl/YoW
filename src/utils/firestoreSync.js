@@ -98,3 +98,12 @@ export async function deleteProjectData(userId, projectId) {
   if (OFFLINE_MODE) return
   await supabase.from('project_data').delete().eq('user_id', userId).eq('project_id', projectId)
 }
+
+export async function deleteAllUserData(userId) {
+  if (OFFLINE_MODE) return
+  await Promise.all([
+    supabase.from('user_data').delete().eq('user_id', userId),
+    supabase.from('project_data').delete().eq('user_id', userId),
+    supabase.from('scenes').delete().eq('user_id', userId),
+  ])
+}

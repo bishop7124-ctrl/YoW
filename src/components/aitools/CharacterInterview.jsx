@@ -55,7 +55,6 @@ export default function CharacterInterview({ store, userId }) {
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
-  const abortRef   = useRef(null)
 
   // Load past interview sessions on mount
   useEffect(() => {

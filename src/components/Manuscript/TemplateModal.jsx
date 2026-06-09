@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { MANUSCRIPT_TEMPLATES } from './manuscriptTemplates'
+import { getTemplatesForProjectType } from './manuscriptTemplates'
 
 // ─── Genre badge colours ───────────────────────────────────────────────────────
 
@@ -137,16 +137,18 @@ export default function TemplateModal({
   onClose,
   onApply,
   hasExistingContent,
+  projectType = 'novel',
 }) {
-  const [selectedId, setSelectedId] = useState(MANUSCRIPT_TEMPLATES[0].id)
+  const templates = useMemo(() => getTemplatesForProjectType(projectType), [projectType])
+  const [selectedId, setSelectedId] = useState(() => templates[0]?.id)
   const [withChapters, setWithChapters] = useState(true)
   const [withScenes, setWithScenes] = useState(true)
   const [applying, setApplying] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const selected = useMemo(
-    () => MANUSCRIPT_TEMPLATES.find(t => t.id === selectedId),
-    [selectedId]
+    () => templates.find(t => t.id === selectedId),
+    [templates, selectedId]
   )
 
   const handleApplyClick = () => {
@@ -193,7 +195,7 @@ export default function TemplateModal({
           {/* Template grid */}
           <div className="ms-tpl-grid-col">
             <div className="ms-tpl-grid">
-              {MANUSCRIPT_TEMPLATES.map(t => (
+              {templates.map(t => (
                 <TemplateCard
                   key={t.id}
                   template={t}

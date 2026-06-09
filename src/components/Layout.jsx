@@ -11,12 +11,13 @@ import Timeline from './timeline/Timeline'
 import WorldHistory from './worldhistory/WorldHistory'
 import MapBuilder from './Map/MapBuilder'
 import Locations from './Locations/Locations'
+import CharacterBuilder from './characterbuilder/CharacterBuilder'
 import Manuscript from './Manuscript/Manuscript'
 import StoryOutline from './outline/StoryOutline'
 import ProjectDashboard from './dashboard/ProjectDashboard'
 import ScheduleCalendar from './schedule/ScheduleCalendar'
 import AITools from './aitools/AITools'
-import { getProjectType, getEnabledSections, ALL_SECTION_IDS } from '../constants/projectTypes'
+import { getProjectType, getEnabledSections, getProjectTypeStage, ALL_SECTION_IDS } from '../constants/projectTypes'
 import { StudioFrame, StudioWorkspace, StudioTab, StudioButton, StudioEmpty } from './presentation/Studio'
 import {
   EXPORT_PDF_THEME_OPTIONS,
@@ -53,6 +54,7 @@ function Icon({ name, size = 16 }) {
     note: <><path d="M5 4h14v16H5z" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></>,
     schedule: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M12 18h.01" /></>,
     aitools:  <><circle cx={12} cy={12} r={9} /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></>,
+    characterbuilder: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
   }
   return <svg {...common}>{paths[name] || paths.note}</svg>
 }
@@ -115,24 +117,27 @@ const ALL_SECTIONS = [
   { id: 'timeline',     label: 'Timeline',     icon: 'timeline' },
   { id: 'worldhistory', label: 'History',      icon: 'worldhistory' },
   { id: 'map',          label: 'Map',          icon: 'map' },
-  { id: 'aitools',     label: 'AI Tools',     icon: 'aitools' },
+  { id: 'aitools',          label: 'AI Tools',         icon: 'aitools' },
+  { id: 'characterbuilder', label: 'Character Builder', icon: 'characterbuilder' },
 ]
 
 const STUDIO_ROOMS = [
-  { id: 'overview',    label: 'Overview',    icon: 'overview',    sections: ['dashboard'] },
-  { id: 'planning',    label: 'Planning',    icon: 'planning',    sections: ['outline', 'ideas', 'schedule'] },
-  { id: 'characters',  label: 'Characters',  icon: 'characters',  sections: ['characters', 'familytree', 'factions'] },
-  { id: 'atlas',       label: 'Atlas',       icon: 'atlas',       sections: ['locations', 'map'] },
-  { id: 'lore',        label: 'Lore',        icon: 'lore',        sections: ['lore', 'timeline', 'worldhistory'] },
-  { id: 'aitools',     label: 'AI Tools',    icon: 'aitools',     sections: ['aitools'] },
+  { id: 'overview',          label: 'Overview',          icon: 'overview',          sections: ['dashboard'] },
+  { id: 'planning',          label: 'Planning',          icon: 'planning',          sections: ['outline', 'ideas', 'schedule'] },
+  { id: 'characters',        label: 'Characters',        icon: 'characters',        sections: ['characters', 'familytree', 'factions'] },
+  { id: 'atlas',             label: 'Atlas',             icon: 'atlas',             sections: ['locations', 'map'] },
+  { id: 'lore',              label: 'Lore',              icon: 'lore',              sections: ['lore', 'timeline', 'worldhistory'] },
+  { id: 'party',             label: 'Party',             icon: 'characterbuilder',  sections: ['characterbuilder'], ttrpgOnly: true },
+  { id: 'aitools',           label: 'AI Tools',          icon: 'aitools',           sections: ['aitools'] },
 ]
 
 const SETTINGS_GROUPS = [
-  { label: 'Planning',   sections: ['outline', 'ideas', 'schedule'] },
-  { label: 'Characters', sections: ['characters', 'familytree', 'factions'] },
-  { label: 'Atlas',      sections: ['locations', 'map'] },
-  { label: 'Lore',       sections: ['lore', 'timeline', 'worldhistory'] },
-  { label: 'AI',         sections: ['aitools'] },
+  { label: 'Planning',          sections: ['outline', 'ideas', 'schedule'] },
+  { label: 'Characters',        sections: ['characters', 'familytree', 'factions'] },
+  { label: 'Atlas',             sections: ['locations', 'map'] },
+  { label: 'Lore',              sections: ['lore', 'timeline', 'worldhistory'] },
+  { label: 'Tabletop RPG',      sections: ['characterbuilder'] },
+  { label: 'AI',                sections: ['aitools'] },
 ]
 
 const BACKUP_DEFAULTS = {
@@ -194,6 +199,8 @@ const shouldCreateAutoBackup = (config, lastBackupAt) => {
 
 function ProjectSettings({ store, onClose }) {
   const novel = store.activeNovel
+  const settingsProjectType = getProjectType(novel?.type)
+  const settingsProjectStage = getProjectTypeStage(novel?.type)
   const initial = (novel?.enabledSections ?? ALL_SECTION_IDS).filter(id => ALL_SECTION_IDS.includes(id))
   const [enabled, setEnabled] = useState(() => new Set(initial))
   const dialogRef = useRef(null)
@@ -462,12 +469,14 @@ function ProjectSettings({ store, onClose }) {
               <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Project type</span>
                 <input
-                  value="Novel"
+                  value={settingsProjectStage.stage === 'beta' ? `${settingsProjectType.label} · ${settingsProjectStage.label}` : settingsProjectType.label}
                   readOnly
                   className="field"
                   style={{ padding: '8px 10px', fontSize: 13 }}
                 />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Other project types are coming soon!</span>
+                <span style={{ fontSize: 11, color: settingsProjectStage.stage === 'beta' ? 'var(--accent)' : 'var(--text-muted)' }}>
+                  {settingsProjectStage.note}
+                </span>
               </label>
 
               {store.series.length > 0 && (
@@ -745,8 +754,15 @@ export default function Layout({
   setViewMode,
   projectSettingsOpen,
   setProjectSettingsOpen,
+  seriesContext,
+  onOpenSeries,
+  onGoHome,
 }) {
   const projectTypeCfg = getProjectType(store.activeNovel?.type)
+  const projectTypeStage = getProjectTypeStage(store.activeNovel?.type)
+  const projectTypeLabel = projectTypeStage.stage === 'beta'
+    ? `${projectTypeCfg.label} · ${projectTypeStage.label}`
+    : projectTypeCfg.label
   const enabledSectionIds = new Set(getEnabledSections(store.activeNovel))
   const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || enabledSectionIds.has(s.id))
 
@@ -816,12 +832,15 @@ export default function Layout({
     timeline:     <Timeline store={store} />,
     worldhistory: <WorldHistory store={store} />,
     map:          <MapBuilder store={store} />,
-    aitools:      <AITools store={store} userId={userId} />,
+    aitools:           <AITools store={store} userId={userId} />,
+    characterbuilder:  <CharacterBuilder store={store} />,
   }
 
   const activeSection = planningSections.find(s => s.id === section) || planningSections[0]
   const availableSectionIds = new Set(planningSections.map(s => s.id))
+  const isTtrpgType = ['tabletop_rpg', 'dnd_campaign'].includes(store.activeNovel?.type)
   const visibleRooms = STUDIO_ROOMS
+    .filter(room => !room.ttrpgOnly || isTtrpgType)
     .map(room => ({ ...room, sections: room.sections.filter(id => availableSectionIds.has(id)) }))
     .filter(room => room.sections.length > 0)
 
@@ -853,10 +872,11 @@ export default function Layout({
     <>
       <StudioFrame
         projectTitle={store.activeNovel?.title || 'Draft'}
-        projectType={projectTypeCfg.label}
+        projectType={projectTypeLabel}
         rooms={roomNav}
         activeRoomId={activeRoom?.id}
         onOpenRoom={openRoom}
+        onGoHome={onGoHome}
         account={<UserMenu onOpenAccount={onOpenAccount} onOpenHelp={onOpenHelp} onOpenLegal={onOpenLegal} onOpenAbout={onOpenAbout} />}
         primaryAction={(
           <StudioButton
@@ -886,16 +906,30 @@ export default function Layout({
               </svg>
               <span aria-hidden="true">Project Settings</span>
             </button>
-            <button
-              className="studio-utility-btn"
-              onClick={() => store.setActiveNovelId(null)}
-              aria-label="Back to projects"
-            >
-              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              <span aria-hidden="true">Exit</span>
-            </button>
+            {seriesContext && onOpenSeries ? (
+              <button
+                className="studio-utility-btn"
+                onClick={onOpenSeries}
+                aria-label={`Back to ${seriesContext.name}`}
+                title={`Back to ${seriesContext.name}`}
+              >
+                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                <span aria-hidden="true" style={{ maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seriesContext.name}</span>
+              </button>
+            ) : (
+              <button
+                className="studio-utility-btn"
+                onClick={() => store.setActiveNovelId(null)}
+                aria-label="Back to projects"
+              >
+                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                <span aria-hidden="true">Exit</span>
+              </button>
+            )}
           </div>
         )}
         contextRail={null}

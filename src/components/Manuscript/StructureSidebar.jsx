@@ -30,14 +30,6 @@ const fmtWords = (n) => {
   return `${n}`
 }
 
-// ─── DnD helpers ─────────────────────────────────────────────────────────────
-
-const computeDropIndex = (sorted, fromId, dropBeforeId) => {
-  const fromIdx = sorted.findIndex(x => x.id === fromId)
-  const targetIdx = dropBeforeId ? sorted.findIndex(x => x.id === dropBeforeId) : sorted.length
-  return fromIdx < targetIdx ? targetIdx - 1 : targetIdx
-}
-
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
 const ChevronRight = () => (
@@ -168,7 +160,7 @@ function SceneRow({
 function ChapterRow({
   chap, chapNum, scenes,
   onAddScene, onSelectChapter,
-  onUpdateChapter, onDeleteChapter,
+  onDeleteChapter,
   activeSceneId, onSelectScene, onUpdateScene, onDeleteScene,
   labels,
   dragRef, dragOver, setDragOver, onDropChapter, onDropScene,
@@ -294,7 +286,7 @@ function ChapterRow({
 export default function StructureSidebar({
   acts, chapters, scenes,
   addAct, addChapter, addScene,
-  updateAct, updateChapter, updateScene,
+  updateChapter, updateScene,
   deleteAct, deleteChapter, deleteScene,
   moveAct, moveChapter, moveScene,
   activeSceneId, onSelectScene, onSelectChapter,

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import IdeaCard from './IdeaCard'
 
 const STATUS_ACCENT = {
@@ -27,8 +26,6 @@ export default function KanbanColumn({
   onAiExpand,
   readOnly,
 }) {
-  const [addingInline, setAddingInline] = useState(false)
-
   const accent = STATUS_ACCENT[status.id] || 'var(--accent)'
   const count = ideas.length
   const visibleIdeas = ideas

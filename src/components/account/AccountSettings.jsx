@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { PLANS, getMembership } from '../../utils/membership'
 import { getStorageQuota } from '../../utils/storageQuota'
 import StorageCard from './StorageCard'
@@ -941,15 +942,239 @@ function ProfileDetails({ user, updateProfile }) {
   )
 }
 
-export default function AccountSettings({ open, onClose, storageUsedBytes = 0, activeTab = 'profile', onTabChange }) {
+function DeleteAccountModal({ novels, store, onClose }) {
+  const { deleteAccount } = useAuth()
+  const [step, setStep] = useState('confirm') // 'confirm' | 'final'
+  const [confirmText, setConfirmText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [downloadedAll, setDownloadedAll] = useState(false)
+  const [downloadingId, setDownloadingId] = useState(null)
+  const [error, setError] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (step === 'final') setTimeout(() => inputRef.current?.focus(), 50)
+  }, [step])
+
+  const downloadBackup = async (novel) => {
+    setDownloadingId(novel.id)
+    try {
+      const PROJECT_FIELDS = [
+        'characters', 'factions', 'locations', 'timeline',
+        'worldHistory', 'acts', 'chapters', 'loreEntries',
+        'ideaEntries', 'maps', 'whiteboards', 'storySchedule',
+      ]
+      const projectData = { project: novel }
+      for (const field of PROJECT_FIELDS) {
+        projectData[field] = (store?.[field] ?? []).filter(item => item?.novelId === novel.id)
+      }
+      projectData.scenes = (store?.scenes ?? []).filter(s => s?.novelId === novel.id)
+      const blob = createProjectZipBlob(projectData)
+      downloadBlob(blob, getProjectExportFilename(novel))
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  const downloadAllBackups = async () => {
+    for (const novel of novels) {
+      await downloadBackup(novel)
+    }
+    setDownloadedAll(true)
+  }
+
+  const handleDelete = async () => {
+    if (confirmText.trim().toLowerCase() !== 'delete my account') return
+    setBusy(true)
+    setError('')
+    try {
+      await deleteAccount()
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.72)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }}
+      onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}
+    >
+      <div style={{
+        background: 'var(--bg-nav)', borderRadius: 14,
+        border: '1px solid var(--border)',
+        width: '100%', maxWidth: 500,
+        maxHeight: 'calc(100vh - 48px)',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 72px rgba(0,0,0,0.5)',
+        overflow: 'hidden',
+      }}>
+        {step === 'confirm' && (
+          <>
+            <div style={{ padding: '28px 28px 20px', flexShrink: 0 }}>
+              <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: '#ef4444' }}>Danger zone</p>
+              <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 900, color: 'var(--text-main)' }}>Delete account</h2>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                This will permanently delete your account and all associated projects, characters, scenes, and data. <strong style={{ color: 'var(--text-main)' }}>This cannot be undone.</strong>
+              </p>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 28px' }}>
+              {novels.length > 0 && (
+                <div style={{ paddingBottom: 8 }}>
+                  <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                    Download backups first ({novels.length} project{novels.length !== 1 ? 's' : ''})
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                    {novels.map(novel => (
+                      <div key={novel.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', borderRadius: 8,
+                        border: '1px solid var(--border)', background: 'var(--bg-main)',
+                      }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>
+                          {novel.title || 'Untitled Project'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => downloadBackup(novel)}
+                          disabled={downloadingId === novel.id}
+                          style={{
+                            flexShrink: 0, marginLeft: 10,
+                            background: 'none', border: '1px solid var(--border)',
+                            borderRadius: 6, padding: '5px 12px',
+                            fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {downloadingId === novel.id ? 'Downloading…' : 'Download .zip'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={downloadAllBackups}
+                    disabled={!!downloadingId}
+                    style={{
+                      width: '100%', padding: '9px 0',
+                      background: 'var(--accent-fade)', border: '1px solid color-mix(in srgb, var(--accent) 40%, var(--border))',
+                      borderRadius: 8, fontSize: 13, fontWeight: 800, color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {downloadedAll ? 'All downloaded ✓' : 'Download all backups'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '20px 28px 28px', flexShrink: 0, borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8,
+                  background: 'none', border: '1px solid var(--border)',
+                  fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep('final')}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8,
+                  background: '#ef4444', border: 'none',
+                  fontSize: 13, fontWeight: 800, color: '#fff', cursor: 'pointer',
+                }}
+              >
+                Continue to delete
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'final' && (
+          <>
+            <div style={{ padding: '28px 28px 0', flexShrink: 0 }}>
+              <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: '#ef4444' }}>Final confirmation</p>
+              <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 900, color: 'var(--text-main)' }}>Are you absolutely sure?</h2>
+              <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Type <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>delete my account</strong> to confirm. All data will be erased immediately.
+              </p>
+              <input
+                ref={inputRef}
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleDelete()}
+                placeholder="delete my account"
+                disabled={busy}
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: 8,
+                  background: 'var(--bg-main)', border: '1.5px solid var(--border)',
+                  fontSize: 14, color: 'var(--text-main)',
+                  marginBottom: error ? 8 : 0, boxSizing: 'border-box',
+                  outline: 'none',
+                }}
+              />
+              {error && <p style={{ margin: '0 0 0', fontSize: 12, color: '#ef4444' }}>{error}</p>}
+            </div>
+
+            <div style={{ padding: '20px 28px 28px', flexShrink: 0, borderTop: '1px solid var(--border)', marginTop: 20, display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => { setStep('confirm'); setConfirmText(''); setError('') }}
+                disabled={busy}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8,
+                  background: 'none', border: '1px solid var(--border)',
+                  fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer',
+                }}
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={busy || confirmText.trim().toLowerCase() !== 'delete my account'}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8,
+                  background: confirmText.trim().toLowerCase() === 'delete my account' ? '#ef4444' : 'var(--border)',
+                  border: 'none',
+                  fontSize: 13, fontWeight: 800,
+                  color: confirmText.trim().toLowerCase() === 'delete my account' ? '#fff' : 'var(--text-muted)',
+                  cursor: confirmText.trim().toLowerCase() === 'delete my account' ? 'pointer' : 'not-allowed',
+                  transition: 'background .15s, color .15s',
+                }}
+              >
+                {busy ? 'Deleting…' : 'Delete my account'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function AccountSettings({ open, onClose, storageUsedBytes = 0, activeTab = 'profile', onTabChange, store }) {
   const { user, getAccessToken, updateProfile, refreshUser } = useAuth()
   const membership = useMemo(() => getMembership(user), [user])
   const [billingBusy, setBillingBusy] = useState('')
   const [billingError, setBillingError] = useState('')
   const [billingMessage, setBillingMessage] = useState('')
   const [fallbackTab, setFallbackTab] = useState('profile')
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const selectedTab = onTabChange ? activeTab : fallbackTab
   const setActiveTab = onTabChange || setFallbackTab
+  const novels = store?.novels ?? []
 
   useEffect(() => {
     if (!open) return
@@ -1037,7 +1262,31 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
 
         <main className="account-settings-grid account-settings-tab-panel">
           {selectedTab === 'profile' && (
-            <ProfileDetails key={user.id} user={user} updateProfile={updateProfile} />
+            <>
+              <ProfileDetails key={user.id} user={user} updateProfile={updateProfile} />
+              <section className="account-settings-panel" style={{ borderTop: '1px solid var(--border)', paddingTop: 28 }}>
+                <div className="account-panel-heading">
+                  <div>
+                    <p className="eyebrow" style={{ color: '#ef4444' }}>Danger zone</p>
+                    <h2>Delete account</h2>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 18 }}>
+                  Permanently delete your account and all projects, characters, scenes, and other data associated with it. You can download backups of your projects before deleting.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalOpen(true)}
+                  style={{
+                    padding: '9px 20px', borderRadius: 8,
+                    background: 'none', border: '1.5px solid #ef4444',
+                    fontSize: 13, fontWeight: 800, color: '#ef4444', cursor: 'pointer',
+                  }}
+                >
+                  Delete account…
+                </button>
+              </section>
+            </>
           )}
 
           {selectedTab === 'appearance' && (
@@ -1213,6 +1462,13 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
 
         </main>
       </div>
+      {deleteModalOpen && (
+        <DeleteAccountModal
+          novels={novels}
+          store={store}
+          onClose={() => setDeleteModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

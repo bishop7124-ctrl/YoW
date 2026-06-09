@@ -38,7 +38,7 @@ function normalise(entry) {
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 
-function IdeaDetailPanel({ idea, ideas, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
+function IdeaDetailPanel({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
   const [descDraft, setDescDraft] = useState(idea.description || idea.body || '')
   const [editingDesc, setEditingDesc] = useState(false)
   const [linkSearch, setLinkSearch] = useState('')
@@ -887,7 +887,6 @@ export default function IdeasKanban({ store }) {
       {selectedIdea && (
         <IdeaDetailPanel
           idea={selectedIdea}
-          ideas={ideas}
           store={store}
           onUpdate={handleUpdate}
           onClose={() => setSelectedId(null)}

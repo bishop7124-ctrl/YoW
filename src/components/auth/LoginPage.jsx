@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import YOWLogo from '../brand/YOWLogo'
+import HomePage from './HomePage'
 
 const FEATURES = [
   {
@@ -60,15 +61,6 @@ const FEATURES = [
       </svg>
     ),
   },
-]
-
-const HOME_SECTIONS = [
-  ['Draft', 'Manuscript drafting with acts, chapters, scenes, and writing progress.'],
-  ['Plan', 'Story outlines, beat planning, schedules, and loose idea boards.'],
-  ['Cast', 'Character dossiers, relationships, factions, and family trees.'],
-  ['World', 'Locations, maps, lore entries, timelines, and world history.'],
-  ['Track', 'Project dashboards for word counts, pacing, goals, and momentum.'],
-  ['Assist', 'Built-in creative AI context for the project you are working on.'],
 ]
 
 function HeroIllustration() {
@@ -184,75 +176,13 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode }) {
 
   if (screen === 'home') {
     return (
-      <div className="auth-shell yow-home min-h-screen text-[var(--text-main)]">
-        <header className="yow-home-nav">
-          <div className="flex items-center gap-3">
-            <div className="studio-logo"><YOWLogo /></div>
-            <div className="yow-home-wordmark">
-              <div className="studio-brand-name-stack yow-home-stack" aria-label="Your Own World">
-                <span><strong>Y</strong>our</span>
-                <span><strong>O</strong>wn</span>
-                <span><strong>W</strong>orld</span>
-              </div>
-              <span className="yow-home-abbr">YOW</span>
-              <span className="beta-watermark" aria-label="Beta">Beta</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {onOpenAbout && (
-              <button type="button" className="btn btn-secondary" onClick={onOpenAbout}>About</button>
-            )}
-            <button type="button" className="btn btn-secondary" data-testid="home-nav-login" onClick={() => openAuth('login')}>Log in</button>
-            <button type="button" className="btn btn-primary" data-testid="home-nav-start" onClick={() => openAuth('signup')}>Get started</button>
-          </div>
-        </header>
-
-        <main className="yow-home-main">
-          <section className="yow-home-hero">
-            <div className="yow-home-copy">
-              <p className="eyebrow mb-3">Your Own World</p>
-              <h1>Build the world your story needs.</h1>
-              <p>
-                Your Own World keeps the manuscript, map room, character board, lore archive, and project dashboard in one focused writing workspace.
-              </p>
-              <div className="yow-home-actions">
-                <button type="button" className="btn btn-primary" data-testid="home-hero-start" onClick={() => openAuth('signup')}>Get started</button>
-                <button type="button" className="btn btn-secondary" data-testid="home-hero-login" onClick={() => openAuth('login')}>Log in</button>
-              </div>
-            </div>
-
-            <div aria-hidden="true">
-              <HeroIllustration />
-            </div>
-          </section>
-
-          <section className="yow-home-grid" aria-label="Your Own World functionality">
-            {HOME_SECTIONS.map(([title, copy]) => (
-              <article key={title} className="yow-home-card">
-                <span>{title}</span>
-                <p>{copy}</p>
-              </article>
-            ))}
-          </section>
-        </main>
-
-        <footer className="yow-home-footer">
-          <p className="yow-home-footer-copy">© 2026 YourOwnWorld. All rights reserved.</p>
-          <nav className="yow-home-footer-nav" aria-label="Legal and info links">
-            {onOpenAbout && (
-              <button type="button" onClick={onOpenAbout} className="yow-footer-link">About</button>
-            )}
-            {onOpenLegal && (
-              <>
-                <button type="button" onClick={() => onOpenLegal('privacy')}  className="yow-footer-link">Privacy</button>
-                <button type="button" onClick={() => onOpenLegal('terms')}    className="yow-footer-link">Terms</button>
-                <button type="button" onClick={() => onOpenLegal('ethics')}   className="yow-footer-link">Ethics</button>
-                <button type="button" onClick={() => onOpenLegal('beta')}     className="yow-footer-link">Beta</button>
-                <button type="button" onClick={() => onOpenLegal('cookies')}  className="yow-footer-link">Cookies</button>
-              </>
-            )}
-          </nav>
-        </footer>
+      <div className="auth-shell">
+        <HomePage
+          onGetStarted={() => openAuth('signup')}
+          onLogin={() => openAuth('login')}
+          onOpenAbout={onOpenAbout}
+          onOpenLegal={onOpenLegal}
+        />
       </div>
     )
   }
@@ -265,13 +195,19 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode }) {
         <aside className="auth-aside flex flex-col justify-between p-8 max-lg:border-r-0 max-lg:border-b">
           <div>
             {/* Brand */}
-            <div className="flex items-center gap-3 mb-8">
+            <button
+              type="button"
+              className="flex items-center gap-3 mb-8 text-left"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+              onClick={() => setScreen('home')}
+              aria-label="Back to homepage"
+            >
               <div className="studio-logo"><YOWLogo /></div>
               <div>
                 <p className="eyebrow text-xs mb-0.5">Story world workspace</p>
                 <h1 className="font-semibold text-base leading-none" style={{ color: 'var(--text-main)' }}>Your Own World</h1>
               </div>
-            </div>
+            </button>
 
             {/* Illustration */}
             <div className="mb-8">

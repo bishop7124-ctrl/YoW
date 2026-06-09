@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { saveAppData, saveSceneDoc, deleteSceneDoc, deleteProjectData } from '../utils/firestoreSync'
 import { buildAllProjectStats, buildProjectStats } from '../utils/projectStats'
+import { getProjectType } from '../constants/projectTypes'
 
 const load = (key, def) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? def }
@@ -43,6 +44,57 @@ const dateKey = value => {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+const buildStarterStructure = (novelId, type) => {
+  const typeCfg = getProjectType(type)
+  const isScriptType = ['play', 'screenplay', 'tv_show'].includes(type)
+  const starterOutline = Array.isArray(typeCfg.starterOutline) && typeCfg.starterOutline.length
+    ? typeCfg.starterOutline
+    : [{ title: typeCfg.structure.level1, children: [{ title: typeCfg.structure.level2, scenes: [typeCfg.structure.level3] }] }]
+
+  const starterActs = []
+  const starterChapters = []
+  const starterScenes = []
+
+  starterOutline.forEach((level1, level1Index) => {
+    const actId = uid()
+    starterActs.push({
+      id: actId,
+      novelId,
+      title: level1.title || `${typeCfg.structure.level1} ${level1Index + 1}`,
+      synopsis: '',
+      order: level1Index,
+    })
+
+    ;(level1.children || []).forEach((level2, level2Index) => {
+      const chapterId = uid()
+      starterChapters.push({
+        id: chapterId,
+        novelId,
+        actId,
+        title: level2.title || `${typeCfg.structure.level2} ${level2Index + 1}`,
+        synopsis: '',
+        order: starterChapters.length,
+      })
+
+      ;(level2.scenes || [typeCfg.structure.level3]).forEach((sceneTitle) => {
+        starterScenes.push({
+          id: uid(),
+          novelId,
+          chapterId,
+          title: sceneTitle || typeCfg.structure.level3,
+          synopsis: '',
+          content: '',
+          ...(isScriptType ? { textMode: 'script', scriptElement: 'scene_heading', scriptBlocks: [] } : {}),
+          order: starterScenes.length,
+          lastModified: Date.now(),
+        })
+      })
+    })
+  })
+
+  return { acts: starterActs, chapters: starterChapters, scenes: starterScenes }
 }
 
 const withSceneContentHistory = (scene, content, now = Date.now()) => {
@@ -142,6 +194,7 @@ export function useStore(userId = null, options = {}) {
   const [whiteboards, setWhiteboards] = useState(() => load('nf_whiteboards', []))
   const [series, setSeries] = useState(() => load('nf_series', []))
   const [storySchedule, setStorySchedule] = useState(() => load('nf_storySchedule', []))
+  const [rpgCharacters, setRpgCharacters] = useState(() => load('nf_rpg_characters', []))
 
   const charactersRef = useRef(characters)
   const locationsRef = useRef(locations)
@@ -153,6 +206,7 @@ export function useStore(userId = null, options = {}) {
   const loreEntriesRef = useRef(loreEntries)
   const ideaEntriesRef = useRef(ideaEntries)
   const storyScheduleRef = useRef(storySchedule)
+  const rpgCharactersRef = useRef(rpgCharacters)
 
   const [selectedCharacterId, setSelectedCharacterId] = useState(null)
   const [selectedLocationId, setSelectedLocationId] = useState(null)
@@ -199,6 +253,7 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => save('nf_whiteboards', whiteboards), [whiteboards])
   useEffect(() => save('nf_series', series), [series])
   useEffect(() => { storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
+  useEffect(() => { rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
 
   // Debounced Firestore save for all non-scene data (2s delay)
   const debouncedSaveAppData = useMemo(
@@ -333,7 +388,7 @@ export function useStore(userId = null, options = {}) {
     remoteReady.current = false
     setNovels([]); setCharacters([]); setFactions([]); setLocations([])
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
-    setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setCurrentYear(0); setActiveNovelId(null)
+    setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setCurrentYear(0); setActiveNovelId(null)
     setTimeout(() => { importing.current = false }, 500)
   }, [])
 
@@ -356,28 +411,45 @@ export function useStore(userId = null, options = {}) {
   const allProjectStats = buildAllProjectStats(novels, projectStatsData)
   const activeProjectStats = activeNovel ? buildProjectStats(activeNovel, projectStatsData) : null
 
-  // Series sync: when a category is in syncCategories, include data from all projects in the same series
+  // Series sync: directional — data flows from earlier books to later ones.
+  // Each series stores projectOrder: [novelId, ...] for explicit ordering.
+  // A project with includeLaterWorks:true also pulls data from books after it.
   const activeSeries = activeNovel?.seriesId ? series.find(s => s.id === activeNovel.seriesId) : null
   const syncCategories = activeSeries?.syncCategories ?? []
-  const seriesNovelIds = activeSeries
-    ? novels.filter(n => n.seriesId === activeSeries.id).map(n => n.id)
-    : []
+
+  const getSeriesVisibleIds = (ser, projectId, projectIncludeLater) => {
+    if (!ser) return [projectId]
+    const order = ser.projectOrder ?? novels.filter(n => n.seriesId === ser.id).map(n => n.id)
+    const idx = order.indexOf(projectId)
+    if (idx === -1) {
+      // Not in order list yet — treat as earliest, only see self unless includeLater
+      return projectIncludeLater ? order.filter(id => novels.some(n => n.id === id && n.seriesId === ser.id)) : [projectId]
+    }
+    const earlier = order.slice(0, idx + 1).filter(id => novels.some(n => n.id === id && n.seriesId === ser.id))
+    if (projectIncludeLater) {
+      const later = order.slice(idx + 1).filter(id => novels.some(n => n.id === id && n.seriesId === ser.id))
+      return [...earlier, ...later]
+    }
+    return earlier
+  }
+
+  const activeIncludeLater = activeNovel?.includeLaterWorks ?? false
+  const seriesVisibleIds = getSeriesVisibleIds(activeSeries, activeNovelId, activeIncludeLater)
 
   const seriesScope = (arr, category) =>
     syncCategories.includes(category)
-      ? arr.filter(item => seriesNovelIds.includes(item.novelId))
+      ? arr.filter(item => seriesVisibleIds.includes(item.novelId))
       : arr.filter(item => item.novelId === activeNovelId)
 
   const getProjectContextData = (projectId = activeNovelId) => {
     const project = novels.find(n => n.id === projectId) ?? null
     const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
     const projectSyncCategories = projectSeries?.syncCategories ?? []
-    const projectSeriesIds = projectSeries
-      ? novels.filter(n => n.seriesId === projectSeries.id).map(n => n.id)
-      : []
+    const projectIncludeLater = project?.includeLaterWorks ?? false
+    const projectVisibleIds = getSeriesVisibleIds(projectSeries, projectId, projectIncludeLater)
     const projectScope = (arr, category) =>
       projectSyncCategories.includes(category)
-        ? arr.filter(item => projectSeriesIds.includes(item.novelId))
+        ? arr.filter(item => projectVisibleIds.includes(item.novelId))
         : arr.filter(item => item.novelId === projectId)
 
     return {
@@ -756,6 +828,19 @@ export function useStore(userId = null, options = {}) {
     })
   }
 
+  const saveRpgCharacter = (data, id) => {
+    const characterId = id || uid()
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => {
+      if (id) return prev.map(c => c.id === id ? { ...c, ...data, updatedAt: new Date().toISOString() } : c)
+      return [...prev, { ...data, id: characterId, novelId: activeNovelId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]
+    })
+    return characterId
+  }
+
+  const deleteRpgCharacter = (id) => {
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.id !== id))
+  }
+
   const saveLocation = (data, id) => {
     if (id) {
       const updated = { ...(locationsRef.current.find(l => l.id === id) || { id, novelId: activeNovelId }), ...data }
@@ -1002,6 +1087,13 @@ export function useStore(userId = null, options = {}) {
       return null
     }
     const novel = { id: uid(), createdAt: new Date().toISOString(), ...data }
+    const starter = buildStarterStructure(novel.id, novel.type)
+    commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...starter.chapters])
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...starter.scenes])
+    if (userId) {
+      starter.scenes.forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+    }
     setNovels(prev => [...prev, novel]); setActiveNovelId(novel.id); return novel
   }
   const updateNovel = (id, data) => setNovels(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))
@@ -1030,6 +1122,7 @@ export function useStore(userId = null, options = {}) {
       maps: maps.filter(m => m.novelId === id),
       whiteboards: whiteboards.filter(w => w.novelId === id),
       storySchedule: storySchedule.filter(e => e.novelId === id),
+      rpgCharacters: rpgCharacters.filter(c => c.novelId === id),
     }
   }
 
@@ -1052,7 +1145,8 @@ export function useStore(userId = null, options = {}) {
     return orderedIds.map(id => map.get(id)).filter(Boolean)
   })
   const deleteNovel = (id) => {
-    setNovels(prev => prev.filter(n => n.id !== id))
+    const updatedNovels = novels.filter(n => n.id !== id)
+    setNovels(updatedNovels)
     setCharacters(prev => prev.filter(c => c.novelId !== id))
     setFactions(prev => prev.filter(f => f.novelId !== id))
     setLocations(prev => prev.filter(l => l.novelId !== id))
@@ -1070,12 +1164,23 @@ export function useStore(userId = null, options = {}) {
     setMaps(prev => prev.filter(m => m.novelId !== id))
     setWhiteboards(prev => prev.filter(w => w.novelId !== id))
     setStorySchedule(prev => prev.filter(e => e.novelId !== id))
+    setRpgCharacters(prev => prev.filter(c => c.novelId !== id))
     setActiveMapByNovel(prev => {
       const next = { ...prev }
       delete next[id]
       return next
     })
-    if (userId) deleteProjectData(userId, id).catch(console.error)
+    if (userId) {
+      deleteProjectData(userId, id).catch(console.error)
+      // Immediately persist updated novels list so deletion survives logout
+      // (the debounced save may not fire in time if user logs out quickly)
+      saveAppData(userId, buildAppDataPayload({
+        novels: updatedNovels, characters, factions, locations, timeline,
+        worldHistory, acts, chapters, loreEntries, ideaEntries,
+        maps, activeMapByNovel, whiteboards, series, storySchedule,
+        currentYear, activeNovelId,
+      })).catch(console.error)
+    }
     if (activeNovelId === id) setActiveNovelId(null)
     setSelectedCharacterId(null)
     setSelectedLocationId(null)
@@ -1106,6 +1211,7 @@ export function useStore(userId = null, options = {}) {
     setMaps(prev => [...prev, ...(data.maps ?? []).map(remap)])
     setWhiteboards(prev => [...prev, ...(data.whiteboards ?? []).map(remap)])
     setStorySchedule(prev => [...prev, ...(data.storySchedule ?? []).map(remap)])
+    setRpgCharacters(prev => [...prev, ...(data.rpgCharacters ?? []).map(remap)])
     setActiveNovelId(newId)
     return project
   }
@@ -1165,6 +1271,8 @@ export function useStore(userId = null, options = {}) {
     selectedLoreEntryId, setSelectedLoreEntryId,
     selectedIdeaEntryId, setSelectedIdeaEntryId,
     storySchedule: novelStorySchedule, addScheduleEvent, updateScheduleEvent, deleteScheduleEvent,
+    rpgCharacters: rpgCharacters.filter(c => c.novelId === activeNovelId),
+    saveRpgCharacter, deleteRpgCharacter,
     importData, replaceData, clearData, finishRemoteLoad
   }
 
@@ -1181,6 +1289,7 @@ export function useStore(userId = null, options = {}) {
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',
     'addScheduleEvent', 'updateScheduleEvent', 'deleteScheduleEvent', 'replaceData',
+    'saveRpgCharacter', 'deleteRpgCharacter',
   ]
 
   const guardedApi = { ...api }

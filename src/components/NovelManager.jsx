@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import UserMenu from './auth/UserMenu'
 import YOWLogo from './brand/YOWLogo'
 import AIImportModal from './AIImportModal'
-import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType } from '../constants/projectTypes'
+import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../constants/projectTypes'
 import {
   createProjectZipBlob,
   downloadProjectDocx,
@@ -12,8 +12,7 @@ import {
 } from '../utils/projectExport'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
-const LAUNCH_TYPES = new Set(['novel', 'novella', 'short_story', 'dnd_campaign', 'tabletop_rpg'])
-const isLaunchProjectType = (type) => LAUNCH_TYPES.has(type)
+const isProjectTypeSelectable = (type) => Boolean(PROJECT_TYPES[type])
 
 const COVER_GRADIENTS = [
   'linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
@@ -438,29 +437,62 @@ const STATUS_OPTIONS = [
   { id: 'planned', label: 'Planned' },
 ]
 
+const SYNC_AREA_OPTIONS = [
+  { id: 'characters', label: 'Characters' },
+  { id: 'locations', label: 'Locations' },
+  { id: 'factions', label: 'Factions' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'worldhistory', label: 'World History' },
+  { id: 'lore', label: 'Lore' },
+  { id: 'ideas', label: 'Ideas' },
+]
+
 function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
+  const seriesProjects = allStats.filter(s => s.project.seriesId === series.id)
+  const initialOrder = series.projectOrder
+    ? series.projectOrder.filter(id => seriesProjects.some(s => s.project.id === id))
+    : seriesProjects.map(s => s.project.id)
+  // Include any assigned projects not yet in order
+  const unordered = seriesProjects.filter(s => !initialOrder.includes(s.project.id)).map(s => s.project.id)
+
   const [form, setForm] = useState({
     name: series.name || '',
     summary: series.summary || '',
     status: series.status || 'ongoing',
     tags: series.tags || [],
     coverPhoto: series.coverPhoto || null,
+    syncCategories: series.syncCategories ?? [],
   })
   const [tagInput, setTagInput] = useState('')
   const [coverError, setCoverError] = useState('')
   const [assignedIds, setAssignedIds] = useState(
-    () => new Set(allStats.filter(s => s.project.seriesId === series.id).map(s => s.project.id))
+    () => new Set(seriesProjects.map(s => s.project.id))
   )
+  // Ordered list of assigned project ids
+  const [projectOrder, setProjectOrder] = useState(() => [...initialOrder, ...unordered])
+  const dragIdx = useRef(null)
+  const dragOverIdx = useRef(null)
+
   const initialFormRef = useRef(JSON.stringify({
     name: series.name || '',
     summary: series.summary || '',
     status: series.status || 'ongoing',
     tags: series.tags || [],
     coverPhoto: series.coverPhoto || null,
+    syncCategories: series.syncCategories ?? [],
   }))
   const initialAssignedRef = useRef(JSON.stringify(
-    [...allStats.filter(s => s.project.seriesId === series.id).map(s => s.project.id)].sort()
+    [...seriesProjects.map(s => s.project.id)].sort()
   ))
+
+  // Keep projectOrder in sync as projects are checked/unchecked
+  useEffect(() => {
+    setProjectOrder(prev => {
+      const next = prev.filter(id => assignedIds.has(id))
+      assignedIds.forEach(id => { if (!next.includes(id)) next.push(id) })
+      return next
+    })
+  }, [assignedIds])
 
   const requestClose = () => {
     const formDirty = JSON.stringify(form) !== initialFormRef.current
@@ -503,11 +535,46 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
     })
   }
 
+  const toggleSyncArea = (id) => {
+    setForm(p => ({
+      ...p,
+      syncCategories: p.syncCategories.includes(id)
+        ? p.syncCategories.filter(c => c !== id)
+        : [...p.syncCategories, id],
+    }))
+  }
+
+  // Drag-to-reorder handlers
+  const onDragStart = (e, idx) => {
+    dragIdx.current = idx
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  const onDragOver = (e, idx) => {
+    e.preventDefault()
+    dragOverIdx.current = idx
+  }
+  const onDrop = () => {
+    const from = dragIdx.current
+    const to = dragOverIdx.current
+    if (from === null || to === null || from === to) return
+    setProjectOrder(prev => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+    dragIdx.current = null
+    dragOverIdx.current = null
+  }
+
   const handleSave = (e) => {
     e.preventDefault()
     if (!form.name.trim()) return
-    onSave(series.id, { ...form, name: form.name.trim() }, assignedIds)
+    onSave(series.id, { ...form, name: form.name.trim(), projectOrder }, assignedIds)
   }
+
+  const orderedAssigned = projectOrder.filter(id => assignedIds.has(id))
+  const unassignedStats = allStats.filter(s => !assignedIds.has(s.project.id))
 
   return (
     <div
@@ -516,7 +583,7 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
     >
       <form
         onSubmit={handleSave}
-        style={{ width: '100%', maxWidth: 520, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
+        style={{ width: '100%', maxWidth: 540, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Cover banner */}
@@ -596,12 +663,60 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
             </div>
           </div>
 
+          {/* Shared areas */}
           <div>
-            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Projects</p>
+            <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Shared areas</p>
+            <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>Toggled areas are pooled across all books in this series. Data flows forward — later books can see earlier entries. Earlier books only see their own data unless &quot;Include later works&quot; is enabled per-project.</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {SYNC_AREA_OPTIONS.map(opt => {
+                const on = form.syncCategories.includes(opt.id)
+                return (
+                  <button key={opt.id} type="button" onClick={() => toggleSyncArea(opt.id)}
+                    style={{
+                      padding: '5px 14px', borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                      background: on ? 'var(--accent-fade)' : 'transparent',
+                      color: on ? 'var(--accent)' : 'var(--text-muted)',
+                    }}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Projects — ordered list for assigned, checkboxes for unassigned */}
+          <div>
+            <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Books in series</p>
+            {orderedAssigned.length > 0 && (
+              <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--text-muted)' }}>Drag to set reading order. Book 1 is listed first.</p>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {allStats.map(s => (
-                <label key={s.project.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: assignedIds.has(s.project.id) ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${assignedIds.has(s.project.id) ? 'color-mix(in srgb, var(--accent) 38%, transparent)' : 'var(--border)'}`, transition: 'background .15s, border-color .15s' }}>
-                  <input type="checkbox" checked={assignedIds.has(s.project.id)} onChange={() => toggleProject(s.project.id)} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0 }} />
+              {orderedAssigned.map((id, idx) => {
+                const s = allStats.find(s => s.project.id === id)
+                if (!s) return null
+                return (
+                  <div
+                    key={id}
+                    draggable
+                    onDragStart={e => onDragStart(e, idx)}
+                    onDragOver={e => onDragOver(e, idx)}
+                    onDrop={onDrop}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, background: 'var(--accent-fade)', border: '1px solid color-mix(in srgb, var(--accent) 38%, transparent)', cursor: 'grab', userSelect: 'none' }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent)', minWidth: 18, textAlign: 'right' }}>{idx + 1}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, flexShrink: 0 }}>⠿</span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>{s.project.title}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', marginRight: 4 }}>{getProjectType(s.project.type).label}</span>
+                    <button type="button" onClick={() => toggleProject(id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: 0 }}
+                      title="Remove from series">×</button>
+                  </div>
+                )
+              })}
+              {unassignedStats.map(s => (
+                <label key={s.project.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: 'var(--bg-main)', border: '1px solid var(--border)', transition: 'background .15s, border-color .15s' }}>
+                  <input type="checkbox" checked={false} onChange={() => toggleProject(s.project.id)} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0 }} />
                   <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>{s.project.title}</span>
                   <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>{getProjectType(s.project.type).label}</span>
                 </label>
@@ -643,6 +758,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     tags: project.tags || [],
     coverPhoto: project.coverPhoto || null,
     progress: project.progress ?? '',
+    includeLaterWorks: project.includeLaterWorks ?? false,
   })
   const [tagInput, setTagInput] = useState('')
   const [coverError, setCoverError] = useState('')
@@ -655,6 +771,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     tags: project.tags || [],
     coverPhoto: project.coverPhoto || null,
     progress: project.progress ?? '',
+    includeLaterWorks: project.includeLaterWorks ?? false,
   }))
 
   const requestClose = () => {
@@ -701,7 +818,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
       ...form,
       title: form.title.trim(),
       description: form.description.trim(),
-      type: isLaunchProjectType(form.type) ? form.type : project.type || DEFAULT_TYPE,
+      type: project.type || DEFAULT_TYPE,
       seriesId: form.seriesId || null,
       progress: form.progress === '' ? null : Number(form.progress),
       updatedAt: new Date().toISOString(),
@@ -769,6 +886,21 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
             </label>
           </div>
 
+          {form.seriesId && (() => {
+            const activeSer = series.find(s => s.id === form.seriesId)
+            const hasSyncAreas = activeSer?.syncCategories?.length > 0
+            if (!hasSyncAreas) return null
+            return (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', borderRadius: 8, background: form.includeLaterWorks ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${form.includeLaterWorks ? 'color-mix(in srgb, var(--accent) 38%, transparent)' : 'var(--border)'}`, cursor: 'pointer', transition: 'background .15s, border-color .15s' }}>
+                <input type="checkbox" checked={form.includeLaterWorks} onChange={e => setForm(p => ({ ...p, includeLaterWorks: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>Include later works</p>
+                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>Show shared entries from books that come after this one in the series. Off by default — later books don&#39;t affect earlier ones.</p>
+                </div>
+              </label>
+            )
+          })()}
+
           <div>
             <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Status</p>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -784,32 +916,6 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
                       color: current === key ? opt.color : 'var(--text-muted)',
                     }}>
                     {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div>
-            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Type</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {TYPE_OPTIONS.map(t => {
-                const isLaunch = isLaunchProjectType(t.id)
-                return (
-                  <button key={t.id} type="button" disabled={!isLaunch} onClick={() => isLaunch && setForm(p => ({ ...p, type: t.id }))}
-                    title={isLaunch ? undefined : 'Coming soon!'}
-                    style={{
-                      textAlign: 'left', padding: '8px 10px', borderRadius: 6, cursor: isLaunch ? 'pointer' : 'not-allowed',
-                      border: `1px solid ${form.type === t.id ? 'var(--accent)' : 'var(--border)'}`,
-                      background: form.type === t.id ? 'var(--accent-fade)' : 'var(--bg-main)',
-                      opacity: isLaunch ? 1 : 0.54,
-                    }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <ProjectTypeImage type={t.id} label={t.label} size={24} />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-main)' }}>{t.label}</span>
-                      {!isLaunch && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Soon</span>}
-                    </div>
-                    <p style={{ margin: 0, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.3 }}>{isLaunch ? t.description : 'Coming soon!'}</p>
                   </button>
                 )
               })}
@@ -859,7 +965,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
   )
 }
 
-function SeriesCard({ series, seriesStats, onClick }) {
+function SeriesCard({ series, seriesStats, onClick, onEdit }) {
   const totalWords = seriesStats.reduce((sum, s) => sum + s.manuscriptWords, 0)
   return (
     <div className="series-dash-card" onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}>
@@ -872,15 +978,16 @@ function SeriesCard({ series, seriesStats, onClick }) {
           : <span className="series-dash-card-letter">{series.name[0]?.toUpperCase()}</span>
         }
         <span className="series-dash-card-count">
-          {seriesStats.length} {seriesStats.length === 1 ? 'book' : 'books'}
+          {seriesStats.length} {seriesStats.length === 1 ? 'project' : 'projects'}
         </span>
+        <span className="series-dash-card-type-badge">Series</span>
       </div>
       <div className="series-dash-card-foot">
         <p className="series-dash-card-name">{series.name}</p>
         {totalWords > 0 && <p className="series-dash-card-words">{totalWords.toLocaleString()} words</p>}
       </div>
       <div className="series-dash-card-hover">
-        <p>Projects</p>
+        <p className="series-dash-card-hover-open">Open Series →</p>
         <ul>
           {seriesStats.map(stats => (
             <li key={stats.project.id}>
@@ -889,6 +996,16 @@ function SeriesCard({ series, seriesStats, onClick }) {
             </li>
           ))}
         </ul>
+        {onEdit && (
+          <button
+            className="series-dash-card-edit-btn"
+            onClick={e => { e.stopPropagation(); onEdit() }}
+            title="Edit series"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z"/></svg>
+            Edit
+          </button>
+        )}
       </div>
     </div>
   )
@@ -960,7 +1077,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
   )
 }
 
-export default function NovelManager({ store, user, onOpenProject, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership }) {
+export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership }) {
   const [showForm, setShowForm] = useState(false)
   const [showAIImport, setShowAIImport] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -970,7 +1087,6 @@ export default function NovelManager({ store, user, onOpenProject, onOpenChat, o
   const [seriesName, setSeriesName] = useState('')
   const [editingSeries, setEditingSeries] = useState(null)
   const [editingProject, setEditingProject] = useState(null)
-  const [seriesFilter, setSeriesFilter] = useState(null)
   const userProfile = user?.user_metadata || {}
   const userName = userProfile.full_name || userProfile.name || userProfile.alias || userProfile.writer_alias || user?.displayName || user?.email?.split('@')[0] || 'User'
 
@@ -1017,9 +1133,18 @@ export default function NovelManager({ store, user, onOpenProject, onOpenChat, o
   const handleCreate = (e) => {
     e.preventDefault()
     if (!form.title.trim()) return
-    store.addNovel({ ...form, type: isLaunchProjectType(form.type) ? form.type : DEFAULT_TYPE, seriesId: form.seriesId || seriesFilter || null })
+    const type = isProjectTypeSelectable(form.type) ? form.type : DEFAULT_TYPE
+    const typeCfg = getProjectType(type)
+    const novel = store.addNovel({
+      ...form,
+      type,
+      wordTarget: typeCfg.defaultWordTarget || null,
+      enabledSections: typeCfg.defaultSections || null,
+      seriesId: form.seriesId || null,
+    })
     setForm({ title: '', description: '', type: DEFAULT_TYPE, seriesId: '' })
     setShowForm(false)
+    if (novel) onOpenProject(novel.id)
   }
 
   const handleRestoreFromZip = async (e) => {
@@ -1041,7 +1166,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenChat, o
             const imported = store.importProjectFromData(data)
             if (!imported) { reject(new Error('Could not import project. You may be on a free plan.')); return }
             resolve()
-          } catch (parseErr) {
+          } catch {
             reject(new Error('Could not read backup file. The file may be corrupt.'))
           }
         })
@@ -1117,9 +1242,6 @@ export default function NovelManager({ store, user, onOpenProject, onOpenChat, o
     }
   }, [allStatsCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const visibleStats = seriesFilter
-    ? store.allProjectStats.filter(s => s.project.seriesId === seriesFilter)
-    : store.allProjectStats
 
   const handleOpenLibraryChat = () => {
     const projectId = focusStats?.project?.id || store.activeNovelId
@@ -1186,81 +1308,96 @@ export default function NovelManager({ store, user, onOpenProject, onOpenChat, o
       />
 
       {/* Content */}
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '36px 28px 56px' }}>
-        {store.series.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 28, alignItems: 'center' }}>
-            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginRight: 4 }}>Series</span>
-            <button
-              onClick={() => setSeriesFilter(null)}
-              style={{ padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: `1px solid ${seriesFilter === null ? 'var(--accent)' : 'var(--border)'}`, background: seriesFilter === null ? 'var(--accent-fade)' : 'transparent', color: seriesFilter === null ? 'var(--accent)' : 'var(--text-muted)' }}
-            >All</button>
-            {store.series.map(s => (
-              <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
-                <button
-                  onClick={() => setSeriesFilter(seriesFilter === s.id ? null : s.id)}
-                  style={{ padding: '4px 10px 4px 12px', borderRadius: '999px 0 0 999px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: `1px solid ${seriesFilter === s.id ? 'var(--accent)' : 'var(--border)'}`, borderRight: 'none', background: seriesFilter === s.id ? 'var(--accent-fade)' : 'transparent', color: seriesFilter === s.id ? 'var(--accent)' : 'var(--text-muted)' }}
-                >{s.name}</button>
-                <button
-                  onClick={() => setEditingSeries(s)}
-                  title="Edit series"
-                  style={{ padding: '4px 8px', borderRadius: '0 999px 999px 0', fontSize: 11, cursor: 'pointer', border: `1px solid ${seriesFilter === s.id ? 'var(--accent)' : 'var(--border)'}`, background: seriesFilter === s.id ? 'var(--accent-fade)' : 'transparent', color: seriesFilter === s.id ? 'var(--accent)' : 'var(--text-muted)', display: 'inline-flex', alignItems: 'center' }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z"/></svg>
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
+      <div className="library-content-shell">
         {(() => {
           const seriesById = new Map((store.series || []).map(s => [s.id, s]))
-          const dashboardStats = visibleStats
-          const seriesWithProjects = seriesFilter ? [] : (store.series || []).filter(s =>
-            dashboardStats.some(st => st.project.seriesId === s.id)
-          )
-          const projectCards = seriesFilter
-            ? dashboardStats
-            : dashboardStats.filter(s => !s.project.seriesId || !seriesById.has(s.project.seriesId))
+          const dashboardStats = store.allProjectStats
+          const seriesWithProjects = store.series || []
+          const projectCards = dashboardStats.filter(s => !s.project.seriesId || !seriesById.has(s.project.seriesId))
+          const seriesProjectGroups = (store.series || [])
+            .map(series => ({
+              series,
+              stats: dashboardStats.filter(st => st.project.seriesId === series.id),
+            }))
+            .filter(group => group.stats.length > 0)
 
-          if (seriesWithProjects.length === 0 && projectCards.length === 0) return null
+          if (seriesWithProjects.length === 0 && projectCards.length === 0 && seriesProjectGroups.length === 0) return null
 
           return (
             <section className="command-library-grid">
-              <div>
-                <div className="dash-section-title">
-                  <h2>Projects</h2>
-                  <span>Choose the active project</span>
-                </div>
-                {seriesWithProjects.length > 0 || projectCards.length > 0 ? (
-                  <div className="dash-series-grid">
-                    {seriesWithProjects.map(s => {
-                      const sStats = dashboardStats.filter(st => st.project.seriesId === s.id)
-                      return (
-                        <SeriesCard
-                          key={s.id}
-                          series={s}
-                          seriesStats={sStats}
-                          onClick={() => setSeriesFilter(seriesFilter === s.id ? null : s.id)}
-                        />
-                      )
-                    })}
-                    {projectCards.map(stats => (
-                      <ProjectCard
-                        key={stats.project.id}
-                        stats={stats}
-                        onClick={() => onOpenProject(stats.project.id)}
-                        onEdit={() => setEditingProject(stats.project)}
-                        onExport={handleExportProject}
-                        isFocus={!!stats.project.focus}
-                        onSetFocus={handleSetFocus}
-                      />
-                    ))}
+              <div className="library-sections">
+                {seriesWithProjects.length > 0 && (
+                  <div className="library-section">
+                    <div className="dash-section-title">
+                      <h2>Series</h2>
+                      <span>Multi-book collections</span>
+                    </div>
+                    <div className="dash-series-grid">
+                      {seriesWithProjects.map(s => {
+                        const sStats = dashboardStats.filter(st => st.project.seriesId === s.id)
+                        return (
+                          <SeriesCard
+                            key={s.id}
+                            series={s}
+                            seriesStats={sStats}
+                            onClick={() => onOpenSeries?.(s.id)}
+                            onEdit={() => setEditingSeries(s)}
+                          />
+                        )
+                      })}
+                    </div>
                   </div>
-                ) : (
+                )}
+
+                {seriesProjectGroups.map(({ series, stats }) => (
+                  <div key={series.id} className="library-section">
+                    <div className="dash-section-title">
+                      <h2>{series.name}</h2>
+                      <span>Series projects</span>
+                    </div>
+                    <div className="dash-series-grid">
+                      {stats.map(item => (
+                        <ProjectCard
+                          key={item.project.id}
+                          stats={item}
+                          onClick={() => onOpenProject(item.project.id)}
+                          onEdit={() => setEditingProject(item.project)}
+                          onExport={handleExportProject}
+                          isFocus={!!item.project.focus}
+                          onSetFocus={handleSetFocus}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {projectCards.length > 0 && (
+                  <div className="library-section">
+                    <div className="dash-section-title">
+                      <h2>Standalone Projects</h2>
+                      <span>Choose the active project</span>
+                    </div>
+                    <div className="dash-series-grid">
+                      {projectCards.map(stats => (
+                        <ProjectCard
+                          key={stats.project.id}
+                          stats={stats}
+                          onClick={() => onOpenProject(stats.project.id)}
+                          onEdit={() => setEditingProject(stats.project)}
+                          onExport={handleExportProject}
+                          isFocus={!!stats.project.focus}
+                          onSetFocus={handleSetFocus}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {seriesWithProjects.length === 0 && projectCards.length === 0 && seriesProjectGroups.length === 0 && (
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No projects yet.</p>
                 )}
               </div>
-              <StatusQueue stats={visibleStats} onOpenProject={onOpenProject} />
+              <StatusQueue stats={store.allProjectStats} onOpenProject={onOpenProject} />
             </section>
           )
         })()}
@@ -1421,22 +1558,22 @@ export default function NovelManager({ store, user, onOpenProject, onOpenChat, o
               <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Type</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 {TYPE_OPTIONS.map(t => {
-                  const isLaunch = isLaunchProjectType(t.id)
+                  const stage = getProjectTypeStage(t.id)
+                  const isBeta = stage.stage === 'beta'
                   return (
-                    <button key={t.id} type="button" disabled={!isLaunch} onClick={() => isLaunch && setForm(p => ({ ...p, type: t.id }))}
-                      title={isLaunch ? undefined : 'Coming soon!'}
+                    <button key={t.id} type="button" onClick={() => setForm(p => ({ ...p, type: t.id }))}
+                      title={stage.note}
                       style={{
-                        textAlign: 'left', padding: '8px 10px', borderRadius: 6, cursor: isLaunch ? 'pointer' : 'not-allowed',
+                        textAlign: 'left', padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
                         border: `1px solid ${form.type === t.id ? 'var(--accent)' : 'var(--border)'}`,
                         background: form.type === t.id ? 'var(--accent-fade)' : 'var(--bg-main)',
-                        opacity: isLaunch ? 1 : 0.54,
                       }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                         <ProjectTypeImage type={t.id} label={t.label} size={24} />
                         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-main)' }}>{t.label}</span>
-                        {!isLaunch && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Soon</span>}
+                        {isBeta && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>{stage.label}</span>}
                       </div>
-                      <p style={{ margin: 0, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.3 }}>{isLaunch ? t.description : 'Coming soon!'}</p>
+                      <p style={{ margin: 0, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.3 }}>{isBeta ? stage.note : t.description}</p>
                     </button>
                   )
                 })}

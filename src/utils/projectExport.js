@@ -1,4 +1,5 @@
 import { EXPORT_PDF_THEME_OPTIONS, getExportPdfTheme } from './projectExportThemes.js'
+import { getProjectType } from '../constants/projectTypes.js'
 
 export { EXPORT_PDF_THEME_OPTIONS }
 
@@ -58,6 +59,34 @@ const sortByTitle = (items = [], key = 'title') =>
 
 const valueList = (...values) => values.filter(value => value !== null && value !== undefined && String(value).trim() !== '')
 
+const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
+
+const SESSION_PLAN_EXPORT_FIELDS = [
+  ['Hooks', 'hooks'],
+  ['Encounter flow', 'encounters'],
+  ['NPCs', 'npcs'],
+  ['Rewards', 'rewards'],
+  ['Consequences', 'consequences'],
+  ['Session notes', 'notes'],
+]
+
+const SESSION_RECAP_EXPORT_FIELDS = [
+  ['Recap', 'summary'],
+  ['Player choices', 'playerChoices'],
+  ['Fallout', 'fallout'],
+  ['Next hooks', 'nextHooks'],
+]
+
+const isCampaignProject = (project) => CAMPAIGN_PROJECT_TYPES.has(project?.type)
+
+const sessionExportRows = (chapter) => [
+  ...SESSION_PLAN_EXPORT_FIELDS.map(([label, key]) => [`Plan: ${label}`, chapter?.sessionPlan?.[key]]),
+  ...SESSION_RECAP_EXPORT_FIELDS.map(([label, key]) => [`Recap: ${label}`, chapter?.sessionRecap?.[key]]),
+].filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+
+const sessionExportSummary = (chapter) =>
+  sessionExportRows(chapter).map(([label, value]) => `${label}: ${cleanText(value)}`).join('\n')
+
 const asArray = (value) => {
   if (Array.isArray(value)) return value
   if (value && typeof value === 'object') return Object.values(value)
@@ -90,16 +119,26 @@ const wordCount = (text = '') => cleanText(text).split(/\s+/).filter(Boolean).le
 
 const buildSummaryStats = (projectData) => {
   const scenes = projectData.scenes ?? []
+  const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
   return [
     ['Characters', projectData.characters?.length ?? 0],
     ['Locations', projectData.locations?.length ?? 0],
     ['Lore entries', projectData.loreEntries?.length ?? 0],
     ['Timeline events', projectData.timeline?.length ?? 0],
-    ['Manuscript words', scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()],
+    [`${workspaceLabel} words`, scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()],
   ]
 }
 
 const getProjectBaseName = (project) => sanitizeFilename(project?.title, 'yow-project')
+
+const getProjectExportLabel = (project) =>
+  getProjectType(project?.type).exportLabel || 'Project Encyclopaedia'
+
+const getProjectExportSlug = (project, fallback = 'project-export') =>
+  sanitizeFilename(getProjectExportLabel(project).toLowerCase(), fallback)
+
+const getProjectWorkspaceLabel = (project) =>
+  getProjectType(project?.type).workspaceLabel || 'Manuscript'
 
 const crcTable = (() => {
   const table = new Uint32Array(256)
@@ -256,10 +295,10 @@ export const getProjectExportFilename = (project) =>
   `${getProjectBaseName(project)}.zip`
 
 export const getProjectDocxFilename = (project) =>
-  `${getProjectBaseName(project)}-encyclopaedia.docx`
+  `${getProjectBaseName(project)}-${getProjectExportSlug(project, 'project-export')}.docx`
 
 export const getProjectPdfFilename = (project) =>
-  `${getProjectBaseName(project)}-visual-encyclopaedia.pdf`
+  `${getProjectBaseName(project)}-${getProjectExportSlug(project, 'project-export')}.pdf`
 
 const addDocParagraphs = (children, { Paragraph, TextRun }, text, options = {}) => {
   const blocks = cleanText(text).split(/\n{2,}/).map(block => block.trim()).filter(Boolean)
@@ -305,7 +344,7 @@ export const createProjectDocxBlob = async (projectData) => {
     spacing: { after: 240 },
   }))
   children.push(new Paragraph({
-    children: [new TextRun({ text: 'Project Encyclopaedia', italics: true, size: 26 })],
+    children: [new TextRun({ text: getProjectExportLabel(project), italics: true, size: 26 })],
     alignment: AlignmentType.CENTER,
     spacing: { after: 420 },
   }))
@@ -317,13 +356,16 @@ export const createProjectDocxBlob = async (projectData) => {
 
   if (enabled.has('outline')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
-    addDocHeading(children, docx, 'Story Outline')
+    addDocHeading(children, docx, isCampaignProject(project) ? 'Campaign Sessions' : 'Story Outline')
     buildOutline(projectData).forEach(({ act, chapters }) => {
       addDocHeading(children, docx, act.title || 'Untitled Act', HeadingLevel.HEADING_2)
       addDocParagraphs(children, docx, act.synopsis)
       chapters.forEach(({ chapter, scenes }, chapterIndex) => {
         addDocHeading(children, docx, chapter.title || `Chapter ${chapterIndex + 1}`, HeadingLevel.HEADING_3)
         addDocParagraphs(children, docx, chapter.synopsis)
+        if (isCampaignProject(project)) {
+          addDocFields(children, docx, sessionExportRows(chapter))
+        }
         scenes.forEach(scene => {
           const title = scene.title && scene.title !== 'Scene' ? scene.title : 'Scene'
           children.push(new Paragraph({
@@ -745,6 +787,10 @@ const mapSection = (projectData) => {
 
 const notesSection = (projectData) => {
   const outline = buildOutline(projectData)
+  const structure = getProjectType(projectData.project?.type).structure || {}
+  const level1 = structure.level1 || 'Act'
+  const level2 = structure.level2 || 'Chapter'
+  const isCampaign = isCampaignProject(projectData.project)
   return outline.map(({ act, chapters }) => `
     <article class="outline-act">
       <h2>${escapeHtml(act.title || 'Untitled Act')}</h2>
@@ -752,15 +798,20 @@ const notesSection = (projectData) => {
       <div class="chapter-grid">
         ${chapters.map(({ chapter, scenes }, index) => `
           <div class="chapter-card">
-            <span>Chapter ${index + 1}</span>
-            <h3>${escapeHtml(chapter.title || `Chapter ${index + 1}`)}</h3>
+            <span>${escapeHtml(level2)} ${index + 1}</span>
+            <h3>${escapeHtml(chapter.title || `${level2} ${index + 1}`)}</h3>
             <p>${escapeHtml(cleanText(chapter.synopsis || `${scenes.length} scenes`) || `${scenes.length} scenes`)}</p>
+            ${isCampaign && sessionExportRows(chapter).length ? `
+              <div class="copy">
+                ${sessionExportRows(chapter).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(cleanText(value))}</p>`).join('')}
+              </div>
+            ` : ''}
             <small>${scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()} words</small>
           </div>
         `).join('')}
       </div>
     </article>
-  `).join('') || emptyState('No outline sections yet.')
+  `).join('') || emptyState(`No ${level1.toLowerCase()} sections yet.`)
 }
 
 const A4_LANDSCAPE = { width: 841.89, height: 595.28 }
@@ -1221,25 +1272,29 @@ const createRelationshipsPage = (characters, theme) => {
 
 const createOutlinePages = (projectData, theme) => {
   const pages = []
+  const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
+  const structure = getProjectType(projectData.project?.type).structure || {}
+  const sectionLabel = `${workspaceLabel} Structure`
   buildOutline(projectData).forEach(({ act, chapters }, actIndex) => {
     const pdf = makePdfCanvas(theme)
-    const contentStartY = pdf.pageBase('Manuscript Desk', act.title || `Act ${actIndex + 1}`, act.synopsis || 'Outline structure and scene counts.')
+    const contentStartY = pdf.pageBase(sectionLabel, act.title || `${structure.level1 || 'Act'} ${actIndex + 1}`, act.synopsis || 'Outline structure and scene counts.')
     chapters.slice(0, 8).forEach(({ chapter, scenes }, index) => {
       const col = index % 2
       const row = Math.floor(index / 2)
       const x = 60 + col * 365
       const y = Math.min(420, contentStartY - 24) - row * 80
       pdf.rect(x, y - 58, 320, 58, theme.palette.panel, theme.palette.border, 0.8)
-      pdf.text(chapter.title || `Chapter ${index + 1}`, x + 14, y - 20, 13, { bold: true, color: theme.palette.text, maxWidth: 220 })
-      pdf.textBox(chapter.synopsis || `${scenes.length} scenes`, x + 14, y - 38, 290, 9, { color: theme.palette.muted, lineHeight: 12, maxLines: 2 })
+      pdf.text(chapter.title || `${structure.level2 || 'Chapter'} ${index + 1}`, x + 14, y - 20, 13, { bold: true, color: theme.palette.text, maxWidth: 220 })
+      const sessionSummary = isCampaignProject(projectData.project) ? sessionExportSummary(chapter) : ''
+      pdf.textBox(sessionSummary || chapter.synopsis || `${scenes.length} scenes`, x + 14, y - 38, 290, 9, { color: theme.palette.muted, lineHeight: 12, maxLines: 2 })
       pdf.text(`${scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()} words`, x + 246, y - 20, 8, { bold: true, color: theme.palette.accent, maxWidth: 60 })
     })
-    pages.push(pdfPage('Notes and Chapters', act.title || `Act ${actIndex + 1}`, pdfContent(pdf)))
+    pages.push(pdfPage(sectionLabel, act.title || `${structure.level1 || 'Act'} ${actIndex + 1}`, pdfContent(pdf)))
   })
   return pages
 }
 
-const createPdfBytes = (pageContents, title) => {
+const createPdfBytes = (pageContents, title, projectData) => {
   const pageDescriptors = pageContents.map(page => typeof page === 'string' ? { content: page, links: [] } : { links: [], ...page })
   const chunks = []
   const offsets = [0]
@@ -1340,8 +1395,34 @@ const createPdfBytes = (pageContents, title) => {
     addObject(outlinesId, `<< /Type /Outlines /First ${outlineSections[0].id} 0 R /Last ${outlineSections[outlineSections.length - 1].id} 0 R /Count ${outlineSections.length} >>`)
   }
 
+  // Embed the full project JSON so a YOW PDF can be re-imported with all connections intact.
+  let yowDataId = null
+  if (projectData) {
+    try {
+      // Strip _pdfImage fields added by prepareProjectPdfData — render-only, not needed for re-import
+      const cleanData = {
+        ...projectData,
+        characters: (projectData.characters ?? []).map(character => {
+          const copy = { ...character }
+          delete copy._pdfImage
+          return copy
+        }),
+      }
+      const json = JSON.stringify(cleanData)
+      const marker = '%%YOW-DATA-BEGIN%%'
+      const endMarker = '%%YOW-DATA-END%%'
+      const streamBody = `\n${marker}\n${json}\n${endMarker}\n`
+      const streamBytes = textEncoder.encode(streamBody)
+      yowDataId = nextId++
+      offsets[yowDataId] = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+      write(`${yowDataId} 0 obj\n<< /Length ${streamBytes.length} >>\nstream`)
+      write(streamBytes)
+      write('\nendstream\nendobj\n')
+    } catch { yowDataId = null }
+  }
+
   const catalogId = nextId++
-  addObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outlinesId ? ` /Outlines ${outlinesId} 0 R /PageMode /UseOutlines` : ''} >>`)
+  addObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outlinesId ? ` /Outlines ${outlinesId} 0 R /PageMode /UseOutlines` : ''}${yowDataId ? ` /YOW ${yowDataId} 0 R` : ''} >>`)
   const infoId = nextId++
   addObject(infoId, `<< /Title (${pdfText(title)}) /Producer (Your Own World) >>`)
   const xrefOffset = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
@@ -1435,7 +1516,7 @@ const createProjectPdfPages = (projectData, theme) => {
   if (enabled.has('ideas')) {
     sortByTitle(projectData.ideaEntries).forEach(entry => {
       records.push(...createArticlePages({
-        section: 'Notes and Chapters',
+        section: 'Ideas',
         eyebrow: 'Field Notes',
         title: entry.title || 'Untitled Note',
         subtitle: valueList(entry.tags?.join(', ')).join(' - '),
@@ -1449,7 +1530,7 @@ const createProjectPdfPages = (projectData, theme) => {
   const tocLineCount = [...new Set(records.map(record => record.section))].length + records.length
   const tocPageCount = Math.max(1, Math.ceil(tocLineCount / 23))
   return [
-    pdfPage('Cover', projectData.project?.title || 'Project Encyclopaedia', createCoverPage(projectData, theme)),
+    pdfPage('Cover', projectData.project?.title || getProjectExportLabel(projectData.project), createCoverPage(projectData, theme)),
     ...createTocPages(records, theme, tocPageCount),
     ...records,
   ]
@@ -1459,7 +1540,7 @@ export const createProjectPdfBlob = async (projectData, options = {}) => {
   const theme = getExportPdfTheme(options.themeId)
   const preparedData = await prepareProjectPdfData(projectData)
   const pages = createProjectPdfPages(preparedData, theme)
-  const bytes = createPdfBytes(pages, preparedData.project?.title || 'Project Encyclopaedia')
+  const bytes = createPdfBytes(pages, preparedData.project?.title || getProjectExportLabel(preparedData.project), preparedData)
   return new Blob([bytes], { type: 'application/pdf' })
 }
 
@@ -1608,6 +1689,7 @@ const makeProjectPages = (projectData, theme) => {
   }
 
   if (enabled.has('outline') || enabled.has('ideas')) {
+    const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
     const ideas = enabled.has('ideas')
       ? sortByTitle(projectData.ideaEntries).map(entry =>
         articleCard(entry.title || 'Untitled Note', valueList(entry.tags?.join(', ')), entry.content || entry.text || entry.body)
@@ -1615,9 +1697,9 @@ const makeProjectPages = (projectData, theme) => {
       : ''
     addSection(
       'notes',
-      'Notes and Chapters',
-      'Manuscript Desk',
-      'Outline structure, scene counts, manuscript notes, and loose ideas',
+      `${workspaceLabel} Structure and Ideas`,
+      workspaceLabel,
+      'Outline structure, draft counts, project notes, and loose ideas',
       `${enabled.has('outline') ? notesSection(projectData) : ''}${ideas}`,
       { modifier: 'notes-section' },
     )

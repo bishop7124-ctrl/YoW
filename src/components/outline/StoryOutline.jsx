@@ -89,6 +89,96 @@ const AutoTextarea = ({ value, onChange, placeholder, className }) => {
   )
 }
 
+const CAMPAIGN_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
+
+const SESSION_PLAN_FIELDS = [
+  { key: 'hooks', label: 'Hooks', placeholder: 'Opening hooks, rumors, clues, or pressure that pulls the party in.' },
+  { key: 'encounters', label: 'Encounter flow', placeholder: 'Expected encounter order, alternate paths, and pacing notes.' },
+  { key: 'npcs', label: 'NPCs', placeholder: 'NPCs in play, what they want, what they know, and how they react.' },
+  { key: 'rewards', label: 'Rewards', placeholder: 'Treasure, boons, clues, levels, favors, or information the party can earn.' },
+  { key: 'consequences', label: 'Consequences', placeholder: 'What changes if the party succeeds, fails, delays, or surprises you.' },
+  { key: 'notes', label: 'Session notes', placeholder: 'Prep reminders, table logistics, rules calls, safety notes, or improvisation anchors.' },
+]
+
+const SESSION_RECAP_FIELDS = [
+  { key: 'summary', label: 'Recap', placeholder: 'What actually happened at the table.' },
+  { key: 'playerChoices', label: 'Player choices', placeholder: 'Major decisions, alliances, routes, and unresolved questions.' },
+  { key: 'fallout', label: 'Fallout', placeholder: 'World, faction, NPC, location, and campaign-state consequences.' },
+  { key: 'nextHooks', label: 'Next hooks', placeholder: 'Threads to bring forward into the next session.' },
+]
+
+const CampaignSessionFields = ({ chapter, scenes, updateChapter, labels }) => {
+  const [open, setOpen] = useState(false)
+  const plan = chapter.sessionPlan || {}
+  const recap = chapter.sessionRecap || {}
+
+  const updatePlan = (key, value) => updateChapter(chapter.id, {
+    sessionPlan: { ...plan, [key]: value },
+  })
+  const updateRecap = (key, value) => updateChapter(chapter.id, {
+    sessionRecap: { ...recap, [key]: value },
+  })
+
+  const filledPlan = SESSION_PLAN_FIELDS.filter(field => plan[field.key]?.trim()).length
+  const filledRecap = SESSION_RECAP_FIELDS.filter(field => recap[field.key]?.trim()).length
+  const detailCount = filledPlan + filledRecap
+
+  return (
+    <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--bg-main)]">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent)]"
+      >
+        <span>{labels.level2} prep & recap</span>
+        <span className="flex items-center gap-2 text-[10px] font-semibold normal-case tracking-normal opacity-70">
+          {scenes.length} {labels.level3.toLowerCase()}{scenes.length !== 1 ? 's' : ''}
+          {detailCount > 0 && <span>{detailCount} fields</span>}
+          <ChevronIcon open={open} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-[var(--border)] px-3 py-3">
+          <div>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Plan</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {SESSION_PLAN_FIELDS.map(field => (
+                <label key={field.key} className="block">
+                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{field.label}</span>
+                  <AutoTextarea
+                    value={plan[field.key]}
+                    onChange={value => updatePlan(field.key, value)}
+                    placeholder={field.placeholder}
+                    className="min-h-12 rounded border border-[var(--border)] bg-[var(--bg-main)] px-3 py-2 text-xs opacity-90"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Recap</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {SESSION_RECAP_FIELDS.map(field => (
+                <label key={field.key} className="block">
+                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{field.label}</span>
+                  <AutoTextarea
+                    value={recap[field.key]}
+                    onChange={value => updateRecap(field.key, value)}
+                    placeholder={field.placeholder}
+                    className="min-h-12 rounded border border-[var(--border)] bg-[var(--bg-main)] px-3 py-2 text-xs opacity-90"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const InlineTitle = ({ value, onSave, className }) => {
   const [editing, setEditing] = useState(false)
   const [temp, setTemp] = useState(value)
@@ -176,7 +266,7 @@ const SceneRow = ({ scene, sceneIdx, isFirst, isLast, updateScene, reorderScene,
   )
 }
 
-const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapter, reorderChapter, deleteChapter, addScene, updateScene, reorderScene, deleteScene, labels, indicators }) => {
+const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapter, reorderChapter, deleteChapter, addScene, updateScene, reorderScene, deleteScene, labels, indicators, isCampaign }) => {
   const [open, setOpen] = useState(true)
   const chapterScenes = useMemo(() => scenes.filter(s => s.chapterId === chapter.id), [scenes, chapter.id])
   const wordCount = useMemo(() => chapterScenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [chapterScenes])
@@ -219,6 +309,14 @@ const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapt
             placeholder={`${labels.level2} synopsis…`}
             className="text-xs opacity-70 mt-1"
           />
+          {isCampaign && (
+            <CampaignSessionFields
+              chapter={chapter}
+              scenes={chapterScenes}
+              updateChapter={updateChapter}
+              labels={labels}
+            />
+          )}
         </div>
 
         <DeleteBtn
@@ -260,7 +358,7 @@ const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapt
   )
 }
 
-const ActCard = ({ act, chapterGlobalNums, chapters, scenes, isFirst, isLast, updateAct, reorderAct, deleteAct, addChapter, updateChapter, reorderChapter, deleteChapter, addScene, updateScene, reorderScene, deleteScene, labels, indicators }) => {
+const ActCard = ({ act, chapterGlobalNums, chapters, scenes, isFirst, isLast, updateAct, reorderAct, deleteAct, addChapter, updateChapter, reorderChapter, deleteChapter, addScene, updateScene, reorderScene, deleteScene, labels, indicators, isCampaign }) => {
   const [open, setOpen] = useState(true)
   const actChapters = useMemo(() => chapters.filter(c => c.actId === act.id), [chapters, act.id])
   const wordCount = useMemo(() => {
@@ -335,6 +433,7 @@ const ActCard = ({ act, chapterGlobalNums, chapters, scenes, isFirst, isLast, up
               deleteScene={deleteScene}
               labels={labels}
               indicators={indicators}
+              isCampaign={isCampaign}
             />
           ))}
           <button
@@ -359,6 +458,7 @@ export default function StoryOutline({ store }) {
 
   const labels = getProjectType(activeNovel?.type).structure
   const indicators = getStoryEventIndicators(activeNovel?.type)
+  const isCampaign = CAMPAIGN_TYPES.has(activeNovel?.type)
 
   const totalWords = useMemo(() => scenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [scenes])
   const totalScenes = scenes.length
@@ -434,6 +534,7 @@ export default function StoryOutline({ store }) {
                 deleteScene={deleteScene}
                 labels={labels}
                 indicators={indicators}
+                isCampaign={isCampaign}
               />
             ))}
           </div>

@@ -9,6 +9,10 @@
     "build": "vite build",
     "check:load": "node ./scripts/check-load.mjs",
     "lint": "eslint src --ext .js,.jsx",
+    "qa": "npm run lint && npm run build && npm run check:load",
+    "qa:all": "npm run qa && npm run qa:smoke",
+    "qa:smoke:install": "PLAYWRIGHT_BROWSERS_PATH=/private/tmp/yow-ms-playwright playwright install chromium",
+    "qa:smoke": "PLAYWRIGHT_BROWSERS_PATH=/private/tmp/yow-ms-playwright playwright test --config playwright.config.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -25,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",

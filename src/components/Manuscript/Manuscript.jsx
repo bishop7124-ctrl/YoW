@@ -9,6 +9,69 @@ import ManuscriptSearch from './ManuscriptSearch'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
 
+const SCRIPT_TYPES = new Set(['play', 'screenplay', 'tv_show'])
+
+const SCRIPT_ELEMENT_SETS = {
+  play: [
+    { value: 'scene_heading', label: 'Scene' },
+    { value: 'action', label: 'Direction' },
+    { value: 'character', label: 'Character' },
+    { value: 'dialogue', label: 'Dialogue' },
+    { value: 'parenthetical', label: 'Aside' },
+    { value: 'transition', label: 'Curtain' },
+  ],
+  screenplay: [
+    { value: 'scene_heading', label: 'Slugline' },
+    { value: 'action', label: 'Action' },
+    { value: 'character', label: 'Character' },
+    { value: 'dialogue', label: 'Dialogue' },
+    { value: 'parenthetical', label: 'Paren' },
+    { value: 'transition', label: 'Transition' },
+  ],
+  tv_show: [
+    { value: 'scene_heading', label: 'Scene' },
+    { value: 'action', label: 'Action' },
+    { value: 'character', label: 'Character' },
+    { value: 'dialogue', label: 'Dialogue' },
+    { value: 'parenthetical', label: 'Paren' },
+    { value: 'transition', label: 'Act Out' },
+  ],
+}
+
+const getScriptElements = (type) => SCRIPT_ELEMENT_SETS[type] || SCRIPT_ELEMENT_SETS.screenplay
+
+const getScriptElementLabel = (type, value) =>
+  getScriptElements(type).find(item => item.value === value)?.label || 'Action'
+
+const getNextScriptElementAfterEnter = (current) => {
+  if (current === 'character') return 'dialogue'
+  if (current === 'parenthetical') return 'dialogue'
+  if (current === 'dialogue') return 'action'
+  if (current === 'transition') return 'scene_heading'
+  return 'action'
+}
+
+const splitTextBlocks = (content = '') =>
+  String(content).split(/\n{2,}/).map(block => block.trim()).filter(Boolean)
+
+const buildScriptBlocks = (content = '', element = 'action') =>
+  splitTextBlocks(content).map((text, index) => ({ id: `block-${index}`, type: element, text }))
+
+const syncScriptBlocks = (content = '', previous = [], fallback = 'action') =>
+  splitTextBlocks(content).map((text, index) => ({
+    id: previous[index]?.id || `block-${index}`,
+    type: previous[index]?.type || fallback,
+    text,
+  }))
+
+const getScriptBlockIndexAtOffset = (content = '', offset = 0) => {
+  const text = String(content)
+  const clamped = Math.max(0, Math.min(offset, text.length))
+  const before = text.slice(0, clamped)
+  const blocksBefore = before.split(/\n{2,}/)
+  return Math.max(0, blocksBefore.length - 1)
+}
+
 // ─── Debounce hook ────────────────────────────────────────────────────────────
 
 function useDebouncedCallback(callback, delay) {
@@ -169,6 +232,8 @@ function buildFinalizedDraft({ novel, acts, chapters, scenes, labels, title }) {
             title: scene.title || `${labels.level3} ${sceneIndex + 1}`,
             content: scene.content || '',
             textMode: scene.textMode || 'prose',
+            scriptElement: scene.scriptElement || 'action',
+            scriptBlocks: scene.scriptBlocks || [],
           }))
 
         return {
@@ -414,6 +479,8 @@ function FinalizedReader({ draft, viewMode, pageIndex, onPageIndexChange }) {
 
 async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalNumbers) {
   const { Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak } = await import('docx')
+  const labels = getProjectType(novel?.type).structure || {}
+  const isScriptProject = SCRIPT_TYPES.has(novel?.type)
 
   const children = []
 
@@ -445,9 +512,9 @@ async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalNumbers)
 
     actChapters.forEach((chap, chapIndex) => {
       const num = chapterGlobalNumbers[chap.id]
-      const l2 = 'chapter'
+      const l2 = (labels.level2 || 'Chapter').toLowerCase()
       const isDefault = !chap.title || chap.title.toLowerCase().startsWith(l2)
-      const chapTitle = isDefault ? `Chapter ${num}` : `Chapter ${num}: ${chap.title}`
+      const chapTitle = isDefault ? `${labels.level2 || 'Chapter'} ${num}` : `${labels.level2 || 'Chapter'} ${num}: ${chap.title}`
 
       if (chapIndex > 0) children.push(new Paragraph({ children: [new PageBreak()] }))
 
@@ -475,6 +542,31 @@ async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalNumbers)
         const content = scene.content?.trim()
         if (!content) return
 
+        if (isScriptProject) {
+          const blocks = scene.scriptBlocks?.length
+            ? scene.scriptBlocks
+            : buildScriptBlocks(content, scene.scriptElement || 'action')
+          blocks.forEach(block => {
+            if (!block.text?.trim()) return
+            const type = block.type || scene.scriptElement || 'action'
+            const text = block.text.split('\n').map(l => l.trim()).filter(Boolean).join(' ')
+            const isCentered = type === 'character' || type === 'transition'
+            children.push(
+              new Paragraph({
+                children: [new TextRun({ text, font: 'Courier New', size: 24, bold: type === 'character' || type === 'scene_heading' || type === 'transition' })],
+                alignment: isCentered ? AlignmentType.CENTER : AlignmentType.LEFT,
+                indent: type === 'dialogue'
+                  ? { left: 1800, right: 1440 }
+                  : type === 'parenthetical'
+                    ? { left: 2160, right: 1800 }
+                    : { left: 720, right: 720 },
+                spacing: { before: type === 'scene_heading' ? 260 : 80, after: 80, line: 300 },
+              })
+            )
+          })
+          return
+        }
+
         const blocks = content.split(/\n{2,}/)
         blocks.forEach(block => {
           const lines = block.split('\n').map(l => l.trim()).filter(Boolean)
@@ -496,7 +588,8 @@ async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalNumbers)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${(novel?.title || 'manuscript').replace(/[^a-z0-9 ]/gi, '_')}.docx`
+  const exportName = getProjectType(novel?.type).workspaceLabel || 'manuscript'
+  a.download = `${(novel?.title || exportName).replace(/[^a-z0-9 ]/gi, '_')}.docx`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -587,13 +680,57 @@ function parseSegments(content, entityNames, entityMap) {
 
 // ─── Content preview ──────────────────────────────────────────────────────────
 
-const ContentPreview = ({ content, entityMap, onEntityClick, onNoteClick, isBullets }) => {
+const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMap, onEntityClick, onNoteClick }) => {
+  const resolvedBlocks = blocks?.length ? blocks : buildScriptBlocks('', elementType)
+  if (!resolvedBlocks.length) return <span className="ms-placeholder">Begin writing here…</span>
+
+  return (
+    <div className="ms-script-preview">
+      {resolvedBlocks.map((block, index) => {
+        const type = block.type || elementType || 'action'
+        const segs = parseSegments(block.text || '', entityNames, entityMap)
+        return (
+          <div key={block.id || index} className={`ms-script-block ms-script-${type}`}>
+            <span className="ms-script-block-label">{getScriptElementLabel(projectType, type)}</span>
+            <p>
+              {segs.map((seg, i) => {
+                if (seg.type === 'entity') return (
+                  <span key={i} className="ms-entity" onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
+                )
+                if (seg.type === 'note') return (
+                  <sup key={i} className="ms-note-marker" onClick={e => { e.stopPropagation(); onNoteClick(seg.seq) }} title={`Note ${seg.seq}`}>{seg.seq}</sup>
+                )
+                return <span key={i}>{renderInlineMarkdown(seg.value, `sb${index}-${i}`)}</span>
+              })}
+            </p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const ContentPreview = ({ content, entityMap, onEntityClick, onNoteClick, isBullets, isScript, scriptBlocks, scriptElement, projectType }) => {
   const entityNames = useMemo(
     () => Object.keys(entityMap).sort((a, b) => b.length - a.length),
     [entityMap]
   )
 
   if (!content) return <span className="ms-placeholder">Begin writing here…</span>
+
+  if (isScript) {
+    return (
+      <ScriptPreview
+        blocks={scriptBlocks?.length ? scriptBlocks : buildScriptBlocks(content, scriptElement)}
+        elementType={scriptElement}
+        projectType={projectType}
+        entityNames={entityNames}
+        entityMap={entityMap}
+        onEntityClick={onEntityClick}
+        onNoteClick={onNoteClick}
+      />
+    )
+  }
 
   if (isBullets) {
     const lines = content.split('\n').filter(l => l.trim())
@@ -695,22 +832,35 @@ const SceneEditor = ({
   formatSettings, characterNames, locationNames,
   onPersistDraft,
   onOpenVersionHistory,
+  projectType,
 }) => {
   const [localContent, setLocalContent] = useState(scene.content || '')
+  const [localScriptBlocks, setLocalScriptBlocks] = useState(() => scene.scriptBlocks?.length
+    ? scene.scriptBlocks
+    : buildScriptBlocks(scene.content || '', scene.scriptElement || 'action'))
+  const [activeScriptBlockIndex, setActiveScriptBlockIndex] = useState(0)
   const [focused, setFocused] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
   const localContentRef = useRef(localContent)
-  const isBullets = scene.textMode === 'bullets'
+  const isScript = SCRIPT_TYPES.has(projectType)
+  const isBullets = !isScript && scene.textMode === 'bullets'
+  const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
+  const scriptElements = getScriptElements(projectType)
 
   const hasMetadata = !!(scene.pov || scene.locationTag || (scene.status && scene.status !== 'draft'))
 
   useEffect(() => {
     if (focused) return undefined
-    const sync = window.requestAnimationFrame(() => setLocalContent(scene.content || ''))
+    const sync = window.requestAnimationFrame(() => {
+      const content = scene.content || ''
+      setLocalContent(content)
+      setLocalScriptBlocks(scene.scriptBlocks?.length ? scene.scriptBlocks : buildScriptBlocks(content, scene.scriptElement || 'action'))
+      setActiveScriptBlockIndex(0)
+    })
     return () => window.cancelAnimationFrame(sync)
-  }, [scene.content, focused])
+  }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
 
   // Auto-resize + scroll to keep cursor near vertical centre while typing
   useEffect(() => {
@@ -794,7 +944,77 @@ const SceneEditor = ({
     onPersistDraft(scene, nextContent)
     setLocalContent(nextContent)
     debouncedUpdate.schedule(nextContent)
+    if (isScript) {
+      const nextBlocks = syncScriptBlocks(nextContent, localScriptBlocks, scriptElement)
+      const nextIndex = getScriptBlockIndexAtOffset(nextContent, e.target.selectionStart)
+      setLocalScriptBlocks(nextBlocks)
+      setActiveScriptBlockIndex(Math.min(nextIndex, Math.max(0, nextBlocks.length - 1)))
+      onUpdateScene(scene.id, {
+        scriptBlocks: nextBlocks,
+        scriptElement: nextBlocks[nextIndex]?.type || scriptElement,
+        textMode: 'script',
+      })
+    }
   }
+
+  const syncActiveScriptBlock = useCallback(() => {
+    if (!isScript || !textareaRef.current) return
+    const nextIndex = getScriptBlockIndexAtOffset(localContentRef.current, textareaRef.current.selectionStart)
+    setActiveScriptBlockIndex(Math.min(nextIndex, Math.max(0, localScriptBlocks.length - 1)))
+  }, [isScript, localScriptBlocks.length])
+
+  const setActiveScriptElement = useCallback((type) => {
+    if (!isScript) return
+    const nextBlocks = localScriptBlocks.length
+      ? localScriptBlocks.map((block, index) => index === activeScriptBlockIndex ? { ...block, type } : block)
+      : buildScriptBlocks(localContent, type)
+    setLocalScriptBlocks(nextBlocks)
+    onUpdateScene(scene.id, {
+      scriptElement: type,
+      scriptBlocks: nextBlocks,
+      textMode: 'script',
+    })
+    window.setTimeout(() => textareaRef.current?.focus(), 0)
+  }, [activeScriptBlockIndex, isScript, localContent, localScriptBlocks, onUpdateScene, scene.id])
+
+  const cycleScriptElement = useCallback((direction = 1) => {
+    if (!isScript) return
+    const currentIndex = scriptElements.findIndex(item => item.value === scriptElement)
+    const nextIndex = (currentIndex + direction + scriptElements.length) % scriptElements.length
+    setActiveScriptElement(scriptElements[nextIndex].value)
+  }, [isScript, scriptElement, scriptElements, setActiveScriptElement])
+
+  const insertScriptParagraph = useCallback((nextType) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const insertion = '\n\n'
+    const nextContent = localContent.slice(0, start) + insertion + localContent.slice(end)
+    const newIndex = getScriptBlockIndexAtOffset(nextContent, start + insertion.length)
+    const synced = syncScriptBlocks(nextContent, localScriptBlocks, scriptElement)
+    const padded = [...synced]
+    while (padded.length <= newIndex) {
+      padded.push({ id: `block-${padded.length}`, type: nextType, text: '' })
+    }
+    const nextBlocks = padded.map((block, index) => index === newIndex ? { ...block, type: nextType } : block)
+
+    localContentRef.current = nextContent
+    onPersistDraft(scene, nextContent)
+    setLocalContent(nextContent)
+    setLocalScriptBlocks(nextBlocks)
+    setActiveScriptBlockIndex(Math.min(newIndex, Math.max(0, nextBlocks.length - 1)))
+    debouncedUpdate.schedule(nextContent)
+    onUpdateScene(scene.id, {
+      scriptElement: nextType,
+      scriptBlocks: nextBlocks,
+      textMode: 'script',
+    })
+    window.setTimeout(() => {
+      if (!textareaRef.current) return
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + insertion.length
+    }, 0)
+  }, [debouncedUpdate, localContent, localScriptBlocks, onPersistDraft, onUpdateScene, scene, scriptElement])
 
   const wrapSelection = useCallback((syntax) => {
     const ta = textareaRef.current
@@ -821,6 +1041,21 @@ const SceneEditor = ({
     if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrapSelection('*'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); wrapSelection('_'); return }
 
+    if (isScript && (e.ctrlKey || e.metaKey) && /^[1-6]$/.test(e.key)) {
+      const next = scriptElements[Number(e.key) - 1]
+      if (next) {
+        e.preventDefault()
+        setActiveScriptElement(next.value)
+        return
+      }
+    }
+
+    if (isScript && e.key === 'Tab') {
+      e.preventDefault()
+      cycleScriptElement(e.shiftKey ? -1 : 1)
+      return
+    }
+
     if (e.key === 'Enter' && localContent.includes('/scene')) {
       e.preventDefault()
       debouncedUpdate.cancel()
@@ -831,6 +1066,12 @@ const SceneEditor = ({
       onPersistDraft(scene, before)
       setLocalContent(before)
       onSplit(scene.id, scene.chapterId, before, after)
+      return
+    }
+
+    if (isScript && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      insertScriptParagraph(getNextScriptElementAfterEnter(scriptElement))
       return
     }
 
@@ -907,14 +1148,27 @@ const SceneEditor = ({
           <div className="flex-1 h-px bg-[var(--border)]" />
 
           <div className="flex rounded overflow-hidden border border-[var(--border)] text-[9px] font-bold uppercase tracking-wider">
-            <button
-              onClick={() => onUpdateScene(scene.id, { textMode: 'prose' })}
-              className={`px-2 py-0.5 transition-colors ${!isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-            >Prose</button>
-            <button
-              onClick={() => onUpdateScene(scene.id, { textMode: 'bullets' })}
-              className={`px-2 py-0.5 transition-colors ${isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-            >Bullets</button>
+            {isScript ? (
+              <select
+                value={scriptElement}
+                onChange={e => setActiveScriptElement(e.target.value)}
+                className="ms-script-select"
+                title="Script element type for the current paragraph. Tab cycles; Ctrl/Cmd+1-6 jumps directly."
+              >
+                {scriptElements.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            ) : (
+              <>
+                <button
+                  onClick={() => onUpdateScene(scene.id, { textMode: 'prose' })}
+                  className={`px-2 py-0.5 transition-colors ${!isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >Prose</button>
+                <button
+                  onClick={() => onUpdateScene(scene.id, { textMode: 'bullets' })}
+                  className={`px-2 py-0.5 transition-colors ${isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                >Bullets</button>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
@@ -955,22 +1209,29 @@ const SceneEditor = ({
           onFocus={() => { setFocused(true); onFocusExternal() }}
           onBlur={() => { onPersistDraft(scene, localContentRef.current); debouncedUpdate.flush(); setFocused(false) }}
           onChange={handleChange}
-          onKeyDown={handleKeyDown}
+          onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
+          onClick={syncActiveScriptBlock}
+          onKeyUp={syncActiveScriptBlock}
+          onSelect={syncActiveScriptBlock}
           placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
           spellCheck
           rows={1}
           className="ms-textarea"
-          style={textStyle}
+          style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
           autoFocus
         />
       ) : (
-        <div className="ms-preview" style={textStyle} onClick={activate}>
+        <div className={`ms-preview${isScript ? ' ms-script-mode' : ''}`} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle} onClick={activate}>
           <ContentPreview
             content={localContent}
             entityMap={entityMap}
             onEntityClick={onEntityClick}
             onNoteClick={seq => { onNoteClick(seq); onOpenNotes() }}
             isBullets={isBullets}
+            isScript={isScript}
+            scriptBlocks={localScriptBlocks.length ? localScriptBlocks : scene.scriptBlocks}
+            scriptElement={scriptElement}
+            projectType={projectType}
           />
         </div>
       )}
@@ -1162,7 +1423,8 @@ export default function Manuscript({ store }) {
     activeNovel, updateNovel,
   } = store
 
-  const labels = getProjectType(activeNovel?.type).structure
+  const projectTypeConfig = getProjectType(activeNovel?.type)
+  const labels = projectTypeConfig.structure
 
   const [activeSceneId, setActiveSceneId] = useState(null)
   const [activeSidebarTab, setActiveSidebarTab] = useState('structure') // null | 'structure' | 'goals' | 'progress' | 'notes'
@@ -1185,7 +1447,16 @@ export default function Manuscript({ store }) {
   const editorRefs = useRef({})
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
+  const isScriptProject = SCRIPT_TYPES.has(activeNovel?.type)
   const isNovelProject = (activeNovel?.type || 'novel') === 'novel'
+  const workspaceLabel = projectTypeConfig.workspaceLabel || 'Manuscript'
+  const importTitle = isScriptProject
+    ? 'Import a .docx draft into script beta'
+    : `Import a .docx ${workspaceLabel.toLowerCase()}`
+  const exportTitle = isScriptProject
+    ? 'Export readable beta script as .docx'
+    : `Export ${workspaceLabel.toLowerCase()} as .docx`
+  const exportButtonLabel = isScriptProject ? 'Export Script' : 'Export'
   const finalizedDrafts = useMemo(
     () => Array.isArray(activeNovel?.finalizedDrafts) ? activeNovel.finalizedDrafts : [],
     [activeNovel]
@@ -1476,7 +1747,7 @@ export default function Manuscript({ store }) {
             <button
               onClick={() => setImportModalOpen(true)}
               className="ms-toolbar-btn"
-              title="Import a .docx manuscript"
+              title={importTitle}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
@@ -1495,6 +1766,15 @@ export default function Manuscript({ store }) {
         <span className="ms-toolbar-wordcount">
           {totalWordCount > 0 ? `${totalWordCount.toLocaleString()} words` : 'No content yet'}
         </span>
+
+        {isScriptProject && !activeFinalizedDraft && (
+          <span
+            className="ms-toolbar-badge"
+            title="Readable script export is available; industry formatting is still in progress."
+          >
+            Script beta
+          </span>
+        )}
 
         <div className="flex-1" />
 
@@ -1611,14 +1891,14 @@ export default function Manuscript({ store }) {
             onClick={handleExport}
             disabled={exporting}
             className="ms-toolbar-btn disabled:opacity-50"
-            title="Export as .docx"
+            title={exportTitle}
           >
             {exporting ? 'Exporting…' : (
               <span className="flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                Export
+                {exportButtonLabel}
               </span>
             )}
           </button>
@@ -1747,6 +2027,7 @@ export default function Manuscript({ store }) {
                       locationNames={locationNames}
                       onPersistDraft={persistSceneDraftToLocalStorage}
                       onOpenVersionHistory={setVersionHistorySceneId}
+                      projectType={activeNovel?.type || 'novel'}
                     />
 
                     {isLastInChapter && (
@@ -1822,6 +2103,7 @@ export default function Manuscript({ store }) {
           hasExistingContent={acts.length > 0}
           onClose={() => setTemplateModalOpen(false)}
           onApply={handleApplyTemplate}
+          projectType={activeNovel?.type || 'novel'}
         />
       )}
 

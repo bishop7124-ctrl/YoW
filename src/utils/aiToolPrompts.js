@@ -1,4 +1,5 @@
 // Modular prompt builders for AI Tools (Plot Hole, Lore Conflict, Style Consistency, Character Interview)
+import { getProjectType } from '../constants/projectTypes'
 
 const MAX_CONTENT_CHARS = 1200
 const MAX_SCENES_INLINE = 20
@@ -9,9 +10,88 @@ function truncate(str, max = MAX_CONTENT_CHARS) {
 }
 
 function novelHeader(novel) {
-  const lines = [`Project: "${novel?.title || 'Untitled'}"`]
+  const typeCfg = getProjectType(novel?.type)
+  const lines = [
+    `Project: "${novel?.title || 'Untitled'}"`,
+    `Project type: ${typeCfg.label}`,
+    `Project structure: ${typeCfg.structure?.level1 || 'Act'} > ${typeCfg.structure?.level2 || 'Chapter'} > ${typeCfg.structure?.level3 || 'Scene'}`,
+  ]
   if (novel?.description) lines.push(`Premise: ${novel.description}`)
+  if (typeCfg.launchPositioning) lines.push(`Launch positioning: ${typeCfg.launchPositioning}`)
   return lines.join('\n')
+}
+
+function projectTypeGuidance(novel) {
+  const type = novel?.type || 'novel'
+  const cfg = getProjectType(type)
+  const structure = cfg.structure || {}
+
+  if (type === 'dnd_campaign') {
+    return `Project-type guidance:
+- Treat this as a D&D campaign bible, not only a prose manuscript.
+- Use D&D-flavoured language where helpful: party, DM, quest hooks, NPCs, factions, locations, sessions, encounters, dungeons, rewards, and fallout.
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.`
+  }
+
+  if (type === 'tabletop_rpg') {
+    return `Project-type guidance:
+- Treat this as a system-neutral tabletop campaign bible, not only a prose manuscript.
+- Use ruleset-neutral language: players, facilitator/GM, adventure hooks, NPCs, factions, locations, sessions, encounters, consequences, and campaign continuity.
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.`
+  }
+
+  if (type === 'novella') {
+    return `Project-type guidance:
+- Treat this as a novella with tighter scope than a full novel.
+- Flag subplots, cast sprawl, or pacing detours that may be too large for roughly ${cfg.defaultWordTarget?.toLocaleString?.() || '30,000'} words.
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.`
+  }
+
+  if (type === 'short_story') {
+    return `Project-type guidance:
+- Treat this as a short story with a compact cast, narrow scope, and strong economy.
+- Flag unresolved setup, extra subplots, or worldbuilding load that may be too large for roughly ${cfg.defaultWordTarget?.toLocaleString?.() || '5,000'} words.
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.`
+  }
+
+  if (type === 'play') {
+    return `Project-type guidance:
+- Treat this as a stage play in beta workflow.
+- Use theatre language: acts, scenes, beats, cast, dialogue, stage directions, entrances, exits, props, and audience clarity.
+- Do not assume script formatting is available yet; focus on structure, dramatic logic, playable scenes, and production-relevant notes.`
+  }
+
+  if (type === 'screenplay') {
+    return `Project-type guidance:
+- Treat this as a screenplay in beta workflow.
+- Use screenwriting language: acts, sequences, scenes, sluglines, action, dialogue, visual storytelling, set pieces, and production clarity.
+- Do not assume industry formatting or FDX export is available yet; focus on story logic, scene function, pacing, and screen-readiness.`
+  }
+
+  if (type === 'tv_show') {
+    return `Project-type guidance:
+- Treat this as a TV series in beta workflow.
+- Use TV language: seasons, episodes, acts, pilot hook, story engine, A/B/C plots, recurring cast, episode arcs, and season arcs.
+- Distinguish series continuity from single-episode logic whenever possible.`
+  }
+
+  if (type === 'comic') {
+    return `Project-type guidance:
+- Treat this as a comic or graphic novel in beta workflow.
+- Use sequential-art language: volumes, issues, pages, panels, captions, dialogue, page turns, reveals, and visual clarity.
+- Do not assume panel tooling is available yet; focus on page-level pacing, visual storytelling, and scene-to-page fit.`
+  }
+
+  if (type === 'video_game') {
+    return `Project-type guidance:
+- Treat this as a video game narrative bible in beta workflow.
+- Use game narrative language: quests, missions, levels, player choice, NPCs, factions, world state, dialogue, branches, consequences, and endings.
+- Do not assume branching-tree tooling is available yet; focus on narrative consistency, player-facing motivation, and world logic.`
+  }
+
+  return `Project-type guidance:
+- Treat this as long-form prose fiction.
+- Prefer structure references like ${structure.level1 || 'Act'}, ${structure.level2 || 'Chapter'}, and ${structure.level3 || 'Scene'}.`
 }
 
 function summariseCharacters(characters) {
@@ -58,9 +138,10 @@ function summariseScenes(scenes, chapters, acts) {
 
 // ── Plot Hole Detector ────────────────────────────────────────────────────────
 
-export function buildPlotHoleSystemPrompt(novel, store) {
+export function buildPlotHoleSystemPrompt(novel) {
   return `You are a professional story editor and plot analyst.
 ${novelHeader(novel)}
+${projectTypeGuidance(novel)}
 
 Your task: analyse the provided project data for logical inconsistencies, missing setup/payoff, timeline issues, character motivation gaps, and unresolved contradictions.
 
@@ -116,6 +197,7 @@ export function buildPlotHoleUserPrompt(store, novelId) {
 export function buildLoreConflictSystemPrompt(novel) {
   return `You are a world-building continuity editor.
 ${novelHeader(novel)}
+${projectTypeGuidance(novel)}
 
 Your task: identify contradictions between lore entries, world rules, locations, characters, timeline events, and manuscript references.
 
@@ -179,6 +261,7 @@ export function buildLoreConflictUserPrompt(store, novelId) {
 export function buildStyleSystemPrompt(novel, hasStyleGuide) {
   return `You are a professional developmental editor specialising in prose style analysis.
 ${novelHeader(novel)}
+${projectTypeGuidance(novel)}
 
 Your task: compare prose style across the provided scenes/chapters and identify voice drift, tonal mismatch, pacing inconsistency, or technical style issues.
 
@@ -264,7 +347,9 @@ export function buildInterviewSystemPrompt(character, novel, store, mode, timeli
     general:      'Answer questions as this character would, staying true to their voice and known facts.',
   }
 
-  return `You are roleplaying as ${character.name} from "${novel?.title || 'the novel'}".
+  return `You are roleplaying as ${character.name} from "${novel?.title || 'the project'}".
+${novelHeader(novel)}
+${projectTypeGuidance(novel)}
 
 CHARACTER PROFILE:
 Name: ${character.name}

@@ -12,6 +12,8 @@ node_modules.broken-*/
 dist
 dist-ssr
 dist-test
+test-results/
+playwright-report/
 *.local
 
 # Vite

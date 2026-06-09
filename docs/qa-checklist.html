@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOW QA Checklist</title>
+<style>
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a22;
+    --surface2: #22222e;
+    --border: #2e2e3e;
+    --accent: #a78bfa;
+    --accent2: #7c3aed;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --text: #e2e2f0;
+    --muted: #7a7a9a;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    flex: 1;
+    min-width: 200px;
+  }
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .progress-bar {
+    width: 180px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 999px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    transition: opacity 0.15s, background 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent2); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: #3d1f1f; color: var(--red); border: 1px solid #5a2a2a; }
+
+  /* Search / Filter bar */
+  .toolbar {
+    padding: 10px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .search-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 7px 12px;
+    font-size: 13px;
+    width: 260px;
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .filter-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .filter-btn.active { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+
+  /* Main layout */
+  .main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: #2a2a38; }
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+  .section-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    background: var(--border);
+    padding: 2px 8px;
+    border-radius: 999px;
+    min-width: 36px;
+    text-align: center;
+  }
+  .section-num.all-done { background: #1a3d2e; color: var(--green); }
+  .collapse-icon {
+    color: var(--muted);
+    font-size: 12px;
+    transition: transform 0.2s;
+  }
+  .section.collapsed .collapse-icon { transform: rotate(-90deg); }
+  .section-body { padding: 6px 0; }
+  .section.collapsed .section-body { display: none; }
+
+  /* Subsection label */
+  .subsection-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 10px 18px 4px;
+  }
+
+  /* Checklist item */
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    margin: 0 6px;
+    transition: background 0.1s;
+  }
+  .item:hover { background: var(--surface2); }
+  .item.hidden { display: none; }
+  .item.checked { opacity: 0.5; }
+  .item.checked .item-label { text-decoration: line-through; color: var(--muted); }
+
+  .item-check {
+    width: 17px;
+    height: 17px;
+    min-width: 17px;
+    accent-color: var(--accent2);
+    margin-top: 2px;
+    cursor: pointer;
+  }
+  .item-right {
+    flex: 1;
+    min-width: 0;
+  }
+  .item-label {
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .item-label .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 5px;
+    vertical-align: middle;
+    text-transform: uppercase;
+  }
+  .tag.blocker { background: #3d1f1f; color: var(--red); }
+  .tag.regression { background: #1f2e1a; color: var(--green); }
+
+  .note-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .note-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 5px 9px;
+    resize: none;
+    overflow: hidden;
+    height: 28px;
+    transition: border-color 0.15s, color 0.15s, height 0.1s;
+    font-family: inherit;
+    outline: none;
+    line-height: 1.4;
+  }
+  .note-input:focus {
+    border-color: var(--accent);
+    color: var(--text);
+    height: 56px;
+  }
+  .note-input::placeholder { color: var(--border); }
+  .note-input.has-note {
+    color: var(--yellow);
+    border-color: #3a3000;
+    background: #1e1b00;
+  }
+
+  /* Status badge next to item */
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+  }
+  .status-dot.pass { background: var(--green); }
+  .status-dot.fail { background: var(--red); }
+  .status-dot.skip { background: var(--muted); }
+  .status-dot.none { background: transparent; border: 1px solid var(--border); }
+
+  .status-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 3px 6px;
+    cursor: pointer;
+    outline: none;
+  }
+  .status-select:focus { border-color: var(--accent); }
+  .status-select option { background: var(--surface2); }
+
+  /* Export modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .modal-header h2 { font-size: 15px; flex: 1; }
+  .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .export-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .export-option:hover { border-color: var(--accent); }
+  .export-option input[type=radio] { accent-color: var(--accent2); }
+  .export-option label { cursor: pointer; }
+  .export-option label strong { display: block; color: var(--text); font-size: 13px; }
+  .export-option label span { font-size: 12px; color: var(--muted); }
+  .export-scope {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .export-scope label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .export-scope input[type=checkbox] { accent-color: var(--accent2); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 600px) {
+    .header { padding: 10px 14px; }
+    .main { padding: 14px; }
+    .progress-bar { width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>YOW QA Checklist</h1>
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span id="progressText">0 / 0</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn-secondary" onclick="collapseAll()">Collapse All</button>
+    <button class="btn-secondary" onclick="expandAll()">Expand All</button>
+    <button class="btn-primary" onclick="openExportModal()">Export Notes</button>
+    <button class="btn-danger" onclick="confirmReset()">Reset All</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input class="search-input" type="text" id="searchInput" placeholder="Search checklist items…" oninput="applyFilters()">
+  <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All</button>
+  <button class="filter-btn" id="filter-unchecked" onclick="setFilter('unchecked')">Unchecked</button>
+  <button class="filter-btn" id="filter-checked" onclick="setFilter('checked')">Checked</button>
+  <button class="filter-btn" id="filter-notes" onclick="setFilter('notes')">Has Notes</button>
+  <button class="filter-btn" id="filter-fail" onclick="setFilter('fail')">Failed</button>
+</div>
+
+<div class="main" id="main"></div>
+
+<!-- Export Modal -->
+<div class="modal-backdrop" id="exportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Export Notes</h2>
+      <button class="btn-secondary" onclick="closeExportModal()" style="padding:4px 10px;">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="export-options">
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtMarkdown" value="markdown" checked>
+          <label for="fmtMarkdown">
+            <strong>Markdown (.md)</strong>
+            <span>Sections, checkboxes, statuses, and notes in GitHub-flavoured Markdown</span>
+          </label>
+        </div>
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtHtml" value="html">
+          <label for="fmtHtml">
+            <strong>HTML Report</strong>
+            <span>Standalone readable HTML file with full checklist and notes</span>
+          </label>
+        </div>
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtJson" value="json">
+          <label for="fmtJson">
+            <strong>JSON</strong>
+            <span>Raw data — useful for re-importing or further processing</span>
+          </label>
+        </div>
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtCsv" value="csv">
+          <label for="fmtCsv">
+            <strong>CSV</strong>
+            <span>Spreadsheet-ready: section, item, checked, status, note columns</span>
+          </label>
+        </div>
+      </div>
+      <div class="export-scope">
+        <strong style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Include</strong>
+        <label><input type="checkbox" id="inclChecked" checked> Checked items</label>
+        <label><input type="checkbox" id="inclUnchecked" checked> Unchecked items</label>
+        <label><input type="checkbox" id="inclNoNote"> Only items with notes or non-default status</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+      <button class="btn-primary" onclick="runExport()">Download</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ──────────────────────────────────────────────────────────────────
+
+const SECTIONS = [
+{
+  id: 's1', title: '1. Authentication & Session',
+  items: [
+    { id: 'a1', label: 'Create a new account with a fresh email — confirm redirect into app', tags: ['blocker'] },
+    { id: 'a2', label: 'Try signing up with an already-registered email — confirm error message' },
+    { id: 'a3', label: 'Try signing up with a weak/invalid password — confirm validation' },
+    { id: 'a4', label: 'Confirm welcome/verification email is sent (if configured)' },
+    { sub: 'Sign In' },
+    { id: 'a5', label: 'Sign in with valid credentials — confirm session loads correctly', tags: ['blocker'] },
+    { id: 'a6', label: 'Sign in with wrong password — confirm error (no user-data leakage)' },
+    { id: 'a7', label: 'Sign in with unknown email — confirm graceful error' },
+    { id: 'a8', label: 'Sign in, close tab, re-open — confirm session is restored without re-login', tags: ['blocker'] },
+    { sub: 'Sign Out' },
+    { id: 'a9', label: 'Sign out from user menu — confirm redirect to login/home', tags: ['blocker'] },
+    { id: 'a10', label: 'After sign out, hit Back in browser — confirm you are not re-admitted' },
+    { id: 'a11', label: 'Sign out and sign back in — confirm your projects are still there', tags: ['blocker'] },
+    { sub: 'Password / Error States' },
+    { id: 'a12', label: 'Password reset flow starts without crashing (email sent)' },
+    { id: 'a13', label: 'Expired or invalid session navigates cleanly to login' },
+  ]
+},
+{
+  id: 's2', title: '2. Dashboard / Project Library',
+  items: [
+    { sub: 'Empty State' },
+    { id: 'b1', label: 'Fresh account shows empty-state hero with a clear call to create a project' },
+    { id: 'b2', label: 'No orphaned "undefined" project entries appear' },
+    { sub: 'Creating Projects' },
+    { id: 'b3', label: 'Create a Novel project — confirm it appears in the library' },
+    { id: 'b4', label: 'Create a Novella project — confirm it appears' },
+    { id: 'b5', label: 'Create a Short Story project — confirm it appears' },
+    { id: 'b6', label: 'Create a D&D Campaign project — confirm it appears' },
+    { id: 'b7', label: 'Create a TTRPG Campaign project — confirm it appears' },
+    { id: 'b8', label: 'Create a Play project — confirm it appears with a beta/limited badge' },
+    { id: 'b9', label: 'Create a Screenplay project — confirm it appears with a beta/limited badge' },
+    { id: 'b10', label: 'Create a TV Series project — confirm it appears with a beta/limited badge' },
+    { id: 'b11', label: 'Create a Comic / Graphic Novel project — confirm beta badge' },
+    { id: 'b12', label: 'Create a Video Game project — confirm beta badge' },
+    { id: 'b13', label: 'Create a project with a series assigned — confirm it groups under the series' },
+    { id: 'b14', label: 'Cover photo is displayed without blend-mode distortion' },
+    { sub: 'Opening / Selecting Projects' },
+    { id: 'b15', label: 'Click a project tile — confirm it opens / becomes active' },
+    { id: 'b16', label: 'Star button toggles active focus' },
+    { id: 'b17', label: 'Single-project account: project auto-activates' },
+    { id: 'b18', label: 'Project cards show hover/focus "Select project" cue' },
+    { id: 'b19', label: 'Active project panel shows hover/focus "Open project" cue' },
+    { id: 'b20', label: 'Projects inside a series are selectable as active even when no standalone projects exist' },
+    { sub: 'Renaming & Deleting' },
+    { id: 'b21', label: 'Rename a project inline — confirm new name persists after refresh' },
+    { id: 'b22', label: 'Delete a project — confirm it disappears from library and no orphan records remain', tags: ['blocker'] },
+    { sub: 'Series Grouping' },
+    { id: 'b23', label: 'Series-grouped projects appear under their parent series header' },
+    { id: 'b24', label: 'Library content width matches ActiveProjectHero width' },
+    { id: 'b25', label: 'Series filter on StatusQueue works correctly' },
+    { sub: 'Overview vs Insights Tabs' },
+    { id: 'b26', label: 'Overview shows: momentum, scene health, draft balance, longest scene, worldbuilding coverage' },
+    { id: 'b27', label: 'Insights tab shows analytics cards' },
+    { id: 'b28', label: 'Responsive tile packing works on desktop, tablet, and mobile' },
+    { id: 'b29', label: 'Switching between Overview and Insights does not lose state' },
+    { sub: 'Scale' },
+    { id: 'b30', label: 'Library with 20+ projects loads without visible lag' },
+    { id: 'b31', label: 'Library with multiple series renders grouping correctly' },
+  ]
+},
+{
+  id: 's3', title: '3. Manuscript Editor',
+  items: [
+    { sub: 'Structure — Novel (Act → Chapter → Scene)' },
+    { id: 'c1', label: 'Add an Act — confirm it persists after refresh', tags: ['blocker'] },
+    { id: 'c2', label: 'Add a Chapter inside an Act — persists', tags: ['blocker'] },
+    { id: 'c3', label: 'Add a Scene inside a Chapter — persists', tags: ['blocker'] },
+    { id: 'c4', label: 'Rename Chapter and Scene — confirm persistence' },
+    { id: 'c5', label: 'Delete a Scene — confirm deletion warning; content is removed', tags: ['blocker'] },
+    { id: 'c6', label: 'Delete a Chapter — confirm deletion warning; scenes inside also removed', tags: ['blocker'] },
+    { id: 'c7', label: 'Reorder Scenes via drag-and-drop — confirm new order persists' },
+    { id: 'c8', label: 'Move a Scene to a different Chapter — appears in right place after refresh' },
+    { sub: 'Structure — Novella (Part → Chapter → Scene)' },
+    { id: 'c9', label: 'Labels read "Part / Chapter / Scene" not "Act / Chapter / Scene"' },
+    { id: 'c10', label: 'Default word target appears (30,000 words)' },
+    { id: 'c11', label: 'Default sections are the lighter Novella set' },
+    { sub: 'Structure — Short Story (Part → Section → Scene)' },
+    { id: 'c12', label: 'Labels read "Part / Section / Scene"' },
+    { id: 'c13', label: 'Default word target appears (5,000 words)' },
+    { sub: 'Structure — D&D Campaign (Story Arc → Session → Encounter)' },
+    { id: 'c14', label: 'Labels read "Arc / Session / Encounter"' },
+    { id: 'c15', label: 'Structured Session Prep fields appear (hooks, encounters, NPCs, rewards, consequences)' },
+    { id: 'c16', label: 'Structured Session Recap fields appear' },
+    { id: 'c17', label: 'D&D-flavoured AI prompt context is active' },
+    { sub: 'Structure — TTRPG Campaign (Story Arc → Session → Encounter)' },
+    { id: 'c18', label: 'Labels read "Arc / Session / Encounter"' },
+    { id: 'c19', label: 'Session prep/recap fields present' },
+    { id: 'c20', label: 'System-neutral (not D&D-branded) type description' },
+    { sub: 'Writing' },
+    { id: 'c21', label: 'Open a scene and type — content appears immediately', tags: ['blocker'] },
+    { id: 'c22', label: 'Rapid typing for 60+ seconds — no cursor jumping or lag', tags: ['blocker'] },
+    { id: 'c23', label: 'Paste a large block of text (~2,000 words) — editor does not freeze' },
+    { id: 'c24', label: 'Refresh mid-scene — content is preserved (autosave)', tags: ['blocker'] },
+    { id: 'c25', label: 'Navigate to another scene and back — original scene content intact', tags: ['blocker'] },
+    { id: 'c26', label: 'Close browser tab and reopen — scene content preserved', tags: ['blocker'] },
+    { id: 'c27', label: 'Logout and login — scene content preserved', tags: ['blocker'] },
+    { sub: 'Autosave Verification' },
+    { id: 'c28', label: 'Type several words, wait 2 seconds, refresh — content is there', tags: ['blocker'] },
+    { id: 'c29', label: 'Type, immediately close tab, reopen — content is there', tags: ['blocker'] },
+    { id: 'c30', label: 'Type in Scene A, switch to Scene B, refresh — Scene A content is preserved', tags: ['blocker'] },
+    { sub: 'Word Count' },
+    { id: 'c31', label: 'Scene word count updates as you type' },
+    { id: 'c32', label: 'Chapter word count reflects total of its scenes' },
+    { id: 'c33', label: 'Project total word count is correct across all chapters' },
+    { id: 'c34', label: 'Paste large text — counts update correctly' },
+    { id: 'c35', label: 'Delete text — counts decrease correctly' },
+    { sub: 'Scene Notes & Status' },
+    { id: 'c36', label: 'Set scene status (Draft, Revised, Final, etc.) — persists after refresh' },
+    { id: 'c37', label: 'Add a scene note — note persists after refresh' },
+    { sub: 'Manuscript Search' },
+    { id: 'c38', label: 'Search for a word that exists — correct scenes highlighted/listed' },
+    { id: 'c39', label: 'Search for a word that doesn\'t exist — empty/no-results state shown' },
+    { sub: 'Templates' },
+    { id: 'c40', label: 'Open template modal — templates list loads' },
+    { id: 'c41', label: 'Apply a template to a new scene — content appears correctly' },
+    { sub: 'Script Mode (Play / Screenplay / TV — Beta)' },
+    { id: 'c42', label: 'Beta label shown in toolbar and export menu' },
+    { id: 'c43', label: 'Tab / Shift+Tab cycles through script element types' },
+    { id: 'c44', label: 'Cmd/Ctrl+1–6 shortcuts switch element types' },
+    { id: 'c45', label: 'Enter key creates a new script paragraph' },
+    { id: 'c46', label: 'Script preview renders dialogue / action / stage direction styled correctly' },
+    { id: 'c47', label: 'Script DOCX export produces a readable document', tags: ['blocker'] },
+    { sub: 'AI Suggestion Panel' },
+    { id: 'c48', label: 'AI button in toolbar opens the AI sidebar panel' },
+    { id: 'c49', label: '"Continue", "What\'s next?", "Improve", "Add dialogue" chips trigger generation' },
+    { id: 'c50', label: 'Custom prompt textarea sends request' },
+    { id: 'c51', label: 'Output streams into the panel — does not auto-apply to scene' },
+    { id: 'c52', label: '"Append to scene" button appends text at cursor/end' },
+    { id: 'c53', label: '"Copy" button copies text to clipboard' },
+    { id: 'c54', label: 'With no AI provider configured — warning message is shown, not a crash' },
+    { sub: 'Version History & Pacing' },
+    { id: 'c55', label: 'Scene version history panel opens' },
+    { id: 'c56', label: 'Previous versions are listed and selectable' },
+    { id: 'c57', label: 'Pacing chart renders without error on a multi-scene manuscript' },
+  ]
+},
+{
+  id: 's4', title: '4. Story Outline',
+  items: [
+    { id: 'd1', label: 'Add an Act — appears in outline list, persists after refresh', tags: ['blocker'] },
+    { id: 'd2', label: 'Add a Chapter with synopsis — synopsis persists', tags: ['blocker'] },
+    { id: 'd3', label: 'Add a Scene entry with synopsis' },
+    { id: 'd4', label: 'Edit Act/Chapter/Scene synopsis — edit persists after refresh', tags: ['blocker'] },
+    { id: 'd5', label: 'Reorder outline items — order persists after refresh' },
+    { id: 'd6', label: 'Delete an outline item — removed after refresh' },
+    { id: 'd7', label: 'Rapid edit + immediate refresh — edit is not lost (localStorage sync)', tags: ['blocker'] },
+  ]
+},
+{
+  id: 's5', title: '5. Characters',
+  items: [
+    { id: 'e1', label: 'Create a character with name, description, role — saves and appears in list', tags: ['blocker'] },
+    { id: 'e2', label: 'Edit character details — changes persist after refresh', tags: ['blocker'] },
+    { id: 'e3', label: 'Delete a character — removed from list; removed from character relationships, lore links, and timeline links', tags: ['blocker'] },
+    { id: 'e4', label: 'Create character, immediately refresh — character is still there', tags: ['blocker'] },
+    { id: 'e5', label: 'Search characters by name — correct results returned' },
+    { id: 'e6', label: 'Empty state message appears when no characters exist' },
+    { id: 'e7', label: 'Characters are scoped to the active project (switching projects shows correct characters)' },
+    { id: 'e8', label: 'Add a relationship between two characters — relationship persists' },
+    { id: 'e9', label: 'Remove a relationship — it disappears from both characters' },
+  ]
+},
+{
+  id: 's6', title: '6. Locations',
+  items: [
+    { id: 'f1', label: 'Create a location — appears in list, persists after refresh', tags: ['blocker'] },
+    { id: 'f2', label: 'Edit location — changes persist', tags: ['blocker'] },
+    { id: 'f3', label: 'Delete a location — removed from list, removed from lore links and timeline links', tags: ['blocker'] },
+    { id: 'f4', label: 'Create location, immediately refresh — it is still there', tags: ['blocker'] },
+    { id: 'f5', label: 'Locations are scoped to the active project' },
+  ]
+},
+{
+  id: 's7', title: '7. Lore Encyclopedia',
+  items: [
+    { id: 'g1', label: 'Create a lore entry with category — appears in list', tags: ['blocker'] },
+    { id: 'g2', label: 'Edit lore entry — changes persist after refresh', tags: ['blocker'] },
+    { id: 'g3', label: 'Delete lore entry — removed; linked characters/locations no longer reference it', tags: ['blocker'] },
+    { id: 'g4', label: 'Create lore entry, immediately refresh — still present', tags: ['blocker'] },
+    { id: 'g5', label: 'Filter lore by category — correct entries shown' },
+    { id: 'g6', label: 'Search lore by keyword — correct results' },
+    { id: 'g7', label: 'Link a character to a lore entry — link appears' },
+    { id: 'g8', label: 'Link a location to a lore entry — link appears' },
+    { id: 'g9', label: 'Empty state shown when no lore exists' },
+  ]
+},
+{
+  id: 's8', title: '8. Timeline & World History',
+  items: [
+    { id: 'h1', label: 'Create a timeline event — appears in chronological list, persists after refresh', tags: ['blocker'] },
+    { id: 'h2', label: 'Edit a timeline event — changes persist', tags: ['blocker'] },
+    { id: 'h3', label: 'Delete a timeline event — removed from timeline and world history', tags: ['blocker'] },
+    { id: 'h4', label: 'Create event, immediately refresh — still there', tags: ['blocker'] },
+    { id: 'h5', label: 'Link a timeline event to a character — link persists' },
+    { id: 'h6', label: 'Link a timeline event to a location — link persists' },
+    { id: 'h7', label: 'Unlink — link removed from both sides' },
+    { id: 'h8', label: 'WorldHistory groups events by era correctly' },
+    { id: 'h9', label: 'Orphaned WorldHistory entries are migrated into timeline on import' },
+  ]
+},
+{
+  id: 's9', title: '9. Map Builder',
+  items: [
+    { id: 'i1', label: 'Map builder loads without errors for a Novel project' },
+    { id: 'i2', label: 'Can add a location pin to the map' },
+    { id: 'i3', label: 'Map state persists after refresh' },
+    { id: 'i4', label: 'Map builder disabled state shown for beta project types that don\'t support it' },
+  ]
+},
+{
+  id: 's10', title: '10. Family Tree',
+  items: [
+    { id: 'j1', label: 'Family tree panel loads without errors' },
+    { id: 'j2', label: 'Can add a family member node' },
+    { id: 'j3', label: 'Relationships between nodes render correctly' },
+    { id: 'j4', label: 'State persists after refresh' },
+  ]
+},
+{
+  id: 's11', title: '11. Factions',
+  items: [
+    { id: 'k1', label: 'Factions panel loads' },
+    { id: 'k2', label: 'Can create a faction with name and description' },
+    { id: 'k3', label: 'Logo builder opens and lets you compose a faction logo' },
+    { id: 'k4', label: 'Faction data persists after refresh' },
+  ]
+},
+{
+  id: 's12', title: '12. Ideas Board',
+  items: [
+    { id: 'l1', label: 'Ideas board loads in list and kanban views' },
+    { id: 'l2', label: 'Create a new idea via Quick Capture — appears on board' },
+    { id: 'l3', label: 'Drag idea to a different kanban column — status updates and persists' },
+    { id: 'l4', label: 'Edit idea — changes persist' },
+    { id: 'l5', label: 'Delete idea — removed' },
+    { id: 'l6', label: 'Filter ideas by tag/status — correct subset shown' },
+    { id: 'l7', label: 'Convert idea to another type (scene, character, lore) — conversion modal works' },
+  ]
+},
+{
+  id: 's13', title: '13. Schedule / Calendar',
+  items: [
+    { id: 'm1', label: 'Calendar view loads correctly' },
+    { id: 'm2', label: 'Add a writing session event — appears on calendar day' },
+    { id: 'm3', label: 'Adding an event does not cause day cells to disappear', tags: ['regression'] },
+    { id: 'm4', label: 'Edit event — changes persist' },
+    { id: 'm5', label: 'Delete event — removed from calendar' },
+    { id: 'm6', label: 'State persists after refresh' },
+  ]
+},
+{
+  id: 's14', title: '14. Character Builder (D&D / TTRPG)',
+  items: [
+    { id: 'n1', label: 'Character Builder tab appears for D&D Campaign and TTRPG Campaign project types' },
+    { id: 'n2', label: 'Character Wizard walks through class, race, stat selection' },
+    { id: 'n3', label: 'Completed character sheet displays stats, HP, abilities correctly' },
+    { id: 'n4', label: 'Dice Roller produces random results in correct ranges (d4, d6, d8, d10, d12, d20, d100)' },
+    { id: 'n5', label: 'Party room shows all created characters' },
+    { id: 'n6', label: 'Character sheet data persists after refresh' },
+  ]
+},
+{
+  id: 's15', title: '15. Exports & Backups',
+  items: [
+    { sub: 'ZIP Export (Project Archive)' },
+    { id: 'o1', label: 'Export a small project — ZIP downloads without error', tags: ['blocker'] },
+    { id: 'o2', label: 'Export a medium project (10+ chapters, 20+ characters) — ZIP is complete', tags: ['blocker'] },
+    { id: 'o3', label: 'Export a large project (30+ scenes, full worldbuilding) — ZIP is complete and not corrupted', tags: ['blocker'] },
+    { id: 'o4', label: 'ZIP contains: manuscript scenes, characters, locations, lore, timeline, outline', tags: ['blocker'] },
+    { id: 'o5', label: 'ZIP can be opened and files are readable' },
+    { sub: 'DOCX Manuscript Export' },
+    { id: 'o6', label: 'Export manuscript as DOCX — file downloads', tags: ['blocker'] },
+    { id: 'o7', label: 'Chapters and scenes appear in correct order', tags: ['blocker'] },
+    { id: 'o8', label: 'Empty scenes do not break the document' },
+    { id: 'o9', label: 'Large manuscript (80,000 words) exports successfully' },
+    { id: 'o10', label: 'Script-mode DOCX (Play/Screenplay) exports with readable formatting' },
+    { sub: 'PDF Export' },
+    { id: 'o11', label: 'Export project as PDF — file downloads' },
+    { id: 'o12', label: 'Content appears in correct order' },
+    { id: 'o13', label: 'Each built-in theme produces visually distinct PDF output' },
+    { id: 'o14', label: 'Large project PDF export completes without crash' },
+    { sub: 'Restore Flow' },
+    { id: 'o15', label: 'Export a project as ZIP', tags: ['blocker'] },
+    { id: 'o16', label: 'Use the Restore button in the library top bar to import that ZIP', tags: ['blocker'] },
+    { id: 'o17', label: 'Restored project appears as a new entry (new ID, no collision)', tags: ['blocker'] },
+    { id: 'o18', label: 'Restored project contains all: chapters, scenes, characters, locations, lore, timeline, outline', tags: ['blocker'] },
+    { id: 'o19', label: 'Original project is unchanged after restore' },
+    { sub: 'Cloud Backup (Firestore)' },
+    { id: 'o20', label: 'While logged in: create content, log out, log back in — data is still there', tags: ['blocker'] },
+    { id: 'o21', label: 'Open the same account in a second browser — data matches' },
+  ]
+},
+{
+  id: 's16', title: '16. AI Tools',
+  items: [
+    { id: 'p1', label: 'AI Tools panel loads' },
+    { id: 'p2', label: 'Plot Hole Detector runs and returns findings' },
+    { id: 'p3', label: 'Lore Conflict Checker runs and returns findings' },
+    { id: 'p4', label: 'Style Consistency checker runs' },
+    { id: 'p5', label: 'Character Interview tool runs' },
+    { id: 'p6', label: 'Each tool shows a clear "no provider configured" state when AI is not set up' },
+    { id: 'p7', label: 'Findings cards render correctly; copy/apply buttons work' },
+  ]
+},
+{
+  id: 's17', title: '17. AI Import Modal',
+  items: [
+    { id: 'q1', label: 'AI import modal opens from the appropriate trigger' },
+    { id: 'q2', label: 'Import flow completes without crashing' },
+    { id: 'q3', label: 'Imported content appears in the correct section of the project' },
+  ]
+},
+{
+  id: 's18', title: '18. Account Settings',
+  items: [
+    { sub: 'Profile' },
+    { id: 'r1', label: 'Display name edits save and persist after refresh' },
+    { id: 'r2', label: 'Email shown correctly' },
+    { sub: 'Theme System' },
+    { id: 'r3', label: 'Switch between all dark preset themes — app shell updates immediately' },
+    { id: 'r4', label: 'Switch between all light preset themes — app shell updates immediately' },
+    { id: 'r5', label: 'Edit custom colours — live preview updates' },
+    { id: 'r6', label: 'Adjust corner roundness — preview updates' },
+    { id: 'r7', label: 'Adjust colour/shadow strength — preview updates' },
+    { id: 'r8', label: 'Save theme to profile — refresh, confirm theme is remembered' },
+    { id: 'r9', label: 'Default theme (ink-ember) is applied on fresh accounts' },
+    { sub: 'Storage' },
+    { id: 'r10', label: 'Storage card shows a meaningful usage value (not 0 or undefined)' },
+    { id: 'r11', label: 'Usage reflects realistic manuscript + worldbuilding sizes' },
+    { sub: 'AI Provider Settings' },
+    { id: 'r12', label: 'Can enter an API key for an AI provider' },
+    { id: 'r13', label: 'Key persists after refresh' },
+    { id: 'r14', label: 'Removing the key causes AI tools to show the "no provider" warning' },
+    { sub: 'Free Project Selector' },
+    { id: 'r15', label: 'Free-tier users can select their one free project' },
+    { id: 'r16', label: 'Switching free project updates access correctly' },
+  ]
+},
+{
+  id: 's19', title: '19. Pricing Page',
+  items: [
+    { id: 's_1', label: 'Page loads without errors' },
+    { id: 's_2', label: 'All plan tiers and prices are displayed' },
+    { id: 's_3', label: 'No beta/limited features advertised as fully complete', tags: ['blocker'] },
+    { id: 's_4', label: 'Upgrade CTA routes to checkout' },
+    { id: 's_5', label: 'Checkout flow can be initiated (Stripe redirects correctly)', tags: ['blocker'] },
+    { id: 's_6', label: 'Cancellation path is documented/accessible', tags: ['blocker'] },
+  ]
+},
+{
+  id: 's20', title: '20. URL / Deep-link Persistence',
+  items: [
+    { id: 't1', label: 'Open a project section (e.g., Characters), refresh — same section loads' },
+    { id: 't2', label: 'Open a specific scene in writing mode, refresh — same scene loads' },
+    { id: 't3', label: 'Open Account Settings on a specific tab, refresh — same tab loads' },
+    { id: 't4', label: 'Open Project Settings, refresh — settings panel reopens' },
+    { id: 't5', label: 'Share a URL with another logged-in user — they land on the correct section (or graceful auth redirect)' },
+  ]
+},
+{
+  id: 's21', title: '21. Modals & Overlays',
+  items: [
+    { id: 'u1', label: 'Project Edit modal: opens, edits save, click outside closes' },
+    { id: 'u2', label: 'Series Edit modal: opens, edits save, click outside closes' },
+    { id: 'u3', label: '"Discard changes?" prompt appears when closing a dirty modal' },
+    { id: 'u4', label: 'All modals trap focus correctly (Tab doesn\'t escape behind modal)' },
+    { id: 'u5', label: 'All modals have consistent spacing and button order (confirm vs cancel)' },
+    { id: 'u6', label: 'Beta disclaimer popup appears once per browser for new visitors, then is suppressed' },
+  ]
+},
+{
+  id: 's22', title: '22. Studio / Presentation',
+  items: [
+    { id: 'v1', label: 'Studio view loads without errors' },
+    { id: 'v2', label: 'Presentation mode is visually correct and navigable' },
+  ]
+},
+{
+  id: 's23', title: '23. Novel Reader / Finalized Draft',
+  items: [
+    { id: 'w1', label: 'Finalize a novel draft — working manuscript remains editable' },
+    { id: 'w2', label: 'Finalized copy is read-only (cannot type in it)' },
+    { id: 'w3', label: 'Can select between multiple finalized snapshots' },
+    { id: 'w4', label: 'Scroll and page-flip view modes both work' },
+    { id: 'w5', label: 'Previous / Next page controls work correctly' },
+    { id: 'w6', label: 'Non-novel project types do NOT show the "Finalize" action' },
+  ]
+},
+{
+  id: 's24', title: '24. Responsive Layout',
+  items: [
+    { sub: 'Dashboard (375px / 768px / 1280px+)' },
+    { id: 'x1', label: 'Project tiles stack correctly on mobile', tags: ['blocker'] },
+    { id: 'x2', label: 'StatusQueue is full width and scrollable on mobile', tags: ['blocker'] },
+    { id: 'x3', label: 'No buttons overlap or disappear on any width', tags: ['blocker'] },
+    { sub: 'Manuscript' },
+    { id: 'x4', label: 'Structure sidebar collapses to bottom tab bar at ≤640px', tags: ['blocker'] },
+    { id: 'x5', label: 'Sidebar panel opens as a 58vh overlay on mobile', tags: ['blocker'] },
+    { id: 'x6', label: 'Writing area fills full width on mobile', tags: ['blocker'] },
+    { id: 'x7', label: 'Write button is visible at compact widths', tags: ['blocker'] },
+    { sub: 'Account / Settings' },
+    { id: 'x8', label: 'All settings panels are scrollable and not clipped on mobile', tags: ['blocker'] },
+    { id: 'x9', label: 'Edit modals do not overflow screen on mobile', tags: ['blocker'] },
+    { sub: 'Series Dashboard' },
+    { id: 'x10', label: 'Top bar stays layered above sticky tab bar (user menu not obscured)' },
+    { sub: 'Public Navigation' },
+    { id: 'x11', label: 'Top nav is consistent across all marketing pages' },
+    { id: 'x12', label: 'Nav links do not overlap on tablet' },
+    { id: 'x13', label: 'Mobile hamburger / collapsed nav works correctly' },
+  ]
+},
+{
+  id: 's25', title: '25. Public / Marketing Pages',
+  items: [
+    { id: 'y1', label: '/ — Home page loads; value proposition clear; no false "live" claims for beta features', tags: ['blocker'] },
+    { id: 'y2', label: '/pricing — Pricing page loads correctly' },
+    { id: 'y3', label: '/features — Features page loads' },
+    { id: 'y4', label: '/blog — Blog index loads; all article links resolve' },
+    { id: 'y5', label: 'Individual blog posts load without 404' },
+    { id: 'y6', label: '/about — About page loads' },
+    { id: 'y7', label: '/faq — FAQ page loads' },
+    { id: 'y8', label: '/beta-disclaimer — Page loads' },
+    { id: 'y9', label: '/ai-overview — AI overview page loads' },
+    { id: 'y10', label: '/dnd-campaign-manager — Marketing page loads' },
+    { id: 'y11', label: '/family-tree-builder — Loads' },
+    { id: 'y12', label: '/lore-management — Loads' },
+    { id: 'y13', label: '/map-builder-for-writers — Loads' },
+    { id: 'y14', label: '/novel-writing-software — Loads' },
+    { id: 'y15', label: '/story-planning-software — Loads' },
+    { id: 'y16', label: '/timeline-tool-for-writers — Loads' },
+    { id: 'y17', label: '/worldbuilding-software — Loads' },
+    { id: 'y18', label: 'All pages have correct <title> and <meta description>' },
+    { id: 'y19', label: 'OG / Twitter card tags present' },
+    { id: 'y20', label: 'Canonical URLs are set correctly' },
+    { id: 'y21', label: 'robots.txt is present and correct' },
+  ]
+},
+{
+  id: 's26', title: '26. Large Project Stress Test',
+  items: [
+    { id: 'z1', label: 'Stress project created: 5 Acts, 20 Chapters, 80 Scenes (~80,000 words)', tags: ['blocker'] },
+    { id: 'z2', label: '50 Characters, 30 Locations, 40 Lore entries, 25 Timeline events' },
+    { id: 'z3', label: 'Dashboard loads the project without visible lag', tags: ['blocker'] },
+    { id: 'z4', label: 'Manuscript structure sidebar renders all chapters and scenes' },
+    { id: 'z5', label: 'Switching between scenes is responsive (< 500ms feel)' },
+    { id: 'z6', label: 'Word count display is accurate' },
+    { id: 'z7', label: 'Search returns results in reasonable time' },
+    { id: 'z8', label: 'ZIP export completes and is not corrupted', tags: ['blocker'] },
+    { id: 'z9', label: 'DOCX export completes with correct scene ordering', tags: ['blocker'] },
+    { id: 'z10', label: 'PDF export completes without crash' },
+  ]
+},
+{
+  id: 's27', title: '27. Data Safety / Edge Cases',
+  items: [
+    { id: 'aa1', label: 'Delete the currently "active" project — app does not crash; clears active state gracefully', tags: ['blocker'] },
+    { id: 'aa2', label: 'Import a corrupt or malformed ZIP — shows error, does not corrupt existing data', tags: ['blocker'] },
+    { id: 'aa3', label: 'Two browser tabs open on same project — editing in one, refresh the other — no silent overwrite', tags: ['blocker'] },
+    { id: 'aa4', label: 'Log out mid-edit — content saved before logout is present after login', tags: ['blocker'] },
+    { id: 'aa5', label: 'Switching projects rapidly — active project reflects last selection, no content bleed', tags: ['blocker'] },
+  ]
+},
+{
+  id: 's28', title: '28. Legal & Compliance',
+  items: [
+    { id: 'ab1', label: 'Privacy Policy link is accessible from app and marketing pages', tags: ['blocker'] },
+    { id: 'ab2', label: 'Terms of Service link is accessible', tags: ['blocker'] },
+    { id: 'ab3', label: 'Cookie banner appears for new visitors and can be accepted/dismissed' },
+    { id: 'ab4', label: 'Beta banner correctly identifies the product as beta where shown' },
+    { id: 'ab5', label: 'Paid plan descriptions match what is actually implemented (no false promises)', tags: ['blocker'] },
+    { id: 'ab6', label: 'Cancellation path is described or linked in pricing/account', tags: ['blocker'] },
+  ]
+},
+];
+
+// ─── STATE ─────────────────────────────────────────────────────────────────
+
+const STATE_KEY = 'yow_qa_v1';
+let state = {};
+
+function loadState() {
+  try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch { state = {}; }
+}
+function saveState() {
+  localStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+function getItem(id) {
+  return state[id] || { checked: false, status: 'none', note: '' };
+}
+function setItem(id, patch) {
+  state[id] = { ...getItem(id), ...patch };
+  saveState();
+}
+
+// ─── RENDER ────────────────────────────────────────────────────────────────
+
+function render() {
+  loadState();
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+
+  SECTIONS.forEach(sec => {
+    const div = document.createElement('div');
+    div.className = 'section';
+    div.id = sec.id;
+
+    const realItems = sec.items.filter(i => i.id);
+    const checkedCount = realItems.filter(i => getItem(i.id).checked).length;
+    const allDone = realItems.length > 0 && checkedCount === realItems.length;
+
+    div.innerHTML = `
+      <div class="section-header" onclick="toggleSection('${sec.id}')">
+        <span class="section-title">${sec.title}</span>
+        <span class="section-num ${allDone ? 'all-done' : ''}">${checkedCount}/${realItems.length}</span>
+        <span class="collapse-icon">▾</span>
+      </div>
+      <div class="section-body"></div>
+    `;
+
+    const body = div.querySelector('.section-body');
+
+    sec.items.forEach(item => {
+      if (item.sub) {
+        const label = document.createElement('div');
+        label.className = 'subsection-label';
+        label.textContent = item.sub;
+        body.appendChild(label);
+        return;
+      }
+
+      const s = getItem(item.id);
+      const row = document.createElement('div');
+      row.className = `item ${s.checked ? 'checked' : ''}`;
+      row.dataset.id = item.id;
+      row.dataset.label = item.label.toLowerCase();
+      row.dataset.checked = s.checked ? 'true' : 'false';
+      row.dataset.note = s.note || '';
+      row.dataset.status = s.status || 'none';
+
+      const tagHtml = (item.tags || []).map(t =>
+        `<span class="tag ${t}">${t}</span>`
+      ).join('');
+
+      row.innerHTML = `
+        <input type="checkbox" class="item-check" ${s.checked ? 'checked' : ''} onchange="toggleCheck('${item.id}', this)">
+        <div class="item-right">
+          <div class="item-label">${tagHtml}${escHtml(item.label)}</div>
+          <div class="note-row">
+            <select class="status-select" onchange="changeStatus('${item.id}', this)">
+              <option value="none" ${s.status === 'none' ? 'selected' : ''}>— status</option>
+              <option value="pass" ${s.status === 'pass' ? 'selected' : ''}>✓ Pass</option>
+              <option value="fail" ${s.status === 'fail' ? 'selected' : ''}>✗ Fail</option>
+              <option value="skip" ${s.status === 'skip' ? 'selected' : ''}>⊘ Skip</option>
+            </select>
+            <textarea class="note-input ${s.note ? 'has-note' : ''}" placeholder="Add a note…" oninput="updateNote('${item.id}', this)" onblur="shrinkNote(this)">${escHtml(s.note || '')}</textarea>
+          </div>
+        </div>
+      `;
+      body.appendChild(row);
+    });
+
+    main.appendChild(div);
+  });
+
+  updateProgress();
+  applyFilters();
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── INTERACTIONS ──────────────────────────────────────────────────────────
+
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+function collapseAll() { SECTIONS.forEach(s => document.getElementById(s.id).classList.add('collapsed')); }
+function expandAll()   { SECTIONS.forEach(s => document.getElementById(s.id).classList.remove('collapsed')); }
+
+function toggleCheck(id, el) {
+  setItem(id, { checked: el.checked });
+  const row = el.closest('.item');
+  row.classList.toggle('checked', el.checked);
+  row.dataset.checked = el.checked ? 'true' : 'false';
+  updateProgress();
+  updateSectionBadge(row);
+}
+
+function changeStatus(id, el) {
+  setItem(id, { status: el.value });
+  const row = el.closest('.item');
+  row.dataset.status = el.value;
+  applyFilters();
+}
+
+function updateNote(id, el) {
+  const val = el.value;
+  setItem(id, { note: val });
+  el.classList.toggle('has-note', !!val.trim());
+  el.closest('.item').dataset.note = val;
+  // auto-grow
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function shrinkNote(el) {
+  if (!el.value.trim()) el.style.height = '';
+}
+
+function updateSectionBadge(row) {
+  const section = row.closest('.section');
+  const realItems = section.querySelectorAll('.item');
+  const checked = section.querySelectorAll('.item.checked').length;
+  const badge = section.querySelector('.section-num');
+  badge.textContent = `${checked}/${realItems.length}`;
+  badge.classList.toggle('all-done', checked === realItems.length && realItems.length > 0);
+}
+
+function updateProgress() {
+  const allItems = document.querySelectorAll('.item');
+  const checkedItems = document.querySelectorAll('.item.checked');
+  const pct = allItems.length ? (checkedItems.length / allItems.length) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${checkedItems.length} / ${allItems.length}`;
+}
+
+// ─── FILTER ────────────────────────────────────────────────────────────────
+
+let currentFilter = 'all';
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('filter-' + f).classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  const query = document.getElementById('searchInput').value.trim().toLowerCase();
+  document.querySelectorAll('.item').forEach(row => {
+    const label = row.dataset.label || '';
+    const checked = row.dataset.checked === 'true';
+    const note = (row.dataset.note || '').toLowerCase();
+    const status = row.dataset.status || 'none';
+
+    let show = true;
+    if (query && !label.includes(query) && !note.includes(query)) show = false;
+    if (currentFilter === 'unchecked' && checked) show = false;
+    if (currentFilter === 'checked' && !checked) show = false;
+    if (currentFilter === 'notes' && !note.trim()) show = false;
+    if (currentFilter === 'fail' && status !== 'fail') show = false;
+
+    row.classList.toggle('hidden', !show);
+  });
+
+  // hide subsection labels if all items below them are hidden
+  document.querySelectorAll('.section-body').forEach(body => {
+    let nodes = Array.from(body.children);
+    nodes.forEach((node, i) => {
+      if (node.classList.contains('subsection-label')) {
+        // find next subsection or end
+        let hasVisible = false;
+        for (let j = i+1; j < nodes.length; j++) {
+          if (nodes[j].classList.contains('subsection-label')) break;
+          if (nodes[j].classList.contains('item') && !nodes[j].classList.contains('hidden')) {
+            hasVisible = true; break;
+          }
+        }
+        node.style.display = hasVisible ? '' : 'none';
+      }
+    });
+  });
+}
+
+// ─── RESET ─────────────────────────────────────────────────────────────────
+
+function confirmReset() {
+  if (confirm('Reset all checkboxes, statuses, and notes? This cannot be undone.')) {
+    state = {};
+    saveState();
+    render();
+  }
+}
+
+// ─── EXPORT ────────────────────────────────────────────────────────────────
+
+function openExportModal()  { document.getElementById('exportModal').classList.add('open'); }
+function closeExportModal() { document.getElementById('exportModal').classList.remove('open'); }
+
+document.getElementById('exportModal').addEventListener('click', function(e) {
+  if (e.target === this) closeExportModal();
+});
+
+function collectData() {
+  const inclChecked   = document.getElementById('inclChecked').checked;
+  const inclUnchecked = document.getElementById('inclUnchecked').checked;
+  const onlyNoted     = document.getElementById('inclNoNote').checked;
+
+  const rows = [];
+  SECTIONS.forEach(sec => {
+    sec.items.forEach(item => {
+      if (!item.id) return;
+      const s = getItem(item.id);
+      if (!inclChecked && s.checked) return;
+      if (!inclUnchecked && !s.checked) return;
+      if (onlyNoted && !s.note.trim() && s.status === 'none') return;
+      rows.push({ section: sec.title, label: item.label, checked: s.checked, status: s.status, note: s.note, tags: item.tags || [] });
+    });
+  });
+  return rows;
+}
+
+function runExport() {
+  const fmt = document.querySelector('input[name=exportFmt]:checked').value;
+  const rows = collectData();
+  const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+
+  if (fmt === 'json') {
+    download(`yow-qa-${ts}.json`, JSON.stringify(rows, null, 2), 'application/json');
+  } else if (fmt === 'csv') {
+    const header = ['Section','Item','Checked','Status','Note'];
+    const lines = [header.join(','), ...rows.map(r => [
+      csvCell(r.section), csvCell(r.label), r.checked ? 'TRUE' : 'FALSE', r.status, csvCell(r.note)
+    ].join(','))];
+    download(`yow-qa-${ts}.csv`, lines.join('\n'), 'text/csv');
+  } else if (fmt === 'markdown') {
+    let md = `# YOW QA Checklist Export\n_Generated: ${new Date().toLocaleString()}_\n\n`;
+    let lastSec = '';
+    rows.forEach(r => {
+      if (r.section !== lastSec) { md += `\n## ${r.section}\n\n`; lastSec = r.section; }
+      const cb = r.checked ? '[x]' : '[ ]';
+      const st = r.status !== 'none' ? ` \`${r.status.toUpperCase()}\`` : '';
+      md += `- ${cb}${st} ${r.label}\n`;
+      if (r.note.trim()) md += `  > **Note:** ${r.note.trim()}\n`;
+    });
+    download(`yow-qa-${ts}.md`, md, 'text/markdown');
+  } else if (fmt === 'html') {
+    let sections = {};
+    rows.forEach(r => {
+      if (!sections[r.section]) sections[r.section] = [];
+      sections[r.section].push(r);
+    });
+    const total = rows.length;
+    const done  = rows.filter(r => r.checked).length;
+    const failed = rows.filter(r => r.status === 'fail').length;
+
+    let body = '';
+    for (const [sec, items] of Object.entries(sections)) {
+      body += `<h2>${esc(sec)}</h2><ul>`;
+      items.forEach(r => {
+        const st = r.status !== 'none' ? ` <span class="st ${r.status}">${r.status.toUpperCase()}</span>` : '';
+        body += `<li class="${r.checked ? 'done' : ''}${r.status === 'fail' ? ' fail' : ''}">
+          <span class="cb">${r.checked ? '✓' : '○'}</span>${st} ${esc(r.label)}
+          ${r.note.trim() ? `<div class="note">${esc(r.note)}</div>` : ''}
+        </li>`;
+      });
+      body += `</ul>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>YOW QA Report</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f0f13;color:#e2e2f0;max-width:860px;margin:0 auto;padding:32px;font-size:14px;}
+h1{color:#a78bfa;margin-bottom:4px;} .meta{color:#7a7a9a;font-size:13px;margin-bottom:32px;}
+h2{color:#c4b5fd;border-bottom:1px solid #2e2e3e;padding-bottom:8px;margin-top:32px;}
+ul{list-style:none;padding:0;} li{padding:7px 10px;border-radius:6px;margin:2px 0;line-height:1.5;}
+li:hover{background:#1a1a22;} li.done{opacity:.55;text-decoration:line-through;}
+li.fail{background:#1f0f0f;} .cb{margin-right:8px;color:#7a7a9a;}
+li.done .cb{color:#34d399;} .note{margin-top:5px;padding:6px 10px;background:#1a1a00;border-left:3px solid #fbbf24;color:#fbbf24;border-radius:4px;font-size:12px;text-decoration:none;}
+.st{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:4px;}
+.st.pass{background:#1a3d2e;color:#34d399;} .st.fail{background:#3d1f1f;color:#f87171;} .st.skip{background:#2e2e3e;color:#7a7a9a;}
+.summary{display:flex;gap:24px;margin-bottom:24px;} .stat{background:#1a1a22;padding:12px 18px;border-radius:8px;border:1px solid #2e2e3e;}
+.stat .n{font-size:28px;font-weight:700;color:#a78bfa;} .stat .l{font-size:12px;color:#7a7a9a;}
+</style></head><body>
+<h1>YOW QA Report</h1><div class="meta">Generated: ${new Date().toLocaleString()}</div>
+<div class="summary">
+  <div class="stat"><div class="n">${done}/${total}</div><div class="l">Checked</div></div>
+  <div class="stat"><div class="n">${Math.round(done/total*100)||0}%</div><div class="l">Complete</div></div>
+  <div class="stat"><div class="n" style="color:#f87171">${failed}</div><div class="l">Failed</div></div>
+</div>
+${body}
+</body></html>`;
+    download(`yow-qa-report-${ts}.html`, html, 'text/html');
+  }
+
+  closeExportModal();
+}
+
+function csvCell(v) { return '"' + String(v||'').replace(/"/g,'""') + '"'; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function download(filename, content, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename;
+  a.click();
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+
+render();
+</script>
+</body>
+</html>

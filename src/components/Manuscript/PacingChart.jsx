@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, useId } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 
 const countWords = str => str?.trim().match(/\S+/g)?.length || 0
 
@@ -22,12 +22,6 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
     () => scenes.filter(s => s.novelId === activeNovelId),
     [scenes, activeNovelId]
   )
-
-  const chapterMap = useMemo(() => {
-    const m = {}
-    chapters.forEach(c => { m[c.id] = c })
-    return m
-  }, [chapters])
 
   // Build ordered scene bars
   const sceneBars = useMemo(() => {

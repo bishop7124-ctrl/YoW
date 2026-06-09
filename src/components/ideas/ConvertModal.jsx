@@ -120,7 +120,7 @@ export default function ConvertModal({ idea, store, onClose, onConverted }) {
       }
 
       onConverted(selectedType, entityId, entityName)
-    } catch (err) {
+    } catch {
       setError('Conversion failed. Please try again.')
       setConverting(false)
     }

@@ -56,7 +56,7 @@ function HighlightedSnippet({ text, regex }) {
 }
 
 export default function ManuscriptSearch({
-  scenes, chapters, acts,
+  scenes, chapters,
   activeNovelId,
   onOpenScene,
   onReplaceInScene,
@@ -95,12 +95,6 @@ export default function ManuscriptSearch({
     chapters.forEach(c => { m[c.id] = c })
     return m
   }, [chapters])
-
-  const actMap = useMemo(() => {
-    const m = {}
-    acts.forEach(a => { m[a.id] = a })
-    return m
-  }, [acts])
 
   const regex = useMemo(() => buildRegex(term, matchCase, wholeWord), [term, matchCase, wholeWord])
 

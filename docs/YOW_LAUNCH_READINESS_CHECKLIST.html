@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YOW Beta and Final Launch Readiness Checklist</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ee;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #5f6b7a;
+      --line: #d8d1c5;
+      --accent: #8a5a22;
+      --accent-soft: #f2e2ca;
+      --danger: #a33131;
+      --danger-soft: #f8dddd;
+      --ok: #25684a;
+      --ok-soft: #dff2e8;
+      --warn: #8a6200;
+      --warn-soft: #fff1c7;
+      --beta: #4d5caa;
+      --beta-soft: #e5e8ff;
+      --code: #f3f0ea;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    header {
+      padding: 36px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    h1, h2, h3, h4 { line-height: 1.18; margin: 0; }
+    h1 { font-size: clamp(32px, 5vw, 56px); letter-spacing: 0; }
+    h2 { font-size: clamp(24px, 3vw, 34px); margin-bottom: 14px; }
+    h3 { font-size: 20px; margin-bottom: 10px; }
+    h4 { font-size: 15px; margin-top: 18px; margin-bottom: 8px; }
+
+    p { margin: 0 0 12px; }
+
+    a { color: var(--accent); font-weight: 700; }
+
+    code {
+      background: var(--code);
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .lede {
+      max-width: 860px;
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .notice {
+      background: var(--warn-soft);
+      border: 1px solid #e6c868;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .metric span { color: var(--muted); font-size: 13px; }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin-top: 20px;
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0;
+      list-style: none;
+      margin: 14px 0 0;
+    }
+
+    .toc a {
+      display: block;
+      background: #fbfaf7;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-decoration: none;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .pill.blocker { background: var(--danger-soft); color: var(--danger); }
+    .pill.qa { background: var(--warn-soft); color: var(--warn); }
+    .pill.safe { background: var(--ok-soft); color: var(--ok); }
+    .pill.beta { background: var(--beta-soft); color: var(--beta); }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #fbfaf7;
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .callout.danger { border-left-color: var(--danger); background: var(--danger-soft); }
+    .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+    .callout.beta { border-left-color: var(--beta); background: var(--beta-soft); }
+
+    .task-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    label.task {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      background: #fbfaf7;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+
+    label.task input { margin-top: 4px; }
+
+    .task small {
+      display: block;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th { background: #f1ece3; }
+
+    .status-live { color: var(--ok); font-weight: 800; }
+    .status-beta { color: var(--beta); font-weight: 800; }
+    .status-risk { color: var(--danger); font-weight: 800; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .step {
+      position: relative;
+      padding: 12px 12px 12px 46px;
+      background: #fbfaf7;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .queue {
+      counter-reset: task;
+      display: grid;
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .queue-item {
+      position: relative;
+      background: #fbfaf7;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 16px 16px 58px;
+    }
+
+    .queue-item::before {
+      counter-increment: task;
+      content: counter(task);
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .queue-item h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .queue-item ul {
+      margin: 8px 0 0 18px;
+      padding: 0;
+    }
+
+    .queue-item li { margin: 5px 0; }
+
+    .deliverable {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-weight: 700;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 820px) {
+      main { width: min(100% - 20px, 1180px); padding-top: 16px; }
+      header, section { padding: 18px; }
+      .grid, .toc, .two-col { grid-template-columns: 1fr; }
+      table { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="pill safe">Execution aid</p>
+    <h1>YOW Beta and Final Launch Readiness Checklist</h1>
+    <p class="lede">
+      This file is a beginner-friendly working checklist derived from <code>docs/ROADMAP.md</code>.
+      The roadmap remains the canonical planning source. Use this document as the exact task order
+      for moving YOW from beta to a finished final launch.
+    </p>
+    <div class="notice">
+      <strong>Product principle:</strong> beta is the build-and-test period; final launch is the fully specced website.
+      Use the safety checklist before large implementation so the foundation is trustworthy, then complete the remaining
+      discipline-specific engines before calling the site fully launched.
+    </div>
+    <div class="grid">
+      <div class="metric"><strong>Beta</strong><span>Work-in-progress period where incomplete workflows can be visible if honest and data-safe.</span></div>
+      <div class="metric"><strong>Final</strong><span>Fully specced website: all promised project-type engines complete enough to stand without continual development.</span></div>
+      <div class="metric"><strong>7</strong><span>True launch blockers: data loss, auth, save, export, editor, responsive layout, legal/payment.</span></div>
+      <div class="metric"><strong>1</strong><span>Canonical plan: <code>docs/ROADMAP.md</code>.</span></div>
+    </div>
+  </header>
+
+  <section id="contents">
+    <h2>Contents</h2>
+    <ul class="toc">
+      <li><a href="#exact-queue">1. Exact Next Task Queue</a></li>
+      <li><a href="#task-details">2. Task Details</a></li>
+      <li><a href="#feature-waves">3. Final Feature Waves</a></li>
+      <li><a href="#acceptance">4. Final Acceptance Gates</a></li>
+    </ul>
+    <div class="legend">
+      <span class="pill blocker">Blocker</span>
+      <span class="pill qa">Needs QA</span>
+      <span class="pill beta">Beta OK</span>
+      <span class="pill safe">Safe to ship</span>
+    </div>
+  </section>
+
+  <section id="exact-queue">
+    <h2>1. Exact Next Task Queue</h2>
+    <p>Do these in this order. Do not skip ahead to feature building until Task 4 is complete.</p>
+    <div class="queue">
+      <div class="queue-item">
+        <h3>Task 1: Get a safe local test environment working.</h3>
+        <ul>
+          <li>Start YOW in offline/dev auth mode or use a disposable test account.</li>
+          <li>Open the app dashboard, not just the public homepage.</li>
+          <li>If the app cannot reach the dashboard, fix that before doing anything else.</li>
+        </ul>
+        <div class="deliverable">Done when: you can create projects without using a real customer account.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 2: Run the 10 project type create/open/export smoke test.</h3>
+        <ul>
+          <li>Create one project for each type: Novel, Novella, Short Story, D&amp;D Campaign, TTRPG Campaign, Play, Screenplay, TV Series, Comic / Graphic Novel, Video Game.</li>
+          <li>For each one: open it, type one unique sentence, refresh, confirm the sentence remains, export ZIP, export DOCX, export PDF if offered.</li>
+          <li>Write down every failure immediately.</li>
+        </ul>
+        <div class="deliverable">Done when: all 10 types either pass or each failure has a specific bug note.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 3: Fix only smoke-test failures.</h3>
+        <ul>
+          <li>If a project type cannot be created, opened, refreshed, or exported, fix that exact issue.</li>
+          <li>If a label is misleading, fix the label.</li>
+          <li>If export crashes, fix export before building new features.</li>
+          <li>After each fix, rerun only the failed smoke test.</li>
+        </ul>
+        <div class="deliverable">Done when: Task 2 passes for all 10 project types.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 4: Run the beta safety regression.</h3>
+        <ul>
+          <li>Test autosave: type in manuscript, refresh immediately, confirm text remains.</li>
+          <li>Test worldbuilding saves: create one character, location, lore entry, timeline event, and world history entry; refresh after each.</li>
+          <li>Test restore: export a ZIP, restore it, compare the restored project against the original.</li>
+          <li>Test responsive layout at desktop, tablet, and phone widths.</li>
+          <li>Test sign up, sign in, sign out, invalid login, and session refresh with a test account.</li>
+        </ul>
+        <div class="deliverable">Done when: no beta blocker remains in data, auth, save, export, editor, responsive layout, or legal/payment basics.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 5: Build the final script engine.</h3>
+        <ul>
+          <li>Finish Play, Screenplay, and TV script editing controls.</li>
+          <li>Make script defaults feel correct immediately on new projects.</li>
+          <li>Make DOCX script output polished and readable.</li>
+          <li>Decide whether final Screenplay export needs FDX, screenplay PDF, or both.</li>
+          <li>Remove beta limitation copy only when script workflows are truly final.</li>
+        </ul>
+        <div class="deliverable">Done when: Play, Screenplay, and TV script drafting/export feel like real supported workflows, not renamed prose scenes.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 6: Build the TV Series episode engine.</h3>
+        <ul>
+          <li>Add episode metadata: season, episode number, title, logline, status, runtime, POV/focus, draft notes.</li>
+          <li>Add a season/episode planning view.</li>
+          <li>Add series-bible fields that do not conflict with the existing book Series feature.</li>
+          <li>Make TV exports include episode metadata in a readable order.</li>
+        </ul>
+        <div class="deliverable">Done when: a TV Series project feels like planning a show, not a novel with different labels.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 7: Build the D&amp;D/TTRPG session engine.</h3>
+        <ul>
+          <li>Add structured session planning fields: hook, summary, encounters, NPCs, locations, secrets, rewards, consequences.</li>
+          <li>Add session recap fields.</li>
+          <li>Make D&amp;D language fantasy/D&amp;D-flavoured and TTRPG language system-neutral.</li>
+          <li>Make campaign exports include session plans and recaps.</li>
+        </ul>
+        <div class="deliverable">Done when: campaign projects support actual session preparation and recap, not only loose notes.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 8: Build the Comic / Graphic Novel panel engine.</h3>
+        <ul>
+          <li>Add page records with page number, summary, setting, cast, and art notes.</li>
+          <li>Add panel records under each page.</li>
+          <li>Each panel needs panel number, shot/framing, action, caption, dialogue, SFX, and art direction.</li>
+          <li>Make exports preserve page and panel order.</li>
+        </ul>
+        <div class="deliverable">Done when: a comic project supports page/panel planning as a first-class workflow.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 9: Build the Video Game narrative engine.</h3>
+        <ul>
+          <li>First decide the exact final scope: narrative bible only, quests/missions, dialogue trees, branching paths, or some combination.</li>
+          <li>Start with narrative bible fields: premise, world rules, factions, player role, core loop, locations, characters, quests/missions.</li>
+          <li>If branching is included, build a small scoped branch model before making a big visual graph.</li>
+          <li>Make exports include game narrative structure clearly.</li>
+        </ul>
+        <div class="deliverable">Done when: a Video Game project supports the actual game narrative planning scope you chose.</div>
+      </div>
+
+      <div class="queue-item">
+        <h3>Task 10: Run final full-site QA.</h3>
+        <ul>
+          <li>Rerun the 10 project type smoke test.</li>
+          <li>Rerun autosave, restore, export, auth, responsive, and large-project tests.</li>
+          <li>Audit homepage/pricing/legal copy and remove beta language only where features are complete.</li>
+          <li>Run <code>npm run build</code>.</li>
+        </ul>
+        <div class="deliverable">Done when: the site is safe, fully specced, honestly described, and production build passes.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="task-details">
+    <h2>2. Task Details</h2>
+    <h3>Task 1 Details: Safe Local Test Environment</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Close any old YOW dev server that is using the port you need.</span></label>
+      <label class="task"><input type="checkbox"><span>Start the app in offline/dev auth mode if possible.</span></label>
+      <label class="task"><input type="checkbox"><span>If offline mode is blocked, create or use one disposable test account.</span></label>
+      <label class="task"><input type="checkbox"><span>Reach the project library/dashboard.</span></label>
+      <label class="task"><input type="checkbox"><span>Confirm the New Project button is visible.</span></label>
+    </div>
+
+    <h3>Task 2 Details: Exact 10-Type Smoke Order</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>Create This Project</th>
+          <th>Verify This Structure</th>
+          <th>Special Check</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Smoke - Novel</td><td>Act / Chapter / Scene</td><td>80k target and manuscript language.</td></tr>
+        <tr><td>2</td><td>Smoke - Novella</td><td>Part / Chapter / Scene</td><td>30k target and lighter default sections.</td></tr>
+        <tr><td>3</td><td>Smoke - Short Story</td><td>Part / Section / Scene</td><td>5k target and short-form language.</td></tr>
+        <tr><td>4</td><td>Smoke - D&amp;D Campaign</td><td>Story Arc / Session / Encounter</td><td>Map, factions, world history, D&amp;D-flavoured language.</td></tr>
+        <tr><td>5</td><td>Smoke - TTRPG Campaign</td><td>Story Arc / Session / Encounter</td><td>System-neutral language, not D&amp;D-only wording.</td></tr>
+        <tr><td>6</td><td>Smoke - Play</td><td>Act / Scene / Beat</td><td>Beta label and script controls.</td></tr>
+        <tr><td>7</td><td>Smoke - Screenplay</td><td>Act / Sequence / Scene</td><td>Beta label, script controls, no finished FDX claim.</td></tr>
+        <tr><td>8</td><td>Smoke - TV Series</td><td>Season / Episode / Act</td><td>Beta label and episode limitation.</td></tr>
+        <tr><td>9</td><td>Smoke - Comic</td><td>Volume / Issue / Page</td><td>Beta label and panel-planning limitation.</td></tr>
+        <tr><td>10</td><td>Smoke - Video Game</td><td>Act / Chapter / Scene</td><td>Beta label and narrative-system limitation.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>For Every Smoke Project, Do This Exact Mini-Test</h3>
+    <div class="steps">
+      <div class="step"><strong>Create it.</strong> Use the exact name from the table.</div>
+      <div class="step"><strong>Open it.</strong> Confirm no blank screen or crash.</div>
+      <div class="step"><strong>Check the dashboard.</strong> Confirm project type label and workflow language.</div>
+      <div class="step"><strong>Open the writing area.</strong> Confirm structure labels.</div>
+      <div class="step"><strong>Type this sentence:</strong> <code>Smoke sentence for [project type].</code></div>
+      <div class="step"><strong>Refresh immediately.</strong> Confirm the sentence is still there.</div>
+      <div class="step"><strong>Export ZIP.</strong> Confirm file downloads.</div>
+      <div class="step"><strong>Export DOCX.</strong> Confirm file downloads and opens.</div>
+      <div class="step"><strong>Export PDF if offered.</strong> Confirm file downloads and opens.</div>
+      <div class="step"><strong>Write PASS or FAIL.</strong> If FAIL, write exactly what failed.</div>
+    </div>
+
+    <h3>Task 3 Details: Fix Rule</h3>
+    <div class="callout danger">
+      If Task 2 finds a failure, do not start Task 5 or later. Fix the failure first.
+    </div>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>If project creation fails, inspect project type constants, create flow, starter structure, and store add project logic.</span></label>
+      <label class="task"><input type="checkbox"><span>If opening fails, inspect route handling, active project state, dashboard stats, and layout assumptions.</span></label>
+      <label class="task"><input type="checkbox"><span>If refresh loses data, inspect local persistence and Firestore/local conflict logic.</span></label>
+      <label class="task"><input type="checkbox"><span>If export fails, inspect <code>src/utils/projectExport.js</code> and project export data.</span></label>
+      <label class="task"><input type="checkbox"><span>If labels are wrong, inspect <code>src/constants/projectTypes.js</code> and UI copy.</span></label>
+    </div>
+  </section>
+
+  <section id="feature-waves">
+    <h2>3. Final Feature Waves</h2>
+    <p>After Tasks 1-4 are green, build these waves in order.</p>
+    <div class="queue">
+      <div class="queue-item">
+        <h3>Wave 1: Finish script engine.</h3>
+        <ul>
+          <li>Finish Play-specific stage directions and dialogue behavior.</li>
+          <li>Finish Screenplay formatting and export decision.</li>
+          <li>Finish TV script drafting basics shared with the episode engine.</li>
+          <li>QA keyboard shortcuts, Enter flow, mobile layout, and DOCX output.</li>
+        </ul>
+      </div>
+      <div class="queue-item">
+        <h3>Wave 2: Build TV Series episode engine.</h3>
+        <ul>
+          <li>Build episode metadata.</li>
+          <li>Build season/episode overview.</li>
+          <li>Build series-bible fields.</li>
+          <li>Update exports.</li>
+        </ul>
+      </div>
+      <div class="queue-item">
+        <h3>Wave 3: Build tabletop session engine.</h3>
+        <ul>
+          <li>Build session plan fields.</li>
+          <li>Build recap fields.</li>
+          <li>Connect NPCs, locations, factions, rewards, and consequences.</li>
+          <li>Update exports.</li>
+        </ul>
+      </div>
+      <div class="queue-item">
+        <h3>Wave 4: Build comic panel engine.</h3>
+        <ul>
+          <li>Build page planning.</li>
+          <li>Build panel planning.</li>
+          <li>Add captions, dialogue, SFX, and art direction.</li>
+          <li>Update exports.</li>
+        </ul>
+      </div>
+      <div class="queue-item">
+        <h3>Wave 5: Build video game narrative engine.</h3>
+        <ul>
+          <li>Choose final scope.</li>
+          <li>Build narrative bible fields.</li>
+          <li>Add quests/missions/dialogue/branching only if they are in final scope.</li>
+          <li>Update exports.</li>
+        </ul>
+      </div>
+      <div class="queue-item">
+        <h3>Wave 6: Final polish and launch candidate.</h3>
+        <ul>
+          <li>Remove beta labels only for complete workflows.</li>
+          <li>Run full 10-type smoke again.</li>
+          <li>Run auth, save, export, restore, responsive, legal/payment QA again.</li>
+          <li>Run <code>npm run build</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="acceptance">
+    <h2>4. Final Acceptance Gates</h2>
+    <p>Do not call YOW final-launch ready until every gate below passes.</p>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>All 10 project types create, open, save after refresh, and export.</span></label>
+      <label class="task"><input type="checkbox"><span>Novel, Novella, Short Story have polished prose workflows.</span></label>
+      <label class="task"><input type="checkbox"><span>Play, Screenplay, TV have polished script workflows and exports.</span></label>
+      <label class="task"><input type="checkbox"><span>TV Series has a real episode/series-bible workflow.</span></label>
+      <label class="task"><input type="checkbox"><span>D&amp;D and TTRPG have real session planning and recap workflows.</span></label>
+      <label class="task"><input type="checkbox"><span>Comic / Graphic Novel has real page/panel planning.</span></label>
+      <label class="task"><input type="checkbox"><span>Video Game has the chosen final narrative planning system.</span></label>
+      <label class="task"><input type="checkbox"><span>ZIP restore works.</span></label>
+      <label class="task"><input type="checkbox"><span>DOCX/PDF exports are readable and ordered correctly.</span></label>
+      <label class="task"><input type="checkbox"><span>Auth and billing flows work with test accounts.</span></label>
+      <label class="task"><input type="checkbox"><span>Responsive layout works on desktop, tablet, and phone.</span></label>
+      <label class="task"><input type="checkbox"><span>Homepage, pricing, legal, and beta/final copy are truthful.</span></label>
+      <label class="task"><input type="checkbox"><span><code>npm run build</code> passes.</span></label>
+      <label class="task"><input type="checkbox"><span><code>docs/ROADMAP.md</code> reflects the final status.</span></label>
+    </div>
+  </section>
+
+  <section id="legacy-reference">
+    <h2>Reference: Previous General Checklist</h2>
+    <p>The exact queue above is the plan to follow. The older checklist content below is kept only as reference while you work.</p>
+
+    <h3>Rules Before You Start</h3>
+    <div class="callout danger">
+      <strong>Do not build on a shaky foundation.</strong>
+      Because final launch is meant to be fully specced, you will implement more than a tiny MVP.
+      But before large feature engines, prove that data, auth, save, export, editor, responsive layout,
+      and legal/payment basics are safe.
+    </div>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Open <code>docs/ROADMAP.md</code> before making launch decisions.<small>Use it as the single source of truth. This HTML file is only a checklist view.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Before coding, write down the exact user workflow you are trying to protect.<small>Example: "A user creates a Novella, writes a scene, refreshes, and exports DOCX."</small></span></label>
+      <label class="task"><input type="checkbox"><span>Classify every issue as Beta Blocker, Final Launch Requirement, Polish, or Icebox.<small>Beta blockers affect data, auth, save, export, editor usability, responsive usability, or legal/payment trust. Final launch requirements include the full project-type engines you still want to build.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Only edit files related to the task.<small>Do not refactor unrelated screens while fixing launch bugs.</small></span></label>
+      <label class="task"><input type="checkbox"><span>After every meaningful change, update <code>docs/ROADMAP.md</code> if status, blockers, or next actions changed.<small>Do not create a second roadmap.</small></span></label>
+      <label class="task"><input type="checkbox"><span>After code changes, run <code>npm run build</code>.<small>Existing chunk warnings are acceptable unless a new build failure appears.</small></span></label>
+    </div>
+  </section>
+
+  <section id="daily-loop">
+    <h2>2. Daily Working Loop</h2>
+    <p>Use this exact loop when you sit down to work. It is designed for a new intern who needs clear guardrails.</p>
+    <div class="steps">
+      <div class="step"><strong>Check the worktree.</strong><br>Run <code>git status --short</code>. Notice which files are already changed. Do not delete or revert work you do not understand.</div>
+      <div class="step"><strong>Read the relevant roadmap rows.</strong><br>For launch work, start with MVP Required, Project Type Launch Scope, All Project Types Live Plan, Conditional MVP, and Bugs.</div>
+      <div class="step"><strong>Pick one tiny objective.</strong><br>Good: "Verify all 10 project types create and export." Bad: "Finish TV, comics, games, and D&amp;D."</div>
+      <div class="step"><strong>Reproduce or verify first.</strong><br>If you are fixing a bug, prove it exists. If you are doing QA, write down the pass/fail result.</div>
+      <div class="step"><strong>Make the smallest safe change.</strong><br>Prefer copy fixes, label fixes, persistence fixes, and export stability over new systems.</div>
+      <div class="step"><strong>Run focused tests.</strong><br>Use the UI when possible. Use code-level export smoke tests when UI auth or environment blocks you.</div>
+      <div class="step"><strong>Run <code>npm run build</code>.</strong><br>If build fails, fix that before moving to another feature.</div>
+      <div class="step"><strong>Update <code>docs/ROADMAP.md</code>.</strong><br>Record exactly what changed, what passed, what still needs QA, and what is deferred.</div>
+      <div class="step"><strong>Stop and summarize.</strong><br>Say what changed, what was tested, what failed or could not be tested, and the next recommended task.</div>
+    </div>
+  </section>
+
+  <section id="must-pass">
+    <h2>3. Beta Safety Must-Pass Checklist</h2>
+    <p>
+      Do this before major new implementation. These checks prove the current beta foundation is safe enough to build on.
+      They are not the full final-launch feature list.
+    </p>
+
+    <h3>Data Safety</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Typing in a manuscript scene saves immediately enough to survive refresh.<small>Test: type a unique sentence, refresh within one second, confirm it remains.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Switching scenes does not overwrite the previous scene.<small>Test: edit Scene A, switch to Scene B, edit Scene B, return to Scene A.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Project settings changes persist after refresh.<small>Test title, description, status, project type display, word target, and enabled sections.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Characters, locations, lore, timeline, and world history persist after instant refresh.<small>Create one record in each module, refresh immediately, verify it remains.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Deleting a linked record cleans up references or fails safely.<small>Example: delete a character linked in lore/timeline, then confirm screens do not crash.</small></span></label>
+    </div>
+
+    <h3>Authentication</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Fresh signup works or shows the correct email-confirmation state.<small>Use a test email. Do not test with a real customer account.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Returning sign-in works.<small>Sign out, sign back in, verify projects return.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Invalid credentials show a readable error.<small>No blank page, no infinite spinner.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Session restore works after refresh.<small>Log in, refresh the browser, confirm you remain in the app.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Password recovery flow shows a clear state.<small>If email delivery cannot be tested locally, record that manual production QA is required.</small></span></label>
+    </div>
+
+    <h3>Exports And Restore</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>ZIP export works for every project type.<small>Open the ZIP and confirm it includes <code>project-data.json</code>, scenes, characters, lore, timeline, and sections.</small></span></label>
+      <label class="task"><input type="checkbox"><span>DOCX export works for prose projects.<small>Check Novel, Novella, Short Story. Confirm chapter/scene order and readable text.</small></span></label>
+      <label class="task"><input type="checkbox"><span>DOCX export works for script beta projects.<small>Check Play, Screenplay, TV Series. Confirm script paragraphs are readable and not mashed together.</small></span></label>
+      <label class="task"><input type="checkbox"><span>PDF export works for small and medium projects.<small>Check content ordering and make sure the app does not freeze.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Restore from ZIP works end to end.<small>Export a project, restore it, confirm it appears as a new project with content intact.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Large project export stays usable.<small>Create or import a stress project. Export ZIP/DOCX/PDF. Record time and failures.</small></span></label>
+    </div>
+
+    <h3>Editor Usability</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Long scene typing remains usable.<small>Paste several thousand words, type at the end, confirm no severe lag or cursor jumps.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Chapter and scene add/rename/delete/reorder persists.<small>Refresh after each operation.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Split-scene flow works and does not lose text.<small>Use the app's split command, verify before/after text lands correctly.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Scene notes persist.<small>Add a note marker, edit the note, refresh, reopen notes.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Script editor controls work for beta script projects.<small>Test Tab, Shift+Tab, Ctrl/Cmd+1-6, Enter flow, preview, and DOCX output.</small></span></label>
+    </div>
+
+    <h3>Responsive Layout</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Dashboard works at desktop width.<small>Test create/open/rename/delete/export and overview/insights switching.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Dashboard works at tablet width.<small>No overlapping cards, buttons, or hidden Write action.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Dashboard works at phone width.<small>Create/open project, find Write button, open settings, export if available.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Manuscript workspace works at phone width.<small>Sidebar bottom tab bar, panel overlay, text area, and toolbar must be usable.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Account settings and project edit modals fit on phone width.<small>No buttons below the screen without scroll, no trapped modal.</small></span></label>
+    </div>
+
+    <h3>Legal, Payment, And Copy Truthfulness</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Homepage clearly separates beta status from final-launch ambition.<small>It may say these workflows are being built, but must not imply unfinished engines are complete today.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Pricing and membership copy match actual plan behavior.<small>Check free limits, paid plan language, cancellation/portal link, and locked project messaging.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Privacy, Terms, Cookie, and Beta Disclaimer are reachable from public pages and app account areas.<small>Click every legal link.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Checkout and billing portal work in the intended environment.<small>If local checkout is unavailable, test in staging/production before launch.</small></span></label>
+      <label class="task"><input type="checkbox"><span>AI copy says suggestions are user-reviewed and not guaranteed accurate.<small>Do not imply AI replaces editing or legal/professional judgment.</small></span></label>
+    </div>
+  </section>
+
+  <section id="project-types">
+    <h2>4. 10 Project Type Smoke Test</h2>
+    <p>Run this before building deeper engines. Do not skip beta types, because all 10 are selectable and must remain data-safe while development continues.</p>
+    <div class="callout ok">
+      <strong>Already partly verified:</strong> automated smoke has passed for all 10 configured project types,
+      live/beta stage labels, structure labels, section defaults, and ZIP/DOCX/PDF blob generation.
+      What remains is a real UI click-through create/open/export pass.
+    </div>
+
+    <h3>Setup</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Start the app in a safe test mode.<small>Preferred: offline/dev auth mode. Alternative: a disposable test account.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Use a clean browser profile or clear old YOW test data.<small>This avoids confusing old projects with new starter structures.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Open the project library/dashboard.<small>Confirm you can see the New Project flow.</small></span></label>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Project Type</th>
+          <th>Status To Show</th>
+          <th>Starter Structure To Verify</th>
+          <th>Default Sections To Spot Check</th>
+          <th>Export Expectation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Novel</td><td class="status-live">Live</td><td>Act / Chapter / Scene</td><td>Outline, characters, family tree, factions, locations, lore, ideas, schedule, timeline, world history, AI tools</td><td>ZIP, DOCX, PDF</td></tr>
+        <tr><td>Novella</td><td class="status-live">Live</td><td>Part / Chapter / Scene</td><td>Lighter prose set: outline, characters, locations, lore, ideas, schedule, timeline, AI tools</td><td>ZIP, DOCX, PDF</td></tr>
+        <tr><td>Short Story</td><td class="status-live">Live</td><td>Part / Section / Scene</td><td>Compact prose set: outline, characters, locations, lore, ideas, schedule, timeline, AI tools</td><td>ZIP, DOCX, PDF</td></tr>
+        <tr><td>D&amp;D Campaign</td><td class="status-live">Live</td><td>Story Arc / Session / Encounter</td><td>Campaign set including map, factions, world history</td><td>ZIP, DOCX, PDF</td></tr>
+        <tr><td>TTRPG Campaign</td><td class="status-live">Live</td><td>Story Arc / Session / Encounter</td><td>System-neutral campaign set including map, factions, world history</td><td>ZIP, DOCX, PDF</td></tr>
+        <tr><td>Play</td><td class="status-beta">Beta now, full engine for final launch</td><td>Act / Scene / Beat</td><td>Script controls visible; stage-play beta limitation visible</td><td>ZIP, readable beta DOCX, PDF if menu offers it</td></tr>
+        <tr><td>Screenplay</td><td class="status-beta">Beta now, full engine for final launch</td><td>Act / Sequence / Scene</td><td>Script controls visible; industry/FDX/PDF script export not complete until final engine</td><td>ZIP, readable beta DOCX, PDF if menu offers it</td></tr>
+        <tr><td>TV Series</td><td class="status-beta">Beta now, full episode engine for final launch</td><td>Season / Episode / Act</td><td>Episode beta limitation visible until full episode metadata/series-bible workflow is built</td><td>ZIP, readable beta DOCX, PDF if menu offers it</td></tr>
+        <tr><td>Comic / Graphic Novel</td><td class="status-beta">Beta now, panel engine for final launch</td><td>Volume / Issue / Page</td><td>Panel planning limitation visible until panel workflow is built</td><td>ZIP, DOCX, PDF should not crash</td></tr>
+        <tr><td>Video Game</td><td class="status-beta">Beta now, narrative system for final launch</td><td>Act / Chapter / Scene</td><td>Narrative-bible limitation visible until final game narrative scope is built</td><td>ZIP, DOCX, PDF should not crash</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Repeat These Steps For Each Type</h3>
+    <div class="steps">
+      <div class="step"><strong>Create.</strong> Click New Project, choose the type, enter a title like <code>Smoke - Screenplay</code>, then create.</div>
+      <div class="step"><strong>Open.</strong> Click the project card. Confirm the project opens without a blank screen.</div>
+      <div class="step"><strong>Check identity.</strong> Confirm the type badge, dashboard wording, and structure labels match the table above.</div>
+      <div class="step"><strong>Edit one thing.</strong> Rename the starter act/chapter/scene or type a unique sentence into the starter scene.</div>
+      <div class="step"><strong>Refresh.</strong> Refresh the browser. Confirm the project reopens or can be reopened and the edit remains.</div>
+      <div class="step"><strong>Export.</strong> Export ZIP and DOCX. If PDF is offered, export PDF too. Record failures immediately.</div>
+      <div class="step"><strong>Beta truth check.</strong> For beta types, confirm the UI says beta/limited and does not claim full specialized engine support.</div>
+    </div>
+  </section>
+
+  <section id="feature-outline">
+    <h2>5. Remaining Feature Outline</h2>
+    <p>This is the remaining feature work as understood from the roadmap. Because final launch means fully specced, most discipline-specific engines are final-launch requirements, not "maybe someday" items.</p>
+
+    <h3>Beta Safety Work Before Big Implementation</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>What Remains</th>
+          <th>Why It Matters</th>
+          <th>Launch Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Project type access</td>
+          <td>Finish UI smoke for all 10 types: create, open, edit starter content, refresh, export.</td>
+          <td>All 10 are selectable, so broken creation/open/export would be a launch contradiction.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Save and close behavior</td>
+          <td>QA modals, close buttons, editor blur/unmount saves, and refresh after edits.</td>
+          <td>Unsaved content loss is a launch blocker.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Dashboard consistency</td>
+          <td>QA empty account, one project, many projects, active project hero, filters, overview/insights, edit/delete/export.</td>
+          <td>The dashboard is the app's front door after login.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Responsive layout</td>
+          <td>Phone/tablet pass for dashboard, manuscript, account settings, project settings, modals, Write button.</td>
+          <td>Unusable mobile/tablet core flows block launch.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Manuscript editor</td>
+          <td>Long-scene typing, rapid typing, split scene, notes, scene/chapter reorder, word counts, refresh persistence.</td>
+          <td>Writing is the core workflow.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Worldbuilding modules</td>
+          <td>Character, location, lore, timeline, world history CRUD and instant-refresh persistence.</td>
+          <td>These are heavily promised in copy and must not lose data.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Exports and restore</td>
+          <td>Small, medium, and large ZIP/DOCX/PDF tests; restore ZIP into a new project; compare content.</td>
+          <td>Export is the safety net and a launch promise.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Authentication</td>
+          <td>Fresh signup, login, logout, session restore, invalid credentials, recovery state.</td>
+          <td>Broken auth blocks users from paid/public launch.</td>
+          <td class="status-risk">Must pass before launch.</td>
+        </tr>
+        <tr>
+          <td>Large project performance</td>
+          <td>Create/load a realistic large novel project and test dashboard, manuscript, search, export.</td>
+          <td>Prevents launch embarrassment for serious writers.</td>
+          <td class="status-risk">Must pass at least basic smoke.</td>
+        </tr>
+        <tr>
+          <td>Legal/payment essentials</td>
+          <td>Confirm legal pages, beta disclaimer, pricing, billing portal, checkout, cancellation language.</td>
+          <td>Misleading billing or legal flow damages trust and can block launch.</td>
+          <td class="status-risk">Must pass before paid launch.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Final Launch Feature Engines To Build During Beta</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Current Understanding</th>
+          <th>Final Launch Requirement</th>
+          <th>Sequencing Warning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Shared script foundation</td>
+          <td>Started: element controls, keyboard shortcuts, Enter flow, preview, script metadata, readable DOCX.</td>
+          <td>Polish defaults, mobile toolbar, script DOCX readability, and copy truthfulness.</td>
+          <td>Do not promise final industry screenplay format yet.</td>
+        </tr>
+        <tr>
+          <td>TV Series episode engine</td>
+          <td>TV is selectable beta with Season / Episode / Act structure.</td>
+          <td>Build episode metadata, season/episode planning, series-bible fields, status/runtime/logline tracking, and exports that reflect episodes.</td>
+          <td>Do this after beta safety QA so you are not building on unstable save/export behavior.</td>
+        </tr>
+        <tr>
+          <td>D&amp;D/TTRPG session engine</td>
+          <td>Campaigns are live as campaign bibles with arcs, sessions, encounters, maps, factions, lore.</td>
+          <td>Build structured session planning and recap fields: hooks, encounters, NPCs, rewards, consequences, and session notes.</td>
+          <td>Keep the existing campaign bible stable while extending it.</td>
+        </tr>
+        <tr>
+          <td>Comic panel engine</td>
+          <td>Comic is selectable beta with Volume / Issue / Page structure.</td>
+          <td>Build page/panel planning, captions/dialogue, visual direction fields, and panel-aware export.</td>
+          <td>Do not let panel data break prose/script project exports.</td>
+        </tr>
+        <tr>
+          <td>Video game narrative engine</td>
+          <td>Video Game is selectable beta with narrative-bible positioning.</td>
+          <td>Decide and build the final game narrative scope: narrative bible first, then quests/missions/dialogue/branching if they are part of the desired finished product.</td>
+          <td>Keep the first version scoped enough to finish; branching systems can explode in complexity.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Optional Or Only If You Truly Want It In The Finished Product</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Novel finalized draft reader QA.<small>Useful and already implemented, but should not block launch unless the UI promises it strongly.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Theme system v2 QA.<small>Nice polish. Only launch-blocking if account appearance settings break the app.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Advanced map builder polish.<small>Keep if stable. Do not over-polish at the expense of save/export safety.</small></span></label>
+      <label class="task"><input type="checkbox"><span>AI chat history pin/category.<small>Already implemented. No further launch action unless broken.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Analytics.<small>Optional for the finished product. Add only if you want ongoing product learning after beta/final launch.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Collaboration, marketplace, mobile apps, public sharing, native desktop, voice dictation, publishing integrations.<small>These are not currently part of the core fully specced requirement unless you explicitly decide they are.</small></span></label>
+    </div>
+  </section>
+
+  <section id="implementation-order">
+    <h2>6. Recommended Implementation Order</h2>
+    <p>If you want to reach a fully specced final launch efficiently, follow this order. First prove safety, then build the larger engines.</p>
+    <div class="steps">
+      <div class="step"><strong>Finish the 10 project type UI smoke test.</strong><br>Reason: all project types are selectable, so every type must create, open, survive refresh, and export without crashing.</div>
+      <div class="step"><strong>Run autosave and data safety regression.</strong><br>Reason: data loss is the scariest launch blocker. Test manuscript plus characters, locations, lore, timeline, world history.</div>
+      <div class="step"><strong>Run export and restore regression.</strong><br>Reason: ZIP restore is your backup story. It must work before launch.</div>
+      <div class="step"><strong>Run auth and membership regression.</strong><br>Reason: public users must be able to enter, leave, return, pay, and understand limits.</div>
+      <div class="step"><strong>Run responsive pass.</strong><br>Reason: launch copy says works on any device. Core flows must work at phone/tablet/desktop widths.</div>
+      <div class="step"><strong>Fix blockers found during QA.</strong><br>Reason: this gives you a safe beta foundation.</div>
+      <div class="step"><strong>Implement the final-launch engines in waves.</strong><br>Reason: script, TV, tabletop, comic, and game systems should be built deliberately, not all tangled together.</div>
+      <div class="step"><strong>Run full final-launch QA after each wave.</strong><br>Reason: every new engine must preserve data safety, exports, responsive layout, and honest copy.</div>
+      <div class="step"><strong>Do one final copy audit.</strong><br>Reason: once engines are complete, remove beta limitations only where the feature is genuinely finished.</div>
+      <div class="step"><strong>Run production build and a final smoke.</strong><br>Reason: final launch candidate should build cleanly and open without obvious runtime errors.</div>
+    </div>
+  </section>
+
+  <section id="test-scripts">
+    <h2>7. Beginner Test Scripts</h2>
+    <p>Use these as manual scripts. Copy the result into your notes or into the roadmap row if the status changes.</p>
+
+    <h3>Script A: One Project Type Smoke</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Create project: <code>Smoke - [Type Name]</code>.</span></label>
+      <label class="task"><input type="checkbox"><span>Confirm project card shows the correct type label and live/beta badge.</span></label>
+      <label class="task"><input type="checkbox"><span>Open project. Confirm dashboard heading and workflow summary make sense for the type.</span></label>
+      <label class="task"><input type="checkbox"><span>Open writing/manuscript area. Confirm structure labels match expected labels.</span></label>
+      <label class="task"><input type="checkbox"><span>Type: <code>Smoke test sentence [today's date] [type name]</code>.</span></label>
+      <label class="task"><input type="checkbox"><span>Refresh immediately. Confirm sentence remains.</span></label>
+      <label class="task"><input type="checkbox"><span>Export ZIP. Confirm a file downloads.</span></label>
+      <label class="task"><input type="checkbox"><span>Export DOCX. Confirm a file downloads and opens.</span></label>
+      <label class="task"><input type="checkbox"><span>If PDF is available, export PDF. Confirm a file downloads and opens.</span></label>
+      <label class="task"><input type="checkbox"><span>Record result: PASS, FAIL, or BLOCKED with details.</span></label>
+    </div>
+
+    <h3>Script B: Restore Flow</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Create a project named <code>Restore Source</code>.</span></label>
+      <label class="task"><input type="checkbox"><span>Add one character, one location, one lore entry, one timeline event, and one scene sentence.</span></label>
+      <label class="task"><input type="checkbox"><span>Export ZIP.</span></label>
+      <label class="task"><input type="checkbox"><span>Use Restore in the library top bar.</span></label>
+      <label class="task"><input type="checkbox"><span>Select the ZIP you just exported.</span></label>
+      <label class="task"><input type="checkbox"><span>Confirm a second project appears, with a new ID/name or duplicate-safe behavior.</span></label>
+      <label class="task"><input type="checkbox"><span>Open restored project and compare scene, character, location, lore, and timeline content.</span></label>
+      <label class="task"><input type="checkbox"><span>Record exact missing or mismatched fields.</span></label>
+    </div>
+
+    <h3>Script C: Responsive Core Flow</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Test desktop width around 1440px.</span></label>
+      <label class="task"><input type="checkbox"><span>Test tablet width around 768px.</span></label>
+      <label class="task"><input type="checkbox"><span>Test phone width around 390px.</span></label>
+      <label class="task"><input type="checkbox"><span>At each width, open dashboard, open project, click Write, type, save/refresh, open project settings, open account settings.</span></label>
+      <label class="task"><input type="checkbox"><span>Fail if a core button is hidden, overlapping, unreachable, or below a modal with no scroll.</span></label>
+    </div>
+
+    <h3>Script D: Script Beta Deep QA</h3>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Create a Screenplay project.</span></label>
+      <label class="task"><input type="checkbox"><span>Click the starter scene and confirm script element selector appears.</span></label>
+      <label class="task"><input type="checkbox"><span>Press Tab repeatedly. Confirm element type cycles.</span></label>
+      <label class="task"><input type="checkbox"><span>Press Shift+Tab. Confirm it cycles backward.</span></label>
+      <label class="task"><input type="checkbox"><span>Press Ctrl/Cmd+1 through Ctrl/Cmd+6. Confirm shortcuts choose the expected element types.</span></label>
+      <label class="task"><input type="checkbox"><span>Type a slugline, press Enter, type action, switch to character, type dialogue, press Enter.</span></label>
+      <label class="task"><input type="checkbox"><span>Click away. Confirm preview is readable and script-styled.</span></label>
+      <label class="task"><input type="checkbox"><span>Refresh. Confirm script block metadata survives.</span></label>
+      <label class="task"><input type="checkbox"><span>Export DOCX. Confirm script lines are readable and separated.</span></label>
+      <label class="task"><input type="checkbox"><span>Repeat a shorter version for Play and TV Series.</span></label>
+    </div>
+  </section>
+
+  <section id="stop-rules">
+    <h2>8. Sequencing Rules</h2>
+    <div class="callout danger">
+      <strong>These rules keep the full build achievable.</strong> You do want the big engines before final launch; the rule is to build them after the safety foundation is proven.
+    </div>
+    <div class="task-list">
+      <label class="task"><input type="checkbox"><span>Do not build TV episode tracking until core QA is green.<small>Then build it as a final-launch engine.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Do not build D&amp;D session planning until campaign bible QA is green.<small>Then extend it without breaking existing campaign data.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Do not build comic panel planning until beta export and labels are stable.<small>Then build panel planning as a final-launch engine.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Do not build game branching/dialogue trees until you choose the final game narrative scope.<small>Then build only the scope you can actually finish.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Stop adding marketing claims unless the app can do them today.<small>Every claim creates QA work.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Stop polishing visuals if a blocker is still untested.<small>Pretty but unsafe is not launch-ready.</small></span></label>
+      <label class="task"><input type="checkbox"><span>Stop after every fix and run the smallest relevant test.<small>Do not stack five fixes before testing the first one.</small></span></label>
+    </div>
+
+    <div class="callout ok">
+      <strong>Confidence target:</strong> after the safety checklist is complete, you should know the beta foundation is safe.
+      After the final engine waves are complete, you should know YOW is the fully specced site you intended to build.
+    </div>
+
+    <p class="footer-note">
+      Last updated as an execution aid for the beta-to-fully-specced-final-launch strategy. If this checklist and <code>docs/ROADMAP.md</code>
+      ever disagree, follow <code>docs/ROADMAP.md</code> and update this file only if it remains useful.
+    </p>
+  </section>
+</main>
+</body>
+</html>

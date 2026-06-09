@@ -87,7 +87,6 @@ export default function AITools({ store, userId }) {
               alignItems:    'center',
               gap:           4,
               padding:       '10px 16px',
-              borderBottom:  activeTool === tool.id ? '2px solid var(--accent)' : '2px solid transparent',
               background:    'none',
               border:        'none',
               borderBottom:  activeTool === tool.id ? '2px solid var(--accent)' : '2px solid transparent',

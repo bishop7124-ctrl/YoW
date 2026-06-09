@@ -17,6 +17,7 @@ export function StudioFrame({
   onToggleContextRail,
   topBar,
   utilityContent,
+  onGoHome,
   children,
 }) {
   return (
@@ -25,7 +26,14 @@ export function StudioFrame({
 
       <header className="studio-spine" aria-label="Studio navigation">
         <div className="studio-brand" title={`${projectTitle} - ${projectType}`}>
-          <div className="studio-brand-mark"><YOWLogo /></div>
+          <div
+            className={`studio-brand-mark${onGoHome ? ' studio-brand-mark-link' : ''}`}
+            role={onGoHome ? 'button' : undefined}
+            tabIndex={onGoHome ? 0 : undefined}
+            aria-label={onGoHome ? 'Back to library' : undefined}
+            onClick={onGoHome}
+            onKeyDown={onGoHome ? (e) => { if (e.key === 'Enter' || e.key === ' ') onGoHome() } : undefined}
+          ><YOWLogo /></div>
           <div className="studio-brand-mobile-label" aria-hidden="true">
             <span>YOW</span>
             <span className="beta-watermark">Beta</span>
@@ -39,6 +47,11 @@ export function StudioFrame({
             <span className="beta-watermark" aria-label="Beta">Beta</span>
             <span className="studio-brand-sep">·</span>
             <h1>{projectTitle}</h1>
+            {projectType && (
+              <span className="studio-project-type-badge" title={projectType}>
+<span>{projectType}</span>
+              </span>
+            )}
           </div>
           {primaryAction && (
             <div className="studio-primary-action">
