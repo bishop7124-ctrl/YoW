@@ -7,7 +7,9 @@ This project has two QA layers:
 
 GitHub Actions runs both layers automatically on pushes and pull requests to `main`.
 It also runs once per day and can be started manually from the GitHub Actions tab.
-When browser smoke fails in CI, Playwright artifacts are uploaded for inspection.
+Browser smoke is split into named CI jobs for launch, project types, export formats,
+and responsive coverage. When browser smoke fails in CI, Playwright artifacts are
+uploaded for the failing area.
 
 Before the first browser run on a machine:
 
