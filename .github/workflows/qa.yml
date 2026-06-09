@@ -15,6 +15,9 @@ concurrency:
   group: qa-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   static-qa:
     name: Static QA

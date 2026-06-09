@@ -3,6 +3,13 @@ import { createClient } from '@supabase/supabase-js'
 // Credentials live in .env.local — see .env.example for the required keys.
 const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const offlineMode     = import.meta.env.VITE_OFFLINE_MODE === 'true'
+const effectiveUrl    = supabaseUrl || 'https://offline.supabase.local'
+const effectiveKey    = supabaseAnonKey || 'offline-anon-key'
+
+if (!offlineMode && (!supabaseUrl || !supabaseAnonKey)) {
+  console.warn('Supabase environment variables are missing. Auth requests will fail until VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are configured.')
+}
 
 const fetchWithTimeout = (url, options = {}) => {
   const controller = new AbortController()
@@ -26,7 +33,7 @@ const fetchWithTimeout = (url, options = {}) => {
   })
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(effectiveUrl, effectiveKey, {
   global: { fetch: fetchWithTimeout },
   realtime: { params: { eventsPerSecond: 0 } },
 })
