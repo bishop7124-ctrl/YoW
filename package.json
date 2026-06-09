@@ -11,8 +11,8 @@
     "lint": "eslint src --ext .js,.jsx",
     "qa": "npm run lint && npm run build && npm run check:load",
     "qa:all": "npm run qa && npm run qa:smoke",
-    "qa:smoke:install": "PLAYWRIGHT_BROWSERS_PATH=/private/tmp/yow-ms-playwright playwright install chromium",
-    "qa:smoke": "PLAYWRIGHT_BROWSERS_PATH=/private/tmp/yow-ms-playwright playwright test --config playwright.config.mjs",
+    "qa:smoke:install": "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/private/tmp/yow-ms-playwright} playwright install chromium",
+    "qa:smoke": "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/private/tmp/yow-ms-playwright} playwright test --config playwright.config.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
