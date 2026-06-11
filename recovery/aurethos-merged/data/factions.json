@@ -1,0 +1,26 @@
+[
+  {
+    "id": "5noebedayolmpk7gywx",
+    "name": "The Cavalis",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "description": "The people/forces of the hidden city of Cavalis."
+  },
+  {
+    "id": "q3088itbfd8mpk7gywx",
+    "name": "The Linzai Forces",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "description": "The Armed forces of Linzai, allied to the Ardryns."
+  },
+  {
+    "id": "ry07oss739mpk7gywx",
+    "name": "The Valleron Forces",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "description": "The armed forces of the Valleron region, allied to The Verities."
+  },
+  {
+    "id": "he34a691th7mpk7gywx",
+    "name": "The Verities",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "description": "Founded in 826, the Verities aim to reveal the truth about the Aurethi trees and free magic for all."
+  }
+]

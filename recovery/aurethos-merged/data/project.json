@@ -1,0 +1,16 @@
+{
+  "id": "osdwpclhvv8mpk7gyw6",
+  "type": "novel",
+  "title": "Aurethos (Recovered)",
+  "createdAt": "2026-05-24T20:04:01.062Z",
+  "description": "Aurethos is a land steeped in magic and political intrigue. The story follows individuals connected to powerful families as they navigate a world marked by a past cataclysm and present conflicts. The fate of Aurethos hinges on uncovering truths and challenging established powers.\n\nRecovered from local YOW exports after account-switch data loss.",
+  "coverPhoto": null,
+  "recovery": {
+    "createdAt": "2026-06-10T21:01:45.752Z",
+    "sources": [
+      "Aurethos-2.zip",
+      "Aurethos-3.zip"
+    ],
+    "notes": "Aurethos-2 supplied manuscript, timeline, lore, and most project data. Aurethos-3 supplied map/whiteboard/schedule fields where newer or non-empty."
+  }
+}

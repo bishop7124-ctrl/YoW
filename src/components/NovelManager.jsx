@@ -100,27 +100,6 @@ function ProjectTypeImage({ type, label, size = 34 }) {
         <path className="project-type-line" d="M17 17h8M17 22h8M17 27h6" />
       </>
     ),
-    play: (
-      <>
-        <path className="project-type-fill" d="M9 11c5-3 10-3 15 0v9c0 6-3 10-7.5 12C12 30 9 26 9 20v-9Z" />
-        <path className="project-type-accent" d="M17 11c5-3 10-3 15 0v9c0 6-3 10-7.5 12-2.1-1-3.9-2.6-5.2-4.8 2-1.8 3.2-4.3 3.2-7.2v-8.3A18.2 18.2 0 0 0 17 11Z" />
-        <path className="project-type-line" d="M14 18h.1M20 18h.1M13 24c2 2 5 2 7 0" />
-      </>
-    ),
-    screenplay: (
-      <>
-        <path className="project-type-fill" d="M8 15h24v16H8V15Z" />
-        <path className="project-type-accent" d="M10 8h6l3 7h-7l-2-7ZM20 8h6l3 7h-7l-2-7Z" />
-        <path className="project-type-line" d="M13 21h14M13 26h9" />
-      </>
-    ),
-    tv_show: (
-      <>
-        <path className="project-type-fill" d="M9 12h22v16H9V12Z" />
-        <path className="project-type-accent" d="M14 28h12v4H14v-4Z" />
-        <path className="project-type-line" d="M15 17h10M15 22h7M16 8l4 4 4-4" />
-      </>
-    ),
     dnd_campaign: (
       <>
         <path className="project-type-fill" d="M20 7l12 7v12l-12 7-12-7V14l12-7Z" />
@@ -140,13 +119,6 @@ function ProjectTypeImage({ type, label, size = 34 }) {
         <path className="project-type-fill" d="M9 10h22v15H19l-7 6 2-6H9V10Z" />
         <path className="project-type-accent" d="M13 14h14v4H13v-4Z" />
         <path className="project-type-line" d="M13 22h9" />
-      </>
-    ),
-    video_game: (
-      <>
-        <path className="project-type-fill" d="M12 16h16l4 9a5 5 0 0 1-8 5l-2-3h-4l-2 3a5 5 0 0 1-8-5l4-9Z" />
-        <path className="project-type-accent" d="M23 16h5l4 9a5 5 0 0 1-8 5l-2-3h-2l3-11Z" />
-        <path className="project-type-line" d="M14 22h6M17 19v6M25 22h.1M28 25h.1" />
       </>
     ),
   }

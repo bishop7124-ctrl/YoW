@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { PLANS, getMembership } from '../../utils/membership'
 import { getStorageQuota } from '../../utils/storageQuota'
@@ -9,13 +10,13 @@ import { PROVIDERS } from '../../utils/aiApi'
 import {
   BUILT_IN_THEMES,
   DEFAULT_CUSTOM_COLORS,
+  DEFAULT_THEME,
+  DEFAULT_THEME_TUNING,
   QUICK_PALETTES,
   applyThemeToDocument,
   applyThemeTuning,
   getThemeColors,
   getThemeTuning,
-  loadThemeChoice,
-  loadThemeTuning,
   rgbaFromHex,
   saveThemeChoice,
   saveThemeTuning,
@@ -37,15 +38,63 @@ const CUSTOM_COLOR_FIELDS = [
   { key: 'border', label: 'Borders' },
 ]
 
-const loadCustomColors = () => {
-  try { return JSON.parse(localStorage.getItem('nf-custom-colors') || '{}') }
-  catch { return {} }
+function MaintenancePayButton({ style }) {
+  const [paying, setPaying] = useState(false)
+  const [error, setError] = useState('')
+  const handlePay = async () => {
+    setPaying(true)
+    setError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ plan: 'maintenance' }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Checkout failed')
+      window.location.href = json.url
+    } catch (err) {
+      setError(err.message)
+      setPaying(false)
+    }
+  }
+  return (
+    <div style={style}>
+      <button
+        onClick={handlePay}
+        disabled={paying}
+        style={{
+          padding: '8px 18px', borderRadius: 7, background: '#f59e0b', color: '#000',
+          fontWeight: 700, fontSize: 13, border: 'none', cursor: paying ? 'wait' : 'pointer',
+          opacity: paying ? 0.7 : 1,
+        }}
+      >
+        {paying ? 'Redirecting…' : 'Pay £6 · Restore access'}
+      </button>
+      {error && <p style={{ margin: '6px 0 0', color: '#ef4444', fontSize: 12 }}>{error}</p>}
+    </div>
+  )
 }
 
 const loadSavedPresets = () => {
   try { return JSON.parse(localStorage.getItem('nf-saved-presets') || '[]') }
   catch { return [] }
 }
+
+const isFiniteNumber = (value) => Number.isFinite(Number(value))
+
+const getAccountTheme = (user) => user?.user_metadata?.theme || DEFAULT_THEME
+
+const getAccountCustomColors = (user) => user?.user_metadata?.theme === 'custom'
+  ? (user?.user_metadata?.custom_theme_colors || {})
+  : {}
+
+const getAccountThemeTuning = (user) => ({
+  ...DEFAULT_THEME_TUNING,
+  ...(isFiniteNumber(user?.user_metadata?.theme_radius_unit) ? { radiusUnit: Number(user.user_metadata.theme_radius_unit) } : {}),
+  ...(isFiniteNumber(user?.user_metadata?.theme_visual_strength) ? { visualStrength: Number(user.user_metadata.theme_visual_strength) } : {}),
+})
 
 function applyFontChoice(fontChoice) {
   const font = FONT_OPTIONS.find(option => option.id === fontChoice) || FONT_OPTIONS[0]
@@ -228,10 +277,10 @@ function PreferencesPanel() {
 }
 
 function AppearancePanel({ user, updateProfile }) {
-  const [theme, setTheme] = useState(loadThemeChoice)
+  const [theme, setTheme] = useState(() => getAccountTheme(user))
   const [fontChoice, setFontChoice] = useState(() => localStorage.getItem('nf-font') || 'system')
-  const [customColors, setCustomColors] = useState(loadCustomColors)
-  const [themeTuning, setThemeTuning] = useState(loadThemeTuning)
+  const [customColors, setCustomColors] = useState(() => getAccountCustomColors(user))
+  const [themeTuning, setThemeTuning] = useState(() => getAccountThemeTuning(user))
   const [savedPresets, setSavedPresets] = useState(loadSavedPresets)
   const [savePresetName, setSavePresetName] = useState('')
   const [profileSaved, setProfileSaved] = useState(false)
@@ -252,6 +301,18 @@ function AppearancePanel({ user, updateProfile }) {
       { label: 'Light themes', options: builtIns.Light },
     ]
   }, [])
+
+  useEffect(() => {
+    setTheme(getAccountTheme(user))
+    setCustomColors(getAccountCustomColors(user))
+    setThemeTuning(getAccountThemeTuning(user))
+  }, [
+    user?.id,
+    user?.user_metadata?.theme,
+    user?.user_metadata?.custom_theme_colors,
+    user?.user_metadata?.theme_radius_unit,
+    user?.user_metadata?.theme_visual_strength,
+  ])
 
   useEffect(() => {
     localStorage.setItem('nf-saved-presets', JSON.stringify(savedPresets))
@@ -1374,6 +1435,28 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
                 </strong>
               </div>
             </div>
+
+            {/* Maintenance fee warning */}
+            {membership.isLifetime && !membership.isFounder && membership.maintenanceWarning && (
+              <div style={{
+                marginBottom: 18,
+                padding: '14px 16px',
+                borderRadius: 10,
+                background: 'color-mix(in srgb, #f59e0b 12%, transparent)',
+                border: '1px solid color-mix(in srgb, #f59e0b 40%, transparent)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#f59e0b' }}>
+                  Annual maintenance fee due in {membership.maintenanceDaysRemaining} day{membership.maintenanceDaysRemaining !== 1 ? 's' : ''}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  A £6/year maintenance fee keeps your data hosted and the platform running. Pay before the deadline to avoid losing access. Fee subject to change with notice.
+                </div>
+                <MaintenancePayButton style={{ marginTop: 4 }} />
+              </div>
+            )}
 
             {/* Storage card */}
             <div style={{ marginBottom: 18 }}>

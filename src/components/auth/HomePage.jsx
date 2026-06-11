@@ -19,30 +19,33 @@ const PROJECT_TYPES = [
     emphasis: ['Manuscript Editor', 'Character Arcs', 'Lore Archive', 'Timeline'],
   },
   {
-    id: 'screenplay',
-    label: 'Screenplay',
-    tagline: 'Beta workflow. Script polish next.',
-    description: 'Create screenplay projects now with script-shaped structure, paragraph element controls, and readable beta DOCX export. Industry-perfect formatting and FDX/PDF script export are still in progress.',
+    id: 'short_story',
+    label: 'Short Story',
+    tagline: 'Focused. Stripped down. Finished.',
+    description: 'A compact workspace for short fiction — tight structure, a 5,000-word target, and every planning tool scaled to match the shorter form.',
     features: [
-      'Beta project creation',
-      'Act and scene structure',
+      'Compact section and scene structure',
+      '5,000-word default target with analytics',
       'Character and location planning',
-      'Readable beta DOCX script export',
+      'Lore and ideas boards',
+      'Export to DOCX and PDF',
     ],
-    emphasis: ['Beta', 'Script Planning', 'Characters', 'Locations'],
+    emphasis: ['Compact Structure', 'Short-Form Analytics', 'Characters', 'Lore'],
   },
   {
-    id: 'tv',
-    label: 'TV Series',
-    tagline: 'Beta workflow. Episodes next.',
-    description: 'Create TV Series projects now with season and episode structure plus script drafting controls. Dedicated episode tracking and series-bible workflows are still in progress.',
+    id: 'comic',
+    label: 'Comic / Graphic Novel',
+    tagline: 'Volume, issue, page. All connected.',
+    description: 'A planning workspace for sequential art narratives — organise by volume and issue, build your world, and map out the visual story before you draw.',
     features: [
-      'Beta project creation',
-      'Season and episode structure',
-      'Script drafting controls',
-      'Series bible tools planned next',
+      'Volume, issue, and page structure',
+      'Character and relationship planning',
+      'Location and world lore archive',
+      'Interactive map support',
+      'Timeline for story chronology',
+      'Export to DOCX and PDF',
     ],
-    emphasis: ['Beta', 'Seasons', 'Episodes', 'Series Bible'],
+    emphasis: ['Issue Structure', 'Characters', 'World Lore', 'Maps'],
   },
   {
     id: 'dnd',
@@ -59,6 +62,21 @@ const PROJECT_TYPES = [
       'Campaign lore and reference material',
     ],
     emphasis: ['Campaign Manager', 'NPC Tracking', 'Session Planning', 'Maps & Lore'],
+  },
+  {
+    id: 'tabletop',
+    label: 'Tabletop Campaign',
+    tagline: 'Any system. Any world. Any table.',
+    description: 'A system-neutral campaign bible for any ruleset — fantasy, horror, sci-fi, or homebrew. No D&D assumptions. Just the tools to build your world and run your sessions.',
+    features: [
+      'Campaign arc, session, and encounter structure',
+      'NPC and character roster',
+      'Faction and political web tracking',
+      'Interactive map and location browser',
+      'Lore codex and world history',
+      'Works for any ruleset or homebrew system',
+    ],
+    emphasis: ['System-Neutral', 'Session Planning', 'Factions', 'World Lore'],
   },
 ]
 
@@ -475,7 +493,7 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
               YOW is the all-in-one creative workspace for writers, worldbuilders, and dungeon masters — manuscript, characters, lore, maps, and timelines, all connected in one focused studio.
             </p>
             <p className="yow-hero-sub">
-              Launch-ready for prose and tabletop campaigns, with screenplay and TV workflows available as clearly marked betas.
+              Built for prose writers and tabletop storytellers — novels, short stories, graphic novels, D&D campaigns, and system-neutral TTRPGs.
             </p>
             <div className="yow-home-actions">
               <button type="button" className="btn btn-primary btn-lg" onClick={onGetStarted}>
@@ -648,7 +666,7 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
             <p className="eyebrow">Not one size fits all</p>
             <h2>YOW adapts to launch-ready project types.</h2>
             <p className="yow-section-sub">
-              Start with prose projects or tabletop campaigns, each with its own structure, defaults, and workspace language.
+              Every project type gets its own structure, defaults, and workspace language — built for the way that format actually works.
             </p>
           </div>
           <div className="yow-comparison-wrap">

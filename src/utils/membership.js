@@ -8,12 +8,15 @@ const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime',
 // These are the canonical quota values — also used by storageQuota.js.
 export const PLAN_STORAGE_BYTES = {
   free:                  250  * 1024 * 1024,        //  250 MB
-  trial:                 10   * 1024 * 1024 * 1024,  //  10 GB (full access during trial)
-  premium_monthly:       10   * 1024 * 1024 * 1024,  //  10 GB
-  premium_lifetime:       5   * 1024 * 1024 * 1024,  //   5 GB
-  premium_plus_lifetime: 10   * 1024 * 1024 * 1024,  //  10 GB
-  founder:               25   * 1024 * 1024 * 1024,  //  25 GB
+  trial:                  1   * 1024 * 1024 * 1024,  //   1 GB
+  premium_monthly:        5   * 1024 * 1024 * 1024,  //   5 GB
+  premium_plus_lifetime:  8   * 1024 * 1024 * 1024,  //   8 GB
+  founder:               15   * 1024 * 1024 * 1024,  //  15 GB
 }
+
+// Annual maintenance fee shown to users (display only — Stripe is the source of truth).
+export const MAINTENANCE_FEE_GBP = 6
+export const MAINTENANCE_WARNING_DAYS = 30
 
 // Maximum founder slots. The API also reads from app_config; this is the client-side default.
 export const FOUNDER_SLOTS_TOTAL = 100
@@ -40,44 +43,22 @@ export const PLANS = [
     highlight: false,
   },
   {
-    key: 'premium_lifetime',
-    label: 'YOW Launch Edition Lifetime',
-    price: 149,
-    interval: 'one_time',
-    priceLabel: '£149',
-    priceSuffix: 'once',
-    storageLabelShort: '5 GB',
-    description: 'Own the fully stacked launch version of YOW forever. Unlimited projects, no recurring fees.',
-    longDescription: 'Own the fully stacked launch version of the platform outright — unlimited projects and premium exports with a single payment. Covers the completed launch feature set; not a guarantee of every future major update.',
-    features: [
-      'Unlimited projects',
-      '5 GB storage',
-      'Premium exports',
-      'Bring-your-own-key AI',
-      'Priority support',
-      'Lifetime access to the fully stacked launch version',
-    ],
-    badge: null,
-    highlight: false,
-    disclaimer: 'Lifetime access covers the completed launch version. Future major updates are not guaranteed.',
-  },
-  {
     key: 'premium_plus_lifetime',
     label: 'YOW Creator Lifetime',
-    price: 249,
+    price: 199,
     interval: 'one_time',
-    priceLabel: '£249',
+    priceLabel: '£199',
     priceSuffix: 'once',
-    storageLabelShort: '10 GB',
-    description: 'Everything in Lifetime Launch, plus access to all future platform updates — forever.',
-    longDescription: 'The definitive one-time investment. You get every feature we ship going forward, early access to selected future tools, and the peace of mind that your workspace grows with you.',
+    storageLabelShort: '8 GB',
+    description: 'Own YOW outright. One payment, unlimited projects, no subscription.',
+    longDescription: 'Pay once and own the platform as it stands. Unlimited projects, premium exports, and all current features — no recurring fees in year one. A small annual maintenance fee of £6/year applies from year two to keep your data hosted and the app running.',
     features: [
-      'Everything in Lifetime Launch',
-      '10 GB storage',
-      'Access to all future updates',
-      'Advanced exports',
-      'Backup & version history (upcoming)',
-      'Early access to future features',
+      'Unlimited projects',
+      '8 GB storage',
+      'Premium exports (DOCX, PDF, ZIP)',
+      'Bring-your-own-key AI',
+      'Priority support',
+      `£${MAINTENANCE_FEE_GBP}/year maintenance from year 2 (subject to change)`,
     ],
     badge: 'Best value',
     highlight: true,
@@ -85,16 +66,17 @@ export const PLANS = [
   {
     key: 'founder',
     label: 'YOW Founder',
-    price: 399,
+    price: 499,
     interval: 'one_time',
-    priceLabel: '£399',
+    priceLabel: '£499',
     priceSuffix: 'once',
-    storageLabelShort: '25 GB',
-    description: 'Become a named Founder of Your Own World. Limited slots. Your mark on the platform.',
-    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited — once the slots are gone, they\'re gone. Feature your first published work on the YOW website, and shape the platform\'s future.',
+    storageLabelShort: '15 GB',
+    description: 'Become a named Founder of Your Own World. Limited slots. Maintenance included forever.',
+    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited — once the slots are gone, they\'re gone. Includes lifetime maintenance with no annual fee, ever.',
     features: [
-      'Everything in Premium Plus',
-      '25 GB storage',
+      'Everything in Creator Lifetime',
+      '15 GB storage',
+      'Maintenance fee included forever',
       'Permanent Founder badge',
       'Feature your debut work on YOW',
       'Founder recognition section',
@@ -111,11 +93,11 @@ export const PLANS = [
     interval: 'month',
     priceLabel: '£10',
     priceSuffix: '/month',
-    storageLabelShort: '10 GB',
+    storageLabelShort: '5 GB',
     description: 'Full platform access on a flexible monthly subscription. Cancel any time.',
     features: [
       'Full platform access',
-      '10 GB storage',
+      '5 GB storage',
       'Future updates included',
       'Cancel any time',
     ],
@@ -163,6 +145,40 @@ export function getMembership(user) {
 
   const storageQuotaBytes = PLAN_STORAGE_BYTES[activePlanKey] ?? PLAN_STORAGE_BYTES.free
 
+  // ── Maintenance fee logic (lifetime non-founder users only) ──────────────
+  // Year 1 is free. From year 2, a small annual maintenance fee applies.
+  // Founders have maintenance included forever.
+  // app_metadata fields set by the webhook:
+  //   lifetime_purchased_at  — ISO date of original lifetime purchase
+  //   maintenance_expires_at — ISO date maintenance is paid until (null = never paid)
+  let isMaintenanceLapsed = false
+  let maintenanceExpiresAt = null
+  let maintenanceDaysRemaining = null
+  let maintenanceWarning = false
+
+  if (isLifetime && !isFounder) {
+    const purchasedAt = dateFrom(user?.app_metadata?.lifetime_purchased_at) || createdAt || now
+    const yearOneEnds = new Date(purchasedAt.getTime() + 365 * DAY_MS)
+    const paidUntil = dateFrom(user?.app_metadata?.maintenance_expires_at)
+
+    if (paidUntil && paidUntil > now) {
+      // Maintenance actively paid
+      maintenanceExpiresAt = paidUntil
+      const msRemaining = paidUntil.getTime() - now.getTime()
+      maintenanceDaysRemaining = Math.ceil(msRemaining / DAY_MS)
+      maintenanceWarning = maintenanceDaysRemaining <= MAINTENANCE_WARNING_DAYS
+    } else if (now < yearOneEnds) {
+      // Still in free year 1
+      maintenanceExpiresAt = yearOneEnds
+      const msRemaining = yearOneEnds.getTime() - now.getTime()
+      maintenanceDaysRemaining = Math.ceil(msRemaining / DAY_MS)
+      maintenanceWarning = maintenanceDaysRemaining <= MAINTENANCE_WARNING_DAYS
+    } else {
+      // Year 1 ended, no valid maintenance payment
+      isMaintenanceLapsed = true
+    }
+  }
+
   return {
     plan,
     subscriptionPlan,
@@ -181,6 +197,10 @@ export function getMembership(user) {
     trialEndsAt,
     daysRemaining,
     storageQuotaBytes,
+    isMaintenanceLapsed,
+    maintenanceExpiresAt,
+    maintenanceDaysRemaining,
+    maintenanceWarning,
     priceLabel: '£10/pm', // legacy compat
   }
 }

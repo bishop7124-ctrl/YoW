@@ -3,7 +3,6 @@ import YOWLogo from '../brand/YOWLogo'
 const NAV_LINKS = [
   { href: '/features/', label: 'Features', match: '/features' },
   { href: '/pricing/', label: 'Pricing', match: '/pricing' },
-  { href: '/blog/', label: 'Blog', match: '/blog' },
   { href: '/faq/', label: 'FAQ', match: '/faq' },
 ]
 
@@ -22,7 +21,8 @@ export default function MarketingNav({
           <span className="marketing-nav-logo" aria-hidden="true">
             <YOWLogo />
           </span>
-          <span>Your Own World</span>
+          <span className="marketing-nav-brand-full">Your Own World</span>
+          <span className="marketing-nav-brand-short" aria-hidden="true">YOW</span>
         </a>
 
         <nav className="marketing-nav-links" aria-label="Main navigation">

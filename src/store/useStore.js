@@ -2,19 +2,60 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { saveAppData, saveSceneDoc, deleteSceneDoc, deleteProjectData } from '../utils/firestoreSync'
 import { buildAllProjectStats, buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
+import { estimateStoreSize } from '../utils/storageQuota'
 
 const load = (key, def) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? def }
   catch { return def }
 }
 const LOCAL_WRITE_AT_KEY = 'nf_localWriteAt'
+const LOCAL_OWNER_KEY = 'nf_localOwner'
+const PROJECT_STORAGE_KEYS = [
+  'nf_novels',
+  'nf_characters',
+  'nf_factions',
+  'nf_locations',
+  'nf_timeline',
+  'nf_worldHistory',
+  'nf_currentYear',
+  'nf_acts',
+  'nf_chapters',
+  'nf_scenes',
+  'nf_loreEntries',
+  'nf_ideaEntries',
+  'nf_maps',
+  'nf_activeMapByNovel',
+  'nf_whiteboards',
+  'nf_series',
+  'nf_storySchedule',
+  'nf_activeNovel',
+  'nf_rpg_characters',
+  LOCAL_WRITE_AT_KEY,
+  LOCAL_OWNER_KEY,
+]
 const loadLocalWriteAt = () => {
   try { return Number(localStorage.getItem(LOCAL_WRITE_AT_KEY) || 0) || 0 }
   catch { return 0 }
 }
-const markLocalWrite = () => {
+const loadLocalOwner = () => {
+  try { return localStorage.getItem(LOCAL_OWNER_KEY) || null }
+  catch { return null }
+}
+const markLocalOwner = (ownerId) => {
+  try {
+    if (ownerId) localStorage.setItem(LOCAL_OWNER_KEY, ownerId)
+    else localStorage.removeItem(LOCAL_OWNER_KEY)
+  } catch { /* Ignore metadata writes; content saves are handled separately. */ }
+}
+const markLocalWrite = (ownerId) => {
   try { localStorage.setItem(LOCAL_WRITE_AT_KEY, String(Date.now())) }
   catch { /* Ignore metadata writes; the actual content save is handled separately. */ }
+  markLocalOwner(ownerId)
+}
+const clearProjectLocalStorage = () => {
+  try {
+    PROJECT_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
+  } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const save = (key, val) => {
   try {
@@ -176,6 +217,7 @@ function createKeyedDebounce(fn, ms) {
 export function useStore(userId = null, options = {}) {
   const globalReadOnly = Boolean(options.readOnly)
   const freeProjectId = options.freeProjectId ?? null
+  const storageQuotaBytes = options.storageQuotaBytes ?? null
   const [novels, setNovels] = useState(() => load('nf_novels', []))
   const [activeNovelId, setActiveNovelId] = useState(() => load('nf_activeNovel', null))
   const [characters, setCharacters] = useState(() => load('nf_characters', []))
@@ -228,11 +270,11 @@ export function useStore(userId = null, options = {}) {
   const commitLocal = useCallback((ref, setter, key, updater) => {
     const next = typeof updater === 'function' ? updater(ref.current) : updater
     ref.current = next
-    markLocalWrite()
+    markLocalWrite(userId)
     save(key, next)
     setter(next)
     return next
-  }, [])
+  }, [userId])
 
   // localStorage persistence
   useEffect(() => save('nf_novels', novels), [novels])
@@ -284,8 +326,10 @@ export function useStore(userId = null, options = {}) {
     importing.current = true
     remoteReady.current = false
     const localWriteAt = loadLocalWriteAt()
+    const localOwner = loadLocalOwner()
     const remoteSavedAt = Number(data?._savedAt || 0) || 0
-    const shouldPreferLocal = localWriteAt > remoteSavedAt
+    const ownerMatchesCurrentUser = Boolean(userId && localOwner === userId)
+    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
 
     if (shouldPreferLocal && userId) {
@@ -295,6 +339,7 @@ export function useStore(userId = null, options = {}) {
         saveSceneDoc(userId, scene).catch(console.error)
       })
     }
+    markLocalOwner(userId)
 
     // Migrate orphan worldHistory entries into timeline so both sections share one store
     const rawTimeline = sourceData.timeline ?? []
@@ -386,10 +431,14 @@ export function useStore(userId = null, options = {}) {
   const clearData = useCallback(() => {
     importing.current = true
     remoteReady.current = false
+    clearProjectLocalStorage()
     setNovels([]); setCharacters([]); setFactions([]); setLocations([])
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
     setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setCurrentYear(0); setActiveNovelId(null)
-    setTimeout(() => { importing.current = false }, 500)
+    setTimeout(() => {
+      importing.current = false
+      remoteReady.current = true
+    }, 500)
   }, [])
 
   const activeNovel = novels.find(n => n.id === activeNovelId) ?? null
@@ -556,6 +605,7 @@ export function useStore(userId = null, options = {}) {
   }, [activeNovelId])
 
   const addAct = (title) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const order = actsRef.current.filter(a => a.novelId === activeNovelId).length
     const newAct = { id: uid(), novelId: activeNovelId, title, synopsis: '', order }
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, newAct])
@@ -563,6 +613,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addChapter = (actId, title) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const order = chaptersRef.current.filter(c => c.novelId === activeNovelId).length
     const newChap = { id: uid(), novelId: activeNovelId, actId, title, synopsis: '', order }
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, newChap])
@@ -570,6 +621,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addScene = (chapterId, title) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const newScene = {
       id: uid(),
       novelId: activeNovelId,
@@ -750,6 +802,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const saveCharacter = (data, id) => {
+    if (!id && isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const characterId = id || uid()
     const childIds = data.childIds || []
     const parentIds = data.parentIds || []
@@ -842,6 +895,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const saveLocation = (data, id) => {
+    if (!id && isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     if (id) {
       const updated = { ...(locationsRef.current.find(l => l.id === id) || { id, novelId: activeNovelId }), ...data }
       commitLocal(locationsRef, setLocations, 'nf_locations', prev => prev.map(l => l.id === id ? { ...l, ...data } : l))
@@ -869,6 +923,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addEvent = (data, options = {}) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const eventId = uid()
     const shouldCreateHistory = options.createHistory !== false && !data.linkedHistoryEntryId
     const historyId = data.linkedHistoryEntryId || (shouldCreateHistory ? uid() : null)
@@ -929,6 +984,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addScheduleEvent = (data) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const entry = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), category: 'scene', duration: 1, tags: [], linkedCharacters: [], linkedLocations: [], ...data } // eslint-disable-line react-hooks/purity
     commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, entry])
     return entry
@@ -937,6 +993,7 @@ export function useStore(userId = null, options = {}) {
   const deleteScheduleEvent = (id) => commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.id !== id))
 
   const addHistoryEntry = (data, options = {}) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const createdAt = Date.now() // eslint-disable-line react-hooks/purity
     const timelineEventId = data.linkedTimelineEventId || data.timelineEventId || null
     const entryId = uid()
@@ -1001,6 +1058,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addLoreEntry = (data) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const entry = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data } // eslint-disable-line react-hooks/purity
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, entry])
     return entry
@@ -1009,6 +1067,7 @@ export function useStore(userId = null, options = {}) {
   const deleteLoreEntry = (id) => commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.filter(e => e.id !== id))
 
   const addIdeaEntry = (data) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const entry = {
       id: uid(),
       novelId: activeNovelId,
@@ -1036,6 +1095,7 @@ export function useStore(userId = null, options = {}) {
   const deleteIdeaEntry = (id) => commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.filter(e => e.id !== id))
 
   const addMap = (name, mapType) => {
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const map = { id: uid(), novelId: activeNovelId, name, mapType: mapType || 'regional', mapPins: [], mapRegions: [], created: Date.now() } // eslint-disable-line react-hooks/purity
     setMaps(prev => [...prev, map])
     setActiveMapByNovel(prev => ({ ...prev, [activeNovelId]: map.id }))
@@ -1086,6 +1146,7 @@ export function useStore(userId = null, options = {}) {
       notifyReadOnly('free-limit')
       return null
     }
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const novel = { id: uid(), createdAt: new Date().toISOString(), ...data }
     const starter = buildStarterStructure(novel.id, novel.type)
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
@@ -1193,6 +1254,7 @@ export function useStore(userId = null, options = {}) {
       notifyReadOnly('free-limit')
       return null
     }
+    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
     const oldId = data.project?.id
     const newId = uid()
     const remap = (item) => item?.novelId === oldId ? { ...item, novelId: newId } : item
@@ -1225,6 +1287,16 @@ export function useStore(userId = null, options = {}) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('membership-read-only', { detail: { reason } }))
     }
+  }
+
+  const isStorageExceeded = () => {
+    if (!storageQuotaBytes) return false
+    const used = estimateStoreSize({
+      novels, characters, factions, locations, timeline, worldHistory,
+      acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards,
+      series, storySchedule,
+    })
+    return used >= storageQuotaBytes
   }
 
   const readOnlyValue = (name) => {

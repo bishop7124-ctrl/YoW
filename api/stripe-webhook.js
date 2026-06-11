@@ -112,15 +112,36 @@ async function activateLifetimePlan(supabaseAdmin, session) {
   await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: {
       ...existing,
-      stripe_customer_id:  customerId,
-      subscription_status: 'active',
-      subscription_plan:   plan,
+      stripe_customer_id:    customerId,
+      subscription_status:   'active',
+      subscription_plan:     plan,
+      lifetime_purchased_at: existing.lifetime_purchased_at || new Date().toISOString(),
     },
   })
 
   // Create/update user_profiles row. Set is_founder flag for Founder purchases.
   const profilePatch = { is_founder: plan === 'founder' }
   await upsertUserProfile(supabaseAdmin, userId, profilePatch)
+}
+
+// --------------------------------------------------------------------------
+// Extend maintenance_expires_at by 1 year on successful maintenance payment.
+// --------------------------------------------------------------------------
+async function extendMaintenance(supabaseAdmin, userId) {
+  if (!userId) {
+    console.warn('[stripe-webhook] Missing user_id for maintenance extension')
+    return
+  }
+  const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
+  const existing = data?.user?.app_metadata || {}
+  const currentExpiry = existing.maintenance_expires_at
+    ? new Date(existing.maintenance_expires_at)
+    : new Date()
+  const base = currentExpiry > new Date() ? currentExpiry : new Date()
+  const newExpiry = new Date(base.getTime() + 365 * 24 * 60 * 60 * 1000)
+  await supabaseAdmin.auth.admin.updateUserById(userId, {
+    app_metadata: { ...existing, maintenance_expires_at: newExpiry.toISOString() },
+  })
 }
 
 // --------------------------------------------------------------------------
@@ -156,7 +177,11 @@ export default async function handler(req, res) {
       case 'checkout.session.completed': {
         const session = event.data.object
 
-        if (session.mode === 'payment') {
+        if (session.metadata?.plan === 'maintenance') {
+          // First maintenance subscription checkout — extend immediately.
+          const userId = session.metadata?.user_id || session.client_reference_id
+          await extendMaintenance(supabaseAdmin, userId)
+        } else if (session.mode === 'payment') {
           // One-time lifetime purchase — activate immediately.
           await activateLifetimePlan(supabaseAdmin, session)
         } else if (session.subscription) {
@@ -188,6 +213,16 @@ export default async function handler(req, res) {
                 : invoice.parent?.subscription_details?.subscription?.id)
         if (!subId) break
         const latestSub = await stripe.subscriptions.retrieve(subId, { expand: ['latest_invoice'] })
+
+        // Maintenance subscription renewal — extend access rather than updating membership plan.
+        if (latestSub.metadata?.plan === 'maintenance' && event.type === 'invoice.paid') {
+          const userId = latestSub.metadata?.user_id
+            || invoice.metadata?.user_id
+            || invoice.parent?.subscription_details?.metadata?.user_id
+          await extendMaintenance(supabaseAdmin, userId)
+          break
+        }
+
         await updateSubscriptionMembership(
           supabaseAdmin, latestSub,
           invoice.metadata?.user_id || invoice.parent?.subscription_details?.metadata?.user_id

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "om6dp9kfldmpk7gywn",
+    "name": "Ammerol",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "Region",
+    "description": "No description recorded."
+  },
+  {
+    "id": "c1gxwukreibmpk7gywn",
+    "name": "Elarya",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "City",
+    "description": "Home of the Elarys family, a city of knowledge surrounded by sacred groves. It is now hollow and depleted after Liandros took control."
+  },
+  {
+    "id": "wca7mxhon2mpk7gywn",
+    "name": "Kesaryn",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "Region",
+    "description": "No description recorded."
+  },
+  {
+    "id": "1petkw9wxsmpk7gywn",
+    "name": "Linzai",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "Region",
+    "description": "No description recorded."
+  },
+  {
+    "id": "zx3gz4hpyu7mpk7gywn",
+    "name": "Linzai",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "City",
+    "description": "The capital city of Aurethos, a populous city with a unique layout centered around the royal grounds."
+  },
+  {
+    "id": "vna6mc4rllpmpk7gywn",
+    "name": "Val",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "City",
+    "description": "The Mountain City of Valleron, a hub for trade and craftsmanship with a growing population despite challenging terrain."
+  },
+  {
+    "id": "suwyj4n585rmpk7gywn",
+    "name": "Valleron",
+    "novelId": "osdwpclhvv8mpk7gyw6",
+    "category": "Region",
+    "description": "No description recorded."
+  }
+]

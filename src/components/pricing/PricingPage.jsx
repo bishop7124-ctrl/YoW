@@ -25,19 +25,16 @@ function removeSchema(id) {
 // Feature comparison table data
 // --------------------------------------------------------------------------
 const FEATURE_ROWS = [
-  { label: 'Active projects',        free: '1',       launch: 'Unlimited', plus: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
-  { label: 'Storage',                free: '250 MB',  launch: '5 GB',      plus: '10 GB',     founder: '25 GB',     monthly: '10 GB'    },
-  { label: 'All studio rooms',       free: '✓',       launch: '✓',         plus: '✓',         founder: '✓',         monthly: '✓'        },
-  { label: 'Premium exports',        free: '—',       launch: '✓',         plus: '✓',         founder: '✓',         monthly: '✓'        },
-  { label: 'Advanced exports',       free: '—',       launch: '—',         plus: '✓',         founder: '✓',         monthly: '✓'        },
-  { label: 'Bring-your-own-key AI',  free: '✓',       launch: '✓',         plus: '✓',         founder: '✓',         monthly: '✓'        },
-  { label: 'Future platform updates',free: '—',       launch: '—',         plus: '✓',         founder: '✓',         monthly: '✓'        },
-  { label: 'Early feature access',   free: '—',       launch: '—',         plus: '✓',         founder: '✓',         monthly: '—'        },
-  { label: 'Founder badge',          free: '—',       launch: '—',         plus: '—',         founder: '✓',         monthly: '—'        },
-  { label: 'Feature your debut work',free: '—',       launch: '—',         plus: '—',         founder: '✓',         monthly: '—'        },
-  { label: 'Priority feature input', free: '—',       launch: '—',         plus: '—',         founder: '✓',         monthly: '—'        },
-  { label: 'Support tier',           free: 'Community',launch: 'Priority', plus: 'Priority',  founder: 'Priority',  monthly: 'Priority' },
-  { label: 'Recurring fee',          free: 'None',    launch: 'None',      plus: 'None',      founder: 'None',      monthly: '£10/mo'   },
+  { label: 'Active projects',         free: '1',         creator: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
+  { label: 'Storage',                 free: '250 MB',    creator: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
+  { label: 'All studio rooms',        free: '✓',         creator: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Premium exports',         free: '—',         creator: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Bring-your-own-key AI',   free: '✓',         creator: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Founder badge',           free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
+  { label: 'Feature your debut work', free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
+  { label: 'Priority feature input',  free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
+  { label: 'Maintenance fee',         free: 'None',      creator: '£6/yr from year 2', founder: 'Included forever', monthly: 'None' },
+  { label: 'Support tier',            free: 'Community', creator: 'Priority',  founder: 'Priority',  monthly: 'Priority'  },
 ]
 
 // --------------------------------------------------------------------------
@@ -45,16 +42,24 @@ const FEATURE_ROWS = [
 // --------------------------------------------------------------------------
 const FAQ_ITEMS = [
   {
-    q: 'What does "Lifetime Launch" actually cover?',
-    a: 'Lifetime Launch gives you permanent access to the fully stacked launch version of Your Own World. You\'ll never be charged again, and the completed launch tool is yours to keep. It does not guarantee access to every future major platform update — that\'s what Premium Plus is for.',
+    q: 'What does "Creator Lifetime" actually cover?',
+    a: 'Creator Lifetime gives you permanent access to Your Own World as it currently stands — unlimited projects, premium exports, and all current features. Year one is included in your purchase. From year two, a small annual maintenance fee of £6/year keeps your data hosted and the platform running. This fee is subject to change with reasonable notice.',
   },
   {
-    q: 'What\'s included in "future updates" on Premium Plus?',
-    a: 'Premium Plus covers the ongoing evolution of the platform — new studio rooms, export formats, collaboration features, and anything else we ship. You pay once and your workspace grows with the product.',
+    q: 'What is the annual maintenance fee?',
+    a: 'The maintenance fee is £6/year, charged from year two of your lifetime ownership. It covers hosting, infrastructure, and keeping the platform operational — not new features. If you choose not to pay, your account switches to export-only mode so you can always retrieve your work. Founder members have maintenance included forever.',
+  },
+  {
+    q: 'What happens if I don\'t pay the maintenance fee?',
+    a: 'You\'ll receive a 30-day notice before your maintenance period expires. If you don\'t renew, your account switches to export-only mode — you can still log in and download all your projects, but editing is paused until you pay. Your data is never deleted.',
   },
   {
     q: 'How many Founder slots are there?',
-    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. If you're considering it, don't wait.`,
+    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. Founders have the annual maintenance fee included forever, so there's never anything more to pay.`,
+  },
+  {
+    q: 'Do monthly subscribers pay a maintenance fee?',
+    a: 'No. Monthly subscribers pay £10/month which covers everything including hosting. The maintenance fee only applies to lifetime plan holders from year two.',
   },
   {
     q: 'What happens to my data if I downgrade to Free?',
@@ -251,7 +256,6 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
         ))}
       </ul>
 
-      {/* Disclaimer for Lifetime Launch */}
       {plan.disclaimer && (
         <p style={{
           marginTop: 16, fontSize: 11, color: 'var(--text-muted)',
@@ -366,7 +370,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
     const prevDesc  = document.querySelector('meta[name="description"]')?.content
     document.title  = 'Pricing — Your Own World | Worldbuilding & Writing Software'
     const descEl = document.querySelector('meta[name="description"]')
-    if (descEl) descEl.setAttribute('content', 'Simple, honest pricing for Your Own World — the all-in-one worldbuilding and writing platform. Free plan, lifetime access from £149, or £10/month. No hidden fees.')
+    if (descEl) descEl.setAttribute('content', 'Simple, honest pricing for Your Own World — the all-in-one worldbuilding and writing platform. Free plan, Creator Lifetime from £199, or £10/month. Small annual maintenance fee applies from year two on lifetime plans.')
 
     return () => {
       removeSchema('ld-pricing-page')
@@ -416,10 +420,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
     }
   }
 
-  // Display plans in the order: Free, Lifetime Launch, Premium Plus, Founder, Monthly Creator
   const displayPlans = [
     PLANS.find(p => p.key === 'free'),
-    PLANS.find(p => p.key === 'premium_lifetime'),
     PLANS.find(p => p.key === 'premium_plus_lifetime'),
     PLANS.find(p => p.key === 'founder'),
     PLANS.find(p => p.key === 'premium_monthly'),
@@ -465,8 +467,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             color: 'var(--text-muted)', lineHeight: 1.7,
             maxWidth: 560, margin: '0 auto 32px',
           }}>
-            Start free. Upgrade when your world demands it. No subscriptions required — one payment unlocks
-            the platform and keeps it yours.
+            Start free. Own it outright with a single payment — or subscribe monthly. A small annual
+            maintenance fee applies from year two on lifetime plans.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
@@ -480,18 +482,22 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             >
               Start for free
             </button>
-            <a
-              href="#comparison"
+            <button
+              type="button"
+              onClick={() => document.getElementById('comparison')?.scrollIntoView({ behavior: 'smooth' })}
               style={{
                 display: 'inline-flex', alignItems: 'center',
                 border: '1px solid var(--border)', borderRadius: 9,
                 padding: '13px 28px', fontSize: 15, fontWeight: 700,
-                color: 'var(--text-muted)', textDecoration: 'none',
+                color: 'var(--text-muted)', background: 'none', cursor: 'pointer',
               }}
             >
               Compare plans
-            </a>
+            </button>
           </div>
+          <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-muted)', opacity: 0.7 }}>
+            Prices shown in GBP. VAT may apply depending on your location and is calculated at checkout.
+          </p>
         </section>
 
         {/* ── Founder counter (above cards) ── */}
@@ -570,12 +576,12 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
                   }}>
                     Feature
                   </th>
-                  {['Free', 'Launch Ed.', 'Creator', 'Founder', 'Monthly'].map((h, i) => (
+                  {['Free', 'Creator', 'Founder', 'Monthly'].map((h, i) => (
                     <th key={h} style={{
                       textAlign: 'center', padding: '10px 8px',
-                      color: i === 2 ? 'var(--accent)' : 'var(--text-muted)',
-                      fontWeight: i === 2 ? 900 : 700,
-                      borderBottom: `2px solid ${i === 2 ? 'var(--accent)' : 'var(--border)'}`,
+                      color: i === 1 ? 'var(--accent)' : 'var(--text-muted)',
+                      fontWeight: i === 1 ? 900 : 700,
+                      borderBottom: `2px solid ${i === 1 ? 'var(--accent)' : 'var(--border)'}`,
                       fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase',
                       minWidth: 80,
                     }}>
@@ -593,13 +599,13 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
                     }}>
                       {row.label}
                     </td>
-                    {[row.free, row.launch, row.plus, row.founder, row.monthly].map((val, ci) => (
+                    {[row.free, row.creator, row.founder, row.monthly].map((val, ci) => (
                       <td key={ci} style={{
                         textAlign: 'center', padding: '12px 8px',
                         color: val === '✓' ? 'var(--accent)' : val === '—' ? 'var(--border)' : 'var(--text-muted)',
                         fontWeight: val === '✓' ? 900 : 500,
-                        borderLeft: ci === 2 ? '1px solid var(--accent)' : undefined,
-                        borderRight: ci === 2 ? '1px solid var(--accent)' : undefined,
+                        borderLeft: ci === 1 ? '1px solid var(--accent)' : undefined,
+                        borderRight: ci === 1 ? '1px solid var(--accent)' : undefined,
                       }}>
                         {val}
                       </td>

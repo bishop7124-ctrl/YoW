@@ -1,358 +1,292 @@
-# YOW MVP QA Checklist
+# YOW Manual Beta Sign-Off Checklist
 
-Run these in order. Tick each box as you go. Report any failure back to engineering immediately — do not skip ahead.
+Use this checklist after automated QA has passed.
 
----
+HTML tracker: [manual-beta-signoff.html](manual-beta-signoff.html)
 
-## Priority 1 — Autosave (do this first, highest data-loss risk)
+Automated QA already covers the repeatable baseline: build/load checks, create-write-refresh, ZIP export/restore, DOCX/PDF download smoke, all configured project-type creation, and mobile/tablet writing reachability.
 
-### Immediate refresh
-- [ ] Open a project and type several paragraphs in a scene
-- [ ] Hard-refresh the tab immediately (Ctrl+Shift+R / Cmd+Shift+R) without waiting
-- [ ] **Pass:** typed content is still there after refresh
-- [ ] **Fail:** content is gone or partially missing
+Manual QA should focus only on what automation does not prove well: real auth, cloud persistence, visual/layout quality, export content quality, realistic project scale, and deeper workflow behavior.
 
-### Scene switching
-- [ ] Type content in Scene A
-- [ ] Click a different scene in the sidebar (Scene B)
-- [ ] Click back to Scene A
-- [ ] **Pass:** Scene A content is exactly as you left it
-- [ ] **Fail:** Scene A content is blank or partially lost
+Report every failure with:
 
-### Tab close and reopen
-- [ ] Type content in a scene
-- [ ] Close the browser tab completely (not just refresh)
-- [ ] Reopen the app and navigate back to the same scene
-- [ ] **Pass:** content survived the tab close
-- [ ] **Fail:** content is gone
-
-### Logged-in cloud round-trip
-- [ ] Sign in to an account
-- [ ] Write something in a scene
-- [ ] Log out
-- [ ] Log back in
-- [ ] **Pass:** content is there from Firestore
-- [ ] **Fail:** content is gone after login
-
-### Rapid typing
-- [ ] Type quickly and continuously for 30 seconds in a scene
-- [ ] Hard-refresh immediately when you stop
-- [ ] **Pass:** all typed content is present
-- [ ] **Fail:** last few seconds of typing are missing
+- Browser/device and viewport size.
+- Account state: signed out, fresh user, returning user, or offline/local.
+- Project type.
+- Exact steps to reproduce.
+- Whether the issue risks data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or legal/payment confusion.
 
 ---
 
-## Priority 2 — Project Types
+## 0. Automated Gate
 
-### Enabled types are selectable
-- [ ] Click "New Project" in the library
-- [ ] Verify **Novel** is clickable and selectable
-- [ ] Verify **Novella** is clickable and selectable
-- [ ] Verify **Short Story** is clickable and selectable
-- [ ] Verify **D&D Campaign** is clickable and selectable
-- [ ] Verify **TTRPG Campaign** is clickable and selectable
+- [ ] `npm run qa` passed.
+- [ ] `npm run qa:smoke` passed locally in a normal terminal or in CI.
+- [ ] No failed GitHub Actions smoke job is unresolved.
 
-### Disabled types show "Soon" and cannot be selected
-- [ ] Verify **Play** shows "Soon" badge and cannot be clicked
-- [ ] Verify **Screenplay** shows "Soon" badge and cannot be clicked
-- [ ] Verify **TV Series** shows "Soon" badge and cannot be clicked
-- [ ] Verify **Comic / Graphic Novel** shows "Soon" badge and cannot be clicked
-- [ ] Verify **Video Game** shows "Soon" badge and cannot be clicked
-
-### Novella structure labels
-- [ ] Create a new **Novella** project
-- [ ] Open the project and go to the manuscript
-- [ ] **Pass:** structure sidebar shows Part / Chapter / Scene (not Act / Chapter / Scene)
-- [ ] **Fail:** shows Act or wrong labels
-
-### Short Story structure labels
-- [ ] Create a new **Short Story** project
-- [ ] Open the manuscript structure sidebar
-- [ ] **Pass:** shows Part / Section / Scene
-- [ ] **Fail:** shows wrong labels
-
-### D&D Campaign structure labels
-- [ ] Create a new **D&D Campaign** project
-- [ ] Open the manuscript/sessions view
-- [ ] **Pass:** shows Story Arc / Session / Encounter
-- [ ] **Fail:** shows wrong labels
-
-### TTRPG Campaign structure labels
-- [ ] Create a new **TTRPG Campaign** project
-- [ ] Open the manuscript/sessions view
-- [ ] **Pass:** shows Story Arc / Session / Encounter
-- [ ] **Fail:** shows wrong labels
-
-### Type persists after edit
-- [ ] Create a Novella project
-- [ ] Open project settings/edit modal
-- [ ] **Pass:** type still shows as Novella (not reset to Novel)
-- [ ] **Fail:** type has been reset
+**Gate:** Do not start manual sign-off while automated QA is red, unless you are manually reproducing a failed automated case.
 
 ---
 
-## Priority 3 — Restore from Backup ZIP
+## 1. Auth and Cloud Persistence
 
-### Export
-- [ ] Open any project that has scenes, characters, and lore
-- [ ] Open the project export menu
-- [ ] Export as **Backup zip**
-- [ ] **Pass:** a `.zip` file downloads successfully
-- [ ] **Fail:** export fails or produces an empty file
+### Fresh account
 
-### Restore
-- [ ] From the library, click the **Restore** button in the top bar
-- [ ] Select the `.zip` file you just exported
-- [ ] **Pass:** a new copy of the project appears in the library
-- [ ] **Fail:** nothing happens, error appears, or the app crashes
+- [ ] Open a private/incognito browser window.
+- [ ] Sign up with a new account.
+- [ ] Confirm the app opens with an empty library.
+- [ ] Create a project and write one sentence in the first scene.
+- [ ] Log out, then log back in.
+- [ ] Confirm the project and sentence are still present.
 
-### Restored content integrity
-- [ ] Open the restored project
-- [ ] Check **chapters and scenes** — all present and readable
-- [ ] Check **characters** — all present with correct fields
-- [ ] Check **lore entries** — all present
-- [ ] Check **timeline events** — all present
-- [ ] Check **locations** — all present
-- [ ] **Pass:** all content matches the original
-- [ ] **Fail:** any section is empty or missing entries
+### Returning account
 
-### Restored project is independent
-- [ ] Edit a scene in the **restored** project
-- [ ] Verify the **original** project is unchanged
-- [ ] **Pass:** original is untouched
-- [ ] **Fail:** original data was modified
+- [ ] Sign in with an existing account that already has projects.
+- [ ] Confirm existing projects load.
+- [ ] Open one project, make a small scene edit, then refresh.
+- [ ] Confirm the edit remains.
+
+### Session and auth errors
+
+- [ ] Close the browser completely while signed in, reopen it, and confirm the session restores.
+- [ ] Attempt sign-in with an incorrect password.
+- [ ] Confirm a clear error appears and the app does not crash or enter a broken state.
+- [ ] Sign out from the user menu and confirm the logged-out state is clean.
+
+**Pass:** Sign up, sign in, sign out, session restore, and cloud round-trip all work.
 
 ---
 
-## Priority 4 — Authentication
+## 2. Autosave and Editor Safety
 
-### Fresh sign-up
-- [ ] Open the app in an incognito/private window
-- [ ] Click "Get started" and sign up with a new account
-- [ ] **Pass:** you land in the app with an empty library and can create a project
-- [ ] **Fail:** error on sign-up, blank screen, or redirect loop
+### Immediate save behavior
 
-### Returning user sign-in
-- [ ] Sign in with an existing account that has projects
-- [ ] **Pass:** existing projects load correctly
-- [ ] **Fail:** projects are missing or the page is broken
+- [ ] Open a project and type several paragraphs in a scene.
+- [ ] Hard-refresh immediately without waiting.
+- [ ] Confirm all typed content remains.
 
-### Invalid credentials
-- [ ] Attempt to sign in with a wrong password
-- [ ] **Pass:** a clear error message appears without crashing
-- [ ] **Fail:** white screen, unhandled error, or silent failure
+### Scene and navigation behavior
 
-### Sign out
-- [ ] Sign out from the user menu
-- [ ] **Pass:** you are returned to the landing or login screen cleanly
-- [ ] **Fail:** app breaks, shows a logged-in state, or errors
+- [ ] Type in Scene A, switch to Scene B, then return to Scene A.
+- [ ] Confirm Scene A is unchanged.
+- [ ] Type in a scene, immediately navigate to Characters or Lore, then return.
+- [ ] Confirm the scene content remains.
 
-### Session restore
-- [ ] Sign in and then close the browser completely
-- [ ] Reopen the app
-- [ ] **Pass:** you are still signed in with your projects visible
-- [ ] **Fail:** you are signed out or the session is broken
+### Long scene behavior
 
----
+- [ ] Paste or write 5,000+ words into one scene.
+- [ ] Continue typing at the end for at least 30 seconds.
+- [ ] Confirm typing remains responsive and the cursor does not jump.
+- [ ] Refresh and confirm the long scene remains intact.
 
-## Priority 5 — Dashboard
+### Structure operations
 
-### Empty account state
-- [ ] Sign in to a fresh account with no projects
-- [ ] **Pass:** empty state is shown with a clear prompt to create a project
-- [ ] **Fail:** blank page, error, or broken layout
+- [ ] Add, rename, move, and delete a chapter.
+- [ ] Add, rename, move, and delete a scene.
+- [ ] Refresh and confirm the structure changes persisted.
+- [ ] Check that deletion warnings are clear enough before destructive actions.
 
-### Create and open a project
-- [ ] Create a new project from the dashboard
-- [ ] Click the project tile to open it
-- [ ] **Pass:** project opens correctly
-- [ ] **Fail:** click does nothing or navigates to wrong place
-
-### Rename a project
-- [ ] Open project settings (edit modal)
-- [ ] Change the title and save
-- [ ] **Pass:** new title appears on the dashboard card
-- [ ] **Fail:** title reverts or save fails silently
-
-### Delete a project
-- [ ] Delete a project from the settings modal
-- [ ] **Pass:** project is removed from the library; no orphan data visible
-- [ ] **Fail:** project remains, error appears, or other projects are affected
-
-### Many projects
-- [ ] Create or load an account with 5+ projects
-- [ ] **Pass:** all cards render correctly without layout breaks
-- [ ] **Fail:** cards overlap, missing, or dashboard scrolls incorrectly
+**Pass:** Normal writing, rapid refresh, navigation, long scenes, and structure edits do not lose content or make the editor unusable.
 
 ---
 
-## Priority 6 — Manuscript Editor
+## 3. Export and Restore Quality
 
-### Write and save
-- [ ] Open a scene and write at least 3 paragraphs
-- [ ] Navigate away and return
-- [ ] **Pass:** content is intact
-- [ ] **Fail:** content is lost or partially missing
+Use one realistic project with scenes, chapters, characters, locations, lore, and timeline entries.
 
-### Add / rename / delete a chapter
-- [ ] Add a new chapter
-- [ ] Rename it
-- [ ] Delete it
-- [ ] **Pass:** all operations succeed; structure updates immediately and persists on refresh
-- [ ] **Fail:** any operation fails or doesn't persist
+### Backup ZIP
 
-### Add / rename / delete a scene
-- [ ] Add a scene to a chapter
-- [ ] Rename it
-- [ ] Move it to a different chapter
-- [ ] Delete it
-- [ ] **Pass:** all operations succeed and persist on refresh
-- [ ] **Fail:** any step fails or doesn't persist
+- [ ] Export the project as a Backup ZIP.
+- [ ] Open the ZIP and confirm it contains project data plus manuscript and worldbuilding data files.
+- [ ] Restore the ZIP from the library.
+- [ ] Confirm the restored project appears as a separate project.
+- [ ] Open the restored project and compare chapters, scenes, characters, locations, lore, and timeline entries against the original.
+- [ ] Edit the restored project and confirm the original project is unchanged.
 
-### Long scene performance
-- [ ] Paste or write 5,000+ words into a single scene
-- [ ] Continue typing at the end
-- [ ] **Pass:** no noticeable lag, cursor stays stable
-- [ ] **Fail:** typing lags more than ~0.5s, cursor jumps, or the editor freezes
+### DOCX
 
-### Word count accuracy
-- [ ] Write a known number of words in a scene (e.g. paste 100 words)
-- [ ] **Pass:** word count shown for the scene/chapter/project matches within ±5 words
-- [ ] **Fail:** count is significantly wrong or missing
+- [ ] Export the manuscript as a Word document.
+- [ ] Open it in Word, Pages, or Google Docs.
+- [ ] Confirm chapter/scene order is correct and text is readable.
+- [ ] Confirm empty scenes and long scenes do not break the document.
+
+### PDF
+
+- [ ] Export a Visual PDF using at least one theme.
+- [ ] Open the PDF.
+- [ ] Confirm content order, readability, and nonblank pages.
+- [ ] Spot-check one additional theme if visual styling looks suspicious.
+
+**Pass:** Exported files open, contain the expected content, preserve order, and restore without linking the copy back to the original.
 
 ---
 
-## Priority 7 — Worldbuilding
+## 4. Responsive Visual Pass
 
-### Characters
-- [ ] Create a character with name, description, and relationships
-- [ ] Hard-refresh
-- [ ] **Pass:** character and all fields are intact
-- [ ] Edit the character, save, refresh — changes persist
-- [ ] Delete the character — it is removed from lore links and timeline links
-- [ ] **Fail:** any of the above fails
+Check the app at mobile, tablet, desktop, and wide desktop widths.
 
-### Locations
-- [ ] Create a location, hard-refresh — location persists
-- [ ] Edit the location — changes persist on refresh
-- [ ] Delete the location — removed from lore/timeline links
-- [ ] **Pass/Fail:** as above
+Suggested widths:
 
-### Lore
-- [ ] Create a lore entry, hard-refresh — entry persists
-- [ ] Edit — changes persist
-- [ ] Delete — entry is gone
-- [ ] Search/filter — entries are found correctly by name and category
-- [ ] **Pass/Fail:** as above
+- 375px mobile.
+- 768px tablet.
+- 1280px desktop.
+- 1440px+ wide desktop.
 
-### Timeline and World History
-- [ ] Create a timeline event, hard-refresh — event persists
-- [ ] Link an event to a world history entry
-- [ ] Unlink it
-- [ ] Delete the event
-- [ ] **Pass:** all operations persist on immediate refresh
-- [ ] **Fail:** any step fails or reverts
+### Required screens
 
----
+- [ ] Landing/public navigation.
+- [ ] Dashboard/library.
+- [ ] New Project modal.
+- [ ] Project settings/edit modal.
+- [ ] Manuscript editor.
+- [ ] Characters.
+- [ ] Locations.
+- [ ] Lore.
+- [ ] Timeline or World History.
+- [ ] Account settings.
 
-## Priority 8 — Exports
+### Required checks
 
-### Project ZIP export
-- [ ] Export a project with characters, lore, and scenes as a backup zip
-- [ ] Open the ZIP and verify it contains `project-data.json`, `data/characters.json`, `data/scenes.json`, etc.
-- [ ] **Pass:** ZIP is valid and contains all data files
-- [ ] **Fail:** ZIP is empty, corrupt, or missing sections
+- [ ] Key buttons are visible and tappable/clickable.
+- [ ] No important controls overlap or disappear.
+- [ ] Modals fit on screen and can be dismissed.
+- [ ] The manuscript Write action is visible on compact layouts.
+- [ ] The mobile manuscript bottom tab bar works.
+- [ ] No screen requires awkward horizontal scrolling for core actions.
 
-### Manuscript DOCX export
-- [ ] Export the manuscript as a Word document (.docx)
-- [ ] Open the file in Word or Google Docs
-- [ ] **Pass:** chapters and scenes are in the correct order; text is readable
-- [ ] **Fail:** file won't open, content is out of order, or scenes are missing
-
-### PDF export
-- [ ] Export the project as a Visual PDF (try at least one theme)
-- [ ] Open the PDF
-- [ ] **Pass:** PDF opens, content is readable, ordering is correct
-- [ ] **Fail:** export fails, PDF is blank, or content is garbled
+**Pass:** Core launch workflows are usable on mobile/tablet/desktop without hidden controls, broken modals, or unreadable layouts.
 
 ---
 
-## Priority 9 — Responsive Layout
+## 5. Dashboard and Project Library
 
-### Mobile (375px width)
-- [ ] Open the app at 375px viewport width (DevTools → responsive mode)
-- [ ] Verify the library/dashboard is usable
-- [ ] Navigate into a project and verify the manuscript Write button is visible and tappable
-- [ ] Verify the bottom tab bar appears in the manuscript view
-- [ ] Verify no buttons overlap or are cut off
-- [ ] **Pass:** all core actions are reachable
-- [ ] **Fail:** any key button is hidden, overlapping, or unreachable
+- [ ] Fresh empty account shows a useful empty state.
+- [ ] Create a project from the dashboard and open it from the project card.
+- [ ] Rename a project and confirm the new title appears on the dashboard.
+- [ ] Delete a project and confirm it disappears without affecting other projects.
+- [ ] Test an account with several projects and at least one series.
+- [ ] Confirm project cards, active project state, series grouping/filtering, Overview, and Insights remain readable and usable.
 
-### Tablet (768px width)
-- [ ] Open the app at 768px viewport width
-- [ ] Verify dashboard project cards are usable
-- [ ] Verify the manuscript editor fills the available space correctly
-- [ ] Verify modals are fully visible and dismissable
-- [ ] **Pass:** layout is usable without horizontal scrolling or hidden controls
-- [ ] **Fail:** layout breaks, overlaps, or key controls disappear
-
-### Desktop wide (1440px+)
-- [ ] Verify the dashboard and manuscript don't stretch to an unusable width
-- [ ] **Pass:** content is centred or capped at a readable max-width
-- [ ] **Fail:** content stretches edge to edge on very wide screens
+**Pass:** The library supports create/open/rename/delete and common multi-project states without ambiguous or broken UI.
 
 ---
 
-## Priority 10 — Save and Close Behaviour
+## 6. Worldbuilding Persistence
 
-### Manuscript flush on navigate away
-- [ ] Type in a scene
-- [ ] Click to a different section (e.g. Characters) immediately
-- [ ] Return to the manuscript
-- [ ] **Pass:** content is there
-- [ ] **Fail:** content is gone
+Use immediate refresh after at least one create/edit/delete action in each section.
 
-### "Discard changes?" prompt on dirty modals
-- [ ] Open the project edit modal and change the title (do not save)
-- [ ] Click Cancel or the X button
-- [ ] **Pass:** a "Discard changes?" confirmation appears
-- [ ] **Fail:** modal closes silently and the change is lost
+- [ ] Characters: create, edit, search, relate/link, delete, and confirm relationship cleanup.
+- [ ] Locations: create, edit, search, link, delete, and confirm link cleanup.
+- [ ] Lore: create, edit, categorize, search/filter, link to character/location, delete.
+- [ ] Timeline/World History: create, edit, link/unlink, group by era where relevant, delete.
 
-### Click-outside closes modals
-- [ ] Open any modal
-- [ ] Click outside the modal area
-- [ ] **Pass:** modal closes without saving unintended changes
-- [ ] **Fail:** modal stays open, crashes, or saves without confirmation
+**Pass:** Worldbuilding records persist by project, survive immediate refresh, and deleted records do not leave broken visible links.
 
 ---
 
-## Priority 11 — Large Project Performance
+## 7. Project-Type Spot Checks
 
-### Stress project load
-- [ ] Create or load a project with: 10+ characters, 50+ scenes, 5+ lore entries, 10+ timeline events
-- [ ] Open the dashboard — verify it loads in under 3 seconds
-- [ ] Open the manuscript — verify the scene list renders without lag
-- [ ] Run a search/filter in Characters — results appear quickly
-- [ ] Export the project as ZIP — export completes without timing out
-- [ ] **Pass:** all operations are usable with no significant lag
-- [ ] **Fail:** any operation is noticeably slow or crashes
+Automation creates every configured type. Manual QA should spot-check whether the UI feels honest and type-specific.
+
+### Live/beta expectation copy
+
+- [ ] Homepage and project creation copy clearly distinguish launch-ready prose/tabletop types from beta/limited types.
+- [ ] Beta types do not look advertised as fully complete.
+- [ ] Project settings show the selected type and any relevant limitation note.
+
+### Prose types
+
+- [ ] Novel uses Act / Chapter / Scene.
+- [ ] Novella uses Part / Chapter / Scene and its lighter default sections.
+- [ ] Short Story uses Part / Section / Scene and its compact default sections.
+- [ ] Default word targets look appropriate where shown.
+
+### Campaign types
+
+- [ ] D&D Campaign uses Story Arc / Session / Encounter.
+- [ ] TTRPG Campaign uses Story Arc / Session / Encounter.
+- [ ] Structured session prep/recap fields are present and persist.
+- [ ] Character Builder Party room, wizard, sheet, and dice roller are reachable.
+- [ ] Campaign export includes campaign/session material.
+
+### Script beta types
+
+- [ ] Play, Screenplay, and TV Series are clearly marked limited/beta.
+- [ ] Script element controls are reachable.
+- [ ] Basic script typing flow works.
+- [ ] Readable script DOCX export works.
+
+**Pass:** Project-type behavior matches the roadmap promise and beta limitations are visible.
 
 ---
 
-## Sign-off
+## 8. Large Project Performance
 
-| Area | Tester | Date | Result |
-|---|---|---|---|
-| Autosave | | | |
-| Project types | | | |
-| Restore from ZIP | | | |
-| Authentication | | | |
-| Dashboard | | | |
-| Manuscript editor | | | |
-| Worldbuilding | | | |
-| Exports | | | |
-| Responsive layout | | | |
-| Save and close | | | |
-| Large project performance | | | |
+Use or create a project with at least:
 
-**Launch gate:** All Priority 1–4 items must pass. Priority 5–11 failures must be triaged against the Launch Blocker Policy before any item is allowed to block launch.
+- 50+ scenes.
+- 10+ characters.
+- 10+ locations or lore entries.
+- 10+ timeline/history entries.
+- One 5,000+ word scene.
+
+Check:
+
+- [ ] Dashboard opens in roughly 3 seconds.
+- [ ] Manuscript scene list and editor remain responsive.
+- [ ] Character/lore/location search returns results quickly.
+- [ ] Word counts update without obvious typing lag.
+- [ ] ZIP export completes.
+- [ ] DOCX export completes.
+- [ ] PDF export completes or fails with a clear recoverable message.
+
+**Pass:** A realistic project remains usable and exports do not hang or crash.
+
+---
+
+## 9. Optional Conditional Checks
+
+Run these only if the feature is part of the current beta promise or you intend to keep it visible.
+
+### AI suggestion mode
+
+- [ ] With no provider configured, AI shows a clear setup warning.
+- [ ] With a provider configured, generate a suggestion.
+- [ ] Confirm generated text is not automatically inserted.
+- [ ] Append to scene only after explicit user action.
+- [ ] Copy and discard behavior works.
+
+### Theme editor
+
+- [ ] Switch dark/light presets.
+- [ ] Adjust custom colors, corner roundness, and visual strength.
+- [ ] Save, refresh, and confirm the app shell and preview remain in sync.
+
+### Finalized draft reader
+
+- [ ] Finalize a novel draft.
+- [ ] Confirm the working manuscript remains editable.
+- [ ] Confirm the finalized draft is read-only.
+- [ ] Switch scroll/page modes and use previous/next page controls.
+- [ ] Confirm non-novel project types do not show the Finalise action.
+
+---
+
+## Sign-Off
+
+| Area | Tester | Date | Result | Blocking Issue? |
+| --- | --- | --- | --- | --- |
+| Automated gate | | | | |
+| Auth and cloud persistence | | | | |
+| Autosave and editor safety | | | | |
+| Export and restore quality | | | | |
+| Responsive visual pass | | | | |
+| Dashboard and project library | | | | |
+| Worldbuilding persistence | | | | |
+| Project-type spot checks | | | | |
+| Large project performance | | | | |
+| Optional conditional checks | | | | |
+
+**Beta sign-off gate:** Automated QA plus sections 1-8 must pass, or failures must be triaged against the Launch Blocker Policy in `docs/ROADMAP.md`.
+
+Only these categories should block beta/final launch: data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or missing/misleading legal/payment essentials.

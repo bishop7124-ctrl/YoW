@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOW Manual Beta Sign-Off</title>
+<style>
+  :root {
+    --bg: #101114;
+    --surface: #181a20;
+    --surface-2: #20232b;
+    --border: #303541;
+    --text: #f2f3f5;
+    --muted: #9aa3b2;
+    --accent: #47c2ff;
+    --accent-2: #5ee1a8;
+    --warn: #f6c85f;
+    --danger: #ff6b6b;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    padding: 14px 24px;
+    background: rgba(16, 17, 20, 0.94);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+
+  h1 {
+    flex: 1;
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  button {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  button:hover { border-color: var(--accent); }
+
+  .progress {
+    min-width: 230px;
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .progress-track {
+    height: 7px;
+    overflow: hidden;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+
+  .progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width 0.2s ease;
+  }
+
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .intro {
+    margin-bottom: 22px;
+    padding: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .intro p {
+    margin: 0 0 10px;
+    color: var(--muted);
+  }
+
+  .intro p:last-child { margin-bottom: 0; }
+
+  .gate {
+    color: var(--warn);
+    font-weight: 700;
+  }
+
+  section {
+    margin-bottom: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  section.complete .section-status {
+    color: var(--accent-2);
+  }
+
+  .section-head {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-num {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .section-title {
+    flex: 1;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .section-note {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .section-status {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .checks {
+    padding: 8px 10px 12px;
+  }
+
+  label {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 9px 8px;
+    border-radius: 6px;
+    color: var(--text);
+  }
+
+  label:hover { background: rgba(255, 255, 255, 0.035); }
+
+  input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 2px 0 0;
+    accent-color: var(--accent-2);
+  }
+
+  label.done span {
+    color: var(--muted);
+    text-decoration: line-through;
+  }
+
+  .subhead {
+    padding: 12px 8px 4px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .failure-box {
+    margin: 24px 0;
+    padding: 16px 18px;
+    background: rgba(255, 107, 107, 0.08);
+    border: 1px solid rgba(255, 107, 107, 0.35);
+    border-radius: var(--radius);
+  }
+
+  .failure-box h2 {
+    margin-bottom: 8px;
+    color: var(--danger);
+  }
+
+  .failure-box ul {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--muted);
+  }
+
+  .signoff {
+    margin-top: 24px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  th, td {
+    padding: 11px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  tr:last-child td { border-bottom: 0; }
+
+  td[contenteditable="true"] {
+    min-width: 90px;
+    outline: none;
+  }
+
+  td[contenteditable="true"]:focus {
+    background: rgba(71, 194, 255, 0.08);
+  }
+
+  @media (max-width: 760px) {
+    header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .progress {
+      min-width: 0;
+      width: 100%;
+    }
+
+    main {
+      padding: 16px;
+    }
+
+    .section-head {
+      align-items: flex-start;
+    }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>YOW Manual Beta Sign-Off</h1>
+  <div class="progress" aria-live="polite">
+    <div class="progress-label">
+      <span>Progress</span>
+      <span id="progressText">0 / 0</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+  <button type="button" id="resetBtn">Reset checks</button>
+</header>
+
+<main>
+  <div class="intro">
+    <p><strong>Use this page before continuing feature development.</strong> Automated QA must be green first. This checklist covers the manual proof still needed: real auth, cloud persistence, editor safety, export quality, responsive visuals, dashboard states, worldbuilding persistence, project-type spot checks, and large-project performance.</p>
+    <p class="gate">Continue development only when sections 0-8 pass, or every failure has been triaged against the roadmap launch-blocker policy.</p>
+  </div>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">0</span>
+      <div class="section-title">
+        <h2>Automated Gate</h2>
+        <div class="section-note">Do this first. Do not start manual sign-off while automated QA is red.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span><code>npm run qa</code> passed.</span></label>
+      <label><input type="checkbox"><span><code>npm run qa:smoke</code> passed locally in a normal terminal or in CI.</span></label>
+      <label><input type="checkbox"><span>No failed GitHub Actions smoke job is unresolved.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">1</span>
+      <div class="section-title">
+        <h2>Auth and Cloud Persistence</h2>
+        <div class="section-note">Proves real account flow and Firestore round-trip.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <div class="subhead">Fresh account</div>
+      <label><input type="checkbox"><span>Open a private/incognito browser window.</span></label>
+      <label><input type="checkbox"><span>Sign up with a new account.</span></label>
+      <label><input type="checkbox"><span>Confirm the app opens with an empty library.</span></label>
+      <label><input type="checkbox"><span>Create a project and write one sentence in the first scene.</span></label>
+      <label><input type="checkbox"><span>Log out, then log back in.</span></label>
+      <label><input type="checkbox"><span>Confirm the project and sentence are still present.</span></label>
+
+      <div class="subhead">Returning account</div>
+      <label><input type="checkbox"><span>Sign in with an existing account that already has projects.</span></label>
+      <label><input type="checkbox"><span>Confirm existing projects load.</span></label>
+      <label><input type="checkbox"><span>Open one project, make a small scene edit, then refresh.</span></label>
+      <label><input type="checkbox"><span>Confirm the edit remains.</span></label>
+
+      <div class="subhead">Session and errors</div>
+      <label><input type="checkbox"><span>Close the browser completely while signed in, reopen it, and confirm the session restores.</span></label>
+      <label><input type="checkbox"><span>Attempt sign-in with an incorrect password.</span></label>
+      <label><input type="checkbox"><span>Confirm a clear error appears and the app does not crash or enter a broken state.</span></label>
+      <label><input type="checkbox"><span>Sign out from the user menu and confirm the logged-out state is clean.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">2</span>
+      <div class="section-title">
+        <h2>Autosave and Editor Safety</h2>
+        <div class="section-note">Highest data-loss risk after real auth.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Open a project and type several paragraphs in a scene.</span></label>
+      <label><input type="checkbox"><span>Hard-refresh immediately without waiting and confirm all typed content remains.</span></label>
+      <label><input type="checkbox"><span>Type in Scene A, switch to Scene B, then return to Scene A and confirm Scene A is unchanged.</span></label>
+      <label><input type="checkbox"><span>Type in a scene, immediately navigate to Characters or Lore, then return and confirm the scene content remains.</span></label>
+      <label><input type="checkbox"><span>Paste or write 5,000+ words into one scene.</span></label>
+      <label><input type="checkbox"><span>Continue typing at the end for at least 30 seconds; confirm typing remains responsive and the cursor does not jump.</span></label>
+      <label><input type="checkbox"><span>Refresh and confirm the long scene remains intact.</span></label>
+      <label><input type="checkbox"><span>Add, rename, move, and delete a chapter.</span></label>
+      <label><input type="checkbox"><span>Add, rename, move, and delete a scene.</span></label>
+      <label><input type="checkbox"><span>Refresh and confirm the structure changes persisted.</span></label>
+      <label><input type="checkbox"><span>Check that deletion warnings are clear enough before destructive actions.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">3</span>
+      <div class="section-title">
+        <h2>Export and Restore Quality</h2>
+        <div class="section-note">Use one realistic project with scenes, chapters, characters, locations, lore, and timeline entries.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Export the project as a Backup ZIP.</span></label>
+      <label><input type="checkbox"><span>Open the ZIP and confirm it contains project data plus manuscript and worldbuilding data files.</span></label>
+      <label><input type="checkbox"><span>Restore the ZIP from the library.</span></label>
+      <label><input type="checkbox"><span>Confirm the restored project appears as a separate project.</span></label>
+      <label><input type="checkbox"><span>Open the restored project and compare chapters, scenes, characters, locations, lore, and timeline entries against the original.</span></label>
+      <label><input type="checkbox"><span>Edit the restored project and confirm the original project is unchanged.</span></label>
+      <label><input type="checkbox"><span>Export the manuscript as a Word document and open it in Word, Pages, or Google Docs.</span></label>
+      <label><input type="checkbox"><span>Confirm DOCX chapter/scene order is correct and text is readable.</span></label>
+      <label><input type="checkbox"><span>Confirm empty scenes and long scenes do not break the DOCX.</span></label>
+      <label><input type="checkbox"><span>Export a Visual PDF using at least one theme and open it.</span></label>
+      <label><input type="checkbox"><span>Confirm PDF content order, readability, and nonblank pages.</span></label>
+      <label><input type="checkbox"><span>Spot-check one additional PDF theme if visual styling looks suspicious.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">4</span>
+      <div class="section-title">
+        <h2>Responsive Visual Pass</h2>
+        <div class="section-note">Check at 375px, 768px, 1280px, and 1440px+ widths.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Check landing/public navigation.</span></label>
+      <label><input type="checkbox"><span>Check dashboard/library.</span></label>
+      <label><input type="checkbox"><span>Check New Project modal.</span></label>
+      <label><input type="checkbox"><span>Check Project settings/edit modal.</span></label>
+      <label><input type="checkbox"><span>Check manuscript editor.</span></label>
+      <label><input type="checkbox"><span>Check Characters.</span></label>
+      <label><input type="checkbox"><span>Check Locations.</span></label>
+      <label><input type="checkbox"><span>Check Lore.</span></label>
+      <label><input type="checkbox"><span>Check Timeline or World History.</span></label>
+      <label><input type="checkbox"><span>Check Account settings.</span></label>
+      <label><input type="checkbox"><span>Confirm key buttons are visible and tappable/clickable.</span></label>
+      <label><input type="checkbox"><span>Confirm no important controls overlap or disappear.</span></label>
+      <label><input type="checkbox"><span>Confirm modals fit on screen and can be dismissed.</span></label>
+      <label><input type="checkbox"><span>Confirm the manuscript Write action is visible on compact layouts.</span></label>
+      <label><input type="checkbox"><span>Confirm the mobile manuscript bottom tab bar works.</span></label>
+      <label><input type="checkbox"><span>Confirm no screen requires awkward horizontal scrolling for core actions.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">5</span>
+      <div class="section-title">
+        <h2>Dashboard and Project Library</h2>
+        <div class="section-note">Common library states before new development resumes.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Fresh empty account shows a useful empty state.</span></label>
+      <label><input type="checkbox"><span>Create a project from the dashboard and open it from the project card.</span></label>
+      <label><input type="checkbox"><span>Rename a project and confirm the new title appears on the dashboard.</span></label>
+      <label><input type="checkbox"><span>Delete a project and confirm it disappears without affecting other projects.</span></label>
+      <label><input type="checkbox"><span>Test an account with several projects and at least one series.</span></label>
+      <label><input type="checkbox"><span>Confirm project cards, active project state, series grouping/filtering, Overview, and Insights remain readable and usable.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">6</span>
+      <div class="section-title">
+        <h2>Worldbuilding Persistence</h2>
+        <div class="section-note">Use immediate refresh after at least one create/edit/delete action in each section.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Characters: create, edit, search, relate/link, delete, and confirm relationship cleanup.</span></label>
+      <label><input type="checkbox"><span>Locations: create, edit, search, link, delete, and confirm link cleanup.</span></label>
+      <label><input type="checkbox"><span>Lore: create, edit, categorize, search/filter, link to character/location, delete.</span></label>
+      <label><input type="checkbox"><span>Timeline/World History: create, edit, link/unlink, group by era where relevant, delete.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">7</span>
+      <div class="section-title">
+        <h2>Project-Type Spot Checks</h2>
+        <div class="section-note">Automation creates every type; this proves visible promises and deeper type behavior.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Homepage and project creation copy clearly distinguish launch-ready prose/tabletop types from beta/limited types.</span></label>
+      <label><input type="checkbox"><span>Beta types do not look advertised as fully complete.</span></label>
+      <label><input type="checkbox"><span>Project settings show the selected type and any relevant limitation note.</span></label>
+      <label><input type="checkbox"><span>Novel uses Act / Chapter / Scene.</span></label>
+      <label><input type="checkbox"><span>Novella uses Part / Chapter / Scene and its lighter default sections.</span></label>
+      <label><input type="checkbox"><span>Short Story uses Part / Section / Scene and its compact default sections.</span></label>
+      <label><input type="checkbox"><span>Default word targets look appropriate where shown.</span></label>
+      <label><input type="checkbox"><span>D&D Campaign uses Story Arc / Session / Encounter.</span></label>
+      <label><input type="checkbox"><span>TTRPG Campaign uses Story Arc / Session / Encounter.</span></label>
+      <label><input type="checkbox"><span>Structured session prep/recap fields are present and persist.</span></label>
+      <label><input type="checkbox"><span>Character Builder Party room, wizard, sheet, and dice roller are reachable.</span></label>
+      <label><input type="checkbox"><span>Campaign export includes campaign/session material.</span></label>
+      <label><input type="checkbox"><span>Play, Screenplay, and TV Series are clearly marked limited/beta.</span></label>
+      <label><input type="checkbox"><span>Script element controls are reachable.</span></label>
+      <label><input type="checkbox"><span>Basic script typing flow works.</span></label>
+      <label><input type="checkbox"><span>Readable script DOCX export works.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">8</span>
+      <div class="section-title">
+        <h2>Large Project Performance</h2>
+        <div class="section-note">Use 50+ scenes, 10+ characters, 10+ locations/lore, 10+ timeline entries, and one 5,000+ word scene.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>Dashboard opens in roughly 3 seconds.</span></label>
+      <label><input type="checkbox"><span>Manuscript scene list and editor remain responsive.</span></label>
+      <label><input type="checkbox"><span>Character/lore/location search returns results quickly.</span></label>
+      <label><input type="checkbox"><span>Word counts update without obvious typing lag.</span></label>
+      <label><input type="checkbox"><span>ZIP export completes.</span></label>
+      <label><input type="checkbox"><span>DOCX export completes.</span></label>
+      <label><input type="checkbox"><span>PDF export completes or fails with a clear recoverable message.</span></label>
+    </div>
+  </section>
+
+  <section data-section>
+    <div class="section-head">
+      <span class="section-num">9</span>
+      <div class="section-title">
+        <h2>Optional Conditional Checks</h2>
+        <div class="section-note">Run only if the feature is visible or part of the current beta promise.</div>
+      </div>
+      <span class="section-status" data-status>0%</span>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox"><span>AI with no provider configured shows a clear setup warning.</span></label>
+      <label><input type="checkbox"><span>AI with a provider configured can generate a suggestion.</span></label>
+      <label><input type="checkbox"><span>AI generated text is not automatically inserted.</span></label>
+      <label><input type="checkbox"><span>AI append, copy, and discard behavior works.</span></label>
+      <label><input type="checkbox"><span>Theme editor switches dark/light presets.</span></label>
+      <label><input type="checkbox"><span>Theme editor saves custom colors, corner roundness, and visual strength after refresh.</span></label>
+      <label><input type="checkbox"><span>Novel finalized draft reader creates a read-only copy while the working manuscript remains editable.</span></label>
+      <label><input type="checkbox"><span>Finalized draft scroll/page modes and previous/next controls work.</span></label>
+      <label><input type="checkbox"><span>Non-novel project types do not show the Finalise action.</span></label>
+    </div>
+  </section>
+
+  <div class="failure-box">
+    <h2>When Something Fails</h2>
+    <ul>
+      <li>Record browser/device and viewport size.</li>
+      <li>Record account state: signed out, fresh user, returning user, or offline/local.</li>
+      <li>Record project type and exact steps to reproduce.</li>
+      <li>Mark whether it risks data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or legal/payment confusion.</li>
+    </ul>
+  </div>
+
+  <div class="signoff">
+    <table>
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Tester</th>
+          <th>Date</th>
+          <th>Result</th>
+          <th>Blocking Issue?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Automated gate</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Auth and cloud persistence</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Autosave and editor safety</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Export and restore quality</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Responsive visual pass</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Dashboard and project library</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Worldbuilding persistence</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Project-type spot checks</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Large project performance</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        <tr><td>Optional conditional checks</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+  const storageKey = 'yow-manual-beta-signoff-v1'
+  const tableStorageKey = 'yow-manual-beta-signoff-table-v1'
+  const checks = Array.from(document.querySelectorAll('input[type="checkbox"]'))
+  const editableCells = Array.from(document.querySelectorAll('[contenteditable="true"]'))
+  const progressText = document.getElementById('progressText')
+  const progressFill = document.getElementById('progressFill')
+  const resetBtn = document.getElementById('resetBtn')
+
+  function loadState() {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
+    checks.forEach((check, index) => {
+      check.checked = Boolean(saved[index])
+      check.closest('label').classList.toggle('done', check.checked)
+    })
+
+    const savedCells = JSON.parse(localStorage.getItem(tableStorageKey) || '{}')
+    editableCells.forEach((cell, index) => {
+      if (savedCells[index]) cell.textContent = savedCells[index]
+    })
+  }
+
+  function saveState() {
+    const state = {}
+    checks.forEach((check, index) => {
+      if (check.checked) state[index] = true
+    })
+    localStorage.setItem(storageKey, JSON.stringify(state))
+
+    const tableState = {}
+    editableCells.forEach((cell, index) => {
+      if (cell.textContent.trim()) tableState[index] = cell.textContent.trim()
+    })
+    localStorage.setItem(tableStorageKey, JSON.stringify(tableState))
+  }
+
+  function updateProgress() {
+    const done = checks.filter(check => check.checked).length
+    const total = checks.length
+    const pct = total ? Math.round((done / total) * 100) : 0
+    progressText.textContent = `${done} / ${total}`
+    progressFill.style.width = `${pct}%`
+
+    document.querySelectorAll('[data-section]').forEach(section => {
+      const sectionChecks = Array.from(section.querySelectorAll('input[type="checkbox"]'))
+      const sectionDone = sectionChecks.filter(check => check.checked).length
+      const sectionPct = sectionChecks.length ? Math.round((sectionDone / sectionChecks.length) * 100) : 0
+      section.querySelector('[data-status]').textContent = `${sectionPct}%`
+      section.classList.toggle('complete', sectionChecks.length > 0 && sectionDone === sectionChecks.length)
+    })
+  }
+
+  checks.forEach(check => {
+    check.addEventListener('change', () => {
+      check.closest('label').classList.toggle('done', check.checked)
+      saveState()
+      updateProgress()
+    })
+  })
+
+  editableCells.forEach(cell => {
+    cell.addEventListener('input', saveState)
+  })
+
+  resetBtn.addEventListener('click', () => {
+    if (!confirm('Reset all checklist progress and sign-off notes?')) return
+    localStorage.removeItem(storageKey)
+    localStorage.removeItem(tableStorageKey)
+    checks.forEach(check => {
+      check.checked = false
+      check.closest('label').classList.remove('done')
+    })
+    editableCells.forEach(cell => {
+      cell.textContent = ''
+    })
+    updateProgress()
+  })
+
+  loadState()
+  updateProgress()
+</script>
+</body>
+</html>

@@ -65,14 +65,16 @@ const FEATURES = [
 
 function HeroIllustration() {
   return (
-    <img src="/hero-illustration.png" alt="" style={{ width: '100%', display: 'block' }} aria-hidden="true" />
+    <div className="auth-hero-logo" aria-hidden="true">
+      <YOWLogo title="" />
+    </div>
   )
 }
 
-export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode }) {
+export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, initialScreen = 'home', initialMode = 'login' }) {
   const { signIn, signUp, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
-  const [screen, setScreen] = useState('home')
-  const [mode, setMode] = useState('login')
+  const [screen, setScreen] = useState(initialScreen)
+  const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState(import.meta.env.VITE_DEV_EMAIL ?? '')
   const [password, setPassword] = useState(import.meta.env.VITE_DEV_PASSWORD ?? '')
   const [error, setError] = useState('')
@@ -156,7 +158,11 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode }) {
     try {
       if (mode === 'login') {
         const { error: err } = await signIn(email, password)
-        if (err) setError(err.message)
+        if (err) setError(
+          /invalid.*(login|credential)|wrong.*password|invalid.*password/i.test(err.message)
+            ? 'Incorrect username or password.'
+            : err.message
+        )
       } else {
         const { data, error: err } = await signUp(email, password)
         if (err) {

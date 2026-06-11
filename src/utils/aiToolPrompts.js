@@ -54,39 +54,11 @@ function projectTypeGuidance(novel) {
 - Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.`
   }
 
-  if (type === 'play') {
-    return `Project-type guidance:
-- Treat this as a stage play in beta workflow.
-- Use theatre language: acts, scenes, beats, cast, dialogue, stage directions, entrances, exits, props, and audience clarity.
-- Do not assume script formatting is available yet; focus on structure, dramatic logic, playable scenes, and production-relevant notes.`
-  }
-
-  if (type === 'screenplay') {
-    return `Project-type guidance:
-- Treat this as a screenplay in beta workflow.
-- Use screenwriting language: acts, sequences, scenes, sluglines, action, dialogue, visual storytelling, set pieces, and production clarity.
-- Do not assume industry formatting or FDX export is available yet; focus on story logic, scene function, pacing, and screen-readiness.`
-  }
-
-  if (type === 'tv_show') {
-    return `Project-type guidance:
-- Treat this as a TV series in beta workflow.
-- Use TV language: seasons, episodes, acts, pilot hook, story engine, A/B/C plots, recurring cast, episode arcs, and season arcs.
-- Distinguish series continuity from single-episode logic whenever possible.`
-  }
-
   if (type === 'comic') {
     return `Project-type guidance:
 - Treat this as a comic or graphic novel in beta workflow.
 - Use sequential-art language: volumes, issues, pages, panels, captions, dialogue, page turns, reveals, and visual clarity.
 - Do not assume panel tooling is available yet; focus on page-level pacing, visual storytelling, and scene-to-page fit.`
-  }
-
-  if (type === 'video_game') {
-    return `Project-type guidance:
-- Treat this as a video game narrative bible in beta workflow.
-- Use game narrative language: quests, missions, levels, player choice, NPCs, factions, world state, dialogue, branches, consequences, and endings.
-- Do not assume branching-tree tooling is available yet; focus on narrative consistency, player-facing motivation, and world logic.`
   }
 
   return `Project-type guidance:

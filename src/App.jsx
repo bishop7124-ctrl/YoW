@@ -6,6 +6,8 @@ import NovelManager from './components/NovelManager'
 import SeriesDashboard from './components/series/SeriesDashboard'
 import Layout from './components/Layout'
 import LoginPage from './components/auth/LoginPage'
+import SignedOutPage from './components/auth/SignedOutPage'
+import MaintenanceLapsedScreen from './components/auth/MaintenanceLapsedScreen'
 import AIPanel from './components/ai/AIPanel'
 import AccountSettings from './components/account/AccountSettings'
 import HelpContact from './components/help/HelpContact'
@@ -16,9 +18,14 @@ import AboutPage from './components/about/AboutPage'
 import YOWLogo from './components/brand/YOWLogo'
 import FreeProjectSelector from './components/account/FreeProjectSelector'
 import PricingPage from './components/pricing/PricingPage'
+import FeaturesPage from './components/features/FeaturesPage'
+import FAQPage from './components/faq/FAQPage'
 import { getMembership } from './utils/membership'
 import { estimateStoreSize } from './utils/storageQuota'
 import {
+  DEFAULT_CUSTOM_COLORS,
+  DEFAULT_THEME,
+  DEFAULT_THEME_TUNING,
   applyThemeToDocument,
   applyThemeTuning,
   getThemeColors,
@@ -37,6 +44,14 @@ const APP_FONT_OPTIONS = {
 
 function isPricingPath(path) {
   return path === '/pricing' || path === '/pricing/'
+}
+
+function isFeaturesPath(path) {
+  return path === '/features' || path === '/features/'
+}
+
+function isFAQPath(path) {
+  return path === '/faq' || path === '/faq/'
 }
 
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'membership'])
@@ -119,10 +134,19 @@ class ErrorBoundary extends Component {
 
 function AppInner() {
   const { user, loading: authLoading, updateProfile, recoveryMode } = useAuth()
+  const [signedOut, setSignedOut] = useState(false)
+  const [openLoginAfterSignOut, setOpenLoginAfterSignOut] = useState(false)
+  const prevUserRef = useRef(null)
+  useEffect(() => {
+    if (prevUserRef.current && !user && !authLoading && !recoveryMode) setSignedOut(true)
+    if (user) { setSignedOut(false); setOpenLoginAfterSignOut(false); prevUserRef.current = user }
+  }, [user, authLoading, recoveryMode])
   const userId = user?.uid || user?.id || null
   const membership = getMembership(user)
-  const store = useStore(userId, { readOnly: membership.isReadOnly, freeProjectId: membership.freeProjectId })
-  const { importData, finishRemoteLoad } = store
+  const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
+  if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
+  const store = useStore(userId, { readOnly: membership.isReadOnly, freeProjectId: membership.freeProjectId, storageQuotaBytes: devStorageExceeded ? 1 : membership.storageQuotaBytes })
+  const { importData, finishRemoteLoad, clearData } = store
   const [dataLoading, setDataLoading] = useState(false)
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
@@ -136,6 +160,8 @@ function AppInner() {
   const [seriesEntryNovelId, setSeriesEntryNovelId] = useState(null)
   const [layoutViewMode, setLayoutViewMode] = useState(() => initialRouteSnapshot.layoutViewMode)
   const [showPricing, setShowPricing] = useState(() => isPricingPath(window.location.pathname))
+  const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
+  const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(() => initialRouteSnapshot.accountOpen)
   const [accountTab, setAccountTab] = useState(() => initialRouteSnapshot.accountTab)
@@ -209,10 +235,18 @@ function AppInner() {
     const handlePop = () => {
       const path = window.location.pathname
       if (isPricingPath(path)) {
-        setShowPricing(true)
+        setShowPricing(true); setShowFeatures(false); setShowFAQ(false)
         return
       }
-      setShowPricing(false)
+      if (isFeaturesPath(path)) {
+        setShowFeatures(true); setShowPricing(false); setShowFAQ(false)
+        return
+      }
+      if (isFAQPath(path)) {
+        setShowFAQ(true); setShowPricing(false); setShowFeatures(false)
+        return
+      }
+      setShowPricing(false); setShowFeatures(false); setShowFAQ(false)
       const route = parseRoute()
       setSection(route.section)
       setLayoutViewMode(route.layoutViewMode)
@@ -252,6 +286,7 @@ function AppInner() {
       let msg = 'Your trial has ended. Upgrade in Account settings to edit again.'
       if (reason === 'free-project') msg = 'This project is view-only on your free plan. Upgrade to edit all projects.'
       if (reason === 'free-limit') msg = 'Free plan includes one active project. Upgrade to create unlimited projects.'
+      if (reason === 'storage-exceeded') msg = 'Storage limit reached. Delete some content or upgrade your plan to continue.'
       setReadOnlyNotice(msg)
       window.clearTimeout(handleReadOnly.timeout)
       handleReadOnly.timeout = window.setTimeout(() => setReadOnlyNotice(''), 4000)
@@ -263,8 +298,11 @@ function AppInner() {
     }
   }, [])
 
-  // Apply profile-saved theme on login (overrides local if set)
+  // Apply account-owned appearance on login. New accounts should not inherit
+  // a previous user's browser-local theme choice.
   useEffect(() => {
+    if (!user?.id) return
+
     const profileTheme = user?.user_metadata?.theme
     const profileCustomColors = user?.user_metadata?.custom_theme_colors || {}
     if (profileTheme) {
@@ -278,6 +316,10 @@ function AppInner() {
       if (appliedTheme === 'custom') {
         localStorage.setItem('nf-custom-colors', JSON.stringify(profileCustomColors))
       }
+    } else {
+      const appliedTheme = saveThemeChoice(DEFAULT_THEME, DEFAULT_CUSTOM_COLORS)
+      localStorage.setItem('nf-custom-colors', JSON.stringify({}))
+      saveThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(appliedTheme))
     }
   }, [
     user?.id,
@@ -290,6 +332,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) {
       loadedUid.current = null
+      clearData()
       finishRemoteLoad()
       return
     }
@@ -316,7 +359,7 @@ function AppInner() {
         finishRemoteLoad()
       })
       .finally(() => setDataLoading(false))
-  }, [user, userId, importData, finishRemoteLoad])
+  }, [user, userId, importData, finishRemoteLoad, clearData])
 
   // Pricing page is accessible regardless of auth state
   if (showPricing) {
@@ -340,6 +383,30 @@ function AppInner() {
     )
   }
 
+  if (showFeatures) {
+    const goHome = () => { window.history.pushState(null, '', '/'); setShowFeatures(false) }
+    return (
+      <>
+        <FeaturesPage user={user} onGetStarted={goHome} onLogin={goHome} />
+        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+        <BetaBanner />
+      </>
+    )
+  }
+
+  if (showFAQ) {
+    const goHome = () => { window.history.pushState(null, '', '/'); setShowFAQ(false) }
+    return (
+      <>
+        <FAQPage user={user} onGetStarted={goHome} onLogin={goHome} />
+        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+        <BetaBanner />
+      </>
+    )
+  }
+
   if (authLoading || dataLoading) {
     return (
       <div className="min-h-screen bg-[var(--bg-main)] flex flex-col items-center justify-center gap-4">
@@ -349,15 +416,36 @@ function AppInner() {
     )
   }
 
-  if (!user || recoveryMode) return (
-    <>
-      <LoginPage onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} recoveryMode={recoveryMode} />
-      <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
-      <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-      <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <BetaBanner />
-    </>
-  )
+  if (membership.isMaintenanceLapsed) {
+    return <MaintenanceLapsedScreen store={store} user={user} />
+  }
+
+  if (!user || recoveryMode) {
+    if (signedOut && !recoveryMode) return (
+      <>
+        <SignedOutPage
+          onLoginAgain={() => { setOpenLoginAfterSignOut(true); setSignedOut(false) }}
+          onGoHome={() => { setOpenLoginAfterSignOut(false); setSignedOut(false); window.location.href = '/' }}
+        />
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+      </>
+    )
+    return (
+      <>
+        <LoginPage
+          onOpenLegal={setLegalPage}
+          onOpenAbout={() => setAboutOpen(true)}
+          recoveryMode={recoveryMode}
+          initialScreen={openLoginAfterSignOut ? 'auth' : 'home'}
+          initialMode="login"
+        />
+        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+        <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
+        <BetaBanner />
+      </>
+    )
+  }
 
   const showFreeSelector = membership.isFree && !membership.freeProjectId && store.novels.length >= 1
 

@@ -6,9 +6,9 @@ import { createClient } from '@supabase/supabase-js'
 // STRIPE_PRICE_ID is kept as the legacy fallback for premium_monthly.
 const PLAN_CONFIG = {
   premium_monthly:       { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_MONTHLY',       mode: 'subscription' },
-  premium_lifetime:      { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_LIFETIME',      mode: 'payment' },
   premium_plus_lifetime: { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME', mode: 'payment' },
   founder:               { priceEnv: 'STRIPE_PRICE_ID_FOUNDER',               mode: 'payment' },
+  maintenance:           { priceEnv: 'STRIPE_PRICE_ID_MAINTENANCE',           mode: 'subscription' },
 }
 
 async function getRemainingFounderSlots(supabase) {

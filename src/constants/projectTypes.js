@@ -86,89 +86,6 @@ export const PROJECT_TYPES = {
     ],
     // heavy sections (factions, map, worldhistory) available but not default
   },
-  play: {
-    label: 'Play',
-    description: 'Stage play or theatrical script',
-    workflowSummary: 'Stage-script beta with acts, scenes, beats, and dialogue-first drafting.',
-    structure: { level1: 'Act', level2: 'Scene', level3: 'Beat' },
-    storyEventIndicators: [
-      { id: 'opening_tableau', label: 'Opening tableau', color: '#38bdf8' },
-      { id: 'inciting_action', label: 'Inciting action', color: '#f97316' },
-      { id: 'entrance', label: 'Key entrance', color: '#a855f7' },
-      { id: 'reversal', label: 'Reversal', color: '#22c55e' },
-      { id: 'curtain', label: 'Curtain moment', color: '#eab308' },
-      { id: 'climax', label: 'Climax', color: '#ef4444' },
-      { id: 'denouement', label: 'Denouement', color: '#14b8a6' },
-    ],
-    planningTab: 'PLANNING',
-    writingTab: 'SCRIPT',
-    workspaceLabel: 'Script',
-    analyticsLabel: 'Script Draft Analytics',
-    exportLabel: 'Play Project Export',
-    defaultSections: [
-      'outline','characters','familytree','locations','lore','ideas','schedule','aitools',
-    ],
-    starterOutline: [
-      { title: 'Act I', children: [{ title: 'Scene 1', scenes: ['Opening Beat'] }] },
-    ],
-    // map, timeline, factions not default — locations kept for stage settings
-  },
-  screenplay: {
-    label: 'Screenplay',
-    description: 'Feature film or short film script',
-    workflowSummary: 'Screenplay beta with acts, sequences, scenes, and script element controls.',
-    structure: { level1: 'Act', level2: 'Sequence', level3: 'Scene' },
-    storyEventIndicators: [
-      { id: 'opening_image', label: 'Opening image', color: '#38bdf8' },
-      { id: 'inciting_incident', label: 'Inciting incident', color: '#f97316' },
-      { id: 'break_into_two', label: 'Break into Act II', color: '#a855f7' },
-      { id: 'midpoint', label: 'Midpoint', color: '#22c55e' },
-      { id: 'all_is_lost', label: 'All is lost', color: '#64748b' },
-      { id: 'finale', label: 'Finale', color: '#ef4444' },
-      { id: 'final_image', label: 'Final image', color: '#eab308' },
-    ],
-    planningTab: 'PLANNING',
-    writingTab: 'SCRIPT',
-    workspaceLabel: 'Script',
-    analyticsLabel: 'Script Draft Analytics',
-    exportLabel: 'Screenplay Project Export',
-    defaultSections: [
-      'outline','characters','familytree','factions',
-      'locations','lore','ideas','schedule','timeline','aitools',
-    ],
-    starterOutline: [
-      { title: 'Act I', children: [{ title: 'Opening Sequence', scenes: ['Opening Image'] }] },
-    ],
-    // relationships enabled by default for character-heavy scripts
-  },
-  tv_show: {
-    label: 'TV Series',
-    description: 'Multi-episode television series',
-    workflowSummary: 'Episode beta with season, pilot, episode, and act-level structure.',
-    structure: { level1: 'Season', level2: 'Episode', level3: 'Act' },
-    storyEventIndicators: [
-      { id: 'pilot_hook', label: 'Pilot hook', color: '#38bdf8' },
-      { id: 'case_engine', label: 'Story engine', color: '#f97316' },
-      { id: 'episode_break', label: 'Episode break', color: '#a855f7' },
-      { id: 'midseason_turn', label: 'Midseason turn', color: '#22c55e' },
-      { id: 'bottle_episode', label: 'Bottle episode', color: '#14b8a6' },
-      { id: 'season_climax', label: 'Season climax', color: '#ef4444' },
-      { id: 'cliffhanger', label: 'Cliffhanger', color: '#eab308' },
-    ],
-    planningTab: 'PLANNING',
-    writingTab: 'EPISODES',
-    workspaceLabel: 'Episodes',
-    analyticsLabel: 'Episode Draft Analytics',
-    exportLabel: 'TV Series Project Export',
-    defaultSections: [
-      'outline','characters','familytree','factions',
-      'locations','lore','ideas','schedule','timeline','worldhistory','aitools',
-    ],
-    starterOutline: [
-      { title: 'Season 1', children: [{ title: 'Pilot', scenes: ['Act One'] }] },
-    ],
-    // map available but not default
-  },
   dnd_campaign: {
     label: 'D&D Campaign',
     description: 'D&D-flavoured fantasy campaign bible with arcs, sessions, encounters, maps, factions, and lore',
@@ -199,32 +116,32 @@ export const PROJECT_TYPES = {
     ],
   },
   tabletop_rpg: {
-    label: 'TTRPG Campaign',
-    description: 'System-neutral tabletop campaign bible for any ruleset, from PF2e to CoC, Blades, homebrew, and more',
-    workflowSummary: 'System-neutral campaign bible for rules-light, horror, fantasy, sci-fi, and homebrew tables.',
-    hint: 'System-neutral — works for any ruleset: PF2e, Call of Cthulhu, Blades in the Dark, homebrew, and more.',
-    launchPositioning: 'System-neutral campaign bible for any tabletop ruleset, keeping the workflow generic across sessions and encounters.',
-    structure: { level1: 'Story Arc', level2: 'Session', level3: 'Encounter' },
+    label: 'Tabletop Campaign',
+    description: 'System-neutral campaign bible — works for any ruleset, genre, or homebrew system',
+    workflowSummary: 'System-neutral campaign bible. Works for any ruleset, tone, or genre — fantasy, horror, sci-fi, or homebrew.',
+    hint: 'System-neutral — no D&D assumptions. Works for any ruleset or homebrew system.',
+    launchPositioning: 'System-neutral campaign bible for any tabletop ruleset — sessions, encounters, factions, locations, and world lore.',
+    structure: { level1: 'Campaign Arc', level2: 'Session', level3: 'Encounter' },
     storyEventIndicators: [
       { id: 'adventure_hook', label: 'Adventure hook', color: '#38bdf8' },
-      { id: 'mission_start', label: 'Mission start', color: '#f97316' },
-      { id: 'complication', label: 'Complication', color: '#a855f7' },
+      { id: 'first_complication', label: 'First complication', color: '#f97316' },
+      { id: 'escalation', label: 'Escalation', color: '#a855f7' },
       { id: 'player_choice', label: 'Major choice', color: '#22c55e' },
-      { id: 'showdown', label: 'Showdown', color: '#ef4444' },
-      { id: 'arc_climax', label: 'Arc climax', color: '#dc2626' },
+      { id: 'crisis_point', label: 'Crisis point', color: '#64748b' },
+      { id: 'climax', label: 'Climax', color: '#ef4444' },
       { id: 'consequences', label: 'Consequences', color: '#eab308' },
     ],
     planningTab: 'WORLDBUILDING',
     writingTab: 'SESSIONS',
     workspaceLabel: 'Sessions',
-    analyticsLabel: 'Campaign Draft Analytics',
+    analyticsLabel: 'Campaign Analytics',
     exportLabel: 'Campaign Bible Export',
     defaultSections: [
       'outline','characters','familytree','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
     ],
     starterOutline: [
-      { title: 'Opening Arc', children: [{ title: 'Session 1', scenes: ['Opening Encounter'] }] },
+      { title: 'Campaign Arc 1', children: [{ title: 'Session 1', scenes: ['Opening Encounter'] }] },
     ],
   },
   comic: {
@@ -254,11 +171,75 @@ export const PROJECT_TYPES = {
     ],
     // worldhistory available but not default for comics
   },
+}
+
+// ---------------------------------------------------------------------------
+// Retired project types — removed from the creation UI but preserved here as
+// a reference/backup. Existing projects with these type keys still load fine
+// via getProjectType's novel fallback.
+// ---------------------------------------------------------------------------
+export const RETIRED_PROJECT_TYPES = {
+  play: {
+    label: 'Play',
+    description: 'Stage play or theatrical script',
+    workflowSummary: 'Stage-script beta with acts, scenes, beats, and dialogue-first drafting.',
+    structure: { level1: 'Act', level2: 'Scene', level3: 'Beat' },
+    storyEventIndicators: [
+      { id: 'opening_tableau', label: 'Opening tableau', color: '#38bdf8' },
+      { id: 'inciting_action', label: 'Inciting action', color: '#f97316' },
+      { id: 'entrance', label: 'Key entrance', color: '#a855f7' },
+      { id: 'reversal', label: 'Reversal', color: '#22c55e' },
+      { id: 'curtain', label: 'Curtain moment', color: '#eab308' },
+      { id: 'climax', label: 'Climax', color: '#ef4444' },
+      { id: 'denouement', label: 'Denouement', color: '#14b8a6' },
+    ],
+    planningTab: 'PLANNING', writingTab: 'SCRIPT', workspaceLabel: 'Script',
+    analyticsLabel: 'Script Draft Analytics', exportLabel: 'Play Project Export',
+    defaultSections: ['outline','characters','familytree','locations','lore','ideas','schedule','aitools'],
+    starterOutline: [{ title: 'Act I', children: [{ title: 'Scene 1', scenes: ['Opening Beat'] }] }],
+  },
+  screenplay: {
+    label: 'Screenplay',
+    description: 'Feature film or short film script',
+    workflowSummary: 'Screenplay beta with acts, sequences, scenes, and script element controls.',
+    structure: { level1: 'Act', level2: 'Sequence', level3: 'Scene' },
+    storyEventIndicators: [
+      { id: 'opening_image', label: 'Opening image', color: '#38bdf8' },
+      { id: 'inciting_incident', label: 'Inciting incident', color: '#f97316' },
+      { id: 'break_into_two', label: 'Break into Act II', color: '#a855f7' },
+      { id: 'midpoint', label: 'Midpoint', color: '#22c55e' },
+      { id: 'all_is_lost', label: 'All is lost', color: '#64748b' },
+      { id: 'finale', label: 'Finale', color: '#ef4444' },
+      { id: 'final_image', label: 'Final image', color: '#eab308' },
+    ],
+    planningTab: 'PLANNING', writingTab: 'SCRIPT', workspaceLabel: 'Script',
+    analyticsLabel: 'Script Draft Analytics', exportLabel: 'Screenplay Project Export',
+    defaultSections: ['outline','characters','familytree','factions','locations','lore','ideas','schedule','timeline','aitools'],
+    starterOutline: [{ title: 'Act I', children: [{ title: 'Opening Sequence', scenes: ['Opening Image'] }] }],
+  },
+  tv_show: {
+    label: 'TV Series',
+    description: 'Multi-episode television series',
+    workflowSummary: 'Episode beta with season, pilot, episode, and act-level structure.',
+    structure: { level1: 'Season', level2: 'Episode', level3: 'Act' },
+    storyEventIndicators: [
+      { id: 'pilot_hook', label: 'Pilot hook', color: '#38bdf8' },
+      { id: 'case_engine', label: 'Story engine', color: '#f97316' },
+      { id: 'episode_break', label: 'Episode break', color: '#a855f7' },
+      { id: 'midseason_turn', label: 'Midseason turn', color: '#22c55e' },
+      { id: 'bottle_episode', label: 'Bottle episode', color: '#14b8a6' },
+      { id: 'season_climax', label: 'Season climax', color: '#ef4444' },
+      { id: 'cliffhanger', label: 'Cliffhanger', color: '#eab308' },
+    ],
+    planningTab: 'PLANNING', writingTab: 'EPISODES', workspaceLabel: 'Episodes',
+    analyticsLabel: 'Episode Draft Analytics', exportLabel: 'TV Series Project Export',
+    defaultSections: ['outline','characters','familytree','factions','locations','lore','ideas','schedule','timeline','worldhistory','aitools'],
+    starterOutline: [{ title: 'Season 1', children: [{ title: 'Pilot', scenes: ['Act One'] }] }],
+  },
   video_game: {
     label: 'Video Game',
     description: 'Interactive narrative or game world',
     workflowSummary: 'Game narrative beta for worlds, factions, missions, and story progression.',
-    // TODO: future structure options — quests, missions, dialogue trees, branching paths
     structure: { level1: 'Act', level2: 'Chapter', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'tutorial_hook', label: 'Tutorial hook', color: '#38bdf8' },
@@ -269,20 +250,10 @@ export const PROJECT_TYPES = {
       { id: 'final_mission', label: 'Final mission', color: '#dc2626' },
       { id: 'ending_state', label: 'Ending state', color: '#eab308' },
     ],
-    planningTab: 'WORLDBUILDING',
-    writingTab: 'LEVELS',
-    workspaceLabel: 'Narrative',
-    analyticsLabel: 'Narrative Draft Analytics',
-    exportLabel: 'Game Narrative Bible Export',
-    defaultSections: [
-      'outline','characters','factions',
-      'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools',
-    ],
-    starterOutline: [
-      { title: 'Act 1', children: [{ title: 'Opening Mission', scenes: ['Tutorial Hook'] }] },
-    ],
-    // familytree intentionally not default for party/faction relationships
-    // TODO: quests, missions, dialogue trees, branching paths, choice consequences
+    planningTab: 'WORLDBUILDING', writingTab: 'LEVELS', workspaceLabel: 'Narrative',
+    analyticsLabel: 'Narrative Draft Analytics', exportLabel: 'Game Narrative Bible Export',
+    defaultSections: ['outline','characters','factions','locations','lore','ideas','schedule','timeline','worldhistory','map','aitools'],
+    starterOutline: [{ title: 'Act 1', children: [{ title: 'Opening Mission', scenes: ['Tutorial Hook'] }] }],
   },
 }
 
@@ -319,30 +290,10 @@ export const PROJECT_TYPE_STAGE = {
     label: 'Live',
     note: 'Launch-ready system-neutral campaign bible workflow.',
   },
-  play: {
-    stage: 'beta',
-    label: 'Beta',
-    note: 'Limited workflow: stage-play structure, script controls, and readable beta DOCX export are available; full theatre production formatting is still in progress.',
-  },
-  screenplay: {
-    stage: 'beta',
-    label: 'Beta',
-    note: 'Limited workflow: screenplay structure, script controls, and readable beta DOCX export are available; industry-perfect formatting and FDX/PDF script export are still in progress.',
-  },
-  tv_show: {
-    stage: 'beta',
-    label: 'Beta',
-    note: 'Limited workflow: season and episode structure plus script controls are available; dedicated episode tracking and series-bible fields are still in progress.',
-  },
   comic: {
     stage: 'beta',
     label: 'Beta',
     note: 'Limited workflow: page-level structure is available; panel planning and art-direction fields are still in progress.',
-  },
-  video_game: {
-    stage: 'beta',
-    label: 'Beta',
-    note: 'Limited workflow: narrative-bible structure is available; quests, dialogue trees, and branching paths are still in progress.',
   },
 }
 
