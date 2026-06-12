@@ -664,7 +664,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
     e.preventDefault()
     setDragging(false)
     await handleFiles(e.dataTransfer.files)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleAnalyze = () => {
     const config = getAIConfig()

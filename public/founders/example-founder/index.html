@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-L1BT87PKXV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-L1BT87PKXV');
+  </script>
+  <title>A. N. Writer — YOW Founder</title>
+  <meta name="description" content="A. N. Writer is a YOW Founder and author of the Ashen Crown series. Epic fantasy with morally grey characters and histories that matter." />
+  <link rel="canonical" href="https://www.yourownworld.co.uk/founders/example-founder/" />
+  <meta property="og:type" content="profile" />
+  <meta property="og:title" content="A. N. Writer — YOW Founder" />
+  <meta property="og:description" content="Author of the Ashen Crown series. Epic fantasy with morally grey characters and histories that matter." />
+  <meta property="og:url" content="https://www.yourownworld.co.uk/founders/example-founder/" />
+  <meta property="og:image" content="https://www.yourownworld.co.uk/hero-illustration.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="/marketing.css" />
+  <style>
+    .founder-profile {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .founder-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 28px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+    }
+    .founder-photo {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .founder-photo-placeholder {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.8rem;
+      flex-shrink: 0;
+      color: var(--muted);
+    }
+    .founder-header-info {
+      flex: 1;
+      min-width: 200px;
+    }
+    .founder-name {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .founder-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #f59e0b;
+      background: rgba(245,158,11,0.12);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 4px;
+      padding: 3px 8px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .founder-genre {
+      font-size: 0.9rem;
+      color: var(--accent);
+      font-weight: 500;
+      margin: 0 0 14px;
+    }
+    .founder-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .founder-link {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 12px;
+      text-decoration: none;
+      transition: border-color 0.15s, color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .founder-link:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .founder-section {
+      margin-bottom: 44px;
+    }
+    .founder-section h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .founder-bio p {
+      font-size: 0.9375rem;
+      line-height: 1.7;
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+    .works-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 20px;
+    }
+    .work-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      display: flex;
+      flex-direction: column;
+    }
+    .work-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      text-decoration: none;
+    }
+    .work-cover {
+      width: 100%;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+      background: var(--bg-card2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-align: center;
+      padding: 20px;
+    }
+    .work-cover-placeholder {
+      width: 100%;
+      aspect-ratio: 2/3;
+      background: var(--bg-card2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 2rem;
+    }
+    .work-info {
+      padding: 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .work-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0;
+    }
+    .work-subtitle {
+      font-size: 0.775rem;
+      color: var(--muted);
+      margin: 0;
+    }
+    .work-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 15%, transparent);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-top: 6px;
+      align-self: flex-start;
+    }
+    .work-buy-link {
+      display: block;
+      font-size: 0.775rem;
+      color: var(--accent);
+      font-weight: 500;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 560px) {
+      .founder-header { flex-direction: column; align-items: center; text-align: center; }
+      .founder-links { justify-content: center; }
+      .founder-name { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+<nav class="m-nav" role="navigation" aria-label="Main navigation">
+  <div class="wrap">
+    <a href="/" class="m-nav-brand" aria-label="Your Own World home"><img src="/yow-logo.svg" alt="" class="m-nav-logo" width="28" height="28" aria-hidden="true" />Your Own World</a>
+    <ul class="m-nav-links" role="list">
+      <li><a href="/features/">Features</a></li>
+      <li><a href="/pricing/">Pricing</a></li>
+      <li><a href="/blog/">Blog</a></li>
+      <li><a href="/faq/">FAQ</a></li>
+    </ul>
+    <div class="m-nav-actions">
+      <a href="/login" class="btn btn-secondary btn-sm">Log in</a>
+      <a href="/signup" class="btn btn-primary btn-sm">Get started free</a>
+    </div>
+  </div>
+</nav>
+<main>
+  <div class="wrap">
+    <nav class="m-breadcrumb" aria-label="Breadcrumb">
+      <a href="/">Home</a><span class="sep">›</span><a href="/founders/">Founders</a><span class="sep">›</span><span aria-current="page">A. N. Writer</span>
+    </nav>
+  </div>
+
+  <section class="m-section" style="padding-top:32px;">
+    <div class="wrap">
+      <div class="founder-profile">
+
+        <!-- ── Header ─────────────────────────────────────────── -->
+        <div class="founder-header">
+          <!-- Replace with <img src="photo.jpg" alt="A. N. Writer" class="founder-photo"> when you have a photo -->
+          <div class="founder-photo-placeholder">✍</div>
+          <div class="founder-header-info">
+            <h1 class="founder-name">
+              A. N. Writer
+              <span class="founder-badge">✦ YOW Founder</span>
+            </h1>
+            <p class="founder-genre">Epic Fantasy · Grimdark · Dark Academia</p>
+            <div class="founder-links">
+              <!-- Add/remove link buttons as needed -->
+              <a href="https://example.com" class="founder-link" target="_blank" rel="noopener">🌐 Website</a>
+              <a href="https://amazon.com" class="founder-link" target="_blank" rel="noopener">📚 Amazon</a>
+              <a href="https://twitter.com" class="founder-link" target="_blank" rel="noopener">𝕏 Twitter</a>
+              <a href="https://instagram.com" class="founder-link" target="_blank" rel="noopener">📷 Instagram</a>
+              <!-- <a href="https://tiktok.com" class="founder-link" target="_blank" rel="noopener">🎵 TikTok</a> -->
+              <!-- <a href="https://patreon.com" class="founder-link" target="_blank" rel="noopener">🎨 Patreon</a> -->
+              <!-- <a href="https://goodreads.com" class="founder-link" target="_blank" rel="noopener">📖 Goodreads</a> -->
+            </div>
+          </div>
+        </div>
+
+        <!-- ── About ──────────────────────────────────────────── -->
+        <div class="founder-section founder-bio">
+          <h2>About</h2>
+          <p>Replace this with the founder's bio. This is where they introduce themselves — who they are, what drives them to write, and what makes their work distinctive. It can be as personal or as professional as they'd like.</p>
+          <p>A second paragraph works well for talking about their writing journey, their influences, or what they're currently working on. Readers who land here are already curious — give them a reason to pick up a book.</p>
+        </div>
+
+        <!-- ── Published Works ────────────────────────────────── -->
+        <div class="founder-section">
+          <h2>Published Works</h2>
+          <div class="works-grid">
+
+            <!-- WORK CARD — copy this block for each book/work -->
+            <a href="https://example.com/book-1" class="work-card" target="_blank" rel="noopener">
+              <!-- Replace with <img src="cover.jpg" alt="Book Title" class="work-cover"> -->
+              <div class="work-cover-placeholder">📖</div>
+              <div class="work-info">
+                <p class="work-title">The Ashen Crown</p>
+                <p class="work-subtitle">Book one of the Ashen Crown series</p>
+                <span class="work-tag">Novel</span>
+                <span class="work-buy-link">Buy on Amazon →</span>
+              </div>
+            </a>
+
+            <a href="https://example.com/book-2" class="work-card" target="_blank" rel="noopener">
+              <div class="work-cover-placeholder">📖</div>
+              <div class="work-info">
+                <p class="work-title">Cinders &amp; Kings</p>
+                <p class="work-subtitle">Book two of the Ashen Crown series</p>
+                <span class="work-tag">Novel</span>
+                <span class="work-buy-link">Buy on Amazon →</span>
+              </div>
+            </a>
+
+            <a href="https://example.com/short-story" class="work-card" target="_blank" rel="noopener">
+              <div class="work-cover-placeholder">📄</div>
+              <div class="work-info">
+                <p class="work-title">The Salt Road</p>
+                <p class="work-subtitle">A standalone novella</p>
+                <span class="work-tag">Novella</span>
+                <span class="work-buy-link">Read on Kindle Unlimited →</span>
+              </div>
+            </a>
+
+            <!-- Add more work cards here -->
+
+          </div>
+        </div>
+
+        <!-- ── Currently Working On (optional) ───────────────── -->
+        <div class="founder-section">
+          <h2>Currently Working On</h2>
+          <div class="m-highlight">
+            <h3>Book Three: The Hollow Throne</h3>
+            <p>The third and final book in the Ashen Crown series. Expected publication: late 2026. Follow on social media for updates, cover reveals, and early chapters.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="m-section">
+    <div class="wrap">
+      <div style="max-width:720px;margin:0 auto;">
+        <p style="font-size:0.875rem;color:var(--muted);text-align:center;">
+          <a href="/founders/" style="color:var(--accent);">← Back to all Founders</a>
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="m-footer">
+  <div class="wrap">
+    <div class="m-footer-inner">
+      <div class="m-footer-brand"><a href="/" class="m-nav-brand"><img src="/yow-logo.svg" alt="" class="m-nav-logo" width="28" height="28" aria-hidden="true" />Your Own World</a><p>All-in-one worldbuilding and writing platform for authors, fantasy writers, and D&amp;D dungeon masters.</p></div>
+      <div class="m-footer-col"><h4>Product</h4><ul><li><a href="/features/">Features</a></li><li><a href="/pricing/">Pricing</a></li><li><a href="/ai-overview/">AI Assistant</a></li><li><a href="/about/">About</a></li></ul></div>
+      <div class="m-footer-col"><h4>Use Cases</h4><ul><li><a href="/worldbuilding-software/">Worldbuilding</a></li><li><a href="/novel-writing-software/">Novel Writing</a></li><li><a href="/dnd-campaign-manager/">D&amp;D Campaigns</a></li><li><a href="/lore-management/">Lore Management</a></li></ul></div>
+      <div class="m-footer-col"><h4>Community</h4><ul><li><a href="/founders/">Founders</a></li><li><a href="/blog/">Blog</a></li><li><a href="/faq/">FAQ</a></li><li><a href="/about/">About</a></li></ul></div>
+    </div>
+    <div class="m-footer-bottom"><span>© 2026 Your Own World. All rights reserved.</span><span><a href="/blog/">Blog</a> · <a href="/faq/">FAQ</a> · <a href="/beta-disclaimer/">Beta Disclaimer</a> · <a href="mailto:support@yourownworld.co.uk">Contact</a></span></div>
+  </div>
+</footer>
+</body>
+</html>

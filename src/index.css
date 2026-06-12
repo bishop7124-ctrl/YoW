@@ -10239,6 +10239,10 @@ body {
   border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
 }
 
+.active-project-command--empty {
+  cursor: default;
+}
+
 .active-project-command-main {
   min-height: 342px;
   grid-row: 1 / 2;
@@ -10353,6 +10357,49 @@ body {
   text-transform: uppercase;
 }
 
+.first-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 3px;
+}
+
+.first-run-primary,
+.first-run-secondary {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.first-run-primary {
+  border: 1px solid color-mix(in srgb, var(--accent) 74%, #fff 10%);
+  background: var(--accent);
+  color: var(--bg-main);
+}
+
+.first-run-secondary {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  color: var(--text-main);
+}
+
+.first-run-primary:hover,
+.first-run-secondary:hover {
+  transform: translateY(-1px);
+}
+
+.first-run-secondary:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  color: var(--accent);
+}
+
 .active-project-command-cover {
   grid-column: 2;
   grid-row: 1 / span 2;
@@ -10390,6 +10437,67 @@ body {
 
 .active-project-command .active-project-settings-btn {
   z-index: 4;
+}
+
+.first-run-tour {
+  min-height: 520px;
+  height: 100%;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--r-md);
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--surface) 88%, transparent),
+      color-mix(in srgb, var(--bg-main) 88%, var(--surface))
+    );
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.first-run-tour-step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-nav) 62%, transparent);
+}
+
+.first-run-tour-step span {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent-fade);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.first-run-tour-step strong,
+.first-run-tour-step small {
+  display: block;
+  min-width: 0;
+}
+
+.first-run-tour-step strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.first-run-tour-step small {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .active-project-export-slot {
@@ -11177,6 +11285,10 @@ body {
   .active-project-command .active-project-cover-card {
     min-height: 360px;
   }
+
+  .first-run-tour {
+    min-height: 360px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -11253,6 +11365,35 @@ body {
   .active-project-command .active-project-cover-card {
     min-height: 220px;
     max-height: 260px;
+  }
+
+  .active-project-command--first-run .active-project-cover-card {
+    max-height: none;
+  }
+
+  .first-run-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .first-run-primary,
+  .first-run-secondary {
+    width: 100%;
+  }
+
+  .first-run-tour {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .first-run-tour-step {
+    grid-template-columns: 28px minmax(0, 1fr);
+    padding: 11px;
+  }
+
+  .first-run-tour-step span {
+    width: 28px;
+    height: 28px;
   }
 
   .active-project-command .active-project-settings-panel {

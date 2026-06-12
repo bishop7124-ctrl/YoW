@@ -1,9 +1,34 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Serve static marketing HTML pages from public/ in dev (e.g. /founders/, /about/)
+function staticHtmlMiddleware() {
+  return {
+    name: 'static-html-middleware',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url?.split('?')[0] ?? '/'
+        if (url === '/' || !url.startsWith('/')) return next()
+        const filePath = path.resolve(__dirname, 'public', url.replace(/^\//, ''), 'index.html')
+        if (fs.existsSync(filePath)) {
+          res.setHeader('Content-Type', 'text/html')
+          res.end(fs.readFileSync(filePath))
+        } else {
+          next()
+        }
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), staticHtmlMiddleware()],
   build: {
     chunkSizeWarningLimit: 1000,
   },

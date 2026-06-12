@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../../supabase'
 import { createProjectZipBlob, getProjectExportFilename, downloadBlob } from '../../utils/projectExport'
 
-export default function MaintenanceLapsedScreen({ store, user }) {
+export default function MaintenanceLapsedScreen({ store }) {
   const [exporting, setExporting] = useState(null)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')

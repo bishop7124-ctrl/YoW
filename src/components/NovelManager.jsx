@@ -221,19 +221,21 @@ function ProjectExportMenu({ onExport, compact = false }) {
   )
 }
 
-function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetStatus, onToggleFocus, onEditProject, onExportProject }) {
+function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetStatus, onToggleFocus, onEditProject, onExportProject, onCreateProject, onImportProject }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const novel = stats?.project ?? null
   const totalWords = allStats.reduce((sum, item) => sum + item.manuscriptWords, 0)
   const currentStatus = STATUS_DATA[novel?.status]?.aliasFor ?? novel?.status
   const progress = Number.isFinite(Number(novel?.progress)) ? Math.max(0, Math.min(100, Number(novel.progress))) : null
   const hasActiveProject = !!novel
+  const isFirstRun = !hasActiveProject && allStats.length === 0 && series.length === 0
 
   return (
     <div
       className={[
         'active-project-command',
         hasActiveProject ? '' : 'active-project-command--empty',
+        isFirstRun ? 'active-project-command--first-run' : '',
         novel?.coverPhoto ? 'active-project-command--has-photo' : '',
       ].filter(Boolean).join(' ')}
       onMouseLeave={() => setSettingsOpen(false)}
@@ -245,39 +247,83 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
             {hasActiveProject && <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>}
             {hasActiveProject ? 'Active Project' : `Welcome, ${userName}`}
           </div>
-          <h2 className="active-project-command-title">{hasActiveProject ? novel.title : 'What are we working on today?'}</h2>
+          <h2 className="active-project-command-title">{hasActiveProject ? novel.title : isFirstRun ? 'Begin your first world.' : 'Choose a project to continue.'}</h2>
           {hasActiveProject && novel.description && <p className="active-project-command-desc">{novel.description}</p>}
-          {!hasActiveProject && <p className="active-project-command-desc">Choose a project below to make it active, or open one directly when you are ready to work.</p>}
-          <div className="active-project-command-stats">
-            {progress !== null && (
+          {!hasActiveProject && (
+            <p className="active-project-command-desc">
+              {isFirstRun
+                ? 'Start with a title, a rough idea, or an existing file. Your workspace will grow around the story as you add chapters, characters, lore, maps, and notes.'
+                : 'Select a project from your library to make it active, or open one directly when you are ready to work.'}
+            </p>
+          )}
+          {isFirstRun ? (
+            <div className="first-run-actions">
+              <button type="button" className="first-run-primary" onClick={(e) => { e.stopPropagation(); onCreateProject?.() }}>
+                New Project
+              </button>
+              <button type="button" className="first-run-secondary" onClick={(e) => { e.stopPropagation(); onImportProject?.() }}>
+                Import with AI
+              </button>
+            </div>
+          ) : (
+            <div className="active-project-command-stats">
+              {progress !== null && (
+                <div className="active-project-command-stat">
+                  <strong>{progress}%</strong>
+                  <span>Progress</span>
+                </div>
+              )}
               <div className="active-project-command-stat">
-                <strong>{progress}%</strong>
-                <span>Progress</span>
+                <strong>{hasActiveProject ? stats.manuscriptWords.toLocaleString() : allStats.length}</strong>
+                <span>{hasActiveProject ? 'Words' : 'Projects'}</span>
               </div>
-            )}
-            <div className="active-project-command-stat">
-              <strong>{hasActiveProject ? stats.manuscriptWords.toLocaleString() : allStats.length}</strong>
-              <span>{hasActiveProject ? 'Words' : 'Projects'}</span>
+              <div className="active-project-command-stat">
+                <strong>{hasActiveProject ? stats.scenes.length : totalWords.toLocaleString()}</strong>
+                <span>{hasActiveProject ? 'Scenes' : 'Total words'}</span>
+              </div>
+              {hasActiveProject && <StatusBadge status={novel.status} />}
             </div>
-            <div className="active-project-command-stat">
-              <strong>{hasActiveProject ? stats.scenes.length : totalWords.toLocaleString()}</strong>
-              <span>{hasActiveProject ? 'Scenes' : 'Total words'}</span>
-            </div>
-            {hasActiveProject && <StatusBadge status={novel.status} />}
-          </div>
+          )}
           {hasActiveProject && <span className="active-project-command-cue">Open project</span>}
         </div>
       </section>
 
       <aside className="active-project-command-cover">
         <div className="active-project-cover-card" style={{ background: novel?.coverPhoto ? undefined : getCoverGradient(novel?.title || 'Your Own World') }}>
-          <div className="active-project-cover-inner">
-            {!novel?.coverPhoto && <div className="active-project-hero-bg" style={{ background: getCoverGradient(novel?.title || 'Your Own World') }} />}
-          {novel?.coverPhoto
-            ? <img src={novel.coverPhoto} alt="" />
-            : <span className="active-project-cover-letter">{hasActiveProject ? novel.title[0]?.toUpperCase() : '?'}</span>
-          }
-          </div>
+          {isFirstRun ? (
+            <div className="first-run-tour" onClick={e => e.stopPropagation()}>
+              <p className="active-project-settings-label">First steps</p>
+              <div className="first-run-tour-step">
+                <span>1</span>
+                <div>
+                  <strong>Choose a format</strong>
+                  <small>Novel, campaign, screenplay, comic, and more.</small>
+                </div>
+              </div>
+              <div className="first-run-tour-step">
+                <span>2</span>
+                <div>
+                  <strong>Add what you already have</strong>
+                  <small>Begin blank, paste a premise, or import existing notes.</small>
+                </div>
+              </div>
+              <div className="first-run-tour-step">
+                <span>3</span>
+                <div>
+                  <strong>Open the workspace</strong>
+                  <small>Draft, organize lore, plan scenes, and keep going.</small>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="active-project-cover-inner">
+              {!novel?.coverPhoto && <div className="active-project-hero-bg" style={{ background: getCoverGradient(novel?.title || 'Your Own World') }} />}
+              {novel?.coverPhoto
+                ? <img src={novel.coverPhoto} alt="" />
+                : <span className="active-project-cover-letter">{hasActiveProject ? novel.title[0]?.toUpperCase() : '?'}</span>
+              }
+            </div>
+          )}
           {hasActiveProject && <button
             className="active-project-settings-btn"
             onClick={e => { e.stopPropagation(); setSettingsOpen(o => !o) }}
@@ -1277,6 +1323,8 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
         onToggleFocus={() => focusStats && handleSetFocus(focusStats.project.id)}
         onEditProject={() => focusStats && setEditingProject(focusStats.project)}
         onExportProject={handleExportProject}
+        onCreateProject={() => setShowForm(true)}
+        onImportProject={() => setShowAIImport(true)}
       />
 
       {/* Content */}
@@ -1374,32 +1422,6 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           )
         })()}
 
-        {/* Empty state */}
-        {store.novels.length === 0 && !store.readOnly && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 360, textAlign: 'center', padding: '56px 16px' }}>
-            <div style={{ fontSize: 52, marginBottom: 24, opacity: 0.12, lineHeight: 1 }}>✦</div>
-            <h2 style={{ margin: '0 0 14px', fontSize: 28, fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-.02em', lineHeight: 1.15 }}>
-              Start your first project
-            </h2>
-            <p style={{ margin: '0 0 32px', fontSize: 15, color: 'var(--text-muted)', maxWidth: 400, lineHeight: 1.65 }}>
-              Build your story world — characters, locations, lore, and manuscript — all in one place.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <button
-                onClick={() => setShowForm(true)}
-                style={{ padding: '14px 40px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 15, fontWeight: 800, cursor: 'pointer', letterSpacing: '-.01em' }}
-              >
-                New Project
-              </button>
-              <button
-                onClick={() => setShowAIImport(true)}
-                style={{ padding: '9px 22px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-              >
-                Import with AI
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Edit series modal */}

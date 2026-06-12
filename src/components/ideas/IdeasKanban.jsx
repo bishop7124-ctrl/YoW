@@ -48,7 +48,7 @@ function IdeaDetailPanel({ idea, store, onUpdate, onClose, onConvert, onArchive,
   useEffect(() => {
     setDescDraft(idea.description || idea.body || '')
     setEditingDesc(false)
-  }, [idea.id])
+  }, [idea.body, idea.description, idea.id])
 
   const commitDesc = () => {
     const d = descDraft.trim()

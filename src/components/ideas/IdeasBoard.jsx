@@ -49,7 +49,7 @@ export default function IdeasBoard({ store }) {
       notes: whiteboard?.notes || [],
       groups: whiteboard?.groups || [],
     })
-  }, [project?.id])
+  }, [project?.id, whiteboard?.groups, whiteboard?.notes])
 
   function getNotePos(n) { return livePos.notes[n.id] ?? { x: n.x, y: n.y } }
   function getNoteSize(n) { return livePos.noteSizes[n.id] ?? { w: n.w || NOTE_W, h: n.h || NOTE_H } }

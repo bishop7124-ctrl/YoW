@@ -57,6 +57,19 @@ const clearProjectLocalStorage = () => {
     PROJECT_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
+const clearProjectRefs = (refs) => {
+  refs.charactersRef.current = []
+  refs.locationsRef.current = []
+  refs.timelineRef.current = []
+  refs.worldHistoryRef.current = []
+  refs.actsRef.current = []
+  refs.chaptersRef.current = []
+  refs.scenesRef.current = []
+  refs.loreEntriesRef.current = []
+  refs.ideaEntriesRef.current = []
+  refs.storyScheduleRef.current = []
+  refs.rpgCharactersRef.current = []
+}
 const save = (key, val) => {
   try {
     localStorage.setItem(key, JSON.stringify(val))
@@ -218,25 +231,27 @@ export function useStore(userId = null, options = {}) {
   const globalReadOnly = Boolean(options.readOnly)
   const freeProjectId = options.freeProjectId ?? null
   const storageQuotaBytes = options.storageQuotaBytes ?? null
-  const [novels, setNovels] = useState(() => load('nf_novels', []))
-  const [activeNovelId, setActiveNovelId] = useState(() => load('nf_activeNovel', null))
-  const [characters, setCharacters] = useState(() => load('nf_characters', []))
-  const [factions, setFactions] = useState(() => load('nf_factions', []))
-  const [locations, setLocations] = useState(() => load('nf_locations', []))
-  const [timeline, setTimeline] = useState(() => load('nf_timeline', []))
-  const [worldHistory, setWorldHistory] = useState(() => load('nf_worldHistory', []))
-  const [currentYear, setCurrentYear] = useState(() => load('nf_currentYear', 0))
-  const [acts, setActs] = useState(() => load('nf_acts', []))
-  const [chapters, setChapters] = useState(() => load('nf_chapters', []))
-  const [scenes, setScenes] = useState(() => load('nf_scenes', []))
-  const [loreEntries, setLoreEntries] = useState(() => load('nf_loreEntries', []))
-  const [ideaEntries, setIdeaEntries] = useState(() => load('nf_ideaEntries', []))
-  const [maps, setMaps] = useState(() => load('nf_maps', []))
-  const [activeMapByNovel, setActiveMapByNovel] = useState(() => load('nf_activeMapByNovel', {}))
-  const [whiteboards, setWhiteboards] = useState(() => load('nf_whiteboards', []))
-  const [series, setSeries] = useState(() => load('nf_series', []))
-  const [storySchedule, setStorySchedule] = useState(() => load('nf_storySchedule', []))
-  const [rpgCharacters, setRpgCharacters] = useState(() => load('nf_rpg_characters', []))
+  const canUseInitialLocal = !userId || loadLocalOwner() === userId
+  const loadInitial = (key, def) => canUseInitialLocal ? load(key, def) : def
+  const [novels, setNovels] = useState(() => loadInitial('nf_novels', []))
+  const [activeNovelId, setActiveNovelId] = useState(() => loadInitial('nf_activeNovel', null))
+  const [characters, setCharacters] = useState(() => loadInitial('nf_characters', []))
+  const [factions, setFactions] = useState(() => loadInitial('nf_factions', []))
+  const [locations, setLocations] = useState(() => loadInitial('nf_locations', []))
+  const [timeline, setTimeline] = useState(() => loadInitial('nf_timeline', []))
+  const [worldHistory, setWorldHistory] = useState(() => loadInitial('nf_worldHistory', []))
+  const [currentYear, setCurrentYear] = useState(() => loadInitial('nf_currentYear', 0))
+  const [acts, setActs] = useState(() => loadInitial('nf_acts', []))
+  const [chapters, setChapters] = useState(() => loadInitial('nf_chapters', []))
+  const [scenes, setScenes] = useState(() => loadInitial('nf_scenes', []))
+  const [loreEntries, setLoreEntries] = useState(() => loadInitial('nf_loreEntries', []))
+  const [ideaEntries, setIdeaEntries] = useState(() => loadInitial('nf_ideaEntries', []))
+  const [maps, setMaps] = useState(() => loadInitial('nf_maps', []))
+  const [activeMapByNovel, setActiveMapByNovel] = useState(() => loadInitial('nf_activeMapByNovel', {}))
+  const [whiteboards, setWhiteboards] = useState(() => loadInitial('nf_whiteboards', []))
+  const [series, setSeries] = useState(() => loadInitial('nf_series', []))
+  const [storySchedule, setStorySchedule] = useState(() => loadInitial('nf_storySchedule', []))
+  const [rpgCharacters, setRpgCharacters] = useState(() => loadInitial('nf_rpg_characters', []))
 
   const charactersRef = useRef(characters)
   const locationsRef = useRef(locations)
@@ -262,9 +277,51 @@ export function useStore(userId = null, options = {}) {
 
   useEffect(() => {
     if (previousUserId.current === userId) return
+    const previous = previousUserId.current
     previousUserId.current = userId
-    remoteReady.current = !userId
-    importing.current = Boolean(userId)
+    remoteReady.current = false
+    importing.current = true
+    clearProjectLocalStorage()
+    clearProjectRefs({
+      charactersRef,
+      locationsRef,
+      timelineRef,
+      worldHistoryRef,
+      actsRef,
+      chaptersRef,
+      scenesRef,
+      loreEntriesRef,
+      ideaEntriesRef,
+      storyScheduleRef,
+      rpgCharactersRef,
+    })
+    setNovels([])
+    setCharacters([])
+    setFactions([])
+    setLocations([])
+    setTimeline([])
+    setWorldHistory([])
+    setActs([])
+    setChapters([])
+    setScenes([])
+    setLoreEntries([])
+    setIdeaEntries([])
+    setMaps([])
+    setActiveMapByNovel({})
+    setWhiteboards([])
+    setSeries([])
+    setStorySchedule([])
+    setRpgCharacters([])
+    setCurrentYear(0)
+    setActiveNovelId(null)
+    if (userId) {
+      markLocalOwner(userId)
+      return
+    }
+    if (!previous) {
+      importing.current = false
+      remoteReady.current = true
+    }
   }, [userId])
 
   const commitLocal = useCallback((ref, setter, key, updater) => {
@@ -390,9 +447,9 @@ export function useStore(userId = null, options = {}) {
     }, 500)
   }, [userId])
 
-  const finishRemoteLoad = useCallback(() => {
+  const finishRemoteLoad = useCallback((allowSaves = true) => {
     importing.current = false
-    remoteReady.current = true
+    remoteReady.current = allowSaves
   }, [])
 
   const replaceData = useCallback((data) => {
@@ -432,6 +489,19 @@ export function useStore(userId = null, options = {}) {
     importing.current = true
     remoteReady.current = false
     clearProjectLocalStorage()
+    clearProjectRefs({
+      charactersRef,
+      locationsRef,
+      timelineRef,
+      worldHistoryRef,
+      actsRef,
+      chaptersRef,
+      scenesRef,
+      loreEntriesRef,
+      ideaEntriesRef,
+      storyScheduleRef,
+      rpgCharactersRef,
+    })
     setNovels([]); setCharacters([]); setFactions([]); setLocations([])
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
     setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setCurrentYear(0); setActiveNovelId(null)

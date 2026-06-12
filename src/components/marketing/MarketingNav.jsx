@@ -8,7 +8,6 @@ const NAV_LINKS = [
 
 export default function MarketingNav({
   activePath = '/',
-  onLogin,
   onGetStarted,
   user,
 }) {
@@ -40,12 +39,12 @@ export default function MarketingNav({
             </button>
           ) : (
             <>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>
+              <a href="/login" className="btn btn-secondary btn-sm">
                 Log in
-              </button>
-              <button type="button" className="btn btn-primary btn-sm" onClick={onGetStarted}>
+              </a>
+              <a href="/signup" className="btn btn-primary btn-sm">
                 Get started free
-              </button>
+              </a>
             </>
           )}
         </div>

@@ -57,7 +57,7 @@ export function AuthProvider({ children }) {
   const resetPassword = OFFLINE_MODE
     ? () => Promise.resolve({ data: null, error: null })
     : (email) => supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}${window.location.pathname}`,
+        redirectTo: `${window.location.origin}/login`,
       })
 
   const updatePassword = OFFLINE_MODE

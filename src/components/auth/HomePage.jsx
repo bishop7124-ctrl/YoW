@@ -470,7 +470,7 @@ function cellClass(value) {
   return 'yow-compare-partial'
 }
 
-export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLegal }) {
+export default function HomePage({ onOpenAbout, onOpenLegal }) {
   const [activeProjectType, setActiveProjectType] = useState('novel')
   const [activeFeatureTab, setActiveFeatureTab] = useState('dashboard')
 
@@ -480,7 +480,7 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
   return (
     <div className="yow-home min-h-screen text-[var(--text-main)]">
 
-      <MarketingNav activePath="/" onLogin={onLogin} onGetStarted={onGetStarted} />
+      <MarketingNav activePath="/" />
 
       <main className="yow-home-main">
 
@@ -496,12 +496,12 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
               Built for prose writers and tabletop storytellers — novels, short stories, graphic novels, D&D campaigns, and system-neutral TTRPGs.
             </p>
             <div className="yow-home-actions">
-              <button type="button" className="btn btn-primary btn-lg" onClick={onGetStarted}>
+              <a href="/signup" className="btn btn-primary btn-lg">
                 Start building your world →
-              </button>
-              <button type="button" className="btn btn-secondary btn-lg" onClick={onLogin}>
+              </a>
+              <a href="/login" className="btn btn-secondary btn-lg">
                 Log in
-              </button>
+              </a>
             </div>
             <p className="yow-trust-line">Free to start · No credit card required · Works on any device</p>
           </div>
@@ -572,9 +572,9 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
                     </li>
                   ))}
                 </ul>
-                <button type="button" className="btn btn-primary mt-6" onClick={onGetStarted}>
+                <a href="/signup" className="btn btn-primary mt-6">
                   Start a {currentProject.label} project →
-                </button>
+                </a>
               </div>
               <div className="yow-project-panel-right" aria-hidden="true">
                 <div className="yow-project-visual">
@@ -750,12 +750,12 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
               Start with a free account — no credit card, no time limit. Upgrade when you're ready for more projects and advanced tools.
             </p>
             <div className="yow-home-actions" style={{ justifyContent: 'center', marginTop: '32px' }}>
-              <button type="button" className="btn btn-primary btn-lg" onClick={onGetStarted}>
+              <a href="/signup" className="btn btn-primary btn-lg">
                 Create your free account →
-              </button>
-              <button type="button" className="btn btn-secondary btn-lg" onClick={onLogin}>
+              </a>
+              <a href="/login" className="btn btn-secondary btn-lg">
                 Log in
-              </button>
+              </a>
             </div>
             <p className="yow-trust-line" style={{ textAlign: 'center' }}>
               Free to start · Sync across devices · Export your work anytime
@@ -772,6 +772,7 @@ export default function HomePage({ onGetStarted, onLogin, onOpenAbout, onOpenLeg
           {onOpenAbout && (
             <button type="button" onClick={onOpenAbout} className="yow-footer-link">About</button>
           )}
+          <a href="/founders/" className="yow-footer-link">Founders</a>
           {onOpenLegal && (
             <>
               <button type="button" onClick={() => onOpenLegal('privacy')}  className="yow-footer-link">Privacy</button>

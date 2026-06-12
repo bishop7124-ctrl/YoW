@@ -71,7 +71,15 @@ function HeroIllustration() {
   )
 }
 
-export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, initialScreen = 'home', initialMode = 'login' }) {
+export default function LoginPage({
+  onOpenLegal,
+  onOpenAbout,
+  onNavigateHome,
+  onAuthModeChange,
+  recoveryMode,
+  initialScreen = 'home',
+  initialMode = 'login',
+}) {
   const { signIn, signUp, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
   const [screen, setScreen] = useState(initialScreen)
   const [mode, setMode] = useState(initialMode)
@@ -95,11 +103,12 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setScreen('auth')
       setMode('login')
+      onAuthModeChange?.('login')
       setError(decodeURIComponent(desc.replace(/\+/g, ' ')))
       // Clean the URL so the error doesn't persist on refresh
       history.replaceState(null, '', window.location.pathname + window.location.search)
     }
-  }, [])
+  }, [onAuthModeChange])
 
   // When Supabase fires PASSWORD_RECOVERY, switch straight to the new-password screen
   useEffect(() => {
@@ -149,6 +158,12 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
     setError('')
     setSent(false)
     setScreen('auth')
+    onAuthModeChange?.(nextMode)
+  }
+
+  const goHome = () => {
+    setScreen('home')
+    onNavigateHome?.()
   }
 
   const handleSubmit = async (e) => {
@@ -166,7 +181,11 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
       } else {
         const { data, error: err } = await signUp(email, password)
         if (err) {
-          setError(err.message)
+          setError(
+            /already registered|already.*exists|user.*exists|email.*taken/i.test(err.message)
+              ? 'An account with this email already exists. Try logging in instead.'
+              : err.message
+          )
         } else if (!data?.session) {
           // Email confirmation required — session won't exist until the link is clicked
           setSent(true)
@@ -205,7 +224,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
               type="button"
               className="flex items-center gap-3 mb-8 text-left"
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-              onClick={() => setScreen('home')}
+              onClick={goHome}
               aria-label="Back to homepage"
             >
               <div className="studio-logo"><YOWLogo /></div>
@@ -261,7 +280,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                     </p>
                   </div>
                   <button
-                    onClick={() => { setPwdUpdated(false); setScreen('auth'); setMode('login'); setNewPwd(''); setConfirmPwd('') }}
+                    onClick={() => { setPwdUpdated(false); openAuth('login'); setNewPwd(''); setConfirmPwd('') }}
                     className="btn btn-primary w-full justify-center py-3"
                   >
                     Go to login
@@ -332,14 +351,14 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                 <p className="mt-3 text-center text-sm text-[var(--text-muted)]">
                   Remembered it?{' '}
                   <button
-                    onClick={() => { setResetSent(false); setMode('login'); setError('') }}
+                    onClick={() => { setResetSent(false); openAuth('login'); setError('') }}
                     className="text-[var(--accent)] hover:underline font-medium"
                   >
                     Back to login
                   </button>
                 </p>
                 <p className="mt-4 text-center text-xs">
-                  <button type="button" onClick={() => setScreen('home')} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
+                  <button type="button" onClick={goHome} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
                     Back to homepage
                   </button>
                 </p>
@@ -358,7 +377,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                 <p className="mt-6 text-center text-sm text-[var(--text-muted)]">
                   Already confirmed?{' '}
                   <button
-                    onClick={() => { setSent(false); setMode('login'); setError('') }}
+                    onClick={() => { setSent(false); openAuth('login'); setError('') }}
                     className="text-[var(--accent)] hover:underline font-medium"
                   >
                     Go to login
@@ -374,7 +393,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                   </button>
                 </p>
                 <p className="mt-4 text-center text-xs">
-                  <button type="button" onClick={() => setScreen('home')} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
+                  <button type="button" onClick={goHome} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
                     Back to homepage
                   </button>
                 </p>
@@ -471,7 +490,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                     <>
                       Remembered it?{' '}
                       <button
-                        onClick={() => { setMode('login'); setError('') }}
+                        onClick={() => { openAuth('login'); setError('') }}
                         className="text-[var(--accent)] hover:underline font-medium"
                       >
                         Back to login
@@ -481,7 +500,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                     <>
                       Don&apos;t have an account?{' '}
                       <button
-                        onClick={() => { setMode('signup'); setError(''); setSent(false) }}
+                        onClick={() => { openAuth('signup'); setError(''); setSent(false) }}
                         className="text-[var(--accent)] hover:underline font-medium"
                       >
                         Sign up
@@ -491,7 +510,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                     <>
                       Already have an account?{' '}
                       <button
-                        onClick={() => { setMode('login'); setError(''); setSent(false) }}
+                        onClick={() => { openAuth('login'); setError(''); setSent(false) }}
                         className="text-[var(--accent)] hover:underline font-medium"
                       >
                         Sign in
@@ -505,7 +524,7 @@ export default function LoginPage({ onOpenLegal, onOpenAbout, recoveryMode, init
                 </p>
 
                 <p className="mt-4 text-center text-xs">
-                  <button type="button" onClick={() => setScreen('home')} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
+                  <button type="button" onClick={goHome} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
                     Back to homepage
                   </button>
                 </p>

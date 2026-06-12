@@ -243,11 +243,11 @@ function GoalsPanel({ writingGoals, onUpdateGoals, scenes, acts, chapters }) {
   const today = todayKey()
   const wordsToday = useMemo(() => totalWordsOnDate(scenes, today), [scenes, today])
 
-  const goals = writingGoals ?? {}
+  const goals = useMemo(() => writingGoals ?? {}, [writingGoals])
   const manuscriptGoal = goals.manuscript ?? 0
   const dailyGoal = goals.daily ?? 0
-  const actGoals = goals.acts ?? {}
-  const chapterGoals = goals.chapters ?? {}
+  const actGoals = useMemo(() => goals.acts ?? {}, [goals.acts])
+  const chapterGoals = useMemo(() => goals.chapters ?? {}, [goals.chapters])
 
   const setManuscriptGoal = useCallback(n => onUpdateGoals({ ...goals, manuscript: n }), [goals, onUpdateGoals])
   const setDailyGoal = useCallback(n => onUpdateGoals({ ...goals, daily: n }), [goals, onUpdateGoals])

@@ -54,6 +54,12 @@ function isFAQPath(path) {
   return path === '/faq' || path === '/faq/'
 }
 
+function getAuthRouteMode(path) {
+  if (path === '/login' || path === '/login/') return 'login'
+  if (path === '/signup' || path === '/signup/') return 'signup'
+  return null
+}
+
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'membership'])
 
 function parseRoute() {
@@ -162,6 +168,7 @@ function AppInner() {
   const [showPricing, setShowPricing] = useState(() => isPricingPath(window.location.pathname))
   const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
   const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
+  const [authRouteMode, setAuthRouteMode] = useState(() => getAuthRouteMode(window.location.pathname))
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(() => initialRouteSnapshot.accountOpen)
   const [accountTab, setAccountTab] = useState(() => initialRouteSnapshot.accountTab)
@@ -173,6 +180,14 @@ function AppInner() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
+
+  const navigatePublic = (path) => {
+    window.history.pushState(null, '', path)
+    setShowPricing(isPricingPath(path))
+    setShowFeatures(isFeaturesPath(path))
+    setShowFAQ(isFAQPath(path))
+    setAuthRouteMode(getAuthRouteMode(path))
+  }
 
   // Estimate store size for storage quota display (recalculated when account opens).
   const storageUsedBytes = useMemo(() => {
@@ -221,6 +236,7 @@ function AppInner() {
   // Sync browser URL with navigation state
   useEffect(() => {
     if (firstUrlSync.current) { firstUrlSync.current = false; return }
+    if (!user && authRouteMode) return
     const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, {
       accountOpen,
       accountTab,
@@ -228,25 +244,30 @@ function AppInner() {
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, accountOpen, accountTab, projectSettingsOpen])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
     const handlePop = () => {
       const path = window.location.pathname
       if (isPricingPath(path)) {
-        setShowPricing(true); setShowFeatures(false); setShowFAQ(false)
+        setShowPricing(true); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
         return
       }
       if (isFeaturesPath(path)) {
-        setShowFeatures(true); setShowPricing(false); setShowFAQ(false)
+        setShowFeatures(true); setShowPricing(false); setShowFAQ(false); setAuthRouteMode(null)
         return
       }
       if (isFAQPath(path)) {
-        setShowFAQ(true); setShowPricing(false); setShowFeatures(false)
+        setShowFAQ(true); setShowPricing(false); setShowFeatures(false); setAuthRouteMode(null)
         return
       }
-      setShowPricing(false); setShowFeatures(false); setShowFAQ(false)
+      const nextAuthRouteMode = getAuthRouteMode(path)
+      if (nextAuthRouteMode) {
+        setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(nextAuthRouteMode)
+        return
+      }
+      setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
       const route = parseRoute()
       setSection(route.section)
       setLayoutViewMode(route.layoutViewMode)
@@ -356,7 +377,7 @@ function AppInner() {
       })
       .catch(error => {
         console.error(error)
-        finishRemoteLoad()
+        finishRemoteLoad(false)
       })
       .finally(() => setDataLoading(false))
   }, [user, userId, importData, finishRemoteLoad, clearData])
@@ -367,14 +388,8 @@ function AppInner() {
       <>
         <PricingPage
           user={user}
-          onGetStarted={() => {
-            window.history.pushState(null, '', '/')
-            setShowPricing(false)
-          }}
-          onSignIn={() => {
-            window.history.pushState(null, '', '/')
-            setShowPricing(false)
-          }}
+          onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
+          onSignIn={() => navigatePublic(user ? '/' : '/login')}
         />
         <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
@@ -384,10 +399,13 @@ function AppInner() {
   }
 
   if (showFeatures) {
-    const goHome = () => { window.history.pushState(null, '', '/'); setShowFeatures(false) }
     return (
       <>
-        <FeaturesPage user={user} onGetStarted={goHome} onLogin={goHome} />
+        <FeaturesPage
+          user={user}
+          onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
+          onLogin={() => navigatePublic(user ? '/' : '/login')}
+        />
         <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
@@ -396,10 +414,13 @@ function AppInner() {
   }
 
   if (showFAQ) {
-    const goHome = () => { window.history.pushState(null, '', '/'); setShowFAQ(false) }
     return (
       <>
-        <FAQPage user={user} onGetStarted={goHome} onLogin={goHome} />
+        <FAQPage
+          user={user}
+          onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
+          onLogin={() => navigatePublic(user ? '/' : '/login')}
+        />
         <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
@@ -424,8 +445,8 @@ function AppInner() {
     if (signedOut && !recoveryMode) return (
       <>
         <SignedOutPage
-          onLoginAgain={() => { setOpenLoginAfterSignOut(true); setSignedOut(false) }}
-          onGoHome={() => { setOpenLoginAfterSignOut(false); setSignedOut(false); window.location.href = '/' }}
+          onLoginAgain={() => { setOpenLoginAfterSignOut(true); setSignedOut(false); navigatePublic('/login') }}
+          onGoHome={() => { setOpenLoginAfterSignOut(false); setSignedOut(false); navigatePublic('/') }}
         />
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       </>
@@ -433,11 +454,14 @@ function AppInner() {
     return (
       <>
         <LoginPage
+          key={recoveryMode ? 'recovery' : authRouteMode || (openLoginAfterSignOut ? 'login' : 'home')}
           onOpenLegal={setLegalPage}
           onOpenAbout={() => setAboutOpen(true)}
+          onNavigateHome={() => navigatePublic('/')}
+          onAuthModeChange={(mode) => navigatePublic(mode === 'signup' ? '/signup' : '/login')}
           recoveryMode={recoveryMode}
-          initialScreen={openLoginAfterSignOut ? 'auth' : 'home'}
-          initialMode="login"
+          initialScreen={recoveryMode || authRouteMode || openLoginAfterSignOut ? 'auth' : 'home'}
+          initialMode={authRouteMode || 'login'}
         />
         <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
