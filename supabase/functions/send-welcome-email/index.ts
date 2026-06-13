@@ -160,14 +160,16 @@ Deno.serve(async (req) => {
   const userId = record?.user_id as string | undefined
   if (!userId) return jsonResponse({ error: 'No user_id in payload', payload }, 400)
 
-  // Look up the user's email
-  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)
-  if (error || !data?.user?.email) {
-    console.error('getUserById error:', error?.message, 'userId:', userId, 'hasServiceKey:', !!SUPABASE_SERVICE_ROLE_KEY)
-    return jsonResponse({ error: 'User not found', detail: error?.message }, 404)
+  // Email can be passed directly from the frontend, or we look it up via admin API
+  let email = record?.email as string | undefined
+  if (!email) {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)
+    if (error || !data?.user?.email) {
+      console.error('getUserById error:', error?.message, 'userId:', userId, 'hasServiceKey:', !!SUPABASE_SERVICE_ROLE_KEY)
+      return jsonResponse({ error: 'User not found', detail: error?.message }, 404)
+    }
+    email = data.user.email
   }
-
-  const email = data.user.email
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

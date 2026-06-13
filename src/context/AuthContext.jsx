@@ -42,16 +42,15 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const sendWelcomeEmail = async (userId) => {
+  const sendWelcomeEmail = async (userId, email) => {
     if (OFFLINE_MODE) return
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      console.log('[welcome] sending to', userId, 'url:', supabaseUrl)
       const res = await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
-        body: JSON.stringify({ record: { user_id: userId } }),
+        body: JSON.stringify({ record: { user_id: userId, email } }),
       })
       console.log('[welcome] response', res.status)
     } catch (e) { console.error('[welcome] error', e) }
@@ -62,7 +61,7 @@ export function AuthProvider({ children }) {
     : async (email, password) => {
         const result = await supabase.auth.signUp({ email, password })
         if (!result.error && result.data?.user?.id) {
-          sendWelcomeEmail(result.data.user.id)
+          sendWelcomeEmail(result.data.user.id, email)
         }
         return result
       }
