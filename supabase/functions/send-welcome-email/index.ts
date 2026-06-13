@@ -144,7 +144,7 @@ function welcomeEmailHtml(email: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' } })
+  if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } })
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
 
   let payload: Record<string, unknown>
@@ -163,7 +163,8 @@ Deno.serve(async (req) => {
   // Look up the user's email
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)
   if (error || !data?.user?.email) {
-    return jsonResponse({ error: 'User not found' }, 404)
+    console.error('getUserById error:', error?.message, 'userId:', userId, 'hasServiceKey:', !!SUPABASE_SERVICE_ROLE_KEY)
+    return jsonResponse({ error: 'User not found', detail: error?.message }, 404)
   }
 
   const email = data.user.email
