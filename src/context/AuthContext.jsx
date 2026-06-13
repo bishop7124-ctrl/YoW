@@ -42,13 +42,35 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  const sendWelcomeEmail = async (userId) => {
+    if (OFFLINE_MODE) return
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+        body: JSON.stringify({ record: { user_id: userId } }),
+      })
+    } catch { /* non-critical, never block signup */ }
+  }
+
   const signUp = OFFLINE_MODE
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
-    : (email, password) => supabase.auth.signUp({ email, password })
+    : async (email, password) => {
+        const result = await supabase.auth.signUp({ email, password })
+        if (!result.error && result.data?.user?.id) {
+          sendWelcomeEmail(result.data.user.id)
+        }
+        return result
+      }
 
   const resendConfirmation = OFFLINE_MODE
     ? () => Promise.resolve({ error: null })
-    : (email) => supabase.auth.resend({ type: 'signup', email })
+    : async (email) => {
+        const result = await supabase.auth.resend({ type: 'signup', email })
+        return result
+      }
 
   const signIn = OFFLINE_MODE
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
@@ -120,7 +142,7 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.app_metadata?.is_admin === true
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, resendConfirmation, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, resendConfirmation, sendWelcomeEmail, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )
