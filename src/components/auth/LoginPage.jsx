@@ -80,7 +80,7 @@ export default function LoginPage({
   initialScreen = 'home',
   initialMode = 'login',
 }) {
-  const { signIn, signUp, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
+  const { signIn, signUp, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
   const [screen, setScreen] = useState(initialScreen)
   const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState(import.meta.env.VITE_DEV_EMAIL ?? '')
@@ -88,6 +88,7 @@ export default function LoginPage({
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const [resent, setResent] = useState(false)
   const [resetSent, setResetSent] = useState(false)
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
@@ -384,9 +385,27 @@ export default function LoginPage({
                   </button>
                 </p>
                 <p className="mt-3 text-center text-sm text-[var(--text-muted)]">
+                  {resent ? (
+                    <span style={{ color: 'var(--accent)' }}>Confirmation email resent.</span>
+                  ) : (
+                    <>
+                      Didn&apos;t receive it?{' '}
+                      <button
+                        onClick={async () => {
+                          await resendConfirmation(email)
+                          setResent(true)
+                        }}
+                        className="text-[var(--accent)] hover:underline font-medium"
+                      >
+                        Resend email
+                      </button>
+                    </>
+                  )}
+                </p>
+                <p className="mt-3 text-center text-sm text-[var(--text-muted)]">
                   Wrong address?{' '}
                   <button
-                    onClick={() => { setSent(false); setEmail(''); setPassword('') }}
+                    onClick={() => { setSent(false); setResent(false); setEmail(''); setPassword('') }}
                     className="text-[var(--accent)] hover:underline font-medium"
                   >
                     Try again

@@ -147,15 +147,18 @@ Deno.serve(async (req) => {
   // Only accept POST from Supabase database webhooks (service role)
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
 
-  let payload: { record?: { user_id?: string } }
+  let payload: Record<string, unknown>
   try {
     payload = await req.json()
   } catch {
     return jsonResponse({ error: 'Invalid JSON' }, 400)
   }
 
-  const userId = payload?.record?.user_id
-  if (!userId) return jsonResponse({ error: 'No user_id in payload' }, 400)
+  // Supabase database webhooks nest the row under `record`
+  // Direct invocations may also pass { record: { user_id } }
+  const record = (payload?.record ?? payload) as Record<string, unknown>
+  const userId = record?.user_id as string | undefined
+  if (!userId) return jsonResponse({ error: 'No user_id in payload', payload }, 400)
 
   // Look up the user's email
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)

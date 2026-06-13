@@ -46,6 +46,10 @@ export function AuthProvider({ children }) {
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
     : (email, password) => supabase.auth.signUp({ email, password })
 
+  const resendConfirmation = OFFLINE_MODE
+    ? () => Promise.resolve({ error: null })
+    : (email) => supabase.auth.resend({ type: 'signup', email })
+
   const signIn = OFFLINE_MODE
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
     : (email, password) => supabase.auth.signInWithPassword({ email, password })
@@ -116,7 +120,7 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.app_metadata?.is_admin === true
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, resendConfirmation, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )
