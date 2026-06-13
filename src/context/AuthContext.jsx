@@ -47,12 +47,14 @@ export function AuthProvider({ children }) {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
+      console.log('[welcome] sending to', userId, 'url:', supabaseUrl)
+      const res = await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
         body: JSON.stringify({ record: { user_id: userId } }),
       })
-    } catch { /* non-critical, never block signup */ }
+      console.log('[welcome] response', res.status)
+    } catch (e) { console.error('[welcome] error', e) }
   }
 
   const signUp = OFFLINE_MODE
