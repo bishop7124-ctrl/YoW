@@ -4,8 +4,19 @@ import { getEnabledSections, getProjectTypeStage } from '../../constants/project
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
+const PROJECT_STATUS_LABELS = {
+  not_started: 'Not started',
+  draft: 'Draft',
+  in_progress: 'In progress',
+  editing: 'Editing',
+  complete: 'Complete',
+  paused: 'Paused',
+  writing: 'In progress',
+  revision: 'Editing',
+}
 
 const countWords = value => value?.trim().match(/\S+/g)?.length || 0
+const formatProjectStatus = status => PROJECT_STATUS_LABELS[status] || status || 'Drafting'
 const toDateKey = value => {
   const date = new Date(value)
   const year = date.getFullYear()
@@ -520,7 +531,7 @@ export default function ProjectDashboard({ store }) {
   const maxCharacterWords = Math.max(1, ...characterFocus.map(item => item.words))
   const maxStructureWords = Math.max(1, ...structureInsights.map(item => item.value))
   const maxLongestSceneWords = Math.max(1, ...(sceneInsights?.longest || []).map(item => item.words))
-  const projectWordTarget = Number(project.wordTarget || project.targetWords || stats.projectType.defaultWordTarget || 0)
+  const projectWordTarget = Number(project.wordCountTarget || project.wordTarget || project.targetWords || stats.projectType.defaultWordTarget || 0)
   const projectWordProgress = projectWordTarget
     ? Math.min(100, Math.round((stats.manuscriptWords / projectWordTarget) * 100))
     : null
@@ -528,6 +539,7 @@ export default function ProjectDashboard({ store }) {
   const isBetaType = projectStage.stage === 'beta'
   const workspaceLabel = stats.projectType.workspaceLabel || 'Manuscript'
   const analyticsLabel = stats.projectType.analyticsLabel || 'Writing Analytics'
+  const projectStatusLabel = formatProjectStatus(project.status)
 
   const updateDailyGoal = value => {
     const next = value.replace(/[^\d]/g, '')
@@ -552,10 +564,30 @@ export default function ProjectDashboard({ store }) {
               <button type="button" onClick={openProjectSettings}>Project settings</button>
             </div>
           </div>
+          <div className="overview-word-stats">
+            <div className="overview-word-stat">
+              <strong>{formatNumber(stats.manuscriptWords)}</strong>
+              <span>words written</span>
+            </div>
+            {projectWordTarget > 0 && (
+              <>
+                <div className="overview-word-stat-divider" />
+                <div className="overview-word-stat">
+                  <strong>{formatNumber(projectWordTarget)}</strong>
+                  <span>word target</span>
+                </div>
+                <div className="overview-word-stat-divider" />
+                <div className="overview-word-stat">
+                  <strong>{projectWordProgress}%</strong>
+                  <span>complete</span>
+                </div>
+              </>
+            )}
+          </div>
           <div className="overview-hero-side">
             <div className="overview-status">
               <span>{viewMode === 'overview' ? stats.updatedLabel : `${formatNumber(stats.manuscriptWords)} words`}</span>
-              <span>{viewMode === 'overview' ? project.status || 'Drafting' : `${analytics.activeDays} active days`}</span>
+              <span>{viewMode === 'overview' ? projectStatusLabel : `${analytics.activeDays} active days`}</span>
             </div>
             <div className="overview-view-switch" aria-label="Dashboard view">
               <button
@@ -600,7 +632,8 @@ export default function ProjectDashboard({ store }) {
                   {stats.projectType.workflowSummary && (
                     <LedgerRow label="Workflow" value={stats.projectType.workflowSummary} longValue />
                   )}
-                  <LedgerRow label="Status" value={project.status || 'Drafting'} />
+                  <LedgerRow label="Status" value={projectStatusLabel} />
+                  <LedgerRow label="Word count" value={formatNumber(stats.manuscriptWords)} />
                   {projectWordTarget > 0 && (
                     <LedgerRow label="Word target" value={`${formatNumber(projectWordTarget)} (${projectWordProgress}%)`} />
                   )}

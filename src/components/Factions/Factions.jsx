@@ -9,7 +9,7 @@ const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest 
 const emptyForm = () => ({ name: '', logo: [], description: '' })
 
 export default function Factions({ store }) {
-  const { factions, setFactions, characters, setSelectedCharacterId } = store
+  const { factions, saveFaction, deleteFaction, characters, setSelectedCharacterId } = store
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [selectedFactionId, setSelectedFactionId] = useState(null)
@@ -42,11 +42,8 @@ export default function Factions({ store }) {
 
   const handleSave = (e) => {
     e.preventDefault()
-    if (editTarget) {
-      setFactions(prev => prev.map(f => f.id === editTarget.id ? { ...f, ...form } : f))
-    } else {
-      setFactions(prev => [...prev, { ...form, id: Math.random().toString(36).slice(2) }])
-    }
+    const faction = saveFaction(form, editTarget?.id)
+    if (faction?.id && selectedFactionId) setSelectedFactionId(faction.id)
     setShowForm(false)
     setEditTarget(null)
   }
@@ -126,7 +123,15 @@ export default function Factions({ store }) {
                     >
                       Edit
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete?')) setFactions(f => f.filter(x => x.id !== faction.id)) }} className="text-xs text-red-500/60 hover:text-red-500 hover:underline">Delete</button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!confirm('Delete this faction?')) return
+                        const scope = confirm('Delete this faction from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+                        deleteFaction(faction.id, { scope })
+                      }}
+                      className="text-xs text-red-500/60 hover:text-red-500 hover:underline"
+                    >Delete</button>
                   </div>
                 </div>
               </div>

@@ -227,6 +227,10 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
   const totalWords = allStats.reduce((sum, item) => sum + item.manuscriptWords, 0)
   const currentStatus = STATUS_DATA[novel?.status]?.aliasFor ?? novel?.status
   const progress = Number.isFinite(Number(novel?.progress)) ? Math.max(0, Math.min(100, Number(novel.progress))) : null
+  const wordCountTarget = novel?.wordCountTarget ? Number(novel.wordCountTarget) : null
+  const completionPct = wordCountTarget && wordCountTarget > 0 && stats
+    ? Math.min(100, Math.round((stats.manuscriptWords / wordCountTarget) * 100))
+    : null
   const hasActiveProject = !!novel
   const isFirstRun = !hasActiveProject && allStats.length === 0 && series.length === 0
 
@@ -267,15 +271,15 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
             </div>
           ) : (
             <div className="active-project-command-stats">
-              {progress !== null && (
+              {(completionPct !== null || progress !== null) && (
                 <div className="active-project-command-stat">
-                  <strong>{progress}%</strong>
-                  <span>Progress</span>
+                  <strong>{completionPct !== null ? `${completionPct}%` : `${progress}%`}</strong>
+                  <span>{completionPct !== null ? 'Complete' : 'Progress'}</span>
                 </div>
               )}
               <div className="active-project-command-stat">
                 <strong>{hasActiveProject ? stats.manuscriptWords.toLocaleString() : allStats.length}</strong>
-                <span>{hasActiveProject ? 'Words' : 'Projects'}</span>
+                <span>{hasActiveProject ? (wordCountTarget ? `/ ${wordCountTarget.toLocaleString()}` : 'Words') : 'Projects'}</span>
               </div>
               <div className="active-project-command-stat">
                 <strong>{hasActiveProject ? stats.scenes.length : totalWords.toLocaleString()}</strong>
@@ -777,6 +781,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     coverPhoto: project.coverPhoto || null,
     progress: project.progress ?? '',
     includeLaterWorks: project.includeLaterWorks ?? false,
+    wordCountTarget: project.wordCountTarget ?? '',
   })
   const [tagInput, setTagInput] = useState('')
   const [coverError, setCoverError] = useState('')
@@ -790,6 +795,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     coverPhoto: project.coverPhoto || null,
     progress: project.progress ?? '',
     includeLaterWorks: project.includeLaterWorks ?? false,
+    wordCountTarget: project.wordCountTarget ?? '',
   }))
 
   const requestClose = () => {
@@ -839,6 +845,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
       type: project.type || DEFAULT_TYPE,
       seriesId: form.seriesId || null,
       progress: form.progress === '' ? null : Number(form.progress),
+      wordCountTarget: form.wordCountTarget === '' ? null : Number(form.wordCountTarget),
       updatedAt: new Date().toISOString(),
     })
   }
@@ -898,9 +905,23 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
                 {series.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
+            {!form.wordCountTarget && (
+              <label>
+                <span>Progress</span>
+                <input value={form.progress} onChange={e => handleProgress(e.target.value)} inputMode="numeric" placeholder="0-100" />
+              </label>
+            )}
             <label>
-              <span>Progress</span>
-              <input value={form.progress} onChange={e => handleProgress(e.target.value)} inputMode="numeric" placeholder="0-100" />
+              <span>Word count target</span>
+              <input
+                value={form.wordCountTarget}
+                onChange={e => {
+                  const cleaned = e.target.value.replace(/[^\d]/g, '')
+                  setForm(p => ({ ...p, wordCountTarget: cleaned }))
+                }}
+                inputMode="numeric"
+                placeholder="e.g. 80000"
+              />
             </label>
           </div>
 
@@ -1098,8 +1119,8 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
 export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership }) {
   const [showForm, setShowForm] = useState(false)
   const [showAIImport, setShowAIImport] = useState(false)
-  const [restoring, setRestoring] = useState(false)
-  const restoreInputRef = useRef(null)
+  const [showImportMenu, setShowImportMenu] = useState(false)
+  const importMenuRef = useRef(null)
   const [form, setForm] = useState({ title: '', description: '', type: DEFAULT_TYPE, seriesId: '' })
   const [showSeriesForm, setShowSeriesForm] = useState(false)
   const [seriesName, setSeriesName] = useState('')
@@ -1107,6 +1128,13 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   const [editingProject, setEditingProject] = useState(null)
   const userProfile = user?.user_metadata || {}
   const userName = userProfile.full_name || userProfile.name || userProfile.alias || userProfile.writer_alias || user?.displayName || user?.email?.split('@')[0] || 'User'
+
+  useEffect(() => {
+    if (!showImportMenu) return
+    const handle = (e) => { if (importMenuRef.current && !importMenuRef.current.contains(e.target)) setShowImportMenu(false) }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showImportMenu])
 
   const handleSaveSeries = (id, data, assignedProjectIds) => {
     store.updateSeries(id, data)
@@ -1163,37 +1191,6 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     setForm({ title: '', description: '', type: DEFAULT_TYPE, seriesId: '' })
     setShowForm(false)
     if (novel) onOpenProject(novel.id)
-  }
-
-  const handleRestoreFromZip = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    setRestoring(true)
-    try {
-      const { unzip } = await import('fflate')
-      const buffer = await file.arrayBuffer()
-      await new Promise((resolve, reject) => {
-        unzip(new Uint8Array(buffer), (err, files) => {
-          if (err) { reject(err); return }
-          const dataFile = files['project-data.json']
-          if (!dataFile) { reject(new Error('Not a valid YOW backup. Missing project-data.json.')); return }
-          try {
-            const data = JSON.parse(new TextDecoder().decode(dataFile))
-            if (!data.project) { reject(new Error('Backup file is missing project data.')); return }
-            const imported = store.importProjectFromData(data)
-            if (!imported) { reject(new Error('Could not import project. You may be on a free plan.')); return }
-            resolve()
-          } catch {
-            reject(new Error('Could not read backup file. The file may be corrupt.'))
-          }
-        })
-      })
-    } catch (err) {
-      alert(err.message || 'Restore failed. Please try again.')
-    } finally {
-      setRestoring(false)
-    }
   }
 
   const handleCloseProjectForm = () => {
@@ -1283,25 +1280,28 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               <button className="library-new-series-button" type="button" onClick={() => setShowSeriesForm(true)}>
                 New Series
               </button>
-              <button className="library-new-series-button" type="button" onClick={() => setShowAIImport(true)} title="Import files and let AI build your project">
-                AI Import
-              </button>
-              <button
-                className="library-new-series-button"
-                type="button"
-                disabled={restoring}
-                onClick={() => restoreInputRef.current?.click()}
-                title="Restore a project from a YOW backup ZIP"
-              >
-                {restoring ? 'Restoring…' : 'Restore'}
-              </button>
-              <input
-                ref={restoreInputRef}
-                type="file"
-                accept=".zip"
-                style={{ display: 'none' }}
-                onChange={handleRestoreFromZip}
-              />
+              <div ref={importMenuRef} style={{ position: 'relative' }}>
+                <button className="library-new-series-button" type="button" onClick={() => setShowImportMenu(v => !v)}>
+                  Import ▾
+                </button>
+                {showImportMenu && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.35)', minWidth: 196, overflow: 'hidden' }}>
+                    {[
+                      { label: 'AI Import', sublabel: 'Upload any file — AI builds your project', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
+                      { label: 'Import ZIP', sublabel: 'YOW backup or NovelCrafter export', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
+                    ].map(({ label, sublabel, onClick }, i, arr) => (
+                      <button key={label} type="button" onClick={onClick}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>{label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{sublabel}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

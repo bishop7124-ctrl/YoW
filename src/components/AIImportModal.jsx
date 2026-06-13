@@ -511,6 +511,169 @@ function populateYowProject(store, data, sel) {
   }
 }
 
+// ── NovelCrafter export import ────────────────────────────────────────────────
+
+async function tryReadNovelCrafterZip(file) {
+  const { unzip, unzipSync } = await import('fflate')
+  const buffer = await file.arrayBuffer()
+  return new Promise((resolve) => {
+    unzip(new Uint8Array(buffer), (err, files) => {
+      if (err) { resolve(null); return }
+      const paths = Object.keys(files)
+      const isNC = paths.some(p =>
+        /^(characters|locations|lore|items|other|snippets|notes)\/[^/]+\/metadata\.json$/.test(p)
+      )
+      if (!isNC) { resolve(null); return }
+
+      const getText = (bytes) => {
+        try { return new TextDecoder('utf-8').decode(bytes) } catch { return '' }
+      }
+
+      const parseEntryBody = (text) => {
+        const match = text.match(/^---[\s\S]*?---\n([\s\S]*)$/)
+        return match ? match[1].trim() : text.trim()
+      }
+
+      const entryMap = {}
+      for (const path of paths) {
+        const m = path.match(/^(characters|locations|lore|items|other|snippets|notes)\/([^/]+)\/(.+)$/)
+        if (!m) continue
+        const [, type, folder, fname] = m
+        const key = `${type}/${folder}`
+        if (!entryMap[key]) entryMap[key] = { type, folder, fileData: {} }
+        entryMap[key].fileData[fname] = files[path]
+      }
+
+      const result = { characters: [], locations: [], lore: [], ideaEntries: [], acts: [] }
+
+      for (const entry of Object.values(entryMap)) {
+        const metaBytes = entry.fileData['metadata.json']
+        const entryBytes = entry.fileData['entry.md']
+        if (!metaBytes) continue
+        let meta
+        try { meta = JSON.parse(getText(metaBytes)) } catch { continue }
+
+        const name = meta.attributes?.name || entry.folder.replace(/-[A-Za-z0-9]{10,}$/, '').replace(/-/g, ' ')
+        const body = entryBytes ? parseEntryBody(getText(entryBytes)) : ''
+
+        if (entry.type === 'characters') {
+          const role = (meta.attributes?.fields?.['Story Role'] || [])[0] || ''
+          result.characters.push({ name, role, bio: body })
+        } else if (entry.type === 'locations') {
+          result.locations.push({ name, category: 'Location', description: body })
+        } else if (entry.type === 'lore') {
+          result.lore.push({ title: name, category: 'Lore', content: body })
+        } else if (entry.type === 'items') {
+          result.lore.push({ title: name, category: 'Item', content: body })
+        } else {
+          // other / snippets / notes → raw idea captures
+          result.ideaEntries.push({ title: name, description: body, body, status: 'raw' })
+        }
+      }
+
+      // Extract manuscript from novel.docx if present
+      const docxBytes = files['novel.docx']
+      if (docxBytes) {
+        try {
+          const docxFiles = unzipSync(docxBytes)
+          const xmlBytes = docxFiles['word/document.xml']
+          if (xmlBytes) {
+            const xml = new TextDecoder('utf-8').decode(xmlBytes)
+            const text = xml
+              .replace(/<w:br[^>]*\/>/gi, '\n')
+              .replace(/<\/w:p>/gi, '\n\n')
+              .replace(/<[^>]+>/g, '')
+              .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'")
+              .replace(/\n{3,}/g, '\n\n')
+              .trim()
+            if (text) {
+              const sections = parseManuscriptSections(text)
+              if (sections.length > 0) {
+                result.acts = [{
+                  title: 'Act 1', synopsis: '',
+                  chapters: sections.map(s => ({
+                    title: s.title || 'Chapter',
+                    synopsis: extractSynopsis(s.content),
+                    scenes: [{ title: s.title || 'Chapter', synopsis: extractSynopsis(s.content), content: s.content }],
+                  })),
+                }]
+              }
+            }
+          }
+        } catch { /* manuscript extraction failed — skip */ }
+      }
+
+      // Extract project name from ZIP filename
+      const rawName = file.name.replace(/\.zip$/i, '')
+      const titleMatch = rawName.match(/\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s+(.+?)(?:\s+-\s+(?:full|partial|backup))?$/i)
+      result.projectTitle = titleMatch ? titleMatch[1].trim() : rawName
+
+      resolve(result)
+    })
+  })
+}
+
+function ncSectionCount(data, key) {
+  if (key === 'acts') return (data.acts || []).length
+  return (data[key] || []).length
+}
+
+function ncCountLabel(data, key) {
+  if (key === 'acts') {
+    const chapters = (data.acts || []).flatMap(a => a.chapters || [])
+    const words = chapters.flatMap(c => c.scenes || [])
+      .reduce((sum, s) => sum + (s.content || '').split(/\s+/).filter(Boolean).length, 0)
+    return `${chapters.length} chapter${chapters.length !== 1 ? 's' : ''} · ${words.toLocaleString()} words`
+  }
+  const n = (data[key] || []).length
+  if (key === 'ideaEntries') return `${n} ${n !== 1 ? 'entries' : 'entry'} → ideas board`
+  const singular = { characters: 'character', locations: 'location', lore: 'lore entry' }[key] || key
+  const plural   = { characters: 'characters', locations: 'locations', lore: 'lore entries' }[key] || key
+  return `${n} ${n !== 1 ? plural : singular}`
+}
+
+const NC_SECTIONS = [
+  { key: 'characters',  label: 'Characters' },
+  { key: 'locations',   label: 'Locations' },
+  { key: 'lore',        label: 'Lore & items' },
+  { key: 'acts',        label: 'Manuscript' },
+  { key: 'ideaEntries', label: 'Other entries' },
+]
+
+function populateNcProject(store, data, sel) {
+  if (sel.characters) {
+    for (const c of data.characters || [])
+      store.saveCharacter({ name: c.name || '', role: c.role || '', bio: c.bio || '', keywords: [], familyGroup: '' })
+  }
+  if (sel.locations) {
+    for (const l of data.locations || [])
+      store.addLocation({ name: l.name || '', category: l.category || '', description: l.description || '' })
+  }
+  if (sel.lore) {
+    for (const e of data.lore || [])
+      store.addLoreEntry({ title: e.title || '', category: e.category || '', content: e.content || '' })
+  }
+  if (sel.acts) {
+    for (const act of data.acts || []) {
+      const newAct = store.addAct(act.title || 'Act')
+      if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
+      for (const chap of act.chapters || []) {
+        const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
+        if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
+        for (const scene of chap.scenes || []) {
+          const newScene = store.addScene(newChap.id, scene.title || 'Scene')
+          if (scene.synopsis || scene.content)
+            store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
+        }
+      }
+    }
+  }
+  if (sel.ideaEntries) {
+    for (const idea of data.ideaEntries || [])
+      store.addIdeaEntry({ title: idea.title || '', description: idea.description || '', body: idea.description || '', status: 'raw' })
+  }
+}
+
 // ── YOW section config & helpers ──────────────────────────────────────────────
 
 const YOW_SECTIONS = [
@@ -591,6 +754,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
   const [, setStreamedText] = useState('')
   const [parsed, setParsed] = useState(null)
   const [yowImport, setYowImport] = useState(null)   // native YOW export data (no AI needed)
+  const [ncImport, setNcImport] = useState(null)     // NovelCrafter export data
   const [aiError, setAiError] = useState('')
   const [selections, setSelections] = useState({})
   // Phase-2 payload: wait for activeNovelId to update before populating entries
@@ -602,8 +766,9 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
   useEffect(() => {
     if (!pendingImport) return
     if (store.activeNovelId !== pendingImport.novelId) return
-    if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
-    else                     populateProject(store, pendingImport.data, pendingImport.sel)
+    if (pendingImport.isYow)      populateYowProject(store, pendingImport.data, pendingImport.sel)
+    else if (pendingImport.isNc)  populateNcProject(store, pendingImport.data, pendingImport.sel)
+    else                          populateProject(store, pendingImport.data, pendingImport.sel)
     setPendingImport(null)
     setPhase('done')
     const id = pendingImport.novelId
@@ -651,10 +816,26 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
         }
       }
 
+      // Check for NovelCrafter export ZIP
+      if (accepted.length === 1 && /\.zip$/i.test(accepted[0].name)) {
+        const nc = await tryReadNovelCrafterZip(accepted[0])
+        if (nc) {
+          const initialSel = {}
+          NC_SECTIONS.forEach(s => { if (ncSectionCount(nc, s.key) > 0) initialSel[s.key] = true })
+          setNcImport(nc)
+          setYowImport(null)
+          setFiles([])
+          setSelections(initialSel)
+          setPhase('preview')
+          return
+        }
+      }
+
       // Regular AI flow — text/md/docx/zip-of-text
       const result = await processFiles(accepted)
       if (!result.length) { setFileError('No readable text files found.'); return }
       setYowImport(null)
+      setNcImport(null)
       setFiles(result)
       setFileError('')
     } catch (e) { setFileError(e.message) }
@@ -747,20 +928,16 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
   }
 
   const handleCreate = () => {
-    const sourceData = yowImport || parsed
+    const sourceData = yowImport || ncImport || parsed
     if (!sourceData) return
-    const proj = yowImport ? yowImport.project : parsed.project
-    // Phase 1: create the project skeleton — this triggers setActiveNovelId inside addNovel,
-    // but React batches that update. We store the payload and let the useEffect above
-    // fire once store.activeNovelId has actually updated to the new id.
-    const novel = store.addNovel({
-      title: proj?.title || 'Imported Project',
-      description: proj?.description || '',
-      type: 'novel',
-    })
+    let title, description
+    if (yowImport) { title = yowImport.project?.title; description = yowImport.project?.description || '' }
+    else if (ncImport) { title = ncImport.projectTitle; description = '' }
+    else { title = parsed.project?.title; description = parsed.project?.description || '' }
+    const novel = store.addNovel({ title: title || 'Imported Project', description, type: 'novel' })
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
-    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, isYow: !!yowImport })
+    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, isYow: !!yowImport, isNc: !!ncImport })
   }
 
   const handleCancel = () => {
@@ -782,11 +959,11 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
         {/* Header */}
         <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0 }}>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>AI Import</p>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>Import</p>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              {phase === 'upload'    && 'Upload files — AI builds your project automatically'}
+              {phase === 'upload'    && 'Upload files — drop a YOW export, NovelCrafter ZIP, or any writing file'}
               {phase === 'analyzing' && 'Analyzing your files…'}
-              {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : 'Review what will be created')}
+              {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : ncImport ? `NovelCrafter export — "${ncImport.projectTitle}"` : 'Review what will be created')}
               {phase === 'creating'  && 'Creating your project…'}
               {phase === 'done'      && 'Project created successfully!'}
             </p>
@@ -828,7 +1005,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
                 ) : (
                   <>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Drop files here or click to browse</p>
-                    <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>.txt · .md · .docx · .pdf · .zip — or a YOW export ZIP</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>.txt · .md · .docx · .pdf · .zip (YOW or NovelCrafter export)</p>
                   </>
                 )}
               </div>
@@ -916,8 +1093,35 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
             </div>
           )}
 
+          {/* ── PREVIEW (NovelCrafter export) ── */}
+          {phase === 'preview' && ncImport && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ padding: '12px 14px', background: 'var(--accent-fade)', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--accent) 28%, transparent)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Project</p>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 99, background: 'color-mix(in srgb, #f59e0b 16%, transparent)', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)', letterSpacing: '.06em', textTransform: 'uppercase' }}>NovelCrafter</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{ncImport.projectTitle}</p>
+              </div>
+
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {NC_SECTIONS.filter(s => ncSectionCount(ncImport, s.key) > 0).map(({ key, label }) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>
+                    <input type="checkbox" checked={!!selections[key]} onChange={e => setSelections(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{ncCountLabel(ncImport, key)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                "Other entries" (creatures, concepts, misc notes) are imported as raw captures on the Ideas board.
+              </p>
+            </div>
+          )}
+
           {/* ── PREVIEW (AI-analyzed) ── */}
-          {phase === 'preview' && parsed && !yowImport && (
+          {phase === 'preview' && parsed && !yowImport && !ncImport && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ padding: '12px 14px', background: 'var(--accent-fade)', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--accent) 28%, transparent)' }}>
                 <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Project</p>
@@ -967,7 +1171,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
         {(phase === 'upload' || phase === 'preview') && (
           <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
             {phase === 'preview' && (
-              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setStreamedText('') }}
+              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText('') }}
                 style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginRight: 'auto' }}>
                 Back
               </button>

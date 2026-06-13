@@ -45,8 +45,8 @@ export default function WorldHistory({ store }) {
 
   const handleSave = (data) => {
     if (editTarget) {
-      updateEvent(editTarget.id, data)
-      setSelectedId(editTarget.id)
+      const event = updateEvent(editTarget.id, data)
+      setSelectedId(event?.id || editTarget.id)
     } else {
       const event = addEvent(data, { createHistory: false })
       setSelectedId(event.id)
@@ -56,7 +56,8 @@ export default function WorldHistory({ store }) {
 
   const handleDelete = (id) => {
     if (!confirm('Delete this chronicle entry?')) return
-    deleteEvent(id)
+    const scope = confirm('Delete this chronicle entry from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+    deleteEvent(id, { scope })
     if (selectedId === id) setSelectedId(null)
   }
 

@@ -130,7 +130,13 @@ export default function Locations({ store }) {
               actions={(
                 <>
                 <StudioButton tone="secondary" size="sm" onClick={()=>{setEditTarget(selected);setShowForm(true)}}>Edit</StudioButton>
-                <StudioButton tone="secondary" size="sm" onClick={()=>{if(confirm("Delete?")) { deleteLocation(selected.id); if (loadJ('nf_linked_delete', false)) removeLocationFromAllMaps(selected.id); setSelectedLocationId(null) }}}>Delete</StudioButton>
+                <StudioButton tone="secondary" size="sm" onClick={()=>{
+                  if (!confirm('Delete this location?')) return
+                  const scope = confirm('Delete this location from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+                  deleteLocation(selected.id, { scope })
+                  if (loadJ('nf_linked_delete', false)) removeLocationFromAllMaps(selected.id)
+                  setSelectedLocationId(null)
+                }}>Delete</StudioButton>
                 </>
               )}
             >
@@ -143,7 +149,11 @@ export default function Locations({ store }) {
 
       {showForm && (
         <Modal title={editTarget ? "Edit Location" : "New Location"} onClose={() => setShowForm(false)} wide>
-          <LocationForm initial={editTarget} onSave={(d) => { saveLocation(d, editTarget?.id); setShowForm(false) }} onCancel={() => setShowForm(false)} />
+          <LocationForm initial={editTarget} onSave={(d) => {
+            const location = saveLocation(d, editTarget?.id)
+            if (location?.id) setSelectedLocationId(location.id)
+            setShowForm(false)
+          }} onCancel={() => setShowForm(false)} />
         </Modal>
       )}
     </StudioSplit>

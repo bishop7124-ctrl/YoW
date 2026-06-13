@@ -189,8 +189,8 @@ export default function Lore({ store }) {
   }
   const handleSave = (data) => {
     if (editTarget) {
-      updateLoreEntry(editTarget.id, data)
-      setSelectedLoreEntryId(editTarget.id)
+      const entry = updateLoreEntry(editTarget.id, data)
+      setSelectedLoreEntryId(entry?.id || editTarget.id)
     } else {
       const entry = addLoreEntry(data)
       setSelectedLoreEntryId(entry.id)
@@ -261,7 +261,11 @@ export default function Lore({ store }) {
               actions={(
                 <>
                   <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(selected); setEditing(true) }}>Edit</StudioButton>
-                  <StudioButton tone="secondary" size="sm" onClick={() => { if (confirm(`Delete "${selected.title}"?`)) deleteLoreEntry(selected.id) }}>Delete</StudioButton>
+                  <StudioButton tone="secondary" size="sm" onClick={() => {
+                    if (!confirm(`Delete "${selected.title}"?`)) return
+                    const scope = confirm('Delete this lore entry from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+                    deleteLoreEntry(selected.id, { scope })
+                  }}>Delete</StudioButton>
                 </>
               )}
             >

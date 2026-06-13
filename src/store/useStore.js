@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { saveAppData, saveSceneDoc, deleteSceneDoc, deleteProjectData } from '../utils/firestoreSync'
-import { buildAllProjectStats, buildProjectStats } from '../utils/projectStats'
+import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
 
@@ -59,6 +59,7 @@ const clearProjectLocalStorage = () => {
 }
 const clearProjectRefs = (refs) => {
   refs.charactersRef.current = []
+  refs.factionsRef.current = []
   refs.locationsRef.current = []
   refs.timelineRef.current = []
   refs.worldHistoryRef.current = []
@@ -98,6 +99,27 @@ const dateKey = value => {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+const SYNC_CATEGORY_CONFIG = {
+  characters: { storageKey: 'nf_characters', titleField: 'name' },
+  locations: { storageKey: 'nf_locations', titleField: 'name' },
+  factions: { storageKey: 'nf_factions', titleField: 'name' },
+  lore: { storageKey: 'nf_loreEntries', titleField: 'title' },
+  timeline: { storageKey: 'nf_timeline', titleField: 'title' },
+  worldhistory: { storageKey: 'nf_worldHistory', titleField: 'title' },
+  ideas: { storageKey: 'nf_ideaEntries', titleField: 'title' },
+}
+
+const normalizeSyncText = value => String(value || '').trim().toLowerCase()
+
+const syncIdentity = (item, category) => {
+  if (!item) return ''
+  if (item.syncRootId) return `root:${item.syncRootId}`
+  if (item.syncSourceId) return `root:${item.syncSourceId}`
+  const field = SYNC_CATEGORY_CONFIG[category]?.titleField ?? 'title'
+  const title = normalizeSyncText(item[field] || item.title || item.name)
+  return title ? `title:${title}` : `id:${item.id}`
 }
 
 const buildStarterStructure = (novelId, type) => {
@@ -254,6 +276,7 @@ export function useStore(userId = null, options = {}) {
   const [rpgCharacters, setRpgCharacters] = useState(() => loadInitial('nf_rpg_characters', []))
 
   const charactersRef = useRef(characters)
+  const factionsRef = useRef(factions)
   const locationsRef = useRef(locations)
   const timelineRef = useRef(timeline)
   const worldHistoryRef = useRef(worldHistory)
@@ -284,6 +307,7 @@ export function useStore(userId = null, options = {}) {
     clearProjectLocalStorage()
     clearProjectRefs({
       charactersRef,
+      factionsRef,
       locationsRef,
       timelineRef,
       worldHistoryRef,
@@ -337,7 +361,7 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => save('nf_novels', novels), [novels])
   useEffect(() => save('nf_activeNovel', activeNovelId), [activeNovelId])
   useEffect(() => { charactersRef.current = characters; save('nf_characters', characters) }, [characters])
-  useEffect(() => save('nf_factions', factions), [factions])
+  useEffect(() => { factionsRef.current = factions; save('nf_factions', factions) }, [factions])
   useEffect(() => { locationsRef.current = locations; save('nf_locations', locations) }, [locations])
   useEffect(() => { timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
   useEffect(() => { worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
@@ -491,6 +515,7 @@ export function useStore(userId = null, options = {}) {
     clearProjectLocalStorage()
     clearProjectRefs({
       charactersRef,
+      factionsRef,
       locationsRef,
       timelineRef,
       worldHistoryRef,
@@ -527,18 +552,21 @@ export function useStore(userId = null, options = {}) {
     activeMapByNovel,
     whiteboards,
   }
-  const allProjectStats = buildAllProjectStats(novels, projectStatsData)
-  const activeProjectStats = activeNovel ? buildProjectStats(activeNovel, projectStatsData) : null
-
   // Series sync: directional — data flows from earlier books to later ones.
   // Each series stores projectOrder: [novelId, ...] for explicit ordering.
   // A project with includeLaterWorks:true also pulls data from books after it.
-  const activeSeries = activeNovel?.seriesId ? series.find(s => s.id === activeNovel.seriesId) : null
-  const syncCategories = activeSeries?.syncCategories ?? []
+
+  const getSeriesProjectOrder = (ser) => {
+    if (!ser) return []
+    const seriesProjectIds = new Set(novels.filter(n => n.seriesId === ser.id).map(n => n.id))
+    const ordered = (ser.projectOrder ?? []).filter(id => seriesProjectIds.has(id))
+    const unordered = [...seriesProjectIds].filter(id => !ordered.includes(id))
+    return [...ordered, ...unordered]
+  }
 
   const getSeriesVisibleIds = (ser, projectId, projectIncludeLater) => {
     if (!ser) return [projectId]
-    const order = ser.projectOrder ?? novels.filter(n => n.seriesId === ser.id).map(n => n.id)
+    const order = getSeriesProjectOrder(ser)
     const idx = order.indexOf(projectId)
     if (idx === -1) {
       // Not in order list yet — treat as earliest, only see self unless includeLater
@@ -552,35 +580,157 @@ export function useStore(userId = null, options = {}) {
     return earlier
   }
 
-  const activeIncludeLater = activeNovel?.includeLaterWorks ?? false
-  const seriesVisibleIds = getSeriesVisibleIds(activeSeries, activeNovelId, activeIncludeLater)
-
-  const seriesScope = (arr, category) =>
-    syncCategories.includes(category)
-      ? arr.filter(item => seriesVisibleIds.includes(item.novelId))
-      : arr.filter(item => item.novelId === activeNovelId)
-
-  const getProjectContextData = (projectId = activeNovelId) => {
+  const resolveSeriesScope = (arr, category, projectId = activeNovelId) => {
     const project = novels.find(n => n.id === projectId) ?? null
     const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
     const projectSyncCategories = projectSeries?.syncCategories ?? []
-    const projectIncludeLater = project?.includeLaterWorks ?? false
-    const projectVisibleIds = getSeriesVisibleIds(projectSeries, projectId, projectIncludeLater)
-    const projectScope = (arr, category) =>
-      projectSyncCategories.includes(category)
-        ? arr.filter(item => projectVisibleIds.includes(item.novelId))
-        : arr.filter(item => item.novelId === projectId)
+    if (!projectSyncCategories.includes(category)) {
+      return (arr || []).filter(item => item.novelId === projectId && !item.syncDeleted)
+    }
 
+    const visibleIds = getSeriesVisibleIds(projectSeries, projectId, project?.includeLaterWorks ?? false)
+    const order = getSeriesProjectOrder(projectSeries)
+    const rank = new Map(order.map((id, index) => [id, index]))
+    const visibleSet = new Set(visibleIds)
+    const resolved = new Map()
+
+    ;(arr || []).forEach(item => {
+      if (!visibleSet.has(item.novelId)) return
+      if ((item.syncHiddenInIds || []).includes(projectId)) return
+      const key = syncIdentity(item, category)
+      const current = resolved.get(key)
+      const currentRank = current ? rank.get(current.novelId) ?? -1 : -1
+      const itemRank = rank.get(item.novelId) ?? -1
+      if (!current || itemRank >= currentRank) resolved.set(key, item)
+    })
+
+    return [...resolved.values()].filter(item => !item.syncDeleted)
+  }
+
+  const seriesScope = (arr, category) => resolveSeriesScope(arr, category, activeNovelId)
+
+  const getSyncChain = (arr, category, item) => {
+    if (!item) return []
+    const project = novels.find(n => n.id === item.novelId) ?? activeNovel
+    const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
+    if (!projectSeries) return [item]
+    const projectIds = new Set(getSeriesProjectOrder(projectSeries))
+    const key = syncIdentity(item, category)
+    return (arr || []).filter(candidate =>
+      projectIds.has(candidate.novelId) && syncIdentity(candidate, category) === key
+    )
+  }
+
+  const getForwardProjectIds = (fromProjectId, ser) => {
+    const order = getSeriesProjectOrder(ser)
+    const idx = order.indexOf(fromProjectId)
+    return idx >= 0 ? new Set(order.slice(idx)) : new Set([fromProjectId])
+  }
+
+  const saveSeriesSyncedItem = (ref, setter, category, data, id, buildNewItem) => {
+    const config = SYNC_CATEGORY_CONFIG[category]
+    if (!config) {
+      commitLocal(ref, setter, '', prev => id
+        ? prev.map(item => item.id === id ? { ...item, ...data } : item)
+        : [...prev, buildNewItem()])
+      return id
+    }
+
+    if (!id) {
+      const created = buildNewItem()
+      const item = { ...created, syncRootId: created.syncRootId || created.id }
+      commitLocal(ref, setter, config.storageKey, prev => [...prev, item])
+      return item
+    }
+
+    const existing = ref.current.find(item => item.id === id)
+    if (!existing) return null
+    const project = novels.find(n => n.id === activeNovelId) ?? activeNovel
+    const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
+    const isSynced = Boolean(projectSeries?.syncCategories?.includes(category))
+
+    if (!isSynced) {
+      const updated = { ...existing, ...data }
+      commitLocal(ref, setter, config.storageKey, prev => prev.map(item => item.id === id ? updated : item))
+      return updated
+    }
+
+    const rootId = existing.syncRootId || existing.syncSourceId || existing.id
+    const chain = getSyncChain(ref.current, category, existing)
+    const forwardIds = getForwardProjectIds(activeNovelId, projectSeries)
+    let target = chain.find(item => item.novelId === activeNovelId)
+    const forkId = target?.id || uid()
+    const fork = target
+      ? { ...target, ...data, syncRootId: rootId, syncDeleted: false }
+      : { ...existing, id: forkId, novelId: activeNovelId, syncRootId: rootId, syncSourceId: existing.id, syncHiddenInIds: [], syncDeleted: false, ...data }
+
+    commitLocal(ref, setter, config.storageKey, prev => {
+      const next = target ? prev : [...prev, fork]
+      return next.map(item => {
+        if (item.id === fork.id) return fork
+        if (!forwardIds.has(item.novelId)) return item
+        if (syncIdentity(item, category) !== syncIdentity(existing, category)) return item
+        return { ...item, ...data, syncRootId: item.syncRootId || rootId, syncDeleted: false }
+      })
+    })
+
+    return fork
+  }
+
+  const deleteSeriesSyncedItem = (ref, setter, category, id, options = {}) => {
+    const config = SYNC_CATEGORY_CONFIG[category]
+    const existing = ref.current.find(item => item.id === id)
+    if (!existing || !config) return []
+    const project = novels.find(n => n.id === activeNovelId) ?? activeNovel
+    const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
+    const isSynced = Boolean(projectSeries?.syncCategories?.includes(category))
+    const chain = isSynced ? getSyncChain(ref.current, category, existing) : [existing]
+    const activeItem = chain.find(item => item.novelId === activeNovelId)
+    const idsToClean = []
+
+    if (!isSynced || options.scope === 'all') {
+      const ids = new Set(chain.map(item => item.id))
+      idsToClean.push(...ids)
+      commitLocal(ref, setter, config.storageKey, prev => prev.filter(item => !ids.has(item.id)))
+      return idsToClean
+    }
+
+    commitLocal(ref, setter, config.storageKey, prev => {
+      let next = activeItem
+        ? prev.filter(item => item.id !== activeItem.id)
+        : prev
+      idsToClean.push(activeItem?.id || existing.id)
+
+      const source = chain
+        .filter(item => item.novelId !== activeNovelId)
+        .sort((a, b) => (getSeriesProjectOrder(projectSeries).indexOf(a.novelId)) - (getSeriesProjectOrder(projectSeries).indexOf(b.novelId)))[0]
+
+      if (source) {
+        next = next.map(item => {
+          if (item.id !== source.id) return item
+          const hidden = new Set(item.syncHiddenInIds || [])
+          hidden.add(activeNovelId)
+          return { ...item, syncRootId: item.syncRootId || existing.syncRootId || existing.id, syncHiddenInIds: [...hidden] }
+        })
+      }
+      return next
+    })
+
+    return idsToClean
+  }
+
+  const getProjectContextData = (projectId = activeNovelId) => {
+    const project = novels.find(n => n.id === projectId) ?? null
     return {
       activeNovelId: projectId,
       activeNovel: project,
-      characters: projectScope(characters, 'characters'),
-      factions: projectScope(factions, 'factions'),
-      locations: projectScope(locations, 'locations'),
-      timeline: projectScope(timeline, 'timeline'),
-      worldHistory: projectScope(worldHistory, 'worldhistory'),
-      loreEntries: projectScope(loreEntries, 'lore'),
-      ideaEntries: projectScope(ideaEntries, 'ideas'),
+      characters: resolveSeriesScope(characters, 'characters', projectId),
+      factions: resolveSeriesScope(factions, 'factions', projectId),
+      locations: resolveSeriesScope(locations, 'locations', projectId),
+      timeline: resolveSeriesScope(timeline, 'timeline', projectId),
+      worldHistory: resolveSeriesScope(worldHistory, 'worldhistory', projectId),
+      loreEntries: resolveSeriesScope(loreEntries, 'lore', projectId),
+      ideaEntries: resolveSeriesScope(ideaEntries, 'ideas', projectId),
       acts: acts.filter(a => a.novelId === projectId).sort((a, b) => a.order - b.order),
       chapters: chapters.filter(c => c.novelId === projectId).sort((a, b) => a.order - b.order),
       scenes: scenes.filter(s => s.novelId === projectId).sort((a, b) => a.order - b.order),
@@ -588,6 +738,23 @@ export function useStore(userId = null, options = {}) {
       storySchedule: storySchedule.filter(e => e.novelId === projectId),
     }
   }
+
+  const asStatsOwned = (items, projectId) =>
+    items.map(item => item.novelId === projectId ? item : { ...item, sourceNovelId: item.novelId, novelId: projectId })
+
+  const getProjectStatsData = (projectId) => ({
+    ...projectStatsData,
+    characters: asStatsOwned(resolveSeriesScope(characters, 'characters', projectId), projectId),
+    factions: asStatsOwned(resolveSeriesScope(factions, 'factions', projectId), projectId),
+    locations: asStatsOwned(resolveSeriesScope(locations, 'locations', projectId), projectId),
+    timeline: asStatsOwned(resolveSeriesScope(timeline, 'timeline', projectId), projectId),
+    worldHistory: asStatsOwned(resolveSeriesScope(worldHistory, 'worldhistory', projectId), projectId),
+    loreEntries: asStatsOwned(resolveSeriesScope(loreEntries, 'lore', projectId), projectId),
+    ideaEntries: asStatsOwned(resolveSeriesScope(ideaEntries, 'ideas', projectId), projectId),
+  })
+
+  const allProjectStats = (novels || []).map(project => buildProjectStats(project, getProjectStatsData(project.id)))
+  const activeProjectStats = activeNovel ? buildProjectStats(activeNovel, getProjectStatsData(activeNovel.id)) : null
 
   // Manuscripts (acts/chapters/scenes) are NEVER synced — always project-only
   const novelActs = acts.filter(a => a.novelId === activeNovelId).sort((a, b) => a.order - b.order)
@@ -675,7 +842,7 @@ export function useStore(userId = null, options = {}) {
   }, [activeNovelId])
 
   const addAct = (title) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const order = actsRef.current.filter(a => a.novelId === activeNovelId).length
     const newAct = { id: uid(), novelId: activeNovelId, title, synopsis: '', order }
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, newAct])
@@ -683,7 +850,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addChapter = (actId, title) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const order = chaptersRef.current.filter(c => c.novelId === activeNovelId).length
     const newChap = { id: uid(), novelId: activeNovelId, actId, title, synopsis: '', order }
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, newChap])
@@ -691,7 +858,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addScene = (chapterId, title) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const newScene = {
       id: uid(),
       novelId: activeNovelId,
@@ -872,81 +1039,90 @@ export function useStore(userId = null, options = {}) {
   }
 
   const saveCharacter = (data, id) => {
-    if (!id && isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (!id && storageExceededCheck()) { return null }
     const characterId = id || uid()
     const childIds = data.childIds || []
     const parentIds = data.parentIds || []
     const spouseIds = data.spouseIds || []
+    const saved = saveSeriesSyncedItem(
+      charactersRef,
+      setCharacters,
+      'characters',
+      data,
+      id,
+      () => ({ id: characterId, novelId: activeNovelId, ...data })
+    )
+    const savedId = saved?.id || characterId
+
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => {
-      const next = id
-        ? prev.map(c => c.id === id ? { ...c, ...data } : c)
-        : [...prev, { id: characterId, novelId: activeNovelId, ...data }]
+      const next = prev
 
       return next.map(c => {
-        if (c.id === characterId || c.novelId !== activeNovelId) return c
+        if (c.id === savedId || c.novelId !== activeNovelId) return c
         let updated = c
         let changed = false
 
         // childIds → sync parentIds on children
         const cParents = updated.parentIds || []
         const shouldBeChild = childIds.includes(c.id)
-        if (shouldBeChild && !cParents.includes(characterId)) {
-          updated = { ...updated, parentIds: [...cParents, characterId] }
+        if (shouldBeChild && !cParents.includes(savedId)) {
+          updated = { ...updated, parentIds: [...cParents, savedId] }
           changed = true
-        } else if (!shouldBeChild && cParents.includes(characterId)) {
-          updated = { ...updated, parentIds: cParents.filter(p => p !== characterId) }
+        } else if (!shouldBeChild && cParents.includes(savedId)) {
+          updated = { ...updated, parentIds: cParents.filter(p => p !== savedId) }
           changed = true
         }
 
         // parentIds → sync childIds on parents
         const cChildren = updated.childIds || []
         const shouldBeParent = parentIds.includes(c.id)
-        if (shouldBeParent && !cChildren.includes(characterId)) {
-          updated = { ...updated, childIds: [...cChildren, characterId] }
+        if (shouldBeParent && !cChildren.includes(savedId)) {
+          updated = { ...updated, childIds: [...cChildren, savedId] }
           changed = true
-        } else if (!shouldBeParent && cChildren.includes(characterId)) {
-          updated = { ...updated, childIds: cChildren.filter(ch => ch !== characterId) }
+        } else if (!shouldBeParent && cChildren.includes(savedId)) {
+          updated = { ...updated, childIds: cChildren.filter(ch => ch !== savedId) }
           changed = true
         }
 
         // spouseIds → sync bidirectionally
         const cSpouses = updated.spouseIds || []
         const shouldBeSpouse = spouseIds.includes(c.id)
-        if (shouldBeSpouse && !cSpouses.includes(characterId)) {
-          updated = { ...updated, spouseIds: [...cSpouses, characterId] }
+        if (shouldBeSpouse && !cSpouses.includes(savedId)) {
+          updated = { ...updated, spouseIds: [...cSpouses, savedId] }
           changed = true
-        } else if (!shouldBeSpouse && cSpouses.includes(characterId)) {
-          updated = { ...updated, spouseIds: cSpouses.filter(s => s !== characterId) }
+        } else if (!shouldBeSpouse && cSpouses.includes(savedId)) {
+          updated = { ...updated, spouseIds: cSpouses.filter(s => s !== savedId) }
           changed = true
         }
 
         return changed ? updated : c
       })
     })
-    return characterId
+    return savedId
   }
-  const deleteCharacter = (id) => {
+  const deleteCharacter = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(charactersRef, setCharacters, 'characters', id, options)
+    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => {
       return prev
-        .filter(c => c.id !== id)
         .map(c => ({
           ...c,
-          childIds: (c.childIds || []).filter(childId => childId !== id),
-          parentIds: (c.parentIds || []).filter(parentId => parentId !== id),
-          spouseIds: (c.spouseIds || []).filter(spouseId => spouseId !== id),
-          relationships: (c.relationships || []).filter(rel => rel.characterId !== id),
+          childIds: (c.childIds || []).filter(childId => !deletedSet.has(childId)),
+          parentIds: (c.parentIds || []).filter(parentId => !deletedSet.has(parentId)),
+          spouseIds: (c.spouseIds || []).filter(spouseId => !deletedSet.has(spouseId)),
+          relationships: (c.relationships || []).filter(rel => !deletedSet.has(rel.characterId)),
         }))
     })
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => ({
         ...entry,
-        characterIds: (entry.characterIds || []).filter(characterId => characterId !== id),
+        characterIds: (entry.characterIds || []).filter(characterId => !deletedSet.has(characterId)),
       }))
     })
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => {
       return prev.map(event => ({
         ...event,
-        linkedCharacters: (event.linkedCharacters || []).filter(characterId => characterId !== id),
+        linkedCharacters: (event.linkedCharacters || []).filter(characterId => !deletedSet.has(characterId)),
       }))
     })
   }
@@ -964,41 +1140,63 @@ export function useStore(userId = null, options = {}) {
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.id !== id))
   }
 
-  const saveLocation = (data, id) => {
-    if (!id && isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
-    if (id) {
-      const updated = { ...(locationsRef.current.find(l => l.id === id) || { id, novelId: activeNovelId }), ...data }
-      commitLocal(locationsRef, setLocations, 'nf_locations', prev => prev.map(l => l.id === id ? { ...l, ...data } : l))
-      return updated
-    } else {
-      const newLoc = { id: uid(), novelId: activeNovelId, ...data }
-      commitLocal(locationsRef, setLocations, 'nf_locations', prev => [...prev, newLoc])
-      return newLoc
-    }
+  const saveFaction = (data, id) => {
+    if (!id && storageExceededCheck()) { return null }
+    const factionId = id || uid()
+    return saveSeriesSyncedItem(
+      factionsRef,
+      setFactions,
+      'factions',
+      data,
+      id,
+      () => ({ id: factionId, novelId: activeNovelId, ...data })
+    )
   }
-  const deleteLocation = (id) => {
-    commitLocal(locationsRef, setLocations, 'nf_locations', prev => prev.filter(l => l.id !== id))
+
+  const deleteFaction = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(factionsRef, setFactions, 'factions', id, options)
+    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
+      deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
+    ))
+  }
+
+  const saveLocation = (data, id) => {
+    if (!id && storageExceededCheck()) { return null }
+    const locationId = id || uid()
+    return saveSeriesSyncedItem(
+      locationsRef,
+      setLocations,
+      'locations',
+      data,
+      id,
+      () => ({ id: locationId, novelId: activeNovelId, ...data })
+    )
+  }
+  const deleteLocation = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(locationsRef, setLocations, 'locations', id, options)
+    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => ({
         ...entry,
-        locationIds: (entry.locationIds || []).filter(locationId => locationId !== id),
+        locationIds: (entry.locationIds || []).filter(locationId => !deletedSet.has(locationId)),
       }))
     })
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => {
       return prev.map(event => ({
         ...event,
-        linkedLocations: (event.linkedLocations || []).filter(locationId => locationId !== id),
+        linkedLocations: (event.linkedLocations || []).filter(locationId => !deletedSet.has(locationId)),
       }))
     })
   }
 
   const addEvent = (data, options = {}) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const eventId = uid()
     const shouldCreateHistory = options.createHistory !== false && !data.linkedHistoryEntryId
     const historyId = data.linkedHistoryEntryId || (shouldCreateHistory ? uid() : null)
     const createdAt = Date.now() // eslint-disable-line react-hooks/purity
-    const event = { id: eventId, novelId: activeNovelId, createdAt, ...data, worldHistoryEntryId: historyId }
+    const event = { id: eventId, novelId: activeNovelId, syncRootId: eventId, createdAt, ...data, worldHistoryEntryId: historyId }
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, event])
     if (data.linkedHistoryEntryId) {
       commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => {
@@ -1011,6 +1209,7 @@ export function useStore(userId = null, options = {}) {
       const historyEntry = {
         id: historyId,
         novelId: activeNovelId,
+        syncRootId: historyId,
         createdAt,
         timelineEventId: eventId,
         title: data.title ?? '',
@@ -1026,16 +1225,24 @@ export function useStore(userId = null, options = {}) {
   }
   const updateEvent = (id, data) => {
     const linkedHistoryId = data.linkedHistoryEntryId ?? data.worldHistoryEntryId
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => e.id === id ? { ...e, ...data, worldHistoryEntryId: linkedHistoryId ?? e.worldHistoryEntryId ?? null } : e))
+    const savedEvent = saveSeriesSyncedItem(
+      timelineRef,
+      setTimeline,
+      'timeline',
+      { ...data, worldHistoryEntryId: linkedHistoryId },
+      id,
+      () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data, worldHistoryEntryId: linkedHistoryId })
+    )
+    const savedEventId = savedEvent?.id || id
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => {
       return prev.map(h => {
-        if (linkedHistoryId && h.timelineEventId === id && h.id !== linkedHistoryId) {
+        if (linkedHistoryId && h.timelineEventId === savedEventId && h.id !== linkedHistoryId) {
           return { ...h, timelineEventId: null }
         }
-        if (h.timelineEventId === id || (linkedHistoryId && h.id === linkedHistoryId)) {
+        if (h.timelineEventId === savedEventId || (linkedHistoryId && h.id === linkedHistoryId)) {
           return {
             ...h,
-            timelineEventId: id,
+            timelineEventId: savedEventId,
             title: data.title ?? h.title,
             era: data.era ?? h.era,
             dateRange: data.date ?? data.dateRange ?? h.dateRange,
@@ -1047,14 +1254,16 @@ export function useStore(userId = null, options = {}) {
         return h
       })
     })
+    return savedEvent
   }
-  const deleteEvent = (id) => {
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.filter(e => e.id !== id))
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => h.timelineEventId === id ? { ...h, timelineEventId: null } : h))
+  const deleteEvent = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(timelineRef, setTimeline, 'timeline', id, options)
+    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => deletedSet.has(h.timelineEventId) ? { ...h, timelineEventId: null } : h))
   }
 
   const addScheduleEvent = (data) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const entry = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), category: 'scene', duration: 1, tags: [], linkedCharacters: [], linkedLocations: [], ...data } // eslint-disable-line react-hooks/purity
     commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, entry])
     return entry
@@ -1063,11 +1272,11 @@ export function useStore(userId = null, options = {}) {
   const deleteScheduleEvent = (id) => commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.id !== id))
 
   const addHistoryEntry = (data, options = {}) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const createdAt = Date.now() // eslint-disable-line react-hooks/purity
     const timelineEventId = data.linkedTimelineEventId || data.timelineEventId || null
     const entryId = uid()
-    const entry = { id: entryId, novelId: activeNovelId, createdAt, ...data, timelineEventId }
+    const entry = { id: entryId, novelId: activeNovelId, syncRootId: entryId, createdAt, ...data, timelineEventId }
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, entry])
     if (timelineEventId) {
       commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => e.id === timelineEventId ? { ...e, worldHistoryEntryId: entry.id } : e))
@@ -1076,6 +1285,7 @@ export function useStore(userId = null, options = {}) {
       const event = {
         id: eventId,
         novelId: activeNovelId,
+        syncRootId: eventId,
         createdAt,
         title: data.title ?? '',
         date: data.dateRange ?? data.date ?? '',
@@ -1094,12 +1304,20 @@ export function useStore(userId = null, options = {}) {
   }
   const updateHistoryEntry = (id, data) => {
     const linkedTimelineId = data.linkedTimelineEventId ?? data.timelineEventId
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => h.id === id ? { ...h, ...data, timelineEventId: linkedTimelineId ?? h.timelineEventId ?? null } : h))
+    const savedHistory = saveSeriesSyncedItem(
+      worldHistoryRef,
+      setWorldHistory,
+      'worldhistory',
+      { ...data, timelineEventId: linkedTimelineId },
+      id,
+      () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data, timelineEventId: linkedTimelineId })
+    )
+    const savedHistoryId = savedHistory?.id || id
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => {
       return prev.map(e => {
-        if (linkedTimelineId && e.id === linkedTimelineId) return { ...e, worldHistoryEntryId: id }
-        if (e.worldHistoryEntryId === id && linkedTimelineId && e.id !== linkedTimelineId) return { ...e, worldHistoryEntryId: null }
-        if (e.worldHistoryEntryId === id) {
+        if (linkedTimelineId && e.id === linkedTimelineId) return { ...e, worldHistoryEntryId: savedHistoryId }
+        if (e.worldHistoryEntryId === savedHistoryId && linkedTimelineId && e.id !== linkedTimelineId) return { ...e, worldHistoryEntryId: null }
+        if (e.worldHistoryEntryId === savedHistoryId) {
           return {
             ...e,
             title: data.title ?? e.title,
@@ -1112,10 +1330,12 @@ export function useStore(userId = null, options = {}) {
         return e
       })
     })
+    return savedHistory
   }
-  const deleteHistoryEntry = (id) => {
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.filter(h => h.id !== id))
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => e.worldHistoryEntryId === id ? { ...e, worldHistoryEntryId: null } : e))
+  const deleteHistoryEntry = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(worldHistoryRef, setWorldHistory, 'worldhistory', id, options)
+    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => deletedSet.has(e.worldHistoryEntryId) ? { ...e, worldHistoryEntryId: null } : e))
   }
   const linkTimelineHistory = (timelineEventId, historyEntryId) => {
     if (!timelineEventId || !historyEntryId) return
@@ -1128,16 +1348,17 @@ export function useStore(userId = null, options = {}) {
   }
 
   const addLoreEntry = (data) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
-    const entry = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data } // eslint-disable-line react-hooks/purity
+    if (storageExceededCheck()) { return null }
+    const id = uid()
+    const entry = { id, novelId: activeNovelId, syncRootId: id, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data } // eslint-disable-line react-hooks/purity
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, entry])
     return entry
   }
-  const updateLoreEntry = (id, data) => commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
-  const deleteLoreEntry = (id) => commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.filter(e => e.id !== id))
+  const updateLoreEntry = (id, data) => saveSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data }))
+  const deleteLoreEntry = (id, options = {}) => deleteSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', id, options)
 
   const addIdeaEntry = (data) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const entry = {
       id: uid(),
       novelId: activeNovelId,
@@ -1158,14 +1379,15 @@ export function useStore(userId = null, options = {}) {
       convertedTo: null,
       ...data,
     }
+    entry.syncRootId = entry.id
     commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, entry])
     return entry
   }
-  const updateIdeaEntry = (id, data) => commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
-  const deleteIdeaEntry = (id) => commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.filter(e => e.id !== id))
+  const updateIdeaEntry = (id, data) => saveSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), updatedAt: Date.now(), title: '', description: '', body: '', group: '', tags: [], status: 'raw', order: 0, isFavourite: false, isPinned: false, aiExpanded: false, linkedEntities: [], linkedIdeas: [], convertedTo: null, ...data }))
+  const deleteIdeaEntry = (id, options = {}) => deleteSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', id, options)
 
   const addMap = (name, mapType) => {
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const map = { id: uid(), novelId: activeNovelId, name, mapType: mapType || 'regional', mapPins: [], mapRegions: [], created: Date.now() } // eslint-disable-line react-hooks/purity
     setMaps(prev => [...prev, map])
     setActiveMapByNovel(prev => ({ ...prev, [activeNovelId]: map.id }))
@@ -1216,7 +1438,7 @@ export function useStore(userId = null, options = {}) {
       notifyReadOnly('free-limit')
       return null
     }
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const novel = { id: uid(), createdAt: new Date().toISOString(), ...data }
     const starter = buildStarterStructure(novel.id, novel.type)
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
@@ -1324,7 +1546,7 @@ export function useStore(userId = null, options = {}) {
       notifyReadOnly('free-limit')
       return null
     }
-    if (isStorageExceeded()) { notifyReadOnly('storage-exceeded'); return null }
+    if (storageExceededCheck()) { return null }
     const oldId = data.project?.id
     const newId = uid()
     const remap = (item) => item?.novelId === oldId ? { ...item, novelId: newId } : item
@@ -1353,26 +1575,30 @@ export function useStore(userId = null, options = {}) {
     freeProjectId !== null && activeNovelId !== null && activeNovelId !== freeProjectId
   )
 
-  const notifyReadOnly = (reason = 'trial-ended') => {
+  const notifyReadOnly = (reason = 'trial-ended', extra = {}) => {
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('membership-read-only', { detail: { reason } }))
+      window.dispatchEvent(new CustomEvent('membership-read-only', { detail: { reason, ...extra } }))
     }
   }
 
-  const isStorageExceeded = () => {
+  const storageExceededCheck = () => {
     if (!storageQuotaBytes) return false
     const used = estimateStoreSize({
       novels, characters, factions, locations, timeline, worldHistory,
       acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards,
       series, storySchedule,
     })
-    return used >= storageQuotaBytes
+    if (used >= storageQuotaBytes) {
+      notifyReadOnly('storage-exceeded', { usedBytes: used, quotaBytes: storageQuotaBytes })
+      return true
+    }
+    return false
   }
 
   const readOnlyValue = (name) => {
     const reason = globalReadOnly ? 'trial-ended' : 'free-project'
     notifyReadOnly(reason)
-    if (name.startsWith('add') || name === 'saveLocation') return null
+    if (name.startsWith('add') || name === 'saveLocation' || name === 'saveFaction') return null
     return undefined
   }
 
@@ -1385,6 +1611,7 @@ export function useStore(userId = null, options = {}) {
     characters: seriesScope(characters, 'characters'),
     saveCharacter, deleteCharacter,
     factions: novelFactions,
+    saveFaction, deleteFaction,
     setFactions: (updater) => {
       setFactions(prev => {
         const untouched = prev.filter(f => f.novelId !== activeNovelId)

@@ -27,6 +27,20 @@ import {
   getProjectExportFilename,
 } from '../utils/projectExport'
 
+// ─── Project status ──────────────────────────────────────────────────────────
+
+const STATUS_DATA = {
+  not_started: { label: 'Not started', color: '#89919a' },
+  draft:       { label: 'Draft',        color: '#a78bfa' },
+  in_progress: { label: 'In progress',  color: '#5bb7d9' },
+  editing:     { label: 'Editing',      color: '#e3a84f' },
+  complete:    { label: 'Complete',     color: '#5dc878' },
+  paused:      { label: 'Paused',       color: '#d86b70' },
+  writing:     { label: 'In progress',  color: '#5bb7d9', aliasFor: 'in_progress' },
+  revision:    { label: 'Editing',      color: '#e3a84f', aliasFor: 'editing' },
+}
+const STATUS_PICKER = ['not_started', 'draft', 'in_progress', 'editing', 'complete', 'paused']
+
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
 function Icon({ name, size = 16 }) {
@@ -217,6 +231,8 @@ function ProjectSettings({ store, onClose }) {
     currentYear: store.currentYear ?? 0,
     seriesId: novel?.seriesId || '',
     progress: novel?.progress ?? '',
+    wordCountTarget: novel?.wordCountTarget ?? '',
+    status: novel?.status ?? null,
   }))
   const [coverError, setCoverError] = useState('')
   const [exporting, setExporting] = useState('')
@@ -244,6 +260,8 @@ function ProjectSettings({ store, onClose }) {
       currentYear: store.currentYear ?? 0,
       seriesId: novel?.seriesId || '',
       progress: novel?.progress ?? '',
+      wordCountTarget: novel?.wordCountTarget ?? '',
+      status: novel?.status ?? null,
     })
     setBackupConfig({ ...BACKUP_DEFAULTS, ...(novel?.backupConfig || {}) })
     setCategoryDraft({
@@ -265,6 +283,11 @@ function ProjectSettings({ store, onClose }) {
     if (field === 'progress') {
       const num = value === '' ? null : Math.max(0, Math.min(100, Number(value)))
       patchProject({ progress: num })
+      return
+    }
+    if (field === 'wordCountTarget') {
+      const num = value === '' ? null : Math.max(0, Number(value))
+      patchProject({ wordCountTarget: num })
       return
     }
     patchProject({ [field]: field === 'seriesId' ? value || null : value })
@@ -443,7 +466,15 @@ function ProjectSettings({ store, onClose }) {
         <div style={{ flex: 1, overflowY: 'auto', padding: 22 }}>
           <div className="project-settings-sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
-              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Project Details</p>
+              <div className="project-settings-section-heading">
+                <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Project Details</p>
+                <span
+                  className={`project-settings-type-chip${settingsProjectStage.stage === 'beta' ? ' is-beta' : ''}`}
+                  title={settingsProjectStage.note}
+                >
+                  {settingsProjectStage.stage === 'beta' ? `${settingsProjectType.label} · ${settingsProjectStage.label}` : settingsProjectType.label}
+                </span>
+              </div>
 
               <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Title</span>
@@ -466,19 +497,6 @@ function ProjectSettings({ store, onClose }) {
                 />
               </label>
 
-              <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Project type</span>
-                <input
-                  value={settingsProjectStage.stage === 'beta' ? `${settingsProjectType.label} · ${settingsProjectStage.label}` : settingsProjectType.label}
-                  readOnly
-                  className="field"
-                  style={{ padding: '8px 10px', fontSize: 13 }}
-                />
-                <span style={{ fontSize: 11, color: settingsProjectStage.stage === 'beta' ? 'var(--accent)' : 'var(--text-muted)' }}>
-                  {settingsProjectStage.note}
-                </span>
-              </label>
-
               {store.series.length > 0 && (
                 <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Series</span>
@@ -496,30 +514,72 @@ function ProjectSettings({ store, onClose }) {
                 </label>
               )}
 
-              <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Current year</span>
-                <input
-                  type="number"
-                  value={details.currentYear}
-                  onChange={e => updateDetail('currentYear', e.target.value)}
-                  className="field"
-                  style={{ padding: '8px 10px', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
-                />
-              </label>
+              <div className="project-settings-compact-fields">
+                <label>
+                  <span>Current year</span>
+                  <input
+                    type="number"
+                    value={details.currentYear}
+                    onChange={e => updateDetail('currentYear', e.target.value)}
+                    className="field"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  />
+                </label>
+                <label>
+                  <span>Word target</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={details.wordCountTarget}
+                    onChange={e => updateDetail('wordCountTarget', e.target.value.replace(/[^\d]/g, ''))}
+                    placeholder="80000"
+                    className="field"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  />
+                </label>
+              </div>
 
-              <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Progress (0–100%)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={details.progress}
-                  onChange={e => updateDetail('progress', e.target.value)}
-                  placeholder="—"
-                  className="field"
-                  style={{ padding: '8px 10px', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
-                />
-              </label>
+              {!details.wordCountTarget && (
+                <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Progress (0–100%)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={details.progress}
+                    onChange={e => updateDetail('progress', e.target.value)}
+                    placeholder="—"
+                    className="field"
+                    style={{ padding: '8px 10px', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
+                  />
+                </label>
+              )}
+
+              <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Status</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {STATUS_PICKER.map(key => {
+                    const opt = STATUS_DATA[key]
+                    const current = STATUS_DATA[details.status]?.aliasFor ?? details.status
+                    const active = current === key
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => updateDetail('status', active ? null : key)}
+                        style={{
+                          padding: '5px 14px', borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                          border: `1px solid ${active ? opt.color : 'var(--border)'}`,
+                          background: active ? `color-mix(in srgb, ${opt.color} 16%, transparent)` : 'transparent',
+                          color: active ? opt.color : 'var(--text-muted)',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
               <div style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Cover Photo</span>
@@ -560,11 +620,11 @@ function ProjectSettings({ store, onClose }) {
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14 }}>
+              <div className="project-settings-section-groups">
                 {SETTINGS_GROUPS.map(group => (
                   <div key={group.label}>
                     <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>{group.label}</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div className="project-settings-section-options">
                       {group.sections.map(id => {
                         const section = ALL_SECTIONS.find(s => s.id === id)
                         if (!section) return null
@@ -576,9 +636,10 @@ function ProjectSettings({ store, onClose }) {
                             aria-checked={on}
                             aria-label={section.label}
                             onClick={() => toggle(id)}
+                            className="project-settings-section-toggle"
                             style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              minHeight: 40, padding: '8px 10px', borderRadius: 10,
+                              minHeight: 34, padding: '7px 9px', borderRadius: 10,
                               border: `1px solid ${on ? 'color-mix(in srgb, var(--accent) 70%, transparent)' : 'color-mix(in srgb, var(--border) 55%, transparent)'}`,
                               background: on ? 'var(--accent-fade)' : 'color-mix(in srgb, var(--bg-nav) 40%, transparent)',
                               cursor: 'pointer', textAlign: 'left',
@@ -593,13 +654,13 @@ function ProjectSettings({ store, onClose }) {
                               </span>
                             </div>
                             <div style={{
-                              width: 32, height: 18, borderRadius: 9, flexShrink: 0,
+                              width: 26, height: 15, borderRadius: 8, flexShrink: 0,
                               background: on ? 'var(--accent)' : 'var(--border)',
-                              position: 'relative', marginLeft: 10,
+                              position: 'relative', marginLeft: 8,
                             }}>
                               <div style={{
-                                position: 'absolute', top: 3, left: on ? 17 : 3,
-                                width: 12, height: 12, borderRadius: '50%',
+                                position: 'absolute', top: 3, left: on ? 14 : 3,
+                                width: 9, height: 9, borderRadius: '50%',
                                 background: on ? 'var(--bg-main)' : 'var(--bg-nav)',
                                 transition: 'left .12s ease',
                               }} />

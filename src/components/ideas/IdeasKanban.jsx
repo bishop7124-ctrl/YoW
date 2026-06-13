@@ -607,7 +607,8 @@ export default function IdeasKanban({ store }) {
 
   const handleDelete = useCallback((id) => {
     if (readOnly) return
-    deleteIdeaEntry(id)
+    const scope = window.confirm('Delete this idea from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+    deleteIdeaEntry(id, { scope })
     if (selectedId === id) setSelectedId(null)
     if (convertId === id) setConvertId(null)
   }, [deleteIdeaEntry, readOnly, selectedId, convertId])

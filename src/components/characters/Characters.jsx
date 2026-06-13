@@ -873,7 +873,7 @@ export default function Characters({ store }) {
     const savedId = saveCharacter(formData, editTarget?.id || null)
     setShowForm(false)
     setEditTarget(null)
-    if (!editTarget) {
+    if (savedId) {
       setSelectedCharacterId(savedId)
       setProfileTab('overview')
     }
@@ -980,7 +980,12 @@ export default function Characters({ store }) {
               actions={(
                 <>
                   <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(selected); setShowForm(true); }}>Edit</StudioButton>
-                  <StudioButton tone="secondary" size="sm" onClick={() => { if(confirm("Delete?")) { deleteCharacter(selected.id); setSelectedCharacterId(null); } }}>Delete</StudioButton>
+                  <StudioButton tone="secondary" size="sm" onClick={() => {
+                    if (!confirm('Delete this character?')) return
+                    const scope = confirm('Delete this character from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+                    deleteCharacter(selected.id, { scope })
+                    setSelectedCharacterId(null)
+                  }}>Delete</StudioButton>
                 </>
               )}
             >

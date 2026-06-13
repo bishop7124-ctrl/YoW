@@ -100,7 +100,8 @@ export default function Timeline({ store }) {
 
   const saveEntry = (data) => {
     if (formState?.type === 'timeline') {
-      updateEvent(formState.item.id, data)
+      const event = updateEvent(formState.item.id, data)
+      if (event?.id) setDetailEvent(event)
     } else {
       addEvent(data, { createHistory: false })
     }
@@ -242,7 +243,8 @@ export default function Timeline({ store }) {
                   className="btn btn-secondary btn-sm"
                   onClick={() => {
                     if (confirm(`Delete "${detailEvent.title}"?`)) {
-                      deleteEvent(detailEvent.id)
+                      const scope = confirm('Delete this timeline entry from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+                      deleteEvent(detailEvent.id, { scope })
                       setDetailEvent(null)
                     }
                   }}

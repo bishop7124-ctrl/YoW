@@ -5,10 +5,11 @@ import {
   getStorageWarningLevel,
 } from '../../utils/storageQuota'
 
-const WARNING_MESSAGES = {
-  warning:  'You\'re approaching your storage limit. Consider upgrading your plan.',
-  critical: 'You\'re nearly out of storage. Uploads may fail soon.',
-  exceeded: 'Storage limit reached. Uploads are paused until you free space or upgrade.',
+const getWarningMessage = (level, usedBytes, quotaBytes) => {
+  if (level === 'warning') return 'You\'re approaching your storage limit. Consider upgrading your plan.'
+  if (level === 'critical') return 'You\'re nearly out of storage. Uploads may fail soon.'
+  if (level === 'exceeded') return `Storage limit reached — ${formatBytes(usedBytes)} of ${formatQuotaLabel(quotaBytes)} used. Uploads are paused until you free space or upgrade.`
+  return null
 }
 
 const BAR_COLORS = {
@@ -22,7 +23,7 @@ export default function StorageCard({ usedBytes = 0, quotaBytes, planLabel, onUp
   const pct   = getStoragePercent(usedBytes, quotaBytes)
   const level = getStorageWarningLevel(usedBytes, quotaBytes)
   const barColor = BAR_COLORS[level]
-  const message  = WARNING_MESSAGES[level]
+  const message  = getWarningMessage(level, usedBytes, quotaBytes)
 
   return (
     <div style={{

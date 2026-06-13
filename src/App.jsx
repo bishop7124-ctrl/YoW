@@ -21,7 +21,7 @@ import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
 import FAQPage from './components/faq/FAQPage'
 import { getMembership } from './utils/membership'
-import { estimateStoreSize } from './utils/storageQuota'
+import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
@@ -174,7 +174,7 @@ function AppInner() {
   const [accountTab, setAccountTab] = useState(() => initialRouteSnapshot.accountTab)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(() => initialRouteSnapshot.projectSettingsOpen)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [readOnlyNotice, setReadOnlyNotice] = useState('')
+  const [readOnlyNotice, setReadOnlyNotice] = useState(null)
   const [freeProjectBusy, setFreeProjectBusy] = useState(false)
   const [legalPage, setLegalPage] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -303,14 +303,19 @@ function AppInner() {
 
   useEffect(() => {
     const handleReadOnly = (event) => {
-      const reason = event.detail?.reason
+      const { reason, usedBytes, quotaBytes } = event.detail || {}
       let msg = 'Your trial has ended. Upgrade in Account settings to edit again.'
       if (reason === 'free-project') msg = 'This project is view-only on your free plan. Upgrade to edit all projects.'
       if (reason === 'free-limit') msg = 'Free plan includes one active project. Upgrade to create unlimited projects.'
       if (reason === 'storage-exceeded') msg = 'Storage limit reached. Delete some content or upgrade your plan to continue.'
-      setReadOnlyNotice(msg)
+      setReadOnlyNotice({
+        msg,
+        storage: reason === 'storage-exceeded' && usedBytes != null && quotaBytes != null
+          ? { used: usedBytes, quota: quotaBytes }
+          : null,
+      })
       window.clearTimeout(handleReadOnly.timeout)
-      handleReadOnly.timeout = window.setTimeout(() => setReadOnlyNotice(''), 4000)
+      handleReadOnly.timeout = window.setTimeout(() => setReadOnlyNotice(null), 4000)
     }
     window.addEventListener('membership-read-only', handleReadOnly)
     return () => {
@@ -496,7 +501,26 @@ function AppInner() {
       />
       <HelpContact open={helpOpen} onClose={() => setHelpOpen(false)} />
       {readOnlyNotice && (
-        <div role="alert" className="membership-toast">{readOnlyNotice}</div>
+        <div role="alert" className="membership-toast">
+          <span>{readOnlyNotice.msg}</span>
+          {readOnlyNotice.storage && (
+            <span className="membership-toast-storage">
+              {formatBytes(readOnlyNotice.storage.used)} of {formatQuotaLabel(readOnlyNotice.storage.quota)} used.
+            </span>
+          )}
+          {readOnlyNotice.storage && (
+            <button
+              type="button"
+              className="membership-toast-link"
+              onClick={() => {
+                setAccountTab('membership')
+                setAccountOpen(true)
+              }}
+            >
+              Plan settings
+            </button>
+          )}
+        </div>
       )}
       {showFreeSelector && (
         <FreeProjectSelector
