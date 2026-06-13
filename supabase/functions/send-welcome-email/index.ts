@@ -7,7 +7,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-function welcomeEmailHtml(email: string) {
+function welcomeEmailHtml(email: string, confirmUrl: string) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,8 +15,8 @@ function welcomeEmailHtml(email: string) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Welcome to Your Own World</title>
 </head>
-<body style="margin:0;padding:0;background:#0a1f24;font-family:'Georgia',serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a1f24;padding:48px 16px;">
+<body style="margin:0;padding:0;background:transparent;font-family:'Georgia',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:transparent;padding:48px 16px;">
     <tr>
       <td align="center">
         <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
@@ -112,7 +112,7 @@ function welcomeEmailHtml(email: string) {
               <table cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="background:#e8724e;border-radius:8px;">
-                    <a href="https://www.yourownworld.co.uk"
+                    <a href="${confirmUrl}"
                        style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;
                               color:#ffffff;text-decoration:none;letter-spacing:0.04em;font-family:'Georgia',serif;">
                       Start Writing &#8594;
@@ -171,6 +171,18 @@ Deno.serve(async (req) => {
     email = data.user.email
   }
 
+  // Generate a confirmation link so our email can verify the account
+  let confirmUrl = 'https://www.yourownworld.co.uk'
+  try {
+    const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'signup',
+      email,
+    })
+    if (linkData?.properties?.action_link) {
+      confirmUrl = linkData.properties.action_link
+    }
+  } catch { /* fall back to homepage link */ }
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -181,13 +193,13 @@ Deno.serve(async (req) => {
       from: 'Your Own World <hello@yourownworld.co.uk>',
       to: [email],
       subject: 'Welcome to Your Own World ✍️',
-      html: welcomeEmailHtml(email),
+      html: welcomeEmailHtml(email, confirmUrl),
     }),
   })
 
   if (!res.ok) {
     const body = await res.text()
-    console.error('Resend error:', body)
+    console.error('Resend error:', body, 'key prefix:', RESEND_API_KEY.slice(0, 8))
     return jsonResponse({ error: 'Failed to send email', detail: body }, 500)
   }
 
