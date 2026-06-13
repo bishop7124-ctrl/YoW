@@ -144,7 +144,7 @@ function welcomeEmailHtml(email: string) {
 }
 
 Deno.serve(async (req) => {
-  // Only accept POST from Supabase database webhooks (service role)
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' } })
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
 
   let payload: Record<string, unknown>
