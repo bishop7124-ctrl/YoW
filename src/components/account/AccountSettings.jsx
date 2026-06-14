@@ -15,6 +15,8 @@ import {
   QUICK_PALETTES,
   applyThemeToDocument,
   applyThemeTuning,
+  deriveCustomThemeTokens,
+  getAccentContrast,
   getThemeColors,
   getThemeTuning,
   rgbaFromHex,
@@ -30,12 +32,12 @@ const FONT_OPTIONS = [
 ]
 
 const CUSTOM_COLOR_FIELDS = [
-  { key: 'bgMain', label: 'Background' },
-  { key: 'bgNav', label: 'Panels' },
-  { key: 'textMain', label: 'Main text' },
-  { key: 'textMuted', label: 'Muted text' },
-  { key: 'accent', label: 'Accent' },
-  { key: 'border', label: 'Borders' },
+  { key: 'bgMain', label: 'Workspace', hint: 'Page background, editor depth, large empty areas' },
+  { key: 'bgNav', label: 'Panels', hint: 'Sidebars, cards, modals, toolbar surfaces' },
+  { key: 'textMain', label: 'Main text', hint: 'Headings, body copy, active controls' },
+  { key: 'textMuted', label: 'Muted text', hint: 'Labels, helper copy, secondary navigation' },
+  { key: 'accent', label: 'Accent', hint: 'Primary buttons, selected states, focus rings' },
+  { key: 'border', label: 'Borders', hint: 'Dividers, input outlines, card edges' },
 ]
 
 function MaintenancePayButton({ style }) {
@@ -132,14 +134,19 @@ function ThemeLivePreview({ colors, radiusUnit, visualStrength, label }) {
   const r = Number(radiusUnit) || 7
   const strength = Number(visualStrength) || 1
   const shadow = `0 ${Math.round(18 * strength)}px ${Math.round(48 * strength)}px rgba(0,0,0,${Math.min(0.55, 0.16 * strength)})`
+  const derived = deriveCustomThemeTokens(colors, { visualStrength: strength, radiusUnit: r })
   const previewVars = {
     '--preview-bg': colors.bgMain,
     '--preview-panel': colors.bgNav,
     '--preview-text': colors.textMain,
     '--preview-muted': colors.textMuted,
     '--preview-accent': colors.accent,
+    '--preview-accent-contrast': getAccentContrast(colors.accent),
     '--preview-border': colors.border,
     '--preview-accent-fade': rgbaFromHex(colors.accent, Math.min(0.28, 0.1 + strength * 0.07)),
+    '--preview-paper': derived['--atmos-paper'],
+    '--preview-paper-line': derived['--atmos-paper-line'],
+    '--preview-cork': derived['--atmos-cork'],
     '--preview-radius': `${r}px`,
     '--preview-radius-sm': `${Math.max(3, r * 0.65)}px`,
     '--preview-radius-lg': `${r * 2.4}px`,
@@ -166,7 +173,7 @@ function ThemeLivePreview({ colors, radiusUnit, visualStrength, label }) {
             <section className="theme-live-card">
               <div className="theme-live-card-head">
                 <div>
-                  <small>Chapter 12</small>
+                  <small>Panel surface</small>
                   <strong>The Last Door</strong>
                 </div>
                 <span>Draft</span>
@@ -178,8 +185,20 @@ function ThemeLivePreview({ colors, radiusUnit, visualStrength, label }) {
               </div>
             </section>
             <div className="theme-live-grid">
-              <div><strong>24</strong><span>Scenes</span></div>
-              <div><strong>8.4k</strong><span>Words</span></div>
+              <div><strong>Paper</strong><span>Editor surface</span></div>
+              <div><strong>Accent</strong><span>Selection state</span></div>
+            </div>
+            <div className="theme-live-token-strip" aria-hidden="true">
+              {[
+                ['Workspace', colors.bgMain],
+                ['Panels', colors.bgNav],
+                ['Text', colors.textMain],
+                ['Muted', colors.textMuted],
+                ['Accent', colors.accent],
+                ['Borders', colors.border],
+              ].map(([name, value]) => (
+                <span key={name} style={{ '--swatch': value }} title={name} />
+              ))}
             </div>
           </main>
         </div>
@@ -476,13 +495,17 @@ function AppearancePanel({ user, updateProfile }) {
           </div>
 
           <div className="account-appearance-section account-color-section">
-            <p className="eyebrow mb-5">Custom colours</p>
+            <p className="eyebrow mb-2">Custom colours</p>
+            <p className="account-section-note">Changes apply immediately across the workspace, sidebars, cards, editor surfaces, buttons, and selection states.</p>
             <div className="account-color-grid">
-              {CUSTOM_COLOR_FIELDS.map(({ key, label }) => {
+              {CUSTOM_COLOR_FIELDS.map(({ key, label, hint }) => {
                 const val = effectiveColors[key] || '#888888'
                 return (
                   <div key={key} className="account-color-field">
-                    <p>{label}</p>
+                    <div className="account-color-label">
+                      <p>{label}</p>
+                      <span>{hint}</span>
+                    </div>
                     <div className="account-color-control">
                       <input type="color" value={val}
                         onChange={e => {
@@ -534,7 +557,7 @@ function AppearancePanel({ user, updateProfile }) {
               </div>
               <div className="account-range-field">
                 <div>
-                  <span>Colour &amp; shadow strength</span>
+                  <span>Atmosphere strength</span>
                   <strong>{Math.round(effectiveStrength * 100)}%</strong>
                 </div>
                 <input
@@ -1400,7 +1423,7 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
                 <>
                   <div>
                     <span>Billing</span>
-                    <strong>Lifetime — no renewal</strong>
+                    <strong>{membership.isFounder ? 'Lifetime — cloud hosting included forever' : 'Lifetime — cloud hosting included'}</strong>
                   </div>
                   {membership.isFounder && (
                     <div>
@@ -1449,10 +1472,10 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
                 gap: 6,
               }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#f59e0b' }}>
-                  Annual maintenance fee due in {membership.maintenanceDaysRemaining} day{membership.maintenanceDaysRemaining !== 1 ? 's' : ''}
+                  Cloud Hosting &amp; Storage Renewal due in {membership.maintenanceDaysRemaining} day{membership.maintenanceDaysRemaining !== 1 ? 's' : ''}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  A £6/year maintenance fee keeps your data hosted and the platform running. Pay before the deadline to avoid losing access. Fee subject to change with notice.
+                  Your included cloud hosting period is ending soon. Renew at £6/year to keep full access — this covers hosting costs only. You can always export your data for free if you choose not to renew.
                 </div>
                 <MaintenancePayButton style={{ marginTop: 4 }} />
               </div>

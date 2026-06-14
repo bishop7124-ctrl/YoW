@@ -469,6 +469,14 @@ const SYNC_AREA_OPTIONS = [
   { id: 'ideas', label: 'Ideas' },
 ]
 
+function useEscapeKey(handler) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') handler() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+}
+
 function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
   const seriesProjects = allStats.filter(s => s.project.seriesId === series.id)
   const initialOrder = series.projectOrder
@@ -522,6 +530,7 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
     if ((formDirty || assignedDirty) && !confirm('Discard changes?')) return
     onClose()
   }
+  useEscapeKey(requestClose)
 
   const handleCoverSelect = async (e) => {
     const file = e.target.files?.[0]
@@ -802,6 +811,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     if (JSON.stringify(form) !== initialFormRef.current && !confirm('Discard changes?')) return
     onClose()
   }
+  useEscapeKey(requestClose)
 
   const handleCoverSelect = async (e) => {
     const file = e.target.files?.[0]
@@ -1204,6 +1214,17 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     setSeriesName('')
     setShowSeriesForm(false)
   }
+
+  useEffect(() => {
+    if (!showForm && !showSeriesForm) return
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      if (showSeriesForm) handleCloseSeriesForm()
+      else if (showForm) handleCloseProjectForm()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showForm, showSeriesForm])
 
   const handleDelete = (id) => {
     if (confirm('Delete this project and all its content? This cannot be undone.')) {

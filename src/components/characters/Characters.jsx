@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import Modal from '../shared/Modal'
 import { FACTION_ICONS } from '../../constants/factionIcons'
 import { REL_TYPES } from '../../constants/Constants'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
+import { allRefsFor } from '../../utils/worldLinks'
 
 // The Fix: uses theme variables so all 4 themes apply correctly
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
@@ -827,7 +828,7 @@ function LinkedNames({ label, items }) {
 }
 
 export default function Characters({ store }) {
-  const { characters, saveCharacter, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions, currentYear } = store
+  const { characters, saveCharacter, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions, currentYear, loreEntries = [], timeline = [], setSelectedLoreEntryId } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name-asc')
   const [filterFamily, setFilterFamily] = useState('')
@@ -866,6 +867,11 @@ export default function Characters({ store }) {
     })).filter(rel => rel.target)
     : []
   const selectedAge = getCharacterAge(selected, currentYear)
+  const incomingRefs = useMemo(() => selected
+    ? allRefsFor(selected.id, { loreEntries, timeline, characters })
+    : { lore: [], timeline: [], characters: [] },
+    [selected, loreEntries, timeline, characters]
+  )
   const profileTabs = CHARACTER_TABS
   const activeProfileTab = profileTabs.some(([id]) => id === profileTab) ? profileTab : 'overview'
 
@@ -937,6 +943,18 @@ export default function Characters({ store }) {
             >
               Clear filters
             </button>
+          </div>
+        )}
+
+        {characters.length === 0 && (
+          <div className="px-4 py-6 text-center space-y-1">
+            <p className="text-sm text-[var(--text-main)]">No characters yet.</p>
+            <p className="text-xs text-[var(--text-muted)]">Add your cast using the New button above.</p>
+          </div>
+        )}
+        {characters.length > 0 && filtered.length === 0 && (
+          <div className="px-4 py-4 text-center">
+            <p className="text-xs text-[var(--text-muted)]">No matches. Try adjusting your search or filters.</p>
           </div>
         )}
 
@@ -1063,6 +1081,33 @@ export default function Characters({ store }) {
                       </div>
                     )}
                   </StudioNote>
+                  {(incomingRefs.lore.length > 0 || incomingRefs.timeline.length > 0) && (
+                    <StudioNote className="lg:col-span-2">
+                      <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Referenced in</h3>
+                      {incomingRefs.lore.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs text-[var(--text-muted)] mb-1.5">Lore</div>
+                          <div className="flex flex-wrap gap-1">
+                            {incomingRefs.lore.map(e => (
+                              <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedLoreEntryId(e.id)}>
+                                {e.title}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {incomingRefs.timeline.length > 0 && (
+                        <div>
+                          <div className="text-xs text-[var(--text-muted)] mb-1.5">Timeline / History</div>
+                          <div className="flex flex-wrap gap-1">
+                            {incomingRefs.timeline.map(e => (
+                              <span key={e.id} className="chip">{e.title}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </StudioNote>
+                  )}
                 </>
               )}
 

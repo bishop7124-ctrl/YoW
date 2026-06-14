@@ -35,6 +35,7 @@ const PROJECT_TYPES = [
   {
     id: 'comic',
     label: 'Comic / Graphic Novel',
+    beta: true,
     tagline: 'Volume, issue, page. All connected.',
     description: 'A planning workspace for sequential art narratives — organise by volume and issue, build your world, and map out the visual story before you draw.',
     features: [
@@ -549,7 +550,8 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
                 className={`yow-project-tab${activeProjectType === pt.id ? ' active' : ''}`}
                 onClick={() => setActiveProjectType(pt.id)}
               >
-<span>{pt.label}</span>
+                <span>{pt.label}</span>
+                {pt.beta && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', background: 'var(--accent)', color: '#fff', borderRadius: 4, padding: '1px 5px', marginLeft: 5, verticalAlign: 'middle' }}>Beta</span>}
               </button>
             ))}
           </div>
@@ -557,6 +559,11 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
           {currentProject && (
             <div className="yow-project-panel" role="tabpanel">
               <div className="yow-project-panel-left">
+                {currentProject.beta && (
+                  <p style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, marginBottom: 8 }}>
+                    Beta — core features available; full QA in progress.
+                  </p>
+                )}
                 <p className="yow-project-tagline">{currentProject.tagline}</p>
                 <p className="yow-project-desc">{currentProject.description}</p>
                 <div className="yow-project-emphasis">

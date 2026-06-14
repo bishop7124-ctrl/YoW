@@ -5,9 +5,15 @@ const MAP_H = 1920
 const SCHEMA_VERSION = 1
 const MIN_SIZE = 18
 const DEFAULT_ZOOM = 0.42
+const MIN_ZOOM = 0.12
+const MAX_ZOOM = 2.5
+const WHEEL_ZOOM_INTENSITY = 0.0016
+const DRAG_THRESHOLD_PX = 4
 const DEFAULT_OBJECT_LAYER_ID = 'objects'
 const LAND_FILL = '#244b2f'
 const LAND_STROKE = '#162a1c'
+const WATER_FILL = '#4aa7c7'
+const WATER_STROKE = '#236783'
 
 const OBJECT_TYPES = {
   marker: { label: 'Marker', icon: '•', fill: '#d6b45f', stroke: '#6f5524' },
@@ -93,7 +99,7 @@ const MAP_TYPE_TOOLSETS = {
       { id: 'borders', mode: 'border', label: 'Borders', icon: '⋯' },
       { id: 'waters', mode: 'river', label: 'Rivers & seas', icon: '~' },
       { id: 'mountains', mode: 'mountain', label: 'Mountains', icon: '△' },
-      { id: 'terrain', mode: 'stamp', label: 'Forests & stamps', icon: '✦' },
+      { id: 'terrain', mode: 'stamp', label: 'Stamps', icon: '✦' },
       { id: 'cities', mode: 'location', label: 'Cities', icon: '⌖' },
       { id: 'labels', mode: 'label', label: 'Labels', icon: 'T' },
     ],
@@ -420,12 +426,26 @@ function normalizeMetadata(metadata, type) {
     ...metadata,
     points,
     faces,
+    waterKind: metadata.waterKind || (type === 'river' && metadata.closed ? 'waterMass' : undefined),
     opacity: Number.isFinite(metadata.opacity) ? clamp(metadata.opacity, 0, 1) : 1,
     lineThickness: Math.max(1, Number.isFinite(metadata.lineThickness) ? metadata.lineThickness : LINE_OBJECT_TYPES.has(type) ? 8 : 2),
     fontSize: Number.isFinite(metadata.fontSize) ? clamp(metadata.fontSize, 10, 144) : (type === 'label' ? 34 : metadata.fontSize),
     curvedLabel: Boolean(metadata.curvedLabel),
     dashed: Boolean(metadata.dashed),
     shapeKind: metadata.shapeKind || (type === 'shape' ? 'polygon' : 'rectangle'),
+  }
+}
+
+function mapSnapshot(map) {
+  const normalized = normalizeMapSchema(map)
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    width: normalized.width,
+    height: normalized.height,
+    mapObjects: normalized.objects,
+    mapLayers: normalized.layers,
+    mapType: normalizeMapType(map?.mapType || map?.metadata?.mapType || 'region'),
+    metadata: { ...(map?.metadata || normalized.metadata || {}) },
   }
 }
 
@@ -666,6 +686,9 @@ function objectContainsPoint(object, point) {
   if (object.visible === false) return false
   const local = toLocal(point, object)
   const meta = object.metadata || {}
+  if (object.type === 'river' && meta.closed && objectLocalFaces(object).length) {
+    return objectLocalFaces(object).some(face => pointInPolygon(local, face))
+  }
   if (LINE_OBJECT_TYPES.has(object.type) && Array.isArray(meta.points)) {
     const thickness = Math.max(12, (meta.lineThickness || 6) + 10)
     for (let index = 1; index < meta.points.length; index += 1) {
@@ -824,6 +847,8 @@ function drawObject(ctx, object, selected, options = {}) {
     drawFantasyMarker(ctx, object, selected)
   } else if (object.type === 'label') {
     drawFantasyLabel(ctx, object)
+  } else if (object.type === 'river' && meta.closed) {
+    cleanEdges ? drawCleanWaterMass(ctx, object, selected) : drawOrganicWaterMass(ctx, object, selected)
   } else if (LINE_OBJECT_TYPES.has(object.type)) {
     drawStyledLineObject(ctx, object, selected, { cleanEdges })
   } else if ((object.type === 'region' || meta.shapeKind === 'polygon') && objectLocalFaces(object).length) {
@@ -858,6 +883,79 @@ function drawCleanPolygonObject(ctx, object, selected) {
     drawStraightPath(ctx, points, true)
     ctx.stroke()
   })
+  ctx.restore()
+}
+
+function drawCleanWaterMass(ctx, object, selected) {
+  const meta = object.metadata || {}
+  const faces = objectLocalFaces(object)
+  if (!faces.length) return
+  ctx.save()
+  ctx.fillStyle = colorWithAlpha(meta.fill || WATER_FILL, 0.68)
+  ctx.strokeStyle = selected ? '#1677ff' : colorWithAlpha(meta.stroke || WATER_STROKE, 0.9)
+  ctx.lineWidth = selected ? Math.max(4, meta.lineThickness || 3) : Math.max(2, meta.lineThickness || 3)
+  faces.forEach(points => {
+    drawStraightPath(ctx, points, true)
+    ctx.fill()
+    ctx.stroke()
+  })
+  ctx.restore()
+}
+
+function drawOrganicWaterMass(ctx, object, selected) {
+  const meta = object.metadata || {}
+  const seed = hashString(object.id)
+  const faces = objectLocalFaces(object)
+  if (!faces.length) return
+  const waterFaces = faces.map((face, faceIndex) => organicPoints(face, seed + faceIndex * 811, {
+    closed: true,
+    amplitude: Math.min(24, Math.max(8, Math.min(object.width, object.height) * 0.035)),
+    spacing: Math.max(24, Math.min(58, Math.min(object.width, object.height) * 0.075)),
+  }))
+  const fill = meta.fill || WATER_FILL
+  const stroke = selected ? '#1677ff' : meta.stroke || WATER_STROKE
+
+  ctx.save()
+  const radius = Math.max(object.width, object.height) * 0.58
+  const gradient = ctx.createRadialGradient(0, 0, Math.max(4, radius * 0.08), 0, 0, Math.max(8, radius))
+  gradient.addColorStop(0, colorWithAlpha('#9fe2ef', 0.76))
+  gradient.addColorStop(0.5, colorWithAlpha(fill, 0.72))
+  gradient.addColorStop(1, colorWithAlpha('#246b8f', 0.7))
+  ctx.fillStyle = gradient
+  waterFaces.forEach(points => {
+    drawSmoothPath(ctx, points, true)
+    ctx.fill()
+  })
+
+  ctx.strokeStyle = colorWithAlpha('#d9f7ff', selected ? 0.34 : 0.22)
+  ctx.lineWidth = Math.max(1, (meta.lineThickness || 3) * 0.45)
+  waterFaces.forEach(points => {
+    drawSmoothPath(ctx, points, true)
+    ctx.stroke()
+  })
+
+  ctx.strokeStyle = colorWithAlpha(stroke, selected ? 1 : 0.86)
+  ctx.lineWidth = selected ? Math.max(4, meta.lineThickness || 3) : Math.max(2, meta.lineThickness || 3)
+  waterFaces.forEach(points => {
+    drawSmoothPath(ctx, points, true)
+    ctx.stroke()
+  })
+
+  ctx.save()
+  waterFaces.forEach(points => drawSmoothPath(ctx, points, true))
+  ctx.clip()
+  ctx.strokeStyle = colorWithAlpha('#e8fbff', 0.16)
+  ctx.lineWidth = 1.2
+  for (let index = 0; index < 26; index += 1) {
+    const x = (seededNoise(seed, index + 70) - 0.5) * object.width * 0.86
+    const y = (seededNoise(seed, index + 90) - 0.5) * object.height * 0.78
+    const width = 24 + seededNoise(seed, index + 110) * 58
+    ctx.beginPath()
+    ctx.moveTo(x - width / 2, y)
+    ctx.quadraticCurveTo(x, y - 7, x + width / 2, y)
+    ctx.stroke()
+  }
+  ctx.restore()
   ctx.restore()
 }
 
@@ -1481,10 +1579,15 @@ export default function MapBuilder({ store }) {
   const viewRef = useRef({ zoom: DEFAULT_ZOOM, pan: { x: 80, y: 80 } })
   const objectsRef = useRef([])
   const selectedIdsRef = useRef([])
+  const activeMapRef = useRef(null)
+  const undoStackRef = useRef([])
+  const redoStackRef = useRef([])
+  const spacePressedRef = useRef(false)
 
   const [mode, setMode] = useState('select')
   const [view, setView] = useState(viewRef.current)
   const [selectedIds, setSelectedIds] = useState([])
+  const [historyVersion, setHistoryVersion] = useState(0)
   const [newMapName, setNewMapName] = useState('')
   const [renamingId, setRenamingId] = useState(null)
   const [renameValue, setRenameValue] = useState('')
@@ -1557,6 +1660,15 @@ export default function MapBuilder({ store }) {
   }, [objects, selectedIds])
 
   useEffect(() => {
+    activeMapRef.current = activeMap
+  }, [activeMap])
+
+  useEffect(() => {
+    undoStackRef.current = []
+    redoStackRef.current = []
+  }, [activeMap?.id])
+
+  useEffect(() => {
     draftRef.current = draft
     requestRender()
   }, [draft]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1617,6 +1729,20 @@ export default function MapBuilder({ store }) {
       const target = event.target
       const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
       if (typing) return
+      if (event.code === 'Space') {
+        spacePressedRef.current = true
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) redoMapChange()
+        else undoMapChange()
+        return
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        redoMapChange()
+        return
+      }
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedIdsRef.current.length) {
         event.preventDefault()
         deleteSelectedObjects()
@@ -1638,8 +1764,15 @@ export default function MapBuilder({ store }) {
         duplicateSelectedObjects()
       }
     }
+    const onKeyUp = event => {
+      if (event.code === 'Space') spacePressedRef.current = false
+    }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -1663,8 +1796,49 @@ export default function MapBuilder({ store }) {
     }))
   }, [schema.height, schema.layers, schema.width, updateActiveMapData])
 
-  const updateObjects = useCallback((updater, extra) => {
+  function pushUndoSnapshot() {
+    const current = activeMapRef.current
+    if (!current) return
+    undoStackRef.current = [...undoStackRef.current.slice(-39), mapSnapshot(current)]
+    redoStackRef.current = []
+    setHistoryVersion(version => version + 1)
+  }
+
+  function applyMapSnapshot(snapshot) {
+    updateActiveMapData(() => ({
+      schemaVersion: SCHEMA_VERSION,
+      width: snapshot.width,
+      height: snapshot.height,
+      mapObjects: snapshot.mapObjects,
+      mapLayers: snapshot.mapLayers,
+      mapType: snapshot.mapType,
+      metadata: snapshot.metadata,
+    }))
+    setSelectedIds([])
+    setDraft(null)
+  }
+
+  function undoMapChange() {
+    const previous = undoStackRef.current.pop()
+    const current = activeMapRef.current
+    if (!previous || !current) return
+    redoStackRef.current = [...redoStackRef.current.slice(-39), mapSnapshot(current)]
+    applyMapSnapshot(previous)
+    setHistoryVersion(version => version + 1)
+  }
+
+  function redoMapChange() {
+    const next = redoStackRef.current.pop()
+    const current = activeMapRef.current
+    if (!next || !current) return
+    undoStackRef.current = [...undoStackRef.current.slice(-39), mapSnapshot(current)]
+    applyMapSnapshot(next)
+    setHistoryVersion(version => version + 1)
+  }
+
+  const updateObjects = useCallback((updater, extra, options = {}) => {
     const next = typeof updater === 'function' ? updater(objectsRef.current) : updater
+    if (!options.skipHistory) pushUndoSnapshot()
     persistObjects(next, extra)
   }, [persistObjects])
 
@@ -1717,7 +1891,7 @@ export default function MapBuilder({ store }) {
     const mapHeight = schema.height || MAP_H
     const padding = Math.min(96, Math.max(32, Math.min(rect.width, rect.height) * 0.1))
     const zoom = Math.min((rect.width - padding) / mapWidth, (rect.height - padding) / mapHeight, 1)
-    const nextZoom = clamp(zoom || DEFAULT_ZOOM, 0.12, 2.5)
+    const nextZoom = clamp(zoom || DEFAULT_ZOOM, MIN_ZOOM, MAX_ZOOM)
     const nextView = {
       zoom: nextZoom,
       pan: {
@@ -1734,7 +1908,7 @@ export default function MapBuilder({ store }) {
     if (!viewport) return
     const rect = viewport.getBoundingClientRect()
     const current = viewRef.current
-    const nextZoom = clamp(current.zoom * factor, 0.12, 2.5)
+    const nextZoom = clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM)
     const sx = clientX - rect.left
     const sy = clientY - rect.top
     const mapX = (sx - current.pan.x) / current.zoom
@@ -1834,7 +2008,7 @@ export default function MapBuilder({ store }) {
     const hit = hitTest(point)
     event.currentTarget.setPointerCapture(event.pointerId)
 
-    if (mode === 'pan' || event.altKey || event.shiftKey || event.spaceKey) {
+    if (mode === 'pan' || event.altKey || spacePressedRef.current) {
       interactionRef.current = { type: 'pan', startX: event.clientX, startY: event.clientY, startPan: viewRef.current.pan }
       return
     }
@@ -1880,6 +2054,7 @@ export default function MapBuilder({ store }) {
     }
     if (handle?.type === 'rotate') {
       const object = selected[0]
+      pushUndoSnapshot()
       interactionRef.current = {
         type: 'rotate',
         id: object.id,
@@ -1891,6 +2066,7 @@ export default function MapBuilder({ store }) {
     }
     if (handle?.type === 'resize') {
       const object = selected[0]
+      pushUndoSnapshot()
       interactionRef.current = {
         type: 'resize',
         id: object.id,
@@ -1901,6 +2077,7 @@ export default function MapBuilder({ store }) {
     }
     if (handle?.type === 'point') {
       const object = selected[0]
+      pushUndoSnapshot()
       interactionRef.current = {
         type: 'point',
         id: object.id,
@@ -1927,6 +2104,9 @@ export default function MapBuilder({ store }) {
       setSelectedIds(nextSelected)
       interactionRef.current = {
         type: 'drag',
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        hasMoved: false,
         startPoint: point,
         startObjects: objectsRef.current
           .filter(object => nextSelected.includes(object.id))
@@ -1958,12 +2138,18 @@ export default function MapBuilder({ store }) {
     }
     const point = screenToMap(event.clientX, event.clientY, viewportRef.current, viewRef.current)
     if (interaction.type === 'drag') {
+      const screenDistance = Math.hypot(event.clientX - interaction.startClientX, event.clientY - interaction.startClientY)
+      if (!interaction.hasMoved) {
+        if (screenDistance < DRAG_THRESHOLD_PX) return
+        pushUndoSnapshot()
+        interaction.hasMoved = true
+      }
       const dx = point.x - interaction.startPoint.x
       const dy = point.y - interaction.startPoint.y
       updateObjects(current => current.map(object => {
         const start = interaction.startObjects.find(item => item.id === object.id)
         return start ? { ...object, ...snapPoint({ x: start.x + dx, y: start.y + dy }) } : object
-      }))
+      }), undefined, { skipHistory: true })
       return
     }
     if (interaction.type === 'resize') {
@@ -1978,7 +2164,7 @@ export default function MapBuilder({ store }) {
           width: Math.max(MIN_SIZE, Math.abs(local.x * 2 * directionX)),
           height: Math.max(MIN_SIZE, Math.abs(local.y * 2 * directionY)),
         }
-      }))
+      }), undefined, { skipHistory: true })
       return
     }
     if (interaction.type === 'point') {
@@ -1993,7 +2179,7 @@ export default function MapBuilder({ store }) {
         const points = [...(object.metadata?.points || [])]
         points[interaction.pointIndex] = localToNormalized(local, object)
         return { ...object, metadata: { ...object.metadata, points } }
-      }))
+      }), undefined, { skipHistory: true })
       return
     }
     if (interaction.type === 'shape') {
@@ -2006,7 +2192,7 @@ export default function MapBuilder({ store }) {
       updateObjects(current => current.map(object => {
         if (object.id !== interaction.id || object.locked) return object
         return { ...object, rotation: round(interaction.startRotation + delta, 0) }
-      }))
+      }), undefined, { skipHistory: true })
     }
   }
 
@@ -2031,7 +2217,9 @@ export default function MapBuilder({ store }) {
 
   function handleWheel(event) {
     event.preventDefault()
-    zoomAt(event.clientX, event.clientY, event.deltaY > 0 ? 0.9 : 1.1)
+    const normalizedDelta = Math.max(-120, Math.min(120, event.deltaY))
+    const factor = Math.exp(-normalizedDelta * WHEEL_ZOOM_INTENSITY)
+    zoomAt(event.clientX, event.clientY, factor)
   }
 
   function handleDrop(event) {
@@ -2058,9 +2246,10 @@ export default function MapBuilder({ store }) {
       const firstPoint = sameTool ? current.points[0] : null
       const lastPoint = sameTool ? current.points[current.points.length - 1] : null
       const minPoints = tool === 'region' || tool === 'shapePolygon' ? 3 : 2
+      const closeMinPoints = Math.max(3, minPoints)
       const closesOnOrigin = Boolean(firstPoint)
         && Math.hypot(point.x - firstPoint.x, point.y - firstPoint.y) <= Math.max(10, 16 / viewRef.current.zoom)
-        && current.points.length >= minPoints
+        && current.points.length >= closeMinPoints
       const finishesOpenLine = Boolean(lastPoint)
         && !defaults[tool]?.closed
         && Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) <= Math.max(10, 16 / viewRef.current.zoom)
@@ -2080,15 +2269,18 @@ export default function MapBuilder({ store }) {
     const minPoints = source.kind === 'region' || source.kind === 'shapePolygon' ? 3 : 2
     if (source.points.length < minPoints) return
     const objectType = source.kind === 'shapePolygon' ? 'shape' : source.kind
+    const isClosedWater = objectType === 'river' && source.closed
     const object = pointsToObject(source.points, objectType, objectsRef.current.length, {
-      name: source.kind === 'shapePolygon' ? 'Land' : OBJECT_TYPES[source.kind]?.label || 'Object',
+      name: source.kind === 'shapePolygon' ? 'Land' : isClosedWater ? 'Water Mass' : OBJECT_TYPES[source.kind]?.label || 'Object',
       text: '',
-      fill: source.fill,
-      stroke: source.stroke,
-      opacity: source.opacity ?? 1,
+      fill: isClosedWater ? WATER_FILL : source.fill,
+      stroke: isClosedWater ? WATER_STROKE : source.stroke,
+      opacity: isClosedWater ? 0.82 : source.opacity ?? 1,
       lineThickness: source.lineThickness,
       dashed: source.dashed,
-      shapeKind: source.kind === 'region' || source.kind === 'shapePolygon' ? 'polygon' : undefined,
+      closed: Boolean(source.closed),
+      waterKind: isClosedWater ? 'waterMass' : undefined,
+      shapeKind: source.kind === 'region' || source.kind === 'shapePolygon' || isClosedWater ? 'polygon' : undefined,
     })
     let selectedId = object.id
     updateObjects(current => {
@@ -2168,12 +2360,14 @@ export default function MapBuilder({ store }) {
   }
 
   function updateMapType(nextType) {
+    pushUndoSnapshot()
     setMapType(nextType)
     updateActiveMapData(() => ({ mapType: nextType, metadata: { ...(activeMap?.metadata || {}), mapType: nextType } }))
     setStampCategory('Default')
   }
 
   function updateStylePreset(nextPreset) {
+    pushUndoSnapshot()
     updateActiveMapData(() => ({
       metadata: { ...(activeMap?.metadata || {}), stylePreset: nextPreset },
     }))
@@ -2279,6 +2473,7 @@ export default function MapBuilder({ store }) {
       try {
         const parsed = JSON.parse(String(reader.result || '{}'))
         const imported = normalizeMapSchema(parsed)
+        pushUndoSnapshot()
         updateActiveMapData(() => ({
           schemaVersion: SCHEMA_VERSION,
           width: imported.width,
@@ -2305,6 +2500,9 @@ export default function MapBuilder({ store }) {
       </div>
     )
   }
+
+  const canUndo = historyVersion >= 0 && undoStackRef.current.length > 0
+  const canRedo = historyVersion >= 0 && redoStackRef.current.length > 0
 
   return (
     <div style={{ flex: 1, minHeight: 0, height: isCompact ? '100%' : 'min(100%, calc(100dvh - 190px))', maxHeight: isCompact ? '100%' : 'calc(100dvh - 190px)', overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', background: 'var(--surface)', color: 'var(--text)', position: 'relative', zIndex: 1 }}>
@@ -2336,6 +2534,8 @@ export default function MapBuilder({ store }) {
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: isCompact ? 'flex-start' : 'flex-end', flexWrap: 'wrap', minWidth: 0 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => selectEditorMode('select')} title="Select">↖</button>
           <button className="btn btn-secondary btn-sm" onClick={() => selectEditorMode('pan')} title="Pan">✥</button>
+          <button className="btn btn-secondary btn-sm" onClick={undoMapChange} disabled={!canUndo} title="Undo">↶</button>
+          <button className="btn btn-secondary btn-sm" onClick={redoMapChange} disabled={!canRedo} title="Redo">↷</button>
           <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(0.86)} title="Zoom out">−</button>
           <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>{Math.round(view.zoom * 100)}%</span>
           <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(1.16)} title="Zoom in">+</button>

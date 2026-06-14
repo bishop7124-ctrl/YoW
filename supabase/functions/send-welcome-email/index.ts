@@ -126,10 +126,10 @@ function welcomeEmailHtml(email: string, confirmUrl: string) {
 
           <tr>
             <td style="background:#133840;border-radius:0 0 12px 12px;padding:18px 40px 24px;border:1px solid #1e4a50;border-top:none;text-align:center;">
-              <p style="margin:0 0 4px;font-size:12px;color:#2a5a62;">
-                Your Own World &middot; <a href="https://www.yourownworld.co.uk" style="color:#2a5a62;text-decoration:none;">yourownworld.co.uk</a>
+              <p style="margin:0 0 4px;font-size:12px;color:#7ab8b4;">
+                Your Own World &middot; <a href="https://www.yourownworld.co.uk" style="color:#7ab8b4;text-decoration:none;">yourownworld.co.uk</a>
               </p>
-              <p style="margin:0;font-size:11px;color:#1e4a50;">
+              <p style="margin:0;font-size:11px;color:#4a8a86;">
                 You're receiving this because you created an account with ${email}
               </p>
             </td>

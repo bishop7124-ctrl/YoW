@@ -108,7 +108,7 @@ Every bug or proposed MVP change must answer: does this create data loss, broken
 | 0. Stop the Chaos | Master roadmap | One canonical roadmap exists with Active, MVP Required, Post-Launch, Icebox, and Bugs sections; all scattered notes are moved or linked. | Yes | Active | Keep this file as the only planning source. | Product |
 | 0. Stop the Chaos | Feature intake freeze | No new launch features enter MVP unless they replace an existing item or fix a launch blocker. | Yes | Active | Enforce the decision rule and parking-lot process above. | Product |
 | 1. Scope Freeze | Exact MVP list | The MVP feature list is locked, versioned, and mapped to acceptance criteria in this roadmap. | Yes | Active | Update only through explicit roadmap decisions. | Product |
-| 1. Scope Freeze | Fully stacked launch scope | Public beta may expose beta/limited workflows, but final launch requires the fully specced project-type stack: all 6 active project types (Novel, Novella, Short Story, D&D Campaign, Tabletop Campaign, Comic/Graphic Novel) must have their promised discipline-specific workflows, safe persistence, and stable exports. Play, Screenplay, TV Series, and Video Game have been retired from active scope and removed from the UI; their constants are preserved in RETIRED_PROJECT_TYPES as a code-level backup. | Yes | In progress | Use beta labels while building, then complete discipline-specific workflow waves for the 6 active types before final launch. | Product/Engineering |
+| 1. Scope Freeze | Fully stacked launch scope | Public beta may expose beta/limited workflows, but final launch requires the fully specced project-type stack: all 6 active project types (Novel, Novella, Short Story, D&D Campaign, Tabletop Campaign, Comic/Graphic Novel) must have their promised discipline-specific workflows, safe persistence, and stable exports. Play, Screenplay, TV Series, and Video Game have been retired from active scope, removed from the UI, and removed from all roadmap scope. Their constants are preserved in RETIRED_PROJECT_TYPES as a code-level backup only. | Yes | In progress | Use beta labels while building, then complete discipline-specific workflow waves for the 6 active types before final launch. | Product/Engineering |
 | 2. Define Good Enough | Launch blocker policy | A blocker is limited to data loss, broken auth, broken save, broken export, unusable editor, unusable mobile layout, or missing legal/payment essentials. | Yes | Adopted | Apply the blocker policy to every triage pass before changing MVP scope. | Product/QA |
 | 2. Define Good Enough | QA automation baseline | A single local QA command runs the basic release-safety checks before deeper browser smoke tests. | Yes | Automated in CI | `npm run qa` runs lint, production build, and load check. `npm run qa:smoke` starts Vite in offline mode and now covers create/write/refresh/export/restore, DOCX/PDF export downloads, all configured project-type creation with starter structure/default sections, and mobile/tablet writing reachability. GitHub Actions runs static QA plus named smoke jobs on push, pull request, daily schedule, and manual dispatch, with Playwright annotations and artifacts uploaded on failure. Current Codex macOS sandbox blocks Chromium launch at Mach-port registration, so browser smoke is verified through a normal local terminal or CI runner. React compiler advisories remain as warnings. | Engineering/QA |
 | 2. Define Good Enough | Manual QA checklist | A complete manual QA checklist exists covering all 28 test sections: auth, dashboard, manuscript editor (all 5 live project types), worldbuilding (characters, locations, lore, timeline), map, family tree, factions, ideas, schedule, character builder, exports (ZIP/DOCX/PDF/restore), AI tools, account settings (themes, storage, AI provider), pricing, URL persistence, modals, studio, novel reader, responsive layout (375px/768px/1280px+), public/marketing pages, large-project stress test, data safety edge cases, and legal/compliance. Each item has pass/fail/skip status, freeform notes, and export to Markdown, HTML report, JSON, or CSV. State persists in localStorage. | Yes | Complete | Open [docs/qa-checklist.html](docs/qa-checklist.html) directly in a browser as the manual test runner before each release. | QA |
@@ -117,7 +117,7 @@ Every bug or proposed MVP change must answer: does this create data loss, broken
 
 | Phase | Feature | Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1. Scope Freeze | Project-type access model | All 6 active project types are selectable in create/edit flows. Comic/Graphic Novel is marked beta/limited. Unknown imported types fall back safely to Novel. Retired types (Play, Screenplay, TV Series, Video Game) are not shown in the UI; their constants exist in RETIRED_PROJECT_TYPES. | Yes | Beta-live model implemented, scope reduced to 6 types | Automated smoke verified active project types, live/beta stages, structure labels, section defaults, and ZIP/DOCX/PDF blob generation. Browser smoke verified homepage beta-live expectation copy. Still needs authenticated/offline UI pass for create/open/export clicks. | Engineering/QA |
+| 1. Scope Freeze | Project-type access model | All 6 active project types are selectable in create/edit flows. Comic/Graphic Novel is marked beta/limited. Unknown imported types fall back safely to Novel. Retired types (Play, Screenplay, TV Series, Video Game) are not shown in the UI; their constants exist in RETIRED_PROJECT_TYPES as a code-level backup only and must never reappear in the UI or marketing copy. | Yes | Beta-live model implemented, scope reduced to 6 types | Automated smoke verified active project types, live/beta stages, structure labels, section defaults, and ZIP/DOCX/PDF blob generation. Browser smoke verified homepage beta-live expectation copy. Still needs authenticated/offline UI pass for create/open/export clicks. | Engineering/QA |
 | 3. Core Polish | Save and close behavior | Closing editors, panels, and modals never drops unsaved manuscript or worldbuilding changes; prompts appear only when useful. | Yes | Implemented, needs QA | Manuscript editor flushes on blur/unmount; Edit modals (project, series) prompt "Discard changes?" when dirty; click-outside closes all modals. Run close/refresh/logout tests across manuscript, lore, characters, locations, and timeline. | Engineering/QA |
 | 3. Core Polish | Dashboard consistency | Dashboard lets users create, open, rename, and delete projects without layout breaks or ambiguous states. | Yes | Implemented, needs QA | First-run empty account hero now uses a welcoming "Begin your first world" start state with New Project, Import with AI, and a three-step quick tour; single-project auto-activation; series dropdown on create; series filter on StatusQueue; tile click opens project; project cards show a hover/focus Select project cue; active project panel shows a hover/focus Open project cue and displays cover photos without blend filtering; star button toggles active focus; series-contained projects are selectable as active projects from the library even when no standalone projects exist; series project cards are grouped under their parent series and the library content width matches ActiveProjectHero; card hover stats trimmed (scenes removed); ActiveProjectHero layout (library snapshot top, project details bottom); all 3 card buttons unified to 30×30 circle; project dashboard now separates Overview basics from Insights analytics, with momentum, scene health, draft balance, longest-scene, worldbuilding coverage cards, responsive tile packing for large screens, and human-readable project status labels instead of raw status IDs; project status picker added to internal project settings panel; current word count added to Overview Basics ledger; word count/target/completion stats added to the overview hero header; project overview summary boxes (Project, Manuscript, Reference, Recent Draft) now display in a single four-column row. Test empty account first-run hero, one project, all-projects-in-series, multiple series, many projects, overview/insights switching across desktop/tablet/mobile widths, project status label display, status picker in internal settings, word count stats in hero, new project create → auto-navigate into project, and deleted-project recovery expectations. Project type is locked at creation (type picker removed from EditProjectModal; type preserved on save). | Engineering/QA |
 | 3. Core Polish | Responsive scaling | The core writing and dashboard flows are usable on mobile and tablet widths; no key controls overlap or disappear. | Yes | Mitigation added, needs QA | Mobile manuscript sidebar fixed to bottom tab bar (≤640px); panel opens as 58vh overlay; writing area gets full width. Project/reference boxes expand on wide screens (max-width 1800px). Series dashboard top bar now stays layered above its sticky tab bar so the user menu is not obscured. Public top navigation is standardised across React and static marketing pages. Added 375px fixes for homepage horizontal overflow, active project/series card layering, project top-nav crowding, manuscript toolbar wrapping, series title priority/tab fitting, schedule month width, and timeline header density. Run 375px viewport pass across homepage, library, series dashboard, manuscript, schedule, and timeline. | Design/QA |
@@ -149,24 +149,231 @@ The public beta must be honest about the project-type stack. Beta project types 
 | Short Story | Short-form prose workflow. Structure: Part → Section → Scene. Compact default sections matching Novella set. Type-specific story event indicators and a 5,000-word default target defined. Shares the manuscript editor. Enabled at launch. | Yes | Enabled, needs QA | QA: create a Short Story project, verify Part/Section/Scene labels, verify default sections, verify default word target appears, verify export. | Engineering/QA |
 | D&D Campaign | D&D tabletop campaign. Structure: Story Arc → Session → Encounter. Default sections include map, factions, worldhistory, and Character Builder. Type-specific DM story event indicators and D&D-flavoured positioning/prompt context defined. Shares editor. Enabled at launch. | Yes | Session engine + Character Builder implemented, needs QA | QA: create a D&D Campaign project, verify Arc/Session/Encounter labels, structured session prep/recap fields, all default sections including map, D&D-flavoured type description and AI prompt behavior, campaign export inclusion, and Character Builder Party room (wizard, sheet, dice roller). | Engineering/QA |
 | TTRPG Campaign | System-neutral tabletop campaign. Structure: Story Arc → Session → Encounter. Same structural defaults as D&D but with system-neutral positioning, labels, indicators, and prompt context. Character Builder included in default sections. Enabled at launch; merge deferred because roadmap currently requires both launch types and migration would add launch risk. | Yes | Session engine + Character Builder implemented, needs QA | QA: create a TTRPG Campaign project, verify Arc/Session/Encounter labels, structured session prep/recap fields, system-neutral type description and AI prompt behavior, campaign export inclusion, and Character Builder Party room (wizard, sheet, dice roller). | Engineering/QA |
-| Comic / Graphic Novel | Sequential art. Structure: Volume → Issue → Page. Selectable as beta/limited. Final launch needs panel planning, visual direction fields, and export expectations before it can be marketed as fully live. | Yes | Beta selectable, final panel workflow required | Define and build page/panel planning model and confirm export format. | Product/Engineering |
-| Video Game | Interactive narrative. Temporary structure: Act → Chapter → Scene. Selectable as beta/limited. Final launch needs narrative-bible vs branching-support scope decision before it can be marketed as fully live. | Yes | Beta selectable, final narrative system required | Decide and build narrative bible first vs quests/dialogue trees/branching paths. | Product/Engineering |
+| Comic / Graphic Novel | Sequential art. Structure: Volume → Issue → Page → Panel. Comic Panel Engine implemented 2026-06-13. Final launch requires QA pass before Comic/Graphic Novel can be marketed as fully live. | Yes | Implemented, needs QA | QA per the QA Plan in the PRD below: CRUD, persistence (refresh/navigate/logout), export round-trip (ZIP/DOCX), responsive (375px/768px/desktop), data safety (delete chains, restore into existing account), performance. | Engineering/QA |
+
+## PRD: Comic Panel Engine
+
+### Product Summary
+
+The Comic Panel Engine turns Comic/Graphic Novel projects from a renamed prose outline into a sequential-art planning workspace. It must let writers plan volumes, issues, pages, and panels; capture the writing and art-direction details needed by a solo creator or writer/artist team; and export a readable comic script and project backup without data loss.
+
+This is final-launch scope for Comic/Graphic Novel. Until this engine is implemented and QA-passed, Comic/Graphic Novel remains beta/limited in product copy.
+
+### Problem
+
+The current Comic/Graphic Novel workflow supports comic-specific project type labels and templates, but page planning still depends on the shared manuscript scene model. That is not enough for comics because creators need to think in pages, panel counts, panel beats, visual composition, captions, speech balloons, sound effects, and page-turn reveals. Without a real page/panel model, YOW risks over-promising a format-specific workflow that cannot support normal comic scripting.
+
+### Target Users
+
+- Writer planning a comic issue or graphic novel script before handing it to an artist.
+- Writer-artist thumbnailing page beats and visual direction before drafting final pages.
+- Editor or collaborator reviewing whether a page has too many panels, unclear dialogue, missing art notes, or weak page turns.
+
+### Goals
+
+- Provide a comic-native structure: Volume → Issue → Page → Panel.
+- Let users create, reorder, duplicate, edit, and delete pages and panels without losing linked content.
+- Capture page-level intent: page title, summary, status, page type, page-turn intent, location/time, characters, visual notes, and production notes.
+- Capture panel-level script detail: panel number, shot/framing, description, art direction, characters, dialogue, captions, SFX, lettering notes, continuity notes, and panel status.
+- Give users a fast page-planning view that shows page count, panel count, dialogue density, status, and page-turn beats.
+- Export comic projects in a readable script format and include panel data in ZIP backup/restore.
+- Keep existing prose, campaign, and worldbuilding workflows unaffected.
+
+### Non-Goals
+
+- Finished comic page layout, drawing, image generation, lettering, or print prepress.
+- Real-time collaboration or artist assignment workflows.
+- Advanced thumbnail canvas editing.
+- Branching versions of the same panel/page.
+- Replacing existing character, location, lore, map, or timeline systems.
+
+### Core User Stories
+
+- As a comic writer, I can add pages inside an issue and panels inside each page so I can plan a complete issue.
+- As a comic writer, I can enter dialogue, captions, SFX, and art notes per panel so my script is useful to an artist.
+- As a writer-artist, I can set page-level visual direction and page-turn purpose so each page has a clear storytelling job.
+- As an editor, I can scan pages for panel count, status, and dialogue load so I can spot pacing problems quickly.
+- As a user, I can refresh, navigate away, export, restore, and log back in without losing page or panel work.
+
+### Data Model Requirements
+
+Reuse the existing project structure where practical: Volume maps to the existing first structural level and Issue maps to the second structural level. Add comic-specific records for pages and panels rather than overloading prose scene content.
+
+Comic page record:
+
+| Field | Requirement |
+| --- | --- |
+| `id` | Stable page ID for local state, cloud sync, export, and restore. |
+| `novelId` | Project ID. Keep the existing naming convention unless the store is renamed globally. |
+| `volumeId` | Parent Volume/act ID. |
+| `issueId` | Parent Issue/chapter ID. |
+| `order` | Numeric page order within the issue. |
+| `title` | Optional page title or label. |
+| `summary` | Page-level story beat. |
+| `pageNumber` | Display page number, auto-derived by default and manually overrideable if needed. |
+| `pageType` | Standard, splash, double-page spread, cover, backmatter, recap, credits, or custom. |
+| `status` | Outline, Draft, Revised, Final. |
+| `pageTurn` | None, reveal, cliffhanger, joke, emotional beat, action beat, or custom. |
+| `locationIds` | Linked locations. |
+| `characterIds` | Linked characters appearing on the page. |
+| `timeOfDay` | Optional continuity field. |
+| `visualDirection` | Page-level composition, mood, palette, reference, or style notes. |
+| `productionNotes` | Editor/artist/letterer notes. |
+| `createdAt` / `updatedAt` | Persistence and conflict visibility. |
+
+Comic panel record:
+
+| Field | Requirement |
+| --- | --- |
+| `id` | Stable panel ID. |
+| `novelId` | Project ID. |
+| `pageId` | Parent comic page ID. |
+| `order` | Numeric panel order within the page. |
+| `panelNumber` | Display number, auto-derived from order. |
+| `layoutHint` | Full width, tall, wide, inset, borderless, close-up, establishing, action, reaction, or custom. |
+| `shotType` | Establishing, wide, medium, close-up, extreme close-up, POV, over-shoulder, detail, or custom. |
+| `description` | What the reader sees. |
+| `artNotes` | Direction for composition, motion, expression, props, continuity, references. |
+| `dialogue` | Ordered balloon lines with speaker, text, and optional emotion/lettering note. |
+| `captions` | Ordered caption boxes with text and optional type: narration, location, time, thought, editorial. |
+| `sfx` | Ordered sound effects with text and optional placement/style note. |
+| `characterIds` | Characters visible or speaking in the panel. |
+| `locationIds` | Optional panel-specific location override. |
+| `continuityNotes` | Prop/costume/time continuity. |
+| `status` | Outline, Draft, Revised, Final. |
+| `createdAt` / `updatedAt` | Persistence and conflict visibility. |
+
+### UX Requirements
+
+- Comic projects show a Comic Planning workspace or comic-specific mode inside Manuscript.
+- The left structure keeps Volume and Issue navigation.
+- The main area shows a page list for the selected issue with compact status, panel count, page type, page-turn marker, and last updated time.
+- Selecting a page opens a page editor with page-level fields and a sortable panel list.
+- Panel editor supports fast creation of multiple panels, duplication, reordering, deletion, and collapse/expand.
+- Dialogue, captions, and SFX are separate repeatable rows, not one undifferentiated text box.
+- Page and panel records autosave with the same reliability expectations as manuscript scenes.
+- Empty states are comic-specific: first page, first panel, and empty issue states should guide the user into page planning without marketing copy.
+- Mobile/tablet layout must preserve page selection, panel editing, save state, and export access without overlapping controls.
+
+### Export Requirements
+
+ZIP backup/restore:
+
+- Include comic pages and panels in project export JSON.
+- Restore must remap page and panel IDs, preserve parent relationships, preserve linked characters/locations where possible, and avoid collisions with existing project IDs.
+- Restore must not drop unknown future comic fields.
+
+DOCX/PDF export:
+
+- Comic projects export as a readable comic script organized by Volume, Issue, Page, and Panel.
+- Each page includes page metadata, summary, page-turn intent, visual direction, and production notes when present.
+- Each panel includes panel description, art notes, dialogue, captions, SFX, continuity notes, and linked character/location names where present.
+- Export should include page and panel counts in issue summaries.
+- Empty pages or panels should export with clear placeholders rather than failing.
+
+### AI Requirements
+
+- AI prompt context for Comic/Graphic Novel should include project type, issue/page/panel structure, current page summary, panel count, selected panel text, linked characters, and linked locations when available.
+- AI actions may suggest panel beats, dialogue trims, page-turn ideas, or visual direction.
+- AI must not overwrite page or panel content without explicit user action.
+
+### Acceptance Criteria
+
+- A user can create a Comic/Graphic Novel project, add at least one Volume, Issue, Page, and Panel, refresh immediately, and all content remains.
+- A user can reorder pages within an issue and panels within a page; order persists after refresh and export/restore.
+- A user can duplicate a page with all panels and then edit the duplicate without changing the original.
+- Deleting a page deletes or safely detaches its panels with a clear confirmation.
+- Deleting a linked character or location removes or labels broken comic links consistently with existing worldbuilding cleanup behavior.
+- Comic page and panel data is included in local storage, cloud save, ZIP export, ZIP restore, DOCX export, and PDF export.
+- Comic export remains readable when an issue has no pages, a page has no panels, or a panel has only notes and no dialogue.
+- Existing Novel, Novella, Short Story, D&D Campaign, and TTRPG Campaign projects continue to create, edit, save, and export without comic fields appearing in their core workflows.
+
+### QA Plan
+
+**1. Structure CRUD**
+- Create a Comic/Graphic Novel project; confirm Comic Planner opens instead of prose Manuscript.
+- Add a Volume; confirm it appears in the sidebar.
+- Add an Issue under the Volume; confirm it appears nested and is selectable.
+- Double-click Volume and Issue titles to rename; confirm names save on blur/Enter.
+- Delete an Issue that has pages; confirm pages are removed and sidebar updates.
+- Delete a Volume that has issues; confirm all child issues and their pages are removed.
+
+**2. Page CRUD**
+- Select an Issue; add at least 3 pages; confirm they appear in the page list with ascending numbers.
+- Edit page title, page type, status, page turn, summary, visual direction, production notes; refresh and confirm all fields persist.
+- Duplicate a page; confirm the duplicate has the same fields and panels; edit the duplicate and confirm the original is unchanged.
+- Delete a page that has panels; confirm the panels are removed and the list updates.
+
+**3. Panel CRUD**
+- Add 4 panels to a page; confirm they each expand and collapse independently.
+- Fill in description, art notes, shot type, layout, status, continuity notes; add dialogue balloons (with speaker), captions (with type), and SFX rows; refresh and confirm all fields persist.
+- Delete a panel; confirm it is removed and remaining panels are renumbered.
+- Link and unlink characters from page and panel character chips; refresh and confirm the selection persists.
+
+**4. Reference image upload (page and panel level)**
+- Upload a PNG or JPG to a page reference; confirm it appears as a thumbnail; refresh and confirm the image persists.
+- Upload a WebP or GIF; confirm it processes and saves correctly.
+- Upload a PDF; confirm the iframe preview appears; confirm the "Session only — not saved on refresh" badge is visible; refresh and confirm the PDF preview is gone (session-only confirmed).
+- Click Replace on an existing image and upload a different image; confirm the old image is gone.
+- Click Remove; confirm the image is cleared and the drop zone returns.
+- Repeat upload tests at the panel level.
+
+**5. Persistence**
+- Fill page and panel fields, add a page reference image, then immediately refresh; confirm all content and the image remain.
+- Navigate to another project section (worldbuilding, etc.) and back to Manuscript; confirm the comic planner state is preserved.
+- Sign out and sign back in; confirm all pages, panels, fields, and reference images are restored from cloud save.
+
+**6. Export — ZIP round-trip**
+- Export a comic project ZIP; open the ZIP and confirm `data/comic-pages.json` and `data/comic-panels.json` are present with correct content.
+- Import the ZIP as a new project; confirm all volumes, issues, pages, panels, text fields, and reference images are restored under a new project entry.
+
+**7. Export — DOCX**
+- Export DOCX for a comic project; confirm a "Comic Script" section appears.
+- Confirm Volume and Issue headings are present; confirm each page shows page number, metadata, summary, and visual direction.
+- Confirm each panel shows description, art notes, dialogue balloons, captions, SFX, and continuity notes.
+- Export a comic with an empty issue (no pages) and a page with no panels; confirm the export does not crash and renders clear placeholders.
+
+**8. Non-comic project isolation**
+- Open a Novel, Novella, Short Story, D&D Campaign, or TTRPG Campaign project; confirm the prose Manuscript opens normally with no comic fields visible.
+- Export a non-comic project DOCX; confirm no comic script section appears.
+
+**9. Responsive**
+- Test at 375px: confirm sidebar, page list, and panel editor are accessible without overlapping controls; confirm the drop zone and image preview are usable.
+- Test at 768px: confirm the three-panel layout adjusts correctly.
+- Test at 1280px+: confirm the layout uses available space without clipping.
+
+**10. Data safety**
+- Delete a character that is linked to pages and panels; confirm the character is removed from `characterIds` on affected records or appears as a broken link consistently with existing worldbuilding cleanup behaviour.
+- Restore a ZIP into an account that already has other projects; confirm existing projects are unaffected.
+- Create a comic project, add pages and panels, then delete the entire project; confirm all comic page and panel records are removed from storage.
+
+### Implementation Notes
+
+- Prefer additive store fields such as `comicPages` and `comicPanels` over mutating the prose scene model into panel data.
+- Keep comic page/panel records project-scoped and compatible with current local-first save and Supabase JSON persistence.
+- Use existing project export/import ID-remapping utilities where possible.
+- Gate comic-specific UI by `project.type === 'comic'`.
+- Keep roadmap status as beta/limited until CRUD, persistence, export, restore, and responsive QA pass.
+
+### Open Decisions
+
+- Whether double-page spreads are modeled as one page record with `pageType: double-page spread` or as linked left/right page records.
+- Whether page numbering should be per issue only or continuous across a graphic novel.
+- Whether panel dialogue needs rich formatting in the first release or plain structured rows are sufficient.
+- Whether visual reference images belong in this engine now or should remain in existing image/map/lore systems until post-launch.
 
 ## All Project Types Live Plan
 
 Operating model: use beta to ship breadth safely, then deepen each discipline before final launch. A beta project type is allowed to be selectable if the UI labels it honestly, data persists safely, export does not crash, and missing workflow-specific features are not advertised as complete. Final launch requires the workflow waves below to be complete enough that the site can stand without planned continual development.
 
-Current status: Wave 0 is implemented and partially smoke-tested. Wave 1 shared type foundation is implemented for type defaults, section defaults on new projects, starter outlines, dashboard language, type-specific workflow summaries, AI prompt context, workspace badges, project-settings type notes, and generic export labels; automated config/export smoke passed across all 10 types. Wave 2 script foundation has started with paragraph-level script element controls, Tab / Shift+Tab element cycling, Ctrl/Cmd+1-6 element shortcuts, Enter-based script paragraph flow, script-styled preview, persisted script block metadata, script metadata on new Play/Screenplay/TV starter scenes, readable script DOCX output, and toolbar/export beta labeling for script beta projects. Wave 4 tabletop session engine now adds structured session prep and recap fields to existing campaign session records and includes them in campaign exports; browser QA is still needed.
+Current status: Wave 0 is implemented and partially smoke-tested. Wave 1 shared type foundation is implemented for type defaults, section defaults on new projects, starter outlines, dashboard language, type-specific workflow summaries, AI prompt context, workspace badges, project-settings type notes, and generic export labels; automated config/export smoke passed across all 6 active types. Wave 2 tabletop session engine adds structured session prep and recap fields to existing campaign session records and includes them in campaign exports; browser QA is still needed. Wave 3 comic panel engine implemented 2026-06-13 with Volume → Issue → Page → Panel structure, full page/panel field editors, reference image/PDF upload, DOCX script export, and ZIP round-trip; browser QA needed.
 
 | Wave | Scope | Acceptance Criteria | QA Gate |
 | --- | --- | --- | --- |
-| 0. Beta access | All 10 project types can be created and edited; beta types show limited-workflow notes. | Create/edit flow accepts all configured project type IDs; project header shows type badge; homepage avoids unsupported feature claims. | Smoke check every type: create, open, add one structure item, refresh, export ZIP. |
+| 0. Beta access | All 6 active project types can be created and edited; beta types show limited-workflow notes. | Create/edit flow accepts all configured project type IDs; project header shows type badge; homepage avoids unsupported feature claims. | Smoke check every type: create, open, add one structure item, refresh, export ZIP. |
 | 1. Shared type foundation | Project-type defaults, dashboard language, AI prompt context, export labels, section defaults, and workspace badges. | Each type has distinct structure labels, default sections, prompt guidance, and visible type identity. | Smoke check live/beta type language in dashboard, manuscript, AI tools, and export menu. |
-| 2. Script engine | Play, Screenplay, and TV share script element types, formatting controls, and script-aware export. | User can write dialogue/action/stage or screen directions and export a readable script document. | Deep QA for script editing, keyboard flow, export, and mobile layout. |
-| 3. Episode engine | TV Series gets episode metadata, series bible fields, and season/episode dashboard affordances. | User can plan a season, track episode loglines/status/runtime, and distinguish TV Series from book Series. | Deep QA TV create/edit/dashboard/export. |
-| 4. Tabletop session engine | D&D/TTRPG get structured session planning and recap fields without replacing existing campaign bible data. | User can plan and recap a session with hooks, encounters, NPCs, rewards, and consequences. | Deep QA campaign planning, persistence, and export. |
-| 5. Comic panel engine | Comic/Graphic Novel gets page/panel planning and visual direction fields. | User can outline pages, panels, captions/dialogue, and art notes. | Deep QA page/panel CRUD and export. |
-| 6. Game narrative engine | Video Game gets narrative-bible fields first; branching/quest/dialogue trees follow behind flags. | User can define quests/missions/dialogue notes or a scoped narrative bible without breaking prose workflows. | Deep QA game project CRUD, navigation, and export. |
+| 2. Tabletop session engine | D&D/TTRPG get structured session planning and recap fields without replacing existing campaign bible data. | User can plan and recap a session with hooks, encounters, NPCs, rewards, and consequences. | Deep QA campaign planning, persistence, and export. |
+| 3. Comic panel engine | Comic/Graphic Novel gets page/panel planning, visual direction fields, reference image/PDF upload, and comic script export. | User can outline pages, panels, captions/dialogue, art notes, and upload reference images; data round-trips through ZIP and DOCX export. | Deep QA per the QA Plan in the Comic Panel Engine PRD above. |
 
 ## Conditional MVP
 
@@ -174,12 +381,12 @@ These items can ship in MVP only if they are already stable, required by a launc
 
 | Phase | Feature | Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 3. Core Polish | Modals and overlays | All critical modals open, close, trap focus reasonably, preserve unsaved work, and use consistent spacing and button order. | Conditional | Partial | Audit shared modal plus high-use feature modals. | Engineering/Design |
+| 3. Core Polish | Modals and overlays | All critical modals open, close, trap focus reasonably, preserve unsaved work, and use consistent spacing and button order. | Conditional | Implemented, needs QA | All modals now support Escape-to-close: shared StudioSheet handles it natively with dirty-state guard; EditSeriesModal, EditProjectModal, and inline new-project/new-series forms in NovelManager all have useEscapeKey(); ScheduleCalendar EventModal and SeriesDashboard AddProjectModal/ConfirmDialog also wired. QA: open each modal, press Escape with and without changes; verify dirty-state confirm prompt appears; verify backdrop click closes. | Engineering/Design |
 | 4. Manuscript | AI suggestion mode | AI assistance can suggest prose or ideas without overwriting user text unless the user explicitly applies it. | Conditional | Implemented, needs QA | AI sidebar panel with 4 quick-action chips (Continue, What's next?, Improve, Add dialogue) + custom prompt textarea. Streams output; user explicitly clicks "Append to scene" or "Copy" to apply. Never auto-applies. AI button in toolbar + AI tab in sidebar. Requires user to configure an AI provider in AI Settings. QA: test with a configured provider — generate, append, copy, discard; verify no auto-overwrite; test with no provider configured (shows warning). | Engineering/QA |
-| 5. Worldbuilding | Internal linking | Characters, locations, lore, timeline, and history can reference each other where the launch workflow requires it. | Conditional | Partial | Define must-have links and postpone broad wiki-style linking. | Product/Engineering |
-| 5. Worldbuilding | Search and filtering | Users can find major project records by name/category/status without scanning long lists manually. | Conditional | Partial | Audit search/filter coverage for characters, locations, lore, timeline, and ideas. | Engineering/QA |
+| 5. Worldbuilding | Internal linking | Characters, locations, lore, timeline, and history can reference each other where the launch workflow requires it. | Conditional | Implemented, needs QA | Full cross-reference sweep complete: Timeline and WorldHistory detail views show linked characters/locations as clickable chips that navigate to the target entity. Characters Relationships tab shows "Referenced in" incoming refs (lore entries, timeline events). Locations detail shows "Referenced in" (lore entries with chip navigation, timeline events). Lore entries support lore-to-lore `loreIds` links via LinkPicker in the edit form; detail view shows "Related Lore" with both outgoing links and incoming reverse-refs (prefixed ←). All powered by pure utility functions in `src/utils/worldLinks.js`. QA: create linked entities across sections; verify chips appear and navigate correctly; verify reverse-refs appear on target entry. | Product/Engineering |
+| 5. Worldbuilding | Search and filtering | Users can find major project records by name/category/status without scanning long lists manually. | Conditional | Implemented, needs QA | Characters: search by name, sort by name/role/faction, filter by family group and faction with active filter count and clear button, "No matches" message on empty results, "No characters yet" message on empty list. Locations: search by name, sort by name/category, "No matches" and "No locations yet" empty states. Lore: search by title, category filter, tag filter, sort — all with "No results" fallback. Timeline: search across title/description/date/tags. WorldHistory: search across title/era/description. Ideas: per-column empty states. QA: test search/filter on each worldbuilding section with empty and populated projects. | Engineering/QA |
 | 6. Exports & Safety | Storage usage tracking | Users can see meaningful storage usage or limits before hitting failure states. | Conditional | Improved, needs QA | All "storage limit reached" warnings now present a consistent message regardless of trigger: the membership toast shows the exact used/quota bytes and a "Plan settings" button that opens the membership tab; the StorageCard exceeded message includes inline used/quota numbers; `storageExceededCheck()` in useStore passes `usedBytes` and `quotaBytes` through the `membership-read-only` event so the toast can render them. Test storage-exceeded toast from any create/save action, verify numbers appear in toast and StorageCard, and verify "Plan settings" button opens membership tab. | Engineering/QA |
-| 7. Launch | Empty/loading/error states | Core screens give clear empty, loading, and error feedback without dead ends. | Conditional | Partial | Dashboard first-run empty account state now has a specific welcome, project/import CTAs, and guided tour steps. Continue auditing top-level routes and each MVP module. | Design/Engineering |
+| 7. Launch | Empty/loading/error states | Core screens give clear empty, loading, and error feedback without dead ends. | Conditional | Improved, needs QA | Dashboard first-run empty account state now has a specific welcome, project/import CTAs, and guided tour steps. Characters index: "No characters yet" + "No matches" on search/filter. Locations index: "No locations yet" + "No matches". Lore index: existing "No results" fallback. WorldHistory index: existing empty/no-match states. Ideas Kanban: per-column empty drop-target state. StudioEmpty used consistently for detail panes across all worldbuilding sections. QA: test each section with zero records, then with records but a no-match search. | Design/Engineering |
 | 7. Launch | Landing page | Landing page explains the writing/worldbuilding value proposition and routes cleanly into signup/pricing without advertising beta/limited workflows as complete. | Conditional | Features and FAQ pages live; nav updated | `/features/` and `/faq/` are now real pages wired into the SPA router (`isFeaturesPath`/`isFAQPath` in App.jsx). `/features/` has: per-project-type feature matrix (Prose Fiction grouped as Novel/Novella/Short Story, Comic/Graphic Novel with Beta badge, Tabletop Campaign, D&D Campaign), unique-per-type callout cards, and a prose-format differences breakdown (word targets, structures, default rooms). `/faq/` has four accordion sections (Plans & Pricing, Features & AI, Data & Storage, Getting Started) updated to match current plan copy. Blog link removed from marketing nav. "Compare plans" on pricing changed from `href="#comparison"` to a `scrollIntoView` button to avoid hash-nav SPA conflicts. QA: hard-reload `/features/` and `/faq/`; test all nav links; FAQ accordion expand/collapse; confirm Blog absent; Compare plans scrolls correctly; back/forward nav between pages. Also QA homepage copy against beta-live scope. | Product/Design/Engineering |
 | 7. Launch | SEO basics | Title, description, OG tags, Twitter card, JSON-LD (WebSite, Organization, SoftwareApplication with pricing), robots, canonical, and keywords are all present. Description updated to include tabletop/campaign audience. | Conditional | Complete | No further action required before launch. | Engineering |
 | 7. Launch | Analytics | Google Analytics 4 (tag G-L1BT87PKXV) added to all 25 HTML files — React app root and all static marketing/blog pages. | Conditional | Complete | No further action required before launch. | Engineering |
@@ -195,18 +402,127 @@ These items can ship in MVP only if they are already stable, required by a launc
 | Factions and family grouping | Grouping supports the novelist workflow without blocking core character/lore use. | Implemented/optional | Factions now have `saveFaction`/`deleteFaction` wired through `saveSeriesSyncedItem`/`deleteSeriesSyncedItem` (matching characters/locations); `factionsRef` tracks live state for sync; deleting a faction clears `factionId` on affected characters. Keep visible only if stable; otherwise move to post-launch polish. | Product/Engineering |
 | EPUB-ready structure | Internal manuscript structure does not prevent future EPUB export; full EPUB generation is not required for MVP. | Preparation only | Move full EPUB export post-launch unless already complete. | Product/Engineering |
 | Stylised encyclopedia export | Not required for MVP unless it is part of the paid launch promise. | Scope trap | Move to post-launch; keep basic project export as the launch requirement. | Product |
-| Advanced map builder | Map features do not block core launch safety unless required by campaign or worldbuilding acceptance criteria. | Implemented/optional | Keep if stable; do not polish at the expense of data safety. | Product |
+| Advanced map builder | Map features do not block core launch safety unless required by campaign or worldbuilding acceptance criteria. See PRD: Map Builder Rebuild below for full scope. First rebuild slice implemented: gentler bounded wheel zoom, visible undo/redo, transaction-style history for object edits, drag threshold to prevent accidental moves, Space/Alt temporary pan behavior, "Stamps" tool label, and closed Rivers/Seas paths becoming filled water masses. | Phase 1 partial implementation, needs browser QA | Browser QA the first slice, then continue with hover state, clearer handles, inspector/layers cleanup, mountain improve/remove decision, thumbnails/export plates, and responsive safety. | Product/Design/Engineering |
 | Analytics | Google Analytics 4 implemented 2026-06-13 (tag G-L1BT87PKXV, added to all 25 HTML pages). Replaces the Posthog/deferred plan. | Complete | No further action needed. | Engineering |
-| Theme system v2 | New visual identity system with atmosphere token architecture, per-theme radius/shadow/glow personalities, and all studio vars auto-adapting via CSS var resolution. Theme editor now groups dark and light preset themes, uses compact selectors with a dedicated live preview, and exposes configurable custom colours, corner roundness, and colour/shadow strength. | Implemented, needs QA | QA AccountSettings theme editor: switch dark/light presets, edit custom colours, adjust roundness and visual strength, save to profile, refresh, and verify the live preview and app shell remain in sync. | Design/Engineering |
+| Theme system v2 | New visual identity system with atmosphere token architecture, per-theme radius/shadow/glow personalities, and all studio vars auto-adapting via CSS var resolution. Theme editor now groups dark and light preset themes, uses compact selectors with a dedicated live preview, exposes configurable custom colours, corner roundness, and atmosphere strength, and now derives custom-theme atmosphere/paper/sidebar/accent-contrast tokens from the edited palette. Project/library screens now use explicit project surface roles for shell, standard panel, soft panel, raised panel, borders, hover, selected states, and tab/navigation icon contrast to reduce random-looking colour shifts. | Implemented, needs authenticated QA | QA AccountSettings theme editor while signed in: switch dark/light presets, edit each custom colour, adjust roundness and atmosphere strength, save to profile, refresh, sign out/in, and verify the live preview, library top bar, active project hero, overview cards, insight cards, manuscript action controls, primary buttons, studio/editor surfaces, tab/navigation icons, and saved profile theme remain in sync with legible text. | Design/Engineering |
 | Collaboration | Multi-user editing and sharing are excluded from MVP. | Post-launch | Document as future roadmap only. | Product |
 | Marketplace/community | Marketplace and public community systems are excluded from MVP. | Post-launch | Avoid launch copy that implies community availability. | Product |
 | Mobile apps | Native mobile apps are excluded; responsive web usability is the MVP requirement. | Post-launch | Focus mobile effort on web responsiveness. | Product |
 | Advanced AI agents | Agentic workflows are excluded; MVP AI stays bounded and user-directed. | Post-launch | Define one or two safe AI assistance actions for launch. | Product/AI |
-| Project-type manuscript templates | The template picker in manuscript mode now filters templates by active project type. Novel/Novella: Three Act, Hero's Journey, Save the Cat, Romantasy, Mystery/Thriller, Episodic TV, Blank. Short Story adds: Freytag's Pyramid, Flash Fiction, In Medias Res. Screenplay: Three Act (page-count), Hero's Journey (Feature), Thriller/Mystery (Feature). Play: Two-Act, Three-Act, One-Act. TV Show: Pilot + Season Arc, Procedural Season. Comic: Multi-Issue Arc, Standalone Graphic Novel. Video Game: Linear Narrative, Open World/Sandbox, Branching Narrative. D&D Campaign: Three-Arc Campaign, One-Shot. TTRPG: Three-Act Campaign, One-Shot/Convention, Horror Campaign. Blank/Custom is universal. `getTemplatesForProjectType()` handles filtering; `TemplateModal` receives `projectType` prop from `Manuscript`. | Implemented 2026-06-13 | No further QA gate required; template picker adapts automatically when a project is opened. | Engineering |
+| Project-type manuscript templates | The template picker in manuscript mode now filters templates by active project type. Novel/Novella: Three Act, Hero's Journey, Save the Cat, Romantasy, Mystery/Thriller, Episodic TV, Blank. Short Story adds: Freytag's Pyramid, Flash Fiction, In Medias Res. Comic: Multi-Issue Arc, Standalone Graphic Novel. D&D Campaign: Three-Arc Campaign, One-Shot. TTRPG: Three-Act Campaign, One-Shot/Convention, Horror Campaign. Blank/Custom is universal. `getTemplatesForProjectType()` handles filtering; `TemplateModal` receives `projectType` prop from `Manuscript`. Retired type templates (Screenplay, Play, TV Show, Video Game) are not shown. | Implemented 2026-06-13 | No further QA gate required; template picker adapts automatically when a project is opened. | Engineering |
 | AI chat history — pin & category | All AI chat sessions are persisted per project in localStorage. Sessions can be pinned (appear first) and tagged with a free-text category; category filter chips appear in the session list when categories exist. | Implemented | No further action needed for launch. | Engineering |
 | Ideas board card expand | Idea cards with body text over ~200 chars now show a 3-line collapsed preview with an always-visible inline Show more / Show less button, so long captures (e.g. imported NovelCrafter snippets) are readable without requiring hover or card selection. | Implemented | No further action needed for launch. | Engineering |
 | Public sharing | Public project/profile sharing is excluded from MVP unless needed for launch marketing. | Post-launch | Keep private workspace promise clear. | Product |
 | Founders directory | Public `/founders/` page listing all Founder-tier members, each with a dedicated profile page (`/founders/[slug]/`) showing bio, published works grid with covers and buy links, social/website links, and a YOW Founder badge. Index page links to individual profiles and includes a "Become a Founder" CTA. Footer link added to homepage React app. Vite dev middleware serves static HTML for marketing pages in dev. Vercel rewrites updated with explicit `/founders/` and `/founders/:slug/` rules above the catch-all. CSS variables corrected to match `marketing.css`. Founders callout added to `/about/` page. | Implemented, needs QA | QA: visit `/founders/` and a founder profile page; verify theme matches other marketing pages; verify nav, footer, and "Become a Founder" CTA link to `/pricing/`; verify Founders link in homepage footer. To add a real founder: duplicate `public/founders/example-founder/`, rename to their slug, fill in details, add a `.founder-card` to `public/founders/index.html`. | Engineering/Product |
+
+## PRD: Map Builder Rebuild
+
+### Product Summary
+
+The Map Builder should become a reliable worldbuilding and campaign-planning canvas, not a novelty drawing panel. It should let writers and GMs quickly create readable world, region, local, and interior maps; link places back to Locations; export enough visual and metadata context to be useful; and feel stable under normal editing.
+
+This remains Post-Launch unless campaign-map quality becomes part of a paid/final-launch promise. If the current version feels glitchy enough to undermine campaign/worldbuilding trust, it should be beta-labeled or hidden until the interaction-stability pass is complete.
+
+### Current Baseline
+
+The current implementation already supports multiple maps per project, map types (world, region, local, interior), object layers, land/region/river/road/border paths, stamps, labels, linked locations, JSON import/export, basic style presets, snap, lock/hide, grouping, duplication, and layer ordering.
+
+The biggest issues are interaction quality and output quality: zoom is too sensitive, selection and drag behavior are not intuitive, drawing modes are easy to confuse, closed water shapes are not treated as filled water, the Mountain line tool does not produce convincing mountains, and project exports currently preserve map metadata better than rendered visual plates.
+
+### Goals
+
+- Make the map canvas predictable: no accidental moves, wild zoom jumps, or unclear selection state.
+- Make drawing tools understandable: users can tell whether they are selecting, panning, drawing, placing, or editing points.
+- Support the core fantasy/cartography primitives writers expect: land, water, regions, routes, borders, labels, settlements, landmarks, terrain stamps, mountains, and interiors.
+- Preserve and export maps safely through project backup/restore, JSON import/export, and world bible exports.
+- Keep map creation fast for non-artists: good defaults, stamp presets, natural variation, and enough styling without demanding design expertise.
+
+### Non-Goals
+
+- Professional GIS tooling, real geographic projection, or measured real-world cartography.
+- Full image-editing software, raster painting, pressure-sensitive brush engines, or Photoshop-style layer effects.
+- Real-time collaboration.
+- Procedural world generation as the first rebuild milestone.
+- Battle-map rules automation, fog of war, initiative tracking, or VTT replacement.
+
+### Required Canvas Interaction
+
+- Provide explicit Select, Pan, Draw, Place Stamp, Label, and Location modes with visible active-state labels.
+- Wheel and trackpad zoom must be damped, bounded, and centered around the cursor; trackpad scroll should not launch the map from tiny to huge in one gesture.
+- Add visible zoom controls: zoom in, zoom out, fit, reset to 100%, and current percentage.
+- Space/Alt temporary pan should work reliably; cursor state should reflect pan, grab, drawing, dragging, resizing, and rotating.
+- Selection must use hover highlights, selected outlines, clear handles, and predictable click behavior.
+- Clicking empty canvas deselects unless a draw/place mode is active.
+- Dragging an object should require a small movement threshold so normal clicks do not accidentally move it.
+- Multi-select should support Shift/Cmd/Ctrl click, select all, clear selection, and layer-panel selection.
+- Resize, rotate, and point-edit handles must be large enough at every zoom level and must not conflict with object selection.
+- Undo/redo is required for create, move, resize, rotate, delete, duplicate, group, ungroup, style edits, point edits, map type changes, imports, and layer-order changes.
+- Keyboard shortcuts should cover Delete, Escape, Enter-to-finish-path, Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Cmd/Ctrl+A, Cmd/Ctrl+D, plus optional one-key mode shortcuts after focus safety is confirmed.
+
+### Required Map Tools
+
+- Land: polygon, rectangle, and ellipse/circle landmasses with organic shoreline option, fill/stroke/opacity, point editing, and base-layer behavior.
+- Water: open Rivers/Seas lines continue to draw rivers/coastlines; when a water path closes, it becomes a filled water mass/lake/sea with editable shoreline, fill, stroke, opacity, and optional wave/shore texture.
+- Regions: political or terrain areas with transparent fills, borders, labels, and editable polygon points.
+- Roads/Paths: open lines with solid/dashed styles, thickness, color, and optional route labels.
+- Borders/Walls: open or closed path support with dashed/solid styles and clear visual distinction from roads.
+- Stamps: rename "Forests and Stamps" to "Stamps"; forests become a Terrain stamp category/preset, not a separate tool label.
+- Stamp placement: click-to-place, drag-to-place, recent/favorite stamps, search, category filters, rotation, scale, opacity, duplicate, and random variation controls.
+- Mountains: either replace the current Mountain tool with convincing mountain symbols/ranges (natural spacing, size jitter, rotation jitter, ridge direction, density, and group editing) or remove it and rely on mountain stamps until quality is good.
+- Labels: readable text labels with font size, color, optional curved labels for regions/routes, and collision-aware defaults where feasible.
+- Locations: place new or existing Locations on the map; linked markers should update display names when the Location name changes and should navigate back to the Location detail.
+- Interiors: rooms, walls, doors, windows, furniture, and object stamps should remain available, but the interface should make clear that interior maps are a different map type from world/region maps.
+
+### Data Model And Persistence
+
+- Keep a versioned map schema with forward-compatible object records.
+- Each object needs stable `id`, `type`, position, size, rotation, z/layer order, visibility, lock state, style metadata, points/faces where relevant, and linked entity IDs where relevant.
+- Add explicit water-mass metadata rather than overloading river lines once a path is closed.
+- Add mountain-range metadata only if the mountain tool is improved; otherwise remove the line-tool mode from available map types.
+- Persist maps synchronously enough that refresh/navigation does not lose recent edits.
+- Project ZIP export/restore must include all maps, object data, layers, linked location IDs, map type/style metadata, and any generated thumbnails.
+- JSON map import/export must preserve unknown future fields and report invalid imports clearly.
+- Deleting a linked Location should not crash the map; markers should become unlinked but keep their text unless the user chooses to remove them.
+
+### Visual Output
+
+- Canvas rendering should look intentionally cartographic at normal zoom: cleaner water, land, region, route, border, mountain/stamp, and label styling.
+- Every map should maintain or generate a thumbnail/preview image for dashboard/export contexts.
+- Project DOCX/PDF/world-bible exports should include map thumbnails or rendered plates where possible, not only metadata.
+- Exports should list map labels, linked locations, regions, and notable stamps so a text-only export still contains useful context.
+
+### UX Layout
+
+- Rework the layout into three dependable zones: left tool palette, central canvas, right properties/layers inspector.
+- Keep map selection, map type, style, export/import, undo/redo, and zoom controls in a stable top bar.
+- The left palette should show only tools relevant to the current map type, with plain labels and tooltips.
+- The Stamps panel should support search, category tabs/filter, favorites, recent stamps, and larger previews.
+- The right inspector should separate Object Properties, Layers, and Map Settings with compact tabs or sections.
+- Avoid hiding essential controls in advanced accordions when they are part of normal editing.
+- Mobile/tablet can be view/edit-lite, but must not show a broken canvas. If full editing is desktop-first, the UI should say so clearly and provide safe viewing/export.
+
+### QA Acceptance
+
+- Create a world map with land, closed sea/lake, open river, regions, roads, borders, labels, settlements, stamps, and linked locations; refresh and verify everything persists.
+- Create a region map with roads, towns, rivers, terrain stamps, and labels; verify selection, moving, resizing, rotating, point editing, grouping, and layer ordering.
+- Create an interior map with rooms, walls, doors, windows, furniture, labels, and object stamps; verify map-type-specific tool filtering.
+- Verify wheel and trackpad zoom are controlled at desktop and laptop settings; zoom never jumps beyond min/max unexpectedly.
+- Verify undo/redo for every common edit path.
+- Verify invalid JSON import shows an error and valid JSON import preserves object data.
+- Export a project ZIP, restore it, and confirm maps, layers, thumbnails, linked markers, and metadata survive.
+- Export DOCX/PDF/world bible and confirm maps appear as useful visual or text plates.
+- Test at 1280px desktop, 768px tablet, and 375px mobile; full editing may be desktop-first, but the UI must not overlap or trap controls.
+
+### Implementation Phases
+
+| Phase | Scope | Acceptance Criteria |
+| --- | --- | --- |
+| 1. Interaction stabilization | Zoom damping/bounds, explicit modes, hover/selection state, drag threshold, undo/redo, handle clarity, keyboard safety. | Partial implementation: zoom damping/bounds, undo/redo, drag threshold, and Space/Alt temporary pan landed. Still needs browser QA, hover state, clearer handles, and broader keyboard polish. |
+| 2. Tool semantics | Closed water masses, renamed Stamps tool, stamp workflow improvements, mountain improve/remove decision, clearer land/region/road/border behavior. | Partial implementation: closed water masses and Stamps label landed. Still needs stamp workflow improvements, mountain improve/remove decision, and clearer land/region/road/border behavior. |
+| 3. Inspector and layers | Rework properties/layers/map settings, improve multi-select, grouping, lock/hide, z-order, and linked-location editing. | Users can understand and edit the selected object or layer without hunting through advanced controls. |
+| 4. Visual quality | Better cartographic styling, mountain/stamp visuals if retained, thumbnails/previews, label readability, map-type-specific polish. | Maps look intentional enough to include in a project bible or campaign prep notes. |
+| 5. Export and restore | ZIP restore coverage, JSON forward compatibility, DOCX/PDF/world-bible map plates. | Maps survive backup/restore and appear usefully in exports. |
+| 6. Responsive safety | Desktop editing pass plus tablet/mobile view/edit-lite behavior. | The map builder is either usable or clearly constrained on each supported viewport, with no broken layout. |
 
 ## Icebox
 
@@ -226,6 +542,7 @@ New ideas start here unless they satisfy the Feature Intake Freeze rules.
 | Item | Detail | Status | Remaining |
 | --- | --- | --- | --- |
 | Supabase security hardening | Migration `20260612_security_hardening.sql` applied. Fixes: `set_updated_at` mutable search_path (switched to `SET search_path = ''`); `delete_user` anon EXECUTE revoked (`REVOKE … FROM PUBLIC` + re-grant to `authenticated` only); `get_founder_slot_info` search_path hardened. | Applied 2026-06-13 | 5 linter warnings remain — all intentional or plan-limited: `feedback` INSERT always-true (anonymous feedback by design); `get_founder_slot_info` anon/authenticated callable (public slot counter); `delete_user` authenticated callable (account-deletion flow); leaked password protection (Pro plan feature). |
+| Welcome email | Branded welcome email sent via Resend on every new signup. Edge Function `send-welcome-email` deployed to Supabase. Called directly from `AuthContext.signUp` after successful signup. Email matches ink-ember theme, lists all 6 live project types, links to yourownworld.co.uk. Supabase default confirmation email disabled (email confirmations off in Authentication → Sign In / Providers). `handle_new_user` trigger on `auth.users` auto-inserts `user_profiles` row on signup. `delete_user` RPC installed so account deletion removes the auth row cleanly. "Resend confirmation" button added to the "check your inbox" screen in LoginPage. RESEND_API_KEY set as Supabase secret. Exposed key rotated 2026-06-13. | Complete | No further action needed. |
 
 ## Bugs
 
@@ -235,7 +552,7 @@ Use this section for confirmed defects only. Suspected issues stay in the releva
 | --- | --- | --- | --- | --- |
 | Project deletion does not persist after logout | Data integrity — deleted projects reappear on next login. Root cause: `user_data.novels` is updated only via the 2-second debounced `saveAppData`; logging out within that window left the deleted project in `user_data` even though its `project_data` row was removed. Fixed: `deleteNovel` now captures the filtered novels list and calls `saveAppData` immediately alongside `deleteProjectData`. | Fixed | Verify: delete a project, immediately log out, log back in, confirm project is gone. | Engineering/QA |
 | Newly created series never appeared in the library | UX — series creation appeared broken; series WAS saved but the library filtered to only series with ≥1 project assigned, so empty series were invisible. Fixed: library now renders all series including empty ones. | Fixed | No further action needed. | Engineering |
-| Series dashboard uses book-specific language for all project types | UX mislead — series containing Screenplays, D&D Campaigns, etc. showed "books", "Add Book", "Books in Series", "Characters in Multiple Books", etc. Fixed: all book-specific copy replaced with "project/projects" in `SeriesDashboard` and the `SeriesCard` count badge; non-novel type label shown as secondary metadata in Projects tab and Overview table. | Fixed | No further action needed. | Engineering |
+| Series dashboard uses book-specific language for all project types | UX mislead — series containing D&D Campaigns, Comic projects, etc. showed "books", "Add Book", "Books in Series", "Characters in Multiple Books", etc. Fixed: all book-specific copy replaced with "project/projects" in `SeriesDashboard` and the `SeriesCard` count badge; non-novel type label shown as secondary metadata in Projects tab and Overview table. | Fixed | No further action needed. | Engineering |
 | Autosave reliability not proven across refresh/navigation/rapid typing | Potential data loss; launch blocker if reproduced. | QA passed | Immediate refresh after typed input and saved records now preserves fresher browser data instead of letting older account data overwrite it. Keep covered in launch regression tests. | Engineering/QA |
 | Restore flow | YOW backup restore is now routed through the unified Import modal (Import ZIP option). Needs end-to-end QA to confirm all project data (scenes, characters, lore, timeline, chapters) round-trips correctly through export → Import ZIP → restore. | Implemented, needs QA | Export a project, use Import ▾ → Import ZIP to restore it, compare content against original. | Engineering/QA |
 | Responsive layout not proven across MVP screens | Could make mobile/tablet launch path unusable. | Mitigation added, needs QA | Re-test dashboard tiles and Status Queue width, mobile index reset/collapse, Map Builder disabled state, manuscript, account/settings, and edit modals across mobile/tablet widths. | Design/QA |
@@ -246,7 +563,7 @@ Use this section for confirmed defects only. Suspected issues stay in the releva
 | New accounts can inherit a previous browser-local theme | A freshly verified account may appear with another account's local theme instead of the default, creating cross-account preference leakage on shared browsers. | Fixed, needs QA | Signed-in accounts now apply their profile-saved theme when present, or the default app theme when no profile theme exists. QA: choose a non-default theme in account A, sign out, verify a new account B, and confirm B lands on the default theme until it saves its own appearance. | Engineering/QA |
 | Login error exposed internal Supabase message on bad credentials | Showing raw "Invalid login credentials" from Supabase is confusing and leaks implementation detail. | Fixed | LoginPage now intercepts credential-related Supabase errors and surfaces "Incorrect username or password." instead. Other auth errors still show their original message. | Engineering |
 | No dedicated post-logout screen | After signing out, users landed directly on the marketing homepage with no confirmation or quick path back to login. | Fixed | New `SignedOutPage` renders after a confirmed sign-out transition (authenticated → unauthenticated). Shows "You've been signed out" with Log in again (returns to LoginPage) and Go to homepage (navigates to `/`) buttons. Include in auth regression pass. | Engineering/QA |
-| Import and new project blocked for paid lifetime users | Paid `premium_plus_lifetime` / `premium_lifetime` users report "Could not import project. You may be on a free plan." and cannot create new projects despite correct `subscription_plan` in JWT and correct plan display in-app. Root cause under investigation — membership math (`freeProjectId: null`, `isPaid: true`) is correct in console, `storageExceededCheck` returns false at 3 KB used, no stale localStorage flag; suspicion is a stale closure or a render-ordering issue in `useStore` option propagation. | Under investigation | Add `console.log('[import] freeProjectId:', freeProjectId, 'storageExceeded:', isStorageExceeded())` to `importProjectFromData` and `addNovel` to confirm what the store sees at call time. | Engineering |
+| Import and new project blocked for paid lifetime users | Paid `premium_plus_lifetime` / `premium_lifetime` users report "Could not import project. You may be on a free plan." and cannot create new projects despite correct `subscription_plan` in JWT and correct plan display in-app. Root cause was a local testing environment issue — not reproducible in production. | Closed — not reproducible | No further action needed. | Engineering |
 
 ## Change Control
 

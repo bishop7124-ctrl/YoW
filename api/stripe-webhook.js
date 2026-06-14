@@ -109,13 +109,22 @@ async function activateLifetimePlan(supabaseAdmin, session) {
   const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
   const existing = data?.user?.app_metadata || {}
 
+  const purchasedAt = existing.lifetime_purchased_at || new Date().toISOString()
+  // hosting_included_years mirrors the client-side HOSTING_INCLUDED_YEARS constant.
+  // Founders get null (lifetime hosting — no expiry date needed).
+  const HOSTING_INCLUDED_YEARS = 3
+  const hostingIncludedUntil = plan === 'founder'
+    ? null
+    : new Date(new Date(purchasedAt).getTime() + HOSTING_INCLUDED_YEARS * 365 * 24 * 60 * 60 * 1000).toISOString()
+
   await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: {
       ...existing,
-      stripe_customer_id:    customerId,
-      subscription_status:   'active',
-      subscription_plan:     plan,
-      lifetime_purchased_at: existing.lifetime_purchased_at || new Date().toISOString(),
+      stripe_customer_id:      customerId,
+      subscription_status:     'active',
+      subscription_plan:       plan,
+      lifetime_purchased_at:   purchasedAt,
+      hosting_included_until:  existing.hosting_included_until || hostingIncludedUntil,
     },
   })
 
@@ -125,7 +134,7 @@ async function activateLifetimePlan(supabaseAdmin, session) {
 }
 
 // --------------------------------------------------------------------------
-// Extend maintenance_expires_at by 1 year on successful maintenance payment.
+// Extend maintenance_expires_at by 1 year on successful Cloud Hosting & Storage Renewal payment.
 // --------------------------------------------------------------------------
 async function extendMaintenance(supabaseAdmin, userId) {
   if (!userId) {

@@ -14,12 +14,17 @@ export const PLAN_STORAGE_BYTES = {
   founder:               15   * 1024 * 1024 * 1024,  //  15 GB
 }
 
-// Annual maintenance fee shown to users (display only — Stripe is the source of truth).
-export const MAINTENANCE_FEE_GBP = 6
-export const MAINTENANCE_WARNING_DAYS = 30
+// ── Billing config ────────────────────────────────────────────────────────────
+// These values drive all client-side copy. Stripe is the source of truth for
+// actual amounts — update both here and your Stripe product if the fee changes.
+export const HOSTING_RENEWAL_FEE_GBP = 6          // £/year shown to users
+export const HOSTING_INCLUDED_YEARS  = 3          // years of cloud hosting included with Lifetime
+export const HOSTING_RENEWAL_WARNING_DAYS = 30    // warn this many days before renewal is due
+export const FOUNDER_SLOTS_TOTAL = 100            // also enforced server-side via app_config
 
-// Maximum founder slots. The API also reads from app_config; this is the client-side default.
-export const FOUNDER_SLOTS_TOTAL = 100
+// Legacy aliases kept so any code still referencing the old names doesn't break.
+export const MAINTENANCE_FEE_GBP = HOSTING_RENEWAL_FEE_GBP
+export const MAINTENANCE_WARNING_DAYS = HOSTING_RENEWAL_WARNING_DAYS
 
 // Ordered display list — also used by AccountSettings and PricingPage to render plan cards.
 export const PLANS = [
@@ -51,14 +56,16 @@ export const PLANS = [
     priceSuffix: 'once',
     storageLabelShort: '8 GB',
     description: 'Own YOW outright. One payment, unlimited projects, no subscription.',
-    longDescription: 'Pay once and own the platform as it stands. Unlimited projects, premium exports, and all current features — no recurring fees in year one. A small annual maintenance fee of £6/year applies from year two to keep your data hosted and the app running.',
+    longDescription: `Pay once and own the platform as it stands. Unlimited projects, premium exports, and all current features. Includes ${HOSTING_INCLUDED_YEARS} years of cloud hosting, storage, backups and sync. After that, cloud access renews at £${HOSTING_RENEWAL_FEE_GBP}/year — a small fee to cover ongoing hosting costs, not to generate profit.`,
     features: [
       'Unlimited projects',
       '8 GB storage',
       'Premium exports (DOCX, PDF, ZIP)',
       'Bring-your-own-key AI',
       'Priority support',
-      `£${MAINTENANCE_FEE_GBP}/year maintenance from year 2 (subject to change)`,
+      `${HOSTING_INCLUDED_YEARS} years of cloud hosting included`,
+      `Cloud Hosting & Storage Renewal: £${HOSTING_RENEWAL_FEE_GBP}/year after that`,
+      'Export your data any time',
     ],
     badge: 'Best value',
     highlight: true,
@@ -71,12 +78,13 @@ export const PLANS = [
     priceLabel: '£499',
     priceSuffix: 'once',
     storageLabelShort: '15 GB',
-    description: 'Become a named Founder of Your Own World. Limited slots. Maintenance included forever.',
-    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited — once the slots are gone, they\'re gone. Includes lifetime maintenance with no annual fee, ever.',
+    description: 'Become a named Founder of Your Own World. Limited slots. Lifetime cloud hosting included.',
+    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited — once the slots are gone, they\'re gone. Includes lifetime cloud hosting, storage, backups and sync with no annual renewal fee, ever.',
     features: [
       'Everything in Creator Lifetime',
       '15 GB storage',
-      'Maintenance fee included forever',
+      'Lifetime cloud hosting included',
+      'No annual renewal fee — ever',
       'Permanent Founder badge',
       'Feature your debut work on YOW',
       'Founder recognition section',
@@ -145,12 +153,13 @@ export function getMembership(user) {
 
   const storageQuotaBytes = PLAN_STORAGE_BYTES[activePlanKey] ?? PLAN_STORAGE_BYTES.free
 
-  // ── Maintenance fee logic (lifetime non-founder users only) ──────────────
-  // Year 1 is free. From year 2, a small annual maintenance fee applies.
-  // Founders have maintenance included forever.
+  // ── Cloud Hosting & Storage Renewal logic (lifetime non-founder users only) ──
+  // Lifetime purchase includes HOSTING_INCLUDED_YEARS years of cloud hosting.
+  // After that, users pay an annual Cloud Hosting & Storage Renewal to keep full access.
+  // Founders have cloud hosting included for life — no renewal ever.
   // app_metadata fields set by the webhook:
   //   lifetime_purchased_at  — ISO date of original lifetime purchase
-  //   maintenance_expires_at — ISO date maintenance is paid until (null = never paid)
+  //   maintenance_expires_at — ISO date cloud hosting is paid until (null = within included period)
   let isMaintenanceLapsed = false
   let maintenanceExpiresAt = null
   let maintenanceDaysRemaining = null
@@ -158,23 +167,23 @@ export function getMembership(user) {
 
   if (isLifetime && !isFounder) {
     const purchasedAt = dateFrom(user?.app_metadata?.lifetime_purchased_at) || createdAt || now
-    const yearOneEnds = new Date(purchasedAt.getTime() + 365 * DAY_MS)
+    const includedHostingEnds = new Date(purchasedAt.getTime() + HOSTING_INCLUDED_YEARS * 365 * DAY_MS)
     const paidUntil = dateFrom(user?.app_metadata?.maintenance_expires_at)
 
     if (paidUntil && paidUntil > now) {
-      // Maintenance actively paid
+      // Renewal actively paid
       maintenanceExpiresAt = paidUntil
       const msRemaining = paidUntil.getTime() - now.getTime()
       maintenanceDaysRemaining = Math.ceil(msRemaining / DAY_MS)
-      maintenanceWarning = maintenanceDaysRemaining <= MAINTENANCE_WARNING_DAYS
-    } else if (now < yearOneEnds) {
-      // Still in free year 1
-      maintenanceExpiresAt = yearOneEnds
-      const msRemaining = yearOneEnds.getTime() - now.getTime()
+      maintenanceWarning = maintenanceDaysRemaining <= HOSTING_RENEWAL_WARNING_DAYS
+    } else if (now < includedHostingEnds) {
+      // Still within included hosting period
+      maintenanceExpiresAt = includedHostingEnds
+      const msRemaining = includedHostingEnds.getTime() - now.getTime()
       maintenanceDaysRemaining = Math.ceil(msRemaining / DAY_MS)
-      maintenanceWarning = maintenanceDaysRemaining <= MAINTENANCE_WARNING_DAYS
+      maintenanceWarning = maintenanceDaysRemaining <= HOSTING_RENEWAL_WARNING_DAYS
     } else {
-      // Year 1 ended, no valid maintenance payment
+      // Included period ended, no valid renewal payment
       isMaintenanceLapsed = true
     }
   }

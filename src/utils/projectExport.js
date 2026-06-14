@@ -78,6 +78,7 @@ const SESSION_RECAP_EXPORT_FIELDS = [
 ]
 
 const isCampaignProject = (project) => CAMPAIGN_PROJECT_TYPES.has(project?.type)
+const isComicProject = (project) => project?.type === 'comic'
 
 const sessionExportRows = (chapter) => [
   ...SESSION_PLAN_EXPORT_FIELDS.map(([label, key]) => [`Plan: ${label}`, chapter?.sessionPlan?.[key]]),
@@ -223,6 +224,8 @@ export const createProjectZipBlob = (projectData) => {
     jsonFile('data/maps.json', projectData.maps ?? []),
     jsonFile('data/whiteboards.json', projectData.whiteboards ?? []),
     jsonFile('data/schedule.json', projectData.storySchedule ?? []),
+    jsonFile('data/comic-pages.json', projectData.comicPages ?? []),
+    jsonFile('data/comic-panels.json', projectData.comicPanels ?? []),
   ]
 
   const localChunks = []
@@ -354,7 +357,69 @@ export const createProjectDocxBlob = async (projectData) => {
     ...buildSummaryStats(projectData),
   ])
 
-  if (enabled.has('outline')) {
+  if (enabled.has('outline') && isComicProject(project)) {
+    children.push(new Paragraph({ children: [new PageBreak()] }))
+    addDocHeading(children, docx, 'Comic Script')
+    const { acts = [], chapters = [], comicPages = [], comicPanels = [] } = projectData
+    sortByOrder(acts).forEach(volume => {
+      addDocHeading(children, docx, volume.title || 'Untitled Volume', HeadingLevel.HEADING_2)
+      addDocParagraphs(children, docx, volume.synopsis)
+      sortByOrder(chapters.filter(c => c.actId === volume.id)).forEach((issue, issueIndex) => {
+        addDocHeading(children, docx, issue.title || `Issue ${issueIndex + 1}`, HeadingLevel.HEADING_3)
+        addDocParagraphs(children, docx, issue.synopsis)
+        const issuePages = sortByOrder(comicPages.filter(p => p.issueId === issue.id))
+        issuePages.forEach((page, pageIndex) => {
+          const pageNum = pageIndex + 1
+          const pageLabel = page.title ? `Page ${pageNum} — ${page.title}` : `Page ${pageNum}`
+          const pageMeta = [page.pageType, page.status, page.pageTurn !== 'none' && page.pageTurn ? `page turn: ${page.pageTurn}` : null].filter(Boolean).join(' · ')
+          children.push(new Paragraph({
+            children: [
+              new TextRun({ text: pageLabel, bold: true, size: 22 }),
+              ...(pageMeta ? [new TextRun({ text: `  ${pageMeta}`, italics: true, size: 18 })] : []),
+            ],
+            spacing: { before: 160, after: 60 },
+          }))
+          if (page.summary) addDocParagraphs(children, docx, page.summary, { indent: { left: 180 } })
+          if (page.visualDirection) addDocFields(children, docx, [['Visual direction', page.visualDirection]])
+          if (page.productionNotes) addDocFields(children, docx, [['Production notes', page.productionNotes]])
+
+          const panels = sortByOrder(comicPanels.filter(p => p.pageId === page.id))
+          if (!panels.length) {
+            children.push(new Paragraph({ children: [new TextRun({ text: '(no panels)', italics: true, size: 18, color: '888888' })], indent: { left: 360 }, spacing: { after: 60 } }))
+          }
+          panels.forEach((panel, panelIndex) => {
+            const panelLabel = `Panel ${panelIndex + 1}`
+            const panelMeta = [panel.shotType, panel.layoutHint].filter(Boolean).join(', ')
+            children.push(new Paragraph({
+              children: [
+                new TextRun({ text: panelLabel, bold: true, size: 20 }),
+                ...(panelMeta ? [new TextRun({ text: `  ${panelMeta}`, italics: true, size: 18 })] : []),
+              ],
+              indent: { left: 360 },
+              spacing: { before: 100, after: 40 },
+            }))
+            if (panel.description) addDocParagraphs(children, docx, panel.description, { indent: { left: 540 } })
+            if (panel.artNotes) addDocFields(children, docx, [['Art notes', panel.artNotes]])
+            ;(panel.captions ?? []).forEach(cap => {
+              const capLabel = cap.type ? `Caption (${cap.type})` : 'Caption'
+              addDocFields(children, docx, [[capLabel, cap.text]])
+            })
+            ;(panel.dialogue ?? []).forEach(line => {
+              const speaker = line.speaker ? `${line.speaker}:` : 'Balloon:'
+              addDocFields(children, docx, [[speaker, line.text]])
+            })
+            ;(panel.sfx ?? []).forEach(fx => {
+              addDocFields(children, docx, [['SFX', fx.text]])
+            })
+            if (panel.continuityNotes) addDocFields(children, docx, [['Continuity', panel.continuityNotes]])
+          })
+        })
+        if (!issuePages.length) {
+          children.push(new Paragraph({ children: [new TextRun({ text: '(no pages)', italics: true, size: 18, color: '888888' })], indent: { left: 360 }, spacing: { after: 60 } }))
+        }
+      })
+    })
+  } else if (enabled.has('outline')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, isCampaignProject(project) ? 'Campaign Sessions' : 'Story Outline')
     buildOutline(projectData).forEach(({ act, chapters }) => {

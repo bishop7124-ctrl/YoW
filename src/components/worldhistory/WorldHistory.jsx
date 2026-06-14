@@ -4,7 +4,7 @@ import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, Stu
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
 
 export default function WorldHistory({ store }) {
-  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent } = store
+  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('era-asc')
   const [selectedId, setSelectedId] = useState(null)
@@ -149,6 +149,40 @@ export default function WorldHistory({ store }) {
                 {liveSelected.tags.map(t => (
                   <span key={t} className="bg-[var(--bg-nav)] border border-[var(--border)] text-[var(--text-muted)] text-xs px-2 py-0.5 rounded">{t}</span>
                 ))}
+              </div>
+            )}
+
+            {liveSelected.linkedCharacters?.length > 0 && (
+              <div className="pt-3 border-t border-[var(--border)]">
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Characters</div>
+                <div className="flex flex-wrap gap-1">
+                  {liveSelected.linkedCharacters.map(id => {
+                    const c = characters.find(x => x.id === id)
+                    if (!c) return null
+                    return (
+                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedCharacterId(id)}>
+                        {c.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {liveSelected.linkedLocations?.length > 0 && (
+              <div className="pt-3 border-t border-[var(--border)]">
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Locations</div>
+                <div className="flex flex-wrap gap-1">
+                  {liveSelected.linkedLocations.map(id => {
+                    const l = locations.find(x => x.id === id)
+                    if (!l) return null
+                    return (
+                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedLocationId(id)}>
+                        {l.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>

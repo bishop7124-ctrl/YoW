@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import YOWLogo from '../brand/YOWLogo'
 import UserMenu from '../auth/UserMenu'
 import { getProjectType } from '../../constants/projectTypes'
@@ -97,6 +97,11 @@ function ProgressBar({ value, total, color = 'var(--accent)' }) {
 // ─── Confirm Dialog ───────────────────────────────────────────────────────────
 
 function ConfirmDialog({ title, body, confirmLabel = 'Delete', onConfirm, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -120,6 +125,11 @@ function AddProjectModal({ store, seriesId, onClose }) {
   const [tab, setTab] = useState('existing') // 'existing' | 'new'
   const [newTitle, setNewTitle] = useState('')
   const [selectedId, setSelectedId] = useState('')
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const unassigned = store.novels.filter(n => !n.seriesId)
 

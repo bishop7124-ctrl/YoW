@@ -7,23 +7,23 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What does "Creator Lifetime" actually cover?',
-        a: "Creator Lifetime gives you permanent access to Your Own World as it currently stands — unlimited projects, premium exports, and all current features. Year one is included in your purchase. From year two, a small annual maintenance fee of £6/year keeps your data hosted and the platform running. This fee is subject to change with reasonable notice.",
+        a: "Creator Lifetime gives you permanent access to Your Own World — unlimited projects, premium exports, and all current features. It includes 3 years of cloud hosting, storage, backups and sync. After those 3 years, a small annual Cloud Hosting & Storage Renewal of £6/year keeps your data hosted and the app running. This fee is intended only to cover hosting costs, not to generate profit, and may change if provider costs materially change.",
       },
       {
-        q: 'What is the annual maintenance fee?',
-        a: "The maintenance fee is £6/year from year two of your lifetime ownership. It covers hosting and infrastructure — not new features. If you choose not to pay, your account switches to export-only mode so you can always retrieve your work. Founder members have maintenance included forever.",
+        q: 'What is the Cloud Hosting & Storage Renewal?',
+        a: "The Cloud Hosting & Storage Renewal is £6/year, due after your included 3-year hosting period ends. It covers the actual cost of storing and serving your data — not new features or development. If you choose not to renew, you can still log in and export all your projects at no charge. Founder members have lifetime cloud hosting included with no renewal fee ever.",
       },
       {
-        q: 'What happens if I don\'t pay the maintenance fee?',
-        a: "You'll receive 30 days notice before your maintenance period expires. If you don't renew, your account switches to export-only mode — you can still log in and download all your projects, but editing is paused until you pay. Your data is never deleted.",
+        q: 'What happens if I don\'t renew cloud hosting?',
+        a: "You'll receive 30 days notice before your included hosting period or renewal expires. If you don't renew, your account moves to a restricted screen where you can still log in and export all your data — no payment required. Your data is never deleted. Renew any time to restore full access instantly.",
       },
       {
-        q: 'Do monthly subscribers pay a maintenance fee?',
-        a: 'No. Monthly subscribers pay £10/month which covers everything including hosting. The maintenance fee only applies to lifetime plan holders from year two.',
+        q: 'Do monthly subscribers pay a Cloud Hosting & Storage Renewal?',
+        a: 'No. Monthly subscribers pay £10/month which covers everything including cloud hosting, storage, backups and sync. The annual renewal only applies to Lifetime plan holders after their included 3-year period.',
       },
       {
         q: 'How many Founder slots are there?',
-        a: "Founder membership is limited to a small number of slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. Founders have the annual maintenance fee included forever.",
+        a: "Founder membership is limited to a small number of slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. Founders have lifetime cloud hosting included with no annual renewal fee, ever.",
       },
       {
         q: 'What happens to my data if I downgrade to Free?',

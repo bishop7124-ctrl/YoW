@@ -68,13 +68,16 @@ export default function MaintenanceLapsedScreen({ store }) {
       }}>
         {/* Header */}
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 36, marginBottom: 4 }}>🔒</div>
+          <div style={{ fontSize: 36, marginBottom: 4 }}>☁️</div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-main)' }}>
-            Annual maintenance fee due
+            Cloud hosting renewal needed
           </h1>
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 420, alignSelf: 'center' }}>
-            Your lifetime access is intact — a small annual maintenance fee keeps your data hosted and the platform running.
-            Pay to restore full access instantly, or export your projects below at no charge.
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 460, alignSelf: 'center' }}>
+            Your lifetime YOW licence is still yours. Your included cloud hosting period has ended, so full cloud
+            account access now requires the annual Cloud Hosting &amp; Storage Renewal.
+          </p>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 460, alignSelf: 'center' }}>
+            Not renewing? No problem — you can still export all your data below at no charge.
           </p>
         </div>
 
@@ -92,13 +95,13 @@ export default function MaintenanceLapsedScreen({ store }) {
         }}>
           <div>
             <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: 15 }}>
-              Annual maintenance fee
+              Cloud Hosting &amp; Storage Renewal
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
               £6/year · Restores full access immediately
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4, opacity: 0.7 }}>
-              Fee subject to change with notice.
+              This fee covers ongoing hosting and storage costs only. It may change in future if provider costs materially change.
             </div>
           </div>
           <button
@@ -117,7 +120,7 @@ export default function MaintenanceLapsedScreen({ store }) {
               whiteSpace: 'nowrap',
             }}
           >
-            {paying ? 'Redirecting…' : 'Pay £6 · Restore access'}
+            {paying ? 'Redirecting…' : 'Renew cloud hosting — £6/year'}
           </button>
         </div>
 
@@ -128,7 +131,7 @@ export default function MaintenanceLapsedScreen({ store }) {
         {/* Export section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Export your projects
+            Export my data
           </div>
           {novels.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: 0 }}>No projects found.</p>

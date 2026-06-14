@@ -101,7 +101,7 @@ export const DEFAULT_THEME_TUNING = {
 
 const ALL_CSS_VARS = [
   '--bg-main', '--bg-nav', '--bg-hover', '--text-main', '--text-muted',
-  '--accent', '--accent-fade', '--border', '--logo-filter', '--accent2',
+  '--accent', '--accent-fade', '--accent-contrast', '--border', '--logo-filter', '--accent2',
   '--atmos-warm', '--atmos-cool', '--atmos-paper', '--atmos-paper-line',
   '--atmos-wood', '--atmos-cork', '--atmos-spine-tint',
   '--atmos-glow-pos', '--atmos-glow-size', '--atmos-glow-intensity',
@@ -155,6 +155,27 @@ const hexToRgb = (hex) => {
   return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 }
 }
 
+const rgbToHex = ({ r, g, b }) => (
+  `#${[r, g, b].map(channel => clamp(Math.round(channel), 0, 255).toString(16).padStart(2, '0')).join('')}`
+)
+
+const mixHex = (a, b, amount = 0.5) => {
+  const ca = hexToRgb(a)
+  const cb = hexToRgb(b)
+  if (!ca || !cb) return a || b || '#888888'
+  const t = clamp(amount, 0, 1)
+  return rgbToHex({
+    r: ca.r * (1 - t) + cb.r * t,
+    g: ca.g * (1 - t) + cb.g * t,
+    b: ca.b * (1 - t) + cb.b * t,
+  })
+}
+
+const luminanceFromHex = (hex, fallback = 0) => {
+  const rgb = hexToRgb(hex)
+  return rgb ? (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255 : fallback
+}
+
 export const rgbaFromHex = (hex, alpha) => {
   const rgb = hexToRgb(hex)
   if (!rgb) return `rgba(255,255,255,${alpha})`
@@ -162,10 +183,46 @@ export const rgbaFromHex = (hex, alpha) => {
 }
 
 const logoFilterForBackground = (hex) => {
-  const rgb = hexToRgb(hex)
-  if (!rgb) return 'none'
-  const luminance = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255
-  return luminance > 0.56 ? 'brightness(0)' : 'none'
+  return luminanceFromHex(hex) > 0.56 ? 'brightness(0)' : 'none'
+}
+
+export const getAccentContrast = (accent) => (
+  luminanceFromHex(accent, 0.5) > 0.58 ? '#151713' : '#ffffff'
+)
+
+export const deriveCustomThemeTokens = (colors = DEFAULT_CUSTOM_COLORS, tuning = DEFAULT_THEME_TUNING) => {
+  const bgMain = colors.bgMain || DEFAULT_CUSTOM_COLORS.bgMain
+  const bgNav = colors.bgNav || DEFAULT_CUSTOM_COLORS.bgNav
+  const textMain = colors.textMain || DEFAULT_CUSTOM_COLORS.textMain
+  const textMuted = colors.textMuted || DEFAULT_CUSTOM_COLORS.textMuted
+  const accent = colors.accent || DEFAULT_CUSTOM_COLORS.accent
+  const border = colors.border || DEFAULT_CUSTOM_COLORS.border
+  const light = luminanceFromHex(bgMain) > 0.58
+  const strength = clamp(Number(tuning.visualStrength) || DEFAULT_THEME_TUNING.visualStrength, 0.45, 1.7)
+  const depth = light ? '#ffffff' : '#030405'
+
+  return {
+    '--bg-main': bgMain,
+    '--bg-nav': bgNav,
+    '--text-main': textMain,
+    '--text-muted': textMuted,
+    '--accent': accent,
+    '--accent2': mixHex(accent, textMuted, 0.42),
+    '--border': border,
+    '--accent-contrast': getAccentContrast(accent),
+    '--accent-fade': rgbaFromHex(accent, clamp(0.08 + strength * 0.08, 0.08, 0.24)),
+    '--bg-hover': rgbaFromHex(textMain, clamp(0.025 + strength * 0.035, 0.03, 0.09)),
+    '--logo-filter': logoFilterForBackground(bgNav),
+    '--atmos-warm': mixHex(bgNav, accent, light ? 0.22 : 0.16),
+    '--atmos-cool': mixHex(bgMain, depth, light ? 0.2 : 0.34),
+    '--atmos-paper': light ? mixHex(bgNav, bgMain, 0.38) : mixHex(bgNav, textMain, 0.13),
+    '--atmos-paper-line': mixHex(border, accent, light ? 0.14 : 0.24),
+    '--atmos-wood': mixHex(bgMain, accent, light ? 0.08 : 0.1),
+    '--atmos-cork': mixHex(bgNav, accent, light ? 0.18 : 0.18),
+    '--atmos-spine-tint': mixHex(bgNav, bgMain, 0.42),
+    '--atmos-glow-pos': light ? '80% 90%' : '86% 10%',
+    '--atmos-glow-size': light ? '28%' : '32%',
+  }
 }
 
 export const applyThemeTuning = (tuning = {}, colors = DEFAULT_CUSTOM_COLORS) => {
@@ -178,6 +235,7 @@ export const applyThemeTuning = (tuning = {}, colors = DEFAULT_CUSTOM_COLORS) =>
   const shadowTone = isLight ? '20,24,28' : '0,0,0'
 
   root.style.setProperty('--radius-unit', `${radiusUnit}px`)
+  root.style.setProperty('--accent-contrast', getAccentContrast(colors.accent))
   root.style.setProperty('--accent-fade', rgbaFromHex(colors.accent, clamp(0.08 + visualStrength * 0.08, 0.08, 0.24)))
   root.style.setProperty('--bg-hover', rgbaFromHex(colors.textMain, clamp(0.025 + visualStrength * 0.035, 0.03, 0.09)))
   root.style.setProperty('--atmos-glow-intensity', `${Math.round(visualStrength * 7)}%`)
@@ -196,15 +254,8 @@ export const saveThemeTuning = (tuning, colors) => {
 // Applied only for quick palettes / custom — built-in themes are fully driven
 // by CSS [data-theme] blocks in index.css.
 const setThemeVars = (root, colors) => {
-  root.style.setProperty('--bg-main', colors.bgMain)
-  root.style.setProperty('--bg-nav', colors.bgNav)
-  root.style.setProperty('--text-main', colors.textMain)
-  root.style.setProperty('--text-muted', colors.textMuted)
-  root.style.setProperty('--accent', colors.accent)
-  root.style.setProperty('--border', colors.border)
-  root.style.setProperty('--bg-hover', rgbaFromHex(colors.textMain, 0.06))
-  root.style.setProperty('--accent-fade', rgbaFromHex(colors.accent, 0.16))
-  root.style.setProperty('--logo-filter', logoFilterForBackground(colors.bgNav))
+  const tokens = deriveCustomThemeTokens(colors, loadThemeTuning())
+  Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value))
 }
 
 export const applyThemeToDocument = (theme, customColors = {}) => {

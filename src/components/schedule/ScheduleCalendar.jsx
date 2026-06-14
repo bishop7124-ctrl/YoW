@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 const DAYS_PER_MONTH = 30
 
@@ -41,6 +41,11 @@ const LABEL_STYLE = { display: 'block', color: 'var(--text-muted)', fontSize: 12
 
 function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categories, onClose }) {
   const isEdit = Boolean(event)
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   const [form, setForm] = useState({
     title: event?.title ?? '',
     description: event?.description ?? '',

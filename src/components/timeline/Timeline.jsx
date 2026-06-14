@@ -42,6 +42,7 @@ export default function Timeline({ store }) {
     timeline = [], characters = [], locations = [],
     addEvent, updateEvent, deleteEvent,
     currentYear,
+    setSelectedCharacterId, setSelectedLocationId,
   } = store
   const railRef = useRef(null)
   const [search, setSearch] = useState('')
@@ -254,6 +255,38 @@ export default function Timeline({ store }) {
             {detailEvent.tags?.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {detailEvent.tags.map(tag => <span key={tag} className="chip">{tag}</span>)}
+              </div>
+            )}
+            {detailEvent.linkedCharacters?.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Characters</div>
+                <div className="flex flex-wrap gap-1">
+                  {detailEvent.linkedCharacters.map(id => {
+                    const c = characters.find(x => x.id === id)
+                    if (!c) return null
+                    return (
+                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setDetailEvent(null); setSelectedCharacterId(id) }}>
+                        {c.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {detailEvent.linkedLocations?.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Locations</div>
+                <div className="flex flex-wrap gap-1">
+                  {detailEvent.linkedLocations.map(id => {
+                    const l = locations.find(x => x.id === id)
+                    if (!l) return null
+                    return (
+                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setDetailEvent(null); setSelectedLocationId(id) }}>
+                        {l.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>

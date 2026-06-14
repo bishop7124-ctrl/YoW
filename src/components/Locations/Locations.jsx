@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
+import { loreRefsFor, timelineRefsFor } from '../../utils/worldLinks'
 
 const loadJ = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
 
@@ -78,7 +79,7 @@ function LocationForm({ initial, onSave, onCancel }) {
 }
 
 export default function Locations({ store }) {
-  const { locations, saveLocation, deleteLocation, selectedLocationId, setSelectedLocationId } = store
+  const { locations, loreEntries = [], timeline = [], saveLocation, deleteLocation, selectedLocationId, setSelectedLocationId, setSelectedLoreEntryId } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name-asc')
   const [showForm, setShowForm] = useState(false)
@@ -94,6 +95,15 @@ export default function Locations({ store }) {
     })
   const selected = (locations || []).find(l => l.id === selectedLocationId)
 
+  const incomingRefs = useMemo(() => selected
+    ? {
+        lore: loreRefsFor(selected.id, loreEntries),
+        timeline: timelineRefsFor(selected.id, timeline),
+      }
+    : { lore: [], timeline: [] },
+    [selected, loreEntries, timeline]
+  )
+
   return (
     <StudioSplit>
       <StudioIndex
@@ -107,6 +117,18 @@ export default function Locations({ store }) {
             <option value="name-desc">Name Z→A</option>
             <option value="category">Category</option>
           </select>
+          {(locations || []).length === 0 && (
+            <div className="px-4 py-6 text-center space-y-1">
+              <p className="text-sm text-[var(--text-main)]">No locations yet.</p>
+              <p className="text-xs text-[var(--text-muted)]">Add places from your world using the New button above.</p>
+            </div>
+          )}
+          {(locations || []).length > 0 && filtered.length === 0 && (
+            <div className="px-4 py-4 text-center">
+              <p className="text-xs text-[var(--text-muted)]">No matches.</p>
+            </div>
+          )}
+
           {filtered.map(l => (
             <StudioRecord
               key={l.id}
@@ -143,6 +165,44 @@ export default function Locations({ store }) {
               <span className="chip chip-accent mt-3">{selected.category}</span>
             </StudioPageHeader>
             <StudioNote className="text-[var(--text-main)] whitespace-pre-wrap leading-relaxed">{selected.description || 'No description provided yet.'}</StudioNote>
+
+            {selected.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-3 border-t border-[var(--border)]">
+                {selected.tags.map(t => (
+                  <span key={t} className="bg-[var(--bg-nav)] border border-[var(--border)] text-[var(--text-muted)] text-xs px-2 py-0.5 rounded">{t}</span>
+                ))}
+              </div>
+            )}
+
+            {(incomingRefs.lore.length > 0 || incomingRefs.timeline.length > 0) && (
+              <div className="pt-3 border-t border-[var(--border)] space-y-3">
+                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Referenced in</div>
+
+                {incomingRefs.lore.length > 0 && (
+                  <div>
+                    <div className="text-xs text-[var(--text-muted)] mb-1">Lore</div>
+                    <div className="flex flex-wrap gap-1">
+                      {incomingRefs.lore.map(e => (
+                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedLoreEntryId(e.id)}>
+                          {e.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {incomingRefs.timeline.length > 0 && (
+                  <div>
+                    <div className="text-xs text-[var(--text-muted)] mb-1">Timeline</div>
+                    <div className="flex flex-wrap gap-1">
+                      {incomingRefs.timeline.map(e => (
+                        <span key={e.id} className="chip">{e.title}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </StudioDetail>

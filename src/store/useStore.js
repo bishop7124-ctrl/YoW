@@ -30,6 +30,8 @@ const PROJECT_STORAGE_KEYS = [
   'nf_storySchedule',
   'nf_activeNovel',
   'nf_rpg_characters',
+  'nf_comicPages',
+  'nf_comicPanels',
   LOCAL_WRITE_AT_KEY,
   LOCAL_OWNER_KEY,
 ]
@@ -70,6 +72,8 @@ const clearProjectRefs = (refs) => {
   refs.ideaEntriesRef.current = []
   refs.storyScheduleRef.current = []
   refs.rpgCharactersRef.current = []
+  refs.comicPagesRef.current = []
+  refs.comicPanelsRef.current = []
 }
 const save = (key, val) => {
   try {
@@ -204,6 +208,8 @@ const getLocalSnapshot = () => ({
   storySchedule: load('nf_storySchedule', []),
   currentYear: load('nf_currentYear', 0),
   activeNovelId: load('nf_activeNovel', null),
+  comicPages: load('nf_comicPages', []),
+  comicPanels: load('nf_comicPanels', []),
 })
 
 const buildAppDataPayload = (data) => ({
@@ -224,6 +230,8 @@ const buildAppDataPayload = (data) => ({
   storySchedule: data.storySchedule ?? [],
   currentYear: data.currentYear ?? 0,
   activeNovelId: data.activeNovelId ?? null,
+  comicPages: data.comicPages ?? [],
+  comicPanels: data.comicPanels ?? [],
 })
 
 // Simple debounce helper: returns a function that delays calling fn by ms
@@ -274,6 +282,8 @@ export function useStore(userId = null, options = {}) {
   const [series, setSeries] = useState(() => loadInitial('nf_series', []))
   const [storySchedule, setStorySchedule] = useState(() => loadInitial('nf_storySchedule', []))
   const [rpgCharacters, setRpgCharacters] = useState(() => loadInitial('nf_rpg_characters', []))
+  const [comicPages, setComicPages] = useState(() => loadInitial('nf_comicPages', []))
+  const [comicPanels, setComicPanels] = useState(() => loadInitial('nf_comicPanels', []))
 
   const charactersRef = useRef(characters)
   const factionsRef = useRef(factions)
@@ -287,6 +297,8 @@ export function useStore(userId = null, options = {}) {
   const ideaEntriesRef = useRef(ideaEntries)
   const storyScheduleRef = useRef(storySchedule)
   const rpgCharactersRef = useRef(rpgCharacters)
+  const comicPagesRef = useRef(comicPages)
+  const comicPanelsRef = useRef(comicPanels)
 
   const [selectedCharacterId, setSelectedCharacterId] = useState(null)
   const [selectedLocationId, setSelectedLocationId] = useState(null)
@@ -318,6 +330,8 @@ export function useStore(userId = null, options = {}) {
       ideaEntriesRef,
       storyScheduleRef,
       rpgCharactersRef,
+      comicPagesRef,
+      comicPanelsRef,
     })
     setNovels([])
     setCharacters([])
@@ -336,6 +350,8 @@ export function useStore(userId = null, options = {}) {
     setSeries([])
     setStorySchedule([])
     setRpgCharacters([])
+    setComicPages([])
+    setComicPanels([])
     setCurrentYear(0)
     setActiveNovelId(null)
     if (userId) {
@@ -377,6 +393,8 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => save('nf_series', series), [series])
   useEffect(() => { storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
   useEffect(() => { rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
+  useEffect(() => { comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
+  useEffect(() => { comicPanelsRef.current = comicPanels; save('nf_comicPanels', comicPanels) }, [comicPanels])
 
   // Debounced Firestore save for all non-scene data (2s delay)
   const debouncedSaveAppData = useMemo(
@@ -397,10 +415,10 @@ export function useStore(userId = null, options = {}) {
       novels, characters, factions, locations, timeline,
       worldHistory, acts, chapters, loreEntries, ideaEntries,
       maps, activeMapByNovel, whiteboards, series, storySchedule,
-      currentYear, activeNovelId,
+      currentYear, activeNovelId, comicPages, comicPanels,
     }))
   }, [userId, novels, characters, factions, locations, timeline,
-      worldHistory, acts, chapters, loreEntries, ideaEntries, maps, activeMapByNovel, whiteboards, series, storySchedule, currentYear, activeNovelId, debouncedSaveAppData])
+      worldHistory, acts, chapters, loreEntries, ideaEntries, maps, activeMapByNovel, whiteboards, series, storySchedule, currentYear, activeNovelId, comicPages, comicPanels, debouncedSaveAppData])
 
   // Bulk import from Firestore after login
   const importData = useCallback((data) => {
@@ -464,6 +482,8 @@ export function useStore(userId = null, options = {}) {
     setStorySchedule(sourceData.storySchedule ?? [])
     setCurrentYear(sourceData.currentYear ?? 0)
     setActiveNovelId(sourceData.activeNovelId ?? null)
+    setComicPages(sourceData.comicPages ?? [])
+    setComicPanels(sourceData.comicPanels ?? [])
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
       importing.current = false
@@ -499,7 +519,9 @@ export function useStore(userId = null, options = {}) {
         series: data.series ?? [],
         storySchedule: data.storySchedule ?? [],
         currentYear: data.currentYear ?? 0,
-        activeNovelId: data.activeNovelId ?? null
+        activeNovelId: data.activeNovelId ?? null,
+        comicPages: data.comicPages ?? [],
+        comicPanels: data.comicPanels ?? [],
       }).catch(console.error)
 
       ;(data.scenes ?? []).forEach(scene => {
@@ -526,10 +548,12 @@ export function useStore(userId = null, options = {}) {
       ideaEntriesRef,
       storyScheduleRef,
       rpgCharactersRef,
+      comicPagesRef,
+      comicPanelsRef,
     })
     setNovels([]); setCharacters([]); setFactions([]); setLocations([])
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
-    setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setCurrentYear(0); setActiveNovelId(null)
+    setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setComicPages([]); setComicPanels([]); setCurrentYear(0); setActiveNovelId(null)
     setTimeout(() => {
       importing.current = false
       remoteReady.current = true
@@ -1433,6 +1457,114 @@ export function useStore(userId = null, options = {}) {
     }
   }
 
+  // Comic page CRUD
+  const novelComicPages = comicPages.filter(p => p.novelId === activeNovelId)
+  const novelComicPanels = comicPanels.filter(p => p.novelId === activeNovelId)
+
+  const addComicPage = (issueId, data = {}) => {
+    const pagesInIssue = comicPagesRef.current.filter(p => p.novelId === activeNovelId && p.issueId === issueId)
+    const page = {
+      id: uid(),
+      novelId: activeNovelId,
+      issueId,
+      order: pagesInIssue.length,
+      title: '',
+      summary: '',
+      pageType: 'standard',
+      status: 'outline',
+      pageTurn: 'none',
+      characterIds: [],
+      locationIds: [],
+      timeOfDay: '',
+      visualDirection: '',
+      productionNotes: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...data,
+    }
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, page])
+    return page
+  }
+
+  const updateComicPage = (pageId, data) => {
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev =>
+      prev.map(p => p.id === pageId ? { ...p, ...data, updatedAt: new Date().toISOString() } : p)
+    )
+  }
+
+  const deleteComicPage = (pageId) => {
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.id !== pageId))
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.pageId !== pageId))
+  }
+
+  const reorderComicPage = (issueId, orderedIds) => {
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => {
+      const inIssue = new Map(prev.filter(p => p.issueId === issueId).map(p => [p.id, p]))
+      const rest = prev.filter(p => p.issueId !== issueId)
+      const reordered = orderedIds.map((id, i) => inIssue.has(id) ? { ...inIssue.get(id), order: i } : null).filter(Boolean)
+      return [...rest, ...reordered]
+    })
+  }
+
+  const duplicateComicPage = (pageId) => {
+    const src = comicPagesRef.current.find(p => p.id === pageId)
+    if (!src) return null
+    const newPageId = uid()
+    const pagesInIssue = comicPagesRef.current.filter(p => p.issueId === src.issueId)
+    const newPage = { ...src, id: newPageId, order: pagesInIssue.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    const srcPanels = comicPanelsRef.current.filter(p => p.pageId === pageId)
+    const newPanels = srcPanels.map(p => ({ ...p, id: uid(), pageId: newPageId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, newPage])
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, ...newPanels])
+    return newPage
+  }
+
+  // Comic panel CRUD
+  const addComicPanel = (pageId, data = {}) => {
+    const panelsOnPage = comicPanelsRef.current.filter(p => p.pageId === pageId)
+    const panel = {
+      id: uid(),
+      novelId: activeNovelId,
+      pageId,
+      order: panelsOnPage.length,
+      layoutHint: 'standard',
+      shotType: 'medium',
+      description: '',
+      artNotes: '',
+      dialogue: [],
+      captions: [],
+      sfx: [],
+      characterIds: [],
+      locationIds: [],
+      continuityNotes: '',
+      status: 'outline',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...data,
+    }
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, panel])
+    return panel
+  }
+
+  const updateComicPanel = (panelId, data) => {
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev =>
+      prev.map(p => p.id === panelId ? { ...p, ...data, updatedAt: new Date().toISOString() } : p)
+    )
+  }
+
+  const deleteComicPanel = (panelId) => {
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.id !== panelId))
+  }
+
+  const reorderComicPanel = (pageId, orderedIds) => {
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => {
+      const onPage = new Map(prev.filter(p => p.pageId === pageId).map(p => [p.id, p]))
+      const rest = prev.filter(p => p.pageId !== pageId)
+      const reordered = orderedIds.map((id, i) => onPage.has(id) ? { ...onPage.get(id), order: i } : null).filter(Boolean)
+      return [...rest, ...reordered]
+    })
+  }
+
   const addNovel = (data) => {
     if (freeProjectId !== null) {
       notifyReadOnly('free-limit')
@@ -1476,6 +1608,8 @@ export function useStore(userId = null, options = {}) {
       whiteboards: whiteboards.filter(w => w.novelId === id),
       storySchedule: storySchedule.filter(e => e.novelId === id),
       rpgCharacters: rpgCharacters.filter(c => c.novelId === id),
+      comicPages: comicPages.filter(p => p.novelId === id),
+      comicPanels: comicPanels.filter(p => p.novelId === id),
     }
   }
 
@@ -1518,6 +1652,8 @@ export function useStore(userId = null, options = {}) {
     setWhiteboards(prev => prev.filter(w => w.novelId !== id))
     setStorySchedule(prev => prev.filter(e => e.novelId !== id))
     setRpgCharacters(prev => prev.filter(c => c.novelId !== id))
+    setComicPages(prev => prev.filter(p => p.novelId !== id))
+    setComicPanels(prev => prev.filter(p => p.novelId !== id))
     setActiveMapByNovel(prev => {
       const next = { ...prev }
       delete next[id]
@@ -1566,6 +1702,8 @@ export function useStore(userId = null, options = {}) {
     setWhiteboards(prev => [...prev, ...(data.whiteboards ?? []).map(remap)])
     setStorySchedule(prev => [...prev, ...(data.storySchedule ?? []).map(remap)])
     setRpgCharacters(prev => [...prev, ...(data.rpgCharacters ?? []).map(remap)])
+    setComicPages(prev => [...prev, ...(data.comicPages ?? []).map(remap)])
+    setComicPanels(prev => [...prev, ...(data.comicPanels ?? []).map(remap)])
     setActiveNovelId(newId)
     return project
   }
@@ -1642,6 +1780,10 @@ export function useStore(userId = null, options = {}) {
     storySchedule: novelStorySchedule, addScheduleEvent, updateScheduleEvent, deleteScheduleEvent,
     rpgCharacters: rpgCharacters.filter(c => c.novelId === activeNovelId),
     saveRpgCharacter, deleteRpgCharacter,
+    comicPages: novelComicPages,
+    comicPanels: novelComicPanels,
+    addComicPage, updateComicPage, deleteComicPage, reorderComicPage, duplicateComicPage,
+    addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
     importData, replaceData, clearData, finishRemoteLoad
   }
 
@@ -1659,6 +1801,8 @@ export function useStore(userId = null, options = {}) {
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',
     'addScheduleEvent', 'updateScheduleEvent', 'deleteScheduleEvent', 'replaceData',
     'saveRpgCharacter', 'deleteRpgCharacter',
+    'addComicPage', 'updateComicPage', 'deleteComicPage', 'reorderComicPage', 'duplicateComicPage',
+    'addComicPanel', 'updateComicPanel', 'deleteComicPanel', 'reorderComicPanel',
   ]
 
   const guardedApi = { ...api }

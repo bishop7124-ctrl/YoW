@@ -8,6 +8,7 @@ import SceneVersionHistory from './SceneVersionHistory'
 import ManuscriptSearch from './ManuscriptSearch'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
+import ComicPlanner from '../comic/ComicPlanner'
 
 const SCRIPT_TYPES = new Set(['play', 'screenplay', 'tv_show'])
 
@@ -1449,6 +1450,9 @@ export default function Manuscript({ store }) {
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
   const isScriptProject = SCRIPT_TYPES.has(activeNovel?.type)
   const isNovelProject = (activeNovel?.type || 'novel') === 'novel'
+  const isComicProject = activeNovel?.type === 'comic'
+
+  if (isComicProject) return <ComicPlanner store={store} />
   const workspaceLabel = projectTypeConfig.workspaceLabel || 'Manuscript'
   const importTitle = isScriptProject
     ? 'Import a .docx draft into script beta'

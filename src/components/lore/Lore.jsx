@@ -1,19 +1,21 @@
 import { useState, useMemo, useEffect } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
+import { loreRefsFor } from '../../utils/worldLinks'
 
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const SUGGESTED_CATEGORIES = ['Magic System', 'Religion', 'History', 'Politics', 'Geography', 'Culture', 'Technology', 'Prophecy', 'Mythology', 'Other']
 
-function EntryForm({ entry, onSave, onCancel, characters, locations, existingCategories, existingTags, configuredCategories }) {
+function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries, existingCategories, existingTags, configuredCategories }) {
   const [form, setForm] = useState({
     title: entry?.title || '',
     category: entry?.category || '',
     content: entry?.content || '',
     characterIds: entry?.characterIds || [],
     locationIds: entry?.locationIds || [],
+    loreIds: entry?.loreIds || [],
     tags: entry?.tags || [],
   })
   const [tagInput, setTagInput] = useState('')
@@ -77,6 +79,8 @@ function EntryForm({ entry, onSave, onCancel, characters, locations, existingCat
         <LinkPicker title="Linked Characters" items={characters} selected={form.characterIds} getLabel={c => c.name} onToggle={id => toggleArray('characterIds', id)} />
         <LinkPicker title="Linked Locations" items={locations} selected={form.locationIds} getLabel={l => l.name} onToggle={id => toggleArray('locationIds', id)} />
       </div>
+
+      <LinkPicker title="Related Lore" items={(loreEntries || []).filter(e => e.id !== entry?.id)} selected={form.loreIds} getLabel={e => e.title} onToggle={id => toggleArray('loreIds', id)} />
 
       <div className="flex gap-2 pt-4 border-t border-[var(--border)]">
         <button type="submit" className="btn btn-primary flex-1 justify-center">Save Entry</button>
@@ -287,6 +291,29 @@ export default function Lore({ store }) {
                 </div>
               )}
 
+              {(() => {
+                const relatedLore = (selected.loreIds || []).map(id => loreEntries.find(e => e.id === id)).filter(Boolean)
+                const incomingLore = loreRefsFor(selected.id, loreEntries).filter(e => e.id !== selected.id && !selected.loreIds?.includes(e.id))
+                if (relatedLore.length === 0 && incomingLore.length === 0) return null
+                return (
+                  <div>
+                    <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Related Lore</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {relatedLore.map(e => (
+                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo({ section: 'lore', id: e.id })}>
+                          {e.title}
+                        </button>
+                      ))}
+                      {incomingLore.map(e => (
+                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo({ section: 'lore', id: e.id })} title="References this entry">
+                          ← {e.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {selected.tags?.length > 0 && (
                 <div>
                   <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Related By Tag</h3>
@@ -330,6 +357,7 @@ export default function Lore({ store }) {
             onCancel={() => { setEditing(false); setEditTarget(null) }}
             characters={characters}
             locations={locations}
+            loreEntries={loreEntries}
             existingCategories={existingCategories}
             existingTags={existingTags}
             configuredCategories={configuredCategories}
