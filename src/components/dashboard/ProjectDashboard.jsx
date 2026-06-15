@@ -4,6 +4,16 @@ import { getEnabledSections, getProjectTypeStage } from '../../constants/project
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
+const COVER_GRADIENTS = [
+  'linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+  'linear-gradient(160deg, #1c0c2a 0%, #2d1b4e 60%, #1a0d33 100%)',
+  'linear-gradient(160deg, #0d1f2d 0%, #1a3a4a 55%, #0a2030 100%)',
+  'linear-gradient(160deg, #1a0c0c 0%, #2d1212 50%, #3a1a1a 100%)',
+  'linear-gradient(160deg, #0d2013 0%, #1a3a20 50%, #0a1a0d 100%)',
+  'linear-gradient(160deg, #0c1a24 0%, #1a2e3a 50%, #0a1520 100%)',
+  'linear-gradient(160deg, #1a1208 0%, #2e2010 50%, #3a2a18 100%)',
+  'linear-gradient(160deg, #0c0c1a 0%, #1a1a30 50%, #0a0a18 100%)',
+]
 const PROJECT_STATUS_LABELS = {
   not_started: 'Not started',
   draft: 'Draft',
@@ -17,6 +27,12 @@ const PROJECT_STATUS_LABELS = {
 
 const countWords = value => value?.trim().match(/\S+/g)?.length || 0
 const formatProjectStatus = status => PROJECT_STATUS_LABELS[status] || status || 'Drafting'
+const formatCompletion = value => `${Math.round(value || 0)}%`
+const pluralize = (count, singular, plural = `${singular}s`) => `${formatNumber(count)} ${count === 1 ? singular : plural}`
+const getCoverGradient = (title) => {
+  const n = (title || '?').split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return COVER_GRADIENTS[n % COVER_GRADIENTS.length]
+}
 const toDateKey = value => {
   const date = new Date(value)
   const year = date.getFullYear()
@@ -247,6 +263,20 @@ const buildSceneInsights = stats => {
   }
 }
 
+const getRecentSceneContext = (scene, stats) => {
+  const chapterId = scene.chapterId || scene.parentId
+  const chapter = stats.chapters.find(item => item.id === chapterId)
+  const actId = chapter?.actId || chapter?.parentId || scene.actId
+  const act = stats.acts.find(item => item.id === actId)
+  const chapterLabel = stats.projectType.structure?.level2 || 'Chapter'
+  const actLabel = stats.projectType.structure?.level1 || 'Act'
+  const parts = []
+
+  if (chapter) parts.push(chapter.title || `${chapterLabel} ${(chapter.order ?? stats.chapters.indexOf(chapter)) + 1}`)
+  if (act) parts.push(act.title || `${actLabel} ${(act.order ?? stats.acts.indexOf(act)) + 1}`)
+  return parts.join(' · ')
+}
+
 const buildCoverageInsights = stats => {
   const manuscript = stats.scenes.map(scene => scene.content || '').join(' ')
   const countMentioned = items => items.filter(item => {
@@ -317,6 +347,9 @@ const NAV_ROOMS = [
   {
     id: 'outline',
     label: 'Outline',
+    cta: 'Open outline',
+    description: 'Shape your story structure and narrative flow.',
+    accent: 'coral',
     primarySection: 'outline',
     requires: ['outline'],
     icon: (
@@ -336,6 +369,9 @@ const NAV_ROOMS = [
   {
     id: 'characters',
     label: 'Characters',
+    cta: 'View characters',
+    description: 'Build people your readers will remember.',
+    accent: 'gold',
     primarySection: 'characters',
     requires: ['characters'],
     icon: (
@@ -353,6 +389,9 @@ const NAV_ROOMS = [
   {
     id: 'atlas',
     label: 'Atlas',
+    cta: 'Explore atlas',
+    description: 'Explore the places that bring your world to life.',
+    accent: 'teal',
     primarySection: 'locations',
     requires: ['locations'],
     icon: (
@@ -369,6 +408,9 @@ const NAV_ROOMS = [
   {
     id: 'lore',
     label: 'Lore',
+    cta: 'Open lore',
+    description: 'Document the history, legends, and secrets.',
+    accent: 'sage',
     primarySection: 'lore',
     requires: ['lore'],
     icon: (
@@ -382,6 +424,9 @@ const NAV_ROOMS = [
   {
     id: 'history',
     label: 'History',
+    cta: 'View timeline',
+    description: 'Track important events that shape your world.',
+    accent: 'amber',
     primarySection: 'timeline',
     requires: ['timeline', 'worldhistory'],
     icon: (
@@ -399,6 +444,9 @@ const NAV_ROOMS = [
   {
     id: 'ideas',
     label: 'Ideas',
+    cta: 'New idea',
+    description: 'Capture and grow your best story ideas.',
+    accent: 'rose',
     primarySection: 'ideas',
     requires: ['ideas'],
     icon: (
@@ -414,21 +462,25 @@ const NAV_ROOMS = [
 const teleport = (section) =>
   window.dispatchEvent(new CustomEvent('switch-section', { detail: { section } }))
 
+const openWriting = () =>
+  window.dispatchEvent(new CustomEvent('switch-writing'))
+
 const openProjectSettings = () =>
   window.dispatchEvent(new CustomEvent('open-project-settings'))
 
 const NavCard = ({ room, stats }) => (
   <button
-    className="overview-nav-card"
+    className={`overview-nav-card overview-nav-card-${room.accent}`}
     onClick={() => teleport(room.primarySection)}
     aria-label={`Open ${room.label}`}
   >
     <span className="overview-nav-card-icon">{room.icon}</span>
     <span className="overview-nav-card-label">
       <span>{room.label}</span>
-      <small>Open</small>
+      <small>{room.getSummary(stats)}</small>
     </span>
-    <span className="overview-nav-card-summary">{room.getSummary(stats)}</span>
+    <span className="overview-nav-card-summary">{room.description}</span>
+    <span className="overview-nav-card-cta">{room.cta}</span>
   </button>
 )
 
@@ -491,6 +543,62 @@ const MiniBarList = ({ items, max, emptyText }) => (
   </div>
 )
 
+const WritingProgressCard = ({ words, target, progress }) => {
+  const hasTarget = target > 0
+  const remaining = hasTarget ? Math.max(0, target - words) : null
+  const progressValue = hasTarget ? Math.min(100, Math.max(0, progress || 0)) : 0
+  const progressLabel = hasTarget ? formatCompletion(progressValue) : 'No target yet'
+  const context = hasTarget
+    ? `You're ${formatNumber(words)} words into a ${formatNumber(target)} word novel.`
+    : `You're ${formatNumber(words)} words into this manuscript. Add a target when you want a finish line.`
+  const remainingText = hasTarget
+    ? remaining > 0
+      ? `${formatNumber(remaining)} words to go.`
+      : 'Target reached. Beautiful work.'
+    : 'No word target set yet.'
+
+  return (
+    <section className="writing-progress-card" aria-label="Writing progress">
+      <div className="writing-progress-card-head">
+        <div className="writing-progress-main">
+          <span className="writing-progress-icon" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </span>
+          <div>
+            <span className="writing-progress-eyebrow">Writing progress</span>
+            <strong>{formatNumber(words)}</strong>
+            <small>words written</small>
+          </div>
+        </div>
+        <div className="writing-progress-details">
+          <div>
+            <strong>{hasTarget ? formatNumber(target) : 'Set a target'}</strong>
+            <span>Word target</span>
+          </div>
+          <div>
+            <strong>{progressLabel}</strong>
+            <span>Complete</span>
+          </div>
+        </div>
+      </div>
+      <div className="writing-progress-meter-row">
+        <div className="writing-progress-meter" aria-hidden="true">
+          <span style={{ width: `${hasTarget ? progressValue : 8}%` }} />
+        </div>
+        <span>{progressLabel}</span>
+      </div>
+      <div className="writing-progress-footer">
+        <p>{context}</p>
+        <small>{remainingText}</small>
+        <span>Early draft in progress</span>
+      </div>
+    </section>
+  )
+}
+
 export default function ProjectDashboard({ store }) {
   const stats = store.activeProjectStats
   const [dailyGoal, setDailyGoal] = useState(() => localStorage.getItem('nf-daily-word-goal') || '500')
@@ -540,6 +648,10 @@ export default function ProjectDashboard({ store }) {
   const workspaceLabel = stats.projectType.workspaceLabel || 'Manuscript'
   const analyticsLabel = stats.projectType.analyticsLabel || 'Writing Analytics'
   const projectStatusLabel = formatProjectStatus(project.status)
+  const overviewHeroStyle = {
+    '--overview-cover-fallback': getCoverGradient(project.title),
+    ...(project.coverPhoto ? { '--overview-cover-art': `url("${project.coverPhoto}")` } : {}),
+  }
 
   const updateDailyGoal = value => {
     const next = value.replace(/[^\d]/g, '')
@@ -550,44 +662,40 @@ export default function ProjectDashboard({ store }) {
   return (
     <StudioBoard className="overview-board">
       <div className="overview-layout">
-        <header className="overview-hero">
-          <div>
-            <p className="studio-kicker">{stats.projectType.label}</p>
+        <header className={`overview-hero${project.coverPhoto ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
+          <div className="overview-hero-copy">
+            <p className="studio-kicker">{stats.projectType.label} project</p>
+            <div className="overview-hero-badges">
+              <span>{stats.projectType.label}</span>
+              <span>{projectStatusLabel}</span>
+            </div>
             <h1>{project.title}</h1>
-            <p>{project.description || 'No project description yet.'}</p>
+            <p>{project.description || 'Your manuscript is taking shape.'}</p>
             {isBetaType && (
               <p style={{ marginTop: 8, color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
                 {projectStage.label}: {projectStage.note}
               </p>
             )}
             <div className="overview-hero-actions">
+              <button type="button" onClick={openWriting}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+                Open manuscript
+              </button>
               <button type="button" onClick={openProjectSettings}>Project settings</button>
             </div>
           </div>
-          <div className="overview-word-stats">
-            <div className="overview-word-stat">
-              <strong>{formatNumber(stats.manuscriptWords)}</strong>
-              <span>words written</span>
-            </div>
-            {projectWordTarget > 0 && (
-              <>
-                <div className="overview-word-stat-divider" />
-                <div className="overview-word-stat">
-                  <strong>{formatNumber(projectWordTarget)}</strong>
-                  <span>word target</span>
-                </div>
-                <div className="overview-word-stat-divider" />
-                <div className="overview-word-stat">
-                  <strong>{projectWordProgress}%</strong>
-                  <span>complete</span>
-                </div>
-              </>
-            )}
-          </div>
+          <WritingProgressCard
+            words={stats.manuscriptWords}
+            target={projectWordTarget}
+            progress={projectWordProgress}
+          />
           <div className="overview-hero-side">
             <div className="overview-status">
-              <span>{viewMode === 'overview' ? stats.updatedLabel : `${formatNumber(stats.manuscriptWords)} words`}</span>
-              <span>{viewMode === 'overview' ? projectStatusLabel : `${analytics.activeDays} active days`}</span>
+              <span>{`Updated ${stats.updatedLabel}`}</span>
+              <span>Keep writing</span>
             </div>
             <div className="overview-view-switch" aria-label="Dashboard view">
               <button
@@ -623,14 +731,14 @@ export default function ProjectDashboard({ store }) {
                 <div className="overview-section-head">
                   <div>
                     <p className="studio-kicker">Project</p>
-                    <h2>Basics</h2>
+                    <h2>Story Snapshot</h2>
                   </div>
                 </div>
                 <div className="overview-list">
                   <LedgerRow label="Created" value={stats.createdLabel} />
                   <LedgerRow label="Project type" value={stats.projectType.label} />
                   {stats.projectType.workflowSummary && (
-                    <LedgerRow label="Workflow" value={stats.projectType.workflowSummary} longValue />
+                    <LedgerRow label="Shape" value={stats.projectType.workflowSummary} longValue />
                   )}
                   <LedgerRow label="Status" value={projectStatusLabel} />
                   <LedgerRow label="Word count" value={formatNumber(stats.manuscriptWords)} />
@@ -644,21 +752,22 @@ export default function ProjectDashboard({ store }) {
                 <div className="overview-section-head">
                   <div>
                     <p className="studio-kicker">{workspaceLabel}</p>
-                    <h2>Structure</h2>
+                    <h2>Manuscript Shape</h2>
                   </div>
                 </div>
                 <div className="overview-list">
                   <LedgerRow label={stats.projectType.structure?.level1 || 'Acts'} value={formatNumber(stats.acts.length)} />
-                  <LedgerRow label={stats.projectType.structure?.level2 || 'Chapters'} value={formatNumber(stats.chapters.length)} />
-                  <LedgerRow label={stats.projectType.structure?.level3 || 'Scenes'} value={formatNumber(stats.scenes.length)} />
+                  <LedgerRow label={`${stats.projectType.structure?.level2 || 'Chapter'}s`} value={formatNumber(stats.chapters.length)} />
+                  <LedgerRow label={`${stats.projectType.structure?.level3 || 'Scene'}s`} value={formatNumber(stats.scenes.length)} />
+                  <LedgerRow label="Average scene length" value={`${formatNumber(sceneInsights?.average || 0)} words`} />
                 </div>
               </section>
 
               <section className="overview-section panel-soft">
                 <div className="overview-section-head">
                   <div>
-                    <p className="studio-kicker">Reference</p>
-                    <h2>World Material</h2>
+                    <p className="studio-kicker">Story world</p>
+                    <h2>Worldbuilding</h2>
                   </div>
                 </div>
                 <div className="overview-list">
@@ -673,18 +782,21 @@ export default function ProjectDashboard({ store }) {
               <section className="overview-section overview-section-wide panel-soft">
                 <div className="overview-section-head">
                   <div>
-                    <p className="studio-kicker">Recent {workspaceLabel}</p>
-                    <h2>{stats.projectType.structure?.level3 || 'Scenes'}</h2>
+                    <p className="studio-kicker">Manuscript</p>
+                    <h2>Recent Writing</h2>
                   </div>
                 </div>
                 <div className="overview-scene-list">
                   {recentScenes.length > 0 ? recentScenes.map(scene => (
                     <div key={scene.id} className="overview-scene">
-                      <span>{scene.title || 'Untitled scene'}</span>
-                      <small>{formatNumber((scene.content || '').trim().match(/\S+/g)?.length || 0)} words</small>
+                      <span>
+                        <strong>{scene.title || 'Untitled scene'}</strong>
+                        {getRecentSceneContext(scene, stats) && <small>{getRecentSceneContext(scene, stats)}</small>}
+                      </span>
+                      <small>{pluralize(countWords(scene.content || ''), 'word')}</small>
                     </div>
                   )) : (
-                    <StudioEmpty title={`No ${String(stats.projectType.structure?.level3 || 'scenes').toLowerCase()} yet`} />
+                    <StudioEmpty title={`No ${String(stats.projectType.structure?.level3 || 'scenes').toLowerCase()} yet`} body="Start a scene when you are ready to put words on the page." />
                   )}
                 </div>
               </section>
@@ -695,7 +807,7 @@ export default function ProjectDashboard({ store }) {
             <div className="overview-section-head">
               <div>
                 <p className="studio-kicker">{analyticsLabel}</p>
-                <h2>Progress</h2>
+                <h2>Writing Rhythm</h2>
               </div>
               <label className="analytics-goal">
                 <span>Daily goal</span>

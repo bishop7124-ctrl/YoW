@@ -14,6 +14,8 @@ const LAND_FILL = '#244b2f'
 const LAND_STROKE = '#162a1c'
 const WATER_FILL = '#4aa7c7'
 const WATER_STROKE = '#236783'
+const SELECTION_STROKE = '#1677ff'
+const HOVER_STROKE = '#d8942f'
 
 const OBJECT_TYPES = {
   marker: { label: 'Marker', icon: '•', fill: '#d6b45f', stroke: '#6f5524' },
@@ -34,7 +36,6 @@ const TOOLBAR_MODES = [
   { id: 'zoom', label: 'Zoom', icon: '+' },
   { id: 'region', label: 'Region', icon: '□' },
   { id: 'river', label: 'River', icon: '~' },
-  { id: 'mountain', label: 'Mountain', icon: '△' },
   { id: 'road', label: 'Road', icon: '—' },
   { id: 'border', label: 'Border', icon: '⋯' },
   { id: 'shape', label: 'Land', icon: '▰' },
@@ -43,7 +44,7 @@ const TOOLBAR_MODES = [
   { id: 'location', label: 'Location', icon: '⌖' },
 ]
 
-const POINT_DRAW_TOOLS = new Set(['region', 'river', 'mountain', 'road', 'border'])
+const POINT_DRAW_TOOLS = new Set(['region', 'river', 'road', 'border'])
 const LINE_OBJECT_TYPES = new Set(['river', 'mountain', 'road', 'border'])
 const CONTENT_OBJECT_TYPES = new Set(['marker', 'stamp', 'label', 'location'])
 const SNAP_SIZES = [20, 40, 80]
@@ -62,16 +63,23 @@ const MAP_TYPE_OPTIONS = [
 ]
 
 const STAMP_LIBRARY = [
-  { id: 'mountains', name: 'Mountains', icon: '△', category: 'Terrain', mapTypes: ['world', 'region'], size: 116, fill: '#8a8068', stroke: '#3b3328', keywords: 'peaks range hills' },
-  { id: 'forest', name: 'Forest', icon: '♠', category: 'Terrain', mapTypes: ['world', 'region', 'local'], size: 112, fill: '#40683b', stroke: '#21381f', keywords: 'woods trees woodland' },
-  { id: 'trees', name: 'Trees', icon: '♠', category: 'Nature', mapTypes: ['region', 'local'], size: 74, fill: '#3f7142', stroke: '#203821', keywords: 'tree woods forest' },
-  { id: 'city', name: 'City', icon: '●', category: 'Settlements', mapTypes: ['world', 'region', 'local'], size: 86, fill: '#b9854e', stroke: '#4c3320', keywords: 'settlement place urban' },
-  { id: 'capital', name: 'Capital', icon: '★', category: 'Settlements', mapTypes: ['world', 'region'], size: 96, fill: '#c89a4b', stroke: '#4a2e16', keywords: 'kingdom seat city crown' },
-  { id: 'town', name: 'Town', icon: '○', category: 'Settlements', mapTypes: ['region', 'local'], size: 70, fill: '#bd875a', stroke: '#4b321f', keywords: 'village settlement' },
-  { id: 'building', name: 'Building', icon: '▥', category: 'Structure', mapTypes: ['local'], size: 78, fill: '#9f7650', stroke: '#3d2a1c', keywords: 'house shop neighborhood town' },
-  { id: 'kingdom', name: 'Kingdom', icon: '♛', category: 'Political', mapTypes: ['world'], size: 128, fill: '#a85f61', stroke: '#4a2325', keywords: 'realm country empire' },
-  { id: 'castle', name: 'Castle', icon: '▣', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 92, fill: '#8f8574', stroke: '#352d25', keywords: 'fort keep citadel' },
-  { id: 'ruins', name: 'Ruins', icon: '⌁', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 86, fill: '#92745b', stroke: '#3f3026', keywords: 'ancient broken landmark' },
+  { id: 'capital', name: 'Capital', icon: 'Crown', assetSrc: '/map-stamps/capital.png', category: 'Settlements', mapTypes: ['world', 'region'], size: 110, fill: '#111111', stroke: '#111111', keywords: 'capital crown realm kingdom seat' },
+  { id: 'city', name: 'City', icon: 'City', assetSrc: '/map-stamps/city.png', category: 'Settlements', mapTypes: ['world', 'region', 'local'], size: 106, fill: '#111111', stroke: '#111111', keywords: 'city settlement urban towers' },
+  { id: 'village', name: 'Village', icon: 'Houses', assetSrc: '/map-stamps/village.png', category: 'Settlements', mapTypes: ['world', 'region', 'local'], size: 96, fill: '#111111', stroke: '#111111', keywords: 'village town settlement houses' },
+  { id: 'castle', name: 'Castle', icon: 'Castle', assetSrc: '/map-stamps/castle.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 104, fill: '#111111', stroke: '#111111', keywords: 'castle fort keep citadel' },
+  { id: 'fortress', name: 'Fortress', icon: 'Fortress', assetSrc: '/map-stamps/fortress.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 104, fill: '#111111', stroke: '#111111', keywords: 'fortress fort stronghold keep' },
+  { id: 'harbor', name: 'Harbor', icon: 'Anchor', assetSrc: '/map-stamps/harbor.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 98, fill: '#111111', stroke: '#111111', keywords: 'harbor port docks anchor sea' },
+  { id: 'mountains', name: 'Mountains', icon: 'Peaks', assetSrc: '/map-stamps/mountains.png', category: 'Terrain', mapTypes: ['world', 'region'], size: 116, fill: '#111111', stroke: '#111111', keywords: 'mountains peaks range hills' },
+  { id: 'forest', name: 'Forest', icon: 'Trees', assetSrc: '/map-stamps/forest.png', category: 'Terrain', mapTypes: ['world', 'region', 'local'], size: 112, fill: '#111111', stroke: '#111111', keywords: 'forest woods trees woodland' },
+  { id: 'ruins', name: 'Ruins', icon: 'Ruins', assetSrc: '/map-stamps/ruins.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 96, fill: '#111111', stroke: '#111111', keywords: 'ruins ancient broken landmark' },
+  { id: 'landmark', name: 'Landmark', icon: 'Obelisk', assetSrc: '/map-stamps/landmark.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 92, fill: '#111111', stroke: '#111111', keywords: 'landmark obelisk monument standing stone' },
+  { id: 'cave', name: 'Cave', icon: 'Cave', assetSrc: '/map-stamps/cave.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 102, fill: '#111111', stroke: '#111111', keywords: 'cave cavern grotto lair' },
+  { id: 'mine', name: 'Mine', icon: 'Pickaxe', assetSrc: '/map-stamps/mine.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 102, fill: '#111111', stroke: '#111111', keywords: 'mine quarry pickaxe ore' },
+  { id: 'temple', name: 'Temple', icon: 'Temple', assetSrc: '/map-stamps/temple.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 104, fill: '#111111', stroke: '#111111', keywords: 'temple shrine columns sacred' },
+  { id: 'battlefield', name: 'Battlefield', icon: 'Swords', assetSrc: '/map-stamps/battlefield.png', category: 'Landmarks', mapTypes: ['world', 'region', 'local'], size: 98, fill: '#111111', stroke: '#111111', keywords: 'battlefield battle swords war' },
+  { id: 'portal', name: 'Portal', icon: 'Portal', assetSrc: '/map-stamps/portal.png', category: 'Magic', mapTypes: ['world', 'region', 'local'], size: 96, fill: '#111111', stroke: '#111111', keywords: 'portal gate magic arch' },
+  { id: 'magic-source', name: 'Magic Source', icon: 'Crystal', assetSrc: '/map-stamps/magic-source.png', category: 'Magic', mapTypes: ['world', 'region', 'local'], size: 96, fill: '#111111', stroke: '#111111', keywords: 'magic source crystal mana power' },
+  { id: 'trees', name: 'Trees', icon: 'Trees', assetSrc: '/map-stamps/forest.png', category: 'Nature', mapTypes: ['region', 'local'], size: 74, fill: '#111111', stroke: '#111111', keywords: 'tree woods forest' },
   { id: 'walls', name: 'Walls', icon: '▤', category: 'Structure', mapTypes: ['interior'], size: 120, fill: '#8a7b68', stroke: '#3d342b', keywords: 'room stone barrier' },
   { id: 'door', name: 'Door', icon: '▯', category: 'Structure', mapTypes: ['interior', 'local'], size: 70, fill: '#8b5a33', stroke: '#3d2414', keywords: 'entry exit gate' },
   { id: 'window', name: 'Window', icon: '▦', category: 'Structure', mapTypes: ['interior'], size: 58, fill: '#6f98a4', stroke: '#263b42', keywords: 'glass opening interior' },
@@ -89,6 +97,26 @@ const DEFAULT_CATEGORIES_BY_MAP_TYPE = {
   interior: ['Structure', 'Furniture'],
 }
 
+const stampAssetCache = new Map()
+
+function loadStampAsset(src) {
+  if (!src || typeof Image === 'undefined') return null
+  const cached = stampAssetCache.get(src)
+  if (cached) return cached
+  const image = new Image()
+  const entry = { image, loaded: false, failed: false }
+  image.onload = () => {
+    entry.loaded = true
+    window.dispatchEvent(new CustomEvent('yow:stamp-asset-loaded', { detail: { src } }))
+  }
+  image.onerror = () => {
+    entry.failed = true
+  }
+  image.src = src
+  stampAssetCache.set(src, entry)
+  return entry
+}
+
 const MAP_TYPE_TOOLSETS = {
   world: {
     label: 'World Map',
@@ -98,7 +126,6 @@ const MAP_TYPE_TOOLSETS = {
       { id: 'regions', mode: 'region', label: 'Kingdoms', icon: '□' },
       { id: 'borders', mode: 'border', label: 'Borders', icon: '⋯' },
       { id: 'waters', mode: 'river', label: 'Rivers & seas', icon: '~' },
-      { id: 'mountains', mode: 'mountain', label: 'Mountains', icon: '△' },
       { id: 'terrain', mode: 'stamp', label: 'Stamps', icon: '✦' },
       { id: 'cities', mode: 'location', label: 'Cities', icon: '⌖' },
       { id: 'labels', mode: 'label', label: 'Labels', icon: 'T' },
@@ -111,7 +138,6 @@ const MAP_TYPE_TOOLSETS = {
       { id: 'provinces', mode: 'region', label: 'Provinces', icon: '□' },
       { id: 'roads', mode: 'road', label: 'Roads', icon: '—' },
       { id: 'rivers', mode: 'river', label: 'Rivers', icon: '~' },
-      { id: 'mountains', mode: 'mountain', label: 'Mountains', icon: '△' },
       { id: 'towns', mode: 'location', label: 'Towns', icon: '⌖' },
       { id: 'landmarks', mode: 'stamp', label: 'Landmarks', icon: '✦' },
       { id: 'borders', mode: 'border', label: 'Borders', icon: '⋯' },
@@ -352,6 +378,8 @@ function createStampObject(stamp, index = 0, point = null) {
       fill: stamp.fill || OBJECT_TYPES.stamp.fill,
       stroke: stamp.stroke || OBJECT_TYPES.stamp.stroke,
       stampId: stamp.id,
+      icon: stamp.icon,
+      assetSrc: stamp.assetSrc,
       stampType: stamp.name,
       category: stamp.category,
       opacity: 1,
@@ -529,6 +557,8 @@ function migrateLegacyObjects(map) {
         fill: '#c79b5d',
         stroke: '#312719',
         stampType: stamp.stampType,
+        icon: STAMP_LIBRARY.find(item => item.name === stamp.stampType || item.id === stamp.stampType)?.icon || OBJECT_TYPES.stamp.icon,
+        assetSrc: STAMP_LIBRARY.find(item => item.name === stamp.stampType || item.id === stamp.stampType)?.assetSrc,
         layerId: stamp.layerId || DEFAULT_OBJECT_LAYER_ID,
       },
     }, migrated.length))
@@ -1216,6 +1246,12 @@ function drawFantasyMarker(ctx, object, selected) {
   ctx.fillStyle = colorWithAlpha(meta.fill || '#8f6a33', 0.72)
   ctx.lineWidth = Math.max(2, radius * 0.08)
 
+  if (object.type === 'stamp') {
+    drawStampGlyph(ctx, object)
+    ctx.restore()
+    return
+  }
+
   ctx.beginPath()
   ctx.arc(0, 0, radius * 0.88, 0, Math.PI * 2)
   ctx.fillStyle = colorWithAlpha(meta.fill || '#8f6a33', 0.28)
@@ -1363,6 +1399,475 @@ function drawFantasyMarker(ctx, object, selected) {
   ctx.restore()
 }
 
+function drawStampGlyph(ctx, object) {
+  const meta = object.metadata || {}
+  const radius = Math.min(object.width, object.height) / 2
+  const libraryStamp = STAMP_LIBRARY.find(stamp => stamp.id === meta.stampId || stamp.name === meta.stampType || stamp.name === meta.name)
+  drawStampSymbol(ctx, {
+    id: meta.stampId || libraryStamp?.id,
+    name: meta.stampType || meta.name || libraryStamp?.name,
+    icon: meta.icon || libraryStamp?.icon || OBJECT_TYPES.stamp.icon,
+    assetSrc: meta.assetSrc || libraryStamp?.assetSrc,
+    renderWidth: object.width,
+    renderHeight: object.height,
+    fill: meta.fill || libraryStamp?.fill || OBJECT_TYPES.stamp.fill,
+    stroke: meta.stroke || libraryStamp?.stroke || OBJECT_TYPES.stamp.stroke,
+  }, radius)
+}
+
+function drawStampSymbol(ctx, stamp, radius) {
+  const id = String(stamp?.id || stamp?.name || '').toLowerCase()
+  if (stamp?.assetSrc) {
+    const asset = loadStampAsset(stamp.assetSrc)
+    if (asset?.loaded) {
+      const width = stamp.renderWidth || radius * 2.05
+      const height = stamp.renderHeight || radius * 2.05
+      ctx.drawImage(asset.image, -width / 2, -height / 2, width, height)
+      return
+    }
+    if (asset && !asset.failed) return
+  }
+  const fill = stamp?.fill || OBJECT_TYPES.stamp.fill
+  const stroke = stamp?.stroke || OBJECT_TYPES.stamp.stroke
+  const seed = hashString(stamp?.id || stamp?.name || 'stamp')
+  const silhouette = colorWithAlpha(fill, 0.96)
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = colorWithAlpha(stroke, 0.9)
+  ctx.fillStyle = silhouette
+  ctx.lineWidth = Math.max(2, radius * 0.08)
+
+  function baseline(width = 1.32, y = 0.56) {
+    ctx.beginPath()
+    ctx.moveTo(-radius * width / 2, radius * y)
+    ctx.lineTo(radius * width / 2, radius * y)
+    ctx.stroke()
+  }
+
+  function rect(x, y, width, height) {
+    ctx.fillRect(radius * x, radius * y, radius * width, radius * height)
+    ctx.strokeRect(radius * x, radius * y, radius * width, radius * height)
+  }
+
+  function crenellations(x, y, width, count, height = 0.12) {
+    const gap = width / count
+    for (let index = 0; index < count; index += 1) {
+      if (index % 2 === 0) rect(x + index * gap, y, gap * 0.78, height)
+    }
+  }
+
+  function gableHouse(x, y, width, height, roofHeight = 0.24) {
+    rect(x, y, width, height)
+    ctx.beginPath()
+    ctx.moveTo(radius * x, radius * y)
+    ctx.lineTo(radius * (x + width / 2), radius * (y - roofHeight))
+    ctx.lineTo(radius * (x + width), radius * y)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  function pine(x, scale = 1) {
+    const trunkY = 0.56
+    rect(x - 0.035 * scale, 0.22 * scale, 0.07 * scale, 0.34 * scale)
+    ;[
+      { y: -0.58, w: 0.32 },
+      { y: -0.28, w: 0.44 },
+      { y: 0.02, w: 0.54 },
+    ].forEach(layer => {
+      ctx.beginPath()
+      ctx.moveTo(radius * x, radius * layer.y * scale)
+      ctx.lineTo(radius * (x - layer.w * scale), radius * (layer.y + 0.42) * scale)
+      ctx.lineTo(radius * (x + layer.w * scale), radius * (layer.y + 0.42) * scale)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    })
+    ctx.beginPath()
+    ctx.moveTo(radius * x, radius * trunkY * scale)
+    ctx.lineTo(radius * x, radius * (trunkY + 0.02) * scale)
+    ctx.stroke()
+  }
+
+  if (id === 'capital' || id === 'kingdom') {
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.62, -radius * 0.28)
+    ctx.lineTo(-radius * 0.34, radius * 0.2)
+    ctx.lineTo(-radius * 0.12, -radius * 0.14)
+    ctx.lineTo(radius * 0.08, radius * 0.22)
+    ctx.lineTo(radius * 0.34, -radius * 0.16)
+    ctx.lineTo(radius * 0.6, -radius * 0.28)
+    ctx.lineTo(radius * 0.46, radius * 0.48)
+    ctx.lineTo(-radius * 0.48, radius * 0.48)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ;[-0.62, -0.28, 0, 0.34, 0.6].forEach((x, index) => {
+      ctx.beginPath()
+      ctx.arc(radius * x, index === 2 ? -radius * 0.43 : -radius * 0.32, radius * 0.06, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    })
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.9)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.08, -radius * 0.02)
+    ctx.lineTo(radius * 0.04, -radius * 0.22)
+    ctx.lineTo(radius * 0.16, -radius * 0.02)
+    ctx.lineTo(radius * 0.04, radius * 0.18)
+    ctx.closePath()
+    ctx.fill()
+    baseline(1.02, 0.58)
+  } else if (id === 'city') {
+    const towers = [
+      { x: -0.48, y: -0.06, w: 0.18, h: 0.58, roof: 'spire' },
+      { x: -0.26, y: -0.34, w: 0.2, h: 0.86, roof: 'dome' },
+      { x: 0, y: -0.52, w: 0.24, h: 1.04, roof: 'flag' },
+      { x: 0.28, y: -0.2, w: 0.2, h: 0.72, roof: 'dome' },
+      { x: 0.5, y: -0.02, w: 0.17, h: 0.54, roof: 'spire' },
+    ]
+    towers.forEach(tower => {
+      rect(tower.x - tower.w / 2, tower.y, tower.w, tower.h)
+      if (tower.roof === 'spire') {
+        ctx.beginPath()
+        ctx.moveTo(radius * (tower.x - tower.w / 2), radius * tower.y)
+        ctx.lineTo(radius * tower.x, radius * (tower.y - 0.24))
+        ctx.lineTo(radius * (tower.x + tower.w / 2), radius * tower.y)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+      } else if (tower.roof === 'dome') {
+        ctx.beginPath()
+        ctx.arc(radius * tower.x, radius * tower.y, radius * tower.w * 0.54, Math.PI, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      } else {
+        ctx.beginPath()
+        ctx.moveTo(radius * tower.x, radius * tower.y)
+        ctx.lineTo(radius * tower.x, -radius * 0.74)
+        ctx.lineTo(radius * (tower.x + 0.2), -radius * 0.68)
+        ctx.lineTo(radius * tower.x, -radius * 0.61)
+        ctx.stroke()
+        ctx.fill()
+      }
+      ctx.fillStyle = colorWithAlpha('#f8efd8', 0.85)
+      rect(tower.x - 0.04, tower.y + tower.h * 0.34, 0.08, 0.12)
+      ctx.fillStyle = silhouette
+    })
+    baseline(1.36, 0.56)
+  } else if (id === 'village' || id === 'town' || id === 'building') {
+    gableHouse(-0.58, -0.02, 0.34, 0.5)
+    gableHouse(-0.18, -0.25, 0.4, 0.76, 0.3)
+    gableHouse(0.3, 0.08, 0.34, 0.44, 0.22)
+    pine(0.72, 0.72)
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.9)
+    rect(-0.47, 0.2, 0.08, 0.14)
+    rect(-0.03, -0.02, 0.08, 0.15)
+    rect(0.42, 0.24, 0.08, 0.12)
+    ctx.fillStyle = silhouette
+    baseline(1.5, 0.58)
+  } else if (id === 'castle') {
+    rect(-0.58, -0.08, 1.16, 0.6)
+    rect(-0.72, -0.44, 0.28, 0.96)
+    rect(0.44, -0.44, 0.28, 0.96)
+    rect(-0.18, -0.58, 0.36, 1.1)
+    crenellations(-0.72, -0.56, 0.28, 3)
+    crenellations(0.44, -0.56, 0.28, 3)
+    crenellations(-0.58, -0.2, 1.16, 7)
+    crenellations(-0.18, -0.7, 0.36, 3)
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.9)
+    ctx.beginPath()
+    ctx.arc(0, radius * 0.52, radius * 0.16, Math.PI, Math.PI * 2)
+    ctx.lineTo(radius * 0.16, radius * 0.52)
+    ctx.lineTo(-radius * 0.16, radius * 0.52)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = silhouette
+    baseline(1.56, 0.58)
+  } else if (id === 'fortress') {
+    rect(-0.62, -0.28, 0.28, 0.8)
+    rect(0.34, -0.28, 0.28, 0.8)
+    rect(-0.32, -0.02, 0.64, 0.54)
+    rect(-0.18, -0.5, 0.36, 1.02)
+    crenellations(-0.62, -0.42, 0.28, 3)
+    crenellations(0.34, -0.42, 0.28, 3)
+    crenellations(-0.32, -0.15, 0.64, 5)
+    crenellations(-0.18, -0.64, 0.36, 3)
+    ctx.beginPath()
+    ctx.moveTo(0, -radius * 0.64)
+    ctx.lineTo(0, -radius * 0.9)
+    ctx.lineTo(radius * 0.22, -radius * 0.84)
+    ctx.lineTo(0, -radius * 0.78)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.88)
+    rect(-0.1, 0.24, 0.2, 0.28)
+    ctx.fillStyle = silhouette
+    baseline(1.48, 0.58)
+  } else if (id === 'harbor') {
+    ctx.lineWidth = Math.max(3, radius * 0.1)
+    ctx.beginPath()
+    ctx.moveTo(0, -radius * 0.54)
+    ctx.lineTo(0, radius * 0.34)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(0, -radius * 0.68, radius * 0.16, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.26, -radius * 0.28)
+    ctx.lineTo(radius * 0.26, -radius * 0.28)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.48, 0)
+    ctx.quadraticCurveTo(-radius * 0.36, radius * 0.5, 0, radius * 0.5)
+    ctx.quadraticCurveTo(radius * 0.36, radius * 0.5, radius * 0.48, 0)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.48, 0)
+    ctx.lineTo(-radius * 0.32, radius * 0.12)
+    ctx.lineTo(-radius * 0.34, -radius * 0.12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(radius * 0.48, 0)
+    ctx.lineTo(radius * 0.32, radius * 0.12)
+    ctx.lineTo(radius * 0.34, -radius * 0.12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.lineWidth = Math.max(2, radius * 0.06)
+    ;[-0.36, 0, 0.36].forEach(offset => {
+      ctx.beginPath()
+      ctx.moveTo(radius * (offset - 0.18), radius * 0.64)
+      ctx.quadraticCurveTo(radius * offset, radius * 0.52, radius * (offset + 0.18), radius * 0.64)
+      ctx.stroke()
+    })
+  } else if (id === 'forest' || id === 'trees') {
+    const count = id === 'forest' ? 7 : 4
+    for (let index = 0; index < count; index += 1) {
+      const x = (seededNoise(seed, index + 10) - 0.5) * radius * 1.35
+      const y = (seededNoise(seed, index + 20) - 0.5) * radius * 1.02
+      const h = radius * (0.46 + seededNoise(seed, index + 30) * 0.34)
+      ctx.beginPath()
+      ctx.moveTo(x, y - h * 0.58)
+      ctx.lineTo(x - h * 0.34, y + h * 0.34)
+      ctx.lineTo(x + h * 0.34, y + h * 0.34)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(x, y + h * 0.34)
+      ctx.lineTo(x, y + h * 0.54)
+      ctx.stroke()
+    }
+    baseline(1.36, 0.64)
+  } else if (id === 'mountains') {
+    const peaks = [
+      { x: -0.34, h: 1.26, w: 0.78 },
+      { x: 0.22, h: 1.05, w: 0.68 },
+      { x: 0.02, h: 0.78, w: 0.48 },
+    ]
+    peaks.forEach(peak => {
+      const x = peak.x * radius
+      const h = peak.h * radius
+      const w = peak.w * radius
+      ctx.beginPath()
+      ctx.moveTo(x, -h * 0.52)
+      ctx.lineTo(x - w * 0.5, h * 0.42)
+      ctx.lineTo(x + w * 0.5, h * 0.42)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.strokeStyle = colorWithAlpha('#fff6db', 0.56)
+      ctx.beginPath()
+      ctx.moveTo(x, -h * 0.43)
+      ctx.lineTo(x - w * 0.11, -h * 0.12)
+      ctx.lineTo(x + w * 0.12, -h * 0.15)
+      ctx.stroke()
+      ctx.strokeStyle = colorWithAlpha(stroke, 0.9)
+    })
+    baseline(1.34, 0.56)
+  } else if (id === 'ruins') {
+    rect(-0.62, -0.42, 0.14, 0.96)
+    rect(-0.44, -0.36, 0.12, 0.9)
+    rect(0.24, -0.2, 0.14, 0.74)
+    rect(0.44, -0.28, 0.12, 0.82)
+    ctx.beginPath()
+    ctx.arc(0, radius * 0.54, radius * 0.36, Math.PI, Math.PI * 2)
+    ctx.stroke()
+    ctx.lineWidth = Math.max(5, radius * 0.14)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.44, radius * 0.54)
+    ctx.lineTo(-radius * 0.22, radius * 0.08)
+    ctx.quadraticCurveTo(0, -radius * 0.2, radius * 0.26, radius * 0.04)
+    ctx.lineTo(radius * 0.48, radius * 0.54)
+    ctx.stroke()
+    ctx.lineWidth = Math.max(2, radius * 0.08)
+    baseline(1.38, 0.58)
+  } else if (id === 'landmark') {
+    ctx.beginPath()
+    ctx.moveTo(0, -radius * 0.78)
+    ctx.lineTo(radius * 0.22, -radius * 0.58)
+    ctx.lineTo(radius * 0.14, radius * 0.44)
+    ctx.lineTo(-radius * 0.14, radius * 0.44)
+    ctx.lineTo(-radius * 0.22, -radius * 0.58)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.9)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.05, -radius * 0.58)
+    ctx.lineTo(radius * 0.08, -radius * 0.68)
+    ctx.lineTo(radius * 0.02, -radius * 0.2)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = silhouette
+    rect(-0.28, 0.44, 0.56, 0.1)
+    baseline(0.86, 0.62)
+  } else if (id === 'cave') {
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.76, radius * 0.54)
+    ctx.lineTo(-radius * 0.54, radius * 0.02)
+    ctx.lineTo(-radius * 0.34, -radius * 0.36)
+    ctx.lineTo(0, -radius * 0.58)
+    ctx.lineTo(radius * 0.34, -radius * 0.42)
+    ctx.lineTo(radius * 0.58, -radius * 0.04)
+    ctx.lineTo(radius * 0.78, radius * 0.54)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.9)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.34, radius * 0.54)
+    ctx.quadraticCurveTo(0, -radius * 0.24, radius * 0.34, radius * 0.54)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = silhouette
+    baseline(1.54, 0.62)
+  } else if (id === 'mine') {
+    ctx.lineWidth = Math.max(4, radius * 0.12)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.44, radius * 0.52)
+    ctx.lineTo(radius * 0.44, -radius * 0.46)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.48, -radius * 0.48)
+    ctx.quadraticCurveTo(radius * 0.1, -radius * 0.78, radius * 0.56, -radius * 0.56)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.48, -radius * 0.48)
+    ctx.lineTo(-radius * 0.36, -radius * 0.22)
+    ctx.moveTo(radius * 0.56, -radius * 0.56)
+    ctx.lineTo(radius * 0.34, -radius * 0.38)
+    ctx.stroke()
+    ctx.lineWidth = Math.max(2, radius * 0.08)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.66, radius * 0.56)
+    ctx.lineTo(-radius * 0.36, radius * 0.28)
+    ctx.lineTo(-radius * 0.08, radius * 0.56)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    baseline(1.32, 0.62)
+  } else if (id === 'temple') {
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.62, -radius * 0.36)
+    ctx.lineTo(0, -radius * 0.66)
+    ctx.lineTo(radius * 0.62, -radius * 0.36)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    rect(-0.72, 0.42, 1.44, 0.12)
+    rect(-0.6, 0.28, 1.2, 0.12)
+    ;[-0.44, -0.16, 0.16, 0.44].forEach(x => rect(x - 0.06, -0.32, 0.12, 0.6))
+    baseline(1.52, 0.62)
+  } else if (id === 'battlefield') {
+    ctx.lineWidth = Math.max(5, radius * 0.13)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.54, radius * 0.5)
+    ctx.lineTo(radius * 0.44, -radius * 0.62)
+    ctx.moveTo(radius * 0.54, radius * 0.5)
+    ctx.lineTo(-radius * 0.44, -radius * 0.62)
+    ctx.stroke()
+    ctx.lineWidth = Math.max(3, radius * 0.08)
+    ctx.beginPath()
+    ctx.moveTo(radius * 0.44, -radius * 0.62)
+    ctx.lineTo(radius * 0.18, -radius * 0.52)
+    ctx.lineTo(radius * 0.36, -radius * 0.36)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.44, -radius * 0.62)
+    ctx.lineTo(-radius * 0.18, -radius * 0.52)
+    ctx.lineTo(-radius * 0.36, -radius * 0.36)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    baseline(1.18, 0.62)
+  } else if (id === 'portal') {
+    ctx.lineWidth = Math.max(5, radius * 0.13)
+    ctx.beginPath()
+    ctx.arc(0, radius * 0.48, radius * 0.5, Math.PI, Math.PI * 2)
+    ctx.lineTo(radius * 0.5, radius * 0.48)
+    ctx.moveTo(-radius * 0.5, radius * 0.48)
+    ctx.lineTo(-radius * 0.5, radius * 0.58)
+    ctx.moveTo(radius * 0.5, radius * 0.48)
+    ctx.lineTo(radius * 0.5, radius * 0.58)
+    ctx.stroke()
+    ctx.lineWidth = Math.max(2, radius * 0.07)
+    for (let index = 0; index < 3; index += 1) {
+      ctx.beginPath()
+      ctx.arc(0, radius * 0.14, radius * (0.1 + index * 0.12), index * 0.6, Math.PI * 1.5 + index * 0.8)
+      ctx.stroke()
+    }
+    baseline(1.12, 0.66)
+  } else if (id === 'magic-source' || id === 'magic source') {
+    ctx.beginPath()
+    ctx.moveTo(0, -radius * 0.72)
+    ctx.lineTo(radius * 0.26, -radius * 0.28)
+    ctx.lineTo(radius * 0.18, radius * 0.48)
+    ctx.lineTo(0, radius * 0.68)
+    ctx.lineTo(-radius * 0.18, radius * 0.48)
+    ctx.lineTo(-radius * 0.26, -radius * 0.28)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = colorWithAlpha('#f8efd8', 0.86)
+    ctx.beginPath()
+    ctx.moveTo(0, -radius * 0.6)
+    ctx.lineTo(radius * 0.12, -radius * 0.28)
+    ctx.lineTo(0, -radius * 0.06)
+    ctx.lineTo(-radius * 0.1, -radius * 0.26)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = silhouette
+    ;[
+      [-0.58, -0.3], [0.56, -0.28], [-0.52, 0.24], [0.48, 0.26],
+    ].forEach(([x, y]) => {
+      ctx.beginPath()
+      ctx.moveTo(radius * x, radius * (y - 0.12))
+      ctx.lineTo(radius * (x + 0.05), radius * (y - 0.02))
+      ctx.lineTo(radius * (x + 0.16), radius * y)
+      ctx.lineTo(radius * (x + 0.05), radius * (y + 0.04))
+      ctx.lineTo(radius * x, radius * (y + 0.14))
+      ctx.lineTo(radius * (x - 0.05), radius * (y + 0.04))
+      ctx.lineTo(radius * (x - 0.16), radius * y)
+      ctx.lineTo(radius * (x - 0.05), radius * (y - 0.02))
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    })
+  } else {
+    const icon = stamp?.icon || OBJECT_TYPES.stamp.icon
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `700 ${Math.max(18, radius * 1.28)}px Georgia, serif`
+    ctx.strokeText(icon, 0, 1)
+    ctx.fillText(icon, 0, 1)
+  }
+  ctx.restore()
+}
+
 function drawFantasyLabel(ctx, object) {
   const meta = object.metadata || {}
   const text = meta.text || meta.name || 'Label'
@@ -1407,42 +1912,84 @@ function drawFantasyLabel(ctx, object) {
   ctx.restore()
 }
 
-function drawSelection(ctx, objects, zoom) {
-  if (!objects.length) return
-  const bounds = selectionBounds(objects)
-  if (!bounds) return
-  const handleSize = Math.max(12 / zoom, 9)
-  const corners = objectCorners(bounds)
-
+function drawHoverHighlight(ctx, object, zoom) {
+  if (!object) return
+  const corners = objectCorners(object)
   ctx.save()
-  ctx.strokeStyle = '#1677ff'
-  ctx.fillStyle = '#ffffff'
-  ctx.lineWidth = Math.max(1.5 / zoom, 1)
-  ctx.setLineDash([8 / zoom, 5 / zoom])
+  ctx.strokeStyle = HOVER_STROKE
+  ctx.lineWidth = Math.max(2 / zoom, 1.25)
+  ctx.setLineDash([7 / zoom, 6 / zoom])
   ctx.beginPath()
   corners.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y))
   ctx.closePath()
   ctx.stroke()
   ctx.setLineDash([])
+  ctx.fillStyle = colorWithAlpha(HOVER_STROKE, 0.1)
+  ctx.beginPath()
+  corners.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y))
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawSelection(ctx, objects, zoom) {
+  if (!objects.length) return
+  const bounds = selectionBounds(objects)
+  if (!bounds) return
+  const handleSize = Math.max(16 / zoom, 12)
+  const corners = objectCorners(bounds)
+
+  ctx.save()
+  ctx.strokeStyle = SELECTION_STROKE
+  ctx.fillStyle = colorWithAlpha(SELECTION_STROKE, 0.08)
+  ctx.lineWidth = Math.max(2 / zoom, 1.25)
+  ctx.setLineDash([8 / zoom, 5 / zoom])
+  ctx.beginPath()
+  corners.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y))
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  ctx.setLineDash([])
   corners.forEach(point => {
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,.28)'
+    ctx.shadowBlur = 5 / zoom
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = SELECTION_STROKE
+    ctx.lineWidth = Math.max(2 / zoom, 1.25)
     ctx.beginPath()
-    ctx.rect(point.x - handleSize / 2, point.y - handleSize / 2, handleSize, handleSize)
+    ctx.roundRect(point.x - handleSize / 2, point.y - handleSize / 2, handleSize, handleSize, Math.max(3 / zoom, 2))
     ctx.fill()
     ctx.stroke()
+    ctx.restore()
   })
   if (objects.length === 1) {
     drawPointHandles(ctx, objects[0], zoom)
     const top = corners[0]
     const topRight = corners[1]
     const rotatePoint = { x: (top.x + topRight.x) / 2, y: (top.y + topRight.y) / 2 - 46 / zoom }
+    ctx.strokeStyle = SELECTION_STROKE
+    ctx.lineWidth = Math.max(2 / zoom, 1.25)
     ctx.beginPath()
     ctx.moveTo((top.x + topRight.x) / 2, (top.y + topRight.y) / 2)
     ctx.lineTo(rotatePoint.x, rotatePoint.y)
     ctx.stroke()
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,.28)'
+    ctx.shadowBlur = 5 / zoom
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = SELECTION_STROKE
+    ctx.lineWidth = Math.max(2 / zoom, 1.25)
     ctx.beginPath()
-    ctx.arc(rotatePoint.x, rotatePoint.y, handleSize * 0.62, 0, Math.PI * 2)
+    ctx.arc(rotatePoint.x, rotatePoint.y, handleSize * 0.72, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
+    ctx.fillStyle = SELECTION_STROKE
+    ctx.font = `700 ${Math.max(11 / zoom, 9)}px Georgia, serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('↻', rotatePoint.x, rotatePoint.y + 0.5 / zoom)
+    ctx.restore()
   }
   ctx.restore()
 }
@@ -1460,15 +2007,32 @@ function drawPointHandles(ctx, object, zoom) {
   ctx.save()
   ctx.setLineDash([])
   ctx.fillStyle = '#ffffff'
-  ctx.strokeStyle = '#1677ff'
-  ctx.lineWidth = Math.max(1.5 / zoom, 1)
+  ctx.strokeStyle = SELECTION_STROKE
+  ctx.lineWidth = Math.max(2 / zoom, 1.25)
   allPoints.forEach(mapPoint => {
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,.25)'
+    ctx.shadowBlur = 4 / zoom
     ctx.beginPath()
     ctx.arc(mapPoint.x, mapPoint.y, size / 2, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
+    ctx.restore()
   })
   ctx.restore()
+}
+
+function cursorForHandle(handle) {
+  if (!handle) return null
+  if (handle.type === 'rotate') return 'grab'
+  if (handle.type === 'point') return 'crosshair'
+  if (handle.type !== 'resize') return null
+  return {
+    nw: 'nwse-resize',
+    se: 'nwse-resize',
+    ne: 'nesw-resize',
+    sw: 'nesw-resize',
+  }[handle.corner] || 'move'
 }
 
 function hitHandle(point, selectedObjects, zoom) {
@@ -1579,6 +2143,8 @@ export default function MapBuilder({ store }) {
   const viewRef = useRef({ zoom: DEFAULT_ZOOM, pan: { x: 80, y: 80 } })
   const objectsRef = useRef([])
   const selectedIdsRef = useRef([])
+  const hoveredIdRef = useRef(null)
+  const hoverHandleRef = useRef(null)
   const activeMapRef = useRef(null)
   const undoStackRef = useRef([])
   const redoStackRef = useRef([])
@@ -1587,10 +2153,15 @@ export default function MapBuilder({ store }) {
   const [mode, setMode] = useState('select')
   const [view, setView] = useState(viewRef.current)
   const [selectedIds, setSelectedIds] = useState([])
+  const [hoveredId, setHoveredId] = useState(null)
+  const [hoverHandle, setHoverHandle] = useState(null)
   const [historyVersion, setHistoryVersion] = useState(0)
   const [newMapName, setNewMapName] = useState('')
+  const [newLayerName, setNewLayerName] = useState('')
   const [renamingId, setRenamingId] = useState(null)
   const [renameValue, setRenameValue] = useState('')
+  const [inspectorTab, setInspectorTab] = useState('object')
+  const [activeLayerId, setActiveLayerId] = useState(DEFAULT_OBJECT_LAYER_ID)
   const [jsonStatus, setJsonStatus] = useState('')
   const [isCompact, setIsCompact] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 920 : false)
   const [draft, setDraft] = useState(null)
@@ -1617,9 +2188,12 @@ export default function MapBuilder({ store }) {
       .filter(object => object.visible !== false && visibleLayers.has(object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID))
       .sort((a, b) => a.zIndex - b.zIndex)
   }, [objects, schema.layers])
+  const layerMap = useMemo(() => new Map(schema.layers.map(layer => [layer.id, layer])), [schema.layers])
   const selectedObjects = objects.filter(object => selectedIds.includes(object.id))
   const primarySelection = selectedObjects[0] || null
   const layerObjects = useMemo(() => [...objects].sort((a, b) => b.zIndex - a.zIndex), [objects])
+  const selectedLayerId = primarySelection?.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID
+  const activeLayer = layerMap.get(activeLayerId) || schema.layers[0]
   const activeMapType = normalizeMapType(activeMap?.mapType || activeMap?.metadata?.mapType || mapType || 'region')
   const activeTypeConfig = MAP_TYPE_TOOLSETS[activeMapType] || MAP_TYPE_TOOLSETS.region
   const activeStylePreset = activeMap?.metadata?.stylePreset || 'parchment'
@@ -1660,6 +2234,15 @@ export default function MapBuilder({ store }) {
   }, [objects, selectedIds])
 
   useEffect(() => {
+    hoveredIdRef.current = hoveredId
+    requestRender()
+  }, [hoveredId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    hoverHandleRef.current = hoverHandle
+  }, [hoverHandle])
+
+  useEffect(() => {
     activeMapRef.current = activeMap
   }, [activeMap])
 
@@ -1698,7 +2281,7 @@ export default function MapBuilder({ store }) {
 
   useEffect(() => {
     requestRender()
-  }, [visibleObjects, selectedIds, activeMapType, activeStylePreset]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visibleObjects, selectedIds, hoveredId, activeMapType, activeStylePreset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeMap) return
@@ -1723,6 +2306,15 @@ export default function MapBuilder({ store }) {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [objects])
+
+  useEffect(() => {
+    if (!schema.layers.some(layer => layer.id === activeLayerId)) {
+      const timer = window.setTimeout(() => {
+        setActiveLayerId(schema.layers[0]?.id || DEFAULT_OBJECT_LAYER_ID)
+      }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [activeLayerId, schema.layers])
 
   useEffect(() => {
     const onKeyDown = event => {
@@ -1785,6 +2377,12 @@ export default function MapBuilder({ store }) {
     return () => window.removeEventListener('resize', resize)
   }, [activeMap]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const onStampAssetLoaded = () => requestRender()
+    window.addEventListener('yow:stamp-asset-loaded', onStampAssetLoaded)
+    return () => window.removeEventListener('yow:stamp-asset-loaded', onStampAssetLoaded)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const persistObjects = useCallback((nextObjects, extra = {}) => {
     updateActiveMapData(() => ({
       ...extra,
@@ -1795,6 +2393,17 @@ export default function MapBuilder({ store }) {
       mapLayers: schema.layers,
     }))
   }, [schema.height, schema.layers, schema.width, updateActiveMapData])
+
+  const persistLayers = useCallback((nextLayers, extra = {}) => {
+    updateActiveMapData(() => ({
+      ...extra,
+      schemaVersion: SCHEMA_VERSION,
+      width: schema.width,
+      height: schema.height,
+      mapObjects: objectsRef.current.map(normalizeObject),
+      mapLayers: nextLayers,
+    }))
+  }, [schema.height, schema.width, updateActiveMapData])
 
   function pushUndoSnapshot() {
     const current = activeMapRef.current
@@ -1878,6 +2487,8 @@ export default function MapBuilder({ store }) {
     drawGrid(ctx, MAP_W, MAP_H, activeStylePreset)
     ctx.shadowColor = 'transparent'
     visibleObjects.forEach(object => drawObject(ctx, object, selectedIdsRef.current.includes(object.id), { mapType: activeMapType, stylePreset: activeStylePreset }))
+    const hoveredObject = visibleObjects.find(object => object.id === hoveredIdRef.current && !selectedIdsRef.current.includes(object.id))
+    drawHoverHighlight(ctx, hoveredObject, viewRef.current.zoom)
     drawDraft(ctx, draftRef.current, viewRef.current.zoom)
     drawSelection(ctx, objectsRef.current.filter(object => selectedIdsRef.current.includes(object.id)), viewRef.current.zoom)
     ctx.restore()
@@ -1963,24 +2574,37 @@ export default function MapBuilder({ store }) {
     })
   }
 
-  function placeObjectAtPoint(object) {
+  function placeObjectAtPoint(object, options = {}) {
+    const layerId = activeLayer?.id || DEFAULT_OBJECT_LAYER_ID
+    const placedObject = normalizeObject({
+      ...object,
+      metadata: { ...object.metadata, layerId },
+    }, objectsRef.current.length)
     updateObjects(current => {
-      const placed = object.type === 'shape' ? moveLandToBase(object, current) : object
+      const placed = placedObject.type === 'shape' ? moveLandToBase(placedObject, current) : placedObject
       return [...current, placed]
     })
-    setSelectedIds([object.id])
+    if (options.selectPlaced) setSelectedIds([placedObject.id])
+  }
+
+  function isObjectLockedByLayer(object) {
+    return Boolean(layerMap.get(object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID)?.locked)
+  }
+
+  function isObjectEditable(object) {
+    return Boolean(object) && !object.locked && !isObjectLockedByLayer(object)
   }
 
   function placeStampAt(point, stamp = selectedStamp) {
     if (!stamp) return
     const object = createStampObject(stamp, objectsRef.current.length, snapPoint(point))
-    placeObjectAtPoint(object)
+    placeObjectAtPoint(object, { selectPlaced: false })
     setSelectedStampId(stamp.id)
     noteStampUsed(stamp.id)
   }
 
   function placeLabelAt(point) {
-    placeObjectAtPoint(createLabelObject(objectsRef.current.length, snapPoint(point)))
+    placeObjectAtPoint(createLabelObject(objectsRef.current.length, snapPoint(point)), { selectPlaced: false })
   }
 
   function createLocationFromName(point) {
@@ -1990,12 +2614,12 @@ export default function MapBuilder({ store }) {
       : { id: uid('location'), name, category: 'Other' }
     setNewLocationName('')
     setSelectedLocationId(location?.id || '')
-    placeObjectAtPoint(createLocationObject(location, objectsRef.current.length, snapPoint(point)))
+    placeObjectAtPoint(createLocationObject(location, objectsRef.current.length, snapPoint(point)), { selectPlaced: false })
   }
 
   function placeLocationAt(point) {
     const linked = (locations || []).find(location => location.id === selectedLocationId)
-    if (linked) placeObjectAtPoint(createLocationObject(linked, objectsRef.current.length, snapPoint(point)))
+    if (linked) placeObjectAtPoint(createLocationObject(linked, objectsRef.current.length, snapPoint(point)), { selectPlaced: false })
     else createLocationFromName(point)
   }
 
@@ -2003,12 +2627,15 @@ export default function MapBuilder({ store }) {
     if (!activeMap || event.button !== 0) return
     const viewport = viewportRef.current
     const point = screenToMap(event.clientX, event.clientY, viewport, viewRef.current)
-    const selected = objectsRef.current.filter(object => selectedIdsRef.current.includes(object.id))
+    const selected = objectsRef.current
+      .filter(object => selectedIdsRef.current.includes(object.id))
+      .filter(isObjectEditable)
     const handle = hitHandle(point, selected, viewRef.current.zoom)
     const hit = hitTest(point)
     event.currentTarget.setPointerCapture(event.pointerId)
 
     if (mode === 'pan' || event.altKey || spacePressedRef.current) {
+      setHoverHandle(null)
       interactionRef.current = { type: 'pan', startX: event.clientX, startY: event.clientY, startPan: viewRef.current.pan }
       return
     }
@@ -2087,7 +2714,7 @@ export default function MapBuilder({ store }) {
       }
       return
     }
-    if (hit && !hit.locked) {
+    if (hit && isObjectEditable(hit)) {
       const additive = event.shiftKey || event.metaKey || event.ctrlKey
       const groupIds = hit.metadata?.groupId && !additive
         ? objectsRef.current.filter(object => object.metadata?.groupId === hit.metadata.groupId && !object.locked).map(object => object.id)
@@ -2102,6 +2729,7 @@ export default function MapBuilder({ store }) {
           ? selectedIdsRef.current
           : [hit.id]
       setSelectedIds(nextSelected)
+      setHoveredId(hit.id)
       interactionRef.current = {
         type: 'drag',
         startClientX: event.clientX,
@@ -2115,6 +2743,8 @@ export default function MapBuilder({ store }) {
       return
     }
     if (!event.shiftKey) setSelectedIds([])
+    setHoveredId(null)
+    setHoverHandle(null)
   }
 
   function handlePointerMove(event) {
@@ -2123,6 +2753,25 @@ export default function MapBuilder({ store }) {
       if (draftRef.current?.points?.length && (POINT_DRAW_TOOLS.has(mode) || draftRef.current.kind === 'shapePolygon')) {
         const point = screenToMap(event.clientX, event.clientY, viewportRef.current, viewRef.current)
         setDraft(current => current ? { ...current, preview: point } : current)
+        setHoveredId(null)
+        setHoverHandle(null)
+        return
+      }
+      if (mode === 'select') {
+        const point = screenToMap(event.clientX, event.clientY, viewportRef.current, viewRef.current)
+        const selected = objectsRef.current
+          .filter(object => selectedIdsRef.current.includes(object.id))
+          .filter(isObjectEditable)
+        const handle = hitHandle(point, selected, viewRef.current.zoom)
+        const hit = hitTest(point)
+        const nextHoveredId = handle ? selected[0]?.id || null : hit?.id || null
+        if (hoveredIdRef.current !== nextHoveredId) setHoveredId(nextHoveredId)
+        const nextHandleKey = handle ? `${handle.type}:${handle.corner || handle.pointIndex || ''}:${handle.faceIndex || ''}` : null
+        const currentHandleKey = hoverHandleRef.current ? `${hoverHandleRef.current.type}:${hoverHandleRef.current.corner || hoverHandleRef.current.pointIndex || ''}:${hoverHandleRef.current.faceIndex || ''}` : null
+        if (currentHandleKey !== nextHandleKey) setHoverHandle(handle)
+      } else if (!['pan', 'zoom'].includes(mode)) {
+        setHoveredId(null)
+        setHoverHandle(null)
       }
       return
     }
@@ -2199,20 +2848,30 @@ export default function MapBuilder({ store }) {
   function handlePointerUp(event) {
     const interaction = interactionRef.current
     if (interaction?.type === 'shape' && draftRef.current?.start && draftRef.current?.end) {
-      const object = shapeFromRect(draftRef.current.start, draftRef.current.end, interaction.shapeKind, objectsRef.current.length)
+      const baseShape = shapeFromRect(draftRef.current.start, draftRef.current.end, interaction.shapeKind, objectsRef.current.length)
+      const object = normalizeObject({
+        ...baseShape,
+        metadata: {
+          ...baseShape.metadata,
+          layerId: activeLayer?.id || DEFAULT_OBJECT_LAYER_ID,
+        },
+      }, objectsRef.current.length)
       if (object.width > MIN_SIZE || object.height > MIN_SIZE) {
-        let selectedId = object.id
         updateObjects(current => {
           const placed = moveLandToBase(object, current)
-          selectedId = placed.id
           return [...current, placed]
         })
-        setSelectedIds([selectedId])
       }
       setDraft(null)
     }
     interactionRef.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
+  function handlePointerLeave() {
+    if (interactionRef.current) return
+    setHoveredId(null)
+    setHoverHandle(null)
   }
 
   function handleWheel(event) {
@@ -2280,6 +2939,7 @@ export default function MapBuilder({ store }) {
       dashed: source.dashed,
       closed: Boolean(source.closed),
       waterKind: isClosedWater ? 'waterMass' : undefined,
+      layerId: activeLayer?.id || DEFAULT_OBJECT_LAYER_ID,
       shapeKind: source.kind === 'region' || source.kind === 'shapePolygon' || isClosedWater ? 'polygon' : undefined,
     })
     let selectedId = object.id
@@ -2304,9 +2964,13 @@ export default function MapBuilder({ store }) {
         : type === 'location'
           ? createLocationObject((locations || []).find(location => location.id === selectedLocationId), objects.length)
           : createObject(type, objects.length)
+    const objectWithLayer = normalizeObject({
+      ...object,
+      metadata: { ...object.metadata, layerId: activeLayer?.id || DEFAULT_OBJECT_LAYER_ID },
+    }, objects.length)
     let selectedId = object.id
     updateObjects(current => {
-      const placed = object.type === 'shape' ? moveLandToBase(object, current) : object
+      const placed = objectWithLayer.type === 'shape' ? moveLandToBase(objectWithLayer, current) : objectWithLayer
       selectedId = placed.id
       return [...current, placed]
     })
@@ -2322,13 +2986,72 @@ export default function MapBuilder({ store }) {
 
   function patchSelected(patch) {
     const ids = new Set(selectedIds)
-    updateObjects(current => current.map(object => ids.has(object.id) && !object.locked
+    updateObjects(current => current.map(object => ids.has(object.id) && isObjectEditable(object)
       ? {
           ...object,
           ...patch,
           metadata: patch.metadata ? { ...object.metadata, ...patch.metadata } : object.metadata,
         }
       : object))
+  }
+
+  function updateLayers(updater, options = {}) {
+    const nextLayers = typeof updater === 'function' ? updater(schema.layers) : updater
+    if (!options.skipHistory) pushUndoSnapshot()
+    persistLayers(nextLayers.map((layer, index) => ({
+      ...layer,
+      id: layer.id || uid('layer'),
+      name: layer.name || `Layer ${index + 1}`,
+      visible: layer.visible !== false,
+      locked: Boolean(layer.locked),
+      zIndex: index,
+    })))
+  }
+
+  function addLayer(event) {
+    event?.preventDefault?.()
+    const name = newLayerName.trim() || `Layer ${schema.layers.length + 1}`
+    const id = uid('layer')
+    updateLayers(current => [...current, { id, name, visible: true, locked: false, zIndex: current.length }])
+    setNewLayerName('')
+    setActiveLayerId(id)
+    setInspectorTab('layers')
+  }
+
+  function renameLayer(layerId, name) {
+    const nextName = name.trim()
+    if (!nextName) return
+    updateLayers(current => current.map(layer => layer.id === layerId ? { ...layer, name: nextName } : layer))
+  }
+
+  function deleteLayer(layerId) {
+    if (layerId === DEFAULT_OBJECT_LAYER_ID || schema.layers.length <= 1) return
+    pushUndoSnapshot()
+    const nextLayers = schema.layers.filter(layer => layer.id !== layerId)
+    const nextObjects = objectsRef.current.map(object => (object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID) === layerId
+      ? { ...object, metadata: { ...object.metadata, layerId: DEFAULT_OBJECT_LAYER_ID } }
+      : object)
+    updateActiveMapData(() => ({
+      schemaVersion: SCHEMA_VERSION,
+      width: schema.width,
+      height: schema.height,
+      mapObjects: nextObjects.map(normalizeObject),
+      mapLayers: nextLayers,
+    }))
+    if (activeLayerId === layerId) setActiveLayerId(DEFAULT_OBJECT_LAYER_ID)
+  }
+
+  function toggleLayerVisibility(layerId) {
+    updateLayers(current => current.map(layer => layer.id === layerId ? { ...layer, visible: layer.visible === false } : layer))
+  }
+
+  function toggleLayerLock(layerId) {
+    updateLayers(current => current.map(layer => layer.id === layerId ? { ...layer, locked: !layer.locked } : layer))
+  }
+
+  function moveSelectedToLayer(layerId) {
+    patchSelected({ metadata: { layerId } })
+    setActiveLayerId(layerId)
   }
 
   function duplicateSelectedObjects() {
@@ -2357,13 +3080,6 @@ export default function MapBuilder({ store }) {
 
   function ungroupSelectedObjects() {
     patchSelected({ metadata: { groupId: null } })
-  }
-
-  function updateMapType(nextType) {
-    pushUndoSnapshot()
-    setMapType(nextType)
-    updateActiveMapData(() => ({ mapType: nextType, metadata: { ...(activeMap?.metadata || {}), mapType: nextType } }))
-    setStampCategory('Default')
   }
 
   function updateStylePreset(nextPreset) {
@@ -2443,9 +3159,11 @@ export default function MapBuilder({ store }) {
     }, 0)
   }
 
-  function selectEditorMode(nextMode) {
-    setMode(nextMode)
-    if (nextMode !== mode) setDraft(null)
+  function selectEditorMode(nextMode, options = {}) {
+    const shouldToggleOff = options.toggle !== false && nextMode === mode && nextMode !== 'select'
+    const resolvedMode = shouldToggleOff ? 'select' : nextMode
+    setMode(resolvedMode)
+    if (resolvedMode !== mode || shouldToggleOff) setDraft(null)
   }
 
   function finishRename(map) {
@@ -2503,6 +3221,19 @@ export default function MapBuilder({ store }) {
 
   const canUndo = historyVersion >= 0 && undoStackRef.current.length > 0
   const canRedo = historyVersion >= 0 && redoStackRef.current.length > 0
+  const primaryLayerLocked = primarySelection ? isObjectLockedByLayer(primarySelection) : false
+  const primaryEditable = primarySelection ? isObjectEditable(primarySelection) : false
+  const canvasCursor = mode === 'pan'
+    ? 'grab'
+    : mode === 'zoom'
+      ? 'zoom-in'
+      : mode === 'select'
+        ? cursorForHandle(hoverHandle) || (hoveredId ? 'move' : 'default')
+        : POINT_DRAW_TOOLS.has(mode) || (mode === 'shape' && shapeKind === 'polygon')
+          ? 'crosshair'
+          : ['shape', 'stamp', 'label', 'location'].includes(mode)
+            ? 'crosshair'
+            : 'default'
 
   return (
     <div style={{ flex: 1, minHeight: 0, height: isCompact ? '100%' : 'min(100%, calc(100dvh - 190px))', maxHeight: isCompact ? '100%' : 'calc(100dvh - 190px)', overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', background: 'var(--surface)', color: 'var(--text)', position: 'relative', zIndex: 1 }}>
@@ -2518,12 +3249,7 @@ export default function MapBuilder({ store }) {
             options={(project.maps || []).map(map => ({ value: map.id, label: map.name || 'Untitled Map' }))}
             onChange={value => selectMap(value)}
           />
-          <SelectInput
-            label="Type"
-            value={activeMap ? activeMapType : mapType}
-            options={MAP_TYPE_OPTIONS}
-            onChange={value => activeMap ? updateMapType(value) : setMapType(value)}
-          />
+          <ReadOnlyField label="Type" value={activeTypeConfig.label} />
           <SelectInput
             label="Style"
             value={activeStylePreset}
@@ -2557,6 +3283,12 @@ export default function MapBuilder({ store }) {
                 placeholder="Map name"
                 style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
               />
+              <SelectInput
+                label="Type"
+                value={mapType}
+                options={MAP_TYPE_OPTIONS}
+                onChange={setMapType}
+              />
               <button className="btn btn-primary btn-sm" type="submit">Create map</button>
             </form>
           )}
@@ -2574,7 +3306,7 @@ export default function MapBuilder({ store }) {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.label}</span>
               </button>
             ))}
-            {(mode === 'river' || mode === 'mountain' || mode === 'road' || mode === 'border') && (
+            {(mode === 'river' || mode === 'road' || mode === 'border') && (
               <>
                 <NumberInput label="Thickness" value={lineThickness} min={1} onChange={setLineThickness} />
                 {(mode === 'road' || mode === 'border') && <CheckboxInput label="Dashed" checked={dashedLines} onChange={setDashedLines} />}
@@ -2623,11 +3355,15 @@ export default function MapBuilder({ store }) {
                     className="btn btn-secondary btn-sm"
                     draggable
                     onDragStart={event => event.dataTransfer.setData('application/x-yow-stamp', stamp.id)}
-                    onClick={() => { setSelectedStampId(stamp.id); selectEditorMode('stamp') }}
+                    onClick={() => {
+                      const sameStampBrush = mode === 'stamp' && selectedStampId === stamp.id
+                      setSelectedStampId(stamp.id)
+                      selectEditorMode('stamp', { toggle: sameStampBrush })
+                    }}
                     title={`${stamp.name} (${stamp.category})`}
                     style={{ minHeight: 58, padding: 6, display: 'grid', gap: 3, justifyItems: 'center', borderColor: selectedStampId === stamp.id ? 'var(--accent)' : undefined, background: selectedStampId === stamp.id ? 'color-mix(in srgb, var(--accent) 16%, var(--surface2))' : undefined }}
                   >
-                    <span style={{ fontSize: 19, color: stamp.fill }}>{stamp.icon}</span>
+                    <StampPreview stamp={stamp} size={30} />
                     <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}>{stamp.name}</span>
                   </button>
                 ))}
@@ -2680,10 +3416,11 @@ export default function MapBuilder({ store }) {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onPointerLeave={handlePointerLeave}
           onWheel={handleWheel}
           onDragOver={event => event.preventDefault()}
           onDrop={handleDrop}
-          style={{ order: isCompact ? 1 : undefined, minWidth: 0, minHeight: isCompact ? 320 : 0, position: 'relative', overflow: 'hidden', touchAction: 'none', cursor: mode === 'pan' ? 'grab' : mode === 'zoom' ? 'zoom-in' : 'default', zIndex: 1 }}
+          style={{ order: isCompact ? 1 : undefined, minWidth: 0, minHeight: isCompact ? 320 : 0, position: 'relative', overflow: 'hidden', touchAction: 'none', cursor: canvasCursor, zIndex: 1 }}
         >
           {activeMap ? (
             <>
@@ -2692,6 +3429,7 @@ export default function MapBuilder({ store }) {
                 <span>{MAP_W} × {MAP_H}</span>
                 <span>{objects.length} objects</span>
                 <span>{selectedIds.length} selected</span>
+                {hoveredId && !selectedIds.includes(hoveredId) && <span>{objectDisplayName(objects.find(object => object.id === hoveredId))}</span>}
               </div>
             </>
           ) : (
@@ -2702,29 +3440,44 @@ export default function MapBuilder({ store }) {
         </main>
 
         <aside style={{ order: isCompact ? 3 : undefined, borderLeft: isCompact ? 'none' : '1px solid var(--border)', borderTop: isCompact ? '1px solid var(--border)' : 'none', background: 'color-mix(in srgb, var(--surface) 96%, #000)', padding: 10, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4, padding: 3, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface2)' }}>
+            <InspectorTabButton active={inspectorTab === 'object'} onClick={() => setInspectorTab('object')}>Object</InspectorTabButton>
+            <InspectorTabButton active={inspectorTab === 'layers'} onClick={() => setInspectorTab('layers')}>Layers</InspectorTabButton>
+            <InspectorTabButton active={inspectorTab === 'map'} onClick={() => setInspectorTab('map')}>Map</InspectorTabButton>
+          </div>
+
+          {inspectorTab === 'object' && (
           <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <PanelTitle>Properties</PanelTitle>
+            <PanelTitle>Object Properties</PanelTitle>
             {primarySelection ? (
               <>
                 {selectedIds.length > 1 && <div style={{ color: 'var(--muted)', fontSize: 12 }}>{selectedIds.length} objects selected. Changes apply to the selection.</div>}
-                <PropertyInput label="Name" value={objectDisplayName(primarySelection)} onChange={value => patchSelected({ metadata: { name: value } })} />
-                <PropertyInput label="Text" value={primarySelection.metadata?.text || ''} onChange={value => patchSelected({ metadata: { text: value } })} />
+                {primaryLayerLocked && <div style={{ color: '#d8942f', fontSize: 12, lineHeight: 1.4 }}>This object is on a locked layer. Unlock the layer before editing.</div>}
+                <PropertyInput label="Name" value={objectDisplayName(primarySelection)} onChange={value => patchSelected({ metadata: { name: value } })} disabled={!primaryEditable} />
+                <PropertyInput label="Text" value={primarySelection.metadata?.text || ''} onChange={value => patchSelected({ metadata: { text: value } })} disabled={!primaryEditable} />
+                <SelectInput
+                  label="Object layer"
+                  value={selectedLayerId}
+                  options={schema.layers.map(layer => ({ value: layer.id, label: layer.name }))}
+                  onChange={moveSelectedToLayer}
+                  disabled={!primaryEditable}
+                />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <NumberInput label="X" value={primarySelection.x} onChange={value => patchSelected({ x: value })} />
-                  <NumberInput label="Y" value={primarySelection.y} onChange={value => patchSelected({ y: value })} />
-                  <NumberInput label="W" value={primarySelection.width} min={MIN_SIZE} onChange={value => patchSelected({ width: value })} />
-                  <NumberInput label="H" value={primarySelection.height} min={MIN_SIZE} onChange={value => patchSelected({ height: value })} />
-                  <NumberInput label="Rotate" value={primarySelection.rotation} onChange={value => patchSelected({ rotation: value })} />
-                  <NumberInput label="Layer" value={primarySelection.zIndex} onChange={value => patchSelected({ zIndex: value })} />
+                  <NumberInput label="X" value={primarySelection.x} onChange={value => patchSelected({ x: value })} disabled={!primaryEditable} />
+                  <NumberInput label="Y" value={primarySelection.y} onChange={value => patchSelected({ y: value })} disabled={!primaryEditable} />
+                  <NumberInput label="W" value={primarySelection.width} min={MIN_SIZE} onChange={value => patchSelected({ width: value })} disabled={!primaryEditable} />
+                  <NumberInput label="H" value={primarySelection.height} min={MIN_SIZE} onChange={value => patchSelected({ height: value })} disabled={!primaryEditable} />
+                  <NumberInput label="Rotate" value={primarySelection.rotation} onChange={value => patchSelected({ rotation: value })} disabled={!primaryEditable} />
+                  <NumberInput label="Order" value={primarySelection.zIndex} onChange={value => patchSelected({ zIndex: value })} disabled={!primaryEditable} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <ColorInput label="Fill" value={primarySelection.metadata?.fill || LAND_FILL} onChange={value => patchSelected({ metadata: { fill: value } })} />
-                  <ColorInput label="Stroke" value={primarySelection.metadata?.stroke || LAND_STROKE} onChange={value => patchSelected({ metadata: { stroke: value } })} />
+                  <ColorInput label="Fill" value={primarySelection.metadata?.fill || LAND_FILL} onChange={value => patchSelected({ metadata: { fill: value } })} disabled={!primaryEditable} />
+                  <ColorInput label="Stroke" value={primarySelection.metadata?.stroke || LAND_STROKE} onChange={value => patchSelected({ metadata: { stroke: value } })} disabled={!primaryEditable} />
                 </div>
                 {primarySelection.type === 'label' && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'end' }}>
-                    <NumberInput label="Font size" value={primarySelection.metadata?.fontSize || 34} min={10} onChange={value => patchSelected({ metadata: { fontSize: value } })} />
-                    <CheckboxInput label="Curved" checked={Boolean(primarySelection.metadata?.curvedLabel)} onChange={value => patchSelected({ metadata: { curvedLabel: value } })} />
+                    <NumberInput label="Font size" value={primarySelection.metadata?.fontSize || 34} min={10} onChange={value => patchSelected({ metadata: { fontSize: value } })} disabled={!primaryEditable} />
+                    <CheckboxInput label="Curved" checked={Boolean(primarySelection.metadata?.curvedLabel)} onChange={value => patchSelected({ metadata: { curvedLabel: value } })} disabled={!primaryEditable} />
                   </div>
                 )}
                 {primarySelection.type === 'location' && (
@@ -2739,14 +3492,15 @@ export default function MapBuilder({ store }) {
                       const linked = (locations || []).find(location => location.id === value)
                       patchSelected({ metadata: { locationId: value || null, name: linked?.name || primarySelection.metadata?.name || 'Location', text: linked?.name || primarySelection.metadata?.text || 'Location', category: linked?.category || primarySelection.metadata?.category } })
                     }}
+                    disabled={!primaryEditable}
                   />
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <NumberInput label="Opacity" value={round((primarySelection.metadata?.opacity ?? 1) * 100, 0)} min={0} onChange={value => patchSelected({ metadata: { opacity: clamp(value / 100, 0, 1) } })} />
-                  <NumberInput label="Line" value={primarySelection.metadata?.lineThickness || 2} min={1} onChange={value => patchSelected({ metadata: { lineThickness: value } })} />
+                  <NumberInput label="Opacity" value={round((primarySelection.metadata?.opacity ?? 1) * 100, 0)} min={0} onChange={value => patchSelected({ metadata: { opacity: clamp(value / 100, 0, 1) } })} disabled={!primaryEditable} />
+                  <NumberInput label="Line" value={primarySelection.metadata?.lineThickness || 2} min={1} onChange={value => patchSelected({ metadata: { lineThickness: value } })} disabled={!primaryEditable} />
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <CheckboxInput label="Dashed" checked={Boolean(primarySelection.metadata?.dashed)} onChange={value => patchSelected({ metadata: { dashed: value } })} />
+                  <CheckboxInput label="Dashed" checked={Boolean(primarySelection.metadata?.dashed)} onChange={value => patchSelected({ metadata: { dashed: value } })} disabled={!primaryEditable} />
                   {primarySelection.type === 'shape' && (
                     <SelectInput
                       label="Land type"
@@ -2757,27 +3511,30 @@ export default function MapBuilder({ store }) {
                         { value: 'circle', label: 'Circle' },
                       ]}
                       onChange={value => patchSelected({ metadata: { shapeKind: value } })}
+                      disabled={!primaryEditable}
                     />
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button className="btn btn-secondary btn-sm" onClick={() => patchSelected({ locked: !primarySelection.locked })}>{primarySelection.locked ? 'Unlock' : 'Lock'}</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => patchSelected({ visible: primarySelection.visible === false })}>{primarySelection.visible === false ? 'Show' : 'Hide'}</button>
-                  <button className="btn btn-secondary btn-sm" onClick={duplicateSelectedObjects}>Duplicate</button>
-                  {selectedIds.length > 1 && <button className="btn btn-secondary btn-sm" onClick={groupSelectedObjects}>Group selected</button>}
-                  {selectedObjects.some(object => object.metadata?.groupId) && <button className="btn btn-secondary btn-sm" onClick={ungroupSelectedObjects}>Ungroup</button>}
-                  <button className="btn btn-secondary btn-sm" onClick={() => moveLayer('front')}>Front</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => moveLayer('back')}>Back</button>
-                  <button className="btn btn-secondary btn-sm" onClick={deleteSelectedObjects}>Delete</button>
+                  <button className="btn btn-secondary btn-sm" disabled={primaryLayerLocked} onClick={() => patchSelected({ locked: !primarySelection.locked })}>{primarySelection.locked ? 'Unlock' : 'Lock'}</button>
+                  <button className="btn btn-secondary btn-sm" disabled={primaryLayerLocked} onClick={() => patchSelected({ visible: primarySelection.visible === false })}>{primarySelection.visible === false ? 'Show' : 'Hide'}</button>
+                  <button className="btn btn-secondary btn-sm" disabled={!primaryEditable} onClick={duplicateSelectedObjects}>Duplicate</button>
+                  {selectedIds.length > 1 && <button className="btn btn-secondary btn-sm" disabled={!primaryEditable} onClick={groupSelectedObjects}>Group selected</button>}
+                  {selectedObjects.some(object => object.metadata?.groupId) && <button className="btn btn-secondary btn-sm" disabled={!primaryEditable} onClick={ungroupSelectedObjects}>Ungroup</button>}
+                  <button className="btn btn-secondary btn-sm" disabled={!primaryEditable} onClick={() => moveLayer('front')}>Front</button>
+                  <button className="btn btn-secondary btn-sm" disabled={!primaryEditable} onClick={() => moveLayer('back')}>Back</button>
+                  <button className="btn btn-secondary btn-sm" disabled={!primaryEditable} onClick={deleteSelectedObjects}>Delete</button>
                 </div>
               </>
             ) : (
-              <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.5 }}>Select an object to edit its position, size, rotation, visibility, lock state, and metadata.</div>
+              <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.5 }}>Select an object to edit its position, size, rotation, layer, visibility, lock state, and metadata.</div>
             )}
           </section>
+          )}
 
-          <details>
-            <summary style={{ cursor: 'pointer' }}><PanelTitle>Maps & Advanced</PanelTitle></summary>
+          {inspectorTab === 'map' && (
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <PanelTitle>Maps</PanelTitle>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
               <form onSubmit={handleCreateMap} style={{ display: 'flex', gap: 6 }}>
                 <input
@@ -2786,6 +3543,14 @@ export default function MapBuilder({ store }) {
                   placeholder="New map"
                   style={{ minWidth: 0, flex: 1, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
                 />
+                <select
+                  value={mapType}
+                  onChange={event => setMapType(event.target.value)}
+                  style={{ minWidth: 92, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
+                  title="New map type"
+                >
+                  {MAP_TYPE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
                 <button className="btn btn-primary btn-sm" type="submit">+</button>
               </form>
               {(project.maps || []).map(map => {
@@ -2823,7 +3588,7 @@ export default function MapBuilder({ store }) {
               })}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()}>Import JSON</button>
-                {['marker', 'shape', 'region', 'river', 'mountain', 'road', 'border'].map(type => {
+                {['marker', 'shape', 'region', 'river', 'road', 'border'].map(type => {
                   const item = OBJECT_TYPES[type]
                   return (
                     <button key={type} className="btn btn-secondary btn-sm" onClick={() => addObject(type)} title={`Add ${item.label}`}>
@@ -2833,19 +3598,62 @@ export default function MapBuilder({ store }) {
                 })}
               </div>
             </div>
-          </details>
+          </section>
+          )}
 
-          <details>
-            <summary style={{ cursor: 'pointer' }}><PanelTitle>Layers</PanelTitle></summary>
+          {inspectorTab === 'layers' && (
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <PanelTitle>Layers</PanelTitle>
+            <form onSubmit={addLayer} style={{ display: 'flex', gap: 6 }}>
+              <input
+                value={newLayerName}
+                onChange={event => setNewLayerName(event.target.value)}
+                placeholder="New layer"
+                style={{ minWidth: 0, flex: 1, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
+              />
+              <button className="btn btn-primary btn-sm" type="submit">+</button>
+            </form>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {schema.layers.map(layer => {
+                const active = activeLayerId === layer.id
+                const count = objects.filter(object => (object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID) === layer.id).length
+                return (
+                  <div key={layer.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 28px)', gap: 4, alignItems: 'center', padding: 6, borderRadius: 7, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)' }}>
+                    <button onClick={() => setActiveLayerId(layer.id)} style={{ minWidth: 0, display: 'grid', gap: 1, padding: 0, border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}>
+                      <input
+                        defaultValue={layer.name}
+                        onBlur={event => renameLayer(layer.id, event.target.value)}
+                        onClick={event => event.stopPropagation()}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter') event.currentTarget.blur()
+                          if (event.key === 'Escape') {
+                            event.currentTarget.value = layer.name
+                            event.currentTarget.blur()
+                          }
+                        }}
+                        style={{ minWidth: 0, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, padding: 0 }}
+                      />
+                      <span style={{ color: 'var(--faint)', fontSize: 10 }}>{count} object{count === 1 ? '' : 's'}{layer.locked ? ' · locked' : ''}</span>
+                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible === false ? 'Show layer' : 'Hide layer'}>{layer.visible === false ? '○' : '●'}</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toggleLayerLock(layer.id)} title={layer.locked ? 'Unlock layer' : 'Lock layer'}>{layer.locked ? 'L' : 'U'}</button>
+                    <button className="btn btn-secondary btn-sm" disabled={layer.id === DEFAULT_OBJECT_LAYER_ID || schema.layers.length <= 1} onClick={() => deleteLayer(layer.id)} title="Delete layer">×</button>
+                  </div>
+                )
+              })}
+            </div>
+            <PanelTitle>Object Stack</PanelTitle>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(objects.filter(object => !object.locked).map(object => object.id))} title="Select all layers">All</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds([])} title="Clear layer selection">None</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(objects.filter(isObjectEditable).map(object => object.id))} title="Select all editable objects">All</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds([])} title="Clear object selection">None</button>
               </div>
               {layerObjects.map((object, index) => {
                 const selected = selectedIds.includes(object.id)
                 const isTop = index === 0
                 const isBottom = index === layerObjects.length - 1
+                const objectEditable = isObjectEditable(object)
+                const objectLayer = layerMap.get(object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID)
                 return (
                   <div
                     key={object.id}
@@ -2871,22 +3679,23 @@ export default function MapBuilder({ store }) {
                         <span style={{ width: 18, height: 18, borderRadius: 5, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, var(--surface) 70%, #000)', color: selected ? 'var(--accent)' : 'var(--muted)', flexShrink: 0 }}>{OBJECT_TYPES[object.type]?.icon || '□'}</span>
                         <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{objectDisplayName(object)}</span>
-                          <span style={{ color: 'var(--faint)', fontSize: 10, textTransform: 'uppercase' }}>{objectTypeLabel(object)}{object.metadata?.groupId ? ' · group' : ''}</span>
+                          <span style={{ color: 'var(--faint)', fontSize: 10, textTransform: 'uppercase' }}>{objectTypeLabel(object)} · {objectLayer?.name || 'Objects'}{object.metadata?.groupId ? ' · group' : ''}</span>
                         </span>
                       </span>
                     </button>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 28px)', gap: 4 }}>
-                      <button className="btn btn-secondary btn-sm" disabled={isTop || object.locked} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, 1) }} title="Move up">↑</button>
-                      <button className="btn btn-secondary btn-sm" disabled={isBottom || object.locked} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, -1) }} title="Move down">↓</button>
-                      <button className="btn btn-secondary btn-sm" onClick={event => { event.stopPropagation(); toggleVisibility(object.id) }} title={object.visible === false ? 'Show' : 'Hide'}>{object.visible === false ? '○' : '●'}</button>
-                      <button className="btn btn-secondary btn-sm" onClick={event => { event.stopPropagation(); toggleLock(object.id) }} title={object.locked ? 'Unlock' : 'Lock'}>{object.locked ? 'L' : 'U'}</button>
+                      <button className="btn btn-secondary btn-sm" disabled={isTop || !objectEditable} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, 1) }} title="Move up">↑</button>
+                      <button className="btn btn-secondary btn-sm" disabled={isBottom || !objectEditable} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, -1) }} title="Move down">↓</button>
+                      <button className="btn btn-secondary btn-sm" disabled={isObjectLockedByLayer(object)} onClick={event => { event.stopPropagation(); toggleVisibility(object.id) }} title={object.visible === false ? 'Show' : 'Hide'}>{object.visible === false ? '○' : '●'}</button>
+                      <button className="btn btn-secondary btn-sm" disabled={isObjectLockedByLayer(object)} onClick={event => { event.stopPropagation(); toggleLock(object.id) }} title={object.locked ? 'Unlock' : 'Lock'}>{object.locked ? 'L' : 'U'}</button>
                     </div>
                   </div>
                 )
               })}
               {!objects.length && <div style={{ color: 'var(--muted)', fontSize: 13 }}>No objects yet.</div>}
             </div>
-          </details>
+          </section>
+          )}
         </aside>
       </div>
     </div>
@@ -2897,53 +3706,119 @@ function PanelTitle({ children }) {
   return <div style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>{children}</div>
 }
 
-function PropertyInput({ label, value, onChange }) {
+function StampPreview({ stamp, size = 32 }) {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    if (stamp?.assetSrc) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = size * dpr
+    canvas.height = size * dpr
+    canvas.style.width = `${size}px`
+    canvas.style.height = `${size}px`
+    const ctx = canvas.getContext('2d')
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, size, size)
+    ctx.translate(size / 2, size / 2)
+    drawStampSymbol(ctx, stamp, size * 0.38)
+  }, [stamp, size])
+  if (stamp?.assetSrc) {
+    return (
+      <img
+        src={stamp.assetSrc}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        style={{ display: 'block', width: size, height: size, objectFit: 'contain' }}
+      />
+    )
+  }
+  return <canvas ref={canvasRef} aria-hidden="true" style={{ display: 'block', width: size, height: size }} />
+}
+
+function InspectorTabButton({ active, children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        minWidth: 0,
+        minHeight: 30,
+        border: 'none',
+        borderRadius: 6,
+        background: active ? 'var(--accent)' : 'transparent',
+        color: active ? '#fff' : 'var(--muted)',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        fontWeight: 800,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function PropertyInput({ label, value, onChange, disabled = false }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--muted)' }}>
       <span>{label}</span>
-      <input value={value} onChange={event => onChange(event.target.value)} style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }} />
+      <input disabled={disabled} value={value} onChange={event => onChange(event.target.value)} style={{ border: '1px solid var(--border)', background: disabled ? 'color-mix(in srgb, var(--surface2) 70%, #000)' : 'var(--surface2)', color: disabled ? 'var(--faint)' : 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }} />
     </label>
   )
 }
 
-function NumberInput({ label, value, min = -Infinity, onChange }) {
+function ReadOnlyField({ label, value }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--muted)', minWidth: 120 }}>
+      <span>{label}</span>
+      <span style={{ minHeight: 35, display: 'flex', alignItems: 'center', border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--surface2) 70%, #000)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {value}
+      </span>
+    </label>
+  )
+}
+
+function NumberInput({ label, value, min = -Infinity, onChange, disabled = false }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--muted)' }}>
       <span>{label}</span>
       <input
         type="number"
+        disabled={disabled}
         value={Number.isFinite(value) ? round(value) : 0}
         onChange={event => onChange(Math.max(min, Number(event.target.value) || 0))}
-        style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
+        style={{ minWidth: 0, border: '1px solid var(--border)', background: disabled ? 'color-mix(in srgb, var(--surface2) 70%, #000)' : 'var(--surface2)', color: disabled ? 'var(--faint)' : 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
       />
     </label>
   )
 }
 
-function ColorInput({ label, value, onChange }) {
+function ColorInput({ label, value, onChange, disabled = false }) {
   const safeValue = /^#[0-9a-f]{6}$/i.test(value) ? value : LAND_FILL
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--muted)' }}>
       <span>{label}</span>
-      <input type="color" value={safeValue} onChange={event => onChange(event.target.value)} style={{ width: '100%', minHeight: 34, border: '1px solid var(--border)', background: 'var(--surface2)', borderRadius: 7, padding: 3 }} />
+      <input disabled={disabled} type="color" value={safeValue} onChange={event => onChange(event.target.value)} style={{ width: '100%', minHeight: 34, border: '1px solid var(--border)', background: disabled ? 'color-mix(in srgb, var(--surface2) 70%, #000)' : 'var(--surface2)', borderRadius: 7, padding: 3, opacity: disabled ? 0.55 : 1 }} />
     </label>
   )
 }
 
-function CheckboxInput({ label, checked, onChange }) {
+function CheckboxInput({ label, checked, onChange, disabled = false }) {
   return (
     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', minHeight: 32 }}>
-      <input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+      <input type="checkbox" disabled={disabled} checked={checked} onChange={event => onChange(event.target.checked)} style={{ accentColor: 'var(--accent)' }} />
       <span>{label}</span>
     </label>
   )
 }
 
-function SelectInput({ label, value, options, onChange }) {
+function SelectInput({ label, value, options, onChange, disabled = false }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--muted)', minWidth: 120 }}>
       <span>{label}</span>
-      <select value={value} onChange={event => onChange(event.target.value)} style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}>
+      <select disabled={disabled} value={value} onChange={event => onChange(event.target.value)} style={{ border: '1px solid var(--border)', background: disabled ? 'color-mix(in srgb, var(--surface2) 70%, #000)' : 'var(--surface2)', color: disabled ? 'var(--faint)' : 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}>
         {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>

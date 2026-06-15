@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import OnboardingTour from './onboarding/OnboardingTour'
+import GettingStartedChecklist, { GettingStartedSnippet, buildMilestones } from './onboarding/GettingStartedChecklist'
+import { LIBRARY_TOUR } from './onboarding/tourDefinitions'
 import UserMenu from './auth/UserMenu'
 import YOWLogo from './brand/YOWLogo'
 import AIImportModal from './AIImportModal'
@@ -221,7 +224,7 @@ function ProjectExportMenu({ onExport, compact = false }) {
   )
 }
 
-function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetStatus, onToggleFocus, onEditProject, onExportProject, onCreateProject, onImportProject }) {
+function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetStatus, onToggleFocus, onEditProject, onExportProject, onCreateProject, onImportProject, checklistSnippet }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const novel = stats?.project ?? null
   const totalWords = allStats.reduce((sum, item) => sum + item.manuscriptWords, 0)
@@ -388,6 +391,7 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
             <span>Total words</span>
           </div>
         </div>
+        {checklistSnippet}
       </section>
     </div>
   )
@@ -1126,7 +1130,9 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
   )
 }
 
-export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership }) {
+export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership, tourStore }) {
+  const [libraryTourOpen, setLibraryTourOpen] = useState(false)
+  const [checklistOpen, setChecklistOpen] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showAIImport, setShowAIImport] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
@@ -1289,20 +1295,20 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     <div style={{ height: '100vh', overflowY: 'auto', background: 'var(--bg-main)', color: 'var(--text-main)', WebkitOverflowScrolling: 'touch' }}>
 
       {/* Top bar */}
-      <div className="library-top-bar">
+      <div className="library-top-bar" data-tour="library-top-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="library-brand-logo"><YOWLogo /></span>
           <span className="beta-watermark" aria-label="Beta">Beta</span>
           {!store.readOnly && !membership?.freeProjectId && (
             <>
-              <button className="library-new-project-button" type="button" onClick={() => setShowForm(true)}>
+              <button className="library-new-project-button" type="button" data-tour="new-project-btn" onClick={() => setShowForm(true)}>
                 New Project
               </button>
               <button className="library-new-series-button" type="button" onClick={() => setShowSeriesForm(true)}>
                 New Series
               </button>
               <div ref={importMenuRef} style={{ position: 'relative' }}>
-                <button className="library-new-series-button" type="button" onClick={() => setShowImportMenu(v => !v)}>
+                <button className="library-new-series-button" type="button" data-tour="import-btn" onClick={() => setShowImportMenu(v => !v)}>
                   Import ▾
                 </button>
                 {showImportMenu && (
@@ -1330,26 +1336,57 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           <button className="library-chat-button" type="button" onClick={handleOpenLibraryChat} title="Open AI chat" aria-label="Open AI chat">
             ✦
           </button>
+          {tourStore && (
+            <button
+              className="library-tour-button"
+              type="button"
+              onClick={() => setLibraryTourOpen(true)}
+              title="Take a tour of the library"
+              aria-label="Library tour"
+            >
+              ?
+            </button>
+          )}
           <UserMenu onOpenAccount={onOpenAccount} onOpenHelp={onOpenHelp} onOpenLegal={onOpenLegal} onOpenAbout={onOpenAbout} />
         </div>
       </div>
 
-      <ActiveProjectHero
-        stats={focusStats}
-        allStats={store.allProjectStats}
-        series={store.series}
-        userName={userName}
-        onOpen={onOpenProject}
-        onSetStatus={(status) => focusStats && handleSetStatus(focusStats.project.id, status)}
-        onToggleFocus={() => focusStats && handleSetFocus(focusStats.project.id)}
-        onEditProject={() => focusStats && setEditingProject(focusStats.project)}
-        onExportProject={handleExportProject}
-        onCreateProject={() => setShowForm(true)}
-        onImportProject={() => setShowAIImport(true)}
-      />
+      {(() => {
+        const milestones = tourStore && !tourStore.checklistDismissed
+          ? buildMilestones({
+              allProjectStats: store.allProjectStats,
+              characters: store.characters,
+              loreEntries: store.loreEntries,
+              locations: store.locations,
+              hasExported: tourStore.hasExported,
+              onCreateProject: () => setShowForm(true),
+            })
+          : null
+
+        return (
+          <div data-tour="active-project-hero">
+            <ActiveProjectHero
+              stats={focusStats}
+              allStats={store.allProjectStats}
+              series={store.series}
+              userName={userName}
+              onOpen={onOpenProject}
+              onSetStatus={(status) => focusStats && handleSetStatus(focusStats.project.id, status)}
+              onToggleFocus={() => focusStats && handleSetFocus(focusStats.project.id)}
+              onEditProject={() => focusStats && setEditingProject(focusStats.project)}
+              onExportProject={handleExportProject}
+              onCreateProject={() => setShowForm(true)}
+              onImportProject={() => setShowAIImport(true)}
+              checklistSnippet={milestones && (
+                <GettingStartedSnippet milestones={milestones} onOpen={() => setChecklistOpen(true)} />
+              )}
+            />
+          </div>
+        )
+      })()}
 
       {/* Content */}
-      <div className="library-content-shell">
+      <div className="library-content-shell" data-tour="library-content">
         {(() => {
           const seriesById = new Map((store.series || []).map(s => [s.id, s]))
           const dashboardStats = store.allProjectStats
@@ -1611,6 +1648,34 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
             </div>
           </form>
         </div>
+      )}
+
+      {/* Getting started checklist modal */}
+      {checklistOpen && tourStore && (() => {
+        const milestones = buildMilestones({
+          allProjectStats: store.allProjectStats,
+          characters: store.characters,
+          loreEntries: store.loreEntries,
+          locations: store.locations,
+          hasExported: tourStore.hasExported,
+          onCreateProject: () => setShowForm(true),
+        })
+        return (
+          <GettingStartedChecklist
+            milestones={milestones}
+            onClose={() => setChecklistOpen(false)}
+            onDismiss={() => { tourStore.dismissChecklist(); setChecklistOpen(false) }}
+          />
+        )
+      })()}
+
+      {/* Library tour */}
+      {libraryTourOpen && (
+        <OnboardingTour
+          steps={LIBRARY_TOUR}
+          onFinish={() => { setLibraryTourOpen(false); tourStore?.markTourComplete('library') }}
+          onSkip={() => setLibraryTourOpen(false)}
+        />
       )}
     </div>
   )

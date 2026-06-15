@@ -570,6 +570,95 @@ const firstLetter = (value) => escapeHtml(String(value || '?').trim()[0]?.toUppe
 const joinNames = (items = [], key = 'name', limit = 4) =>
   items.slice(0, limit).map(item => item?.[key]).filter(Boolean).join(', ')
 
+const MAP_OBJECT_TYPE_LABELS = {
+  marker: 'Marker',
+  stamp: 'Stamp',
+  label: 'Label',
+  location: 'Linked location',
+  region: 'Region',
+  river: 'Water / river',
+  mountain: 'Legacy mountain line',
+  road: 'Road / path',
+  border: 'Border / wall',
+  shape: 'Land / room',
+}
+
+const getMapObjects = (map = {}) => asArray(map.mapObjects ?? map.objects)
+const getMapLayers = (map = {}) => asArray(map.mapLayers ?? map.layers)
+
+const locationNameById = (projectData) => {
+  const lookup = new Map()
+  asArray(projectData.locations).forEach(location => {
+    if (location?.id) lookup.set(location.id, location.name || 'Untitled Location')
+  })
+  return lookup
+}
+
+const mapObjectName = (object, locationsById) => {
+  const meta = object?.metadata || {}
+  if (meta.locationId && locationsById.has(meta.locationId)) return locationsById.get(meta.locationId)
+  return meta.name || meta.text || object?.name || object?.label || MAP_OBJECT_TYPE_LABELS[object?.type] || 'Map object'
+}
+
+const summarizeMap = (map, projectData) => {
+  const locationsById = locationNameById(projectData)
+  const objects = getMapObjects(map)
+  const layers = getMapLayers(map)
+  const legacyLabels = [...asArray(map.mapLabels), ...asArray(map.mapPins)]
+    .map(item => item.text || item.label || item.name)
+    .filter(Boolean)
+  const legacyRegions = asArray(map.mapRegions).map(item => item.name || item.label).filter(Boolean)
+  const objectLabels = objects
+    .filter(object => ['label', 'location', 'marker'].includes(object?.type))
+    .map(object => mapObjectName(object, locationsById))
+    .filter(Boolean)
+  const regions = [
+    ...legacyRegions,
+    ...objects.filter(object => object?.type === 'region').map(object => mapObjectName(object, locationsById)),
+  ].filter(Boolean)
+  const routes = objects
+    .filter(object => ['road', 'border', 'river'].includes(object?.type))
+    .map(object => {
+      const kind = MAP_OBJECT_TYPE_LABELS[object.type] || object.type
+      return `${kind}: ${mapObjectName(object, locationsById)}`
+    })
+  const stamps = objects
+    .filter(object => object?.type === 'stamp')
+    .map(object => mapObjectName(object, locationsById))
+    .filter(Boolean)
+  const land = objects
+    .filter(object => object?.type === 'shape')
+    .map(object => mapObjectName(object, locationsById))
+    .filter(Boolean)
+  const typeCounts = objects.reduce((counts, object) => {
+    const label = MAP_OBJECT_TYPE_LABELS[object?.type] || object?.type || 'Object'
+    counts[label] = (counts[label] || 0) + 1
+    return counts
+  }, {})
+  const layerLines = layers.map(layer => {
+    const layerCount = objects.filter(object => (object?.metadata?.layerId || 'objects') === layer.id).length
+    const flags = valueList(layer.visible === false && 'hidden', layer.locked && 'locked').join(', ')
+    return `${layer.name || 'Layer'}: ${layerCount} object${layerCount === 1 ? '' : 's'}${flags ? ` (${flags})` : ''}`
+  })
+  const countLines = Object.entries(typeCounts).map(([label, count]) => `${label}: ${count}`)
+  const lines = [
+    layers.length ? `Layers: ${layerLines.join('; ')}` : '',
+    countLines.length ? `Object counts: ${countLines.join('; ')}` : '',
+    objectLabels.length || legacyLabels.length ? `Labels and places: ${[...objectLabels, ...legacyLabels].slice(0, 18).join(', ')}` : '',
+    regions.length ? `Regions: ${regions.slice(0, 14).join(', ')}` : '',
+    routes.length ? `Routes and water: ${routes.slice(0, 12).join(', ')}` : '',
+    stamps.length ? `Stamps: ${stamps.slice(0, 14).join(', ')}` : '',
+    land.length ? `Land and rooms: ${land.slice(0, 12).join(', ')}` : '',
+  ].filter(Boolean)
+  return {
+    labels: [...objectLabels, ...legacyLabels],
+    regions,
+    layers,
+    objects,
+    lines,
+  }
+}
+
 const getTags = (item, keys = ['tags', 'keywords']) =>
   keys.flatMap(key => Array.isArray(item?.[key]) ? item[key] : []).filter(Boolean)
 
@@ -834,16 +923,18 @@ const mapSection = (projectData) => {
   const maps = projectData.maps ?? []
   if (!maps.length) return emptyState('No maps attached to this project.')
   return `<div class="map-grid">${maps.map(map => {
-    const labels = [...(map.mapLabels ?? []), ...(map.mapPins ?? [])].map(item => item.text || item.label || item.name).filter(Boolean)
-    const regions = (map.mapRegions ?? []).map(item => item.name || item.label).filter(Boolean)
+    const summary = summarizeMap(map, projectData)
     const image = getImage(map) || map.thumbnail || map.preview || map.dataUrl || map.mapImage
+    const summaryList = summary.lines.length
+      ? `<ul>${summary.lines.slice(0, 7).map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
+      : '<p class="muted">Map object data is preserved in the project backup. No visible map objects are recorded yet.</p>'
     return `
       <article class="map-card">
         <div class="map-preview">${image ? `<img src="${escapeHtml(image)}" alt="">` : `<span>${firstLetter(map.name || 'Map')}</span>`}</div>
         <div>
           <h2>${escapeHtml(map.name || 'Untitled Map')}</h2>
-          ${htmlMeta(valueList(map.mapType, labels.length && `${labels.length} labels`, regions.length && `${regions.length} regions`))}
-          ${labels.length ? `<p>${escapeHtml(labels.slice(0, 14).join(', '))}</p>` : '<p class="muted">Map metadata available. Rendered pixel art is stored separately in the map builder.</p>'}
+          ${htmlMeta(valueList(map.mapType, summary.objects.length && `${summary.objects.length} objects`, summary.layers.length && `${summary.layers.length} layers`, summary.regions.length && `${summary.regions.length} regions`))}
+          ${summaryList}
         </div>
       </article>
     `
@@ -1565,12 +1656,13 @@ const createProjectPdfPages = (projectData, theme) => {
   }
   if (enabled.has('map')) {
     ;(projectData.maps ?? []).forEach(map => {
+      const summary = summarizeMap(map, projectData)
       records.push(...createArticlePages({
         section: 'Maps',
         eyebrow: 'Cartography',
         title: map.name || 'Untitled Map',
-        subtitle: valueList(map.mapType, map.mapLabels?.length && `${map.mapLabels.length} labels`, map.mapRegions?.length && `${map.mapRegions.length} regions`).join(' - '),
-        body: [...(map.mapLabels ?? []), ...(map.mapPins ?? [])].map(item => item.text || item.label || item.name).filter(Boolean).join(', ') || 'Map metadata available. Rendered pixel art is stored separately in the map builder.',
+        subtitle: valueList(map.mapType, summary.objects.length && `${summary.objects.length} objects`, summary.layers.length && `${summary.layers.length} layers`, summary.regions.length && `${summary.regions.length} regions`).join(' - '),
+        body: summary.lines.join('\n\n') || 'Map object data is preserved in the project backup. No visible map objects are recorded yet.',
         related: [],
         artLabel: 'Map Plate',
         initial: firstLetter(map.name || 'Map').replace(/&.*;/, ''),

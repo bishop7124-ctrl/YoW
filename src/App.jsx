@@ -17,6 +17,8 @@ import LegalModal from './components/legal/LegalModal'
 import AboutPage from './components/about/AboutPage'
 import YOWLogo from './components/brand/YOWLogo'
 import FreeProjectSelector from './components/account/FreeProjectSelector'
+import WelcomeWizard from './components/onboarding/WelcomeWizard'
+import { useTourStore } from './components/onboarding/useTourStore'
 import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
 import FAQPage from './components/faq/FAQPage'
@@ -178,6 +180,7 @@ function AppInner() {
   const [freeProjectBusy, setFreeProjectBusy] = useState(false)
   const [legalPage, setLegalPage] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const tourStore = useTourStore()
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
 
@@ -624,9 +627,18 @@ function AppInner() {
     )
   }
 
+  const isFirstRun = !tourStore.wizardShown && store.novels.length === 0 && !dataLoading
+
   return (
     <>
-      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} />
+      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} />
+      {isFirstRun && (
+        <WelcomeWizard
+          store={store}
+          onOpenProject={(id) => { tourStore.markWizardShown(); handleOpenProject(id) }}
+          onSkip={() => tourStore.markWizardShown()}
+        />
+      )}
       <AIPanel
         store={store}
         open={libraryAiOpen}

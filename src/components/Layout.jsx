@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, useState, useMemo } from 'react'
+import { Component, useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import UserMenu from './auth/UserMenu'
 import AIPanel from './ai/AIPanel'
 import AIAssistant from './ai/AIAssistant'
@@ -829,6 +829,9 @@ export default function Layout({
 
   const [aiOpen, setAiOpen] = useState(false)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
+  const resetStudioIndex = useCallback(() => {
+    window.dispatchEvent(new Event('studio-index-reset'))
+  }, [])
 
   // Redirect away from a section that just got disabled
   useEffect(() => {
@@ -846,13 +849,19 @@ export default function Layout({
       }
     }
     const handleOpenProjectSettings = () => setProjectSettingsOpen(true)
+    const handleOpenWriting = () => {
+      resetStudioIndex()
+      setViewMode('writing')
+    }
     window.addEventListener('switch-section', handleTeleport)
     window.addEventListener('open-project-settings', handleOpenProjectSettings)
+    window.addEventListener('switch-writing', handleOpenWriting)
     return () => {
       window.removeEventListener('switch-section', handleTeleport)
       window.removeEventListener('open-project-settings', handleOpenProjectSettings)
+      window.removeEventListener('switch-writing', handleOpenWriting)
     }
-  }, [setSection, setViewMode, setProjectSettingsOpen])
+  }, [setSection, setViewMode, setProjectSettingsOpen, resetStudioIndex])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 860px)')
@@ -912,10 +921,6 @@ export default function Layout({
   const activeRoomSections = activeRoom?.id === 'manuscript'
     ? []
     : planningSections.filter(s => activeRoom?.sections.includes(s.id))
-
-  const resetStudioIndex = () => {
-    window.dispatchEvent(new Event('studio-index-reset'))
-  }
 
   const openRoom = (room) => {
     resetStudioIndex()

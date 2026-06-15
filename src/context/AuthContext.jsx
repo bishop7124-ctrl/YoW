@@ -59,7 +59,7 @@ export function AuthProvider({ children }) {
   const signUp = OFFLINE_MODE
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
     : async (email, password) => {
-        const result = await supabase.auth.signUp({ email, password })
+        const result = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/login` } })
         if (!result.error && result.data?.user?.id) {
           sendWelcomeEmail(result.data.user.id, email)
         }
