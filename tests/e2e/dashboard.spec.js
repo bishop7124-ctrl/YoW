@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  createProject, dismissLaunchPrompts, openProjectSettings, readStorage,
+  seedCleanStorage,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -37,17 +37,20 @@ test('rename a project via project settings', async ({ page }) => {
 
   await createProject(page, { title: original })
 
-  // Open project settings
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  // Open project settings (uses aria-label to avoid strict-mode hit on library card button)
+  await openProjectSettings(page)
 
-  const titleInput = page.getByPlaceholder(/title/i).first()
+  // The title field has no placeholder — it's labelled by a <span>Title</span> inside the same <label>
+  const titleInput = page.getByLabel('Title')
   await titleInput.fill(renamed)
-  await page.getByRole('button', { name: /Save|Done/i }).first().click()
+  // Title saves on change; close the dialog
+  await page.getByRole('button', { name: 'Done' }).first().click()
 
-  await waitForStorage(page, () => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-    return novels.some(n => n.title === renamed)
-  })
+  await page.waitForFunction(
+    (t) => JSON.parse(localStorage.getItem('nf_novels') || '[]').some(n => n.title === t),
+    renamed,
+    { timeout: 8000 },
+  )
 
   const novels = await readStorage(page, 'nf_novels')
   expect(novels.some(n => n.title === renamed)).toBe(true)
@@ -63,10 +66,11 @@ test('project word count appears in overview', async ({ page }) => {
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
   await page.getByPlaceholder('Begin writing here…').fill('One two three four five six seven eight nine ten')
 
-  await waitForStorage(page, () => {
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
-    return scenes.some(s => (s.content || '').includes('ten'))
-  })
+  await page.waitForFunction(
+    () => JSON.parse(localStorage.getItem('nf_scenes') || '[]').some(s => (s.content || '').includes('ten')),
+    undefined,
+    { timeout: 8000 },
+  )
 
   // Navigate to project overview
   await page.getByRole('button', { name: /Overview|Home|Project/i }).first().click()
@@ -102,24 +106,25 @@ test('delete a project and confirm it is removed from storage', async ({ page })
   const title = `Delete Project ${Date.now()}`
   await createProject(page, { title })
 
-  // Open project settings
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  // "Delete project" is in the library card's EditProjectModal, not the studio gear dialog.
+  // Go back to library, open the project card's settings modal, then delete.
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await expect(page.getByRole('heading', { name: title }).first()).toBeVisible()
 
-  const deleteBtn = page.getByRole('button', { name: /Delete project|Delete/i }).last()
+  // The project card has aria-label="Project settings" (the active-hero gear uses title, not aria-label)
+  await page.getByLabel('Project settings').first().click()
+
+  // handleDelete uses window.confirm — accept it
+  page.once('dialog', dialog => dialog.accept())
+  const deleteBtn = page.getByRole('button', { name: 'Delete project', exact: true })
   await deleteBtn.click()
 
-  // Confirm deletion dialog
-  const confirmBtn = page.getByRole('button', { name: /Confirm|Yes, delete|Delete/i }).first()
-  if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await confirmBtn.click()
-  }
+  await page.waitForFunction(
+    (t) => !JSON.parse(localStorage.getItem('nf_novels') || '[]').some(n => n.title === t),
+    title,
+    { timeout: 8000 },
+  )
 
-  await waitForStorage(page, () => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-    return !novels.some(n => n.title === title)
-  })
-
-  await page.reload()
   const novels = await readStorage(page, 'nf_novels')
   expect(novels.some(n => n.title === title)).toBe(false)
 })
@@ -142,11 +147,9 @@ test('switching between projects loads the correct project', async ({ page }) =>
   await createProject(page, { title: titleB })
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
-  // Click project A in the library
+  // Click project A's card in the library — verify the studio opens with project A
   await page.getByText(titleA).first().click()
 
-  const activeId = await page.evaluate(() => localStorage.getItem('nf_activeNovel'))
-  const novels = await readStorage(page, 'nf_novels')
-  const activeProject = novels.find(n => n.id === activeId)
-  expect(activeProject?.title).toBe(titleA)
+  // The studio heading should reflect project A (heading appears in both nav and main — use first)
+  await expect(page.getByRole('heading', { name: titleA }).first()).toBeVisible({ timeout: 8000 })
 })

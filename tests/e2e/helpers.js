@@ -28,6 +28,8 @@ export async function seedCleanStorage(page) {
       sessionStorage.setItem('yow_qa_storage_seeded', '1')
     }
     localStorage.setItem('yow_beta_acknowledged', '1')
+    // Suppress the first-run wizard so it never blocks button clicks
+    localStorage.setItem('yow_onboarding', JSON.stringify({ wizardShown: true, checklistDismissed: true }))
     document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
   }, storageKeys)
 }
@@ -63,6 +65,24 @@ export async function createProject(page, { title, type = 'novel' } = {}) {
   await page.getByRole('button', { name: 'Create' }).click()
   await page.waitForURL(/\/project\//)
   return projectTitle
+}
+
+// Click the studio "Project settings" gear button (aria-label, not the library card text button).
+export async function openProjectSettings(page) {
+  await page.getByLabel('Project settings').first().click()
+  // Wait for the settings dialog to appear
+  await page.waitForSelector('[role="dialog"][aria-labelledby="project-settings-title"]', { timeout: 6000 })
+}
+
+// Open the Import dropdown and click "Import ZIP", then return the file input locator.
+export async function openImportZip(page) {
+  await page.getByRole('button', { name: /Import/i }).first().click()
+  await page.getByRole('menuitem', { name: /Import ZIP/i })
+    .or(page.getByRole('button', { name: /Import ZIP/i }))
+    .first()
+    .click()
+  // The AIImportModal file input accepts zip among other types
+  return page.locator('input[type="file"]').first()
 }
 
 // Navigate to writing and fill the default scene, waiting for autosave to localStorage.

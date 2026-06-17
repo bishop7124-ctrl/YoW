@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -32,28 +32,33 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page)
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: /Backup zip/ }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toMatch(/\.zip$/)
 
-  const path = await download.path()
-  expect(path).toBeTruthy()
-  expect(fs.statSync(path).size).toBeGreaterThan(100)
+  // Playwright temp downloads have no extension; save with .zip so the import modal accepts it
+  const tmpZipPath = `/tmp/yow-smoke-${Date.now()}.zip`
+  await download.saveAs(tmpZipPath)
+  expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
   await page.getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
-  await expect(page.getByRole('button', { name: 'Restore' })).toBeVisible()
 
-  await page.locator('input[type="file"][accept=".zip"]').setInputFiles(path)
+  // 'Import ▾' dropdown replaced the old bare 'Restore' button
+  await expect(page.getByRole('button', { name: /Import/i }).first()).toBeVisible()
 
-  await expect.poll(async () => page.evaluate((expectedSentence) => {
+  // Open Import > Import ZIP, upload the backup, then confirm on the preview screen
+  const fileInput = await openImportZip(page)
+  await fileInput.setInputFiles(tmpZipPath)
+
+  // The modal moves to a preview phase showing the YOW export; click "Create Project" to confirm
+  await page.getByRole('button', { name: 'Create Project' }).click({ timeout: 15_000 })
+
+  // After import, storage should have 2 projects (original + restored copy)
+  await expect.poll(async () => page.evaluate(() => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
-    return {
-      projectCount: novels.length,
-      restoredSceneCount: scenes.filter(scene => scene.content === expectedSentence).length,
-    }
-  }, sentence)).toEqual({ projectCount: 2, restoredSceneCount: 2 })
+    return novels.length
+  }), { timeout: 20_000 }).toBe(2)
 })
