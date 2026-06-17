@@ -91,10 +91,10 @@ Status: Deferred
 
 - Project-type access: verify all 6 active types are selectable, retired types never appear in UI or marketing copy, unknown imports fall back safely to Novel, and Comic/Graphic Novel is honestly beta/limited until QA passes.
 - Novel: verify long-form prose workflow, editor stability, exports, worldbuilding, timeline/history, and large-project performance.
-- Novella: verify Part/Chapter/Scene labels, lighter default sections, 30,000-word target, and export.
-- Short Story: verify Part/Section/Scene labels, compact default sections, 5,000-word target, and export.
-- D&D Campaign: verify Arc/Session/Encounter labels, structured session prep/recap fields, D&D-flavoured copy and AI prompt behavior, default sections including map, campaign export, and Character Builder Party room.
-- TTRPG Campaign: verify system-neutral Arc/Session/Encounter labels, structured session prep/recap fields, neutral copy and AI prompt behavior, default sections including map, campaign export, and Character Builder Party room.
+- ✅ Novella: structure sidebar shows Part/Chapter/Scene labels; 30,000-word target stored at creation. `tests/e2e/project-type-labels.spec.js`. Deferred: lighter default sections audit, export.
+- ✅ Short Story: structure sidebar shows Part/Section/Scene labels; 5,000-word target stored at creation. `tests/e2e/project-type-labels.spec.js`. Deferred: compact sections audit, export.
+- ✅ D&D Campaign: structure sidebar shows Story Arc/Session/Encounter labels. `tests/e2e/project-type-labels.spec.js`. Deferred: session prep/recap fields, D&D AI prompts, map section, export, Character Builder.
+- ✅ TTRPG Campaign: structure sidebar shows Campaign Arc/Session/Encounter labels. `tests/e2e/project-type-labels.spec.js`. Deferred: session fields, neutral AI prompts, map section, export, Character Builder.
 - Comic/Graphic Novel: run the Comic Panel Engine checks for CRUD, refresh/navigation/logout persistence, reference upload behavior, ZIP/DOCX round-trip, non-comic isolation, responsive behavior, delete chains, restore into existing account, and performance.
 
 ## Priority 7: Conditional MVP

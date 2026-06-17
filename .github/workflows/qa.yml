@@ -75,6 +75,8 @@ jobs:
             spec: tests/e2e/url-persistence.spec.js
           - name: account-isolation
             spec: tests/e2e/account-isolation.spec.js
+          - name: project-type-labels
+            spec: tests/e2e/project-type-labels.spec.js
 
     steps:
       - name: Check out repository
