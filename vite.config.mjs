@@ -28,6 +28,10 @@ function staticHtmlMiddleware() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.{js,jsx}', 'api/**/*.test.js'],
+  },
   plugins: [react(), staticHtmlMiddleware()],
   build: {
     chunkSizeWarningLimit: 1000,

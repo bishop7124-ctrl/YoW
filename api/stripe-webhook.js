@@ -14,7 +14,7 @@ function getRawBody(req) {
   })
 }
 
-function getCurrentPeriodEnd(subscription) {
+export function getCurrentPeriodEnd(subscription) {
   const ends = subscription.items.data
     .map(item => item.current_period_end)
     .filter(v => typeof v === 'number')
