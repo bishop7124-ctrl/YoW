@@ -46,7 +46,7 @@ export function characterRefsFor(id, characters = []) {
  * Collects all incoming references to a given entity id from across
  * every worldbuilding collection. Returns an object with named sections.
  */
-export function allRefsFor(id, { loreEntries = [], timeline = [], characters = [], loreMap = {} } = {}) {
+export function allRefsFor(id, { loreEntries = [], timeline = [], characters = [], _loreMap = {} } = {}) {
   return {
     lore: loreRefsFor(id, loreEntries),
     timeline: timelineRefsFor(id, timeline),

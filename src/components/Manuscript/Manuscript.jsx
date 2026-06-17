@@ -1452,7 +1452,6 @@ export default function Manuscript({ store }) {
   const isNovelProject = (activeNovel?.type || 'novel') === 'novel'
   const isComicProject = activeNovel?.type === 'comic'
 
-  if (isComicProject) return <ComicPlanner store={store} />
   const workspaceLabel = projectTypeConfig.workspaceLabel || 'Manuscript'
   const importTitle = isScriptProject
     ? 'Import a .docx draft into script beta'
@@ -1724,11 +1723,13 @@ export default function Manuscript({ store }) {
     })
   }, [])
 
+  if (isComicProject) return <ComicPlanner store={store} />
+
   return (
     <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}`}>
 
       {/* ── Toolbar ─────────────────────────────────────────── */}
-      <div className="ms-toolbar font-sans flex items-center gap-2 flex-shrink-0 px-3">
+      <div data-tour="manuscript-toolbar" className="ms-toolbar font-sans flex items-center gap-2 flex-shrink-0 px-3">
 
         {!activeFinalizedDraft && (
           <>
@@ -1767,7 +1768,7 @@ export default function Manuscript({ store }) {
         <SaveIndicator state={saveState} />
 
         {/* Word count */}
-        <span className="ms-toolbar-wordcount">
+        <span data-tour="manuscript-word-count" className="ms-toolbar-wordcount">
           {totalWordCount > 0 ? `${totalWordCount.toLocaleString()} words` : 'No content yet'}
         </span>
 
@@ -1941,7 +1942,7 @@ export default function Manuscript({ store }) {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Writing area */}
-        <main className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
+        <main data-tour="manuscript-editor" className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
           <div className="manuscript-document mx-auto py-16 px-6 md:px-12">
 
             {acts.length === 0 && (
