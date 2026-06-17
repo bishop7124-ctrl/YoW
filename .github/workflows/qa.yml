@@ -44,7 +44,7 @@ jobs:
     name: Smoke / ${{ matrix.name }}
     needs: static-qa
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     env:
       PLAYWRIGHT_BROWSERS_PATH: /tmp/yow-ms-playwright
     strategy:
@@ -59,6 +59,18 @@ jobs:
             spec: tests/e2e/export-formats.spec.js
           - name: responsive
             spec: tests/e2e/responsive-smoke.spec.js
+          - name: autosave
+            spec: tests/e2e/autosave.spec.js
+          - name: manuscript-structure
+            spec: tests/e2e/manuscript-structure.spec.js
+          - name: worldbuilding
+            spec: tests/e2e/worldbuilding.spec.js
+          - name: dashboard
+            spec: tests/e2e/dashboard.spec.js
+          - name: comic-planner
+            spec: tests/e2e/comic-planner.spec.js
+          - name: data-safety
+            spec: tests/e2e/data-safety.spec.js
 
     steps:
       - name: Check out repository
