@@ -18,9 +18,10 @@ Use this file when QA is intentionally postponed so development can continue. Ev
 
 ## Priority 0: Data Safety And Auth
 
-Status: Deferred
+Status: Partial — localStorage guard automated; real-auth paths deferred
 
-- Account switch isolation: use two real accounts with distinct projects; switch A to B without restarting the browser; verify B never displays A data, B remote data loads, and B cloud rows are not overwritten by A data.
+- ✅ Account switch isolation (localStorage guard): `tests/e2e/account-isolation.spec.js` covers foreign-owner data blocked, own-project persistence, and tamper-then-reload guard behavior. Passes in CI.
+- ⬜ Account switch isolation (real auth): use two real Supabase accounts with distinct projects; switch A→B without a full browser restart; verify B never shows A data, B remote data loads, and B cloud rows are not overwritten. Still needs manual QA.
 - Affected-account recovery: inspect available Supabase history, backups, exports, or browser remnants before further edits are made to any account suspected of cross-account overwrite.
 - Fresh signup: create a new account, confirm the empty library appears, create a project, write one sentence, log out, log back in, and confirm the project and sentence remain.
 - Returning login: sign into an existing account with projects, confirm projects load, edit a scene, refresh, and confirm the edit remains.
@@ -29,8 +30,11 @@ Status: Deferred
 
 ## Priority 1: Autosave, Editor, And Structure
 
-Status: Deferred
+Status: Partial — autosave and structure CRUD automated; deep editing deferred
 
+- ✅ Autosave reliability: `tests/e2e/autosave.spec.js` covers immediate reload, nav-away, rapid typing, logout simulation, and timestamp. Passes in CI.
+- ✅ Scene/chapter CRUD: `tests/e2e/manuscript-structure.spec.js` covers add/rename scene, add chapter, structure defaults, word count update. Passes in CI.
+- ✅ URL persistence: `tests/e2e/url-persistence.spec.js` covers writing mode URL, section URLs, and direct-URL navigation. Passes in CI.
 - Autosave reliability: type into a scene and hard-refresh immediately; confirm typed text remains without waiting for cloud debounce.
 - Navigation persistence: type in Scene A, switch to Scene B, return to Scene A, navigate to another workspace, return to Manuscript, and confirm content remains.
 - Long-scene stability: paste or write 5,000+ words, type for at least 30 seconds, confirm cursor stability and refresh persistence.
@@ -64,6 +68,8 @@ Status: Deferred
 Status: Deferred
 
 - Empty account: verify the first-run "Begin your first world" state, New Project, Import with AI, and guided tour.
+- Onboarding tours: verify the Library, Manuscript, Characters, Locations, Lore, Ideas, Map, AI Tools, and Timeline tour buttons open the correct steps, spotlight the intended controls, close on Skip/Escape/section change, and mark completion after Done.
+- Onboarding responsive behavior: verify tour tooltip placement and spotlight cutouts at 375px, 768px, and desktop widths; confirm the Map tour button is hidden on the mobile Map Builder placeholder but available when the actual map editor is visible.
 - Single project: verify auto-activation, project card selection cue, active project open cue, overview basics, and word count stats.
 - Series states: verify empty series visibility, all-projects-in-series accounts, multiple series, series filters, and series-contained project activation.
 - Project management: create, open, rename, delete, recover from deleted active project, and confirm project type remains locked after creation.
@@ -113,7 +119,7 @@ Status: Deferred
 - Inspector and layers: verify Object/Layers/Map tabs, map type selection in every New Map form, map type displayed read-only after creation with no post-create type picker, object property editing, object-layer assignment, new layer creation, active-layer placement for newly placed objects, layer rename-on-blur, layer visibility, layer lock preventing canvas/property edits, layer deletion moving objects back to the default layer, object stack selection, lock/hide, z-order, grouping, ungrouping, linked-location editing, map settings, and multi-select behavior.
 - Visual quality: verify cartographic styling, label readability, stamp previews match placed stamp renderings, placed stamps render without circular backing shadows/halos, and the reference-aligned fantasy stamp set uses the extracted source-image PNG icons in the sidebar and on the canvas: Capital, City, Village, Castle, Fortress, Harbor, Mountains, Forest, Ruins, Landmark, Cave, Mine, Temple, Battlefield, Portal, and Magic Source. Verify older saved `kingdom`, `town`, and `building` stamps still render with compatible fallback symbols.
 - Stamp scaling: resize the Capital stamp at several sizes and non-square proportions; verify the crown and internal diamond cutout scale together without the diamond drifting from its source-image position.
-- Export and restore: verify map JSON import/export, project ZIP restore, linked marker behavior after location deletion, map records in project backup, and map export plates in HTML/PDF/world-bible output. Confirm object-map exports summarize layers, object counts, labels/places, regions, routes/water, stamps, and land/rooms; confirm empty maps show a clear fallback; confirm rendered visual thumbnails/plates once that later slice exists.
+- Export and restore: verify map JSON import/export, project ZIP restore, linked marker behavior after location deletion, map records in project backup, and map export plates in HTML/PDF/world-bible output. Confirm object-map exports summarize layers, object counts, labels/places, regions, routes/water, stamps, and land/rooms; confirm empty maps show a clear fallback; confirm maps without saved thumbnails generate readable visual preview plates in HTML and PDF exports.
 - Responsive safety: verify desktop editing plus tablet/mobile view/edit-lite behavior; no viewport should show a broken canvas or trapped controls.
 
 ## Priority 9: Large Project And Performance
