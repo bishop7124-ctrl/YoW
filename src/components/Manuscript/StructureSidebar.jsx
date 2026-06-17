@@ -351,7 +351,7 @@ export default function StructureSidebar({
   }, [chapters, scenes])
 
   return (
-    <aside className="ms-sidebar font-sans">
+    <aside data-tour="manuscript-structure" className="ms-sidebar font-sans">
       {/* Header */}
       <div className="ms-sidebar-header">
         <span className="ms-sidebar-title">Structure</span>
