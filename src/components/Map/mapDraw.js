@@ -4,7 +4,8 @@ import {
 } from './mapConstants.js'
 import {
   clamp, colorWithAlpha, drawSmoothPath, hashString,
-  objectLocalFaces, objectLocalPoints, organicPoints, round, seededNoise,
+  localToNormalized, objectCorners, objectLocalFaces, objectLocalPoints,
+  objectPointToMap, organicPoints, seededNoise, selectionBounds,
 } from './mapUtils.js'
 
 export function drawGrid(ctx, width, height, stylePreset = 'parchment') {
