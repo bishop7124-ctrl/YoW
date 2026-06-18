@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
-import { PLANS, getMembership } from '../../utils/membership'
+import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
 import { getStorageQuota } from '../../utils/storageQuota'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
@@ -48,10 +48,11 @@ function MaintenancePayButton({ style }) {
     setError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/create-checkout-session', {
+      const endpoint = import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL || '/api/create-checkout-session'
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ plan: 'maintenance' }),
+        body: JSON.stringify({ plan: 'hosting_renewal' }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Checkout failed')
@@ -72,7 +73,7 @@ function MaintenancePayButton({ style }) {
           opacity: paying ? 0.7 : 1,
         }}
       >
-        {paying ? 'Redirecting…' : 'Pay £6 · Restore access'}
+        {paying ? 'Redirecting…' : `Pay £${HOSTING_RENEWAL_FEE_GBP} · Restore Cloud Mode`}
       </button>
       {error && <p style={{ margin: '6px 0 0', color: '#ef4444', fontSize: 12 }}>{error}</p>}
     </div>
@@ -1414,16 +1415,26 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
                 </>
               )}
               {membership.isPaid && !membership.isLifetime && (
-                <div>
-                  <span>Billing</span>
-                  <strong>Monthly — cancel any time</strong>
-                </div>
+                <>
+                  <div>
+                    <span>App licence</span>
+                    <strong>Monthly — cancel any time</strong>
+                  </div>
+                  <div>
+                    <span>Cloud hosting</span>
+                    <strong>Cloud Mode while subscribed</strong>
+                  </div>
+                </>
               )}
               {membership.isPaid && membership.isLifetime && (
                 <>
                   <div>
-                    <span>Billing</span>
-                    <strong>{membership.isFounder ? 'Lifetime — cloud hosting included forever' : 'Lifetime — cloud hosting included'}</strong>
+                    <span>App licence</span>
+                    <strong>Lifetime — active</strong>
+                  </div>
+                  <div>
+                    <span>Cloud hosting</span>
+                    <strong>{membership.isFounder ? 'Cloud Mode included' : membership.isLocalMode ? 'Local Mode' : 'Cloud Mode included'}</strong>
                   </div>
                   {membership.isFounder && (
                     <div>
@@ -1450,7 +1461,9 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
               <div>
                 <span>Access level</span>
                 <strong>
-                  {membership.isPaid
+                  {membership.isLocalMode
+                    ? 'Local Mode'
+                    : membership.isPaid
                     ? 'Full access'
                     : membership.isTrialActive
                       ? 'Full access (trial)'
@@ -1472,10 +1485,31 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
                 gap: 6,
               }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#f59e0b' }}>
-                  Cloud Hosting &amp; Storage Renewal due in {membership.maintenanceDaysRemaining} day{membership.maintenanceDaysRemaining !== 1 ? 's' : ''}
+                  Cloud hosting renewal due in {membership.maintenanceDaysRemaining} day{membership.maintenanceDaysRemaining !== 1 ? 's' : ''}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Your included cloud hosting period is ending soon. Renew at £6/year to keep full access — this covers hosting costs only. You can always export your data for free if you choose not to renew.
+                  Your included Cloud Mode period is ending soon. Renew at £{HOSTING_RENEWAL_FEE_GBP}/year to keep hosted sync, storage, and backups. Your lifetime app licence and Local Mode stay active either way.
+                </div>
+                <MaintenancePayButton style={{ marginTop: 4 }} />
+              </div>
+            )}
+
+            {membership.isLocalMode && (
+              <div style={{
+                marginBottom: 18,
+                padding: '14px 16px',
+                borderRadius: 10,
+                background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent)' }}>
+                  Local Mode is active
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Your lifetime licence is still active. Cloud hosting is inactive, so edits are saved on this device and will not sync to Supabase until you renew Cloud Mode.
                 </div>
                 <MaintenancePayButton style={{ marginTop: 4 }} />
               </div>
@@ -1502,7 +1536,12 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
               Available plans
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {PLANS.map(plan => (
+              {[
+                PLANS.find(plan => plan.key === 'free'),
+                PLANS.find(plan => plan.key === 'premium_monthly'),
+                PLANS.find(plan => plan.key === 'premium_plus_lifetime'),
+                PLANS.find(plan => plan.key === 'founder'),
+              ].filter(Boolean).map(plan => (
                 <PlanCard
                   key={plan.key}
                   plan={plan}

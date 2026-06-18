@@ -20,7 +20,9 @@ function readCachedUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(OFFLINE_MODE ? OFFLINE_USER : readCachedUser)
   const [loading] = useState(false)
-  const [recoveryMode, setRecoveryMode] = useState(false)
+  const [recoveryMode, setRecoveryMode] = useState(
+    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
+  )
 
   useEffect(() => {
     if (OFFLINE_MODE) return

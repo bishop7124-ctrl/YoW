@@ -7,9 +7,9 @@
 
 export const BILLING = {
   // Displayed prices (GBP, display only — Stripe is the authoritative amount)
-  monthlyPrice:        10,   // £/month
-  lifetimePrice:       199,  // £ one-time
-  founderPrice:        499,  // £ one-time
+  monthlyPrice:        12,   // £/month
+  lifetimePrice:       179,  // £ one-time
+  founderPrice:        399,  // £ one-time
   hostingRenewalPrice: 6,    // £/year after included period
 
   // Lifetime hosting rules

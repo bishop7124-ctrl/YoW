@@ -8,6 +8,8 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
 )
 
+const HOSTING_RENEWAL_SECONDS = 365 * 24 * 60 * 60
+
 function getCurrentPeriodEnd(subscription: Stripe.Subscription) {
   const itemPeriodEnds = subscription.items.data
     .map((item) => item.current_period_end)
@@ -33,6 +35,7 @@ async function updateMembership(subscription: Stripe.Subscription, fallbackUserI
       stripe_customer_id: customerId,
       stripe_subscription_id: subscription.id,
       subscription_status: subscription.status,
+      subscription_plan: subscription.metadata?.plan || existingMetadata.subscription_plan || 'premium_monthly',
       subscription_current_period_end: getCurrentPeriodEnd(subscription),
       subscription_cancel_at_period_end: subscription.cancel_at_period_end,
     },
@@ -40,6 +43,11 @@ async function updateMembership(subscription: Stripe.Subscription, fallbackUserI
 }
 
 async function updateMembershipFromCheckoutSession(session: Stripe.Checkout.Session) {
+  if (session.mode === 'payment') {
+    await updateOneTimeMembership(session)
+    return
+  }
+
   if (!session.subscription) return
 
   const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id
@@ -48,6 +56,48 @@ async function updateMembershipFromCheckoutSession(session: Stripe.Checkout.Sess
   })
 
   await updateMembership(subscription, session.metadata?.user_id || session.client_reference_id)
+}
+
+async function updateOneTimeMembership(session: Stripe.Checkout.Session) {
+  const userId = session.metadata?.user_id || session.client_reference_id
+  if (!userId) return
+
+  const plan = session.metadata?.plan || ''
+  const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id
+  const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
+  const existingMetadata = data.user?.app_metadata || {}
+  const now = Math.floor(Date.now() / 1000)
+
+  const nextMetadata: Record<string, unknown> = {
+    ...existingMetadata,
+    ...(customerId ? { stripe_customer_id: customerId } : {}),
+  }
+
+  if (plan === 'premium_plus_lifetime' || plan === 'founder') {
+    nextMetadata.subscription_status = 'active'
+    nextMetadata.subscription_plan = plan
+    nextMetadata.lifetime_purchased_at = existingMetadata.lifetime_purchased_at || new Date().toISOString()
+    if (plan === 'founder') {
+      nextMetadata.cloud_hosting_status = 'active'
+      nextMetadata.cloud_hosting_expires_at = null
+      nextMetadata.maintenance_expires_at = null
+    }
+  }
+
+  if (plan === 'hosting_renewal' || plan === 'maintenance') {
+    const currentExpiry = existingMetadata.maintenance_expires_at
+      ? Math.floor(new Date(String(existingMetadata.maintenance_expires_at)).getTime() / 1000)
+      : 0
+    const renewalStartsAt = Math.max(now, Number.isFinite(currentExpiry) ? currentExpiry : 0)
+    const nextExpiry = new Date((renewalStartsAt + HOSTING_RENEWAL_SECONDS) * 1000).toISOString()
+    nextMetadata.cloud_hosting_status = 'active'
+    nextMetadata.cloud_hosting_expires_at = nextExpiry
+    nextMetadata.maintenance_expires_at = nextExpiry
+  }
+
+  await supabaseAdmin.auth.admin.updateUserById(userId, {
+    app_metadata: nextMetadata,
+  })
 }
 
 async function updateMembershipFromInvoice(invoice: Stripe.Invoice) {

@@ -70,7 +70,10 @@ const CONTENT = {
         <Section title="Subscriptions and billing">
           <Ul>
             <Li>New accounts receive a free trial period to explore the platform.</Li>
-            <Li>After the trial, a paid membership is required to continue editing. Read access to existing projects is retained.</Li>
+            <Li>Free, Monthly, Lifetime, and Founder plans have different app access, cloud hosting, storage, and support limits. Current plan details are shown before checkout.</Li>
+            <Li>Lifetime app access means permanent access to the YOW app and Local Mode. It does not mean indefinite hosted cloud storage unless your Cloud Mode entitlement is active.</Li>
+            <Li>If Lifetime cloud hosting lapses, your lifetime licence remains active and you can continue in Local Mode, import backups, and export your work. Cloud sync, hosted backups, and uploads pause until Cloud Mode is renewed.</Li>
+            <Li>Founder includes lifetime Cloud Mode within the published storage and fair-use cap.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>
             <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. No refunds are issued for partial periods.</Li>
           </Ul>

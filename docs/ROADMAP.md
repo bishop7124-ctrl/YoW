@@ -12,8 +12,8 @@ Codex, Claude, and any other project agent should use this file as the single pl
 - When QA is deferred, add the required checks to [docs/QA_PLAN.md](docs/QA_PLAN.md) in the same turn and keep building from this roadmap.
 - When the work requires user action, user testing, a product decision, credentials, external setup, or any manual verification that cannot be completed by the agent, provide the user with clear step-by-step instructions at that point in the process.
 - Do not create a separate roadmap, backlog, launch list, or planning document unless the user explicitly asks for an export or temporary working draft.
-- Do not add new MVP launch features unless they replace an existing MVP item, fix a launch blocker, or are required for legal, payment, auth, data safety, or launch-critical expectation setting.
-- Put non-blocking new ideas in Post-Launch or Icebox instead of silently expanding MVP.
+- YOW is not aiming for a minimal MVP. Final paid/public launch means the desired final product scope for the 6 active project types is complete enough to sell without relying on continual post-launch feature development.
+- If the product decision is "we want this in YOW," treat it as launch scope unless it is explicitly excluded from the final product, belongs to a future business expansion, or is parked by a direct product decision.
 - When a completed task closes or changes a roadmap item, update its status and next action before finishing.
 - If no roadmap update is needed, briefly say why in the final response.
 
@@ -25,7 +25,7 @@ Status: Active
 
 Acceptance criteria:
 
-- One canonical roadmap exists with Active, MVP Required, Post-Launch, Icebox, and Bugs sections.
+- One canonical roadmap exists with Active, Launch Required, Future/Excluded, Icebox, and Bugs sections.
 - Scattered planning notes are moved here or linked from here.
 - Generated artifacts, public roadmap database seeds, and acceptance-matrix documents do not override this file.
 
@@ -35,7 +35,7 @@ Linked/historical sources:
 - [scripts/create_yow_mvp_matrix.py](../scripts/create_yow_mvp_matrix.py) is the script that generated the initial matrix content.
 - [supabase/migrations/20260521_roadmap.sql](../supabase/migrations/20260521_roadmap.sql) seeds the public-facing app roadmap. It is display data, not the product planning source of truth.
 
-### Feature Intake Freeze
+### Final Product Scope Discipline
 
 Status: Active
 
@@ -45,22 +45,22 @@ Product stage definition:
 - Final launch is the fully specced website. The intent is to implement the desired full product now, during beta, and avoid relying on continual post-launch development to finish core feature promises.
 - "Launch blocker" still means the issue must be fixed before any public paid/final launch. During beta, the same blocker policy is used to decide whether a beta build is safe enough to keep using.
 
-No new launch feature enters MVP/final-launch scope unless it satisfies one of these rules:
+Launch scope rule:
 
-- It replaces an existing MVP item of equal or larger scope.
-- It fixes a launch blocker.
-- It is required by legal, payment, auth, data safety, or launch-critical expectation setting.
+- YOW is being built as the final paid launch product, not a narrow MVP.
+- Desired product capabilities are launch scope by default.
+- Only move a desired capability out of launch scope when there is an explicit product decision that it is a future expansion, excluded business model, or not part of YOW's paid promise.
+- Do not hide a desired launch capability in Future/Excluded just because it is complex.
 
 Parking-lot process:
 
-- New ideas go to Icebox by default.
-- Ideas that clearly improve the product but are not launch-critical go to Post-Launch.
-- Any proposed MVP addition must name the MVP item it replaces or the launch blocker it resolves.
-- If the replacement/blocker cannot be named, the item stays out of MVP.
+- New ideas still go to Icebox until the user makes a product decision.
+- Once the user confirms "we want this," move it into launch scope with acceptance criteria unless they explicitly say it is future/excluded.
+- Future/Excluded is for capabilities outside the final product promise, such as collaboration, marketplace/community, native mobile apps, or other future business lines.
 
 Launch blocker definition:
 
-Only data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or missing legal/payment essentials should block MVP launch.
+Only data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or missing legal/payment essentials are technical blockers for beta safety. For final paid/public launch, incomplete desired product capabilities also block launch if they are part of the final product promise.
 
 ## Launch Blocker Policy
 
@@ -84,38 +84,38 @@ Non-blockers:
 
 - Cosmetic polish that does not prevent core workflows.
 - Nice-to-have features without a launch promise.
-- Advanced workflow refinements that can be moved to Post-Launch.
+- Advanced workflow refinements that are explicitly excluded from the final launch promise.
 - Edge cases that have a clear workaround and do not risk data, payment, access, or legal trust.
-- New feature ideas that do not replace an MVP item or resolve a blocker.
+- New feature ideas that have not yet been accepted into the final product promise.
 
 Triage labels:
 
 | Label | Meaning | Required Action |
 | --- | --- | --- |
 | Blocker | Fits one of the blocker categories above and prevents launch. | Fix before launch or change the launch promise/scope so it no longer blocks. |
-| Conditional | Could block launch only if it is part of the paid/public promise or affects a required workflow. | Decide whether it is launch scope; otherwise move to Post-Launch. |
-| Non-blocking MVP | Needed for a good MVP but not launch-stopping if rough. | Ship if feasible after blockers are under control. |
-| Post-Launch | Valuable but not required for launch safety or honest launch promises. | Park in Post-Launch with a clear revisit point. |
+| Conditional | Could block launch only if it is part of the paid/public promise or affects a required workflow. | Decide whether it is launch scope; otherwise mark Future/Excluded explicitly. |
+| Launch Required | Required for the final paid launch product, even if beta can temporarily run without it. | Implement and QA before final paid/public launch. |
+| Future/Excluded | Valuable but explicitly outside the final launch promise or a future business expansion. | Park with a clear product reason. |
 | Icebox | Interesting, unvalidated, or not yet tied to a launch outcome. | Park until there is a stronger product reason. |
 
 Triage rule:
 
-Every bug or proposed MVP change must answer: does this create data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or missing legal/payment essentials? If not, it is not a launch blocker.
+Every bug or proposed launch change must answer both: does this create data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or missing legal/payment essentials; and is it part of the final product promise? Technical blockers decide beta safety, while final-product gaps decide final paid launch readiness.
 
 ## Active
 
 | Phase | Feature | Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0. Stop the Chaos | Master roadmap | One canonical roadmap exists with Active, MVP Required, Post-Launch, Icebox, and Bugs sections; all scattered notes are moved or linked. | Yes | Active | Keep this file as the only planning source. | Product |
-| 0. Stop the Chaos | Feature intake freeze | No new launch features enter MVP unless they replace an existing item or fix a launch blocker. | Yes | Active | Enforce the decision rule and parking-lot process above. | Product |
-| 1. Scope Freeze | Exact MVP list | The MVP feature list is locked, versioned, and mapped to acceptance criteria in this roadmap. | Yes | Active | Update only through explicit roadmap decisions. | Product |
-| 1. Scope Freeze | Fully stacked launch scope | Public beta may expose beta/limited workflows, but final launch requires the fully specced project-type stack: all 6 active project types (Novel, Novella, Short Story, D&D Campaign, Tabletop Campaign, Comic/Graphic Novel) must have their promised discipline-specific workflows, safe persistence, and stable exports. Play, Screenplay, TV Series, and Video Game have been retired from active scope, removed from the UI, and removed from all roadmap scope. Their constants are preserved in RETIRED_PROJECT_TYPES as a code-level backup only. | Yes | In progress | Use beta labels while building, then complete discipline-specific workflow waves for the 6 active types before final launch. | Product/Engineering |
-| 2. Define Good Enough | Launch blocker policy | A blocker is limited to data loss, broken auth, broken save, broken export, unusable editor, unusable mobile layout, or missing legal/payment essentials. | Yes | Adopted | Apply the blocker policy to every triage pass before changing MVP scope. | Product/QA |
+| 0. Stop the Chaos | Master roadmap | One canonical roadmap exists with Active, Launch Required, Future/Excluded, Icebox, and Bugs sections; all scattered notes are moved or linked. | Yes | Active | Keep this file as the only planning source. | Product |
+| 0. Stop the Chaos | Final product scope discipline | Final paid/public launch is the desired final product, not a minimal MVP. Desired capabilities are launch scope unless explicitly marked Future/Excluded or Icebox by product decision. | Yes | Active | Enforce the decision rule and parking-lot process above. | Product |
+| 1. Scope Freeze | Exact launch product list | The final launch feature list is locked, versioned, and mapped to acceptance criteria in this roadmap. | Yes | Active | Update only through explicit roadmap decisions. | Product |
+| 1. Scope Freeze | Fully stacked launch scope | Public beta may expose beta/limited workflows, but final launch requires the fully specced project-type stack: all 6 active project types (Novel, Novella, Short Story, D&D Campaign, Tabletop Campaign, Comic/Graphic Novel) must have their promised discipline-specific workflows, safe persistence, and stable exports. Shared projects, live collaboration, player portals, and online tabletop/campaign-room features are explicitly out of launch scope; YOW remains a private planning, drafting, worldbuilding, and export workspace rather than a virtual tabletop. Play, Screenplay, TV Series, and Video Game have been retired from active scope, removed from the UI, and removed from all roadmap scope. Their constants are preserved in RETIRED_PROJECT_TYPES as a code-level backup only. | Yes | In progress | Use beta labels while building, then complete discipline-specific workflow waves for the 6 active types before final launch. | Product/Engineering |
+| 2. Define Good Enough | Launch blocker policy | A blocker is limited to data loss, broken auth, broken save, broken export, unusable editor, unusable mobile layout, or missing legal/payment essentials. | Yes | Adopted | Apply the blocker policy to every triage pass before changing launch scope or beta safety. | Product/QA |
 | 2. Define Good Enough | QA automation baseline | A single local QA command runs the basic release-safety checks before deeper browser smoke tests. | Yes | Automated in CI | `npm run qa` runs lint, production build, and load check. `npm run qa:smoke` starts Vite in offline mode and now covers create/write/refresh/export/restore, DOCX/PDF export downloads, all configured project-type creation with starter structure/default sections, and mobile/tablet writing reachability. GitHub Actions runs static QA plus named smoke jobs on push, pull request, daily schedule, and manual dispatch, with Playwright annotations and artifacts uploaded on failure. Current Codex macOS sandbox blocks Chromium launch at Mach-port registration, so browser smoke is verified through a normal local terminal or CI runner. React compiler advisories remain as warnings. | Engineering/QA |
 | 2. Define Good Enough | Manual QA checklist | A complete manual QA checklist exists covering all 28 test sections: auth, dashboard, manuscript editor (all 5 live project types), worldbuilding (characters, locations, lore, timeline), map, family tree, factions, ideas, schedule, character builder, exports (ZIP/DOCX/PDF/restore), AI tools, account settings (themes, storage, AI provider), pricing, URL persistence, modals, studio, novel reader, responsive layout (375px/768px/1280px+), public/marketing pages, large-project stress test, data safety edge cases, and legal/compliance. Each item has pass/fail/skip status, freeform notes, and export to Markdown, HTML report, JSON, or CSV. State persists in localStorage. | Yes | Complete | Open [docs/qa-checklist.html](docs/qa-checklist.html) directly in a browser as the manual test runner before each release. | QA |
 | 2. Define Good Enough | Deferred QA plan | A single deferred QA plan accumulates every required QA item while development continues, so launch-readiness verification can happen together later without losing coverage. | Yes | Active | Add new required checks to [docs/QA_PLAN.md](docs/QA_PLAN.md) whenever implementation changes behavior. | Product/Engineering/QA |
 
-## MVP Required
+## Launch Required
 
 | Phase | Feature | Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -138,7 +138,7 @@ Dashboard consistency follow-up note (2026-06-14): Insights view now shares the 
 | 5. Worldbuilding | Timeline and history linking | Timeline events and world-history entries can be created, edited, linked/unlinked, and persist by project. | Yes | Forward-series sync implemented, needs QA | Timeline/history create/edit/delete/link/unlink now writes local storage synchronously before React state scheduling. WorldHistory groups timeline entries by era; Timeline shows them chronologically. Orphan worldHistory entries are migrated into timeline on importData. Series-synced timeline/history entries resolve forward in reading order and delete prompts support current-project-only versus all-synced removal. Test create/edit/delete round-trips across both sections, link/unlink behavior, instant-refresh persistence, era grouping, forward-series overrides, scoped deletes, and inherited dashboard counts. | Engineering/QA |
 | 6. Exports & Safety | Project export | Users can export a complete project archive containing manuscript and worldbuilding data in a restorable format. | Yes | Implemented, needs QA | Test export contents for small, medium, and large projects. | Engineering/QA |
 | 6. Exports & Safety | Manuscript export | Users can export manuscript content in a readable document format with chapters/scenes in the correct order. | Yes | Implemented, needs QA | Test .docx export for formatting, ordering, empty scenes, and large manuscripts. | Engineering/QA |
-| 6. Exports & Safety | Backups | Backup = cloud sync (Firestore, active for logged-in users) + manual ZIP export. No scheduled backup required for MVP. Definition is final. | Yes | Implemented, needs QA | Test that logged-in users have their data in Firestore and that the ZIP export contains all project data. | Engineering/QA |
+| 6. Exports & Safety | Backups | Backup = cloud sync (Firestore, active for logged-in users) + manual ZIP export. No scheduled backup is required for final launch unless a new product decision adds it to the paid promise. Definition is final. | Yes | Implemented, needs QA | Test that logged-in users have their data in Firestore and that the ZIP export contains all project data. | Engineering/QA |
 | 6. Exports & Safety | Restore flows | Users can restore a project from a YOW backup ZIP or import from a NovelCrafter export ZIP via the unified Import menu in the library top bar. Both flows are handled by the Import modal: YOW exports trigger the existing populateYowProject path (full ID remapping, all sections); NovelCrafter exports are auto-detected by folder structure (characters/, locations/, lore/, items/, other/, novel.docx), parsed with `tryReadNovelCrafterZip`, and populated via `populateNcProject` — manuscript chapters become scenes, items route to lore, other/snippets/notes become raw idea captures. The library top bar has a single Import ▾ dropdown (AI Import and Import ZIP) replacing the former separate buttons. A pre-import section-selection UI shows counts for each data type. | Yes | Implemented, needs QA | QA: (1) Export a YOW project, use Import ZIP to restore it, verify all content round-trips under a new project entry. (2) Drop a NovelCrafter full export ZIP, verify characters/locations/lore/manuscript/other entries all import correctly — manuscript chapters become scenes, other entries appear as raw captures on the Ideas board. | Engineering/QA |
 | 7. Launch | Authentication | Sign up, sign in, sign out, session restore, and password/error states work reliably across refreshes. | Yes | Implemented, needs QA | Signup now shows a human-readable error ("An account with this email already exists. Try logging in instead.") instead of the raw Supabase message when a duplicate email is submitted. Run auth regression pass with fresh user, returning user, invalid credentials, duplicate email signup, expired session, direct `/login` and `/signup` URLs, and password reset returning to `/login`. | Engineering/QA |
 | 7. Launch | Autosave reliability | Autosave has explicit test coverage or manual proof for refresh, navigation, rapid typing, and multi-scene work. | Yes | High-risk QA | Make this the first launch-readiness test pass. | Engineering/QA |
@@ -153,8 +153,8 @@ The public beta must be honest about the project-type stack. Beta project types 
 | Novel | Long-form prose workflow supports acts, chapters, scenes, manuscript drafting, worldbuilding, timeline/history, character systems, project export, and manuscript export. | Yes | Active baseline | Continue QA against autosave, editor stability, exports, and large-project performance. | Product/Engineering/QA |
 | Novella | Medium-length prose workflow. Structure: Part → Chapter → Scene. Lighter default sections (outline, characters, locations, lore, ideas, schedule, timeline). Type-specific story event indicators and a 30,000-word default target defined. Shares the manuscript editor with Novel. Enabled at launch. | Yes | Enabled, needs QA | QA: create a Novella project, verify Part/Chapter/Scene labels appear in structure sidebar, verify lighter default section set, verify default word target appears, verify export works. | Engineering/QA |
 | Short Story | Short-form prose workflow. Structure: Part → Section → Scene. Compact default sections matching Novella set. Type-specific story event indicators and a 5,000-word default target defined. Shares the manuscript editor. Enabled at launch. | Yes | Enabled, needs QA | QA: create a Short Story project, verify Part/Section/Scene labels, verify default sections, verify default word target appears, verify export. | Engineering/QA |
-| D&D Campaign | D&D tabletop campaign. Structure: Story Arc → Session → Encounter. Default sections include map, factions, worldhistory, and Character Builder. Type-specific DM story event indicators and D&D-flavoured positioning/prompt context defined. Shares editor. Enabled at launch. | Yes | Session engine + Character Builder implemented, needs QA | QA: create a D&D Campaign project, verify Arc/Session/Encounter labels, structured session prep/recap fields, all default sections including map, D&D-flavoured type description and AI prompt behavior, campaign export inclusion, and Character Builder Party room (wizard, sheet, dice roller). | Engineering/QA |
-| TTRPG Campaign | System-neutral tabletop campaign. Structure: Story Arc → Session → Encounter. Same structural defaults as D&D but with system-neutral positioning, labels, indicators, and prompt context. Character Builder included in default sections. Enabled at launch; merge deferred because roadmap currently requires both launch types and migration would add launch risk. | Yes | Session engine + Character Builder implemented, needs QA | QA: create a TTRPG Campaign project, verify Arc/Session/Encounter labels, structured session prep/recap fields, system-neutral type description and AI prompt behavior, campaign export inclusion, and Character Builder Party room (wizard, sheet, dice roller). | Engineering/QA |
+| D&D Campaign | D&D tabletop campaign. Structure: Story Arc → Session → Encounter. Default sections include map, factions, worldhistory, and Character Builder. Type-specific DM story event indicators and D&D-flavoured positioning/prompt context defined. Shares editor. Launch promise is DM-side campaign planning, not online play, shared projects, live player access, or a virtual tabletop. Enabled at launch. | Yes | Session engine + Character Builder implemented, needs QA | QA: create a D&D Campaign project, verify Arc/Session/Encounter labels, structured session prep/recap fields, all default sections including map, D&D-flavoured type description and AI prompt behavior, campaign export inclusion, and Character Builder Party room (wizard, sheet, dice roller). Also verify public copy does not imply shared campaign rooms, live player portals, or virtual-tabletop play. | Engineering/QA |
+| TTRPG Campaign | System-neutral tabletop campaign. Structure: Story Arc → Session → Encounter. Same structural defaults as D&D but with system-neutral positioning, labels, indicators, and prompt context. Character Builder included in default sections. Launch promise is GM-side campaign planning, not online play, shared projects, live player access, or a virtual tabletop. Enabled at launch; merge deferred because roadmap currently requires both launch types and migration would add launch risk. | Yes | Session engine + Character Builder implemented, needs QA | QA: create a TTRPG Campaign project, verify Arc/Session/Encounter labels, structured session prep/recap fields, system-neutral type description and AI prompt behavior, campaign export inclusion, and Character Builder Party room (wizard, sheet, dice roller). Also verify public copy does not imply shared campaign rooms, live player portals, or virtual-tabletop play. | Engineering/QA |
 | Comic / Graphic Novel | Sequential art. Structure: Volume → Issue → Page → Panel. Comic Panel Engine implemented 2026-06-13. Final launch requires QA pass before Comic/Graphic Novel can be marketed as fully live. | Yes | Implemented, needs QA | QA per the QA Plan in the PRD below: CRUD, persistence (refresh/navigate/logout), export round-trip (ZIP/DOCX), responsive (375px/768px/desktop), data safety (delete chains, restore into existing account), performance. | Engineering/QA |
 
 ## PRD: Comic Panel Engine
@@ -366,7 +366,7 @@ DOCX/PDF export:
 - Whether double-page spreads are modeled as one page record with `pageType: double-page spread` or as linked left/right page records.
 - Whether page numbering should be per issue only or continuous across a graphic novel.
 - Whether panel dialogue needs rich formatting in the first release or plain structured rows are sufficient.
-- Whether visual reference images belong in this engine now or should remain in existing image/map/lore systems until post-launch.
+- Whether visual reference images belong in this engine now or should remain in existing image/map/lore systems until a future product decision.
 
 ## All Project Types Live Plan
 
@@ -381,9 +381,9 @@ Current status: Wave 0 is implemented and partially smoke-tested. Wave 1 shared 
 | 2. Tabletop session engine | D&D/TTRPG get structured session planning and recap fields without replacing existing campaign bible data. | User can plan and recap a session with hooks, encounters, NPCs, rewards, and consequences. | Deep QA campaign planning, persistence, and export. |
 | 3. Comic panel engine | Comic/Graphic Novel gets page/panel planning, visual direction fields, reference image/PDF upload, and comic script export. | User can outline pages, panels, captions/dialogue, art notes, and upload reference images; data round-trips through ZIP and DOCX export. | Deep QA per the QA Plan in the Comic Panel Engine PRD above. |
 
-## Conditional MVP
+## Conditional Launch Scope
 
-These items can ship in MVP only if they are already stable, required by a launch promise, or needed to avoid a blocker.
+These items can ship in beta only if they are already stable, required by a launch promise, or needed to avoid a blocker. For final paid/public launch, any desired product capability must be complete or explicitly moved to Future/Excluded by product decision.
 
 | Phase | Feature | Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -394,8 +394,105 @@ These items can ship in MVP only if they are already stable, required by a launc
 | 6. Exports & Safety | Storage usage tracking | Users can see meaningful storage usage or limits before hitting failure states. | Conditional | Improved, needs QA | All "storage limit reached" warnings now present a consistent message regardless of trigger: the membership toast shows the exact used/quota bytes and a "Plan settings" button that opens the membership tab; the StorageCard exceeded message includes inline used/quota numbers; `storageExceededCheck()` in useStore passes `usedBytes` and `quotaBytes` through the `membership-read-only` event so the toast can render them. Test storage-exceeded toast from any create/save action, verify numbers appear in toast and StorageCard, and verify "Plan settings" button opens membership tab. | Engineering/QA |
 | 7. Launch | Empty/loading/error states | Core screens give clear empty, loading, and error feedback without dead ends. | Conditional | Improved, needs QA | Dashboard first-run empty account state now has a specific welcome, project/import CTAs, and guided tour steps. Characters index: "No characters yet" + "No matches" on search/filter. Locations index: "No locations yet" + "No matches". Lore index: existing "No results" fallback. WorldHistory index: existing empty/no-match states. Ideas Kanban: per-column empty drop-target state. StudioEmpty used consistently for detail panes across all worldbuilding sections. QA: test each section with zero records, then with records but a no-match search. | Design/Engineering |
 | 7. Launch | Landing page | Landing page explains the writing/worldbuilding value proposition and routes cleanly into signup/pricing without advertising beta/limited workflows as complete. | Conditional | Features and FAQ pages live; nav updated | `/features/` and `/faq/` are now real pages wired into the SPA router (`isFeaturesPath`/`isFAQPath` in App.jsx). `/features/` has: per-project-type feature matrix (Prose Fiction grouped as Novel/Novella/Short Story, Comic/Graphic Novel with Beta badge, Tabletop Campaign, D&D Campaign), unique-per-type callout cards, and a prose-format differences breakdown (word targets, structures, default rooms). `/faq/` has four accordion sections (Plans & Pricing, Features & AI, Data & Storage, Getting Started) updated to match current plan copy. Blog link removed from marketing nav. "Compare plans" on pricing changed from `href="#comparison"` to a `scrollIntoView` button to avoid hash-nav SPA conflicts. QA: hard-reload `/features/` and `/faq/`; test all nav links; FAQ accordion expand/collapse; confirm Blog absent; Compare plans scrolls correctly; back/forward nav between pages. Also QA homepage copy against beta-live scope. | Product/Design/Engineering |
+| 7. Launch | Pricing recommendation | Four-plan launch structure: Free, Monthly, Lifetime, Founder. Prices are Free forever, Monthly at £12/month, Lifetime at £179 once, Founder at £399 once, and Lifetime cloud hosting renewal at £6/year after the included hosting period. Rationale: keep Free genuinely useful, make Monthly available but intentionally less compelling over time, make Lifetime the best-value serious-writer option, position Founder as a supporter/status tier rather than the best-value deal, and keep cloud renewal mentally simple at 50p/month. | Conditional | Implemented, needs highest-priority Stripe QA | Highest priority before real paid checkout: run [docs/QA_PLAN.md](docs/QA_PLAN.md) Priority 0 Stripe test-mode billing QA. Verify test-mode Stripe secrets, price IDs, webhook secret, webhook events, function deployment, Monthly/Lifetime/Founder/hosting renewal checkout, metadata updates, cancellation/failure behavior, and restore live Stripe values before accepting real payments. | Product/Engineering/QA |
+| 7. Launch | Lifetime local mode and cloud hosting split | Lifetime access must mean permanent access to the YOW app and local project tools, while Supabase cloud storage/sync/backups remain a separately entitled hosted service. Lifetime users whose included hosting has ended can continue in Local Mode without ongoing Supabase project storage writes; Monthly and Founder users keep Cloud Mode while entitled. | Yes | Implemented, needs QA | QA/legal checks are tracked in [docs/QA_PLAN.md](docs/QA_PLAN.md); verify Local Mode editing, no cloud writes, renewal checkout, and entitlement metadata before selling Lifetime plans. | Product/Engineering/QA |
 | 7. Launch | SEO basics | Title, description, OG tags, Twitter card, JSON-LD (WebSite, Organization, SoftwareApplication with pricing), robots, canonical, and keywords are all present. Description updated to include tabletop/campaign audience. | Conditional | Complete | No further action required before launch. | Engineering |
 | 7. Launch | Analytics | Google Analytics 4 (tag G-L1BT87PKXV) added to all 25 HTML files — React app root and all static marketing/blog pages. | Conditional | Complete | No further action required before launch. | Engineering |
+
+## PRD: Lifetime Local Mode and Cloud Hosting Split
+
+### Product Decision
+
+Lifetime users should keep permanent access to the YOW app, local project editing, import, and export. They should not receive indefinite Supabase cloud storage, sync, hosted backups, or file hosting unless they are within the included hosting period, renew hosting, or hold Founder status.
+
+YOW should be positioned as ownership-first software with optional hosted cloud services:
+
+- App access: lifetime for Lifetime and Founder purchasers.
+- Cloud Mode: Supabase-backed sync, hosted project data, storage, backups, and cross-device access.
+- Local Mode: browser/device-backed projects, import/export, and no cloud sync/storage writes.
+
+### Non-Negotiable User Promise
+
+Users must never feel that their writing is held hostage. A lapsed hosting entitlement may disable cloud sync/storage, but it must preserve:
+
+- app access,
+- local project editing,
+- full project export,
+- backup import/restore,
+- clear account status messaging,
+- a paid path to restore cloud hosting.
+
+### Entitlement Rules
+
+| User State | App Access | Cloud Mode | Local Mode | Export |
+| --- | --- | --- | --- | --- |
+| Free | Yes | Limited to free plan rules | Yes | Yes |
+| Monthly active | Yes | Yes while subscribed | Yes | Yes |
+| Monthly cancelled/expired | Yes, per free/read-only rules | No paid cloud entitlement after billing period | Yes | Yes |
+| Lifetime within included hosting | Yes | Yes until included hosting ends | Yes | Yes |
+| Lifetime hosting lapsed | Yes | No project writes/uploads/sync after grace period | Yes | Yes |
+| Lifetime hosting renewed | Yes | Yes until renewal expires | Yes | Yes |
+| Founder | Yes | Yes, lifetime Cloud Mode with fair-use/storage cap | Yes | Yes |
+
+### Implementation Phases
+
+1. Entitlement model
+   - Add explicit hosted-service status separate from app licence status.
+   - Track `app_license_status`, `cloud_hosting_status`, `cloud_hosting_expires_at`, `cloud_grace_expires_at`, and plan key in account metadata or profile data.
+   - Treat Founder as lifetime app + lifetime Cloud Mode, bounded by published storage/fair-use limits.
+
+2. Local Mode foundation
+   - Ensure the app can run from the static frontend with no Supabase project writes.
+   - Store Local Mode projects in browser localStorage/IndexedDB using the existing local-first store path where possible.
+   - Keep create/edit/delete/import/export available for local projects.
+   - Disable cloud-only features with clear inactive states rather than broken controls.
+
+3. Cloud-to-local transition
+   - Add a guided export/import flow for Lifetime users approaching hosting expiry.
+   - Before expiry: show warnings and offer hosting renewal.
+   - During grace period: allow read/export of cloud projects and preferably one-click "download all projects" backup.
+   - After grace period: stop cloud writes/uploads/sync; preserve app access and Local Mode.
+
+4. Storage and cost controls
+   - Keep published storage caps per plan.
+   - Prevent lapsed users from uploading new files to Supabase Storage.
+   - Decide whether expired cloud data is archived, retained read-only for a fixed period, or deleted after notice; this decision must be reflected in Terms and pricing FAQ before paid launch.
+   - Add operational reporting for storage by plan/status so Lifetime and Founder liabilities are visible.
+
+5. Billing and renewal
+   - Keep Lifetime purchase separate from cloud hosting renewal.
+   - Add a hosting-renewal checkout path for lapsed or soon-to-lapse Lifetime users.
+   - On successful renewal, restore Cloud Mode immediately and set the next hosting expiry date.
+   - Avoid language that says the lifetime app licence expired.
+
+6. UX and copy
+   - Name the non-hosted state "Local Mode."
+   - Account settings should show separate statuses: App Licence and Cloud Hosting.
+   - Pricing, FAQ, Terms, and checkout copy must clearly distinguish lifetime app access from hosted cloud services.
+   - Suggested message: "Your lifetime licence is active. Cloud hosting is inactive, so YOW is running in Local Mode. Your projects are stored on this device unless you export a backup or renew hosting."
+
+7. QA and launch checks
+   - Test active Lifetime, lapsed Lifetime, renewed Lifetime, Founder, active Monthly, cancelled Monthly, and Free.
+   - Verify lapsed Lifetime users can open the app, create/edit local projects, import backups, export backups, and cannot write/upload/sync to Supabase.
+   - Verify no data loss during cloud-to-local transition.
+   - Verify pricing and legal pages do not imply indefinite free cloud hosting for Lifetime users.
+
+### Open Product Decisions
+
+- Hosting contribution price: decided at £6/year after the included hosting period because 50p/month is easy to understand and keeps the renewal feeling accessible.
+- Grace period length: recommended 60-90 days after included hosting ends.
+- Expired cloud data policy: archive/read-only/delete timing must be decided before launch.
+- Founder cap: confirm storage/fair-use limit even with lifetime Cloud Mode.
+- Offline licence: decide whether Local Mode requires occasional online licence verification or can rely on cached entitlement.
+
+### Acceptance Criteria
+
+- Lifetime users can continue using YOW in Local Mode after hosted cloud entitlement expires.
+- Lapsed Lifetime users generate no ongoing Supabase project storage writes or file uploads.
+- Users can export all cloud projects before cloud access is removed.
+- Account, pricing, FAQ, and legal copy clearly explain the app licence/cloud hosting split.
+- Founder lifetime hosting is bounded by clear storage and fair-use limits.
+- Manual QA confirms no writing/worldbuilding data is lost during entitlement transitions.
 
 ## Onboarding System
 
@@ -416,7 +513,7 @@ Integration:
 
 QA deferred: wizard create flow on a real fresh account; checklist milestone accuracy; library and section tour spotlight positioning at mobile/tablet/desktop widths; section tour completion persistence.
 
-## Post-Launch
+## Future/Excluded
 
 | Feature | Requirement / Acceptance Criteria | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- |
@@ -424,20 +521,20 @@ QA deferred: wizard create flow on a real fresh account; checklist milestone acc
 | Scroll-to-centre writing mode | Active scene can be brought into comfortable focus without breaking navigation or layout. | Implemented partially | Keep as polish unless it is already stable. | Product |
 | Novel finalized draft reader | Novel projects can copy the current manuscript into timestamped, uneditable finalized draft snapshots and view them in a separate reader layout optimized for novel-style reading, with scroll and page-flip style viewing modes. | Implemented, needs QA | QA: finalise a novel draft, verify the working manuscript remains editable, verify the finalized copy is selectable/read-only, verify scroll/pages switching and previous/next page controls, and verify non-novel project types do not show the Finalise action. | Product/Engineering/QA |
 | Passage comments/notes | Users can attach notes to a scene or passage-level context without creating data loss or editor instability. | Partial | De-scope passage-level annotation if scene notes are enough for launch. | Product |
-| Factions and family grouping | Grouping supports the novelist workflow without blocking core character/lore use. | Implemented/optional | Factions now have `saveFaction`/`deleteFaction` wired through `saveSeriesSyncedItem`/`deleteSeriesSyncedItem` (matching characters/locations); `factionsRef` tracks live state for sync; deleting a faction clears `factionId` on affected characters. Keep visible only if stable; otherwise move to post-launch polish. | Product/Engineering |
-| EPUB-ready structure | Internal manuscript structure does not prevent future EPUB export; full EPUB generation is not required for MVP. | Preparation only | Move full EPUB export post-launch unless already complete. | Product/Engineering |
-| Stylised encyclopedia export | Not required for MVP unless it is part of the paid launch promise. | Scope trap | Move to post-launch; keep basic project export as the launch requirement. | Product |
-| Advanced map builder | Map features do not block core launch safety unless required by campaign or worldbuilding acceptance criteria. See PRD: Map Builder Rebuild below for full scope. Rebuild slices implemented: gentler bounded wheel zoom, visible undo/redo, transaction-style history for object edits, drag threshold to prevent accidental moves, Space/Alt temporary pan behavior, "Stamps" tool label, closed Rivers/Seas paths becoming filled water masses, hover highlights, clearer selection/point/rotate handles, mode-aware canvas cursor cues, active brush toggles back to Select when clicked again, a tabbed Object/Layers/Map inspector with real layer creation, active-layer placement, object reassignment, layer visibility/lock controls, an object stack, map type selected at creation and read-only afterward, removal of the weak Mountain line tool from creation UI in favour of the Mountains stamp, a reference-aligned 16-item fantasy stamp set using extracted source-image PNG icons, richer HTML/PDF map text plates that summarize layers, object counts, labels/places, regions, routes/water, stamps, and land/rooms from both legacy and object-map data, and generated object-map preview plates for HTML/PDF exports when no saved map image exists. | Phase 1 partial + Phase 2 partial + Phase 3 partial + Phase 4 partial + Phase 5 partial implementation, QA deferred | Required QA is tracked in [docs/QA_PLAN.md](docs/QA_PLAN.md). Continue with responsive safety and deeper export/restore verification. | Product/Design/Engineering |
+| Factions and family grouping | Grouping supports the novelist workflow without blocking core character/lore use. | Implemented/optional | Factions now have `saveFaction`/`deleteFaction` wired through `saveSeriesSyncedItem`/`deleteSeriesSyncedItem` (matching characters/locations); `factionsRef` tracks live state for sync; deleting a faction clears `factionId` on affected characters. Keep visible at launch only if stable; otherwise explicitly mark as Future/Excluded polish. | Product/Engineering |
+| EPUB-ready structure | Internal manuscript structure does not prevent future EPUB export; full EPUB generation is not currently part of the final launch promise. | Preparation only | Keep full EPUB export Future/Excluded unless the user decides it belongs in final launch. | Product/Engineering |
+| Stylised encyclopedia export | Not part of the current final launch promise unless product explicitly adds it. | Scope trap | Keep basic project export as the launch requirement unless stylised encyclopedia export is promoted by product decision. | Product |
+| Advanced map builder | Map features do not block core launch safety unless required by campaign or worldbuilding acceptance criteria. See PRD: Map Builder Rebuild below for full scope. Rebuild slices implemented: gentler bounded wheel zoom, visible undo/redo, transaction-style history for object edits, drag threshold to prevent accidental moves, Space/Alt temporary pan behavior, "Stamps" tool label, closed Rivers/Seas paths becoming filled water masses, hover highlights, clearer selection/point/rotate handles, mode-aware canvas cursor cues, active brush toggles back to Select when clicked again, a canvas-first workspace with floating map navigation, floating command bar, floating tool palette, floating inspector, and a dedicated New Map modal, a tabbed Object/Layers/Map inspector with real layer creation, active-layer placement, object reassignment, layer visibility/lock controls, an object stack, map type selected at creation and read-only afterward, removal of the weak Mountain line tool from creation UI in favour of the Mountains stamp, a reference-aligned 16-item fantasy stamp set using extracted source-image PNG icons, richer HTML/PDF map text plates that summarize layers, object counts, labels/places, regions, routes/water, stamps, and land/rooms from both legacy and object-map data, and generated object-map preview plates for HTML/PDF exports when no saved map image exists. | Phase 1 partial + Phase 2 partial + Phase 3 partial + Phase 4 partial + Phase 5 partial implementation, QA deferred | Required QA is tracked in [docs/QA_PLAN.md](docs/QA_PLAN.md). Continue with responsive safety and deeper export/restore verification. | Product/Design/Engineering |
 | Analytics | Google Analytics 4 implemented 2026-06-13 (tag G-L1BT87PKXV, added to all 25 HTML pages). Replaces the Posthog/deferred plan. | Complete | No further action needed. | Engineering |
 | Theme system v2 | New visual identity system with atmosphere token architecture, per-theme radius/shadow/glow personalities, and all studio vars auto-adapting via CSS var resolution. Theme editor now groups dark and light preset themes, uses compact selectors with a dedicated live preview, exposes configurable custom colours, corner roundness, and atmosphere strength, and now derives custom-theme atmosphere/paper/sidebar/accent-contrast tokens from the edited palette. Project/library screens now use explicit project surface roles for shell, standard panel, soft panel, raised panel, borders, hover, selected states, and tab/navigation icon contrast to reduce random-looking colour shifts. | Implemented, needs authenticated QA | QA AccountSettings theme editor while signed in: switch dark/light presets, edit each custom colour, adjust roundness and atmosphere strength, save to profile, refresh, sign out/in, and verify the live preview, library top bar, active project hero, overview cards, insight cards, manuscript action controls, primary buttons, studio/editor surfaces, tab/navigation icons, and saved profile theme remain in sync with legible text. | Design/Engineering |
-| Collaboration | Multi-user editing and sharing are excluded from MVP. | Post-launch | Document as future roadmap only. | Product |
-| Marketplace/community | Marketplace and public community systems are excluded from MVP. | Post-launch | Avoid launch copy that implies community availability. | Product |
-| Mobile apps | Native mobile apps are excluded; responsive web usability is the MVP requirement. | Post-launch | Focus mobile effort on web responsiveness. | Product |
-| Advanced AI agents | Agentic workflows are excluded; MVP AI stays bounded and user-directed. | Post-launch | Define one or two safe AI assistance actions for launch. | Product/AI |
+| Collaboration | Multi-user editing and sharing are excluded from the final launch product. | Future/Excluded | Document as future roadmap only. | Product |
+| Marketplace/community | Marketplace and public community systems are excluded from the final launch product. | Future/Excluded | Avoid launch copy that implies community availability. | Product |
+| Mobile apps | Native mobile apps are excluded; responsive web usability is the final launch requirement. | Future/Excluded | Focus mobile effort on web responsiveness. | Product |
+| Advanced AI agents | Agentic workflows are excluded; launch AI stays bounded and user-directed. | Future/Excluded | Define one or two safe AI assistance actions for launch. | Product/AI |
 | Project-type manuscript templates | The template picker in manuscript mode now filters templates by active project type. Novel/Novella: Three Act, Hero's Journey, Save the Cat, Romantasy, Mystery/Thriller, Episodic TV, Blank. Short Story adds: Freytag's Pyramid, Flash Fiction, In Medias Res. Comic: Multi-Issue Arc, Standalone Graphic Novel. D&D Campaign: Three-Arc Campaign, One-Shot. TTRPG: Three-Act Campaign, One-Shot/Convention, Horror Campaign. Blank/Custom is universal. `getTemplatesForProjectType()` handles filtering; `TemplateModal` receives `projectType` prop from `Manuscript`. Retired type templates (Screenplay, Play, TV Show, Video Game) are not shown. | Implemented 2026-06-13 | No further QA gate required; template picker adapts automatically when a project is opened. | Engineering |
 | AI chat history — pin & category | All AI chat sessions are persisted per project in localStorage. Sessions can be pinned (appear first) and tagged with a free-text category; category filter chips appear in the session list when categories exist. | Implemented | No further action needed for launch. | Engineering |
 | Ideas board card expand | Idea cards with body text over ~200 chars now show a 3-line collapsed preview with an always-visible inline Show more / Show less button, so long captures (e.g. imported NovelCrafter snippets) are readable without requiring hover or card selection. | Implemented | No further action needed for launch. | Engineering |
-| Public sharing | Public project/profile sharing is excluded from MVP unless needed for launch marketing. | Post-launch | Keep private workspace promise clear. | Product |
+| Public sharing | Public project/profile sharing is excluded from the final launch product unless needed for launch marketing. | Future/Excluded | Keep private workspace promise clear. | Product |
 | Founders directory | Public `/founders/` page listing all Founder-tier members, each with a dedicated profile page (`/founders/[slug]/`) showing bio, published works grid with covers and buy links, social/website links, and a YOW Founder badge. Index page links to individual profiles and includes a "Become a Founder" CTA. Footer link added to homepage React app. Vite dev middleware serves static HTML for marketing pages in dev. Vercel rewrites updated with explicit `/founders/` and `/founders/:slug/` rules above the catch-all. CSS variables corrected to match `marketing.css`. Founders callout added to `/about/` page. | Implemented, needs QA | QA: visit `/founders/` and a founder profile page; verify theme matches other marketing pages; verify nav, footer, and "Become a Founder" CTA link to `/pricing/`; verify Founders link in homepage footer. To add a real founder: duplicate `public/founders/example-founder/`, rename to their slug, fill in details, add a `.founder-card` to `public/founders/index.html`. | Engineering/Product |
 
 ## PRD: Map Builder Rebuild
@@ -446,7 +543,7 @@ QA deferred: wizard create flow on a real fresh account; checklist milestone acc
 
 The Map Builder should become a reliable worldbuilding and campaign-planning canvas, not a novelty drawing panel. It should let writers and GMs quickly create readable world, region, local, and interior maps; link places back to Locations; export enough visual and metadata context to be useful; and feel stable under normal editing.
 
-This remains Post-Launch unless campaign-map quality becomes part of a paid/final-launch promise. If the current version feels glitchy enough to undermine campaign/worldbuilding trust, it should be beta-labeled or hidden until the interaction-stability pass is complete.
+This remains Future/Excluded unless campaign-map quality becomes part of a paid/final-launch promise. If the current version feels glitchy enough to undermine campaign/worldbuilding trust, it should be beta-labeled or hidden until the interaction-stability pass is complete.
 
 ### Current Baseline
 
@@ -555,12 +652,12 @@ New ideas start here unless they satisfy the Feature Intake Freeze rules.
 
 | Feature | Why Parked | Decision Needed |
 | --- | --- | --- |
-| Voice dictation | Public roadmap exploration item; not novel-launch critical. | Revisit after MVP stability. |
+| Voice dictation | Public roadmap exploration item; not currently accepted into final launch scope. | Revisit after launch scope is stable. |
 | Publishing platform integrations | Public roadmap exploration item; expands surface area beyond launch. | Define target platforms after launch. |
-| AI-assisted developmental editing feedback | Larger AI workflow than bounded MVP suggestions. | Revisit after MVP AI behavior is stable. |
-| Native desktop app | Not required while responsive web is the MVP requirement. | Revisit after web launch. |
+| AI-assisted developmental editing feedback | Larger AI workflow than bounded launch AI suggestions. | Revisit after launch AI behavior is stable. |
+| Native desktop app | Not required while responsive web is the launch requirement. | Revisit after web launch. |
 | Series management and cross-project references | Useful, but expands data model and project scoping. | Revisit after single-novel workflow is reliable. |
-| Template library — extended marketplace / community-submitted templates | Further template content beyond the built-in per-type set is a product/community layer, not a launch blocker. Built-in project-type manuscript templates shipped 2026-06-13; extended/user-submitted library remains post-launch. | Revisit post-launch. |
+| Template library — extended marketplace / community-submitted templates | Further template content beyond the built-in per-type set is a product/community layer, not a launch blocker. Built-in project-type manuscript templates shipped 2026-06-13; extended/user-submitted library remains Future/Excluded. | Revisit after final launch. |
 
 ## Security
 
@@ -575,12 +672,13 @@ Use this section for confirmed defects only. Suspected issues stay in the releva
 
 | Bug | Impact | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- |
+| Map page fails with `MAP_TYPE_OPTIONS` error | Map Builder could fail to load when map normalization runs. Fixed: `mapUtils.js` now imports `MAP_TYPE_OPTIONS` before using it in `normalizeMapType`. | Fixed | Verify Map Builder opens on an existing and newly created map during the next browser QA pass. | Engineering/QA |
 | Project deletion does not persist after logout | Data integrity — deleted projects reappear on next login. Root cause: `user_data.novels` is updated only via the 2-second debounced `saveAppData`; logging out within that window left the deleted project in `user_data` even though its `project_data` row was removed. Fixed: `deleteNovel` now captures the filtered novels list and calls `saveAppData` immediately alongside `deleteProjectData`. | Fixed | Verify: delete a project, immediately log out, log back in, confirm project is gone. | Engineering/QA |
 | Newly created series never appeared in the library | UX — series creation appeared broken; series WAS saved but the library filtered to only series with ≥1 project assigned, so empty series were invisible. Fixed: library now renders all series including empty ones. | Fixed | No further action needed. | Engineering |
 | Series dashboard uses book-specific language for all project types | UX mislead — series containing D&D Campaigns, Comic projects, etc. showed "books", "Add Book", "Books in Series", "Characters in Multiple Books", etc. Fixed: all book-specific copy replaced with "project/projects" in `SeriesDashboard` and the `SeriesCard` count badge; non-novel type label shown as secondary metadata in Projects tab and Overview table. | Fixed | No further action needed. | Engineering |
 | Autosave reliability not proven across refresh/navigation/rapid typing | Potential data loss; launch blocker if reproduced. | QA passed | Immediate refresh after typed input and saved records now preserves fresher browser data instead of letting older account data overwrite it. Keep covered in launch regression tests. | Engineering/QA |
 | Restore flow | YOW backup restore is now routed through the unified Import modal (Import ZIP option). Needs end-to-end QA to confirm all project data (scenes, characters, lore, timeline, chapters) round-trips correctly through export → Import ZIP → restore. | Implemented, needs QA | Export a project, use Import ▾ → Import ZIP to restore it, compare content against original. | Engineering/QA |
-| Responsive layout not proven across MVP screens | Could make mobile/tablet launch path unusable. | Mitigation added, needs QA | Re-test dashboard tiles and Status Queue width, mobile index reset/collapse, Map Builder disabled state, manuscript, account/settings, and edit modals across mobile/tablet widths. | Design/QA |
+| Responsive layout not proven across launch screens | Could make mobile/tablet launch path unusable. | Mitigation added, needs QA | Re-test dashboard tiles and Status Queue width, mobile index reset/collapse, Map Builder disabled state, manuscript, account/settings, and edit modals across mobile/tablet widths. | Design/QA |
 | Write button hidden on compact layouts | Users may be unable to find or enter the manuscript workspace on mobile/tablet. | Mitigation added, needs QA | The existing Write button now has a compact top-bar placement instead of disappearing at narrow widths. Verify desktop and compact layouts both expose the same Write action. | Design/QA |
 | Story outline edits can fail rapid refresh testing | Potential data loss if outline structure/synopsis edits refresh before background persistence runs. | QA passed | Act, chapter, scene add/update/delete/reorder operations write local storage synchronously before React state scheduling; refresh/import prefers fresher browser data over older account data. User QA confirmed rapid-refresh persistence. | Engineering/QA |
 | Refresh can lose the current app page or settings panel | Users may return to the wrong workspace after refresh, making settings and project pages feel unsaved. | QA automated | `tests/e2e/url-persistence.spec.js` covers writing mode, project overview, worldbuilding section, direct URL navigation, and content preservation across URL reload. All 5 tests pass in CI. Account settings tab URL round-trip still needs manual QA (requires real auth). | Engineering/QA |
@@ -594,8 +692,8 @@ Use this section for confirmed defects only. Suspected issues stay in the releva
 
 When editing this roadmap:
 
-- Keep MVP Required limited to blocker-level launch work.
-- Move non-blocking polish to Post-Launch.
+- Keep Launch Required aligned to the final paid product promise.
+- Move only explicitly excluded or future-business work to Future/Excluded.
 - Move unvalidated ideas to Icebox.
 - Add bugs only after reproduction or a concrete QA finding.
 - Update linked generated artifacts only after this roadmap changes, not the other way around.

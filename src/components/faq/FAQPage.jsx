@@ -6,31 +6,31 @@ const FAQ_SECTIONS = [
     heading: 'Plans & Pricing',
     items: [
       {
-        q: 'What does "Creator Lifetime" actually cover?',
-        a: "Creator Lifetime gives you permanent access to Your Own World — unlimited projects, premium exports, and all current features. It includes 3 years of cloud hosting, storage, backups and sync. After those 3 years, a small annual Cloud Hosting & Storage Renewal of £6/year keeps your data hosted and the app running. This fee is intended only to cover hosting costs, not to generate profit, and may change if provider costs materially change.",
+        q: 'What does Lifetime actually cover?',
+        a: "Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes 3 years of Cloud Mode for hosted sync, storage, and backups. After that, you can keep using Local Mode forever or renew cloud hosting for £6/year.",
       },
       {
-        q: 'What is the Cloud Hosting & Storage Renewal?',
-        a: "The Cloud Hosting & Storage Renewal is £6/year, due after your included 3-year hosting period ends. It covers the actual cost of storing and serving your data — not new features or development. If you choose not to renew, you can still log in and export all your projects at no charge. Founder members have lifetime cloud hosting included with no renewal fee ever.",
+        q: 'What is the cloud hosting renewal?',
+        a: "The cloud hosting renewal is £6/year, due only after the included 3-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups. If you choose not to renew, your lifetime app licence remains active and YOW switches to Local Mode.",
       },
       {
         q: 'What happens if I don\'t renew cloud hosting?',
-        a: "You'll receive 30 days notice before your included hosting period or renewal expires. If you don't renew, your account moves to a restricted screen where you can still log in and export all your data — no payment required. Your data is never deleted. Renew any time to restore full access instantly.",
+        a: "You keep access to the app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Cloud sync, hosted backups, and Supabase uploads pause until you renew Cloud Mode.",
       },
       {
-        q: 'Do monthly subscribers pay a Cloud Hosting & Storage Renewal?',
-        a: 'No. Monthly subscribers pay £10/month which covers everything including cloud hosting, storage, backups and sync. The annual renewal only applies to Lifetime plan holders after their included 3-year period.',
+        q: 'Do monthly subscribers pay a cloud hosting renewal?',
+        a: 'No. Monthly subscribers pay £12/month, which includes Cloud Mode while subscribed. The annual renewal only applies to Lifetime plan holders after their included hosting period.',
       },
       {
         q: 'How many Founder slots are there?',
-        a: "Founder membership is limited to a small number of slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. Founders have lifetime cloud hosting included with no annual renewal fee, ever.",
+        a: "Founder membership is limited to a small number of slots globally. Once they're gone, they're gone. Founders have lifetime Cloud Mode included within the published storage and fair-use cap.",
       },
       {
         q: 'What happens to my data if I downgrade to Free?',
         a: "Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable. You'll just designate one active project to edit — everything else becomes view-only until you upgrade again.",
       },
       {
-        q: 'Can I cancel my Monthly Creator subscription?',
+        q: 'Can I cancel my Monthly subscription?',
         a: "Yes. Cancel any time from your account settings via the billing portal. You'll retain full access until the end of your current billing period.",
       },
       {
@@ -69,7 +69,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Where is my data stored?',
-        a: "Your data is stored securely in the cloud and syncs across all your devices. You own your work — you can export your manuscript and project data at any time.",
+        a: "In Cloud Mode, your data is stored securely in the cloud and syncs across your devices. In Local Mode, projects are stored on your device. You own your work either way and can export your manuscript and project data at any time.",
       },
       {
         q: 'Can I export my manuscript?',

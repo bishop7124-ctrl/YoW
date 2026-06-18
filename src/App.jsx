@@ -7,7 +7,6 @@ import SeriesDashboard from './components/series/SeriesDashboard'
 import Layout from './components/Layout'
 import LoginPage from './components/auth/LoginPage'
 import SignedOutPage from './components/auth/SignedOutPage'
-import MaintenanceLapsedScreen from './components/auth/MaintenanceLapsedScreen'
 import AIPanel from './components/ai/AIPanel'
 import AccountSettings from './components/account/AccountSettings'
 import HelpContact from './components/help/HelpContact'
@@ -153,7 +152,12 @@ function AppInner() {
   const membership = getMembership(user)
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
-  const store = useStore(userId, { readOnly: membership.isReadOnly, freeProjectId: membership.freeProjectId, storageQuotaBytes: devStorageExceeded ? 1 : membership.storageQuotaBytes })
+  const store = useStore(userId, {
+    readOnly: membership.isReadOnly,
+    freeProjectId: membership.freeProjectId,
+    storageQuotaBytes: devStorageExceeded ? 1 : membership.storageQuotaBytes,
+    cloudSyncEnabled: membership.canSyncCloud,
+  })
   const { importData, finishRemoteLoad, clearData } = store
   const [dataLoading, setDataLoading] = useState(false)
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
@@ -445,10 +449,6 @@ function AppInner() {
     )
   }
 
-  if (membership.isMaintenanceLapsed) {
-    return <MaintenanceLapsedScreen store={store} user={user} />
-  }
-
   if (!user || recoveryMode) {
     if (signedOut && !recoveryMode) return (
       <>
@@ -523,6 +523,21 @@ function AppInner() {
               Plan settings
             </button>
           )}
+        </div>
+      )}
+      {membership.isLocalMode && (
+        <div role="status" className="membership-toast">
+          <span>Your lifetime licence is active. Cloud hosting is inactive, so YOW is running in Local Mode on this device.</span>
+          <button
+            type="button"
+            className="membership-toast-link"
+            onClick={() => {
+              setAccountTab('membership')
+              setAccountOpen(true)
+            }}
+          >
+            Cloud settings
+          </button>
         </div>
       )}
       {showFreeSelector && (
@@ -600,6 +615,7 @@ function AppInner() {
           seriesContext={seriesContext}
           onOpenSeries={seriesContext ? handleBackToSeries : null}
           onGoHome={() => { store.setActiveNovelId(null); setViewMode('manager') }}
+          tourStore={tourStore}
         />
         {accountPage}
         {globalOverlays}

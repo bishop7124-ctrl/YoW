@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { PLANS, FOUNDER_SLOTS_TOTAL } from '../../utils/membership'
+import { HOSTING_INCLUDED_YEARS, HOSTING_RENEWAL_FEE_GBP, PLANS, FOUNDER_SLOTS_TOTAL } from '../../utils/membership'
 import { supabase } from '../../supabase'
 import MarketingNav from '../marketing/MarketingNav'
 
@@ -33,7 +33,8 @@ const FEATURE_ROWS = [
   { label: 'Founder badge',           free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
   { label: 'Feature your debut work', free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
   { label: 'Priority feature input',  free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Cloud hosting included',   free: 'None',      creator: '3 years, then £6/yr', founder: 'Lifetime', monthly: 'While subscribed' },
+  { label: 'Mode after hosting ends',  free: 'Local + free cloud limits', creator: 'Local Mode forever', founder: 'Cloud Mode', monthly: 'Local after cancellation' },
+  { label: 'Cloud hosting included',   free: 'Free limits', creator: `${HOSTING_INCLUDED_YEARS} years, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime fair-use', monthly: 'While subscribed' },
   { label: 'Support tier',            free: 'Community', creator: 'Priority',  founder: 'Priority',  monthly: 'Priority'  },
 ]
 
@@ -42,31 +43,31 @@ const FEATURE_ROWS = [
 // --------------------------------------------------------------------------
 const FAQ_ITEMS = [
   {
-    q: 'What does "Creator Lifetime" actually cover?',
-    a: 'Creator Lifetime gives you permanent access to Your Own World — unlimited projects, premium exports, and all current features. It includes 3 years of cloud hosting, storage, backups and sync. After those 3 years, a small annual Cloud Hosting & Storage Renewal of £6/year keeps your data hosted and the app running. This fee is intended only to cover hosting costs, not to generate profit, and may change if provider costs materially change.',
+    q: 'What does Lifetime actually cover?',
+    a: `Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for hosted sync, storage, and backups. After that, you can keep using Local Mode forever or renew cloud hosting for £${HOSTING_RENEWAL_FEE_GBP}/year.`,
   },
   {
-    q: 'What is the Cloud Hosting & Storage Renewal?',
-    a: 'The Cloud Hosting & Storage Renewal is £6/year, due after your included 3-year hosting period ends. It covers the actual cost of storing and serving your data — not new features or ongoing development. If you choose not to renew, you can still log in, export all your data, and decide later. Founder members have cloud hosting included for life with no renewal fee ever.',
+    q: 'What is the cloud hosting renewal?',
+    a: `The cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year, due only after the included ${HOSTING_INCLUDED_YEARS}-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups. If you choose not to renew, your lifetime app licence remains active and YOW switches to Local Mode.`,
   },
   {
     q: 'What happens if I don\'t renew cloud hosting?',
-    a: 'You\'ll receive a 30-day notice before your included hosting period or renewal expires. If you don\'t renew, your account moves to a restricted screen where you can still log in and export all your projects — no payment required to retrieve your work. Your data is never deleted. Renew any time to restore full access instantly.',
+    a: 'You keep access to the app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Cloud sync, hosted backups, and Supabase uploads pause until you renew Cloud Mode.',
   },
   {
     q: 'How many Founder slots are there?',
-    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they're gone, they're gone — the Founder tier will not be sold again. Founders have lifetime cloud hosting included, so there's never anything more to pay.`,
+    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they're gone, they're gone. Founders have lifetime Cloud Mode included within the published storage and fair-use cap.`,
   },
   {
-    q: 'Do monthly subscribers pay a Cloud Hosting & Storage Renewal?',
-    a: 'No. Monthly subscribers pay £10/month which covers everything including cloud hosting, storage, backups and sync. The annual renewal only applies to Lifetime plan holders after their included 3-year period.',
+    q: 'Do monthly subscribers pay a cloud hosting renewal?',
+    a: `No. Monthly subscribers pay ${PLANS.find(p => p.key === 'premium_monthly')?.priceLabel}/month, which includes Cloud Mode while subscribed. The annual renewal only applies to Lifetime plan holders after their included hosting period.`,
   },
   {
     q: 'What happens to my data if I downgrade to Free?',
     a: 'Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable. You\'ll just designate one active project to edit — everything else becomes view-only until you upgrade again.',
   },
   {
-    q: 'Can I cancel my Monthly Creator subscription?',
+    q: 'Can I cancel my Monthly subscription?',
     a: 'Yes. Cancel any time from your account settings via the billing portal. You\'ll retain full access until the end of your current billing period.',
   },
   {
@@ -370,7 +371,9 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
     const prevDesc  = document.querySelector('meta[name="description"]')?.content
     document.title  = 'Pricing — Your Own World | Worldbuilding & Writing Software'
     const descEl = document.querySelector('meta[name="description"]')
-    if (descEl) descEl.setAttribute('content', 'Simple, honest pricing for Your Own World — the all-in-one worldbuilding and writing platform. Free plan, Creator Lifetime from £199 (includes 3 years cloud hosting), or £10/month.')
+    const monthly = PLANS.find(p => p.key === 'premium_monthly')
+    const lifetime = PLANS.find(p => p.key === 'premium_plus_lifetime')
+    if (descEl) descEl.setAttribute('content', `Simple, honest pricing for Your Own World — Free, Monthly at ${monthly?.priceLabel}/month, Lifetime at ${lifetime?.priceLabel}, and Founder.`)
 
     return () => {
       removeSchema('ld-pricing-page')
@@ -422,9 +425,9 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   const displayPlans = [
     PLANS.find(p => p.key === 'free'),
+    PLANS.find(p => p.key === 'premium_monthly'),
     PLANS.find(p => p.key === 'premium_plus_lifetime'),
     PLANS.find(p => p.key === 'founder'),
-    PLANS.find(p => p.key === 'premium_monthly'),
   ].filter(Boolean)
 
   const pageBg = 'var(--bg-main)'
@@ -467,8 +470,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             color: 'var(--text-muted)', lineHeight: 1.7,
             maxWidth: 560, margin: '0 auto 32px',
           }}>
-            Start free. Own it outright with a single payment — or subscribe monthly. Creator Lifetime
-            includes 3 years of cloud hosting, then a small annual renewal to cover hosting costs.
+            Start free. Subscribe monthly if you need flexibility, or choose Lifetime if you want
+            permanent app access with Local Mode forever and Cloud Mode included for three years.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
@@ -642,7 +645,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           }}>
             If you're committed to building your world and want to own your tools outright,
             a lifetime plan is a better investment. If you're still exploring or your needs
-            change, Monthly Creator gives you full access with no commitment.
+            change, Monthly gives you full access with no commitment.
           </p>
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',

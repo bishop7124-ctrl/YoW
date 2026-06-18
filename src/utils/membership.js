@@ -1,3 +1,5 @@
+import { BILLING } from './billingConfig'
+
 export const TRIAL_DAYS = 28
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -17,10 +19,10 @@ export const PLAN_STORAGE_BYTES = {
 // ── Billing config ────────────────────────────────────────────────────────────
 // These values drive all client-side copy. Stripe is the source of truth for
 // actual amounts — update both here and your Stripe product if the fee changes.
-export const HOSTING_RENEWAL_FEE_GBP = 6          // £/year shown to users
-export const HOSTING_INCLUDED_YEARS  = 3          // years of cloud hosting included with Lifetime
-export const HOSTING_RENEWAL_WARNING_DAYS = 30    // warn this many days before renewal is due
-export const FOUNDER_SLOTS_TOTAL = 100            // also enforced server-side via app_config
+export const HOSTING_RENEWAL_FEE_GBP = BILLING.hostingRenewalPrice
+export const HOSTING_INCLUDED_YEARS = BILLING.hostingIncludedYears
+export const HOSTING_RENEWAL_WARNING_DAYS = BILLING.hostingRenewalWarningDays
+export const FOUNDER_SLOTS_TOTAL = BILLING.founderSlotsTotal
 
 // Legacy aliases kept so any code still referencing the old names doesn't break.
 export const MAINTENANCE_FEE_GBP = HOSTING_RENEWAL_FEE_GBP
@@ -49,22 +51,23 @@ export const PLANS = [
   },
   {
     key: 'premium_plus_lifetime',
-    label: 'YOW Creator Lifetime',
-    price: 199,
+    label: 'Lifetime',
+    price: BILLING.lifetimePrice,
     interval: 'one_time',
-    priceLabel: '£199',
+    priceLabel: `£${BILLING.lifetimePrice}`,
     priceSuffix: 'once',
     storageLabelShort: '8 GB',
-    description: 'Own YOW outright. One payment, unlimited projects, no subscription.',
-    longDescription: `Pay once and own the platform as it stands. Unlimited projects, premium exports, and all current features. Includes ${HOSTING_INCLUDED_YEARS} years of cloud hosting, storage, backups and sync. After that, cloud access renews at £${HOSTING_RENEWAL_FEE_GBP}/year — a small fee to cover ongoing hosting costs, not to generate profit.`,
+    description: 'Own the YOW app outright. Local Mode is permanent; cloud hosting is included for 3 years.',
+    longDescription: `Pay once for permanent app access, unlimited local projects, premium exports, and all current features. Includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for sync, hosted storage, and backups. After that, you can keep using Local Mode forever or renew cloud hosting at £${HOSTING_RENEWAL_FEE_GBP}/year.`,
     features: [
       'Unlimited projects',
+      'Permanent Local Mode access',
       '8 GB storage',
       'Premium exports (DOCX, PDF, ZIP)',
       'Bring-your-own-key AI',
       'Priority support',
-      `${HOSTING_INCLUDED_YEARS} years of cloud hosting included`,
-      `Cloud Hosting & Storage Renewal: £${HOSTING_RENEWAL_FEE_GBP}/year after that`,
+      `${HOSTING_INCLUDED_YEARS} years of Cloud Mode included`,
+      `Cloud hosting renewal: £${HOSTING_RENEWAL_FEE_GBP}/year after that`,
       'Export your data any time',
     ],
     badge: 'Best value',
@@ -72,19 +75,19 @@ export const PLANS = [
   },
   {
     key: 'founder',
-    label: 'YOW Founder',
-    price: 499,
+    label: 'Founder',
+    price: BILLING.founderPrice,
     interval: 'one_time',
-    priceLabel: '£499',
+    priceLabel: `£${BILLING.founderPrice}`,
     priceSuffix: 'once',
     storageLabelShort: '15 GB',
-    description: 'Become a named Founder of Your Own World. Limited slots. Lifetime cloud hosting included.',
-    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited — once the slots are gone, they\'re gone. Includes lifetime cloud hosting, storage, backups and sync with no annual renewal fee, ever.',
+    description: 'Founder status, permanent app access, and lifetime Cloud Mode within fair-use limits.',
+    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited. Includes lifetime Cloud Mode for hosted storage, backups, and sync within the published fair-use cap.',
     features: [
-      'Everything in Creator Lifetime',
+      'Everything in Lifetime',
       '15 GB storage',
-      'Lifetime cloud hosting included',
-      'No annual renewal fee — ever',
+      'Lifetime Cloud Mode included',
+      'No annual hosting renewal fee',
       'Permanent Founder badge',
       'Feature your debut work on YOW',
       'Founder recognition section',
@@ -96,15 +99,17 @@ export const PLANS = [
   },
   {
     key: 'premium_monthly',
-    label: 'YOW Monthly Creator',
-    price: 10,
+    label: 'Monthly',
+    price: BILLING.monthlyPrice,
     interval: 'month',
-    priceLabel: '£10',
+    priceLabel: `£${BILLING.monthlyPrice}`,
     priceSuffix: '/month',
     storageLabelShort: '5 GB',
-    description: 'Full platform access on a flexible monthly subscription. Cancel any time.',
+    description: 'Full app access and Cloud Mode while subscribed. Cancel any time.',
     features: [
       'Full platform access',
+      'Cloud Mode while subscribed',
+      'Local Mode available',
       '5 GB storage',
       'Future updates included',
       'Cancel any time',
@@ -153,9 +158,9 @@ export function getMembership(user) {
 
   const storageQuotaBytes = PLAN_STORAGE_BYTES[activePlanKey] ?? PLAN_STORAGE_BYTES.free
 
-  // ── Cloud Hosting & Storage Renewal logic (lifetime non-founder users only) ──
+  // ── Cloud hosting renewal logic (lifetime non-founder users only) ──
   // Lifetime purchase includes HOSTING_INCLUDED_YEARS years of cloud hosting.
-  // After that, users pay an annual Cloud Hosting & Storage Renewal to keep full access.
+  // After that, users can renew Cloud Mode or continue in Local Mode.
   // Founders have cloud hosting included for life — no renewal ever.
   // app_metadata fields set by the webhook:
   //   lifetime_purchased_at  — ISO date of original lifetime purchase
@@ -164,11 +169,14 @@ export function getMembership(user) {
   let maintenanceExpiresAt = null
   let maintenanceDaysRemaining = null
   let maintenanceWarning = false
+  let cloudHostingStatus = isPaid || isTrialActive ? 'active' : 'free'
+  let cloudHostingLabel = isPaid || isTrialActive ? 'Cloud Mode' : 'Free Cloud Mode'
 
   if (isLifetime && !isFounder) {
     const purchasedAt = dateFrom(user?.app_metadata?.lifetime_purchased_at) || createdAt || now
     const includedHostingEnds = new Date(purchasedAt.getTime() + HOSTING_INCLUDED_YEARS * 365 * DAY_MS)
-    const paidUntil = dateFrom(user?.app_metadata?.maintenance_expires_at)
+    const paidUntil = dateFrom(user?.app_metadata?.cloud_hosting_expires_at)
+      || dateFrom(user?.app_metadata?.maintenance_expires_at)
 
     if (paidUntil && paidUntil > now) {
       // Renewal actively paid
@@ -185,8 +193,19 @@ export function getMembership(user) {
     } else {
       // Included period ended, no valid renewal payment
       isMaintenanceLapsed = true
+      cloudHostingStatus = 'lapsed'
+      cloudHostingLabel = 'Local Mode'
     }
+  } else if (isFounder) {
+    cloudHostingStatus = 'founder'
+    cloudHostingLabel = 'Cloud Mode'
+  } else if (!isPaid && !isTrialActive) {
+    cloudHostingStatus = 'free'
+    cloudHostingLabel = 'Free Cloud Mode'
   }
+
+  const isCloudMode = cloudHostingStatus !== 'lapsed'
+  const isLocalMode = cloudHostingStatus === 'lapsed'
 
   return {
     plan,
@@ -207,9 +226,14 @@ export function getMembership(user) {
     daysRemaining,
     storageQuotaBytes,
     isMaintenanceLapsed,
+    cloudHostingStatus,
+    cloudHostingLabel,
+    isCloudMode,
+    isLocalMode,
+    canSyncCloud: isCloudMode,
     maintenanceExpiresAt,
     maintenanceDaysRemaining,
     maintenanceWarning,
-    priceLabel: '£10/pm', // legacy compat
+    priceLabel: `£${BILLING.monthlyPrice}/pm`, // legacy compat
   }
 }

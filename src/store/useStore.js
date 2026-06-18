@@ -261,6 +261,8 @@ export function useStore(userId = null, options = {}) {
   const globalReadOnly = Boolean(options.readOnly)
   const freeProjectId = options.freeProjectId ?? null
   const storageQuotaBytes = options.storageQuotaBytes ?? null
+  const cloudSyncEnabled = options.cloudSyncEnabled !== false
+  const canSyncCloud = Boolean(userId && cloudSyncEnabled)
   const canUseInitialLocal = !userId || loadLocalOwner() === userId
   const loadInitial = (key, def) => canUseInitialLocal ? load(key, def) : def
   const [novels, setNovels] = useState(() => loadInitial('nf_novels', []))
@@ -410,14 +412,14 @@ export function useStore(userId = null, options = {}) {
 
   // Sync non-scene data to Firestore whenever anything changes
   useEffect(() => {
-    if (!userId || importing.current || !remoteReady.current) return
+    if (!canSyncCloud || importing.current || !remoteReady.current) return
     debouncedSaveAppData(userId, buildAppDataPayload({
       novels, characters, factions, locations, timeline,
       worldHistory, acts, chapters, loreEntries, ideaEntries,
       maps, activeMapByNovel, whiteboards, series, storySchedule,
       currentYear, activeNovelId, comicPages, comicPanels,
     }))
-  }, [userId, novels, characters, factions, locations, timeline,
+  }, [userId, canSyncCloud, novels, characters, factions, locations, timeline,
       worldHistory, acts, chapters, loreEntries, ideaEntries, maps, activeMapByNovel, whiteboards, series, storySchedule, currentYear, activeNovelId, comicPages, comicPanels, debouncedSaveAppData])
 
   // Bulk import from Firestore after login
@@ -431,7 +433,7 @@ export function useStore(userId = null, options = {}) {
     const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
 
-    if (shouldPreferLocal && userId) {
+    if (shouldPreferLocal && canSyncCloud) {
       const snapshot = getLocalSnapshot()
       saveAppData(userId, buildAppDataPayload(snapshot)).catch(console.error)
       ;(snapshot.scenes ?? []).forEach(scene => {
@@ -489,7 +491,7 @@ export function useStore(userId = null, options = {}) {
       importing.current = false
       remoteReady.current = true
     }, 500)
-  }, [userId])
+  }, [userId, canSyncCloud])
 
   const finishRemoteLoad = useCallback((allowSaves = true) => {
     importing.current = false
@@ -499,7 +501,7 @@ export function useStore(userId = null, options = {}) {
   const replaceData = useCallback((data) => {
     importData(data)
 
-    if (!userId) return
+    if (!canSyncCloud) return
 
     setTimeout(() => {
       saveAppData(userId, {
@@ -528,7 +530,7 @@ export function useStore(userId = null, options = {}) {
         saveSceneDoc(userId, scene).catch(console.error)
       })
     }, 700)
-  }, [importData, userId])
+  }, [importData, userId, canSyncCloud])
 
   // Clear all local state on sign-out
   const clearData = useCallback(() => {
@@ -894,7 +896,7 @@ export function useStore(userId = null, options = {}) {
       lastModified: Date.now() // eslint-disable-line react-hooks/purity
     }
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, newScene])
-    if (userId) saveSceneDoc(userId, newScene).catch(console.error)
+    if (canSyncCloud) saveSceneDoc(userId, newScene).catch(console.error)
     return newScene
   }
 
@@ -1009,11 +1011,11 @@ export function useStore(userId = null, options = {}) {
       return prev.map(s => {
         if (s.id !== sceneId) return s
         const updated = withSceneContentHistory(s, content)
-        if (userId) debouncedSaveScene(sceneId, userId, updated)
+        if (canSyncCloud) debouncedSaveScene(sceneId, userId, updated)
         return updated
       })
     })
-  }, [userId, debouncedSaveScene, commitLocal])
+  }, [userId, canSyncCloud, debouncedSaveScene, commitLocal])
 
   const deleteAct = (id) => {
     const chapterIds = chaptersRef.current.filter(c => c.actId === id).map(c => c.id)
@@ -1024,7 +1026,7 @@ export function useStore(userId = null, options = {}) {
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
         const keep = !sceneIds.includes(s.id)
-        if (!keep && userId) deleteSceneDoc(userId, s.id).catch(console.error)
+        if (!keep && canSyncCloud) deleteSceneDoc(userId, s.id).catch(console.error)
         return keep
       })
     })
@@ -1036,7 +1038,7 @@ export function useStore(userId = null, options = {}) {
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
         const keep = !sceneIds.includes(s.id)
-        if (!keep && userId) deleteSceneDoc(userId, s.id).catch(console.error)
+        if (!keep && canSyncCloud) deleteSceneDoc(userId, s.id).catch(console.error)
         return keep
       })
     })
@@ -1044,7 +1046,7 @@ export function useStore(userId = null, options = {}) {
   const deleteScene = (id) => {
     debouncedSaveScene.cancel(id)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== id))
-    if (userId) deleteSceneDoc(userId, id).catch(console.error)
+    if (canSyncCloud) deleteSceneDoc(userId, id).catch(console.error)
   }
   const updateAct = (id, data) => commitLocal(actsRef, setActs, 'nf_acts', prev => prev.map(a => a.id === id ? { ...a, ...data } : a))
   const updateChapter = (id, data) => commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
@@ -1056,7 +1058,7 @@ export function useStore(userId = null, options = {}) {
         const updated = hasContent && data.content !== s.content
           ? withSceneContentHistory({ ...s, ...data }, data.content)
           : { ...s, ...data }
-        if (userId) debouncedSaveScene(id, userId, updated)
+        if (canSyncCloud) debouncedSaveScene(id, userId, updated)
         return updated
       })
     })
@@ -1576,7 +1578,7 @@ export function useStore(userId = null, options = {}) {
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...starter.chapters])
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...starter.scenes])
-    if (userId) {
+    if (canSyncCloud) {
       starter.scenes.forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
     setNovels(prev => [...prev, novel]); setActiveNovelId(novel.id); return novel
@@ -1643,7 +1645,7 @@ export function useStore(userId = null, options = {}) {
     setChapters(prev => prev.filter(c => c.novelId !== id))
     setScenes(prev => {
       const toDelete = prev.filter(s => s.novelId === id)
-      if (userId) toDelete.forEach(s => deleteSceneDoc(userId, s.id).catch(console.error))
+      if (canSyncCloud) toDelete.forEach(s => deleteSceneDoc(userId, s.id).catch(console.error))
       return prev.filter(s => s.novelId !== id)
     })
     setLoreEntries(prev => prev.filter(e => e.novelId !== id))
@@ -1659,7 +1661,7 @@ export function useStore(userId = null, options = {}) {
       delete next[id]
       return next
     })
-    if (userId) {
+    if (canSyncCloud) {
       deleteProjectData(userId, id).catch(console.error)
       // Immediately persist updated novels list so deletion survives logout
       // (the debounced save may not fire in time if user logs out quickly)
