@@ -662,7 +662,7 @@ export default function ProjectDashboard({ store }) {
   return (
     <StudioBoard className="overview-board">
       <div className="overview-layout">
-        <header className={`overview-hero${project.coverPhoto ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
+        <header data-tour="dashboard-header" className={`overview-hero${project.coverPhoto ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
           <div className="overview-hero-copy">
             <p className="studio-kicker">{stats.projectType.label} project</p>
             <div className="overview-hero-badges">
@@ -687,11 +687,13 @@ export default function ProjectDashboard({ store }) {
               <button type="button" onClick={openProjectSettings}>Project settings</button>
             </div>
           </div>
-          <WritingProgressCard
-            words={stats.manuscriptWords}
-            target={projectWordTarget}
-            progress={projectWordProgress}
-          />
+          <div data-tour="dashboard-word-target">
+            <WritingProgressCard
+              words={stats.manuscriptWords}
+              target={projectWordTarget}
+              progress={projectWordProgress}
+            />
+          </div>
           <div className="overview-hero-side">
             <div className="overview-status">
               <span>{`Updated ${stats.updatedLabel}`}</span>
@@ -719,7 +721,7 @@ export default function ProjectDashboard({ store }) {
         {viewMode === 'overview' ? (
           <>
             {visibleRooms.length > 0 && (
-              <nav className="overview-nav" aria-label="Project areas">
+              <nav className="overview-nav" data-tour="dashboard-quick-links" aria-label="Project areas">
                 {visibleRooms.map(room => (
                   <NavCard key={room.id} room={room} stats={stats} />
                 ))}

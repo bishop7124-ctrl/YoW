@@ -165,7 +165,7 @@ export function StudioBoard({ children, className = '', variant = 'desk' }) {
   return <div className={cx('studio-board', `studio-board-${variant}`, className)}>{children}</div>
 }
 
-export function StudioSplit({ children, variant = 'notebook' }) {
+export function StudioSplit({ children, variant = 'notebook', ...rest }) {
   const [mobileIndexCollapsed, setMobileIndexCollapsed] = useState(false)
 
   useEffect(() => {
@@ -197,6 +197,7 @@ export function StudioSplit({ children, variant = 'notebook' }) {
     <div
       className={cx('studio-split', `studio-split-${variant}`, mobileIndexCollapsed && 'is-mobile-index-collapsed')}
       onClickCapture={handleClickCapture}
+      {...rest}
     >
       {mobileIndexCollapsed && (
         <button
@@ -213,9 +214,9 @@ export function StudioSplit({ children, variant = 'notebook' }) {
   )
 }
 
-export function StudioIndex({ eyebrow, title, tools, children, variant = 'index' }) {
+export function StudioIndex({ eyebrow, title, tools, children, variant = 'index', ...rest }) {
   return (
-    <aside className={cx('studio-index', `studio-index-${variant}`)}>
+    <aside className={cx('studio-index', `studio-index-${variant}`)} {...rest}>
       <div className="studio-index-head">
         <div>
           <p className="studio-kicker">{eyebrow}</p>

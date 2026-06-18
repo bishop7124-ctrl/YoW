@@ -17,6 +17,8 @@ import StoryOutline from './outline/StoryOutline'
 import ProjectDashboard from './dashboard/ProjectDashboard'
 import ScheduleCalendar from './schedule/ScheduleCalendar'
 import AITools from './aitools/AITools'
+import OnboardingTour from './onboarding/OnboardingTour'
+import { MANUSCRIPT_TOUR, CHARACTERS_TOUR, LOCATIONS_TOUR, LORE_TOUR, IDEAS_TOUR, MAP_TOUR, AI_TOOLS_TOUR, TIMELINE_TOUR, WORLDHISTORY_TOUR, FAMILYTREE_TOUR, COMIC_TOUR, OUTLINE_TOUR, DASHBOARD_TOUR, FACTIONS_TOUR } from './onboarding/tourDefinitions'
 import { getProjectType, getEnabledSections, getProjectTypeStage, ALL_SECTION_IDS } from '../constants/projectTypes'
 import { StudioFrame, StudioWorkspace, StudioTab, StudioButton, StudioEmpty } from './presentation/Studio'
 import {
@@ -818,6 +820,7 @@ export default function Layout({
   seriesContext,
   onOpenSeries,
   onGoHome,
+  tourStore,
 }) {
   const projectTypeCfg = getProjectType(store.activeNovel?.type)
   const projectTypeStage = getProjectTypeStage(store.activeNovel?.type)
@@ -829,6 +832,38 @@ export default function Layout({
 
   const [aiOpen, setAiOpen] = useState(false)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
+  const [openSectionTourId, setOpenSectionTourId] = useState(null)
+
+  const sectionTours = useMemo(() => ({
+    manuscript: MANUSCRIPT_TOUR,
+    characters: CHARACTERS_TOUR,
+    locations: LOCATIONS_TOUR,
+    lore: LORE_TOUR,
+    ideas: IDEAS_TOUR,
+    map: MAP_TOUR,
+    aitools: AI_TOOLS_TOUR,
+    timeline: TIMELINE_TOUR,
+    worldhistory: WORLDHISTORY_TOUR,
+    familytree: FAMILYTREE_TOUR,
+    comic: COMIC_TOUR,
+    outline: OUTLINE_TOUR,
+    dashboard: DASHBOARD_TOUR,
+    factions: FACTIONS_TOUR,
+  }), [])
+  const activeSectionTourId = viewMode === 'writing' ? 'manuscript' : section
+  const activeSectionTour = activeSectionTourId === 'map' && isMobileViewport
+    ? null
+    : sectionTours[activeSectionTourId]
+
+  // Auto-show tour on first visit to each section
+  useEffect(() => {
+    if (!tourStore || !activeSectionTour) return
+    if (tourStore.isTourComplete(activeSectionTourId)) return
+    // Small delay so the section content can mount and data-tour elements can appear
+    const t = setTimeout(() => setOpenSectionTourId(activeSectionTourId), 400)
+    return () => clearTimeout(t)
+  }, [activeSectionTourId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const resetStudioIndex = useCallback(() => {
     window.dispatchEvent(new Event('studio-index-reset'))
   }, [])
@@ -960,6 +995,16 @@ export default function Layout({
         topBar={null}
         utilityContent={(
           <div className="studio-utility-btns">
+            {activeSectionTour && (
+              <button
+                className="studio-utility-btn library-tour-button"
+                onClick={() => setOpenSectionTourId(activeSectionTourId)}
+                aria-label="Tour this section"
+                title="Tour this section"
+              >
+                <span>?</span>
+              </button>
+            )}
             <button
               className={`studio-utility-btn${projectSettingsOpen ? ' is-active' : ''}`}
               onClick={() => setProjectSettingsOpen(v => !v)}
@@ -1067,6 +1112,18 @@ export default function Layout({
       )}
 
       <AIPanel store={store} open={aiOpen} onClose={() => setAiOpen(false)} initialContext={initialContext} membership={membership} />
+
+      {openSectionTourId === activeSectionTourId && activeSectionTour && (
+        <OnboardingTour
+          key={activeSectionTourId}
+          steps={activeSectionTour}
+          onFinish={() => {
+            setOpenSectionTourId(null)
+            tourStore?.markTourComplete(activeSectionTourId)
+          }}
+          onSkip={() => { setOpenSectionTourId(null); tourStore?.markTourComplete(activeSectionTourId) }}
+        />
+      )}
     </>
   )
 }

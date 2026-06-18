@@ -476,7 +476,7 @@ export default function StoryOutline({ store }) {
   return (
     <div className="h-full flex flex-col bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden">
       {/* Header */}
-      <div className="studio-topbar flex-shrink-0 px-8 py-5 flex items-center justify-between">
+      <div className="studio-topbar flex-shrink-0 px-8 py-5 flex items-center justify-between" data-tour="outline-header">
         <div>
           <p className="eyebrow">Structure</p>
           <h1 className="font-serif text-2xl font-bold text-[var(--text-main)]">Story Outline</h1>
@@ -488,6 +488,7 @@ export default function StoryOutline({ store }) {
           </div>
         </div>
         <button
+          data-tour="outline-add"
           onClick={() => addAct(`${labels.level1} ${acts.length + 1}`)}
           className="btn btn-primary"
         >

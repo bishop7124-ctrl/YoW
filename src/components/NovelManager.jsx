@@ -1145,6 +1145,13 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   const userProfile = user?.user_metadata || {}
   const userName = userProfile.full_name || userProfile.name || userProfile.alias || userProfile.writer_alias || user?.displayName || user?.email?.split('@')[0] || 'User'
 
+  // Auto-show library tour on first visit
+  useEffect(() => {
+    if (!tourStore || tourStore.isTourComplete('library')) return
+    const t = setTimeout(() => setLibraryTourOpen(true), 500)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!showImportMenu) return
     const handle = (e) => { if (importMenuRef.current && !importMenuRef.current.contains(e.target)) setShowImportMenu(false) }
@@ -1674,7 +1681,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
         <OnboardingTour
           steps={LIBRARY_TOUR}
           onFinish={() => { setLibraryTourOpen(false); tourStore?.markTourComplete('library') }}
-          onSkip={() => setLibraryTourOpen(false)}
+          onSkip={() => { setLibraryTourOpen(false); tourStore?.markTourComplete('library') }}
         />
       )}
     </div>

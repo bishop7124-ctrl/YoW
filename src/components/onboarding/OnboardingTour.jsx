@@ -8,25 +8,15 @@ function getRect(selector) {
   return { top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom, right: r.right }
 }
 
-const PAD = 10
-const TIP_W = 300
+const PAD = 14
+const TIP_W = 320
+const TIP_H_EST = 200
 
-function placeTip(rect, vpW, vpH) {
-  if (!rect) return { top: vpH / 2 - 80, left: vpW / 2 - TIP_W / 2 }
-  const spaceBelow = vpH - rect.bottom
-  const spaceAbove = rect.top
-  let top, left
-
-  if (spaceBelow >= 160 || spaceBelow >= spaceAbove) {
-    top = rect.bottom + PAD
-  } else {
-    top = rect.top - PAD - 160
+function placeTip(vpW, vpH) {
+  return {
+    top: vpH / 2 - TIP_H_EST / 2,
+    left: vpW / 2 - TIP_W / 2,
   }
-
-  left = rect.left + rect.width / 2 - TIP_W / 2
-  left = Math.max(PAD, Math.min(vpW - TIP_W - PAD, left))
-  top = Math.max(PAD, Math.min(vpH - 180, top))
-  return { top, left }
 }
 
 export default function OnboardingTour({ steps, onFinish, onSkip }) {
@@ -53,7 +43,6 @@ export default function OnboardingTour({ steps, onFinish, onSkip }) {
     }
   }, [step.target])
 
-  // Scroll target into view
   useEffect(() => {
     if (!step.target) return
     const el = document.querySelector(`[data-tour="${step.target}"]`)
@@ -70,24 +59,35 @@ export default function OnboardingTour({ steps, onFinish, onSkip }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [isLast, idx, onSkip])
 
-  const tip = placeTip(rect, vpW, vpH)
+  const tip = placeTip(vpW, vpH)
 
   return (
     <div className="tour-root" role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
-      {/* Dark backdrop */}
-      <div className="tour-backdrop" onClick={onSkip} />
+      {/* Dark backdrop — not clickable to dismiss; user must use Skip or Done */}
+      <div className="tour-backdrop" />
 
-      {/* Spotlight cutout */}
+      {/* Spotlight cutout with pulsing ring */}
       {rect && (
-        <div
-          className="tour-spotlight"
-          style={{
-            top: rect.top - PAD,
-            left: rect.left - PAD,
-            width: rect.width + PAD * 2,
-            height: rect.height + PAD * 2,
-          }}
-        />
+        <>
+          <div
+            className="tour-spotlight"
+            style={{
+              top: rect.top - PAD,
+              left: rect.left - PAD,
+              width: rect.width + PAD * 2,
+              height: rect.height + PAD * 2,
+            }}
+          />
+          <div
+            className="tour-spotlight-ring"
+            style={{
+              top: rect.top - PAD,
+              left: rect.left - PAD,
+              width: rect.width + PAD * 2,
+              height: rect.height + PAD * 2,
+            }}
+          />
+        </>
       )}
 
       {/* Tooltip */}
@@ -99,7 +99,7 @@ export default function OnboardingTour({ steps, onFinish, onSkip }) {
       >
         <div className="tour-tip-header">
           <span className="tour-step-count">{idx + 1} / {steps.length}</span>
-          <button className="tour-skip" onClick={onSkip} aria-label="Skip tour">Skip</button>
+          <button className="tour-skip" onClick={onSkip} aria-label="Skip tour">Skip tour</button>
         </div>
         <h3 className="tour-tip-title">{step.title}</h3>
         <p className="tour-tip-body">{step.body}</p>

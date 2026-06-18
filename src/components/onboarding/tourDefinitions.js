@@ -121,8 +121,8 @@ export const AI_TOOLS_TOUR = [
   },
   {
     target: 'aitools-provider',
-    title: 'AI provider',
-    body: 'Connect your own API key in Account Settings → AI. YOW supports OpenAI, Anthropic, and others.',
+    title: 'Choose a tool',
+    body: 'Pick from Plot Hole Detector, Lore Conflict Checker, Character Interview, and Style Consistency. Connect your API key in Account Settings → AI to get started.',
   },
 ]
 
@@ -131,5 +131,93 @@ export const TIMELINE_TOUR = [
     target: 'timeline-header',
     title: 'Timeline',
     body: 'Plot events in chronological order and group them by era in World History. Link events to characters and locations.',
+  },
+]
+
+export const FACTIONS_TOUR = [
+  {
+    target: 'factions-header',
+    title: 'Factions & Allegiances',
+    body: 'Define the groups, organisations, and political bodies in your world — guilds, kingdoms, cults, corporations. Characters can belong to one or more factions.',
+  },
+  {
+    target: 'factions-add',
+    title: 'Create a faction',
+    body: 'Click here to create a new faction. Give it a name, symbol, and description, then assign characters to it from their profiles.',
+  },
+]
+
+export const WORLDHISTORY_TOUR = [
+  {
+    target: 'worldhistory-header',
+    title: 'Chronicle wall',
+    body: 'Record the deep history of your world — eras, wars, founding myths, apocalypses. Entries can be linked to timeline events and lore.',
+  },
+  {
+    target: 'worldhistory-new',
+    title: 'Add a chronicle entry',
+    body: 'Click New to create a history entry. Assign it an era and date so entries sort correctly on your world timeline.',
+  },
+]
+
+export const FAMILYTREE_TOUR = [
+  {
+    target: 'familytree-header',
+    title: 'Relationships',
+    body: 'See all your characters laid out by family group and generation. Connections you define on character profiles appear as links here.',
+  },
+  {
+    target: 'familytree-canvas',
+    title: 'The tree',
+    body: 'Each card is a character. Click one to select it, then use the panel on the right to add relationships, jump to their profile, or create a new character.',
+  },
+]
+
+export const COMIC_TOUR = [
+  {
+    target: 'comic-sidebar',
+    title: 'Issue structure',
+    body: 'Organise your comic into volumes and issues here. Add a volume first, then create issues inside it.',
+  },
+  {
+    target: 'comic-page-list',
+    title: 'Pages',
+    body: 'Each issue is broken into pages. Add pages, set type (splash, spread, standard), and track their status as you script and letter.',
+  },
+  {
+    target: 'comic-page-editor',
+    title: 'Page editor',
+    body: 'Click a page to open it here. Define panel layouts, write dialogue balloons, add captions, and attach script notes for your artist.',
+  },
+]
+
+export const OUTLINE_TOUR = [
+  {
+    target: 'outline-header',
+    title: 'Outline',
+    body: 'Plan your story structure before you write. Add beats, scenes, and notes here — they stay separate from your manuscript until you\'re ready.',
+  },
+  {
+    target: 'outline-add',
+    title: 'Add an act',
+    body: 'Click here to add a new act. Each act can contain chapters, and each chapter can contain scenes — build out your structure before you write.',
+  },
+]
+
+export const DASHBOARD_TOUR = [
+  {
+    target: 'dashboard-header',
+    title: 'Project overview',
+    body: 'Your project at a glance — word count progress, recent activity, and quick links to jump back into your writing.',
+  },
+  {
+    target: 'dashboard-word-target',
+    title: 'Word count goal',
+    body: 'Set a target word count in Project Settings to track your progress here. The bar fills as you write.',
+  },
+  {
+    target: 'dashboard-quick-links',
+    title: 'Quick links',
+    body: 'Jump straight to your manuscript, characters, or any section of the project from here.',
   },
 ]

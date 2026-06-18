@@ -1,9 +1,25 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { getRelType } from "../../constants/Constants";
 import { FACTION_ICONS } from "../../constants/factionIcons";
 
 const toArray = (v) => Array.isArray(v) ? v : []
+
+const NODE_W = 190;
+const NODE_H = 78;
+const X_GAP = 34;
+const Y_GAP = 92;
+const ROW_GAP = 24;
+const PAD = 28;
+
+const getTreeColumnCount = () => {
+  if (typeof window === "undefined") return 4;
+  const pagePadding = window.innerWidth >= 768 ? 48 : 24;
+  const shellWidth = Math.min(1280, window.innerWidth - pagePadding);
+  const sidebarWidth = window.innerWidth >= 1280 ? 296 : 0;
+  const available = Math.max(260, shellWidth - sidebarWidth);
+  return Math.max(1, Math.floor((available - PAD * 2 + X_GAP) / (NODE_W + X_GAP)));
+};
 
 const extractYear = (value) => {
   if (!value) return null;
@@ -19,12 +35,8 @@ export default function FamilyTree({ store }) {
   const [relType, setRelType] = useState("ally");
   const [hoveredCharId, setHoveredCharId] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+  const [treeColumnCount, setTreeColumnCount] = useState(getTreeColumnCount);
   const parsedCurrentYear = Number.isFinite(Number(currentYear)) ? Number(currentYear) : 0;
-  const NODE_W = 190;
-  const NODE_H = 78;
-  const X_GAP = 34;
-  const Y_GAP = 92;
-  const PAD = 28;
 
   const getAgeLabel = (char) => {
     const birth = extractYear(char.birthDate);
@@ -44,6 +56,13 @@ export default function FamilyTree({ store }) {
 
   const selectedCharacter = characters.find((c) => c.id === selectedCharacterId) || null;
   const hoveredCharacter = hoveredCharId ? characters.find((c) => c.id === hoveredCharId) : null;
+
+  useEffect(() => {
+    const updateColumns = () => setTreeColumnCount(getTreeColumnCount());
+    updateColumns();
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
 
   const updateHoverPosition = (target) => {
     const rect = target.getBoundingClientRect();
@@ -125,20 +144,26 @@ export default function FamilyTree({ store }) {
     const sections = Array.from(groups.entries()).map(([familyGroup, members]) => {
       const label = familyGroup === "unassigned" ? "Ungrouped Characters" : familyGroup;
       const maxGeneration = members.reduce((max, m) => Math.max(max, generations.get(m.id) ?? 0), 0);
-      const generationRows = Array.from({ length: maxGeneration + 1 }, (_, i) => i).map((generation) => ({
-        generation,
-        people: members
+      let yCursor = PAD;
+      const generationRows = Array.from({ length: maxGeneration + 1 }, (_, i) => i).map((generation) => {
+        const people = members
           .filter((m) => (generations.get(m.id) ?? 0) === generation)
           .slice()
-          .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
-      }));
+          .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const rows = Math.max(1, Math.ceil(people.length / treeColumnCount));
+        const row = { generation, people, y: yCursor, rows };
+        yCursor += rows * NODE_H + Math.max(0, rows - 1) * ROW_GAP + Y_GAP;
+        return row;
+      });
 
       const positions = new Map();
       generationRows.forEach((row) => {
         row.people.forEach((person, index) => {
+          const wrappedRow = Math.floor(index / treeColumnCount);
+          const column = index % treeColumnCount;
           positions.set(person.id, {
-            x: PAD + index * (NODE_W + X_GAP),
-            y: PAD + row.generation * (NODE_H + Y_GAP),
+            x: PAD + column * (NODE_W + X_GAP),
+            y: row.y + wrappedRow * (NODE_H + ROW_GAP),
           });
         });
       });
@@ -161,10 +186,13 @@ export default function FamilyTree({ store }) {
       });
 
       const width = Math.max(
-        680,
-        ...generationRows.map((row) => PAD * 2 + row.people.length * NODE_W + Math.max(0, row.people.length - 1) * X_GAP)
+        320,
+        ...generationRows.map((row) => {
+          const columns = Math.min(treeColumnCount, Math.max(1, row.people.length));
+          return PAD * 2 + columns * NODE_W + Math.max(0, columns - 1) * X_GAP;
+        })
       );
-      const height = PAD * 2 + (maxGeneration + 1) * NODE_H + maxGeneration * Y_GAP;
+      const height = Math.max(PAD * 2 + NODE_H, yCursor - Y_GAP + PAD);
 
       return { familyGroup, label, memberCount: members.length, members, generationRows, positions, width, height };
     });
@@ -174,11 +202,16 @@ export default function FamilyTree({ store }) {
       if (b.familyGroup === "unassigned") return -1;
       return a.label.localeCompare(b.label);
     });
-  }, [characters, generations]);
+  }, [characters, generations, treeColumnCount]);
 
   const jumpToCharacters = (characterId) => {
     setSelectedCharacterId(characterId);
     window.dispatchEvent(new CustomEvent("switch-section", { detail: { section: "characters" } }));
+  };
+
+  const addCharacterFromTree = () => {
+    const savedId = saveCharacter({ name: "New Character", role: "Character" });
+    if (savedId) setSelectedCharacterId(savedId);
   };
 
   const addRelationshipFromTree = () => {
@@ -201,7 +234,7 @@ export default function FamilyTree({ store }) {
   return (
     <div className="h-full bg-[var(--bg-main)] overflow-auto p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-end justify-between">
+        <div className="flex items-end justify-between" data-tour="familytree-header">
           <div>
             <h1 className="text-2xl font-bold text-[var(--text-main)]">Relationships</h1>
             <p className="text-sm text-[var(--text-muted)] mt-1">Tree layout by family group and generation. Works for any character network.</p>
@@ -214,11 +247,12 @@ export default function FamilyTree({ store }) {
         {characters.length === 0 ? (
           <div className="h-[60vh] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-[var(--border)] rounded-xl px-8">
             <p className="text-[var(--text-muted)] text-sm font-medium">No characters yet</p>
-            <p className="text-[var(--text-muted)] text-xs leading-relaxed max-w-xs">Create characters in the <strong className="text-[var(--text-main)]">Characters</strong> tab — they appear here automatically. Assign a Family Group and set parent/spouse relationships to see family connections.</p>
+            <p className="text-[var(--text-muted)] text-xs leading-relaxed max-w-xs">Add someone here, then assign family groups and relationship links as the tree grows.</p>
+            <button onClick={addCharacterFromTree} className="bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold px-4 py-2 rounded hover:opacity-90">Add Character</button>
           </div>
         ) : (
-          <div className="grid grid-cols-[1fr_280px] gap-4 items-start">
-            <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
+            <div className="space-y-6 min-w-0">
               {familySections.map((section) => (
                 <section key={section.familyGroup} className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-4">
                   <div className="flex items-center justify-between mb-4">
@@ -228,13 +262,13 @@ export default function FamilyTree({ store }) {
                     </div>
                   </div>
 
-                  <div className="overflow-auto rounded-lg border border-[var(--border)] bg-[var(--bg-main)] tree-container relative" onScroll={() => setHoveredCharId(null)}>
+                  <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-main)] tree-container relative" data-tour="familytree-canvas" onScroll={() => setHoveredCharId(null)}>
                     <svg width={section.width} height={section.height} className="block min-w-full">
                       {section.generationRows.map((row) => (
                         <text
                           key={`gen-${row.generation}`}
                           x={12}
-                          y={PAD + row.generation * (NODE_H + Y_GAP) - 8}
+                          y={row.y - 8}
                           fill="var(--text-muted)"
                           fontSize="10"
                           fontWeight="700"
@@ -413,7 +447,10 @@ export default function FamilyTree({ store }) {
             <aside className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 sticky top-4">
               <h3 className="text-sm font-bold text-[var(--text-main)] mb-2">Tree Relationships</h3>
               {!selectedCharacter ? (
-                <p className="text-xs text-[var(--text-muted)]">Select a character node to edit links.</p>
+                <div className="space-y-3">
+                  <p className="text-xs text-[var(--text-muted)]">Select a character node to edit links or add someone new.</p>
+                  <button onClick={addCharacterFromTree} className="w-full bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold py-1.5 rounded hover:opacity-90">Add Character</button>
+                </div>
               ) : (
                 <div className="space-y-3">
                   <div>
