@@ -175,7 +175,7 @@ function SFXLine({ line, onChange, onDelete }) {
   )
 }
 
-function PanelEditor({ panel, characters, locations, onUpdate, onDelete }) {
+function PanelEditor({ panel, characters, onUpdate, onDelete }) {
   const [open, setOpen] = useState(true)
   const [sessionPdf, setSessionPdf] = useState(null)
 
@@ -192,8 +192,6 @@ function PanelEditor({ panel, characters, locations, onUpdate, onDelete }) {
   const addSfx = () => update({ sfx: [...(panel.sfx ?? []), { id: uid(), text: '' }] })
   const updateSfx = (id, data) => update({ sfx: (panel.sfx ?? []).map(l => l.id === id ? data : l) })
   const deleteSfx = (id) => update({ sfx: (panel.sfx ?? []).filter(l => l.id !== id) })
-
-  const panelChars = characters.filter(c => (panel.characterIds ?? []).includes(c.id))
 
   return (
     <div className={`cp-panel-card ${open ? 'is-open' : ''}`}>
@@ -322,13 +320,13 @@ function PanelEditor({ panel, characters, locations, onUpdate, onDelete }) {
 
 // ─── Page editor ──────────────────────────────────────────────────────────────
 
-function PageEditor({ page, panels, characters, locations, pageNumber, onUpdatePage, onDeletePage, onAddPanel, onUpdatePanel, onDeletePanel, onDuplicatePage }) {
+function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDeletePage, onAddPanel, onUpdatePanel, onDeletePanel, onDuplicatePage }) {
   const sortedPanels = sortByOrder(panels)
   const [pageSessionPdf, setPageSessionPdf] = useState(null)
 
   return (
     <div className="cp-page-editor">
-      <div className="cp-page-editor-header">
+      <div className="cp-page-editor-header" data-tour="comic-page-editor">
         <div className="cp-page-title-row">
           <span className="cp-page-number">Page {pageNumber}</span>
           <input
@@ -446,7 +444,6 @@ function PageEditor({ page, panels, characters, locations, pageNumber, onUpdateP
             key={panel.id}
             panel={panel}
             characters={characters}
-            locations={locations}
             onUpdate={(updated) => onUpdatePanel(panel.id, updated)}
             onDelete={(id) => onDeletePanel(id)}
           />
@@ -503,7 +500,7 @@ function StructureSidebar({ volumes, issues, selectedIssueId, onSelectIssue, onA
 
   return (
     <div className="cp-sidebar">
-      <div className="cp-sidebar-header">
+      <div className="cp-sidebar-header" data-tour="comic-sidebar">
         <span className="cp-sidebar-title">Structure</span>
         <button className="cp-btn-ghost cp-btn-xs" onClick={onAddVolume}>+ Volume</button>
       </div>
@@ -591,7 +588,7 @@ export default function ComicPlanner({ store }) {
     comicPages, comicPanels,
     addComicPage, updateComicPage, deleteComicPage, duplicateComicPage,
     addComicPanel, updateComicPanel, deleteComicPanel,
-    characters, locations,
+    characters,
     activeNovel,
   } = store
 
@@ -694,7 +691,7 @@ export default function ComicPlanner({ store }) {
           </div>
         ) : (
           <>
-            <div className="cp-page-list">
+            <div className="cp-page-list" data-tour="comic-page-list">
               <div className="cp-page-list-header">
                 <span className="cp-page-list-title">
                   {selectedIssue?.title || 'Issue'} — {issuePages.length} page{issuePages.length !== 1 ? 's' : ''}
@@ -725,13 +722,13 @@ export default function ComicPlanner({ store }) {
               {!selectedPage ? (
                 <div className="cp-empty-state">
                   <p>Select a page to edit its panels and details.</p>
+                  <button className="cp-btn-primary" onClick={handleAddPage}>Add page</button>
                 </div>
               ) : (
                 <PageEditor
                   page={selectedPage}
                   panels={pagePanels}
                   characters={characters}
-                  locations={locations}
                   pageNumber={issuePages.indexOf(selectedPage) + 1}
                   onUpdatePage={updateComicPage}
                   onDeletePage={handleDeletePage}

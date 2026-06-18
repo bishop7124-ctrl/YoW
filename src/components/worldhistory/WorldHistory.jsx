@@ -68,7 +68,8 @@ export default function WorldHistory({ store }) {
       <StudioIndex
         eyebrow="Chronicle wall"
         title="History"
-        tools={<StudioButton tone="primary" size="sm" onClick={() => { setEditTarget(null); setShowForm(true) }}>New</StudioButton>}
+        data-tour="worldhistory-header"
+        tools={<StudioButton tone="primary" size="sm" data-tour="worldhistory-new" onClick={() => { setEditTarget(null); setShowForm(true) }}>New</StudioButton>}
       >
         <input
           value={search}
@@ -119,6 +120,7 @@ export default function WorldHistory({ store }) {
           <StudioEmpty
             title="Select a chronicle entry"
             body="Choose a period from the history wall or create a new one."
+            action={<StudioButton tone="primary" className="mt-4" onClick={() => { setEditTarget(null); setShowForm(true) }}>Add Entry</StudioButton>}
           />
         ) : (
           <div className="max-w-4xl">

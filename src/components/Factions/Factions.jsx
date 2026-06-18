@@ -57,7 +57,7 @@ export default function Factions({ store }) {
     <div className="workspace-page text-left">
       <div className="workspace-inner max-w-5xl">
 
-        <div className="page-header mb-8">
+        <div className="page-header mb-8" data-tour="factions-header">
           <div>
             <div className="flex items-center gap-2 mb-1">
               {selectedFactionId && (
@@ -82,6 +82,7 @@ export default function Factions({ store }) {
             <button
               onClick={openCreate}
               className="btn btn-primary"
+              data-tour="factions-add"
             >
               Create Faction
             </button>

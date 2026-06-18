@@ -211,14 +211,14 @@ export default function Lore({ store }) {
   }
 
   return (
-    <StudioSplit>
+    <StudioSplit data-tour="lore-header">
       <StudioIndex
         eyebrow="Lore wall"
         title="Notebook"
         tools={<StudioButton tone="primary" size="sm" onClick={handleNew}>New</StudioButton>}
       >
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search lore..." className="field w-full px-2 py-1.5 text-xs placeholder:text-[var(--text-muted)]" />
-          <div className="grid grid-cols-2 gap-2">
+          <div data-tour="lore-categories" className="grid grid-cols-2 gap-2">
             <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="field px-2 py-1.5 text-xs">
               <option>All</option>
               <option>Uncategorized</option>

@@ -54,7 +54,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
   ).slice(0, 4)
 
   return (
-    <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
+    <div data-tour="ideas-capture" style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
       <div style={{
         display: 'flex',
         alignItems: 'center',

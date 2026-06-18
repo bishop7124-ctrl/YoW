@@ -1,5 +1,7 @@
 import { useRef, useEffect } from 'react'
+import { LAND_FILL } from './mapConstants.js'
 import { drawStampSymbol } from './mapDraw.js'
+import { round } from './mapUtils.js'
 
 export function PanelTitle({ children }) {
   return <div style={{ fontSize: 10, color: 'var(--faint)', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>{children}</div>

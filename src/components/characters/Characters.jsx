@@ -895,10 +895,10 @@ export default function Characters({ store }) {
   const activeFilters = (filterFamily ? 1 : 0) + (filterFaction ? 1 : 0)
 
   return (
-    <StudioSplit variant="dossier">
+    <StudioSplit variant="dossier" data-tour="characters-header">
       <StudioIndex
         title="Characters"
-        tools={<StudioButton tone="primary" size="sm" onClick={() => { setEditTarget(null); setShowForm(true); }}>New</StudioButton>}
+        tools={<StudioButton data-tour="characters-add" tone="primary" size="sm" onClick={() => { setEditTarget(null); setShowForm(true); }}>New</StudioButton>}
       >
         <input
           value={search} onChange={e => setSearch(e.target.value)}
@@ -988,7 +988,11 @@ export default function Characters({ store }) {
 
       <StudioDetail>
         {!selected ? (
-          <StudioEmpty title="Select a dossier" body="Choose a character from the characters list." />
+          <StudioEmpty
+            title="Select a dossier"
+            body="Choose a character from the characters list or add someone new."
+            action={<StudioButton tone="primary" className="mt-4" onClick={() => { setEditTarget(null); setShowForm(true); }}>Add Character</StudioButton>}
+          />
         ) : (
           <div className="max-w-5xl">
             <StudioPageHeader

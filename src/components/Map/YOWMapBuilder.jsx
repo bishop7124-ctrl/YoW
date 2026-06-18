@@ -77,6 +77,7 @@ export default function MapBuilder({ store }) {
   const [locationSearch, setLocationSearch] = useState('')
   const [selectedLocationId, setSelectedLocationId] = useState('')
   const [newLocationName, setNewLocationName] = useState('')
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false)
 
   const schema = useMemo(() => normalizeMapSchema(activeMap), [activeMap])
   const objects = schema.objects
@@ -532,7 +533,8 @@ export default function MapBuilder({ store }) {
     const hit = hitTest(point)
     event.currentTarget.setPointerCapture(event.pointerId)
 
-    if (mode === 'pan' || event.altKey || spacePressedRef.current) {
+    const shiftPan = event.shiftKey && !hit && !handle
+    if (mode === 'pan' || event.altKey || spacePressedRef.current || shiftPan) {
       setHoverHandle(null)
       interactionRef.current = { type: 'pan', startX: event.clientX, startY: event.clientY, startPan: viewRef.current.pan }
       return
@@ -1050,6 +1052,7 @@ export default function MapBuilder({ store }) {
     event.preventDefault()
     const id = addMap(newMapName.trim() || 'Untitled Map', mapType || 'region')
     setNewMapName('')
+    setIsMapModalOpen(false)
     setTimeout(() => {
       selectMap(id)
       fitCanvasToViewport()
@@ -1132,62 +1135,69 @@ export default function MapBuilder({ store }) {
             ? 'crosshair'
             : 'default'
 
+  const activeModeLabel = TOOLBAR_MODES.find(item => item.id === mode)?.label || activeTypeConfig.tools.find(tool => tool.mode === mode)?.label || 'Select'
+
   return (
-    <div data-tour="map-header" style={{ flex: 1, minHeight: 0, height: isCompact ? '100%' : 'min(100%, calc(100dvh - 190px))', maxHeight: isCompact ? '100%' : 'calc(100dvh - 190px)', overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', background: 'var(--surface)', color: 'var(--text)', position: 'relative', zIndex: 1 }}>
-      <div className="studio-topbar map-builder-topbar" style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : 'minmax(170px, 260px) minmax(320px, 1fr) auto', alignItems: 'end', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', minWidth: 0, position: 'relative', zIndex: 8, overflow: 'visible' }}>
-        <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-          <strong style={{ fontFamily: 'var(--font-serif)', fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeMap?.name || 'Map Builder'}</strong>
-          <span style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTypeConfig.label} · {TOOLBAR_MODES.find(item => item.id === mode)?.label || 'Select'}</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: isCompact ? '1fr' : 'minmax(130px, 1fr) minmax(126px, .75fr) minmax(126px, .75fr)', gap: 8, minWidth: 0 }}>
-          <SelectInput
-            label="Map"
-            value={activeMap?.id || ''}
-            options={(project.maps || []).map(map => ({ value: map.id, label: map.name || 'Untitled Map' }))}
-            onChange={value => selectMap(value)}
-          />
-          <ReadOnlyField label="Type" value={activeTypeConfig.label} />
-          <SelectInput
-            label="Style"
-            value={activeStylePreset}
-            options={STYLE_PRESET_OPTIONS}
-            onChange={updateStylePreset}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: isCompact ? 'flex-start' : 'flex-end', flexWrap: 'wrap', minWidth: 0 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => selectEditorMode('select')} title="Select">↖</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => selectEditorMode('pan')} title="Pan">✥</button>
-          <button className="btn btn-secondary btn-sm" onClick={undoMapChange} disabled={!canUndo} title="Undo">↶</button>
-          <button className="btn btn-secondary btn-sm" onClick={redoMapChange} disabled={!canRedo} title="Redo">↷</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(0.86)} title="Zoom out">−</button>
-          <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>{Math.round(view.zoom * 100)}%</span>
-          <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(1.16)} title="Zoom in">+</button>
-          <button className="btn btn-secondary btn-sm" onClick={fitCanvasToViewport}>Fit</button>
-          <button className="btn btn-secondary btn-sm" onClick={downloadJson}>Export</button>
-          <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={event => importJson(event.target.files?.[0])} style={{ display: 'none' }} />
-          {jsonStatus && <span style={{ fontSize: 12, color: jsonStatus === 'Invalid JSON' ? '#d86b70' : 'var(--accent)' }}>{jsonStatus}</span>}
-        </div>
+    <div data-tour="map-header" className="map-builder-shell">
+      <main
+        ref={viewportRef}
+        className="map-builder-viewport"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
+        onWheel={handleWheel}
+        onDragOver={event => event.preventDefault()}
+        onDrop={handleDrop}
+        style={{ cursor: canvasCursor }}
+      >
+        {activeMap ? (
+          <>
+            <canvas ref={canvasRef} className="map-builder-canvas" />
+            <div className="map-builder-status-pill">
+              <span>{MAP_W} × {MAP_H}</span>
+              <span>{objects.length} objects</span>
+              <span>{selectedIds.length} selected</span>
+              {hoveredId && !selectedIds.includes(hoveredId) && <span>{objectDisplayName(objects.find(object => object.id === hoveredId))}</span>}
+            </div>
+          </>
+        ) : (
+          <div className="map-builder-empty">
+            <strong>Start with a map.</strong>
+            <span>Create a world, region, local, or interior map for this project.</span>
+            <button className="btn btn-primary btn-sm" onClick={() => setIsMapModalOpen(true)}>New Map</button>
+          </div>
+        )}
+      </main>
+
+      <div className="map-builder-float map-builder-map-nav">
+        <SelectInput
+          label={`${activeTypeConfig.label} · ${activeModeLabel}`}
+          value={activeMap?.id || ''}
+          options={(project.maps || []).map(map => ({ value: map.id, label: map.name || 'Untitled Map' }))}
+          onChange={value => selectMap(value)}
+        />
+        <button className="btn btn-primary btn-sm map-builder-add-map" onClick={() => setIsMapModalOpen(true)} title="New map" aria-label="New map">+</button>
       </div>
 
-      <div style={{ minHeight: 0, display: 'grid', gridTemplateColumns: isCompact ? '1fr' : 'minmax(150px, 176px) minmax(0, 1fr) minmax(238px, 284px)', gridTemplateRows: isCompact ? 'minmax(320px, 1fr) auto auto' : 'minmax(0, 1fr)', overflowX: 'visible', overflowY: isCompact ? 'auto' : 'visible', paddingBottom: isCompact ? 12 : 0 }}>
-        <aside style={{ order: isCompact ? 2 : undefined, borderRight: isCompact ? 'none' : '1px solid var(--border)', borderBottom: isCompact ? '1px solid var(--border)' : 'none', background: 'color-mix(in srgb, var(--surface) 96%, #000)', padding: 10, overflowY: 'auto', display: 'flex', flexDirection: isCompact ? 'row' : 'column', gap: 10, flexWrap: isCompact ? 'wrap' : 'nowrap', minHeight: 0 }}>
+      <div className="map-builder-float map-builder-command-bar">
+        <button className="btn btn-secondary btn-sm" onClick={() => selectEditorMode('select')} title="Select">↖</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => selectEditorMode('pan')} title="Pan">✥</button>
+        <button className="btn btn-secondary btn-sm" onClick={undoMapChange} disabled={!canUndo} title="Undo">↶</button>
+        <button className="btn btn-secondary btn-sm" onClick={redoMapChange} disabled={!canRedo} title="Redo">↷</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(0.86)} title="Zoom out">−</button>
+        <span className="map-builder-zoom-readout">{Math.round(view.zoom * 100)}%</span>
+        <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(1.16)} title="Zoom in">+</button>
+        <button className="btn btn-secondary btn-sm" onClick={fitCanvasToViewport}>Fit</button>
+        <button className="btn btn-secondary btn-sm" onClick={downloadJson} disabled={!activeMap}>Export</button>
+        <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={event => importJson(event.target.files?.[0])} style={{ display: 'none' }} />
+        {jsonStatus && <span className={jsonStatus === 'Invalid JSON' ? 'map-builder-status is-error' : 'map-builder-status'}>{jsonStatus}</span>}
+      </div>
+
+      <aside className="map-builder-float map-builder-tools">
           {!activeMap && (
-            <form onSubmit={handleCreateMap} style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: isCompact ? 220 : 0 }}>
-              <PanelTitle>New Map</PanelTitle>
-              <input
-                value={newMapName}
-                onChange={event => setNewMapName(event.target.value)}
-                placeholder="Map name"
-                style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
-              />
-              <SelectInput
-                label="Type"
-                value={mapType}
-                options={MAP_TYPE_OPTIONS}
-                onChange={setMapType}
-              />
-              <button className="btn btn-primary btn-sm" type="submit">Create map</button>
-            </form>
+            <button className="btn btn-primary btn-sm" onClick={() => setIsMapModalOpen(true)}>Create map</button>
           )}
           <section data-tour="map-tools" style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: isCompact ? 180 : 0 }}>
             <PanelTitle>{activeTypeConfig.label}</PanelTitle>
@@ -1305,38 +1315,9 @@ export default function MapBuilder({ store }) {
             </div>
             </div>
           </details>
-        </aside>
+      </aside>
 
-        <main
-          ref={viewportRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
-          onWheel={handleWheel}
-          onDragOver={event => event.preventDefault()}
-          onDrop={handleDrop}
-          style={{ order: isCompact ? 1 : undefined, minWidth: 0, minHeight: isCompact ? 320 : 0, position: 'relative', overflow: 'hidden', touchAction: 'none', cursor: canvasCursor, zIndex: 1 }}
-        >
-          {activeMap ? (
-            <>
-              <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-              <div style={{ position: 'absolute', left: 14, top: 14, display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderRadius: 8, background: 'rgba(0,0,0,.5)', color: '#fff', fontSize: 12, pointerEvents: 'none' }}>
-                <span>{MAP_W} × {MAP_H}</span>
-                <span>{objects.length} objects</span>
-                <span>{selectedIds.length} selected</span>
-                {hoveredId && !selectedIds.includes(hoveredId) && <span>{objectDisplayName(objects.find(object => object.id === hoveredId))}</span>}
-              </div>
-            </>
-          ) : (
-            <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--muted)' }}>
-              Create a map to start.
-            </div>
-          )}
-        </main>
-
-        <aside style={{ order: isCompact ? 3 : undefined, borderLeft: isCompact ? 'none' : '1px solid var(--border)', borderTop: isCompact ? '1px solid var(--border)' : 'none', background: 'color-mix(in srgb, var(--surface) 96%, #000)', padding: 10, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+      <aside className="map-builder-float map-builder-inspector">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 4, padding: 3, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface2)' }}>
             <InspectorTabButton active={inspectorTab === 'object'} onClick={() => setInspectorTab('object')}>Object</InspectorTabButton>
             <InspectorTabButton active={inspectorTab === 'layers'} onClick={() => setInspectorTab('layers')}>Layers</InspectorTabButton>
@@ -1432,24 +1413,15 @@ export default function MapBuilder({ store }) {
           {inspectorTab === 'map' && (
           <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <PanelTitle>Maps</PanelTitle>
+            <ReadOnlyField label="Current type" value={activeTypeConfig.label} />
+            <SelectInput
+              label="Style"
+              value={activeStylePreset}
+              options={STYLE_PRESET_OPTIONS}
+              onChange={updateStylePreset}
+            />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-              <form onSubmit={handleCreateMap} style={{ display: 'flex', gap: 6 }}>
-                <input
-                  value={newMapName}
-                  onChange={event => setNewMapName(event.target.value)}
-                  placeholder="New map"
-                  style={{ minWidth: 0, flex: 1, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
-                />
-                <select
-                  value={mapType}
-                  onChange={event => setMapType(event.target.value)}
-                  style={{ minWidth: 92, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit' }}
-                  title="New map type"
-                >
-                  {MAP_TYPE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-                <button className="btn btn-primary btn-sm" type="submit">+</button>
-              </form>
+              <button className="btn btn-primary btn-sm" onClick={() => setIsMapModalOpen(true)}>New Map</button>
               {(project.maps || []).map(map => {
                 const active = map.id === project.activeMapId
                 return (
@@ -1594,7 +1566,41 @@ export default function MapBuilder({ store }) {
           </section>
           )}
         </aside>
-      </div>
+
+      {isMapModalOpen && (
+        <div className="map-builder-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) setIsMapModalOpen(false)
+        }}>
+          <form className="map-builder-modal" role="dialog" aria-modal="true" aria-labelledby="map-builder-modal-title" onSubmit={handleCreateMap}>
+            <header>
+              <div>
+                <p>New map</p>
+                <h3 id="map-builder-modal-title">Create a map</h3>
+              </div>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => setIsMapModalOpen(false)} aria-label="Close">×</button>
+            </header>
+            <label>
+              <span>Map name</span>
+              <input
+                autoFocus
+                value={newMapName}
+                onChange={event => setNewMapName(event.target.value)}
+                placeholder="Aurethos World Map"
+              />
+            </label>
+            <SelectInput
+              label="Map type"
+              value={mapType}
+              options={MAP_TYPE_OPTIONS}
+              onChange={setMapType}
+            />
+            <footer>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => setIsMapModalOpen(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" type="submit">Create map</button>
+            </footer>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

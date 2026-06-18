@@ -74,9 +74,9 @@ export default function AITools({ store, userId }) {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div data-tour="aitools-header" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Tool tab bar */}
-      <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', overflowX: 'auto', scrollbarWidth: 'none' }}>
+      <div data-tour="aitools-provider" style={{ borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {TOOLS.map(tool => (
           <button
             key={tool.id}

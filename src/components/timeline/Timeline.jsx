@@ -114,7 +114,7 @@ export default function Timeline({ store }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[var(--bg-main)]">
+    <div data-tour="timeline-header" className="h-full flex flex-col bg-[var(--bg-main)]">
       <div className="studio-topbar timeline-topbar px-5 py-3 flex items-center justify-between flex-shrink-0">
         <div>
           <p className="eyebrow">Chronicle</p>

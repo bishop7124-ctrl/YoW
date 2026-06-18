@@ -105,7 +105,7 @@ export default function Locations({ store }) {
   )
 
   return (
-    <StudioSplit>
+    <StudioSplit data-tour="locations-header">
       <StudioIndex
         eyebrow="Atlas wall"
         title="Field Notes"
@@ -143,7 +143,11 @@ export default function Locations({ store }) {
 
       <StudioDetail>
         {!selected ? (
-          <StudioEmpty title="Select a field note" body="Choose a location from the atlas wall." />
+          <StudioEmpty
+            title="Select a field note"
+            body="Choose a location from the atlas wall or add a new place."
+            action={<StudioButton tone="primary" className="mt-4" onClick={() => { setEditTarget(null); setShowForm(true) }}>Add Location</StudioButton>}
+          />
         ) : (
           <div className="max-w-4xl">
             <StudioPageHeader
