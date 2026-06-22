@@ -16,6 +16,7 @@ export default function KanbanColumn({
   selectedId,
   aiExpandId,
   onCardClick,
+  onCardEdit,
   onCardPointerDown,
   onUpdate,
   onDelete,
@@ -24,6 +25,7 @@ export default function KanbanColumn({
   onFavourite,
   onConvert,
   onAiExpand,
+  onEmptyClick,
   readOnly,
 }) {
   const accent = STATUS_ACCENT[status.id] || 'var(--accent)'
@@ -129,6 +131,7 @@ export default function KanbanColumn({
             isDragging={draggingId === idea.id}
             isDropBefore={dropBeforeId === idea.id}
             onSelect={onCardClick}
+            onEdit={onCardEdit}
             onUpdate={onUpdate}
             onDelete={onDelete}
             onArchive={onArchive}
@@ -155,17 +158,25 @@ export default function KanbanColumn({
 
         {/* Empty state */}
         {count === 0 && !isDropTarget && (
-          <div style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px 16px',
-            color: 'var(--faint)',
-            textAlign: 'center',
-            gap: 6,
-          }}>
+          <div
+            onClick={!readOnly ? onEmptyClick : undefined}
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px 16px',
+              color: 'var(--faint)',
+              textAlign: 'center',
+              gap: 6,
+              cursor: readOnly ? 'default' : 'pointer',
+              borderRadius: 8,
+              transition: 'background .15s',
+            }}
+            onMouseEnter={e => { if (!readOnly) e.currentTarget.style.background = `color-mix(in srgb, ${accent} 5%, transparent)` }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
             <div style={{
               width: 32,
               height: 32,
@@ -179,7 +190,7 @@ export default function KanbanColumn({
               </svg>
             </div>
             <p style={{ fontSize: 11, margin: 0 }}>
-              {status.id === 'raw' ? 'Capture your first idea above' : `Drag ideas here`}
+              {readOnly ? 'No ideas here yet' : 'Click to add an idea'}
             </p>
           </div>
         )}

@@ -47,8 +47,32 @@ const MAP_OBJECT_TYPE_LABELS = {
   shape: 'Land / room',
 }
 
+const mapObjectTypeLabel = (object) => {
+  const semantic = object?.metadata?.semanticType
+  if (semantic === 'room') return 'Room'
+  if (semantic === 'corridor') return 'Corridor'
+  if (semantic === 'wall') return 'Wall'
+  return MAP_OBJECT_TYPE_LABELS[object?.type] || object?.type || 'Object'
+}
+
 const getMapObjects = (map = {}) => asArray(map.mapObjects ?? map.objects)
 const getMapLayers = (map = {}) => asArray(map.mapLayers ?? map.layers)
+const normalizeExportGrid = (map = {}) => {
+  const settings = map?.metadata?.gridSettings || {}
+  const interior = map?.mapType === 'interior' || map?.metadata?.mapType === 'interior'
+  const size = Number.isFinite(Number(settings.size)) ? Number(settings.size) : interior ? 80 : 40
+  const opacity = Number.isFinite(Number(settings.opacity)) ? Number(settings.opacity) : interior ? 0.36 : 0.28
+  const color = safeMapColor(settings.color, interior ? '#6f7780' : '#5b4630')
+  return {
+    enabled: settings.enabled !== undefined ? Boolean(settings.enabled) : interior,
+    type: settings.type === 'hex' ? 'hex' : 'square',
+    size: Math.max(10, Math.min(240, size)),
+    opacity: Math.max(0.05, Math.min(0.9, opacity)),
+    color,
+    snapToGrid: settings.snapToGrid !== undefined ? Boolean(settings.snapToGrid) : interior,
+    scale: String(settings.scale || '1 square = 5 ft').trim(),
+  }
+}
 
 const locationNameById = (projectData) => {
   const lookup = new Map()
@@ -68,6 +92,7 @@ const summarizeMap = (map, projectData) => {
   const locationsById = locationNameById(projectData)
   const objects = getMapObjects(map)
   const layers = getMapLayers(map)
+  const grid = normalizeExportGrid(map)
   const legacyLabels = [...asArray(map.mapLabels), ...asArray(map.mapPins)]
     .map(item => item.text || item.label || item.name)
     .filter(Boolean)
@@ -83,7 +108,7 @@ const summarizeMap = (map, projectData) => {
   const routes = objects
     .filter(object => ['road', 'border', 'river'].includes(object?.type))
     .map(object => {
-      const kind = MAP_OBJECT_TYPE_LABELS[object.type] || object.type
+      const kind = mapObjectTypeLabel(object)
       return `${kind}: ${mapObjectName(object, locationsById)}`
     })
   const stamps = objects
@@ -95,7 +120,7 @@ const summarizeMap = (map, projectData) => {
     .map(object => mapObjectName(object, locationsById))
     .filter(Boolean)
   const typeCounts = objects.reduce((counts, object) => {
-    const label = MAP_OBJECT_TYPE_LABELS[object?.type] || object?.type || 'Object'
+    const label = mapObjectTypeLabel(object)
     counts[label] = (counts[label] || 0) + 1
     return counts
   }, {})
@@ -107,6 +132,7 @@ const summarizeMap = (map, projectData) => {
   const countLines = Object.entries(typeCounts).map(([label, count]) => `${label}: ${count}`)
   const lines = [
     layers.length ? `Layers: ${layerLines.join('; ')}` : '',
+    grid.enabled ? `Movement grid: ${grid.type}, ${grid.size}px, ${grid.scale}${grid.snapToGrid ? ', snap on' : ''}` : '',
     countLines.length ? `Object counts: ${countLines.join('; ')}` : '',
     objectLabels.length || legacyLabels.length ? `Labels and places: ${[...objectLabels, ...legacyLabels].slice(0, 18).join(', ')}` : '',
     regions.length ? `Regions: ${regions.slice(0, 14).join(', ')}` : '',
@@ -150,9 +176,20 @@ const mapPreviewElement = (object, locationsById) => {
   const points = mapObjectPoints(object)
 
   if (object.type === 'label') {
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-family="Georgia, serif" font-size="${Math.max(14, Math.min(42, Number(meta.fontSize) || 24))}" font-weight="700" fill="${stroke}">${escapeHtml(meta.text || meta.name || 'Label')}</text>`
+    const fontSize = Math.max(14, Math.min(144, Number(meta.fontSize) || 42))
+    const textColor = meta.textColor || fill
+    const outlineColor = meta.outlineColor || 'transparent'
+    const backgroundColor = meta.backgroundColor || 'transparent'
+    const background = backgroundColor === 'transparent' ? '' : `<rect x="${left.toFixed(1)}" y="${top.toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" rx="8" fill="${safeMapColor(backgroundColor, '#ffffff')}"/>`
+    return `<g>${background}<text x="${x.toFixed(1)}" y="${(y + fontSize * 0.34).toFixed(1)}" text-anchor="middle" font-family="${escapeHtml(meta.fontFamily || 'Georgia, serif')}" font-size="${fontSize}" font-weight="${Number(meta.fontWeight) || 600}" font-style="${meta.fontStyle === 'italic' ? 'italic' : 'normal'}" fill="${textColor === 'transparent' ? 'none' : safeMapColor(textColor, '#2a241b')}" stroke="${outlineColor === 'transparent' ? 'none' : safeMapColor(outlineColor, '#f8edd0')}" stroke-width="${outlineColor === 'transparent' ? 0 : Math.max(1, fontSize * 0.05).toFixed(1)}" paint-order="stroke">${escapeHtml(meta.text || meta.name || 'Label')}</text></g>`
   }
-  if (['stamp', 'location', 'marker'].includes(object.type)) {
+  if (object.type === 'location') {
+    const glyphs = { pin: '●', dot: '●', diamond: '◆', star: '★', tower: '▥' }
+    const glyph = glyphs[meta.markerIcon] || glyphs.pin
+    const radius = Math.max(12, Math.min(width, height) * 0.28)
+    return `<g><text x="${x.toFixed(1)}" y="${(y + radius * 0.28).toFixed(1)}" text-anchor="middle" font-family="Georgia, serif" font-size="${(radius * 1.5).toFixed(1)}" font-weight="700" fill="${fill}" stroke="${stroke}" stroke-width="2">${glyph}</text><text x="${x.toFixed(1)}" y="${(y + radius * 1.25).toFixed(1)}" text-anchor="middle" font-family="Georgia, serif" font-size="${Math.max(12, radius * 0.46).toFixed(1)}" font-weight="700" fill="${stroke}" stroke="#f6eedb" stroke-width="3" paint-order="stroke">${name}</text></g>`
+  }
+  if (['stamp', 'marker'].includes(object.type)) {
     const radius = Math.max(10, Math.min(width, height) / 2)
     return `<g><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-width="3"/><text x="${x.toFixed(1)}" y="${(y + 5).toFixed(1)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.max(12, radius * 0.55).toFixed(1)}" font-weight="800" fill="${stroke}">${firstLetter(name).replace(/&.*;/, '')}</text></g>`
   }
@@ -163,6 +200,25 @@ const mapPreviewElement = (object, locationsById) => {
     if (closed && points.length >= 3) {
       return `<polygon points="${pointList}" fill="${fill}" fill-opacity="${Math.min(0.55, opacity)}" stroke="${stroke}" stroke-width="${Math.max(2, Number(meta.lineThickness) || 5)}"/>`
     }
+    if (meta.semanticType === 'corridor') {
+      const thickness = Math.max(18, Number(meta.lineThickness) || 56)
+      const floor = safeMapColor(meta.floorFill, '#a1a5a5')
+      const edge = safeMapColor(meta.edgeStroke, '#252a2d')
+      return `<g><polyline points="${pointList}" fill="none" stroke="${edge}" stroke-width="${thickness + 12}" stroke-linecap="round" stroke-linejoin="round"/><polyline points="${pointList}" fill="none" stroke="${floor}" stroke-width="${thickness}" stroke-linecap="round" stroke-linejoin="round"/></g>`
+    }
+    if (meta.semanticType === 'wall') {
+      const thickness = Math.max(6, Number(meta.lineThickness) || 12)
+      const highlight = safeMapColor(meta.wallHighlight, '#73797c')
+      const wallPoints = meta.closed ? `${pointList} ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}` : pointList
+      const texture = meta.wallTexture || 'stone'
+      const dash = texture === 'brick'
+        ? `${Math.max(8, thickness * 1.25).toFixed(1)} ${Math.max(3, thickness * 0.3).toFixed(1)}`
+        : texture === 'stone'
+          ? `${Math.max(5, thickness * 0.72).toFixed(1)} ${Math.max(3, thickness * 0.28).toFixed(1)}`
+          : ''
+      const detail = texture === 'solid' ? '' : `<polyline points="${wallPoints}" fill="none" stroke="${highlight}" stroke-opacity=".7" stroke-width="${Math.max(2, thickness * (texture === 'wood' ? 0.34 : 0.24))}" stroke-linecap="${texture === 'wood' ? 'round' : 'butt'}" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`
+      return `<g><polyline points="${wallPoints}" fill="none" stroke="${stroke}" stroke-width="${thickness + 5}" stroke-linecap="round" stroke-linejoin="round"/>${detail}</g>`
+    }
     return `<polyline points="${pointList}" fill="none" stroke="${stroke}" stroke-width="${Math.max(2, Number(meta.lineThickness) || 5)}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`
   }
   if ((object.type === 'region' || meta.shapeKind === 'polygon') && points.length >= 3) {
@@ -172,6 +228,44 @@ const mapPreviewElement = (object, locationsById) => {
     return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(width / 2).toFixed(1)}" ry="${(height / 2).toFixed(1)}" fill="${fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-width="3"/>`
   }
   return `<rect x="${left.toFixed(1)}" y="${top.toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" rx="10" fill="${fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-width="3"><title>${name}</title></rect>`
+}
+
+const generatedMapGridElements = (map) => {
+  const grid = normalizeExportGrid(map)
+  if (!grid.enabled) return ''
+  const width = Number(map?.width) || 1200
+  const height = Number(map?.height) || 760
+  const stroke = grid.color
+  const opacity = grid.opacity.toFixed(2)
+  const lines = []
+  if (grid.type === 'hex') {
+    const radius = grid.size / 2
+    const hexWidth = Math.sqrt(3) * radius
+    const rowHeight = radius * 1.5
+    const rows = Math.ceil(height / rowHeight) + 2
+    const columns = Math.ceil(width / hexWidth) + 2
+    for (let row = -1; row <= rows; row += 1) {
+      const y = row * rowHeight
+      const offsetX = Math.abs(row % 2) * hexWidth / 2
+      for (let column = -1; column <= columns; column += 1) {
+        const x = column * hexWidth + offsetX
+        const points = Array.from({ length: 6 }, (_, side) => {
+          const angle = -Math.PI / 2 + side * Math.PI / 3
+          return `${(x + Math.cos(angle) * radius).toFixed(1)},${(y + Math.sin(angle) * radius).toFixed(1)}`
+        }).join(' ')
+        lines.push(`<polygon points="${points}" fill="none" stroke="${stroke}" stroke-opacity="${opacity}" stroke-width="1"/>`)
+      }
+    }
+  } else {
+    for (let x = 0; x <= width; x += grid.size) {
+      lines.push(`<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${height}" stroke="${stroke}" stroke-opacity="${opacity}" stroke-width="1"/>`)
+    }
+    for (let y = 0; y <= height; y += grid.size) {
+      lines.push(`<line x1="0" y1="${y.toFixed(1)}" x2="${width}" y2="${y.toFixed(1)}" stroke="${stroke}" stroke-opacity="${opacity}" stroke-width="1"/>`)
+    }
+  }
+  const label = grid.scale ? `<text x="32" y="${height - 32}" font-family="Georgia, serif" font-size="28" font-weight="700" fill="${stroke}" fill-opacity="${Math.min(0.9, grid.opacity + 0.25).toFixed(2)}">${escapeHtml(grid.scale)}</text>` : ''
+  return `<g>${lines.join('')}${label}</g>`
 }
 
 const generatedMapPreview = (map, projectData) => {
@@ -186,7 +280,12 @@ const generatedMapPreview = (map, projectData) => {
     .map(object => mapPreviewElement(object, locationsById))
     .filter(Boolean)
     .join('')
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#f2ead8"/><g opacity=".22"><path d="M0 ${height * 0.22} C ${width * 0.22} ${height * 0.08}, ${width * 0.42} ${height * 0.35}, ${width} ${height * 0.16}" fill="none" stroke="#b9a982" stroke-width="5"/><path d="M0 ${height * 0.78} C ${width * 0.28} ${height * 0.62}, ${width * 0.58} ${height * 0.92}, ${width} ${height * 0.72}" fill="none" stroke="#b9a982" stroke-width="5"/></g>${elements}</svg>`
+  const gridElements = generatedMapGridElements(map)
+  const stoneStyle = map?.metadata?.stylePreset === 'dungeon'
+  const background = stoneStyle
+    ? `<rect width="100%" height="100%" fill="#565c60"/>`
+    : `<rect width="100%" height="100%" fill="#f2ead8"/><g opacity=".22"><path d="M0 ${height * 0.22} C ${width * 0.22} ${height * 0.08}, ${width * 0.42} ${height * 0.35}, ${width} ${height * 0.16}" fill="none" stroke="#b9a982" stroke-width="5"/><path d="M0 ${height * 0.78} C ${width * 0.28} ${height * 0.62}, ${width * 0.58} ${height * 0.92}, ${width} ${height * 0.72}" fill="none" stroke="#b9a982" stroke-width="5"/></g>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${background}${gridElements}${elements}</svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
@@ -374,6 +473,8 @@ const characterDossier = (character, projectData) => {
     })
     .filter(Boolean)
   const image = getImage(character)
+  const journey = character.journey
+  const journeyBeats = [...(journey?.beats || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
   return `
     <article class="dossier-card">
       <div class="portrait-frame">
@@ -395,6 +496,14 @@ const characterDossier = (character, projectData) => {
           ].filter(([, value]) => value).map(([label, value]) => `<div><span>${escapeHtml(label)}</span><p>${escapeHtml(value)}</p></div>`).join('')}
         </div>
         <div class="copy">${prose(character.bio || character.description || character.notes) || '<p class="muted">No dossier notes recorded.</p>'}</div>
+        ${journey ? `<div class="copy"><h3>Character Journey · ${escapeHtml(journey.arcType || 'Custom arc')}</h3>
+          ${[
+            ['Starting state', journey.startingState], ['Ending state', journey.endingState], ['Core wound', journey.coreWound],
+            ['Lie believed', journey.lieBelieved], ['Truth to learn', journey.truthLearned], ['Want', journey.want],
+            ['Need', journey.need], ['Internal conflict', journey.internalConflict], ['External conflict', journey.externalConflict],
+          ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join('')}
+          ${journeyBeats.length ? `<h3>Journey Beats</h3>${journeyBeats.map(beat => `<p><strong>${escapeHtml(beat.title || 'Untitled beat')}</strong> · ${escapeHtml(beat.storyPhase === 'Custom' ? beat.customPhase || 'Custom phase' : beat.storyPhase || 'Story beat')}${beat.isMajorTurningPoint ? ' · Major turning point' : ''}<br>${escapeHtml(beat.description || beat.emotionalState || '')}</p>`).join('')}` : ''}
+        </div>` : ''}
         ${relationships.length ? `<div class="relationship-tags"><strong>Known Links</strong>${relationships.slice(0, 8).map(rel => `<span>${escapeHtml(rel.type)}: ${escapeHtml(rel.targetName)}</span>`).join('')}</div>` : ''}
       </div>
     </article>

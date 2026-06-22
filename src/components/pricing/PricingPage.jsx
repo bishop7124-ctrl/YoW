@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { HOSTING_INCLUDED_YEARS, HOSTING_RENEWAL_FEE_GBP, PLANS, FOUNDER_SLOTS_TOTAL } from '../../utils/membership'
 import { supabase } from '../../supabase'
 import MarketingNav from '../marketing/MarketingNav'
+import MarketingFooter from '../marketing/MarketingFooter'
 
 // --------------------------------------------------------------------------
 // Structured data helpers (injected into <head> while the page is mounted)
@@ -205,6 +206,25 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
         {plan.longDescription || plan.description}
       </p>
 
+      {/* Features list */}
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, flexGrow: 1 }}>
+        {plan.features.map((f, i) => (
+          <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ marginTop: 2, flexShrink: 0 }}><CheckIcon /></span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>{f}</span>
+          </li>
+        ))}
+      </ul>
+
+      {plan.disclaimer && (
+        <p style={{
+          marginTop: 16, fontSize: 11, color: 'var(--text-muted)',
+          lineHeight: 1.5, fontStyle: 'italic',
+        }}>
+          {plan.disclaimer}
+        </p>
+      )}
+
       {/* CTA */}
       {plan.key !== 'free' && (
         <button
@@ -221,7 +241,7 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
             fontSize: 14, fontWeight: 800,
             cursor: busy || soldOut ? 'not-allowed' : 'pointer',
             opacity: busy || soldOut ? 0.55 : 1,
-            marginBottom: 20,
+            marginTop: 20,
             transition: 'opacity .15s',
           }}
         >
@@ -239,31 +259,12 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
 
       {plan.key === 'free' && (
         <div style={{
-          width: '100%', padding: '12px 0', marginBottom: 20,
+          width: '100%', padding: '12px 0', marginTop: 20,
           textAlign: 'center', fontSize: 13, fontWeight: 700,
           color: 'var(--text-muted)',
         }}>
           Free forever — no card required
         </div>
-      )}
-
-      {/* Features list */}
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {plan.features.map((f, i) => (
-          <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <span style={{ marginTop: 2, flexShrink: 0 }}><CheckIcon /></span>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>{f}</span>
-          </li>
-        ))}
-      </ul>
-
-      {plan.disclaimer && (
-        <p style={{
-          marginTop: 16, fontSize: 11, color: 'var(--text-muted)',
-          lineHeight: 1.5, fontStyle: 'italic',
-        }}>
-          {plan.disclaimer}
-        </p>
       )}
     </article>
   )
@@ -760,20 +761,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         </section>
       </main>
 
-      {/* ── Footer ── */}
-      <footer style={{
-        borderTop: '1px solid var(--border)',
-        padding: '24px',
-        textAlign: 'center',
-        fontSize: 12, color: 'var(--text-muted)',
-        lineHeight: 1.7,
-      }}>
-        <p style={{ margin: 0 }}>
-          © {new Date().getFullYear()} Your Own World.&nbsp;
-          All prices in GBP. Payments processed by Stripe.&nbsp;
-          <a href="/" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Back to app</a>
-        </p>
-      </footer>
+      <MarketingFooter />
     </div>
   )
 }

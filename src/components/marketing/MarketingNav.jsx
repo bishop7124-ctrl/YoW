@@ -4,6 +4,7 @@ const NAV_LINKS = [
   { href: '/features/', label: 'Features', match: '/features' },
   { href: '/pricing/', label: 'Pricing', match: '/pricing' },
   { href: '/faq/', label: 'FAQ', match: '/faq' },
+  { href: '/founders/', label: 'Founders', match: '/founders' },
 ]
 
 export default function MarketingNav({

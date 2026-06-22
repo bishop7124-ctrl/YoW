@@ -4,6 +4,7 @@ import { FACTION_ICONS } from '../../constants/factionIcons'
 import { REL_TYPES } from '../../constants/Constants'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { allRefsFor } from '../../utils/worldLinks'
+import CharacterJourney from './CharacterJourney'
 
 // The Fix: uses theme variables so all 4 themes apply correctly
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
@@ -53,10 +54,13 @@ const BACKGROUND_FIELDS = [
 
 const CHARACTER_TABS = [
   ['overview', 'Overview'],
+  ['journey', 'Journey'],
   ['relationships', 'Relationships'],
   ['traits', 'Character Traits'],
   ['background', 'Background'],
 ]
+
+const CHARACTER_FORM_TABS = CHARACTER_TABS.filter(([id]) => id !== 'journey')
 
 function extractYear(value) {
   if (value === null || value === undefined) return null
@@ -458,7 +462,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   return (
     <>
       <form onSubmit={(e) => { e.preventDefault(); saveForm(); }} className="space-y-4 text-left">
-        <TabStrip tabs={CHARACTER_TABS} activeTab={editorTab} onChange={setEditorTab} />
+        <TabStrip tabs={CHARACTER_FORM_TABS} activeTab={editorTab} onChange={setEditorTab} />
 
         {editorTab === 'overview' && (
           <div className="space-y-5">
@@ -828,7 +832,7 @@ function LinkedNames({ label, items }) {
 }
 
 export default function Characters({ store }) {
-  const { characters, saveCharacter, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions, currentYear, loreEntries = [], timeline = [], setSelectedLoreEntryId } = store
+  const { characters, saveCharacter, saveCharacterJourney, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions, currentYear, loreEntries = [], timeline = [], chapters = [], scenes = [], setSelectedLoreEntryId } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name-asc')
   const [filterFamily, setFilterFamily] = useState('')
@@ -1113,6 +1117,17 @@ export default function Characters({ store }) {
                     </StudioNote>
                   )}
                 </>
+              )}
+
+              {activeProfileTab === 'journey' && (
+                <CharacterJourney
+                  character={selected}
+                  characters={characters}
+                  timeline={timeline}
+                  chapters={chapters}
+                  scenes={scenes}
+                  onSave={data => saveCharacterJourney(selected.id, data.journey)}
+                />
               )}
 
               {activeProfileTab === 'traits' && (

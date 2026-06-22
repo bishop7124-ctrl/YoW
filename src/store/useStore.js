@@ -3,6 +3,7 @@ import { saveAppData, saveSceneDoc, deleteSceneDoc, deleteProjectData } from '..
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
+import { clearJourneyLinks } from '../utils/characterJourney'
 
 const load = (key, def) => {
   try { return JSON.parse(localStorage.getItem(key)) ?? def }
@@ -286,6 +287,7 @@ export function useStore(userId = null, options = {}) {
   const [rpgCharacters, setRpgCharacters] = useState(() => loadInitial('nf_rpg_characters', []))
   const [comicPages, setComicPages] = useState(() => loadInitial('nf_comicPages', []))
   const [comicPanels, setComicPanels] = useState(() => loadInitial('nf_comicPanels', []))
+  const [eras, setEras] = useState(() => loadInitial('nf_eras', []))
 
   const charactersRef = useRef(characters)
   const factionsRef = useRef(factions)
@@ -383,6 +385,7 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { locationsRef.current = locations; save('nf_locations', locations) }, [locations])
   useEffect(() => { timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
   useEffect(() => { worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
+  useEffect(() => { save('nf_eras', eras) }, [eras])
   useEffect(() => save('nf_currentYear', currentYear), [currentYear])
   useEffect(() => { actsRef.current = acts; save('nf_acts', acts) }, [acts])
   useEffect(() => { chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
@@ -1030,6 +1033,10 @@ export function useStore(userId = null, options = {}) {
         return keep
       })
     })
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
+      ...character,
+      journey: clearJourneyLinks(character.journey, { chapterIds, sceneIds }),
+    } : character))
   }
   const deleteChapter = (id) => {
     const sceneIds = scenesRef.current.filter(s => s.chapterId === id).map(s => s.id)
@@ -1042,10 +1049,18 @@ export function useStore(userId = null, options = {}) {
         return keep
       })
     })
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
+      ...character,
+      journey: clearJourneyLinks(character.journey, { chapterIds: [id], sceneIds }),
+    } : character))
   }
   const deleteScene = (id) => {
     debouncedSaveScene.cancel(id)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== id))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
+      ...character,
+      journey: clearJourneyLinks(character.journey, { sceneIds: [id] }),
+    } : character))
     if (canSyncCloud) deleteSceneDoc(userId, id).catch(console.error)
   }
   const updateAct = (id, data) => commitLocal(actsRef, setActs, 'nf_acts', prev => prev.map(a => a.id === id ? { ...a, ...data } : a))
@@ -1126,6 +1141,14 @@ export function useStore(userId = null, options = {}) {
     })
     return savedId
   }
+  const saveCharacterJourney = (id, journey) => saveSeriesSyncedItem(
+    charactersRef,
+    setCharacters,
+    'characters',
+    { journey },
+    id,
+    () => null
+  )
   const deleteCharacter = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(charactersRef, setCharacters, 'characters', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
@@ -1137,6 +1160,7 @@ export function useStore(userId = null, options = {}) {
           parentIds: (c.parentIds || []).filter(parentId => !deletedSet.has(parentId)),
           spouseIds: (c.spouseIds || []).filter(spouseId => !deletedSet.has(spouseId)),
           relationships: (c.relationships || []).filter(rel => !deletedSet.has(rel.characterId)),
+          ...(c.journey ? { journey: clearJourneyLinks(c.journey, { characterIds: [...deletedSet] }) } : {}),
         }))
     })
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
@@ -1286,6 +1310,10 @@ export function useStore(userId = null, options = {}) {
     const deletedIds = deleteSeriesSyncedItem(timelineRef, setTimeline, 'timeline', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => deletedSet.has(h.timelineEventId) ? { ...h, timelineEventId: null } : h))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
+      ...character,
+      journey: clearJourneyLinks(character.journey, { timelineEventIds: [...deletedSet] }),
+    } : character))
   }
 
   const addScheduleEvent = (data) => {
@@ -1414,7 +1442,30 @@ export function useStore(userId = null, options = {}) {
 
   const addMap = (name, mapType) => {
     if (storageExceededCheck()) { return null }
-    const map = { id: uid(), novelId: activeNovelId, name, mapType: mapType || 'regional', mapPins: [], mapRegions: [], created: Date.now() } // eslint-disable-line react-hooks/purity
+    const normalizedMapType = mapType || 'regional'
+    const isInterior = normalizedMapType === 'interior'
+    const isCampaignInterior = ['dnd_campaign', 'tabletop_rpg'].includes(activeNovel?.type)
+    const map = {
+      id: uid(),
+      novelId: activeNovelId,
+      name,
+      mapType: normalizedMapType,
+      mapPins: [],
+      mapRegions: [],
+      metadata: isInterior ? {
+        stylePreset: 'dungeon',
+        gridSettings: {
+          enabled: true,
+          type: 'square',
+          size: 80,
+          opacity: 0.36,
+          color: '#d0d5d8',
+          snapToGrid: true,
+          scale: isCampaignInterior ? '1 square = 5 ft' : '1 square = 1 unit',
+        },
+      } : {},
+      created: Date.now(), // eslint-disable-line react-hooks/purity
+    }
     setMaps(prev => [...prev, map])
     setActiveMapByNovel(prev => ({ ...prev, [activeNovelId]: map.id }))
     return map.id
@@ -1615,6 +1666,22 @@ export function useStore(userId = null, options = {}) {
     }
   }
 
+  const novelEras = eras.filter(e => e.novelId === activeNovelId)
+
+  const addEra = (data) => {
+    const era = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data }
+    setEras(prev => [...prev, era])
+    return era
+  }
+  const updateEra = (id, data) => setEras(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
+  const deleteEra = (id) => {
+    setEras(prev => prev.filter(e => e.id !== id))
+    // clear era reference from timeline entries
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev =>
+      prev.map(e => e.eraId === id ? { ...e, eraId: null, era: '' } : e)
+    )
+  }
+
   const addSeries = (name) => {
     const s = { id: uid(), name, createdAt: new Date().toISOString() }
     setSeries(prev => [...prev, s])
@@ -1749,7 +1816,7 @@ export function useStore(userId = null, options = {}) {
     series, addSeries, deleteSeries, updateSeries, reorderSeries, reorderNovels,
     allProjectStats, activeProjectStats,
     characters: seriesScope(characters, 'characters'),
-    saveCharacter, deleteCharacter,
+    saveCharacter, saveCharacterJourney, deleteCharacter,
     factions: novelFactions,
     saveFaction, deleteFaction,
     setFactions: (updater) => {
@@ -1766,6 +1833,7 @@ export function useStore(userId = null, options = {}) {
     addEvent, updateEvent, deleteEvent, linkTimelineHistory, unlinkTimelineHistory,
     worldHistory: novelWorldHistory,
     addHistoryEntry, updateHistoryEntry, deleteHistoryEntry,
+    eras: novelEras, addEra, updateEra, deleteEra,
     currentYear: activeNovel?.currentYear ?? currentYear, updateCurrentYear,
     loreEntries: novelLoreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
     ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, deleteIdeaEntry,
@@ -1793,8 +1861,9 @@ export function useStore(userId = null, options = {}) {
 
   const guardedMethods = [
     'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
-    'saveCharacter', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
+    'saveCharacter', 'saveCharacterJourney', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
     'addEvent', 'updateEvent', 'deleteEvent', 'linkTimelineHistory', 'unlinkTimelineHistory', 'addHistoryEntry', 'updateHistoryEntry', 'deleteHistoryEntry',
+    'addEra', 'updateEra', 'deleteEra',
     'updateCurrentYear', 'addLoreEntry', 'updateLoreEntry', 'deleteLoreEntry',
     'addIdeaEntry', 'updateIdeaEntry', 'deleteIdeaEntry', 'updateWhiteboard', 'updateMapProject',
     'addMap', 'deleteMap', 'renameMap', 'updateActiveMapData', 'addLocation',

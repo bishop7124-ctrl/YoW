@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
+import MarketingFooter from '../marketing/MarketingFooter'
 
 // ── Feature presence values ──────────────────────────────────────────────────
 // true = included (default on)
@@ -614,6 +615,7 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
         </section>
 
       </main>
+      <MarketingFooter />
     </div>
   )
 }

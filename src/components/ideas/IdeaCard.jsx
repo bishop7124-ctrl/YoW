@@ -11,6 +11,7 @@ export default function IdeaCard({
   isDragging,
   isDropBefore,
   onSelect,
+  onEdit,
   onUpdate,
   onDelete,
   onArchive,
@@ -90,7 +91,8 @@ export default function IdeaCard({
         onClick={e => {
           if (isDragging || editingTitle) return
           e.stopPropagation()
-          onSelect?.(idea.id === (isSelected ? idea.id : null) ? null : idea.id)
+          if (onEdit) onEdit(idea.id)
+          else onSelect?.(idea.id === (isSelected ? idea.id : null) ? null : idea.id)
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -186,44 +188,16 @@ export default function IdeaCard({
           </button>
         </div>
 
-        {/* Description (shown when expanded or selected) */}
-        {(expanded || isSelected) && hasDesc && (
-          <div style={{ margin: '8px 0 0 18px' }}>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, wordBreak: 'break-word' }}>
-              {descText}
-            </p>
-            {expanded && isLongBody && (
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); setExpanded(false) }}
-                onPointerDown={e => e.stopPropagation()}
-                style={{ marginTop: 5, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}
-              >
-                Show less
-              </button>
-            )}
-          </div>
-        )}
 
-        {/* Collapsed description preview */}
+        {/* Collapsed description preview — 4 lines max */}
         {!expanded && !isSelected && hasDesc && (
           <div style={{ margin: '5px 0 0 18px' }}>
             <p style={{
-              margin: 0, fontSize: 11, color: 'var(--faint)', lineHeight: 1.4,
-              ...(isLongBody ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
+              margin: 0, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5,
+              display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden',
             }}>
-              {isLongBody ? descText.slice(0, PREVIEW_CHARS) + '…' : truncate(descText, 80)}
+              {descText}
             </p>
-            {isLongBody && (
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); setExpanded(true) }}
-                onPointerDown={e => e.stopPropagation()}
-                style={{ marginTop: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}
-              >
-                Show more
-              </button>
-            )}
           </div>
         )}
 

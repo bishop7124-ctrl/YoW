@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
+import MarketingFooter from '../marketing/MarketingFooter'
 
 const FAQ_SECTIONS = [
   {
@@ -78,6 +79,23 @@ const FAQ_SECTIONS = [
     ],
   },
   {
+    heading: 'Local Mode',
+    items: [
+      {
+        q: 'How do I use Local Mode?',
+        a: "Local Mode stores your projects on your device instead of the cloud. It's available on the Lifetime plan and activates automatically if your Cloud Mode period lapses. To switch manually: open Account Settings → Membership → and toggle Cloud Mode off. Your data stays on this device, nothing is uploaded, and you can keep writing without an internet connection. To move projects between devices in Local Mode, use the Export (ZIP) option from the project menu and Import on the other device.",
+      },
+      {
+        q: 'What is the difference between Cloud Mode and Local Mode?',
+        a: "In Cloud Mode, your data is stored securely in the cloud and syncs across your devices. In Local Mode, projects are stored on your device only. Both modes give you full access to the editor, all studio rooms, and exports — the only difference is where your data lives. You own your work either way.",
+      },
+      {
+        q: 'Can I switch between Local Mode and Cloud Mode?',
+        a: "Lifetime users can toggle between modes in Account Settings → Membership. When you switch to Cloud Mode, your local projects are uploaded. When you switch to Local Mode, your cloud data is downloaded to this device. Monthly subscribers are always in Cloud Mode while their subscription is active.",
+      },
+    ],
+  },
+  {
     heading: 'Getting Started',
     items: [
       {
@@ -90,7 +108,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Can I import an existing manuscript?',
-        a: 'You can paste or type your existing content directly into the manuscript editor. Structured imports (e.g. from DOCX) are on the roadmap.',
+        a: 'You can paste or type your existing content directly into the manuscript editor. DOCX import is also supported — use the import button in the manuscript toolbar.',
       },
     ],
   },
@@ -192,6 +210,7 @@ export default function FAQPage({ onGetStarted, onLogin, user }) {
         </section>
 
       </main>
+      <MarketingFooter />
     </div>
   )
 }

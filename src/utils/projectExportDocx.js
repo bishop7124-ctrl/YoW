@@ -164,6 +164,49 @@ export const createProjectDocxBlob = async (projectData) => {
         ['Internal goal', character.internalGoal],
       ])
       addDocParagraphs(children, docx, character.bio || character.description || character.notes)
+      if (character.journey) {
+        const journey = character.journey
+        addDocHeading(children, docx, 'Character Journey', HeadingLevel.HEADING_3)
+        addDocFields(children, docx, [
+          ['Arc type', journey.arcType],
+          ['Scope', journey.scope === 'series' ? 'Across the series' : 'This project'],
+          ['Starting state', journey.startingState],
+          ['Ending state', journey.endingState],
+          ['Core wound', journey.coreWound],
+          ['Core fear', journey.fear],
+          ['Lie believed', journey.lieBelieved],
+          ['Truth to learn', journey.truthLearned],
+          ['Want', journey.want],
+          ['Need', journey.need],
+          ['Fatal flaw', journey.fatalFlaw],
+          ['Strength', journey.strength],
+          ['Internal conflict', journey.internalConflict],
+          ['External conflict', journey.externalConflict],
+          ['Beginning belief', journey.beginningBelief],
+          ['Ending belief', journey.endingBelief],
+          ['Beginning goal', journey.beginningGoal],
+          ['Ending goal', journey.endingGoal],
+          ['Beginning fear', journey.beginningFear],
+          ['Ending fear', journey.endingFear],
+          ['Beginning relationships', journey.beginningRelationships],
+          ['Ending relationships', journey.endingRelationships],
+        ])
+        addDocParagraphs(children, docx, journey.notes)
+        ;[...(journey.beats || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).forEach((beat, index) => {
+          addDocHeading(children, docx, `${index + 1}. ${beat.title || 'Untitled beat'}`, HeadingLevel.HEADING_3)
+          addDocFields(children, docx, [
+            ['Story phase', beat.storyPhase === 'Custom' ? beat.customPhase : beat.storyPhase],
+            ['Major turning point', beat.isMajorTurningPoint ? 'Yes' : ''],
+            ['Emotional state', beat.emotionalState],
+            ['Belief', beat.belief],
+            ['Goal', beat.goal],
+            ['Conflict', beat.conflict],
+            ['Choice made', beat.choiceMade],
+            ['Consequence', beat.consequence],
+          ])
+          addDocParagraphs(children, docx, beat.description)
+        })
+      }
     })
   }
 

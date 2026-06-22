@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import {
   SCRIPT_TYPES, SCENE_STATUSES, nextStatus,
   buildScriptBlocks, getScriptElements, getScriptElementLabel, getNextScriptElementAfterEnter,
   getScriptBlockIndexAtOffset, syncScriptBlocks,
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
 } from './manuscriptUtils.js'
+import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 
 const InlineInput = ({ value, onSave, className, placeholder }) => {
   const [temp, setTemp] = useState(value)
@@ -241,6 +242,9 @@ export const SceneEditor = ({
   onPersistDraft,
   onOpenVersionHistory,
   projectType,
+  focusedWriting = false,
+  scrollContainerRef,
+  pageZoom = 1,
 }) => {
   const [localContent, setLocalContent] = useState(scene.content || '')
   const [localScriptBlocks, setLocalScriptBlocks] = useState(() => scene.scriptBlocks?.length
@@ -270,39 +274,24 @@ export const SceneEditor = ({
     return () => window.cancelAnimationFrame(sync)
   }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
 
-  // Auto-resize + scroll to keep cursor near vertical centre while typing
-  useEffect(() => {
+  // Resize before paint so caret measurement always uses the settled textarea height.
+  useLayoutEffect(() => {
     if (!focused || !textareaRef.current) return
     const ta = textareaRef.current
     ta.style.height = 'auto'
     ta.style.height = ta.scrollHeight + 'px'
+  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom])
 
-    const scrollEl = ta.closest('.ms-scroll-container')
-    if (!scrollEl) return
+  const scheduleCaretFollow = useCaretComfortScroll({
+    textareaRef,
+    scrollContainerRef,
+    enabled: focusedWriting && focused,
+    scale: pageZoom,
+  })
 
-    const scrollElRect = scrollEl.getBoundingClientRect()
-    const taRect = ta.getBoundingClientRect()
-
-    // Approximate cursor position within textarea
-    const text = ta.value.substring(0, ta.selectionEnd)
-    const lineCount = Math.max(text.split('\n').length, 1)
-    const totalLines = Math.max(ta.value.split('\n').length, 1)
-    const cursorRatio = lineCount / totalLines
-
-    const taTopInScroll = taRect.top - scrollElRect.top + scrollEl.scrollTop
-    const cursorYInScroll = taTopInScroll + taRect.height * cursorRatio
-
-    // Centre of scroll container
-    const targetScroll = cursorYInScroll - scrollEl.clientHeight * 0.42
-
-    // Only scroll if cursor is outside a comfortable zone (avoid constant jumping)
-    const cursorVisibleY = taRect.top + taRect.height * cursorRatio - scrollElRect.top
-    const topZone = scrollEl.clientHeight * 0.25
-    const bottomZone = scrollEl.clientHeight * 0.75
-    if (cursorVisibleY < topZone || cursorVisibleY > bottomZone) {
-      scrollEl.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' })
-    }
-  }, [localContent, focused])
+  useLayoutEffect(() => {
+    if (focusedWriting && focused) scheduleCaretFollow()
+  }, [focusedWriting, focused, localContent, formatSettings, pageZoom, scheduleCaretFollow])
 
   const debouncedUpdate = useDebouncedCallback(text => onUpdate(scene.id, text), 400)
 
@@ -532,7 +521,7 @@ export const SceneEditor = ({
   }
 
   return (
-    <div ref={wrapperRef} className="relative group/scene" id={`ms-scene-${scene.id}`}>
+    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`} id={`ms-scene-${scene.id}`}>
       {/* Scene header — title + controls */}
       <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}`}>
         <div className="ms-scene-header-row">

@@ -6,6 +6,9 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Routes handled by the React SPA — do not serve static files for these
+const SPA_ROUTES = new Set(['/features', '/features/', '/pricing', '/pricing/', '/faq', '/faq/', '/founders', '/founders/'])
+
 // Serve static marketing HTML pages from public/ in dev (e.g. /founders/, /about/)
 function staticHtmlMiddleware() {
   return {
@@ -14,6 +17,7 @@ function staticHtmlMiddleware() {
       server.middlewares.use((req, res, next) => {
         const url = req.url?.split('?')[0] ?? '/'
         if (url === '/' || !url.startsWith('/')) return next()
+        if (SPA_ROUTES.has(url)) return next()
         const filePath = path.resolve(__dirname, 'public', url.replace(/^\//, ''), 'index.html')
         if (fs.existsSync(filePath)) {
           res.setHeader('Content-Type', 'text/html')

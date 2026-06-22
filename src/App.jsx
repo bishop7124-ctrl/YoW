@@ -21,6 +21,7 @@ import { useTourStore } from './components/onboarding/useTourStore'
 import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
 import FAQPage from './components/faq/FAQPage'
+import FoundersPage from './components/founders/FoundersPage'
 import { getMembership } from './utils/membership'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import {
@@ -53,6 +54,10 @@ function isFeaturesPath(path) {
 
 function isFAQPath(path) {
   return path === '/faq' || path === '/faq/'
+}
+
+function isFoundersPath(path) {
+  return path === '/founders' || path === '/founders/'
 }
 
 function getAuthRouteMode(path) {
@@ -174,6 +179,7 @@ function AppInner() {
   const [showPricing, setShowPricing] = useState(() => isPricingPath(window.location.pathname))
   const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
   const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
+  const [showFounders, setShowFounders] = useState(() => isFoundersPath(window.location.pathname))
   const [authRouteMode, setAuthRouteMode] = useState(() => getAuthRouteMode(window.location.pathname))
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(() => initialRouteSnapshot.accountOpen)
@@ -193,6 +199,7 @@ function AppInner() {
     setShowPricing(isPricingPath(path))
     setShowFeatures(isFeaturesPath(path))
     setShowFAQ(isFAQPath(path))
+    setShowFounders(isFoundersPath(path))
     setAuthRouteMode(getAuthRouteMode(path))
   }
 
@@ -258,15 +265,19 @@ function AppInner() {
     const handlePop = () => {
       const path = window.location.pathname
       if (isPricingPath(path)) {
-        setShowPricing(true); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
+        setShowPricing(true); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
         return
       }
       if (isFeaturesPath(path)) {
-        setShowFeatures(true); setShowPricing(false); setShowFAQ(false); setAuthRouteMode(null)
+        setShowFeatures(true); setShowPricing(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
         return
       }
       if (isFAQPath(path)) {
-        setShowFAQ(true); setShowPricing(false); setShowFeatures(false); setAuthRouteMode(null)
+        setShowFAQ(true); setShowPricing(false); setShowFeatures(false); setShowFounders(false); setAuthRouteMode(null)
+        return
+      }
+      if (isFoundersPath(path)) {
+        setShowFounders(true); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
         return
       }
       const nextAuthRouteMode = getAuthRouteMode(path)
@@ -274,7 +285,7 @@ function AppInner() {
         setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(nextAuthRouteMode)
         return
       }
-      setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
+      setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
       const route = parseRoute()
       setSection(route.section)
       setLayoutViewMode(route.layoutViewMode)
@@ -429,6 +440,21 @@ function AppInner() {
     return (
       <>
         <FAQPage
+          user={user}
+          onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
+          onLogin={() => navigatePublic(user ? '/' : '/login')}
+        />
+        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+        <BetaBanner />
+      </>
+    )
+  }
+
+  if (showFounders) {
+    return (
+      <>
+        <FoundersPage
           user={user}
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onLogin={() => navigatePublic(user ? '/' : '/login')}

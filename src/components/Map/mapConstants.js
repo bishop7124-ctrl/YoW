@@ -1,7 +1,7 @@
 
 export const MAP_W = 2560
 export const MAP_H = 1920
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 export const MIN_SIZE = 18
 export const DEFAULT_ZOOM = 0.42
 export const MIN_ZOOM = 0.12
@@ -9,6 +9,7 @@ export const MAX_ZOOM = 2.5
 export const WHEEL_ZOOM_INTENSITY = 0.0016
 export const DRAG_THRESHOLD_PX = 4
 export const DEFAULT_OBJECT_LAYER_ID = 'objects'
+export const DEFAULT_LOCATION_LAYER_ID = 'locations'
 export const LAND_FILL = '#244b2f'
 export const LAND_STROKE = '#162a1c'
 export const WATER_FILL = '#4aa7c7'
@@ -52,6 +53,7 @@ export const STYLE_PRESET_OPTIONS = [
   { value: 'parchment', label: 'Parchment' },
   { value: 'ink', label: 'Ink' },
   { value: 'atlas', label: 'Atlas' },
+  { value: 'dungeon', label: 'Dungeon' },
 ]
 
 export const MAP_TYPE_OPTIONS = [
@@ -79,21 +81,24 @@ export const STAMP_LIBRARY = [
   { id: 'portal', name: 'Portal', icon: 'Portal', assetSrc: '/map-stamps/portal.png', category: 'Magic', mapTypes: ['world', 'region', 'local'], size: 96, fill: '#111111', stroke: '#111111', keywords: 'portal gate magic arch' },
   { id: 'magic-source', name: 'Magic Source', icon: 'Crystal', assetSrc: '/map-stamps/magic-source.png', category: 'Magic', mapTypes: ['world', 'region', 'local'], size: 96, fill: '#111111', stroke: '#111111', keywords: 'magic source crystal mana power' },
   { id: 'trees', name: 'Trees', icon: 'Trees', assetSrc: '/map-stamps/forest.png', category: 'Nature', mapTypes: ['region', 'local'], size: 74, fill: '#111111', stroke: '#111111', keywords: 'tree woods forest' },
-  { id: 'walls', name: 'Walls', icon: '▤', category: 'Structure', mapTypes: ['interior'], size: 120, fill: '#8a7b68', stroke: '#3d342b', keywords: 'room stone barrier' },
-  { id: 'door', name: 'Door', icon: '▯', category: 'Structure', mapTypes: ['interior', 'local'], size: 70, fill: '#8b5a33', stroke: '#3d2414', keywords: 'entry exit gate' },
-  { id: 'window', name: 'Window', icon: '▦', category: 'Structure', mapTypes: ['interior'], size: 58, fill: '#6f98a4', stroke: '#263b42', keywords: 'glass opening interior' },
-  { id: 'table', name: 'Table', icon: '▭', category: 'Furniture', mapTypes: ['interior'], size: 90, fill: '#7a4f30', stroke: '#382213', keywords: 'desk furniture dining' },
-  { id: 'chair', name: 'Chair', icon: '┘', category: 'Furniture', mapTypes: ['interior'], size: 58, fill: '#7b5435', stroke: '#3a2415', keywords: 'seat furniture' },
-  { id: 'bed', name: 'Bed', icon: '▰', category: 'Furniture', mapTypes: ['interior'], size: 108, fill: '#926d65', stroke: '#3d2727', keywords: 'sleep furniture' },
-  { id: 'container', name: 'Container', icon: '▣', category: 'Furniture', mapTypes: ['interior', 'local'], size: 66, fill: '#9a6a32', stroke: '#3e2611', keywords: 'chest crate barrel box' },
-  { id: 'fireplace', name: 'Fireplace', icon: '▲', category: 'Furniture', mapTypes: ['interior'], size: 78, fill: '#a24e36', stroke: '#432018', keywords: 'hearth fire' },
+  { id: 'walls', name: 'Walls', icon: '▤', category: 'Structure', mapTypes: ['interior'], size: 120, fill: '#d8d0be', stroke: '#181b1d', keywords: 'room stone barrier' },
+  { id: 'door', name: 'Door', icon: '▯', category: 'Structure', mapTypes: ['interior', 'local'], size: 150, fill: '#d8d0be', stroke: '#181b1d', keywords: 'entry exit gate' },
+  { id: 'window', name: 'Window', icon: '▦', category: 'Structure', mapTypes: ['interior'], size: 58, fill: '#d8d0be', stroke: '#181b1d', keywords: 'glass opening interior' },
+  { id: 'table', name: 'Table', icon: '▭', category: 'Furniture', mapTypes: ['interior'], size: 90, fill: '#c9b995', stroke: '#181b1d', keywords: 'desk furniture dining' },
+  { id: 'chair', name: 'Chair', icon: '┘', category: 'Furniture', mapTypes: ['interior'], size: 58, fill: '#c9b995', stroke: '#181b1d', keywords: 'seat furniture' },
+  { id: 'bed', name: 'Bed', icon: '▰', category: 'Furniture', mapTypes: ['interior'], size: 108, fill: '#b8c0c4', stroke: '#181b1d', keywords: 'sleep furniture' },
+  { id: 'container', name: 'Chest', icon: '▣', category: 'Furniture', mapTypes: ['interior', 'local'], size: 66, fill: '#c9b995', stroke: '#181b1d', keywords: 'chest crate barrel box' },
+  { id: 'fireplace', name: 'Hearth', icon: '▲', category: 'Furniture', mapTypes: ['interior'], size: 78, fill: '#c9b995', stroke: '#181b1d', keywords: 'hearth fireplace fire' },
+  { id: 'stairs', name: 'Stairs', icon: '≋', category: 'Dungeon', mapTypes: ['interior'], size: 82, fill: '#d8d0be', stroke: '#181b1d', keywords: 'stairs steps level dungeon' },
+  { id: 'trap', name: 'Trap', icon: '!', category: 'Dungeon', mapTypes: ['interior'], size: 64, fill: '#d8d0be', stroke: '#181b1d', keywords: 'trap hazard danger dungeon' },
+  { id: 'secret-door', name: 'Secret Door', icon: '?', category: 'Dungeon', mapTypes: ['interior'], size: 66, fill: '#d8d0be', stroke: '#181b1d', keywords: 'secret hidden door passage dungeon' },
 ]
 
 export const DEFAULT_CATEGORIES_BY_MAP_TYPE = {
   world: ['Terrain', 'Political', 'Settlements', 'Landmarks'],
   region: ['Terrain', 'Nature', 'Settlements', 'Landmarks'],
   local: ['Nature', 'Settlements', 'Landmarks', 'Structure'],
-  interior: ['Structure', 'Furniture'],
+  interior: ['Structure', 'Furniture', 'Dungeon'],
 }
 
 export const stampAssetCache = new Map()
@@ -122,11 +127,11 @@ export const MAP_TYPE_TOOLSETS = {
     purpose: 'Large-scale geography and realms',
     tools: [
       { id: 'landmasses', mode: 'shape', label: 'Landmasses', icon: '▰' },
-      { id: 'regions', mode: 'region', label: 'Kingdoms', icon: '□' },
+      { id: 'regions', mode: 'region', label: 'Regions', icon: '□' },
       { id: 'borders', mode: 'border', label: 'Borders', icon: '⋯' },
       { id: 'waters', mode: 'river', label: 'Rivers & seas', icon: '~' },
       { id: 'terrain', mode: 'stamp', label: 'Stamps', icon: '✦' },
-      { id: 'cities', mode: 'location', label: 'Cities', icon: '⌖' },
+      { id: 'locations', mode: 'location', label: 'Locations', icon: '⌖' },
       { id: 'labels', mode: 'label', label: 'Labels', icon: 'T' },
     ],
   },
@@ -158,14 +163,13 @@ export const MAP_TYPE_TOOLSETS = {
   },
   interior: {
     label: 'Interior Map',
-    purpose: 'Rooms, buildings, dungeons, and interiors',
+    purpose: 'Rooms, custom walls, doors, furniture, and interior layouts',
     tools: [
       { id: 'rooms', mode: 'shape', label: 'Rooms', icon: '▰' },
       { id: 'walls', mode: 'border', label: 'Walls', icon: '▤' },
-      { id: 'doors', mode: 'stamp', label: 'Doors', icon: '▯' },
-      { id: 'windows', mode: 'stamp', label: 'Windows', icon: '▦' },
-      { id: 'furniture', mode: 'stamp', label: 'Furniture', icon: '▭' },
-      { id: 'objects', mode: 'stamp', label: 'Interior objects', icon: '▣' },
+      { id: 'doors', mode: 'stamp', label: 'Door', icon: '▯', stampId: 'door', compact: true },
+      { id: 'furniture', mode: 'stamp', label: 'Furniture', icon: '▭', stampCategory: 'Furniture' },
+      { id: 'dungeon-features', mode: 'stamp', label: 'Interior features', icon: '!', stampCategory: 'Dungeon' },
       { id: 'labels', mode: 'label', label: 'Labels', icon: 'T' },
     ],
   },

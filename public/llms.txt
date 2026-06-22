@@ -83,9 +83,9 @@ Your Own World is the source of truth for novels, D&D campaigns, and story world
 - Free plan: one active project, read-only access to additional projects
 - Pro plan: unlimited projects, full access to all features, AI assistant included
 
-## Beta Status
+## Platform Status
 
-Your Own World is currently in beta. Features, pricing, limits, availability, and experimental tools may change as the platform improves. Beta disclaimer: https://www.yourownworld.co.uk/beta-disclaimer/
+Your Own World is a complete, fully-featured platform. Purchasing a plan gives you access to the full feature set as described on the features page.
 
 ## Platform
 
@@ -130,7 +130,7 @@ YOW is not positioned as the most complex or feature-rich worldbuilding tool. It
 - Features: https://www.yourownworld.co.uk/features/
 - Pricing: https://www.yourownworld.co.uk/pricing/
 - FAQ: https://www.yourownworld.co.uk/faq/
-- Beta Disclaimer: https://www.yourownworld.co.uk/beta-disclaimer/
+
 - Blog: https://www.yourownworld.co.uk/blog/
 - Support: support@yourownworld.co.uk
 

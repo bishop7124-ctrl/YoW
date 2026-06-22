@@ -36,7 +36,414 @@ function normalise(entry) {
   }
 }
 
-// ─── Detail panel ─────────────────────────────────────────────────────────────
+// ─── Create modal ─────────────────────────────────────────────────────────────
+
+function IdeaCreateModal({ status, onClose, onAdd }) {
+  const [title, setTitle] = useState('')
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!title.trim()) return
+    onAdd(title.trim(), status)
+    onClose()
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,.55)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-nav)',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          padding: '28px 28px 24px',
+          width: 420,
+          maxWidth: '90vw',
+          boxShadow: '0 24px 64px rgba(0,0,0,.45)',
+        }}
+      >
+        <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>
+          New idea
+        </h3>
+        <form onSubmit={handleSubmit}>
+          <input
+            autoFocus
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="What's your idea?"
+            onKeyDown={e => { if (e.key === 'Escape') onClose() }}
+            style={{
+              width: '100%',
+              background: 'color-mix(in srgb, var(--bg-nav) 60%, var(--bg-main))',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '10px 14px',
+              color: 'var(--text-main)',
+              fontSize: 14,
+              fontFamily: 'inherit',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+            onFocus={e => { e.target.style.borderColor = 'var(--accent)' }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={!title.trim()}>Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Edit modal ───────────────────────────────────────────────────────────────
+
+function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
+  const [titleDraft, setTitleDraft] = useState(idea.title || '')
+  const [bodyDraft, setBodyDraft] = useState(idea.description || idea.body || '')
+  const [tagDraft, setTagDraft] = useState('')
+  const [linkSearch, setLinkSearch] = useState('')
+  const [showLinkSearch, setShowLinkSearch] = useState(false)
+  const isExpanding = aiExpandId === idea.id
+  const textareaRef = useRef(null)
+
+  useEffect(() => {
+    setTitleDraft(idea.title || '')
+    setBodyDraft(idea.description || idea.body || '')
+  }, [idea.id, idea.title, idea.description, idea.body])
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef.current
+    if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
+  }, [bodyDraft])
+
+  const commitTitle = () => {
+    const t = titleDraft.trim()
+    if (t && t !== idea.title) onUpdate(idea.id, { title: t })
+  }
+
+  const commitBody = () => {
+    const b = bodyDraft
+    if (b !== (idea.description || idea.body || '')) onUpdate(idea.id, { description: b, body: b })
+  }
+
+  const allEntities = useMemo(() => {
+    const arr = []
+    ;(store.characters || []).forEach(c => arr.push({ type: 'character', id: c.id, name: c.name || 'Unnamed' }))
+    ;(store.locations || []).forEach(l => arr.push({ type: 'location', id: l.id, name: l.name || 'Unnamed' }))
+    ;(store.factions || []).forEach(f => arr.push({ type: 'faction', id: f.id, name: f.name || 'Unnamed' }))
+    ;(store.loreEntries || []).forEach(e => arr.push({ type: 'lore', id: e.id, name: e.title || 'Untitled' }))
+    return arr
+  }, [store.characters, store.locations, store.factions, store.loreEntries])
+
+  const linkResults = useMemo(() => {
+    if (!linkSearch.trim()) return []
+    const q = linkSearch.toLowerCase()
+    const linked = idea.linkedEntities || []
+    return allEntities.filter(e => e.name.toLowerCase().includes(q) && !linked.some(l => l.id === e.id)).slice(0, 6)
+  }, [linkSearch, allEntities, idea.linkedEntities])
+
+  const addLink = (entity) => {
+    onUpdate(idea.id, { linkedEntities: [...(idea.linkedEntities || []), entity] })
+    setLinkSearch('')
+    setShowLinkSearch(false)
+  }
+
+  const addTag = (tag) => {
+    const clean = tag.trim().toLowerCase().replace(/\s+/g, '-')
+    if (clean && !(idea.tags || []).includes(clean)) onUpdate(idea.id, { tags: [...(idea.tags || []), clean] })
+    setTagDraft('')
+  }
+
+  const statusInfo = KANBAN_STATUSES.find(s => s.id === (idea.status || 'raw'))
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.6)' }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '78vw',
+          maxWidth: 960,
+          height: '82vh',
+          background: 'var(--bg-nav)',
+          border: '1px solid var(--border)',
+          borderRadius: 18,
+          boxShadow: '0 32px 96px rgba(0,0,0,.55)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Modal toolbar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 20px',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
+            background: 'var(--accent-fade)', color: 'var(--accent)',
+            letterSpacing: '.04em', textTransform: 'uppercase',
+          }}>
+            {statusInfo?.label || idea.status}
+          </span>
+          {idea.isFavourite && <span style={{ fontSize: 12, color: '#f59e0b' }}>★</span>}
+          <div style={{ flex: 1 }} />
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => onAiExpand?.(idea.id)}
+              disabled={isExpanding}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'none', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '5px 12px',
+                cursor: 'pointer', color: 'var(--accent)',
+                fontSize: 11, fontFamily: 'inherit',
+                opacity: isExpanding ? 0.6 : 1,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+              {isExpanding ? 'Expanding…' : 'AI expand'}
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => onConvert?.()}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, fontFamily: 'inherit' }}
+            >
+              Convert
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => { onDelete?.(); onClose() }}
+              style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--danger) 30%, var(--border))', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'var(--danger)', fontSize: 11, fontFamily: 'inherit' }}
+            >
+              Delete
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Main body — two columns: document + sidebar */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+          {/* Document area */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', padding: '32px 48px' }}>
+            {/* Title */}
+            <input
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+              readOnly={readOnly}
+              placeholder="Untitled idea"
+              style={{
+                width: '100%',
+                background: 'none',
+                border: 'none',
+                outline: 'none',
+                fontFamily: 'var(--font-serif)',
+                fontSize: 32,
+                fontWeight: 700,
+                color: 'var(--text-main)',
+                lineHeight: 1.2,
+                marginBottom: 24,
+                padding: 0,
+                cursor: readOnly ? 'default' : 'text',
+              }}
+            />
+
+            {/* Body / content */}
+            <textarea
+              ref={textareaRef}
+              value={bodyDraft}
+              onChange={e => setBodyDraft(e.target.value)}
+              onBlur={commitBody}
+              readOnly={readOnly}
+              placeholder={readOnly ? '' : 'Start writing your idea here…'}
+              style={{
+                width: '100%',
+                background: 'none',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                overflow: 'hidden',
+                fontFamily: 'var(--font-sans, inherit)',
+                fontSize: 15,
+                color: 'var(--text-main)',
+                lineHeight: 1.75,
+                padding: 0,
+                minHeight: 200,
+                cursor: readOnly ? 'default' : 'text',
+              }}
+            />
+          </div>
+
+          {/* Sidebar */}
+          <div style={{
+            width: 220,
+            borderLeft: '1px solid var(--border)',
+            overflowY: 'auto',
+            padding: '20px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 20,
+            flexShrink: 0,
+          }}>
+            {/* Status change */}
+            {!readOnly && (
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Status</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {KANBAN_STATUSES.map(s => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => onUpdate(idea.id, { status: s.id })}
+                      style={{
+                        background: (idea.status || 'raw') === s.id ? 'var(--accent-fade)' : 'none',
+                        border: `1px solid ${(idea.status || 'raw') === s.id ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border)'}`,
+                        borderRadius: 8,
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        color: (idea.status || 'raw') === s.id ? 'var(--accent)' : 'var(--text-muted)',
+                        fontSize: 11,
+                        fontFamily: 'inherit',
+                        textAlign: 'left',
+                        fontWeight: (idea.status || 'raw') === s.id ? 700 : 400,
+                      }}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tags */}
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Tags</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                {(idea.tags || []).map(tag => (
+                  <span key={tag} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'var(--accent-fade)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    #{tag}
+                    {!readOnly && (
+                      <button type="button" onClick={() => onUpdate(idea.id, { tags: (idea.tags || []).filter(t => t !== tag) })} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', opacity: 0.6, lineHeight: 1, fontSize: 12 }}>×</button>
+                    )}
+                  </span>
+                ))}
+                {!readOnly && (
+                  <input
+                    value={tagDraft}
+                    onChange={e => setTagDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft) }
+                      if (e.key === 'Backspace' && !tagDraft) onUpdate(idea.id, { tags: (idea.tags || []).slice(0, -1) })
+                    }}
+                    placeholder="+ add tag"
+                    style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 10, fontFamily: 'inherit', padding: '2px 0', minWidth: 50 }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Linked entities */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Linked to</label>
+                {!readOnly && (
+                  <button type="button" onClick={() => setShowLinkSearch(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 10, fontFamily: 'inherit', padding: 0 }}>+ link</button>
+                )}
+              </div>
+              {showLinkSearch && (
+                <div style={{ marginBottom: 8 }}>
+                  <input
+                    autoFocus
+                    value={linkSearch}
+                    onChange={e => setLinkSearch(e.target.value)}
+                    placeholder="Search…"
+                    style={{ width: '100%', background: 'color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main))', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-main)', fontSize: 11, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                  {linkResults.length > 0 && (
+                    <div style={{ marginTop: 4, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                      {linkResults.map(e => (
+                        <button key={e.id} type="button" onClick={() => addLink(e)} style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-main)', fontSize: 11, fontFamily: 'inherit', textAlign: 'left' }}>
+                          <span style={{ fontSize: 9, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em', width: 48, flexShrink: 0 }}>{e.type}</span>
+                          {e.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {(idea.linkedEntities || []).length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {idea.linkedEntities.map(entity => (
+                    <div key={entity.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: 'color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main))', borderRadius: 7, border: '1px solid var(--border)', fontSize: 11 }}>
+                      <span style={{ fontSize: 9, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em', width: 48, flexShrink: 0 }}>{entity.type}</span>
+                      <span style={{ flex: 1, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entity.name}</span>
+                      {!readOnly && (
+                        <button type="button" onClick={() => onUpdate(idea.id, { linkedEntities: (idea.linkedEntities || []).filter(e => e.id !== entity.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: 11, color: 'var(--faint)' }}>No linked entities.</p>
+              )}
+            </div>
+
+            {/* Converted indicator */}
+            {idea.convertedTo && (
+              <div style={{ padding: '8px 12px', background: 'color-mix(in srgb, #7ac4a0 10%, var(--bg-nav))', border: '1px solid color-mix(in srgb, #7ac4a0 30%, var(--border))', borderRadius: 8, fontSize: 11 }}>
+                <p style={{ margin: 0, color: '#7ac4a0', fontWeight: 600 }}>✓ Converted to {idea.convertedTo.type}</p>
+                <p style={{ margin: '2px 0 0', color: 'var(--text-muted)' }}>{idea.convertedTo.name}</p>
+              </div>
+            )}
+
+            {/* Archive / restore */}
+            {!readOnly && (
+              <div style={{ marginTop: 'auto' }}>
+                {idea.status !== 'archived' ? (
+                  <button type="button" onClick={() => { onArchive?.(); onClose() }} className="btn btn-secondary" style={{ width: '100%' }}>Archive</button>
+                ) : (
+                  <button type="button" onClick={() => { onUpdate(idea.id, { status: 'raw' }); onClose() }} className="btn btn-secondary" style={{ width: '100%' }}>Restore</button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Detail panel (legacy, kept for reference) ────────────────────────────────
 
 function IdeaDetailPanel({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
   const [descDraft, setDescDraft] = useState(idea.description || idea.body || '')
@@ -534,6 +941,8 @@ export default function IdeasKanban({ store }) {
   const [selectedId, setSelectedId] = useState(null)
   const [convertId, setConvertId] = useState(null)
   const [aiExpandId, setAiExpandId] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [createStatus, setCreateStatus] = useState(null)
 
   // Drag state
   const [draggingId, setDraggingId] = useState(null)
@@ -600,6 +1009,21 @@ export default function IdeasKanban({ store }) {
     })
   }, [ideas, addIdeaEntry, readOnly])
 
+  const handleAddForStatus = useCallback((title, status) => {
+    if (!title.trim() || readOnly) return
+    const colIdeas = ideas.filter(i => (i.status || 'raw') === status)
+    const maxOrder = colIdeas.length ? Math.max(...colIdeas.map(i => i.order || 0)) : -1
+    addIdeaEntry({
+      title: title.trim(),
+      description: '',
+      body: '',
+      tags: [],
+      status,
+      order: maxOrder + 1,
+      updatedAt: Date.now(),
+    })
+  }, [ideas, addIdeaEntry, readOnly])
+
   const handleUpdate = useCallback((id, data) => {
     if (readOnly) return
     updateIdeaEntry(id, { ...data, updatedAt: Date.now() })
@@ -611,7 +1035,8 @@ export default function IdeasKanban({ store }) {
     deleteIdeaEntry(id, { scope })
     if (selectedId === id) setSelectedId(null)
     if (convertId === id) setConvertId(null)
-  }, [deleteIdeaEntry, readOnly, selectedId, convertId])
+    if (editingId === id) setEditingId(null)
+  }, [deleteIdeaEntry, readOnly, selectedId, convertId, editingId])
 
   const handleArchive = useCallback((id) => {
     handleUpdate(id, { status: 'archived' })
@@ -804,11 +1229,16 @@ export default function IdeasKanban({ store }) {
   // ── Derived ──────────────────────────────────────────────────────────────────
 
   const selectedIdea = selectedId ? ideas.find(i => i.id === selectedId) ?? null : null
+  const editingIdea = editingId ? ideas.find(i => i.id === editingId) ?? null : null
   const convertIdea = convertId ? ideas.find(i => i.id === convertId) ?? null : null
   const visibleStatuses = showArchived ? KANBAN_STATUSES : KANBAN_STATUSES.filter(s => s.id !== 'archived')
 
   const handleCardSelect = useCallback((id) => {
     setSelectedId(prev => prev === id ? null : id)
+  }, [])
+
+  const handleCardEdit = useCallback((id) => {
+    setEditingId(id)
   }, [])
 
   return (
@@ -865,6 +1295,7 @@ export default function IdeasKanban({ store }) {
             selectedId={selectedId}
             aiExpandId={aiExpandId}
             onCardClick={handleCardSelect}
+            onCardEdit={handleCardEdit}
             onCardPointerDown={handleCardPointerDown}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
@@ -873,6 +1304,7 @@ export default function IdeasKanban({ store }) {
             onFavourite={handleFavourite}
             onConvert={(id) => setConvertId(id)}
             onAiExpand={handleAiExpand}
+            onEmptyClick={() => setCreateStatus(status.id)}
             readOnly={readOnly}
           />
         ))}
@@ -884,19 +1316,28 @@ export default function IdeasKanban({ store }) {
         return idea ? <GhostCard idea={idea} style={ghostStyle} /> : null
       })()}
 
-      {/* Selected idea detail panel */}
-      {selectedIdea && (
-        <IdeaDetailPanel
-          idea={selectedIdea}
+      {/* Edit modal */}
+      {editingIdea && (
+        <IdeaEditModal
+          idea={editingIdea}
           store={store}
           onUpdate={handleUpdate}
-          onClose={() => setSelectedId(null)}
-          onConvert={() => setConvertId(selectedIdea.id)}
-          onArchive={() => handleArchive(selectedIdea.id)}
-          onDelete={() => handleDelete(selectedIdea.id)}
+          onClose={() => setEditingId(null)}
+          onConvert={() => { setConvertId(editingIdea.id); setEditingId(null) }}
+          onArchive={() => handleArchive(editingIdea.id)}
+          onDelete={() => { handleDelete(editingIdea.id); setEditingId(null) }}
           onAiExpand={handleAiExpand}
           aiExpandId={aiExpandId}
           readOnly={readOnly}
+        />
+      )}
+
+      {/* Create modal */}
+      {createStatus && (
+        <IdeaCreateModal
+          status={createStatus}
+          onClose={() => setCreateStatus(null)}
+          onAdd={handleAddForStatus}
         />
       )}
 

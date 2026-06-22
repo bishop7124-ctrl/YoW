@@ -1,5 +1,5 @@
 import {
-  MAP_W, MAP_H, SCHEMA_VERSION, MIN_SIZE, DEFAULT_OBJECT_LAYER_ID,
+  MAP_W, MAP_H, SCHEMA_VERSION, MIN_SIZE, DEFAULT_OBJECT_LAYER_ID, DEFAULT_LOCATION_LAYER_ID,
   LAND_FILL, LAND_STROKE, LINE_OBJECT_TYPES, CONTENT_OBJECT_TYPES,
   MAP_TYPE_OPTIONS, OBJECT_TYPES, STAMP_LIBRARY,
 } from './mapConstants.js'
@@ -29,6 +29,9 @@ export function normalizeMapType(value) {
 }
 
 export function objectTypeLabel(object) {
+  if (object?.metadata?.semanticType === 'room') return 'Room'
+  if (object?.metadata?.semanticType === 'corridor') return 'Corridor'
+  if (object?.metadata?.semanticType === 'wall') return 'Wall'
   return OBJECT_TYPES[object?.type]?.label || object?.type || 'Object'
 }
 
@@ -156,8 +159,42 @@ export function objectLocalFaces(object) {
   return validFaces
 }
 
-export function defaultLayers() {
-  return [{ id: DEFAULT_OBJECT_LAYER_ID, name: 'Objects', visible: true, locked: false, zIndex: 0 }]
+export const DEFAULT_CATEGORY_LAYER_IDS = new Set([
+  'shapes', 'regions', 'water', 'terrain', 'routes', 'boundaries',
+  'stamps', 'labels', DEFAULT_LOCATION_LAYER_ID, 'markers', DEFAULT_OBJECT_LAYER_ID,
+])
+
+export function defaultLayerIdForObject(type) {
+  return {
+    shape: 'shapes',
+    region: 'regions',
+    river: 'water',
+    mountain: 'terrain',
+    road: 'routes',
+    border: 'boundaries',
+    stamp: 'stamps',
+    label: 'labels',
+    location: DEFAULT_LOCATION_LAYER_ID,
+    marker: 'markers',
+  }[type] || DEFAULT_OBJECT_LAYER_ID
+}
+
+export function defaultLayers(mapType = 'region') {
+  const shapeName = mapType === 'interior' ? 'Rooms' : mapType === 'world' ? 'Landmasses' : 'Areas'
+  const boundaryName = mapType === 'interior' ? 'Walls' : 'Boundaries'
+  return [
+    { id: 'shapes', name: shapeName, visible: true, locked: false, zIndex: 0 },
+    { id: 'regions', name: 'Regions', visible: true, locked: false, zIndex: 1 },
+    { id: 'water', name: 'Water', visible: true, locked: false, zIndex: 2 },
+    { id: 'terrain', name: 'Terrain', visible: true, locked: false, zIndex: 3 },
+    { id: 'routes', name: 'Routes', visible: true, locked: false, zIndex: 4 },
+    { id: 'boundaries', name: boundaryName, visible: true, locked: false, zIndex: 5 },
+    { id: 'stamps', name: 'Stamps', visible: true, locked: false, zIndex: 6 },
+    { id: 'labels', name: 'Labels', visible: true, locked: false, zIndex: 7 },
+    { id: DEFAULT_LOCATION_LAYER_ID, name: 'Locations', visible: true, locked: false, zIndex: 8 },
+    { id: 'markers', name: 'Markers', visible: true, locked: false, zIndex: 9 },
+    { id: DEFAULT_OBJECT_LAYER_ID, name: 'Other', visible: true, locked: false, zIndex: 10 },
+  ]
 }
 
 export function createObject(type, index = 0) {
@@ -188,7 +225,7 @@ export function createObject(type, index = 0) {
       dashed: type === 'road' || type === 'border',
       shapeKind: type === 'shape' ? 'polygon' : 'rectangle',
       points: isLine ? [{ x: -0.5, y: 0 }, { x: 0.5, y: 0 }] : null,
-      layerId: DEFAULT_OBJECT_LAYER_ID,
+      layerId: defaultLayerIdForObject(type),
     },
   }
 }
@@ -216,7 +253,7 @@ export function createStampObject(stamp, index = 0, point = null) {
       category: stamp.category,
       opacity: 1,
       lineThickness: 2,
-      layerId: DEFAULT_OBJECT_LAYER_ID,
+      layerId: defaultLayerIdForObject('stamp'),
     },
   }, index)
 }
@@ -226,6 +263,17 @@ export function createLabelObject(index = 0, point = null) {
     ...createObject('label', index),
     x: point?.x ?? 440 + index * 24,
     y: point?.y ?? 340 + index * 24,
+    metadata: {
+      ...createObject('label', index).metadata,
+      name: 'Label',
+      text: 'Label',
+      fontFamily: '"Palatino Linotype", "Book Antiqua", Georgia, serif',
+      fontWeight: 600,
+      fontStyle: 'normal',
+      textColor: '#2a241b',
+      outlineColor: 'transparent',
+      backgroundColor: 'transparent',
+    },
   }, index)
 }
 
@@ -234,8 +282,8 @@ export function createLocationObject(location, index = 0, point = null) {
     ...createObject('location', index),
     x: point?.x ?? 460 + index * 24,
     y: point?.y ?? 360 + index * 24,
-    width: 96,
-    height: 96,
+    width: 72,
+    height: 72,
     metadata: {
       ...createObject('location', index).metadata,
       name: location?.name || 'New Location',
@@ -244,6 +292,8 @@ export function createLocationObject(location, index = 0, point = null) {
       category: location?.category || 'Other',
       fill: '#d6b45f',
       stroke: '#6f5524',
+      markerIcon: location?.markerIcon || 'pin',
+      layerId: DEFAULT_LOCATION_LAYER_ID,
     },
   }, index)
 }
@@ -287,12 +337,32 @@ export function normalizeMetadata(metadata, type) {
     points,
     faces,
     waterKind: metadata.waterKind || (type === 'river' && metadata.closed ? 'waterMass' : undefined),
+    organicEdges: ['region', 'shape'].includes(type) ? metadata.organicEdges !== false : metadata.organicEdges,
     opacity: Number.isFinite(metadata.opacity) ? clamp(metadata.opacity, 0, 1) : 1,
     lineThickness: Math.max(1, Number.isFinite(metadata.lineThickness) ? metadata.lineThickness : LINE_OBJECT_TYPES.has(type) ? 8 : 2),
     fontSize: Number.isFinite(metadata.fontSize) ? clamp(metadata.fontSize, 10, 144) : (type === 'label' ? 34 : metadata.fontSize),
     curvedLabel: Boolean(metadata.curvedLabel),
     dashed: Boolean(metadata.dashed),
+    wallTexture: ['stone', 'brick', 'wood', 'solid'].includes(metadata.wallTexture) ? metadata.wallTexture : metadata.semanticType === 'wall' ? 'stone' : metadata.wallTexture,
     shapeKind: metadata.shapeKind || (type === 'shape' ? 'polygon' : 'rectangle'),
+  }
+}
+
+export function normalizeGridSettings(settings = {}, mapType = 'region') {
+  const interior = mapType === 'interior'
+  const rawType = settings.type || settings.gridType || 'square'
+  const size = Number.isFinite(Number(settings.size)) ? Number(settings.size) : interior ? 80 : 40
+  const opacity = Number.isFinite(Number(settings.opacity)) ? Number(settings.opacity) : interior ? 0.36 : 0.28
+  const scale = String(settings.scale || settings.movementScale || '1 square = 5 ft').trim()
+  const color = /^#[0-9a-f]{3,8}$/i.test(String(settings.color || '')) ? settings.color : interior ? '#6f7780' : '#5b4630'
+  return {
+    enabled: settings.enabled !== undefined ? Boolean(settings.enabled) : interior,
+    type: rawType === 'hex' ? 'hex' : 'square',
+    size: clamp(size, 10, 240),
+    opacity: clamp(opacity, 0.05, 0.9),
+    color,
+    snapToGrid: settings.snapToGrid !== undefined ? Boolean(settings.snapToGrid) : interior,
+    scale: scale || '1 square = 5 ft',
   }
 }
 
@@ -399,18 +469,38 @@ export function migrateLegacyObjects(map) {
 }
 
 export function normalizeMapSchema(map) {
+  const mapType = normalizeMapType(map?.mapType || map?.metadata?.mapType || 'region')
   const rawObjects = Array.isArray(map?.objects)
     ? map.objects
     : Array.isArray(map?.mapObjects)
       ? map.mapObjects
       : migrateLegacyObjects(map)
-  const objects = rawObjects.map(normalizeObject).sort((a, b) => a.zIndex - b.zIndex)
+  const normalizedObjects = rawObjects.map(normalizeObject).map(object => {
+    if (mapType !== 'interior') return object
+    const genericNames = {
+      room: new Set(['Land', 'Round Land', 'Shape']),
+      corridor: new Set(['Road']),
+      wall: new Set(['Border']),
+    }
+    const semanticType = object.type === 'shape'
+      ? 'room'
+      : object.type === 'road'
+        ? 'corridor'
+        : object.type === 'border'
+          ? 'wall'
+          : object.metadata?.semanticType
+    if (!semanticType) return object
+    const name = genericNames[semanticType]?.has(object.metadata?.name)
+      ? semanticType[0].toUpperCase() + semanticType.slice(1)
+      : object.metadata?.name
+    return { ...object, metadata: { ...object.metadata, semanticType, name } }
+  }).sort((a, b) => a.zIndex - b.zIndex)
   const rawLayers = Array.isArray(map?.layers) && map.layers.length
     ? map.layers
     : Array.isArray(map?.mapLayers) && map.mapLayers.length
       ? map.mapLayers
       : []
-  const layers = rawLayers.length
+  const normalizedLayers = rawLayers.length
     ? rawLayers.map((layer, index) => ({
         id: layer.id || uid('layer'),
         name: layer.name || `Layer ${index + 1}`,
@@ -418,14 +508,33 @@ export function normalizeMapSchema(map) {
         locked: Boolean(layer.locked),
         zIndex: Number.isFinite(layer.zIndex) ? layer.zIndex : index,
       }))
-    : defaultLayers()
+    : []
+  const shouldCategorize = Number(map?.schemaVersion || map?.version || 0) < SCHEMA_VERSION && !map?.metadata?.categorizedLayers
+  const objects = normalizedObjects.map(object => {
+    if (!shouldCategorize) return object
+    const currentLayerId = object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID
+    if (!DEFAULT_CATEGORY_LAYER_IDS.has(currentLayerId)) return object
+    return { ...object, metadata: { ...object.metadata, layerId: defaultLayerIdForObject(object.type) } }
+  })
+  const categoryLayers = defaultLayers(mapType)
+  const existingLayersById = new Map(normalizedLayers.map(layer => [layer.id, layer]))
+  const usedCategoryIds = new Set(objects.map(object => object.metadata?.layerId || defaultLayerIdForObject(object.type)))
+  const layers = [
+    ...categoryLayers.filter(layer => usedCategoryIds.has(layer.id)).map(layer => ({ ...layer, ...(existingLayersById.get(layer.id) || {}), name: layer.name })),
+    ...normalizedLayers.filter(layer => !DEFAULT_CATEGORY_LAYER_IDS.has(layer.id)),
+  ].map((layer, index) => ({ ...layer, zIndex: index }))
   return {
     version: SCHEMA_VERSION,
     width: Number.isFinite(map?.width) ? map.width : MAP_W,
     height: Number.isFinite(map?.height) ? map.height : MAP_H,
     objects,
     layers,
-    metadata: { ...(map?.metadata || {}), migratedFromTerrain: Boolean(rawObjects.length && !map?.objects && !map?.mapObjects) },
+    metadata: {
+      ...(map?.metadata || {}),
+      categorizedLayers: true,
+      gridSettings: normalizeGridSettings(map?.metadata?.gridSettings, mapType),
+      migratedFromTerrain: Boolean(rawObjects.length && !map?.objects && !map?.mapObjects),
+    },
   }
 }
 

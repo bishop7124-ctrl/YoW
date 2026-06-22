@@ -172,13 +172,13 @@ function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categ
 
           {novelChars.length > 0 && (
             <div>
-              <label style={{ ...LABEL_STYLE, marginBottom: 6 }}>Characters</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <label style={LABEL_STYLE}>Characters</label>
+              <div className="panel-soft max-h-32 overflow-y-auto flex flex-wrap gap-2 p-2">
                 {novelChars.map(char => {
                   const active = form.linkedCharacters.includes(char.id)
                   return (
-                    <button key={char.id} onClick={() => toggleChar(char.id)} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent-fade)' : 'var(--bg-main)', color: active ? 'var(--accent)' : 'var(--text-muted)' }}>
-                      {char.name}
+                    <button key={char.id} type="button" onClick={() => toggleChar(char.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                      {active && <span>✓</span>}{char.name}
                     </button>
                   )
                 })}
@@ -188,13 +188,13 @@ function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categ
 
           {novelLocs.length > 0 && (
             <div>
-              <label style={{ ...LABEL_STYLE, marginBottom: 6 }}>Locations</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <label style={LABEL_STYLE}>Locations</label>
+              <div className="panel-soft max-h-32 overflow-y-auto flex flex-wrap gap-2 p-2">
                 {novelLocs.map(loc => {
                   const active = form.linkedLocations.includes(loc.id)
                   return (
-                    <button key={loc.id} onClick={() => toggleLoc(loc.id)} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent-fade)' : 'var(--bg-main)', color: active ? 'var(--accent)' : 'var(--text-muted)' }}>
-                      {loc.name}
+                    <button key={loc.id} type="button" onClick={() => toggleLoc(loc.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                      {active && <span>✓</span>}{loc.name}
                     </button>
                   )
                 })}

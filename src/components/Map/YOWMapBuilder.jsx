@@ -6,18 +6,33 @@ import {
   STAMP_LIBRARY, STYLE_PRESET_OPTIONS, TOOLBAR_MODES, WATER_FILL, WATER_STROKE, WHEEL_ZOOM_INTENSITY,
 } from './mapConstants.js'
 import {
-  clamp, createLabelObject, createLocationObject, createObject, createStampObject,
-  exportPayload, isLandObject, loadJson, localToNormalized, mapSnapshot, moveLandToBase,
-  normalizeMapSchema, normalizeMapType, normalizeObject, objectContainsPoint, objectDisplayName,
-  objectTypeLabel, pointsToObject, round, saveJson, screenToMap, shapeFromRect, toLocal, uid,
+  clamp, createLabelObject, createLocationObject, createStampObject,
+  DEFAULT_CATEGORY_LAYER_IDS, defaultLayerIdForObject, defaultLayers, exportPayload, isLandObject, loadJson, localToNormalized, mapSnapshot, moveLandToBase,
+  normalizeGridSettings, normalizeMapSchema, normalizeMapType, normalizeObject, objectContainsPoint, objectDisplayName,
+  pointsToObject, round, saveJson, screenToMap, shapeFromRect, toLocal, uid,
 } from './mapUtils.js'
 import {
-  cursorForHandle, drawDraft, drawGrid, drawHoverHighlight, drawObject, drawSelection, hitHandle,
+  cursorForHandle, drawDraft, drawGrid, drawHoverHighlight, drawMovementGrid, drawObject, drawSelection, hitHandle,
 } from './mapDraw.js'
 import {
   PanelTitle, StampPreview, InspectorTabButton, PropertyInput, ReadOnlyField,
   NumberInput, ColorInput, CheckboxInput, SelectInput,
 } from './MapInspectorComponents.jsx'
+
+const MAP_FONT_OPTIONS = [
+  { value: '"Palatino Linotype", "Book Antiqua", Georgia, serif', label: 'Fantasy serif' },
+  { value: 'Georgia, "Times New Roman", serif', label: 'Classic serif' },
+  { value: '"Trebuchet MS", Arial, sans-serif', label: 'Clean sans' },
+  { value: '"Courier New", monospace', label: 'Scribed' },
+]
+
+const LOCATION_ICON_OPTIONS = [
+  { value: 'pin', label: 'Map pin' },
+  { value: 'dot', label: 'Circle' },
+  { value: 'diamond', label: 'Diamond' },
+  { value: 'star', label: 'Star' },
+  { value: 'tower', label: 'Tower' },
+]
 
 export default function MapBuilder({ store }) {
   const {
@@ -49,6 +64,7 @@ export default function MapBuilder({ store }) {
   const spacePressedRef = useRef(false)
 
   const [mode, setMode] = useState('select')
+  const [activeToolId, setActiveToolId] = useState('select')
   const [view, setView] = useState(viewRef.current)
   const [selectedIds, setSelectedIds] = useState([])
   const [hoveredId, setHoveredId] = useState(null)
@@ -66,17 +82,30 @@ export default function MapBuilder({ store }) {
   const [shapeKind, setShapeKind] = useState('polygon')
   const [lineThickness, setLineThickness] = useState(8)
   const [dashedLines, setDashedLines] = useState(false)
+  const [wallThickness, setWallThickness] = useState(12)
+  const [wallColor, setWallColor] = useState('#252a2d')
+  const [wallTexture, setWallTexture] = useState('stone')
   const [mapType, setMapType] = useState('region')
   const [stampSearch, setStampSearch] = useState('')
   const [stampCategory, setStampCategory] = useState('All')
   const [selectedStampId, setSelectedStampId] = useState('mountains')
   const [favoriteStamps, setFavoriteStamps] = useState(() => loadJson('yow_map_favorite_stamps', []))
   const [recentStamps, setRecentStamps] = useState(() => loadJson('yow_map_recent_stamps', []))
-  const [snapEnabled, setSnapEnabled] = useState(true)
-  const [snapSize, setSnapSize] = useState(40)
-  const [locationSearch, setLocationSearch] = useState('')
-  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [newLocationName, setNewLocationName] = useState('')
+  const [locationIcon, setLocationIcon] = useState('pin')
+  const [locationSize, setLocationSize] = useState(72)
+  const [cursorMapPoint, setCursorMapPoint] = useState(null)
+  const [placementModal, setPlacementModal] = useState(null)
+  const [labelConfig, setLabelConfig] = useState({
+    text: '',
+    fontFamily: MAP_FONT_OPTIONS[0].value,
+    fontSize: 42,
+    fontWeight: 600,
+    fontStyle: 'normal',
+    textColor: '#2a241b',
+    outlineColor: 'transparent',
+    backgroundColor: 'transparent',
+  })
   const [isMapModalOpen, setIsMapModalOpen] = useState(false)
 
   const schema = useMemo(() => normalizeMapSchema(activeMap), [activeMap])
@@ -94,8 +123,24 @@ export default function MapBuilder({ store }) {
   const selectedLayerId = primarySelection?.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID
   const activeLayer = layerMap.get(activeLayerId) || schema.layers[0]
   const activeMapType = normalizeMapType(activeMap?.mapType || activeMap?.metadata?.mapType || mapType || 'region')
-  const activeTypeConfig = MAP_TYPE_TOOLSETS[activeMapType] || MAP_TYPE_TOOLSETS.region
-  const activeStylePreset = activeMap?.metadata?.stylePreset || 'parchment'
+  const usesDungeonLanguage = ['dnd_campaign', 'tabletop_rpg'].includes(project?.type)
+  const activeTypeConfig = useMemo(() => {
+    const base = MAP_TYPE_TOOLSETS[activeMapType] || MAP_TYPE_TOOLSETS.region
+    if (activeMapType !== 'interior' || !usesDungeonLanguage) return base
+    return {
+      ...base,
+      label: 'Dungeon Map',
+      purpose: 'Rooms, custom walls, doors, traps, and table-ready dungeon planning',
+      tools: base.tools.map(tool => tool.id === 'dungeon-features' ? { ...tool, label: 'Dungeon features' } : tool),
+    }
+  }, [activeMapType, usesDungeonLanguage])
+  const activeStylePreset = activeMap?.metadata?.stylePreset || (activeMapType === 'interior' ? 'dungeon' : 'parchment')
+  const activeGridSettings = useMemo(() => normalizeGridSettings(schema.metadata?.gridSettings, activeMapType), [schema.metadata?.gridSettings, activeMapType])
+  const layerMoveOptions = useMemo(() => {
+    const builtIns = defaultLayers(activeMapType)
+    const custom = schema.layers.filter(layer => !DEFAULT_CATEGORY_LAYER_IDS.has(layer.id))
+    return [...builtIns, ...custom].map(layer => ({ value: layer.id, label: layer.name, locked: Boolean(layer.locked) }))
+  }, [activeMapType, schema.layers])
   const activeToolIds = useMemo(() => new Set(activeTypeConfig.tools.map(tool => tool.mode)), [activeTypeConfig])
   const selectedStamp = STAMP_LIBRARY.find(stamp => stamp.id === selectedStampId) || STAMP_LIBRARY[0]
   const defaultCategories = DEFAULT_CATEGORIES_BY_MAP_TYPE[activeMapType] || DEFAULT_CATEGORIES_BY_MAP_TYPE.region
@@ -122,11 +167,6 @@ export default function MapBuilder({ store }) {
       return a.name.localeCompare(b.name)
     })
   }, [activeMapType, defaultCategories, favoriteStamps, recentStamps, stampCategory, stampSearch])
-  const filteredLocations = useMemo(() => {
-    const query = locationSearch.trim().toLowerCase()
-    return (locations || []).filter(location => !query || `${location.name || ''} ${location.category || ''}`.toLowerCase().includes(query))
-  }, [locationSearch, locations])
-
   useEffect(() => {
     objectsRef.current = objects
     selectedIdsRef.current = selectedIds
@@ -179,17 +219,33 @@ export default function MapBuilder({ store }) {
   }, [activeToolIds, mode])
 
   useEffect(() => {
+    if (activeMapType === 'interior' && shapeKind === 'polygon') {
+      const timer = window.setTimeout(() => setShapeKind('rectangle'), 0)
+      return () => window.clearTimeout(timer)
+    }
+    if (activeMapType !== 'interior' && shapeKind === 'rectangle') {
+      const timer = window.setTimeout(() => setShapeKind('polygon'), 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [activeMapType, shapeKind])
+
+  useEffect(() => {
     requestRender()
-  }, [visibleObjects, selectedIds, hoveredId, activeMapType, activeStylePreset]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visibleObjects, selectedIds, hoveredId, activeMapType, activeStylePreset, activeGridSettings, cursorMapPoint, mode, selectedStampId, labelConfig, locationIcon, locationSize, placementModal]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!['stamp', 'label', 'location'].includes(mode)) setCursorMapPoint(null)
+  }, [mode])
 
   useEffect(() => {
     if (!activeMap) return
     const current = normalizeMapSchema(activeMap)
-    if (activeMap.schemaVersion === SCHEMA_VERSION && Array.isArray(activeMap.mapObjects)) return
+    if (activeMap.schemaVersion === SCHEMA_VERSION && activeMap.metadata?.categorizedLayers && Array.isArray(activeMap.mapObjects)) return
     updateActiveMapData(() => ({
       schemaVersion: SCHEMA_VERSION,
       width: current.width,
       height: current.height,
+      metadata: current.metadata,
       mapObjects: current.objects,
       mapLayers: current.layers,
       mapPins: [],
@@ -207,7 +263,7 @@ export default function MapBuilder({ store }) {
   }, [objects])
 
   useEffect(() => {
-    if (!schema.layers.some(layer => layer.id === activeLayerId)) {
+    if (schema.layers.length && !schema.layers.some(layer => layer.id === activeLayerId)) {
       const timer = window.setTimeout(() => {
         setActiveLayerId(schema.layers[0]?.id || DEFAULT_OBJECT_LAYER_ID)
       }, 0)
@@ -384,8 +440,34 @@ export default function MapBuilder({ store }) {
     ctx.shadowBlur = 38 / viewRef.current.zoom
     ctx.shadowOffsetY = 14 / viewRef.current.zoom
     drawGrid(ctx, MAP_W, MAP_H, activeStylePreset)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, MAP_W, MAP_H)
+    ctx.clip()
+    drawMovementGrid(ctx, MAP_W, MAP_H, activeGridSettings)
+    ctx.restore()
     ctx.shadowColor = 'transparent'
     visibleObjects.forEach(object => drawObject(ctx, object, selectedIdsRef.current.includes(object.id), { mapType: activeMapType, stylePreset: activeStylePreset }))
+    if (cursorMapPoint && !placementModal && ['stamp', 'label', 'location'].includes(mode)) {
+      let previewObject = null
+      if (mode === 'stamp') {
+        previewObject = createStampObject(selectedStamp, objectsRef.current.length, cursorMapPoint)
+      } else if (mode === 'label' && labelConfig.text.trim()) {
+        const fontSize = Number(labelConfig.fontSize) || 42
+        previewObject = {
+          ...createLabelObject(objectsRef.current.length, cursorMapPoint),
+          width: Math.max(180, labelConfig.text.trim().length * fontSize * 0.68),
+          height: Math.max(72, fontSize * 1.8),
+          metadata: { ...createLabelObject(objectsRef.current.length, cursorMapPoint).metadata, ...labelConfig, name: labelConfig.text.trim(), text: labelConfig.text.trim() },
+        }
+      } else if (mode === 'location') {
+        const previewLocation = { id: null, name: 'Location', category: 'Other', markerIcon: locationIcon }
+        previewObject = { ...createLocationObject(previewLocation, objectsRef.current.length, cursorMapPoint), width: locationSize, height: locationSize }
+      }
+      if (previewObject) {
+        drawObject(ctx, { ...previewObject, metadata: { ...previewObject.metadata, opacity: 0.68 } }, false, { mapType: activeMapType, stylePreset: activeStylePreset })
+      }
+    }
     const hoveredObject = visibleObjects.find(object => object.id === hoveredIdRef.current && !selectedIdsRef.current.includes(object.id))
     drawHoverHighlight(ctx, hoveredObject, viewRef.current.zoom)
     drawDraft(ctx, draftRef.current, viewRef.current.zoom)
@@ -449,10 +531,12 @@ export default function MapBuilder({ store }) {
   }
 
   function snapPoint(point) {
-    if (!snapEnabled) return point
+    const grid = activeGridSettings
+    if (!grid.snapToGrid) return point
+    const size = grid.size || 40
     return {
-      x: Math.round(point.x / snapSize) * snapSize,
-      y: Math.round(point.y / snapSize) * snapSize,
+      x: Math.round(point.x / size) * size,
+      y: Math.round(point.y / size) * size,
     }
   }
 
@@ -474,7 +558,7 @@ export default function MapBuilder({ store }) {
   }
 
   function placeObjectAtPoint(object, options = {}) {
-    const layerId = activeLayer?.id || DEFAULT_OBJECT_LAYER_ID
+    const layerId = options.layerId || placementLayerIdForType(object.type)
     const placedObject = normalizeObject({
       ...object,
       metadata: { ...object.metadata, layerId },
@@ -484,6 +568,11 @@ export default function MapBuilder({ store }) {
       return [...current, placed]
     })
     if (options.selectPlaced) setSelectedIds([placedObject.id])
+  }
+
+  function placementLayerIdForType(type) {
+    const activeId = activeLayer?.id || DEFAULT_OBJECT_LAYER_ID
+    return DEFAULT_CATEGORY_LAYER_IDS.has(activeId) ? defaultLayerIdForObject(type) : activeId
   }
 
   function isObjectLockedByLayer(object) {
@@ -503,23 +592,30 @@ export default function MapBuilder({ store }) {
   }
 
   function placeLabelAt(point) {
-    placeObjectAtPoint(createLabelObject(objectsRef.current.length, snapPoint(point)), { selectPlaced: false })
+    const text = labelConfig.text.trim()
+    if (!text) {
+      setPlacementModal({ kind: 'label' })
+      return
+    }
+    const fontSize = Number(labelConfig.fontSize) || 42
+    const object = createLabelObject(objectsRef.current.length, snapPoint(point))
+    placeObjectAtPoint({
+      ...object,
+      width: Math.max(180, text.length * fontSize * 0.68),
+      height: Math.max(72, fontSize * 1.8),
+      metadata: { ...object.metadata, ...labelConfig, name: text, text },
+    }, { selectPlaced: false })
   }
 
-  function createLocationFromName(point) {
-    const name = newLocationName.trim() || 'New Location'
+  function placeNamedLocationAt(point) {
+    const name = newLocationName.trim()
+    if (!name) return
     const location = saveLocation
       ? saveLocation({ name, category: activeMapType === 'interior' ? 'Landmark' : 'Other', description: '' })
       : { id: uid('location'), name, category: 'Other' }
     setNewLocationName('')
-    setSelectedLocationId(location?.id || '')
-    placeObjectAtPoint(createLocationObject(location, objectsRef.current.length, snapPoint(point)), { selectPlaced: false })
-  }
-
-  function placeLocationAt(point) {
-    const linked = (locations || []).find(location => location.id === selectedLocationId)
-    if (linked) placeObjectAtPoint(createLocationObject(linked, objectsRef.current.length, snapPoint(point)), { selectPlaced: false })
-    else createLocationFromName(point)
+    const object = createLocationObject({ ...location, name, markerIcon: locationIcon }, objectsRef.current.length, snapPoint(point))
+    placeObjectAtPoint({ ...object, width: locationSize, height: locationSize, metadata: { ...object.metadata, name, text: name, markerIcon: locationIcon } }, { selectPlaced: false })
   }
 
   function handlePointerDown(event) {
@@ -544,7 +640,7 @@ export default function MapBuilder({ store }) {
       return
     }
     if (POINT_DRAW_TOOLS.has(mode)) {
-      startOrExtendPointDraft(point, mode, event.detail >= 2)
+      startOrExtendPointDraft(activeMapType === 'interior' ? snapPoint(point) : point, mode, event.detail >= 2)
       return
     }
     if (mode === 'stamp') {
@@ -556,7 +652,8 @@ export default function MapBuilder({ store }) {
       return
     }
     if (mode === 'location') {
-      placeLocationAt(point)
+      setNewLocationName('')
+      setPlacementModal({ kind: 'location', point: snapPoint(point) })
       return
     }
     if (mode === 'shape' && shapeKind === 'polygon') {
@@ -564,18 +661,20 @@ export default function MapBuilder({ store }) {
       return
     }
     if (mode === 'shape') {
+      const shapePoint = activeMapType === 'interior' ? snapPoint(point) : point
       interactionRef.current = {
         type: 'shape',
-        startPoint: point,
+        startPoint: shapePoint,
         shapeKind,
       }
       setDraft({
         kind: 'shape',
-        start: point,
-        end: point,
+        start: shapePoint,
+        end: shapePoint,
         shapeKind,
-        fill: LAND_FILL,
-        stroke: LAND_STROKE,
+        fill: activeMapType === 'interior' ? '#a1a5a5' : LAND_FILL,
+        stroke: activeMapType === 'interior' ? '#252a2d' : LAND_STROKE,
+        lineThickness: activeMapType === 'interior' ? 8 : 2,
       })
       return
     }
@@ -649,10 +748,14 @@ export default function MapBuilder({ store }) {
 
   function handlePointerMove(event) {
     const interaction = interactionRef.current
+    const pointerPoint = screenToMap(event.clientX, event.clientY, viewportRef.current, viewRef.current)
+    if (!interaction && ['stamp', 'label', 'location'].includes(mode) && !placementModal) {
+      setCursorMapPoint(snapPoint(pointerPoint))
+    }
     if (!interaction) {
       if (draftRef.current?.points?.length && (POINT_DRAW_TOOLS.has(mode) || draftRef.current.kind === 'shapePolygon')) {
         const point = screenToMap(event.clientX, event.clientY, viewportRef.current, viewRef.current)
-        setDraft(current => current ? { ...current, preview: point } : current)
+        setDraft(current => current ? { ...current, preview: activeMapType === 'interior' ? snapPoint(point) : point } : current)
         setHoveredId(null)
         setHoverHandle(null)
         return
@@ -732,7 +835,7 @@ export default function MapBuilder({ store }) {
       return
     }
     if (interaction.type === 'shape') {
-      setDraft(current => current ? { ...current, end: point } : current)
+      setDraft(current => current ? { ...current, end: activeMapType === 'interior' ? snapPoint(point) : point } : current)
       return
     }
     if (interaction.type === 'rotate') {
@@ -753,7 +856,10 @@ export default function MapBuilder({ store }) {
         ...baseShape,
         metadata: {
           ...baseShape.metadata,
-          layerId: activeLayer?.id || DEFAULT_OBJECT_LAYER_ID,
+          ...(activeMapType === 'interior'
+            ? { name: 'Room', semanticType: 'room', fill: '#a1a5a5', stroke: '#252a2d', lineThickness: 8, organicEdges: false, opacity: 1, shapeKind: interaction.shapeKind === 'polygon' ? 'rectangle' : interaction.shapeKind }
+            : {}),
+          layerId: placementLayerIdForType('shape'),
         },
       }, objectsRef.current.length)
       if (object.width > MIN_SIZE || object.height > MIN_SIZE) {
@@ -770,6 +876,7 @@ export default function MapBuilder({ store }) {
 
   function handlePointerLeave() {
     if (interactionRef.current) return
+    setCursorMapPoint(null)
     setHoveredId(null)
     setHoverHandle(null)
   }
@@ -795,9 +902,15 @@ export default function MapBuilder({ store }) {
     const defaults = {
       region: { closed: true, fill: OBJECT_TYPES.region.fill, stroke: OBJECT_TYPES.region.stroke, opacity: 0.32, lineThickness: 3, dashed: false },
       river: { closed: false, fill: 'transparent', stroke: '#3c93b8', lineThickness, dashed: false },
-      road: { closed: false, fill: 'transparent', stroke: '#8b6743', lineThickness, dashed: dashedLines },
-      border: { closed: false, fill: 'transparent', stroke: '#9b5ab8', lineThickness, dashed: dashedLines },
-      shapePolygon: { closed: true, fill: LAND_FILL, stroke: LAND_STROKE, lineThickness: 2, dashed: false },
+      road: activeMapType === 'interior'
+        ? { closed: false, fill: 'transparent', stroke: '#252a2d', floorFill: '#a1a5a5', edgeStroke: '#252a2d', lineThickness: Math.max(56, lineThickness), dashed: false, semanticType: 'corridor' }
+        : { closed: false, fill: 'transparent', stroke: '#8b6743', lineThickness, dashed: dashedLines },
+      border: activeMapType === 'interior'
+        ? { closed: false, fill: 'transparent', stroke: wallColor, wallHighlight: '#a2a7a9', wallTexture, lineThickness: Math.max(2, wallThickness), dashed: false, semanticType: 'wall' }
+        : { closed: false, fill: 'transparent', stroke: '#9b5ab8', lineThickness, dashed: dashedLines },
+      shapePolygon: activeMapType === 'interior'
+        ? { closed: true, fill: '#a1a5a5', stroke: '#252a2d', lineThickness: 8, dashed: false, organicEdges: false, opacity: 1, semanticType: 'room' }
+        : { closed: true, fill: LAND_FILL, stroke: LAND_STROKE, lineThickness: 2, dashed: false, organicEdges: true },
     }
     setDraft(current => {
       const sameTool = current?.kind === tool
@@ -829,16 +942,23 @@ export default function MapBuilder({ store }) {
     const objectType = source.kind === 'shapePolygon' ? 'shape' : source.kind
     const isClosedWater = objectType === 'river' && source.closed
     const object = pointsToObject(source.points, objectType, objectsRef.current.length, {
-      name: source.kind === 'shapePolygon' ? 'Land' : isClosedWater ? 'Water Mass' : OBJECT_TYPES[source.kind]?.label || 'Object',
+      name: activeMapType === 'interior' && source.semanticType
+        ? source.semanticType[0].toUpperCase() + source.semanticType.slice(1)
+        : source.kind === 'shapePolygon' ? 'Land' : isClosedWater ? 'Water Mass' : OBJECT_TYPES[source.kind]?.label || 'Object',
       text: '',
       fill: isClosedWater ? WATER_FILL : source.fill,
       stroke: isClosedWater ? WATER_STROKE : source.stroke,
       opacity: isClosedWater ? 0.82 : source.opacity ?? 1,
       lineThickness: source.lineThickness,
       dashed: source.dashed,
+      semanticType: source.semanticType,
+      floorFill: source.floorFill,
+      edgeStroke: source.edgeStroke,
+      wallHighlight: source.wallHighlight,
+      wallTexture: source.wallTexture,
       closed: Boolean(source.closed),
       waterKind: isClosedWater ? 'waterMass' : undefined,
-      layerId: activeLayer?.id || DEFAULT_OBJECT_LAYER_ID,
+      layerId: placementLayerIdForType(objectType),
       shapeKind: source.kind === 'region' || source.kind === 'shapePolygon' || isClosedWater ? 'polygon' : undefined,
     })
     let selectedId = object.id
@@ -853,28 +973,6 @@ export default function MapBuilder({ store }) {
     setSelectedIds([selectedId])
     setDraft(null)
     setMode('select')
-  }
-
-  function addObject(type) {
-    const object = type === 'stamp'
-      ? createStampObject(selectedStamp, objects.length)
-      : type === 'label'
-        ? createLabelObject(objects.length)
-        : type === 'location'
-          ? createLocationObject((locations || []).find(location => location.id === selectedLocationId), objects.length)
-          : createObject(type, objects.length)
-    const objectWithLayer = normalizeObject({
-      ...object,
-      metadata: { ...object.metadata, layerId: activeLayer?.id || DEFAULT_OBJECT_LAYER_ID },
-    }, objects.length)
-    let selectedId = object.id
-    updateObjects(current => {
-      const placed = objectWithLayer.type === 'shape' ? moveLandToBase(objectWithLayer, current) : objectWithLayer
-      selectedId = placed.id
-      return [...current, placed]
-    })
-    setSelectedIds([selectedId])
-    if (type === 'stamp') noteStampUsed(selectedStamp?.id)
   }
 
   function deleteSelectedObjects() {
@@ -924,7 +1022,7 @@ export default function MapBuilder({ store }) {
   }
 
   function deleteLayer(layerId) {
-    if (layerId === DEFAULT_OBJECT_LAYER_ID || schema.layers.length <= 1) return
+    if (DEFAULT_CATEGORY_LAYER_IDS.has(layerId) || schema.layers.length <= 1) return
     pushUndoSnapshot()
     const nextLayers = schema.layers.filter(layer => layer.id !== layerId)
     const nextObjects = objectsRef.current.map(object => (object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID) === layerId
@@ -951,6 +1049,15 @@ export default function MapBuilder({ store }) {
   function moveSelectedToLayer(layerId) {
     patchSelected({ metadata: { layerId } })
     setActiveLayerId(layerId)
+  }
+
+  function moveObjectToLayer(objectId, layerId) {
+    const target = layerMoveOptions.find(layer => layer.value === layerId)
+    if (!layerId || target?.locked) return
+    pushUndoSnapshot()
+    updateObjects(current => current.map(object => object.id === objectId && isObjectEditable(object)
+      ? { ...object, metadata: { ...object.metadata, layerId } }
+      : object))
   }
 
   function duplicateSelectedObjects() {
@@ -988,6 +1095,16 @@ export default function MapBuilder({ store }) {
     }))
   }
 
+  function updateGridSettings(patch) {
+    pushUndoSnapshot()
+    updateActiveMapData(() => ({
+      metadata: {
+        ...(activeMap?.metadata || {}),
+        gridSettings: normalizeGridSettings({ ...activeGridSettings, ...patch }, activeMapType),
+      },
+    }))
+  }
+
   function moveLayer(direction) {
     if (!selectedIds.length) return
     const selected = new Set(selectedIds)
@@ -1003,25 +1120,22 @@ export default function MapBuilder({ store }) {
     updateObjects(next.map((object, index) => ({ ...object, zIndex: object.zIndex + index * 0.001 })))
   }
 
-  function normalizeZOrder(list) {
-    return [...list]
-      .sort((a, b) => a.zIndex - b.zIndex)
-      .map((object, index) => ({ ...object, zIndex: index + 1 }))
-  }
-
   function moveLayerObject(id, direction) {
-    const ordered = normalizeZOrder(objects)
+    const source = objects.find(object => object.id === id)
+    if (!source || source.locked) return
+    const layerId = source.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID
+    const ordered = objects
+      .filter(object => (object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID) === layerId)
+      .sort((a, b) => a.zIndex - b.zIndex)
     const index = ordered.findIndex(object => object.id === id)
-    if (index < 0 || ordered[index].locked) return
-    const targetIndex = direction === 'front'
-      ? ordered.length - 1
-      : direction === 'back'
-        ? 0
-        : clamp(index + direction, 0, ordered.length - 1)
+    const targetIndex = clamp(index + direction, 0, ordered.length - 1)
     if (targetIndex === index) return
-    const [item] = ordered.splice(index, 1)
-    ordered.splice(targetIndex, 0, item)
-    updateObjects(ordered.map((object, nextIndex) => ({ ...object, zIndex: nextIndex + 1 })))
+    const target = ordered[targetIndex]
+    updateObjects(current => current.map(object => {
+      if (object.id === source.id) return { ...object, zIndex: target.zIndex }
+      if (object.id === target.id) return { ...object, zIndex: source.zIndex }
+      return object
+    }))
   }
 
   function selectLayerObject(event, object) {
@@ -1063,7 +1177,20 @@ export default function MapBuilder({ store }) {
     const shouldToggleOff = options.toggle !== false && nextMode === mode && nextMode !== 'select'
     const resolvedMode = shouldToggleOff ? 'select' : nextMode
     setMode(resolvedMode)
+    if (['select', 'pan', 'zoom'].includes(resolvedMode)) setActiveToolId(resolvedMode)
     if (resolvedMode !== mode || shouldToggleOff) setDraft(null)
+  }
+
+  function selectMapTool(tool) {
+    const isSameTool = activeToolId === tool.id && mode === tool.mode
+    if (tool.stampId) setSelectedStampId(tool.stampId)
+    if (tool.stampCategory) setStampCategory(tool.stampCategory)
+    setActiveToolId(isSameTool ? 'select' : tool.id)
+    selectEditorMode(tool.mode, { toggle: isSameTool })
+    if (tool.mode === 'label' && !isSameTool) {
+      setLabelConfig(current => ({ ...current, text: '' }))
+      setPlacementModal({ kind: 'label' })
+    }
   }
 
   function finishRename(map) {
@@ -1082,6 +1209,38 @@ export default function MapBuilder({ store }) {
     link.download = `${(activeMap.name || 'map').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-object-map.json`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  function downloadMapPng() {
+    if (!activeMap) return
+    const scale = 2
+    const exportCanvas = document.createElement('canvas')
+    exportCanvas.width = MAP_W * scale
+    exportCanvas.height = MAP_H * scale
+    const ctx = exportCanvas.getContext('2d')
+    ctx.scale(scale, scale)
+    drawGrid(ctx, MAP_W, MAP_H, activeStylePreset)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, MAP_W, MAP_H)
+    ctx.clip()
+    drawMovementGrid(ctx, MAP_W, MAP_H, activeGridSettings)
+    visibleObjects.forEach(object => drawObject(ctx, object, false, { mapType: activeMapType, stylePreset: activeStylePreset }))
+    ctx.restore()
+    exportCanvas.toBlob(blob => {
+      if (!blob) {
+        setJsonStatus('Export failed')
+        return
+      }
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${(activeMap.name || 'map').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`
+      link.click()
+      URL.revokeObjectURL(url)
+      setJsonStatus('Map exported')
+      setTimeout(() => setJsonStatus(''), 1800)
+    }, 'image/png')
   }
 
   function importJson(file) {
@@ -1190,7 +1349,7 @@ export default function MapBuilder({ store }) {
         <span className="map-builder-zoom-readout">{Math.round(view.zoom * 100)}%</span>
         <button className="btn btn-secondary btn-sm" onClick={() => zoomViewportCenter(1.16)} title="Zoom in">+</button>
         <button className="btn btn-secondary btn-sm" onClick={fitCanvasToViewport}>Fit</button>
-        <button className="btn btn-secondary btn-sm" onClick={downloadJson} disabled={!activeMap}>Export</button>
+        <button className="btn btn-secondary btn-sm" onClick={downloadMapPng} disabled={!activeMap}>Export PNG</button>
         <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={event => importJson(event.target.files?.[0])} style={{ display: 'none' }} />
         {jsonStatus && <span className={jsonStatus === 'Invalid JSON' ? 'map-builder-status is-error' : 'map-builder-status'}>{jsonStatus}</span>}
       </div>
@@ -1206,28 +1365,44 @@ export default function MapBuilder({ store }) {
               <button
                 key={tool.id}
                 className="btn btn-secondary btn-sm"
-                onClick={() => selectEditorMode(tool.mode)}
-                style={{ justifyContent: 'flex-start', display: 'flex', gap: 8, minHeight: 34, background: mode === tool.mode ? 'var(--accent)' : undefined, color: mode === tool.mode ? '#fff' : undefined }}
+                onClick={() => selectMapTool(tool)}
+                style={{ justifyContent: 'flex-start', display: 'flex', gap: 8, minHeight: 34, background: activeToolId === tool.id ? 'var(--accent)' : undefined, color: activeToolId === tool.id ? '#fff' : undefined }}
               >
                 <span style={{ width: 16, textAlign: 'center', flexShrink: 0 }}>{tool.icon}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.label}</span>
               </button>
             ))}
-            {(mode === 'river' || mode === 'road' || mode === 'border') && (
+            {mode === 'border' && activeMapType === 'interior' ? (
+              <>
+                <NumberInput label="Wall size" value={wallThickness} min={2} onChange={setWallThickness} />
+                <ColorInput label="Wall colour" value={wallColor} onChange={setWallColor} />
+                <SelectInput
+                  label="Wall texture"
+                  value={wallTexture}
+                  options={[
+                    { value: 'stone', label: 'Stone blocks' },
+                    { value: 'brick', label: 'Brickwork' },
+                    { value: 'wood', label: 'Timber' },
+                    { value: 'solid', label: 'Solid' },
+                  ]}
+                  onChange={setWallTexture}
+                />
+              </>
+            ) : (mode === 'river' || mode === 'road' || mode === 'border') && (
               <>
                 <NumberInput label="Thickness" value={lineThickness} min={1} onChange={setLineThickness} />
                 {(mode === 'road' || mode === 'border') && <CheckboxInput label="Dashed" checked={dashedLines} onChange={setDashedLines} />}
               </>
             )}
-            {mode === 'shape' && (
-              <SelectInput
-                label="Land type"
-                value={shapeKind}
-                options={[
-                  { value: 'polygon', label: 'Polygon' },
-                  { value: 'rectangle', label: 'Rectangle' },
-                  { value: 'circle', label: 'Circle' },
-                ]}
+	            {mode === 'shape' && (
+	              <SelectInput
+	                label={activeMapType === 'interior' ? 'Room shape' : 'Land type'}
+	                value={shapeKind}
+	                options={[
+	                  ...(activeMapType === 'interior' ? [] : [{ value: 'polygon', label: 'Polygon' }]),
+	                  { value: 'rectangle', label: 'Rectangle' },
+	                  { value: 'circle', label: 'Circle' },
+	                ]}
                 onChange={value => { setShapeKind(value); setDraft(null) }}
               />
             )}
@@ -1239,7 +1414,7 @@ export default function MapBuilder({ store }) {
             ) : null}
           </section>
 
-          <details open={mode === 'stamp'} style={{ minWidth: isCompact ? 240 : 0 }}>
+          <details open={mode === 'stamp' && activeToolId !== 'doors'} style={{ minWidth: isCompact ? 240 : 0 }}>
             <summary style={{ cursor: 'pointer' }}><PanelTitle>Stamps</PanelTitle></summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 8 }}>
               <input
@@ -1253,7 +1428,11 @@ export default function MapBuilder({ store }) {
                 onChange={event => setStampCategory(event.target.value)}
                 style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', fontSize: 12 }}
               >
-                {stampCategories.map(category => <option key={category} value={category}>{category}</option>)}
+                {stampCategories.map(category => (
+                  <option key={category} value={category}>
+                    {category === 'Dungeon' && !usesDungeonLanguage ? 'Interior features' : category}
+                  </option>
+                ))}
               </select>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 6 }}>
                 {filteredStamps.slice(0, 18).map(stamp => (
@@ -1265,6 +1444,7 @@ export default function MapBuilder({ store }) {
                     onClick={() => {
                       const sameStampBrush = mode === 'stamp' && selectedStampId === stamp.id
                       setSelectedStampId(stamp.id)
+                      setActiveToolId('stamp-library')
                       selectEditorMode('stamp', { toggle: sameStampBrush })
                     }}
                     title={`${stamp.name} (${stamp.category})`}
@@ -1287,32 +1467,16 @@ export default function MapBuilder({ store }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
             {mode === 'location' && (
               <>
-                <input
-                  value={locationSearch}
-                  onChange={event => setLocationSearch(event.target.value)}
-                  placeholder="Find location"
-                  style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', fontSize: 12 }}
-                />
-                <select value={selectedLocationId} onChange={event => setSelectedLocationId(event.target.value)} style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', fontSize: 12 }}>
-                  <option value="">New linked location</option>
-                  {filteredLocations.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}
-                </select>
-                {!selectedLocationId && (
-                  <input
-                    value={newLocationName}
-                    onChange={event => setNewLocationName(event.target.value)}
-                    placeholder="New location name"
-                    style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', fontSize: 12 }}
-                  />
-                )}
+                <SelectInput label="Location icon" value={locationIcon} options={LOCATION_ICON_OPTIONS} onChange={setLocationIcon} />
+                <NumberInput label="Location size" value={locationSize} min={32} onChange={setLocationSize} />
               </>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <CheckboxInput label="Snap" checked={snapEnabled} onChange={setSnapEnabled} />
-              <select value={snapSize} onChange={event => setSnapSize(Number(event.target.value))} disabled={!snapEnabled} style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', fontSize: 12 }}>
-                {SNAP_SIZES.map(size => <option key={size} value={size}>{size}px</option>)}
-              </select>
-            </div>
+	            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+	              <CheckboxInput label="Snap" checked={activeGridSettings.snapToGrid} onChange={value => updateGridSettings({ snapToGrid: value })} />
+	              <select value={activeGridSettings.size} onChange={event => updateGridSettings({ size: Number(event.target.value) })} disabled={!activeGridSettings.snapToGrid} style={{ minWidth: 0, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 7, padding: '7px 8px', fontFamily: 'inherit', fontSize: 12 }}>
+	                {[...new Set([...SNAP_SIZES, activeGridSettings.size])].sort((a, b) => a - b).map(size => <option key={size} value={size}>{size}px</option>)}
+	              </select>
+	            </div>
             </div>
           </details>
       </aside>
@@ -1336,7 +1500,7 @@ export default function MapBuilder({ store }) {
                 <SelectInput
                   label="Object layer"
                   value={selectedLayerId}
-                  options={schema.layers.map(layer => ({ value: layer.id, label: layer.name }))}
+                  options={layerMoveOptions.map(layer => ({ value: layer.value, label: layer.label }))}
                   onChange={moveSelectedToLayer}
                   disabled={!primaryEditable}
                 />
@@ -1348,39 +1512,80 @@ export default function MapBuilder({ store }) {
                   <NumberInput label="Rotate" value={primarySelection.rotation} onChange={value => patchSelected({ rotation: value })} disabled={!primaryEditable} />
                   <NumberInput label="Order" value={primarySelection.zIndex} onChange={value => patchSelected({ zIndex: value })} disabled={!primaryEditable} />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <ColorInput label="Fill" value={primarySelection.metadata?.fill || LAND_FILL} onChange={value => patchSelected({ metadata: { fill: value } })} disabled={!primaryEditable} />
-                  <ColorInput label="Stroke" value={primarySelection.metadata?.stroke || LAND_STROKE} onChange={value => patchSelected({ metadata: { stroke: value } })} disabled={!primaryEditable} />
-                </div>
+                {primarySelection.metadata?.semanticType === 'wall' ? (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <ColorInput label="Wall colour" value={primarySelection.metadata?.stroke || '#252a2d'} onChange={value => patchSelected({ metadata: { stroke: value } })} disabled={!primaryEditable} />
+                      <NumberInput label="Wall size" value={primarySelection.metadata?.lineThickness || 12} min={2} onChange={value => patchSelected({ metadata: { lineThickness: value } })} disabled={!primaryEditable} />
+                    </div>
+                    <SelectInput
+                      label="Wall texture"
+                      value={primarySelection.metadata?.wallTexture || 'stone'}
+                      options={[
+                        { value: 'stone', label: 'Stone blocks' },
+                        { value: 'brick', label: 'Brickwork' },
+                        { value: 'wood', label: 'Timber' },
+                        { value: 'solid', label: 'Solid' },
+                      ]}
+                      onChange={value => patchSelected({ metadata: { wallTexture: value } })}
+                      disabled={!primaryEditable}
+                    />
+                  </>
+                ) : primarySelection.type !== 'label' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <ColorInput label="Fill" value={primarySelection.metadata?.fill || LAND_FILL} onChange={value => patchSelected({ metadata: { fill: value } })} disabled={!primaryEditable} />
+                    <ColorInput label="Stroke" value={primarySelection.metadata?.stroke || LAND_STROKE} onChange={value => patchSelected({ metadata: { stroke: value } })} disabled={!primaryEditable} />
+                  </div>
+                ) : null}
                 {primarySelection.type === 'label' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'end' }}>
-                    <NumberInput label="Font size" value={primarySelection.metadata?.fontSize || 34} min={10} onChange={value => patchSelected({ metadata: { fontSize: value } })} disabled={!primaryEditable} />
-                    <CheckboxInput label="Curved" checked={Boolean(primarySelection.metadata?.curvedLabel)} onChange={value => patchSelected({ metadata: { curvedLabel: value } })} disabled={!primaryEditable} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    <SelectInput label="Font" value={primarySelection.metadata?.fontFamily || MAP_FONT_OPTIONS[0].value} options={MAP_FONT_OPTIONS} onChange={value => patchSelected({ metadata: { fontFamily: value } })} disabled={!primaryEditable} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'end' }}>
+                      <NumberInput label="Font size" value={primarySelection.metadata?.fontSize || 42} min={10} onChange={value => patchSelected({ metadata: { fontSize: value } })} disabled={!primaryEditable} />
+                      <SelectInput label="Style" value={primarySelection.metadata?.fontStyle || 'normal'} options={[{ value: 'normal', label: 'Regular' }, { value: 'italic', label: 'Italic' }]} onChange={value => patchSelected({ metadata: { fontStyle: value } })} disabled={!primaryEditable} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <ColorInput label="Text colour" value={primarySelection.metadata?.textColor === 'transparent' ? '#2a241b' : primarySelection.metadata?.textColor || '#2a241b'} onChange={value => patchSelected({ metadata: { textColor: value } })} disabled={!primaryEditable} />
+                      <ColorInput label="Outline colour" value={primarySelection.metadata?.outlineColor === 'transparent' ? '#f8edd0' : primarySelection.metadata?.outlineColor || '#f8edd0'} onChange={value => patchSelected({ metadata: { outlineColor: value } })} disabled={!primaryEditable} />
+                    </div>
+                    <ColorInput label="Background colour" value={primarySelection.metadata?.backgroundColor === 'transparent' ? '#ffffff' : primarySelection.metadata?.backgroundColor || '#ffffff'} onChange={value => patchSelected({ metadata: { backgroundColor: value } })} disabled={!primaryEditable} />
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <CheckboxInput label="Transparent text" checked={primarySelection.metadata?.textColor === 'transparent'} onChange={value => patchSelected({ metadata: { textColor: value ? 'transparent' : '#2a241b' } })} disabled={!primaryEditable} />
+                      <CheckboxInput label="Transparent outline" checked={(primarySelection.metadata?.outlineColor || 'transparent') === 'transparent'} onChange={value => patchSelected({ metadata: { outlineColor: value ? 'transparent' : '#f8edd0' } })} disabled={!primaryEditable} />
+                      <CheckboxInput label="Transparent background" checked={(primarySelection.metadata?.backgroundColor || 'transparent') === 'transparent'} onChange={value => patchSelected({ metadata: { backgroundColor: value ? 'transparent' : '#ffffff' } })} disabled={!primaryEditable} />
+                      <CheckboxInput label="Curved" checked={Boolean(primarySelection.metadata?.curvedLabel)} onChange={value => patchSelected({ metadata: { curvedLabel: value } })} disabled={!primaryEditable} />
+                    </div>
                   </div>
                 )}
                 {primarySelection.type === 'location' && (
-                  <SelectInput
-                    label="Linked location"
-                    value={primarySelection.metadata?.locationId || ''}
-                    options={[
-                      { value: '', label: 'Unlinked' },
-                      ...(locations || []).map(location => ({ value: location.id, label: location.name || 'Untitled' })),
-                    ]}
-                    onChange={value => {
-                      const linked = (locations || []).find(location => location.id === value)
-                      patchSelected({ metadata: { locationId: value || null, name: linked?.name || primarySelection.metadata?.name || 'Location', text: linked?.name || primarySelection.metadata?.text || 'Location', category: linked?.category || primarySelection.metadata?.category } })
-                    }}
-                    disabled={!primaryEditable}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    <SelectInput
+                      label="Linked location"
+                      value={primarySelection.metadata?.locationId || ''}
+                      options={[
+                        { value: '', label: 'Unlinked' },
+                        ...(locations || []).map(location => ({ value: location.id, label: location.name || 'Untitled' })),
+                      ]}
+                      onChange={value => {
+                        const linked = (locations || []).find(location => location.id === value)
+                        patchSelected({ metadata: { locationId: value || null, name: linked?.name || primarySelection.metadata?.name || 'Location', text: linked?.name || primarySelection.metadata?.text || 'Location', category: linked?.category || primarySelection.metadata?.category } })
+                      }}
+                      disabled={!primaryEditable}
+                    />
+                    <SelectInput label="Location icon" value={primarySelection.metadata?.markerIcon || 'pin'} options={LOCATION_ICON_OPTIONS} onChange={value => patchSelected({ metadata: { markerIcon: value } })} disabled={!primaryEditable} />
+                  </div>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   <NumberInput label="Opacity" value={round((primarySelection.metadata?.opacity ?? 1) * 100, 0)} min={0} onChange={value => patchSelected({ metadata: { opacity: clamp(value / 100, 0, 1) } })} disabled={!primaryEditable} />
-                  <NumberInput label="Line" value={primarySelection.metadata?.lineThickness || 2} min={1} onChange={value => patchSelected({ metadata: { lineThickness: value } })} disabled={!primaryEditable} />
+                  {primarySelection.metadata?.semanticType !== 'wall' && <NumberInput label="Line" value={primarySelection.metadata?.lineThickness || 2} min={1} onChange={value => patchSelected({ metadata: { lineThickness: value } })} disabled={!primaryEditable} />}
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <CheckboxInput label="Dashed" checked={Boolean(primarySelection.metadata?.dashed)} onChange={value => patchSelected({ metadata: { dashed: value } })} disabled={!primaryEditable} />
-                  {primarySelection.type === 'shape' && (
-                    <SelectInput
+	                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+	                  {primarySelection.metadata?.semanticType !== 'wall' && <CheckboxInput label="Dashed" checked={Boolean(primarySelection.metadata?.dashed)} onChange={value => patchSelected({ metadata: { dashed: value } })} disabled={!primaryEditable} />}
+	                  {(primarySelection.type === 'shape' || primarySelection.type === 'region') && (
+	                    <CheckboxInput label="Squiggly edge" checked={primarySelection.metadata?.organicEdges !== false} onChange={value => patchSelected({ metadata: { organicEdges: value } })} disabled={!primaryEditable} />
+	                  )}
+	                  {primarySelection.type === 'shape' && (
+	                    <SelectInput
                       label="Land type"
                       value={primarySelection.metadata?.shapeKind || 'polygon'}
                       options={[
@@ -1414,13 +1619,35 @@ export default function MapBuilder({ store }) {
           <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <PanelTitle>Maps</PanelTitle>
             <ReadOnlyField label="Current type" value={activeTypeConfig.label} />
-            <SelectInput
-              label="Style"
-              value={activeStylePreset}
-              options={STYLE_PRESET_OPTIONS}
-              onChange={updateStylePreset}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+	            <SelectInput
+	              label="Style"
+	              value={activeStylePreset}
+	              options={STYLE_PRESET_OPTIONS.map(option => option.value === 'dungeon'
+	                ? { ...option, label: usesDungeonLanguage ? 'Dungeon stone' : 'Grey stone' }
+	                : option)}
+	              onChange={updateStylePreset}
+	            />
+	            <PanelTitle>Movement Grid</PanelTitle>
+	            <CheckboxInput label="Show grid" checked={activeGridSettings.enabled} onChange={value => updateGridSettings({ enabled: value })} />
+	            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+	              <SelectInput
+	                label="Grid type"
+	                value={activeGridSettings.type}
+	                options={[
+	                  { value: 'square', label: 'Square' },
+	                  { value: 'hex', label: 'Hex' },
+	                ]}
+	                onChange={value => updateGridSettings({ type: value })}
+	              />
+	              <NumberInput label="Size" value={activeGridSettings.size} min={10} onChange={value => updateGridSettings({ size: value })} />
+	            </div>
+	            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+	              <NumberInput label="Opacity %" value={round(activeGridSettings.opacity * 100, 0)} min={5} onChange={value => updateGridSettings({ opacity: clamp(value / 100, 0.05, 0.9) })} />
+	              <ColorInput label="Colour" value={activeGridSettings.color} onChange={value => updateGridSettings({ color: value })} />
+	            </div>
+	            <PropertyInput label="Scale label" value={activeGridSettings.scale} onChange={value => updateGridSettings({ scale: value })} />
+	            <CheckboxInput label="Snap to grid" checked={activeGridSettings.snapToGrid} onChange={value => updateGridSettings({ snapToGrid: value })} />
+	            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
               <button className="btn btn-primary btn-sm" onClick={() => setIsMapModalOpen(true)}>New Map</button>
               {(project.maps || []).map(map => {
                 const active = map.id === project.activeMapId
@@ -1456,15 +1683,9 @@ export default function MapBuilder({ store }) {
                 )
               })}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary btn-sm" onClick={downloadMapPng}>Export PNG</button>
+                <button className="btn btn-secondary btn-sm" onClick={downloadJson}>Export JSON</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()}>Import JSON</button>
-                {['marker', 'shape', 'region', 'river', 'road', 'border'].map(type => {
-                  const item = OBJECT_TYPES[type]
-                  return (
-                    <button key={type} className="btn btn-secondary btn-sm" onClick={() => addObject(type)} title={`Add ${item.label}`}>
-                      {item.icon}
-                    </button>
-                  )
-                })}
               </div>
             </div>
           </section>
@@ -1482,90 +1703,159 @@ export default function MapBuilder({ store }) {
               />
               <button className="btn btn-primary btn-sm" type="submit">+</button>
             </form>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(objects.filter(isObjectEditable).map(object => object.id))} title="Select all editable objects">All</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds([])} title="Clear object selection">None</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {schema.layers.map(layer => {
                 const active = activeLayerId === layer.id
-                const count = objects.filter(object => (object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID) === layer.id).length
+                const items = layerObjects.filter(object => (object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID) === layer.id)
+                const builtIn = DEFAULT_CATEGORY_LAYER_IDS.has(layer.id)
                 return (
-                  <div key={layer.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 28px)', gap: 4, alignItems: 'center', padding: 6, borderRadius: 7, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)' }}>
-                    <button onClick={() => setActiveLayerId(layer.id)} style={{ minWidth: 0, display: 'grid', gap: 1, padding: 0, border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}>
-                      <input
-                        defaultValue={layer.name}
-                        onBlur={event => renameLayer(layer.id, event.target.value)}
-                        onClick={event => event.stopPropagation()}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter') event.currentTarget.blur()
-                          if (event.key === 'Escape') {
-                            event.currentTarget.value = layer.name
-                            event.currentTarget.blur()
-                          }
-                        }}
-                        style={{ minWidth: 0, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, padding: 0 }}
-                      />
-                      <span style={{ color: 'var(--faint)', fontSize: 10 }}>{count} object{count === 1 ? '' : 's'}{layer.locked ? ' · locked' : ''}</span>
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible === false ? 'Show layer' : 'Hide layer'}>{layer.visible === false ? '○' : '●'}</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => toggleLayerLock(layer.id)} title={layer.locked ? 'Unlock layer' : 'Lock layer'}>{layer.locked ? 'L' : 'U'}</button>
-                    <button className="btn btn-secondary btn-sm" disabled={layer.id === DEFAULT_OBJECT_LAYER_ID || schema.layers.length <= 1} onClick={() => deleteLayer(layer.id)} title="Delete layer">×</button>
-                  </div>
-                )
-              })}
-            </div>
-            <PanelTitle>Object Stack</PanelTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(objects.filter(isObjectEditable).map(object => object.id))} title="Select all editable objects">All</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds([])} title="Clear object selection">None</button>
-              </div>
-              {layerObjects.map((object, index) => {
-                const selected = selectedIds.includes(object.id)
-                const isTop = index === 0
-                const isBottom = index === layerObjects.length - 1
-                const objectEditable = isObjectEditable(object)
-                const objectLayer = layerMap.get(object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID)
-                return (
-                  <div
-                    key={object.id}
-                    onClick={event => selectLayerObject(event, object)}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(0, 1fr) auto',
-                      gap: 6,
-                      alignItems: 'center',
-                      padding: 7,
-                      borderRadius: 7,
-                      border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-                      background: selected ? 'color-mix(in srgb, var(--accent) 14%, var(--surface2))' : 'var(--surface2)',
-                      cursor: object.locked ? 'default' : 'pointer',
-                    }}
-                  >
-                    <button
-                      onClick={event => selectLayerObject(event, object)}
-                      title={selected ? 'Deselect layer' : 'Select layer'}
-                      style={{ minWidth: 0, textAlign: 'left', background: 'none', border: 'none', color: selected ? 'var(--text-main)' : 'var(--muted)', fontFamily: 'inherit', cursor: 'pointer', overflow: 'hidden', padding: 0 }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                        <span style={{ width: 18, height: 18, borderRadius: 5, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, var(--surface) 70%, #000)', color: selected ? 'var(--accent)' : 'var(--muted)', flexShrink: 0 }}>{OBJECT_TYPES[object.type]?.icon || '□'}</span>
-                        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{objectDisplayName(object)}</span>
-                          <span style={{ color: 'var(--faint)', fontSize: 10, textTransform: 'uppercase' }}>{objectTypeLabel(object)} · {objectLayer?.name || 'Objects'}{object.metadata?.groupId ? ' · group' : ''}</span>
-                        </span>
-                      </span>
-                    </button>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 28px)', gap: 4 }}>
-                      <button className="btn btn-secondary btn-sm" disabled={isTop || !objectEditable} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, 1) }} title="Move up">↑</button>
-                      <button className="btn btn-secondary btn-sm" disabled={isBottom || !objectEditable} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, -1) }} title="Move down">↓</button>
-                      <button className="btn btn-secondary btn-sm" disabled={isObjectLockedByLayer(object)} onClick={event => { event.stopPropagation(); toggleVisibility(object.id) }} title={object.visible === false ? 'Show' : 'Hide'}>{object.visible === false ? '○' : '●'}</button>
-                      <button className="btn btn-secondary btn-sm" disabled={isObjectLockedByLayer(object)} onClick={event => { event.stopPropagation(); toggleLock(object.id) }} title={object.locked ? 'Unlock' : 'Lock'}>{object.locked ? 'L' : 'U'}</button>
+                  <div key={layer.id} style={{ border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 6, overflow: 'hidden', background: 'var(--surface2)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 24px)', gap: 3, alignItems: 'center', minHeight: 28, padding: '2px 3px 2px 7px', background: active ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'color-mix(in srgb, var(--surface2) 88%, var(--surface))' }}>
+                      <button onClick={() => setActiveLayerId(layer.id)} style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: 0, border: 'none', background: 'transparent', color: 'var(--text)', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}>
+                        {builtIn ? (
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800 }}>{layer.name}</span>
+                        ) : (
+                          <input
+                            defaultValue={layer.name}
+                            onBlur={event => renameLayer(layer.id, event.target.value)}
+                            onClick={event => event.stopPropagation()}
+                            onKeyDown={event => {
+                              if (event.key === 'Enter') event.currentTarget.blur()
+                              if (event.key === 'Escape') {
+                                event.currentTarget.value = layer.name
+                                event.currentTarget.blur()
+                              }
+                            }}
+                            style={{ minWidth: 0, width: '100%', border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: 11, fontWeight: 800, padding: 0 }}
+                          />
+                        )}
+                        <span style={{ color: 'var(--faint)', fontSize: 9, whiteSpace: 'nowrap' }}>{items.length}{layer.locked ? ' · L' : ''}</span>
+                      </button>
+                      <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible === false ? 'Show category' : 'Hide category'}>{layer.visible === false ? '○' : '●'}</button>
+                      <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} onClick={() => toggleLayerLock(layer.id)} title={layer.locked ? 'Unlock category' : 'Lock category'}>{layer.locked ? 'L' : 'U'}</button>
+                      <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} disabled={builtIn || schema.layers.length <= 1} onClick={() => deleteLayer(layer.id)} title="Delete category">×</button>
                     </div>
+                    {items.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {items.map((object, index) => {
+                          const selected = selectedIds.includes(object.id)
+                          const objectEditable = isObjectEditable(object)
+                          return (
+                            <div key={object.id} onClick={event => selectLayerObject(event, object)} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 82px auto', gap: 4, alignItems: 'center', minHeight: 31, padding: '3px 4px 3px 9px', borderTop: '1px solid var(--border)', background: selected ? 'color-mix(in srgb, var(--accent) 14%, var(--surface2))' : 'var(--surface)', cursor: object.locked ? 'default' : 'pointer' }}>
+                              <button onClick={event => selectLayerObject(event, object)} title={selected ? 'Deselect object' : 'Select object'} style={{ minWidth: 0, textAlign: 'left', background: 'none', border: 'none', color: selected ? 'var(--text-main)' : 'var(--muted)', fontFamily: 'inherit', cursor: 'pointer', overflow: 'hidden', padding: 0 }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                  <span style={{ width: 16, height: 16, borderRadius: 4, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, var(--surface) 70%, #000)', color: selected ? 'var(--accent)' : 'var(--muted)', flexShrink: 0, fontSize: 10 }}>{OBJECT_TYPES[object.type]?.icon || '□'}</span>
+                                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{objectDisplayName(object)}</span>
+                                  {object.metadata?.groupId && <span style={{ color: 'var(--faint)', fontSize: 9 }}>group</span>}
+                                </span>
+                              </button>
+                              <select
+                                aria-label={`Move ${objectDisplayName(object)} to layer`}
+                                title="Move to layer"
+                                value={object.metadata?.layerId || DEFAULT_OBJECT_LAYER_ID}
+                                disabled={!objectEditable}
+                                onClick={event => event.stopPropagation()}
+                                onChange={event => { event.stopPropagation(); moveObjectToLayer(object.id, event.target.value) }}
+                                style={{ width: 82, height: 24, minWidth: 0, border: '1px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--muted)', fontFamily: 'inherit', fontSize: 9, padding: '0 3px' }}
+                              >
+                                {layerMoveOptions.map(option => <option key={option.value} value={option.value} disabled={option.locked}>{option.label}</option>)}
+                              </select>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 24px)', gap: 2 }}>
+                                <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} disabled={index === 0 || !objectEditable} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, 1) }} title="Move up">↑</button>
+                                <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} disabled={index === items.length - 1 || !objectEditable} onClick={event => { event.stopPropagation(); moveLayerObject(object.id, -1) }} title="Move down">↓</button>
+                                <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} disabled={isObjectLockedByLayer(object)} onClick={event => { event.stopPropagation(); toggleVisibility(object.id) }} title={object.visible === false ? 'Show' : 'Hide'}>{object.visible === false ? '○' : '●'}</button>
+                                <button className="btn btn-secondary btn-sm" style={{ width: 24, height: 24, minHeight: 24, padding: 0 }} disabled={isObjectLockedByLayer(object)} onClick={event => { event.stopPropagation(); toggleLock(object.id) }} title={object.locked ? 'Unlock' : 'Lock'}>{object.locked ? 'L' : 'U'}</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               })}
-              {!objects.length && <div style={{ color: 'var(--muted)', fontSize: 13 }}>No objects yet.</div>}
+              {!objects.length && <div style={{ color: 'var(--muted)', fontSize: 12 }}>No objects yet.</div>}
             </div>
           </section>
           )}
         </aside>
+
+      {placementModal && (
+        <div className="map-builder-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) {
+            setPlacementModal(null)
+            if (placementModal.kind === 'label' && !labelConfig.text.trim()) selectEditorMode('select')
+          }
+        }}>
+          <form
+            className="map-builder-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="map-placement-modal-title"
+            onSubmit={event => {
+              event.preventDefault()
+              if (placementModal.kind === 'label') {
+                if (!labelConfig.text.trim()) return
+                setPlacementModal(null)
+                return
+              }
+              if (!newLocationName.trim() || !placementModal.point) return
+              placeNamedLocationAt(placementModal.point)
+              setPlacementModal(null)
+            }}
+          >
+            <header>
+              <div>
+                <p>{placementModal.kind === 'label' ? 'Map label' : 'Map location'}</p>
+                <h3 id="map-placement-modal-title">{placementModal.kind === 'label' ? 'Write the label' : 'Name this location'}</h3>
+              </div>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => {
+                setPlacementModal(null)
+                if (placementModal.kind === 'label' && !labelConfig.text.trim()) selectEditorMode('select')
+              }} aria-label="Close">×</button>
+            </header>
+            {placementModal.kind === 'label' ? (
+              <>
+                <PropertyInput label="Label text" value={labelConfig.text} onChange={value => setLabelConfig(current => ({ ...current, text: value }))} />
+                <SelectInput label="Font" value={labelConfig.fontFamily} options={MAP_FONT_OPTIONS} onChange={value => setLabelConfig(current => ({ ...current, fontFamily: value }))} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <NumberInput label="Font size" value={labelConfig.fontSize} min={10} onChange={value => setLabelConfig(current => ({ ...current, fontSize: value }))} />
+                  <SelectInput label="Style" value={labelConfig.fontStyle} options={[{ value: 'normal', label: 'Regular' }, { value: 'italic', label: 'Italic' }]} onChange={value => setLabelConfig(current => ({ ...current, fontStyle: value }))} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <ColorInput label="Text colour" value={labelConfig.textColor === 'transparent' ? '#2a241b' : labelConfig.textColor} onChange={value => setLabelConfig(current => ({ ...current, textColor: value }))} />
+                  <ColorInput label="Outline colour" value={labelConfig.outlineColor === 'transparent' ? '#f8edd0' : labelConfig.outlineColor} onChange={value => setLabelConfig(current => ({ ...current, outlineColor: value }))} />
+                </div>
+                <ColorInput label="Background colour" value={labelConfig.backgroundColor === 'transparent' ? '#ffffff' : labelConfig.backgroundColor} onChange={value => setLabelConfig(current => ({ ...current, backgroundColor: value }))} />
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <CheckboxInput label="Transparent text" checked={labelConfig.textColor === 'transparent'} onChange={value => setLabelConfig(current => ({ ...current, textColor: value ? 'transparent' : '#2a241b' }))} />
+                  <CheckboxInput label="Transparent outline" checked={labelConfig.outlineColor === 'transparent'} onChange={value => setLabelConfig(current => ({ ...current, outlineColor: value ? 'transparent' : '#f8edd0' }))} />
+                  <CheckboxInput label="Transparent background" checked={labelConfig.backgroundColor === 'transparent'} onChange={value => setLabelConfig(current => ({ ...current, backgroundColor: value ? 'transparent' : '#ffffff' }))} />
+                </div>
+              </>
+            ) : (
+              <>
+                <PropertyInput label="Location name" value={newLocationName} onChange={setNewLocationName} />
+                <SelectInput label="Location icon" value={locationIcon} options={LOCATION_ICON_OPTIONS} onChange={setLocationIcon} />
+                <NumberInput label="Location size" value={locationSize} min={32} onChange={setLocationSize} />
+              </>
+            )}
+            <footer>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => {
+                setPlacementModal(null)
+                if (placementModal.kind === 'label' && !labelConfig.text.trim()) selectEditorMode('select')
+              }}>Cancel</button>
+              <button className="btn btn-primary btn-sm" type="submit" disabled={placementModal.kind === 'label' ? !labelConfig.text.trim() : !newLocationName.trim()}>
+                {placementModal.kind === 'label' ? 'Preview label' : 'Place location'}
+              </button>
+            </footer>
+          </form>
+        </div>
+      )}
 
       {isMapModalOpen && (
         <div className="map-builder-modal-backdrop" role="presentation" onMouseDown={event => {
@@ -1585,7 +1875,7 @@ export default function MapBuilder({ store }) {
                 autoFocus
                 value={newMapName}
                 onChange={event => setNewMapName(event.target.value)}
-                placeholder="Aurethos World Map"
+                placeholder="Name this map"
               />
             </label>
             <SelectInput

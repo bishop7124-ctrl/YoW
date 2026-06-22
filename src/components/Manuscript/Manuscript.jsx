@@ -13,9 +13,11 @@ import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
 import { FormatContent, NotesPanel, SaveIndicator } from './ManuscriptToolbar.jsx'
 import { SCRIPT_TYPES, buildFinalizedDraft, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
+import FocusedWritingShell, { ManuscriptZoomControl } from './FocusedWritingShell.jsx'
+import { useFocusedWritingMode } from './useFocusedWritingMode.js'
 
 
-export default function Manuscript({ store }) {
+export default function Manuscript({ store, userId }) {
   const {
     acts, chapters, scenes,
     addAct, addChapter, addScene,
@@ -47,10 +49,13 @@ export default function Manuscript({ store }) {
   const [pacingOpen, setPacingOpen] = useState(false)
 
   const containerRef = useRef(null)
+  const scrollContainerRef = useRef(null)
   const saveTimer = useRef(null)
   const editorRefs = useRef({})
+  const focusedWriting = useFocusedWritingMode(userId)
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
+  const activeChapter = activeScene ? chapters.find(chapter => chapter.id === activeScene.chapterId) ?? null : null
   const isScriptProject = SCRIPT_TYPES.has(activeNovel?.type)
   const isNovelProject = (activeNovel?.type || 'novel') === 'novel'
   const isComicProject = activeNovel?.type === 'comic'
@@ -128,6 +133,22 @@ export default function Manuscript({ store }) {
     document.addEventListener('fullscreenchange', handler)
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
+
+  useEffect(() => {
+    if (!focusedWriting.enabled) return undefined
+    const handleEscape = event => {
+      if (event.key !== 'Escape') return
+      if (activeSidebarTab) {
+        event.preventDefault()
+        setActiveSidebarTab(null)
+        return
+      }
+      event.preventDefault()
+      focusedWriting.setEnabled(false)
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [activeSidebarTab, focusedWriting])
 
   const handleFormatChange = useCallback((next) => {
     setFormatSettings(next)
@@ -314,10 +335,10 @@ export default function Manuscript({ store }) {
     setActiveSceneId(sceneId)
     requestAnimationFrame(() => {
       document.getElementById(`ms-scene-${sceneId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        ?.scrollIntoView({ behavior: focusedWriting.enabled ? 'auto' : 'smooth', block: 'center' })
     })
     setTimeout(() => editorRefs.current[sceneId]?.focus(), 200)
-  }, [])
+  }, [focusedWriting.enabled])
 
   const handleSelectChapter = useCallback((chapId) => {
     requestAnimationFrame(() => {
@@ -329,9 +350,24 @@ export default function Manuscript({ store }) {
   if (isComicProject) return <ComicPlanner store={store} />
 
   return (
-    <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}`}>
+    <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}${focusedWriting.enabled ? ' is-focused-writing' : ''}`}>
 
       {/* ── Toolbar ─────────────────────────────────────────── */}
+      {focusedWriting.enabled ? (
+        <FocusedWritingShell
+          projectTitle={activeNovel?.title}
+          saveState={saveState}
+          wordCount={totalWordCount}
+          breadcrumb={activeChapter || activeScene
+            ? [activeChapter ? getChapterTitle(activeChapter) : null, activeScene?.title || labels.level3].filter(Boolean).join(' / ')
+            : ''}
+          activePanelId={activeSidebarTab}
+          onSetPanel={setActiveSidebarTab}
+          onExit={() => focusedWriting.setEnabled(false)}
+          pageZoom={focusedWriting.pageZoom}
+          onPageZoomChange={focusedWriting.setPageZoom}
+        />
+      ) : (
       <div data-tour="manuscript-toolbar" className="ms-toolbar font-sans flex items-center gap-2 flex-shrink-0 px-3">
 
         {!activeFinalizedDraft && (
@@ -513,6 +549,24 @@ export default function Manuscript({ store }) {
         )}
 
         {/* Fullscreen toggle */}
+        {!activeFinalizedDraft && (
+          <ManuscriptZoomControl
+            pageZoom={focusedWriting.pageZoom}
+            onPageZoomChange={focusedWriting.setPageZoom}
+          />
+        )}
+
+        {!activeFinalizedDraft && (
+          <button
+            onClick={() => { setActiveSidebarTab(null); focusedWriting.setEnabled(true) }}
+            className="ms-toolbar-btn"
+            title="Focused writing mode"
+            aria-label="Enter focused writing mode"
+          >
+            Focus
+          </button>
+        )}
+
         <button
           onClick={toggleFullscreen}
           className="ms-toolbar-btn"
@@ -530,6 +584,7 @@ export default function Manuscript({ store }) {
           )}
         </button>
       </div>
+      )}
 
       {/* ── Body: writing area + right sidebar ──────────────── */}
       {activeFinalizedDraft ? (
@@ -545,8 +600,11 @@ export default function Manuscript({ store }) {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Writing area */}
-        <main data-tour="manuscript-editor" className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
-          <div className="manuscript-document mx-auto py-16 px-6 md:px-12">
+        <main ref={scrollContainerRef} data-tour="manuscript-editor" className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
+          <div
+            className="manuscript-document mx-auto py-16 px-6 md:px-12"
+            style={{ zoom: focusedWriting.pageZoom }}
+          >
 
             {acts.length === 0 && (
               <div className="empty-state mt-32 font-sans">
@@ -636,6 +694,9 @@ export default function Manuscript({ store }) {
                       onPersistDraft={persistSceneDraftToLocalStorage}
                       onOpenVersionHistory={setVersionHistorySceneId}
                       projectType={activeNovel?.type || 'novel'}
+                      focusedWriting={focusedWriting.enabled && focusedWriting.caretFollow}
+                      scrollContainerRef={scrollContainerRef}
+                      pageZoom={focusedWriting.pageZoom}
                     />
 
                     {isLastInChapter && (
@@ -659,6 +720,7 @@ export default function Manuscript({ store }) {
 
         {/* Right writing sidebar */}
         <WritingSidebar
+          focusedMode={focusedWriting.enabled}
           activePanelId={activeSidebarTab}
           onSetPanel={setActiveSidebarTab}
           acts={acts}

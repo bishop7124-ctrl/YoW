@@ -44,6 +44,8 @@ Product stage definition:
 - Public beta is the build-and-test period. It may expose incomplete workflows if they are clearly labeled, data-safe, and not misleading.
 - Final launch is the fully specced website. The intent is to implement the desired full product now, during beta, and avoid relying on continual post-launch development to finish core feature promises.
 - "Launch blocker" still means the issue must be fixed before any public paid/final launch. During beta, the same blocker policy is used to decide whether a beta build is safe enough to keep using.
+- Paid/final launch must not market any of the 6 active project types as beta, limited, or coming soon. If an active project type is not fully ready, launch waits or the product scope must be explicitly changed.
+- Real paid checkout should remain disabled or treated as test-only until the Launch Readiness Gate below is passed.
 
 Launch scope rule:
 
@@ -61,6 +63,24 @@ Parking-lot process:
 Launch blocker definition:
 
 Only data loss, broken auth, broken save, broken export, unusable editor, unusable responsive layout, or missing legal/payment essentials are technical blockers for beta safety. For final paid/public launch, incomplete desired product capabilities also block launch if they are part of the final product promise.
+
+### Launch Readiness Gate
+
+Status: Active
+
+YOW is launch-ready only when every gate below is passed. This is the operating definition for "we can confidently take money."
+
+| Gate | Required Outcome | Status |
+| --- | --- | --- |
+| Scope gate | All items in Launch Required and To Be Implemented are either complete and QA-passed, or explicitly moved to Future/Excluded by product decision. | Open |
+| Project-type gate | Novel, Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel are all fully live for their promised workflows. No active launch type is marketed as beta/limited at final launch. | Open |
+| Data safety gate | Auth, save, autosave, restore, export, account isolation, local/cloud transition, and storage-limit behavior are QA-passed with no known data-loss blocker. | Open |
+| Export ownership gate | Users can export complete project data through ZIP/DOCX/PDF/World Bible where promised, including before cloud expiry or inactive-account cleanup. | Open |
+| Payment gate | Stripe test-mode QA passes for Monthly, Lifetime, Founder, and £6 hosting renewal; live keys/prices/webhooks are reviewed before real checkout is enabled. | Open |
+| Legal and promise gate | Pricing, FAQ, Terms, privacy, cancellation, storage caps, Local Mode, cloud expiry, Founder recognition, and export ownership copy match the roadmap decisions. | Open |
+| Responsive gate | Core workflows work at mobile, tablet, and desktop widths without hidden critical controls or broken layouts. | Open |
+| Performance gate | A realistic large project remains usable for dashboard, writing, search, worldbuilding, map builder, and exports. | Open |
+| Marketing gate | Homepage, features, FAQ, pricing, SEO schema, and public pages do not imply excluded features such as collaboration, public sharing, mobile apps, marketplace/community, publishing integrations, or live VTT play. | Open |
 
 ## Launch Blocker Policy
 
@@ -119,7 +139,7 @@ Every bug or proposed launch change must answer both: does this create data loss
 
 | Phase | Feature | Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1. Scope Freeze | Project-type access model | All 6 active project types are selectable in create/edit flows. Comic/Graphic Novel is marked beta/limited. Unknown imported types fall back safely to Novel. Retired types (Play, Screenplay, TV Series, Video Game) are not shown in the UI; their constants exist in RETIRED_PROJECT_TYPES as a code-level backup only and must never reappear in the UI or marketing copy. | Yes | Beta-live model implemented, scope reduced to 6 types | Automated smoke verified active project types, live/beta stages, structure labels, section defaults, and ZIP/DOCX/PDF blob generation. Browser smoke verified homepage beta-live expectation copy. Still needs authenticated/offline UI pass for create/open/export clicks. | Engineering/QA |
+| 1. Scope Freeze | Project-type access model | All 6 active project types are selectable in create/edit flows. Comic/Graphic Novel may be marked beta/limited during public beta only. Final paid launch requires all 6 active project types to be marketed as fully live or launch waits. Unknown imported types fall back safely to Novel. Retired types (Play, Screenplay, TV Series, Video Game) are not shown in the UI; their constants exist in RETIRED_PROJECT_TYPES as a code-level backup only and must never reappear in the UI or marketing copy. | Yes | Beta-live model implemented, scope reduced to 6 types | Automated smoke verified active project types, live/beta stages, structure labels, section defaults, and ZIP/DOCX/PDF blob generation. Browser smoke verified homepage beta-live expectation copy. Still needs authenticated/offline UI pass for create/open/export clicks and final-launch copy pass to remove beta/limited labels after QA passes. | Engineering/QA |
 | 3. Core Polish | Save and close behavior | Closing editors, panels, and modals never drops unsaved manuscript or worldbuilding changes; prompts appear only when useful. | Yes | Implemented, needs QA | Manuscript editor flushes on blur/unmount; Edit modals (project, series) prompt "Discard changes?" when dirty; click-outside closes all modals. Run close/refresh/logout tests across manuscript, lore, characters, locations, and timeline. | Engineering/QA |
 | 3. Core Polish | Dashboard consistency | Dashboard lets users create, open, rename, and delete projects without layout breaks or ambiguous states. | Yes | Implemented, needs QA | First-run empty account hero now uses a welcoming "Begin your first world" start state with New Project, Import with AI, and a three-step quick tour; single-project auto-activation; series dropdown on create; series filter on StatusQueue; tile click opens project; project cards show a hover/focus Select project cue; active project panel shows a hover/focus Open project cue and displays cover photos without blend filtering; star button toggles active focus; series-contained projects are selectable as active projects from the library even when no standalone projects exist; series project cards are grouped under their parent series and the library content width matches ActiveProjectHero; card hover stats trimmed (scenes removed); ActiveProjectHero layout (library snapshot top, project details bottom); all 3 card buttons unified to 30×30 circle; project dashboard now separates Overview basics from Insights analytics, with momentum, scene health, draft balance, longest-scene, worldbuilding coverage cards, responsive tile packing for large screens, and human-readable project status labels instead of raw status IDs; project status picker added to internal project settings panel; current word count added to Overview Basics ledger; word count/target/completion stats added to the overview hero header; project overview summary boxes (Project, Manuscript, Reference, Recent Draft) now display in a single four-column row. Test empty account first-run hero, one project, all-projects-in-series, multiple series, many projects, overview/insights switching across desktop/tablet/mobile widths, project status label display, status picker in internal settings, word count stats in hero, new project create → auto-navigate into project, and deleted-project recovery expectations. Project type is locked at creation (type picker removed from EditProjectModal; type preserved on save). | Engineering/QA |
 
@@ -146,7 +166,7 @@ Dashboard consistency follow-up note (2026-06-14): Insights view now shares the 
 
 ## Project Type Launch Scope
 
-The public beta must be honest about the project-type stack. Beta project types may be selectable before their full discipline-specific engine exists, but the UI and marketing copy must clearly say what is limited. Final launch, however, means the fully specced website: each project type needs its own structure, language, defaults, export expectations, QA scenarios, and promised discipline-specific workflow.
+The public beta must be honest about the project-type stack. Beta project types may be selectable before their full discipline-specific engine exists, but the UI and marketing copy must clearly say what is limited. Final paid launch, however, means the fully specced website: each project type needs its own structure, language, defaults, export expectations, QA scenarios, and promised discipline-specific workflow. No active launch project type may remain publicly labeled beta/limited at final paid launch.
 
 | Project Type | Unique Launch Requirement / Acceptance Criteria | Blocker? | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -449,14 +469,23 @@ Users must never feel that their writing is held hostage. A lapsed hosting entit
 
 3. Cloud-to-local transition
    - Add a guided export/import flow for Lifetime users approaching hosting expiry.
-   - Before expiry: show warnings and offer hosting renewal.
-   - During grace period: allow read/export of cloud projects and preferably one-click "download all projects" backup.
-   - After grace period: stop cloud writes/uploads/sync; preserve app access and Local Mode.
+   - Before expiry: show abundant in-app and email warnings and offer hosting renewal.
+   - During the 90-day grace period: allow read/export of cloud projects and provide a one-click "Export all data" action.
+   - Final warning email must include one clear "Export all data" button that downloads all available project data.
+   - After grace period: stop cloud writes/uploads/sync; preserve app access and Local Mode. Paid/Lifetime/Founder cloud data should be archived rather than fully deleted if the user does not respond.
 
 4. Storage and cost controls
    - Keep published storage caps per plan.
+   - Free accounts have a 250MB cloud storage cap.
+   - Monthly accounts have unlimited projects with a 10GB fair-use cloud storage cap.
+   - Lifetime accounts use the 10GB fair-use cloud storage cap during the included 3-year hosting period and any renewed hosting period.
+   - Founder accounts include lifetime Cloud Mode with a 25GB fair-use cloud storage cap.
+   - Storage warnings appear at 80% usage.
+   - At 100% usage, block new uploads and cloud-heavy file writes, but never block writing, deleting files, or exporting.
+   - Cloud-stored project data, images, uploads, PDFs, backups, and imported files count toward storage. Local-only data does not count. Generated export files do not count unless stored permanently.
    - Prevent lapsed users from uploading new files to Supabase Storage.
-   - Decide whether expired cloud data is archived, retained read-only for a fixed period, or deleted after notice; this decision must be reflected in Terms and pricing FAQ before paid launch.
+   - Paid/Lifetime expired cloud data policy: 90-day grace with abundant warnings, then archive if no response is received. Do not fully delete paid/lifetime cloud data as the normal policy.
+   - Free inactivity policy: Free accounts with more than 18 months of inactivity enter the same 90-day warning/grace flow; after that 90-day period, delete the account and all associated database/storage records fully if there is no response.
    - Add operational reporting for storage by plan/status so Lifetime and Founder liabilities are visible.
 
 5. Billing and renewal
@@ -469,6 +498,7 @@ Users must never feel that their writing is held hostage. A lapsed hosting entit
    - Name the non-hosted state "Local Mode."
    - Account settings should show separate statuses: App Licence and Cloud Hosting.
    - Pricing, FAQ, Terms, and checkout copy must clearly distinguish lifetime app access from hosted cloud services.
+   - Copy should reassure users that their writing belongs to them and they will always be given an opportunity to export. Keep this clear but calm in legal/help copy so it does not make the product sound precarious.
    - Suggested message: "Your lifetime licence is active. Cloud hosting is inactive, so YOW is running in Local Mode. Your projects are stored on this device unless you export a backup or renew hosting."
 
 7. QA and launch checks
@@ -480,16 +510,25 @@ Users must never feel that their writing is held hostage. A lapsed hosting entit
 ### Open Product Decisions
 
 - Hosting contribution price: decided at £6/year after the included hosting period because 50p/month is easy to understand and keeps the renewal feeling accessible.
-- Grace period length: recommended 60-90 days after included hosting ends.
-- Expired cloud data policy: archive/read-only/delete timing must be decided before launch.
-- Founder cap: confirm storage/fair-use limit even with lifetime Cloud Mode.
-- Offline licence: decide whether Local Mode requires occasional online licence verification or can rely on cached entitlement.
+- Grace period length: decided at 90 days for lapsed paid hosting and inactive Free account cleanup.
+- Expired paid cloud data policy: after 90 days of warnings and export opportunity, archive paid/Lifetime data rather than fully deleting it by default.
+- Inactive Free account policy: Free accounts inactive for more than 18 months receive the 90-day warning/export flow, then are fully deleted from database/storage if there is no response.
+- Free cap: decided at 250MB cloud storage.
+- Monthly cap: decided at 10GB fair-use cloud storage.
+- Lifetime hosted cap: decided at 10GB fair-use cloud storage during included and renewed hosting periods.
+- Founder cap: decided at 25GB fair-use cloud storage.
+- Over-cap behavior: warn at 80%; at 100%, block new uploads/cloud-heavy file writes but never block writing, deleting files, or exporting.
+- Storage accounting: cloud-stored project data, images, uploads, PDFs, backups, and imported files count; local-only data does not count; generated export files do not count unless stored permanently.
+- Offline licence: cached signed-in access should allow Local Mode on a previously verified device. Brand-new login and entitlement refresh require internet access; export should not be blocked merely because verification is overdue.
 
 ### Acceptance Criteria
 
 - Lifetime users can continue using YOW in Local Mode after hosted cloud entitlement expires.
 - Lapsed Lifetime users generate no ongoing Supabase project storage writes or file uploads.
 - Users can export all cloud projects before cloud access is removed.
+- Paid/Lifetime users receive abundant warnings before cloud data removal, including a final email with an "Export all data" button.
+- Paid/Lifetime expired cloud data is archived after the 90-day grace period rather than fully deleted by default.
+- Free inactive accounts receive warnings after 18 months inactivity and are fully deleted after the 90-day warning period if there is no response.
 - Account, pricing, FAQ, and legal copy clearly explain the app licence/cloud hosting split.
 - Founder lifetime hosting is bounded by clear storage and fair-use limits.
 - Manual QA confirms no writing/worldbuilding data is lost during entitlement transitions.
@@ -513,37 +552,103 @@ Integration:
 
 QA deferred: wizard create flow on a real fresh account; checklist milestone accuracy; library and section tour spotlight positioning at mobile/tablet/desktop widths; section tour completion persistence.
 
-## Future/Excluded
+## To Be Implemented
+
+These items are now confirmed final-launch scope and must become either complete or explicitly re-decided before paid/public launch.
+
+| Feature | Launch Requirement / Acceptance Criteria | Status | Next Action | Owner/Notes |
+| --- | --- | --- | --- | --- |
+| Character journey / arc tracking | Users can track a character's journey across the project with visible arc stages, turning points, emotional/internal change, external goal progress, linked scenes/events, and current state. For series projects, the tracker must make it clear whether the arc is project-local or series-spanning. | Implemented, needs QA | Character profiles now include a dedicated Journey tab with guided arc overview, project/series intent, Before & After comparison, ordered expandable journey beats, major-turning-point emphasis, links to timeline events/chapters/scenes/characters, validated CRUD/reordering, automatic deleted-link cleanup, forward-series character sync, and ZIP/DOCX/PDF export inclusion. Journey editing is intentionally excluded from the general Add/Edit Character modal. QA persistence, forward-series overrides, link cleanup/navigation expectations, export/restore, and mobile/tablet/desktop layout. | Product/Engineering/QA |
+| Focused writing mode | Final launch includes a distraction-reduced editor state that is independent of browser fullscreen. Focused mode keeps the active manuscript, a minimal status bar, optional breadcrumb, and on-demand access to structure, notes, formatting, AI, and goals. It uses mirror-based textarea caret measurement and a calm 35–65% comfort zone rather than strict cursor centring. Autosave, drafts, spellcheck, selection, IME, accessibility, script/prose formatting, and mobile Safari usability must remain intact. | Implemented 2026-06-22; needs browser/device QA | Focused and fullscreen states are separate; the focused shell, temporary desktop drawers/mobile sheets, per-user local preference, mirror caret measurement, composition/selection guards, instant comfort scrolling, reduced-motion rules, and focused regression tests are implemented. Unit suite and production build pass. Run the deferred browser/device matrix below, especially long wrapped prose, real IME, mobile Safari keyboard resize, screen-reader operation, and combined native fullscreen. | Product/Engineering/QA |
+| Reliable map builder | D&D/TTRPG and worldbuilding users can create reliable, readable maps for planning. The map builder must feel predictable, persist safely, export/restore correctly, and include a grid overlay for movement/planning. Interior maps must feel like a dungeon-building tool for D&D/TTRPG planning, not a reskinned world/region map, while non-campaign projects use neutral interior-design language. It remains a planning map tool, not a live virtual tabletop. | Partial base; lazy grouped layers, placement workflow, and simplified interior construction implemented, needs authenticated browser QA | Current map builder has multi-map support, typed layers, paths, stamps, labels, linked locations, JSON import/export, grouping, undo/redo, rendered export plates, and high-resolution PNG export. Built-in type groups are now lazy: no empty defaults appear, and a compact grouped category exists only while it owns objects. Objects nest beneath their category and expose an inline Move to layer picker containing every built-in destination plus custom layers; moving the last item removes the empty source group, while moving into an absent built-in destination creates it. Object Properties retains the same movement capability. Category controls and sibling-only ordering remain grouped; custom categories remain editable/deletable. Schema v2 performs a one-time legacy sort while preserving deliberate custom assignments. Interior maps use grey stone and customizable Walls. Doors, labels, and named locations preview at the cursor. Next action is authenticated browser QA for lazy group creation/removal, layer movement/undo/locking/export persistence, grouped density, selection/order, migration, cursor previews, modal flows, locations, labels, walls, terminology, ZIP restore, and map stability. | Product/Design/Engineering |
+| Series management and cross-project references | Series management is part of final launch. Users can organise projects into a series, keep project order clear, understand inherited/shared records, and safely reference continuity across projects without corrupting single-project data. | Partial; remove future copy and finish continuity | Series dashboard, project ordering, settings, and forward-series sync already exist for characters, locations, lore, factions, ideas, timeline, and world history. Remaining launch work: replace the "Coming in Phase 2" continuity panel with launch-appropriate functionality/copy, add or clearly scope series-wide search and character arc continuity if part of the paid promise, QA inherited/shared records, and ensure series export/restore preserves order and continuity data. | Product/Engineering/QA |
+| AI import launch-scope review | AI import must not contradict the 6 active project-type launch promise. Users should understand whether AI import creates only Novel projects or supports type-specific imports for Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel. | Review then decide | Current AI import implementation still contains "other project types are deferred until after launch" language/behaviour. Decide whether AI import is Novel-only at launch with honest copy, or expand it to all 6 project types before final paid launch. | Product/AI/Engineering |
+
+### Focused Writing Mode Product Decision
+
+Decision recorded 2026-06-22. Focused writing mode is an editor state, not a synonym for browser fullscreen. Users must be able to use focused mode in the browser window, focused mode and fullscreen together, or fullscreen without focused mode. Focused mode must not depend on the Fullscreen API.
+
+Focused shell:
+
+- Keep the active manuscript area and a minimal top bar containing the project title, saving state, word count, and an explicit exit control.
+- Allow a small scene/chapter breadcrumb. Hide sidebars by default, but keep structure, notes, formatting, AI, and goals available through floating reveal controls.
+- Open structure as a temporary left drawer; notes as a right drawer or bottom sheet; formatting as a compact floating toolbar; and AI as a temporary panel. On mobile, use bottom sheets above the tab bar.
+- Escape closes the active temporary panel first. A subsequent Escape may exit focused mode on keyboard platforms, but mobile always needs a visible exit control.
+- Reduce chrome, borders, shadows, and inactive-scene emphasis while preserving a readable manuscript width and generous writing space.
+
+Caret-follow behaviour:
+
+- Keep the caret within roughly 35–65% of the visible editor area. Do not continuously centre it.
+- Centre a newly selected scene/editor predictably. During typing, scroll only as the caret approaches a comfort boundary.
+- Use instant or very short adjustments; do not smooth-scroll during continuous typing. Respect `prefers-reduced-motion`.
+- Measure a textarea caret with a hidden mirror element that copies rendered width, typography, line height, padding, border, letter spacing, whitespace/wrapping, and prose/script styles. Split at `selectionEnd`, insert a marker, and measure its rectangle only when needed.
+- Schedule measurement after textarea auto-height settles. Cover input, keyup, click, mouseup, paste, textarea selection changes, and resize through `requestAnimationFrame` batching.
+- Ignore updates during IME composition and while the user is actively selecting with mouse or touch. Caret following must never change autosave or local-draft write behaviour.
+
+State and persistence:
+
+- Own focused-mode state above `SceneEditor`, initially in `Manuscript` or the manuscript store, and expose caret measurement/following through dedicated hooks rather than embedding scroll policy in `SceneEditor`.
+- Persist focused mode per user. Retain local focused settings such as `focusedMode.enabled`, `focusedMode.caretFollow`, and `focusedMode.uiDensity` for future extensibility.
+- Re-open in focused mode only when the user explicitly left it enabled. Keep the MVP behaviour fixed to one calm-follow setting; user tuning is later polish, not part of the first slice.
+
+Implementation stages:
+
+1. Product shell: separate focused and fullscreen controls; add focused state, minimal toolbar, focused layout, hidden sidebars, and temporary reveal panels without changing caret following.
+2. Caret measurement: remove the newline-estimate cursor-centering effect and add mirror-based measurement plus 35–65% comfort scrolling behind a feature flag.
+3. Event coverage: support typing, deletion, paste, key navigation, pointer caret movement/selection, composition lifecycle, selection changes, and resize.
+4. Mobile polish: use dynamic viewport units where available, account for keyboard resize and safe areas, keep the toolbar compact/sticky, use bottom sheets, and prioritize visibility above the keyboard over perfect centring on mobile Safari.
+5. Preferences: persist the per-user enabled state and local focused settings without exposing premature configuration UI.
+6. QA hardening: prove autosave safety, scene switching, script/prose measurement, reduced-motion behaviour, accessibility, zoom, and mobile Safari fallback before marking complete.
+
+Implementation note (2026-06-22): stages 1–5 are implemented in the manuscript workspace. The previous newline-count estimate and continuous smooth centring were removed from `SceneEditor`; dedicated hooks now auto-size before paint, mirror the rendered textarea, batch covered caret events into animation frames, and adjust only outside the 35–65% comfort zone. Focused mode uses a minimal status shell plus floating reveal controls, desktop temporary drawers, and mobile bottom sheets while retaining the existing `WritingSidebar` content and all autosave/draft calls. Normal, focused, and fullscreen writing toolbars include a persisted 80–150% manuscript-page zoom that scales the complete document canvas—text, headings, spacing, and scene chrome—while passing the same scale into mirror-based caret measurement. Automated comfort-boundary tests pass; browser/device QA remains required before final completion.
+
+## QA Needed
+
+These items are in launch scope and currently need verification rather than new product scoping.
+
+| Feature | Launch Requirement / Acceptance Criteria | Status | Next Action | Owner/Notes |
+| --- | --- | --- | --- | --- |
+| Novel finalized draft reader | Novel projects can snapshot the current manuscript into timestamped, read-only finalized drafts and view them in a reader layout without changing the working manuscript. | Implemented, needs QA | QA finalise/read/select behavior, scroll/page controls, and non-novel visibility rules. | Product/Engineering/QA |
+| Factions and family grouping | Factions, family groups, and character grouping are visible final-launch worldbuilding tools if QA confirms they persist, sync, delete, and export safely. | Implemented, needs QA | QA faction CRUD, character cleanup on delete, series sync, filters, and export inclusion. | Product/Engineering/QA |
+| Stylised encyclopedia / World Bible export | Current PDF/HTML export is the launch World Bible/encyclopedia path. It should be reviewed and QA'd rather than expanded into a separate new export feature. | Implemented, needs QA | Review generated output for realistic projects; QA cover, TOC, character dossiers, relationship atlas, factions, locations, lore, timelines, map plates, notes, theme styling, and embedded project JSON. | Product/Design/QA |
+| Theme system v2 | Theme customisation remains in launch as an existing quality feature, not a primary marketing promise. | Implemented, needs QA | Authenticated QA for theme saving, preview, refresh, sign-out/sign-in, contrast, and main workspace surfaces. | Design/Engineering/QA |
+| Founders directory | Keep the public Founders directory because Founder pricing includes recognition/status. | Implemented, needs QA | QA `/founders/`, profile pages, pricing CTA, homepage/footer links, and visual match with marketing pages. | Product/Engineering/QA |
+
+## Completed Supporting Scope
 
 | Feature | Requirement / Acceptance Criteria | Status | Next Action | Owner/Notes |
 | --- | --- | --- | --- | --- |
-| Full-screen writing mode | A distraction-reduced writing view is available and exits cleanly without losing the active scene. | Unknown/needs check | Verify current behavior; ship only if already stable. | Product/Engineering |
-| Scroll-to-centre writing mode | Active scene can be brought into comfortable focus without breaking navigation or layout. | Implemented partially | Keep as polish unless it is already stable. | Product |
-| Novel finalized draft reader | Novel projects can copy the current manuscript into timestamped, uneditable finalized draft snapshots and view them in a separate reader layout optimized for novel-style reading, with scroll and page-flip style viewing modes. | Implemented, needs QA | QA: finalise a novel draft, verify the working manuscript remains editable, verify the finalized copy is selectable/read-only, verify scroll/pages switching and previous/next page controls, and verify non-novel project types do not show the Finalise action. | Product/Engineering/QA |
-| Passage comments/notes | Users can attach notes to a scene or passage-level context without creating data loss or editor instability. | Partial | De-scope passage-level annotation if scene notes are enough for launch. | Product |
-| Factions and family grouping | Grouping supports the novelist workflow without blocking core character/lore use. | Implemented/optional | Factions now have `saveFaction`/`deleteFaction` wired through `saveSeriesSyncedItem`/`deleteSeriesSyncedItem` (matching characters/locations); `factionsRef` tracks live state for sync; deleting a faction clears `factionId` on affected characters. Keep visible at launch only if stable; otherwise explicitly mark as Future/Excluded polish. | Product/Engineering |
-| EPUB-ready structure | Internal manuscript structure does not prevent future EPUB export; full EPUB generation is not currently part of the final launch promise. | Preparation only | Keep full EPUB export Future/Excluded unless the user decides it belongs in final launch. | Product/Engineering |
-| Stylised encyclopedia export | Not part of the current final launch promise unless product explicitly adds it. | Scope trap | Keep basic project export as the launch requirement unless stylised encyclopedia export is promoted by product decision. | Product |
-| Advanced map builder | Map features do not block core launch safety unless required by campaign or worldbuilding acceptance criteria. See PRD: Map Builder Rebuild below for full scope. Rebuild slices implemented: gentler bounded wheel zoom, visible undo/redo, transaction-style history for object edits, drag threshold to prevent accidental moves, Space/Alt temporary pan behavior, "Stamps" tool label, closed Rivers/Seas paths becoming filled water masses, hover highlights, clearer selection/point/rotate handles, mode-aware canvas cursor cues, active brush toggles back to Select when clicked again, a canvas-first workspace with floating map navigation, floating command bar, floating tool palette, floating inspector, and a dedicated New Map modal, a tabbed Object/Layers/Map inspector with real layer creation, active-layer placement, object reassignment, layer visibility/lock controls, an object stack, map type selected at creation and read-only afterward, removal of the weak Mountain line tool from creation UI in favour of the Mountains stamp, a reference-aligned 16-item fantasy stamp set using extracted source-image PNG icons, richer HTML/PDF map text plates that summarize layers, object counts, labels/places, regions, routes/water, stamps, and land/rooms from both legacy and object-map data, and generated object-map preview plates for HTML/PDF exports when no saved map image exists. | Phase 1 partial + Phase 2 partial + Phase 3 partial + Phase 4 partial + Phase 5 partial implementation, QA deferred | Required QA is tracked in [docs/QA_PLAN.md](docs/QA_PLAN.md). Continue with responsive safety and deeper export/restore verification. | Product/Design/Engineering |
 | Analytics | Google Analytics 4 implemented 2026-06-13 (tag G-L1BT87PKXV, added to all 25 HTML pages). Replaces the Posthog/deferred plan. | Complete | No further action needed. | Engineering |
-| Theme system v2 | New visual identity system with atmosphere token architecture, per-theme radius/shadow/glow personalities, and all studio vars auto-adapting via CSS var resolution. Theme editor now groups dark and light preset themes, uses compact selectors with a dedicated live preview, exposes configurable custom colours, corner roundness, and atmosphere strength, and now derives custom-theme atmosphere/paper/sidebar/accent-contrast tokens from the edited palette. Project/library screens now use explicit project surface roles for shell, standard panel, soft panel, raised panel, borders, hover, selected states, and tab/navigation icon contrast to reduce random-looking colour shifts. | Implemented, needs authenticated QA | QA AccountSettings theme editor while signed in: switch dark/light presets, edit each custom colour, adjust roundness and atmosphere strength, save to profile, refresh, sign out/in, and verify the live preview, library top bar, active project hero, overview cards, insight cards, manuscript action controls, primary buttons, studio/editor surfaces, tab/navigation icons, and saved profile theme remain in sync with legible text. | Design/Engineering |
-| Collaboration | Multi-user editing and sharing are excluded from the final launch product. | Future/Excluded | Document as future roadmap only. | Product |
-| Marketplace/community | Marketplace and public community systems are excluded from the final launch product. | Future/Excluded | Avoid launch copy that implies community availability. | Product |
-| Mobile apps | Native mobile apps are excluded; responsive web usability is the final launch requirement. | Future/Excluded | Focus mobile effort on web responsiveness. | Product |
-| Advanced AI agents | Agentic workflows are excluded; launch AI stays bounded and user-directed. | Future/Excluded | Define one or two safe AI assistance actions for launch. | Product/AI |
 | Project-type manuscript templates | The template picker in manuscript mode now filters templates by active project type. Novel/Novella: Three Act, Hero's Journey, Save the Cat, Romantasy, Mystery/Thriller, Episodic TV, Blank. Short Story adds: Freytag's Pyramid, Flash Fiction, In Medias Res. Comic: Multi-Issue Arc, Standalone Graphic Novel. D&D Campaign: Three-Arc Campaign, One-Shot. TTRPG: Three-Act Campaign, One-Shot/Convention, Horror Campaign. Blank/Custom is universal. `getTemplatesForProjectType()` handles filtering; `TemplateModal` receives `projectType` prop from `Manuscript`. Retired type templates (Screenplay, Play, TV Show, Video Game) are not shown. | Implemented 2026-06-13 | No further QA gate required; template picker adapts automatically when a project is opened. | Engineering |
 | AI chat history — pin & category | All AI chat sessions are persisted per project in localStorage. Sessions can be pinned (appear first) and tagged with a free-text category; category filter chips appear in the session list when categories exist. | Implemented | No further action needed for launch. | Engineering |
+| AI-assisted developmental editing feedback | Current AI architecture already provides bounded, user-directed developmental support through Plot Hole Detector, Lore Conflict Checker, Style Analysis, contextual AI Chat, and manuscript quick suggestions. This is sufficient for launch without adding autonomous/agentic workflows. | Complete for launch architecture | QA existing AI tools through the launch QA plan; do not expand into advanced agents unless a separate product decision is made. | Product/AI/QA |
 | Ideas board card expand | Idea cards with body text over ~200 chars now show a 3-line collapsed preview with an always-visible inline Show more / Show less button, so long captures (e.g. imported NovelCrafter snippets) are readable without requiring hover or card selection. | Implemented | No further action needed for launch. | Engineering |
-| Public sharing | Public project/profile sharing is excluded from the final launch product unless needed for launch marketing. | Future/Excluded | Keep private workspace promise clear. | Product |
-| Founders directory | Public `/founders/` page listing all Founder-tier members, each with a dedicated profile page (`/founders/[slug]/`) showing bio, published works grid with covers and buy links, social/website links, and a YOW Founder badge. Index page links to individual profiles and includes a "Become a Founder" CTA. Footer link added to homepage React app. Vite dev middleware serves static HTML for marketing pages in dev. Vercel rewrites updated with explicit `/founders/` and `/founders/:slug/` rules above the catch-all. CSS variables corrected to match `marketing.css`. Founders callout added to `/about/` page. | Implemented, needs QA | QA: visit `/founders/` and a founder profile page; verify theme matches other marketing pages; verify nav, footer, and "Become a Founder" CTA link to `/pricing/`; verify Founders link in homepage footer. To add a real founder: duplicate `public/founders/example-founder/`, rename to their slug, fill in details, add a `.founder-card` to `public/founders/index.html`. | Engineering/Product |
+
+## Future/Excluded
+
+The following are explicitly outside the final launch product after product review. Do not re-add them as launch requirements without a direct product decision.
+
+| Feature | Decision | Reason |
+| --- | --- | --- |
+| Marketplace / public community | Removed from product scope. | YOW is a private creative workspace, not a public community platform. |
+| Collaboration / multi-user editing | Removed from product scope. | Shared editing, permissions, presence, conflict resolution, and collaboration support would create a different product. |
+| Native mobile apps | Removed from product scope. | Responsive web usability remains the launch requirement. |
+| Public project/profile sharing | Removed from product scope. | Launch promise should stay focused on private writing, planning, ownership, and export. |
+| Advanced AI agents | Removed from product scope. | Current AI architecture is intentionally bounded and user-directed; autonomous workflows are not necessary for launch. |
+| EPUB export | Excluded unless publishing-output positioning changes. | Current DOCX/PDF/ZIP/export ownership path is more important. EPUB adds validation, formatting, reader-compatibility, and publishing-support expectations that are not worth launch scope unless YOW promises direct publication output. |
+| Voice dictation | Excluded unless accessibility requirements change. | Browser dictation support is inconsistent and microphone/privacy expectations add QA burden. It is useful, but not necessary for the current product promise. |
+| Publishing platform integrations | Removed from product scope. | Direct publishing integrations would add external API support, account linking, and platform-specific maintenance outside the private workspace model. |
+| Native desktop app | Removed from product scope. | Web access plus export/data ownership is the launch model. |
+| Extended template marketplace / community-submitted templates | Removed from product scope. | Built-in project-type templates are enough; user/community template distribution would recreate marketplace/community obligations. |
+| Passage-level comments/annotations | Removed from launch scope. | Scene notes are sufficient for launch; true passage annotation would add editor complexity and data-loss risk without being central to YOW's private planning/export promise. |
 
 ## PRD: Map Builder Rebuild
 
 ### Product Summary
 
-The Map Builder should become a reliable worldbuilding and campaign-planning canvas, not a novelty drawing panel. It should let writers and GMs quickly create readable world, region, local, and interior maps; link places back to Locations; export enough visual and metadata context to be useful; and feel stable under normal editing.
+The Map Builder is final-launch scope. It should become a reliable worldbuilding and campaign-planning canvas, not a novelty drawing panel. It should let writers and GMs quickly create readable world, region, local, and interior maps; link places back to Locations; use grid overlays for movement/planning; export enough visual and metadata context to be useful; and feel stable under normal editing.
 
-This remains Future/Excluded unless campaign-map quality becomes part of a paid/final-launch promise. If the current version feels glitchy enough to undermine campaign/worldbuilding trust, it should be beta-labeled or hidden until the interaction-stability pass is complete.
+Map quality is required because D&D/TTRPG users will reasonably expect usable campaign-map support. The launch promise is planning-grade map creation and export, not live play, live player access, fog of war, initiative automation, or VTT replacement.
 
 ### Current Baseline
 
@@ -556,6 +661,7 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 - Make the map canvas predictable: no accidental moves, wild zoom jumps, or unclear selection state.
 - Make drawing tools understandable: users can tell whether they are selecting, panning, drawing, placing, or editing points.
 - Support the core fantasy/cartography primitives writers expect: land, water, regions, routes, borders, labels, settlements, landmarks, terrain stamps, mountains, and interiors.
+- Support optional grid overlays for movement and planning: square grid at minimum, clear sizing controls, opacity/color controls, snap-to-grid where useful, and map-scale labels that help a GM understand distance without turning YOW into a live tabletop.
 - Preserve and export maps safely through project backup/restore, JSON import/export, and world bible exports.
 - Keep map creation fast for non-artists: good defaults, stamp presets, natural variation, and enough styling without demanding design expertise.
 
@@ -572,6 +678,7 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 - Provide explicit Select, Pan, Draw, Place Stamp, Label, and Location modes with visible active-state labels.
 - Wheel and trackpad zoom must be damped, bounded, and centered around the cursor; trackpad scroll should not launch the map from tiny to huge in one gesture.
 - Add visible zoom controls: zoom in, zoom out, fit, reset to 100%, and current percentage.
+- Add visible grid controls: show/hide grid, grid size, grid opacity, grid colour, snap-to-grid, and a plain movement scale label such as "1 square = 5 ft" or a custom unit.
 - Space/Alt temporary pan should work reliably; cursor state should reflect pan, grab, drawing, dragging, resizing, and rotating.
 - Selection must use hover highlights, selected outlines, clear handles, and predictable click behavior.
 - Clicking empty canvas deselects unless a draw/place mode is active.
@@ -593,12 +700,14 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 - Mountains: either replace the current Mountain tool with convincing mountain symbols/ranges (natural spacing, size jitter, rotation jitter, ridge direction, density, and group editing) or remove it and rely on mountain stamps until quality is good.
 - Labels: readable text labels with font size, color, optional curved labels for regions/routes, and collision-aware defaults where feasible.
 - Locations: place new or existing Locations on the map; linked markers should update display names when the Location name changes and should navigate back to the Location detail.
-- Interiors: rooms, walls, doors, windows, furniture, and object stamps should remain available, but the interface should make clear that interior maps are a different map type from world/region maps.
+- Interiors: interior maps are spatial-layout tools, not world/region maps indoors. They need distinct room/corridor/wall semantics, doors, furniture/object stamps, snap-to-grid defaults, and neutral terminology for prose/comic projects. D&D/TTRPG projects additionally use dungeon terminology, traps, secret doors, 5 ft movement language, and a grid-first dungeon-planning presentation.
+- Grid overlays: square grid is required for launch; hex grid is optional only if it can be implemented cleanly without destabilising the map builder. Grid overlays must export visually and persist in map data.
 
 ### Data Model And Persistence
 
 - Keep a versioned map schema with forward-compatible object records.
 - Each object needs stable `id`, `type`, position, size, rotation, z/layer order, visibility, lock state, style metadata, points/faces where relevant, and linked entity IDs where relevant.
+- Each map needs grid settings: enabled, grid type, size, opacity, colour, snap setting, and movement scale/unit metadata.
 - Add explicit water-mass metadata rather than overloading river lines once a path is closed.
 - Add mountain-range metadata only if the mountain tool is improved; otherwise remove the line-tool mode from available map types.
 - Persist maps synchronously enough that refresh/navigation does not lose recent edits.
@@ -610,6 +719,7 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 
 - Canvas rendering should look intentionally cartographic at normal zoom: cleaner water, land, region, route, border, mountain/stamp, and label styling.
 - Every map should maintain or generate a thumbnail/preview image for dashboard/export contexts.
+- Grid overlays should be legible but not overpower map content, and should appear in exported visual plates when enabled.
 - Project DOCX/PDF/world-bible exports should include map thumbnails or rendered plates where possible, not only metadata.
 - Exports should list map labels, linked locations, regions, and notable stamps so a text-only export still contains useful context.
 
@@ -628,6 +738,7 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 - Create a world map with land, closed sea/lake, open river, regions, roads, borders, labels, settlements, stamps, and linked locations; refresh and verify everything persists.
 - Create a region map with roads, towns, rivers, terrain stamps, and labels; verify selection, moving, resizing, rotating, point editing, grouping, and layer ordering.
 - Create an interior map with rooms, walls, doors, windows, furniture, labels, and object stamps; verify map-type-specific tool filtering.
+- Enable a square grid, set movement scale, change size/opacity/colour, use snap-to-grid, refresh, export, restore, and confirm the grid and movement metadata persist and render in visual exports.
 - Verify wheel and trackpad zoom are controlled at desktop and laptop settings; zoom never jumps beyond min/max unexpectedly.
 - Verify undo/redo for every common edit path.
 - Verify invalid JSON import shows an error and valid JSON import preserves object data.
@@ -645,19 +756,15 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 | 4. Visual quality | Better cartographic styling, reference-aligned fantasy stamp visuals, thumbnails/previews, label readability, map-type-specific polish. | Partial implementation: the stamp library now includes the 16 reference-image fantasy icons as extracted transparent PNG assets, with matching sidebar previews and placed stamp rendering. Still needs visual QA and later thumbnail/preview work. |
 | 5. Export and restore | ZIP restore coverage, JSON forward compatibility, DOCX/PDF/world-bible map plates. | Partial implementation: project backup already preserves map records; HTML/world-bible and PDF map sections now summarize rebuilt object-map data plus legacy labels/pins/regions as useful text plates. Generated object-map preview plates now render into HTML/PDF exports when no saved map image exists. Still needs deeper ZIP restore/browser verification later. |
 | 6. Responsive safety | Desktop editing pass plus tablet/mobile view/edit-lite behavior. | The map builder is either usable or clearly constrained on each supported viewport, with no broken layout. |
+| 7. Grid and movement planning | Optional grid overlay, movement scale, snap-to-grid, persisted grid settings, and visual/export support. | Required for final launch because tabletop GMs need movement/planning guidance. Square grid is required; hex grid is optional if low-risk. |
 
 ## Icebox
 
-New ideas start here unless they satisfy the Feature Intake Freeze rules.
+New ideas start here unless they are accepted into final launch scope through the Final Product Scope Discipline rules.
 
 | Feature | Why Parked | Decision Needed |
 | --- | --- | --- |
-| Voice dictation | Public roadmap exploration item; not currently accepted into final launch scope. | Revisit after launch scope is stable. |
-| Publishing platform integrations | Public roadmap exploration item; expands surface area beyond launch. | Define target platforms after launch. |
-| AI-assisted developmental editing feedback | Larger AI workflow than bounded launch AI suggestions. | Revisit after launch AI behavior is stable. |
-| Native desktop app | Not required while responsive web is the launch requirement. | Revisit after web launch. |
-| Series management and cross-project references | Useful, but expands data model and project scoping. | Revisit after single-novel workflow is reliable. |
-| Template library — extended marketplace / community-submitted templates | Further template content beyond the built-in per-type set is a product/community layer, not a launch blocker. Built-in project-type manuscript templates shipped 2026-06-13; extended/user-submitted library remains Future/Excluded. | Revisit after final launch. |
+| No active unreviewed ideas | Previous Icebox items have been moved to To Be Implemented, QA Needed, Completed Supporting Scope, or Future/Excluded by product decision. | Add only genuinely new, unvalidated ideas here. |
 
 ## Security
 

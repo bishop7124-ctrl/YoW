@@ -11,7 +11,11 @@ import {
 export function drawGrid(ctx, width, height, stylePreset = 'parchment') {
   ctx.save()
   const paper = ctx.createLinearGradient(0, 0, width, height)
-  if (stylePreset === 'ink') {
+  if (stylePreset === 'dungeon') {
+    paper.addColorStop(0, '#686e72')
+    paper.addColorStop(0.52, '#565c60')
+    paper.addColorStop(1, '#454a4e')
+  } else if (stylePreset === 'ink') {
     paper.addColorStop(0, '#f7f4eb')
     paper.addColorStop(0.48, '#e6e0d2')
     paper.addColorStop(1, '#c8c0ae')
@@ -27,13 +31,15 @@ export function drawGrid(ctx, width, height, stylePreset = 'parchment') {
   ctx.fillStyle = paper
   ctx.fillRect(0, 0, width, height)
 
-  ctx.globalAlpha = stylePreset === 'ink' ? 0.12 : 0.24
+  ctx.globalAlpha = stylePreset === 'ink' ? 0.12 : stylePreset === 'dungeon' ? 0.14 : 0.24
   for (let index = 0; index < 520; index += 1) {
     const seed = index * 97
     const x = seededNoise(seed, 1) * width
     const y = seededNoise(seed, 2) * height
     const r = 1 + seededNoise(seed, 3) * 5
-    ctx.fillStyle = stylePreset === 'atlas'
+    ctx.fillStyle = stylePreset === 'dungeon'
+      ? (seededNoise(seed, 4) > 0.5 ? '#8a9093' : '#2f3437')
+      : stylePreset === 'atlas'
       ? (seededNoise(seed, 4) > 0.5 ? '#5f8078' : '#eff8f1')
       : seededNoise(seed, 4) > 0.5 ? '#8b6a36' : '#fff7df'
     ctx.beginPath()
@@ -42,25 +48,70 @@ export function drawGrid(ctx, width, height, stylePreset = 'parchment') {
   }
 
   ctx.globalAlpha = 1
-  ctx.strokeStyle = stylePreset === 'atlas' ? 'rgba(39, 74, 70, 0.12)' : 'rgba(73, 59, 38, 0.08)'
-  ctx.lineWidth = 1
-  for (let x = 0; x <= width; x += 80) {
-    ctx.beginPath()
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, height)
-    ctx.stroke()
-  }
-  for (let y = 0; y <= height; y += 80) {
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(width, y)
-    ctx.stroke()
-  }
   const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.15, width / 2, height / 2, width * 0.7)
   vignette.addColorStop(0, 'rgba(255,255,255,0)')
-  vignette.addColorStop(1, stylePreset === 'atlas' ? 'rgba(26,67,68,0.18)' : stylePreset === 'ink' ? 'rgba(48,45,40,0.18)' : 'rgba(88,58,24,0.22)')
+  vignette.addColorStop(1, stylePreset === 'dungeon' ? 'rgba(15,18,20,0.2)' : stylePreset === 'atlas' ? 'rgba(26,67,68,0.18)' : stylePreset === 'ink' ? 'rgba(48,45,40,0.18)' : 'rgba(88,58,24,0.22)')
   ctx.fillStyle = vignette
   ctx.fillRect(0, 0, width, height)
+  ctx.restore()
+}
+
+export function drawMovementGrid(ctx, width, height, settings = {}) {
+  if (!settings.enabled) return
+  const size = Math.max(10, Number(settings.size) || 40)
+  const color = /^#[0-9a-f]{3,8}$/i.test(String(settings.color || '')) ? settings.color : '#5b4630'
+  const alpha = clamp(Number(settings.opacity) || 0.28, 0.05, 0.9)
+
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1
+  ctx.setLineDash([])
+
+  if (settings.type === 'hex') {
+    const radius = size / 2
+    const hexWidth = Math.sqrt(3) * radius
+    const rowHeight = radius * 1.5
+    const rows = Math.ceil(height / rowHeight) + 2
+    const columns = Math.ceil(width / hexWidth) + 2
+    for (let row = -1; row <= rows; row += 1) {
+      const y = row * rowHeight
+      const offsetX = Math.abs(row % 2) * hexWidth / 2
+      for (let column = -1; column <= columns; column += 1) {
+        const x = column * hexWidth + offsetX
+        ctx.beginPath()
+        for (let side = 0; side < 6; side += 1) {
+          const angle = -Math.PI / 2 + side * Math.PI / 3
+          const px = x + Math.cos(angle) * radius
+          const py = y + Math.sin(angle) * radius
+          if (side === 0) ctx.moveTo(px, py)
+          else ctx.lineTo(px, py)
+        }
+        ctx.closePath()
+        ctx.stroke()
+      }
+    }
+  } else {
+    for (let x = 0; x <= width; x += size) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+      ctx.stroke()
+    }
+    for (let y = 0; y <= height; y += size) {
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(width, y)
+      ctx.stroke()
+    }
+  }
+
+  if (settings.scale) {
+    ctx.globalAlpha = Math.min(0.9, alpha + 0.3)
+    ctx.fillStyle = color
+    ctx.font = '700 26px Georgia, serif'
+    ctx.fillText(settings.scale, 32, height - 34)
+  }
   ctx.restore()
 }
 
@@ -81,6 +132,7 @@ export function drawObject(ctx, object, selected, options = {}) {
   if (meta.dashed) ctx.setLineDash([Math.max(8, (meta.lineThickness || 4) * 2.2), Math.max(6, (meta.lineThickness || 4) * 1.4)])
 
   const cleanEdges = options.mapType === 'interior'
+  const cleanShapeEdges = cleanEdges || ((object.type === 'region' || object.type === 'shape') && meta.organicEdges === false)
 
   if (object.type === 'marker' || object.type === 'stamp' || object.type === 'location') {
     drawFantasyMarker(ctx, object, selected)
@@ -91,11 +143,11 @@ export function drawObject(ctx, object, selected, options = {}) {
   } else if (LINE_OBJECT_TYPES.has(object.type)) {
     drawStyledLineObject(ctx, object, selected, { cleanEdges })
   } else if ((object.type === 'region' || meta.shapeKind === 'polygon') && objectLocalFaces(object).length) {
-    cleanEdges ? drawCleanPolygonObject(ctx, object, selected) : drawOrganicPolygonObject(ctx, object, selected)
+    cleanShapeEdges ? drawCleanPolygonObject(ctx, object, selected) : drawOrganicPolygonObject(ctx, object, selected)
   } else if (object.type === 'shape' && meta.shapeKind === 'circle') {
-    cleanEdges ? drawCleanEllipseObject(ctx, object, selected) : drawOrganicEllipseObject(ctx, object, selected)
+    cleanShapeEdges ? drawCleanEllipseObject(ctx, object, selected) : drawOrganicEllipseObject(ctx, object, selected)
   } else {
-    cleanEdges ? drawCleanRectObject(ctx, object, selected) : drawOrganicRectObject(ctx, object, selected)
+    cleanShapeEdges ? drawCleanRectObject(ctx, object, selected) : drawOrganicRectObject(ctx, object, selected)
   }
   ctx.restore()
 }
@@ -109,7 +161,7 @@ export function drawCleanPolygonObject(ctx, object, selected) {
 
   ctx.save()
   if (fill !== 'transparent') {
-    ctx.fillStyle = colorWithAlpha(fill, object.type === 'region' ? 0.34 : 0.72)
+    ctx.fillStyle = colorWithAlpha(fill, meta.semanticType === 'room' ? 0.96 : object.type === 'region' ? 0.34 : 0.72)
     faces.forEach(points => {
       drawStraightPath(ctx, points, true)
       ctx.fill()
@@ -206,7 +258,7 @@ export function drawCleanEllipseObject(ctx, object, selected) {
   ctx.beginPath()
   ctx.ellipse(0, 0, object.width / 2, object.height / 2, 0, 0, Math.PI * 2)
   if (fill !== 'transparent') {
-    ctx.fillStyle = colorWithAlpha(fill, 0.72)
+    ctx.fillStyle = colorWithAlpha(fill, meta.semanticType === 'room' ? 0.96 : 0.72)
     ctx.fill()
   }
   ctx.strokeStyle = colorWithAlpha(stroke, selected ? 1 : 0.9)
@@ -359,7 +411,39 @@ export function drawStyledLineObject(ctx, object, selected, options = {}) {
 
   ctx.save()
   ctx.setLineDash([])
-  if (object.type === 'river') {
+  if (meta.semanticType === 'corridor') {
+    ctx.strokeStyle = selected ? '#1677ff' : colorWithAlpha(meta.edgeStroke || '#24292c', 0.98)
+    ctx.lineWidth = thickness + 12
+    drawStraightPath(ctx, points, false)
+    ctx.stroke()
+    ctx.strokeStyle = colorWithAlpha(meta.floorFill || '#a1a5a5', 1)
+    ctx.lineWidth = thickness
+    drawStraightPath(ctx, points, false)
+    ctx.stroke()
+    ctx.strokeStyle = colorWithAlpha('#d8d9d5', 0.18)
+    ctx.lineWidth = Math.max(2, thickness * 0.08)
+    drawStraightPath(ctx, points, false)
+    ctx.stroke()
+  } else if (meta.semanticType === 'wall') {
+    const closed = Boolean(meta.closed)
+    const texture = meta.wallTexture || 'stone'
+    ctx.strokeStyle = selected ? '#1677ff' : colorWithAlpha(meta.stroke || '#23282b', 1)
+    ctx.lineWidth = thickness + 5
+    drawStraightPath(ctx, points, closed)
+    ctx.stroke()
+    if (texture !== 'solid') {
+      ctx.strokeStyle = colorWithAlpha(meta.wallHighlight || '#a2a7a9', selected ? 0.45 : 0.72)
+      ctx.lineWidth = texture === 'wood' ? Math.max(2, thickness * 0.34) : Math.max(2, thickness * 0.24)
+      ctx.lineCap = texture === 'wood' ? 'round' : 'butt'
+      ctx.setLineDash(texture === 'brick'
+        ? [Math.max(8, thickness * 1.25), Math.max(3, thickness * 0.3)]
+        : texture === 'stone'
+          ? [Math.max(5, thickness * 0.72), Math.max(3, thickness * 0.28)]
+          : [])
+      drawStraightPath(ctx, points, closed)
+      ctx.stroke()
+    }
+  } else if (object.type === 'river') {
     drawTaperedPath(ctx, points, thickness, colorWithAlpha('#183d55', 0.22), seed, 2.4)
     drawTaperedPath(ctx, points, thickness, colorWithAlpha(stroke, selected ? 0.95 : 0.72), seed, 1.35)
     drawTaperedPath(ctx, points, thickness * 0.38, colorWithAlpha('#d9f4ff', selected ? 0.5 : 0.32), seed, 0.8)
@@ -420,24 +504,69 @@ export function drawFantasyMarker(ctx, object, selected) {
     return
   }
 
-  ctx.beginPath()
-  ctx.arc(0, 0, radius * 0.88, 0, Math.PI * 2)
-  ctx.fillStyle = colorWithAlpha(meta.fill || '#8f6a33', 0.28)
-  ctx.fill()
+  if (object.type !== 'location') {
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * 0.88, 0, Math.PI * 2)
+    ctx.fillStyle = colorWithAlpha(meta.fill || '#8f6a33', 0.28)
+    ctx.fill()
+  }
   ctx.fillStyle = colorWithAlpha(meta.fill || '#8f6a33', 0.78)
 
   if (object.type === 'location') {
-    ctx.beginPath()
-    ctx.moveTo(0, radius * 0.78)
-    ctx.bezierCurveTo(radius * 0.72, radius * 0.06, radius * 0.52, -radius * 0.76, 0, -radius * 0.76)
-    ctx.bezierCurveTo(-radius * 0.52, -radius * 0.76, -radius * 0.72, radius * 0.06, 0, radius * 0.78)
-    ctx.closePath()
-    ctx.fill()
-    ctx.stroke()
-    ctx.fillStyle = colorWithAlpha('#fff8dc', 0.9)
-    ctx.beginPath()
-    ctx.arc(0, -radius * 0.2, radius * 0.26, 0, Math.PI * 2)
-    ctx.fill()
+    const markerIcon = meta.markerIcon || 'pin'
+    if (markerIcon === 'star') {
+      ctx.beginPath()
+      for (let index = 0; index < 10; index += 1) {
+        const angle = -Math.PI / 2 + index * Math.PI / 5
+        const r = index % 2 ? radius * 0.32 : radius * 0.72
+        if (index === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r - radius * 0.14)
+        else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r - radius * 0.14)
+      }
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    } else if (markerIcon === 'diamond') {
+      ctx.beginPath()
+      ctx.moveTo(0, -radius * 0.76)
+      ctx.lineTo(radius * 0.6, -radius * 0.1)
+      ctx.lineTo(0, radius * 0.62)
+      ctx.lineTo(-radius * 0.6, -radius * 0.1)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+    } else if (markerIcon === 'tower') {
+      ctx.fillRect(-radius * 0.46, -radius * 0.56, radius * 0.92, radius * 1.04)
+      ctx.strokeRect(-radius * 0.46, -radius * 0.56, radius * 0.92, radius * 1.04)
+      ;[-0.42, 0, 0.42].forEach(offset => {
+        ctx.fillRect(radius * offset - radius * 0.13, -radius * 0.76, radius * 0.26, radius * 0.24)
+        ctx.strokeRect(radius * offset - radius * 0.13, -radius * 0.76, radius * 0.26, radius * 0.24)
+      })
+    } else if (markerIcon === 'dot') {
+      ctx.beginPath()
+      ctx.arc(0, -radius * 0.08, radius * 0.5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.moveTo(0, radius * 0.58)
+      ctx.bezierCurveTo(radius * 0.72, -radius * 0.04, radius * 0.52, -radius * 0.76, 0, -radius * 0.76)
+      ctx.bezierCurveTo(-radius * 0.52, -radius * 0.76, -radius * 0.72, -radius * 0.04, 0, radius * 0.58)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = colorWithAlpha('#fff8dc', 0.9)
+      ctx.beginPath()
+      ctx.arc(0, -radius * 0.22, radius * 0.24, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.font = `600 ${Math.max(14, radius * 0.32)}px "Palatino Linotype", Georgia, serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.lineWidth = Math.max(3, radius * 0.07)
+    ctx.strokeStyle = colorWithAlpha('#f6eedb', 0.92)
+    ctx.fillStyle = colorWithAlpha(meta.stroke || '#3a2a16', 1)
+    ctx.strokeText(meta.text || meta.name || 'Location', 0, radius * 0.66)
+    ctx.fillText(meta.text || meta.name || 'Location', 0, radius * 0.66)
   } else if (name.includes('forest') || name.includes('tree')) {
     const count = 5 + Math.floor(seededNoise(seed, 1) * 5)
     for (let index = 0; index < count; index += 1) {
@@ -658,7 +787,135 @@ export function drawStampSymbol(ctx, stamp, radius) {
     ctx.stroke()
   }
 
-  if (id === 'capital' || id === 'kingdom') {
+  if (id === 'stairs') {
+    ctx.strokeRect(-radius * 0.62, -radius * 0.72, radius * 1.24, radius * 1.44)
+    for (let index = 1; index < 6; index += 1) {
+      const y = -0.72 + index * 0.24
+      ctx.beginPath()
+      ctx.moveTo(-radius * 0.62, radius * y)
+      ctx.lineTo(radius * 0.62, radius * y)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.moveTo(0, radius * 0.48)
+    ctx.lineTo(0, -radius * 0.42)
+    ctx.moveTo(0, -radius * 0.42)
+    ctx.lineTo(-radius * 0.18, -radius * 0.18)
+    ctx.moveTo(0, -radius * 0.42)
+    ctx.lineTo(radius * 0.18, -radius * 0.18)
+    ctx.stroke()
+  } else if (id === 'trap') {
+    ctx.fillStyle = colorWithAlpha(fill, 0.34)
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * 0.62, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index * Math.PI / 4
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(angle) * radius * 0.18, Math.sin(angle) * radius * 0.18)
+      ctx.lineTo(Math.cos(angle) * radius * 0.72, Math.sin(angle) * radius * 0.72)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.arc(0, 0, radius * 0.12, 0, Math.PI * 2)
+    ctx.fillStyle = stroke
+    ctx.fill()
+  } else if (id === 'secret-door') {
+    ctx.setLineDash([radius * 0.18, radius * 0.12])
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.72, 0)
+    ctx.lineTo(radius * 0.72, 0)
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.font = `700 ${Math.max(14, radius * 0.72)}px Georgia, serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = stroke
+    ctx.fillText('S', 0, -radius * 0.3)
+  } else if (id === 'door') {
+    ctx.lineWidth = Math.max(2, radius * 0.09)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.7, 0)
+    ctx.lineTo(-radius * 0.58, 0)
+    ctx.moveTo(radius * 0.58, 0)
+    ctx.lineTo(radius * 0.7, 0)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.58, 0)
+    ctx.lineTo(-radius * 0.58, -radius * 1.16)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(-radius * 0.58, 0, radius * 1.16, -Math.PI / 2, 0)
+    ctx.stroke()
+  } else if (id === 'window') {
+    ;[-0.12, 0.12].forEach(y => {
+      ctx.beginPath()
+      ctx.moveTo(-radius * 0.72, radius * y)
+      ctx.lineTo(radius * 0.72, radius * y)
+      ctx.stroke()
+    })
+    ;[-0.38, 0, 0.38].forEach(x => {
+      ctx.beginPath()
+      ctx.moveTo(radius * x, -radius * 0.24)
+      ctx.lineTo(radius * x, radius * 0.24)
+      ctx.stroke()
+    })
+  } else if (id === 'table') {
+    ctx.beginPath()
+    ctx.roundRect(-radius * 0.72, -radius * 0.42, radius * 1.44, radius * 0.84, radius * 0.12)
+    ctx.fill()
+    ctx.stroke()
+    ;[-0.5, 0.5].forEach(x => [-0.22, 0.22].forEach(y => {
+      ctx.beginPath()
+      ctx.arc(radius * x, radius * y, radius * 0.08, 0, Math.PI * 2)
+      ctx.fillStyle = stroke
+      ctx.fill()
+    }))
+  } else if (id === 'bed') {
+    ctx.fillStyle = colorWithAlpha(fill, 0.72)
+    ctx.fillRect(-radius * 0.52, -radius * 0.76, radius * 1.04, radius * 1.52)
+    ctx.strokeRect(-radius * 0.52, -radius * 0.76, radius * 1.04, radius * 1.52)
+    ctx.fillStyle = colorWithAlpha('#ece8df', 0.9)
+    ctx.fillRect(-radius * 0.42, -radius * 0.64, radius * 0.84, radius * 0.34)
+    ctx.strokeRect(-radius * 0.42, -radius * 0.64, radius * 0.84, radius * 0.34)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.52, -radius * 0.2)
+    ctx.lineTo(radius * 0.52, -radius * 0.2)
+    ctx.stroke()
+  } else if (id === 'container') {
+    ctx.fillRect(-radius * 0.62, -radius * 0.42, radius * 1.24, radius * 0.84)
+    ctx.strokeRect(-radius * 0.62, -radius * 0.42, radius * 1.24, radius * 0.84)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.62, -radius * 0.08)
+    ctx.lineTo(radius * 0.62, -radius * 0.08)
+    ctx.moveTo(0, -radius * 0.08)
+    ctx.lineTo(0, radius * 0.18)
+    ctx.stroke()
+  } else if (id === 'chair') {
+    ctx.fillRect(-radius * 0.38, -radius * 0.12, radius * 0.76, radius * 0.62)
+    ctx.strokeRect(-radius * 0.38, -radius * 0.12, radius * 0.76, radius * 0.62)
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.46, -radius * 0.2)
+    ctx.lineTo(-radius * 0.46, -radius * 0.58)
+    ctx.lineTo(radius * 0.46, -radius * 0.58)
+    ctx.lineTo(radius * 0.46, -radius * 0.2)
+    ctx.stroke()
+  } else if (id === 'fireplace') {
+    ctx.strokeRect(-radius * 0.72, -radius * 0.5, radius * 1.44, radius)
+    for (let x = -0.48; x <= 0.48; x += 0.32) {
+      ctx.beginPath()
+      ctx.moveTo(radius * x, -radius * 0.5)
+      ctx.lineTo(radius * x, -radius * 0.26)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.moveTo(-radius * 0.4, radius * 0.24)
+    ctx.lineTo(radius * 0.4, -radius * 0.2)
+    ctx.moveTo(-radius * 0.4, -radius * 0.2)
+    ctx.lineTo(radius * 0.4, radius * 0.24)
+    ctx.stroke()
+  } else if (id === 'capital' || id === 'kingdom') {
     ctx.beginPath()
     ctx.moveTo(-radius * 0.62, -radius * 0.28)
     ctx.lineTo(-radius * 0.34, radius * 0.2)
@@ -1042,21 +1299,26 @@ export function drawFantasyLabel(ctx, object) {
   const size = Math.max(10, Math.min(144, meta.fontSize || object.height * 0.45))
   const curve = meta.curvedLabel ? Math.min(24, object.width * 0.055) : 0
   ctx.save()
-  ctx.font = `700 ${size}px Georgia, serif`
+  const fontFamily = meta.fontFamily || '"Palatino Linotype", "Book Antiqua", Georgia, serif'
+  const fontWeight = meta.fontWeight || 600
+  const fontStyle = meta.fontStyle || 'normal'
+  const textColor = meta.textColor || meta.fill || '#2a241b'
+  const outlineColor = meta.outlineColor ?? meta.stroke ?? 'transparent'
+  const backgroundColor = meta.backgroundColor || 'transparent'
+  ctx.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.lineJoin = 'round'
   const measuredWidth = Math.max(1, ctx.measureText(text).width)
   const scale = Math.min(1, Math.max(0.34, (object.width - 12) / measuredWidth))
-  ctx.save()
-  ctx.fillStyle = colorWithAlpha(meta.stroke || '#f8edd0', 0.58)
-  ctx.strokeStyle = colorWithAlpha(meta.fill || '#2a241b', 0.2)
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.roundRect(-object.width / 2, -object.height / 2, object.width, object.height, 8)
-  ctx.fill()
-  ctx.stroke()
-  ctx.restore()
+  if (backgroundColor !== 'transparent') {
+    ctx.save()
+    ctx.fillStyle = backgroundColor
+    ctx.beginPath()
+    ctx.roundRect(-object.width / 2, -object.height / 2, object.width, object.height, 8)
+    ctx.fill()
+    ctx.restore()
+  }
   ctx.scale(scale, 1)
   const totalWidth = measuredWidth
   let cursor = -totalWidth / 2
@@ -1069,11 +1331,15 @@ export function drawFantasyLabel(ctx, object) {
     ctx.save()
     ctx.translate(x, y)
     ctx.rotate(angle)
-    ctx.strokeStyle = colorWithAlpha(meta.stroke || '#f8edd0', 0.78)
-    ctx.lineWidth = Math.max(4, size * 0.14)
-    ctx.strokeText(char, 0, 0)
-    ctx.fillStyle = colorWithAlpha(meta.fill || '#2a241b', 0.92)
-    ctx.fillText(char, 0, 0)
+    if (outlineColor !== 'transparent') {
+      ctx.strokeStyle = outlineColor
+      ctx.lineWidth = Math.max(2, size * 0.09)
+      ctx.strokeText(char, 0, 0)
+    }
+    if (textColor !== 'transparent') {
+      ctx.fillStyle = textColor
+      ctx.fillText(char, 0, 0)
+    }
     ctx.restore()
     cursor += charWidth
   })
@@ -1122,6 +1388,8 @@ export function drawSelection(ctx, objects, zoom) {
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,.28)'
     ctx.shadowBlur = 5 / zoom
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = SELECTION_STROKE
     ctx.lineWidth = Math.max(2 / zoom, 1.25)
@@ -1145,6 +1413,8 @@ export function drawSelection(ctx, objects, zoom) {
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,.28)'
     ctx.shadowBlur = 5 / zoom
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = SELECTION_STROKE
     ctx.lineWidth = Math.max(2 / zoom, 1.25)
@@ -1181,6 +1451,8 @@ export function drawPointHandles(ctx, object, zoom) {
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,.25)'
     ctx.shadowBlur = 4 / zoom
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
     ctx.beginPath()
     ctx.arc(mapPoint.x, mapPoint.y, size / 2, 0, Math.PI * 2)
     ctx.fill()
@@ -1266,17 +1538,28 @@ export function drawDraft(ctx, draft, zoom) {
     ctx.fill()
     ctx.stroke()
   } else if (draft.points?.length) {
-    ctx.beginPath()
-    draft.points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point.x, point.y)
-      else ctx.lineTo(point.x, point.y)
-    })
-    if (draft.preview) ctx.lineTo(draft.preview.x, draft.preview.y)
-    if (draft.closed && draft.points.length >= 3) {
-      ctx.closePath()
-      ctx.fill()
+    const previewPoints = draft.preview ? [...draft.points, draft.preview] : draft.points
+    if (draft.semanticType === 'corridor') {
+      ctx.strokeStyle = draft.edgeStroke || '#252a2d'
+      ctx.lineWidth = (draft.lineThickness || 56) + 12
+      drawStraightPath(ctx, previewPoints, false)
+      ctx.stroke()
+      ctx.strokeStyle = draft.floorFill || '#a1a5a5'
+      ctx.lineWidth = draft.lineThickness || 56
+      drawStraightPath(ctx, previewPoints, false)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      previewPoints.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y)
+        else ctx.lineTo(point.x, point.y)
+      })
+      if (draft.closed && draft.points.length >= 3) {
+        ctx.closePath()
+        ctx.fill()
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
     ctx.setLineDash([])
     ctx.fillStyle = '#ffffff'
     draft.points.forEach(point => {
@@ -1288,4 +1571,3 @@ export function drawDraft(ctx, draft, zoom) {
   }
   ctx.restore()
 }
-

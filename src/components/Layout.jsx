@@ -1097,7 +1097,7 @@ export default function Layout({
               </SectionErrorBoundary>
             ) : viewMode === 'writing' ? (
               <SectionErrorBoundary key="manuscript">
-                <Manuscript store={store} />
+                <Manuscript store={store} userId={userId} />
               </SectionErrorBoundary>
             ) : null}
           </div>

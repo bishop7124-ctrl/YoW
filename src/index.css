@@ -12678,9 +12678,6 @@ body {
 .manuscript-processor.is-fullscreen .ms-sidebar {
   width: 200px;
 }
-.manuscript-processor.is-fullscreen .manuscript-document {
-  max-width: 760px;
-}
 
 /* ─── Responsive: narrow sidebar on small viewports ─────────────────────── */
 
@@ -18502,5 +18499,279 @@ body {
 
   .map-builder-status-pill {
     display: none;
+  }
+}
+
+/* ─── Focused writing and manuscript page zoom ─────────────────────────── */
+
+.ms-focus-topbar {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, auto) minmax(260px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  background: var(--bg-main);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 230;
+}
+
+.ms-focus-project-title,
+.ms-focus-breadcrumb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-focus-project-title {
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.ms-focus-breadcrumb {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.ms-focus-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ms-focus-exit {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ms-focus-exit:hover,
+.ms-focus-exit:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ms-focus-zoom {
+  height: 26px;
+  display: inline-grid;
+  grid-template-columns: 24px 38px 24px;
+  align-items: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  color: var(--text-muted);
+  background: transparent;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ms-focus-zoom button {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ms-focus-zoom button:hover:not(:disabled),
+.ms-focus-zoom button:focus-visible {
+  color: var(--accent);
+  background: var(--accent-fade);
+}
+
+.ms-focus-zoom button:disabled {
+  cursor: default;
+  opacity: .3;
+}
+
+.ms-focus-controls {
+  position: fixed;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 240;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-nav) 92%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(14px);
+}
+
+.ms-focus-controls button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ms-focus-controls button:hover,
+.ms-focus-controls button:focus-visible,
+.ms-focus-controls button.is-active {
+  color: var(--accent);
+  background: var(--accent-fade);
+}
+
+.manuscript-processor.is-focused-writing {
+  position: relative;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.manuscript-processor.is-focused-writing > .flex {
+  position: relative;
+}
+
+.manuscript-processor.is-focused-writing .manuscript-page.ms-scroll-container {
+  scroll-behavior: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 58px;
+}
+
+.manuscript-processor.is-focused-writing .manuscript-document {
+  padding-top: clamp(36px, 7vh, 76px);
+}
+
+.manuscript-processor.is-focused-writing .group\/scene {
+  opacity: .72;
+  transition: opacity .12s;
+}
+
+.manuscript-processor.is-focused-writing .group\/scene.is-editing,
+.manuscript-processor.is-focused-writing .group\/scene:focus-within,
+.manuscript-processor.is-focused-writing .group\/scene:hover {
+  opacity: 1;
+}
+
+.ms-writing-sidebar.is-focused-mode {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 225;
+  width: 0;
+  border-left: 0;
+  background: transparent;
+  overflow: visible;
+  transition: none;
+}
+
+.ms-writing-sidebar.is-focused-mode.is-open {
+  width: min(360px, 42vw);
+  background: var(--bg-main);
+  border-left: 1px solid var(--border);
+  box-shadow: -18px 0 42px rgba(0, 0, 0, .25);
+}
+
+.ms-writing-sidebar.is-focused-mode .ms-writing-tab-strip {
+  display: none;
+}
+
+.ms-writing-sidebar.is-focused-mode .ms-writing-panel {
+  width: 100%;
+  height: 100%;
+  border-left: 0;
+  background: var(--bg-main);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manuscript-processor.is-focused-writing *,
+  .manuscript-processor.is-focused-writing *::before,
+  .manuscript-processor.is-focused-writing *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .ms-focus-topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 4px 8px;
+  }
+
+  .ms-focus-breadcrumb,
+  .ms-focus-status .ms-save-label,
+  .ms-focus-status .ms-toolbar-wordcount {
+    display: none;
+  }
+
+  .ms-focus-status {
+    gap: 6px;
+  }
+
+  .ms-focus-zoom {
+    grid-template-columns: 22px 34px 22px;
+  }
+
+  .ms-focus-controls {
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    transform: none;
+    justify-content: space-between;
+  }
+
+  .ms-focus-controls button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 4px;
+  }
+
+  .manuscript-processor.is-focused-writing .manuscript-document {
+    padding: 28px 18px 0;
+  }
+
+  .ms-writing-sidebar.is-focused-mode,
+  .ms-writing-sidebar.is-focused-mode.is-open {
+    position: fixed;
+    inset: auto 0 0;
+    display: block;
+    width: 100% !important;
+    height: auto;
+    max-height: min(68dvh, calc(100dvh - 44px));
+    border: 0;
+    border-top: 1px solid var(--border);
+    background: var(--bg-main);
+    box-shadow: 0 -18px 42px rgba(0, 0, 0, .3);
+    z-index: 250;
+  }
+
+  .ms-writing-sidebar.is-focused-mode:not(.is-open) {
+    display: none;
+  }
+
+  .ms-writing-sidebar.is-focused-mode .ms-writing-panel {
+    height: min(68dvh, calc(100dvh - 44px));
+    max-height: none;
+    border-bottom: 0;
   }
 }

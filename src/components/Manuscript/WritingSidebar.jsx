@@ -493,6 +493,7 @@ function ProgressPanel({ scenes, chapters, writingGoals }) {
 // ─── Root component ───────────────────────────────────────────────────────────
 
 export default function WritingSidebar({
+  focusedMode = false,
   // Tab control
   activePanelId,
   onSetPanel,
@@ -522,7 +523,7 @@ export default function WritingSidebar({
   }, [activePanelId, onSetPanel])
 
   return (
-    <aside className={`ms-writing-sidebar${isOpen ? ' is-open' : ''} font-sans`}>
+    <aside className={`ms-writing-sidebar${isOpen ? ' is-open' : ''}${focusedMode ? ' is-focused-mode' : ''} font-sans`}>
 
       {/* Tab strip — always visible */}
       <div className="ms-writing-tab-strip">

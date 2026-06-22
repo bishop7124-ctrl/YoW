@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
+import EraManager from './EraManager'
 
 export default function WorldHistory({ store }) {
-  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId } = store
+  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId, eras, addEra, updateEra, deleteEra } = store
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('era-asc')
   const [selectedId, setSelectedId] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [showEraManager, setShowEraManager] = useState(false)
 
   useEffect(() => {
     const openNewHistoryForm = () => { setEditTarget(null); setShowForm(true) }
@@ -23,23 +24,39 @@ export default function WorldHistory({ store }) {
     (e.description || e.content || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  const sorter = (a, b) => {
-    if (sortBy === 'title-desc') return b.title.localeCompare(a.title)
-    return a.title.localeCompare(b.title)
+  const parseYear = (e) => {
+    if (e.startYear != null) return e.startYear
+    const match = (e.date || '').match(/-?\d+/)
+    return match ? parseInt(match[0], 10) : Infinity
   }
 
-  const groups = filtered.reduce((acc, e) => {
-    const era = e.era || 'Unknown Era'
-    if (!acc[era]) acc[era] = []
-    acc[era].push(e)
-    return acc
-  }, {})
-  Object.keys(groups).forEach(era => groups[era].sort(sorter))
-  const grouped = sortBy === 'era-asc'
-    ? Object.fromEntries(Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)))
-    : sortBy === 'era-desc'
-      ? Object.fromEntries(Object.entries(groups).sort(([a], [b]) => b.localeCompare(a)))
-      : groups
+  const eraStartYear = (eraId) => {
+    const era = (eras || []).find(er => er.id === eraId)
+    return era?.startYear ?? Infinity
+  }
+
+  // Sort eras by startYear, then entries within each era by year
+  const sortedEras = [...(eras || [])].sort((a, b) => (a.startYear ?? Infinity) - (b.startYear ?? Infinity))
+
+  // Group entries: matched by eraId first, fallback to era string name, then unassigned
+  const eraMap = {}
+  const unassigned = []
+
+  for (const e of filtered) {
+    if (e.eraId) {
+      if (!eraMap[e.eraId]) eraMap[e.eraId] = []
+      eraMap[e.eraId].push(e)
+    } else if (e.era) {
+      // legacy string era — show under "Other"
+      if (!eraMap['__other__']) eraMap['__other__'] = []
+      eraMap['__other__'].push(e)
+    } else {
+      unassigned.push(e)
+    }
+  }
+
+  // Sort entries within each group by year
+  const sortGroup = (arr) => [...arr].sort((a, b) => parseYear(a) - parseYear(b))
 
   const closeForm = () => { setShowForm(false); setEditTarget(null) }
 
@@ -62,6 +79,7 @@ export default function WorldHistory({ store }) {
   }
 
   const liveSelected = selectedId ? (timeline || []).find(e => e.id === selectedId) : null
+  const selectedEra = liveSelected?.eraId ? (eras || []).find(er => er.id === liveSelected.eraId) : null
 
   return (
     <StudioSplit>
@@ -69,7 +87,12 @@ export default function WorldHistory({ store }) {
         eyebrow="Chronicle wall"
         title="History"
         data-tour="worldhistory-header"
-        tools={<StudioButton tone="primary" size="sm" data-tour="worldhistory-new" onClick={() => { setEditTarget(null); setShowForm(true) }}>New</StudioButton>}
+        tools={
+          <div className="flex gap-1">
+            <StudioButton tone="secondary" size="sm" onClick={() => setShowEraManager(true)}>Eras</StudioButton>
+            <StudioButton tone="primary" size="sm" data-tour="worldhistory-new" onClick={() => { setEditTarget(null); setShowForm(true) }}>New</StudioButton>
+          </div>
+        }
       >
         <input
           value={search}
@@ -77,12 +100,6 @@ export default function WorldHistory({ store }) {
           placeholder="Search…"
           className="field w-full px-2.5 py-1.5 text-xs placeholder:text-[var(--text-muted)]"
         />
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-xs">
-          <option value="title-asc">Title A→Z</option>
-          <option value="title-desc">Title Z→A</option>
-          <option value="era-asc">Era A→Z</option>
-          <option value="era-desc">Era Z→A</option>
-        </select>
 
         {filtered.length === 0 && (timeline || []).length === 0 && (
           <div className="p-4 text-center space-y-2">
@@ -96,23 +113,38 @@ export default function WorldHistory({ store }) {
           <p className="text-[var(--text-muted)] text-xs p-4 text-center">No matches.</p>
         )}
 
-        {Object.entries(grouped).map(([era, entries]) => (
-          <div key={era}>
-            <div className="px-3 py-1.5 text-xs font-medium text-[var(--accent)]/60 uppercase tracking-wider border-b border-[var(--border)] bg-[var(--bg-nav)]/50 sticky top-0">
-              {era}
-            </div>
-            {entries.map(e => (
-              <StudioRecord
-                key={e.id}
-                onClick={() => setSelectedId(e.id)}
-                active={liveSelected?.id === e.id}
-              >
-                <div className="text-sm font-medium text-[var(--text-main)] truncate">{e.title}</div>
-                {e.date && <div className="text-xs text-[var(--text-muted)] mt-0.5">{e.date}</div>}
-              </StudioRecord>
-            ))}
-          </div>
-        ))}
+        {/* Era-grouped timeline */}
+        {sortedEras.map(era => {
+          const entries = eraMap[era.id] ?? []
+          return (
+            <EraSection
+              key={era.id}
+              label={era.name}
+              range={era.startYear != null || era.endYear != null ? `${era.startYear ?? '?'} – ${era.endYear ?? '?'}` : null}
+              entries={sortGroup(entries)}
+              selectedId={liveSelected?.id}
+              onSelect={setSelectedId}
+            />
+          )
+        })}
+
+        {eraMap['__other__']?.length > 0 && (
+          <EraSection
+            label="Other"
+            entries={sortGroup(eraMap['__other__'])}
+            selectedId={liveSelected?.id}
+            onSelect={setSelectedId}
+          />
+        )}
+
+        {unassigned.length > 0 && (
+          <EraSection
+            label="Unassigned"
+            entries={sortGroup(unassigned)}
+            selectedId={liveSelected?.id}
+            onSelect={setSelectedId}
+          />
+        )}
       </StudioIndex>
 
       <StudioDetail>
@@ -135,8 +167,14 @@ export default function WorldHistory({ store }) {
               )}
             >
               <div className="flex items-center gap-3 mt-1.5">
-                {liveSelected.era && <span className="text-xs text-[var(--accent)]">{liveSelected.era}</span>}
-                {liveSelected.date && <span className="text-xs text-[var(--text-muted)]">{liveSelected.date}</span>}
+                {selectedEra && <span className="text-xs text-[var(--accent)]">{selectedEra.name}</span>}
+                {liveSelected.startYear != null ? (
+                  <span className="text-xs text-[var(--text-muted)]">
+                    {liveSelected.endYear != null ? `${liveSelected.startYear} – ${liveSelected.endYear}` : String(liveSelected.startYear)}
+                  </span>
+                ) : liveSelected.date ? (
+                  <span className="text-xs text-[var(--text-muted)]">{liveSelected.date}</span>
+                ) : null}
               </div>
             </StudioPageHeader>
 
@@ -198,11 +236,45 @@ export default function WorldHistory({ store }) {
             initial={editTarget}
             characters={characters}
             locations={locations}
+            eras={eras}
             onSave={handleSave}
             onCancel={closeForm}
           />
         </Modal>
       )}
+
+      {showEraManager && (
+        <Modal title="Manage Eras" onClose={() => setShowEraManager(false)}>
+          <EraManager eras={eras} addEra={addEra} updateEra={updateEra} deleteEra={deleteEra} />
+        </Modal>
+      )}
     </StudioSplit>
+  )
+}
+
+function EraSection({ label, range, entries, selectedId, onSelect }) {
+  return (
+    <div>
+      <div className="px-3 py-1.5 flex items-baseline gap-2 border-b border-[var(--border)] bg-[var(--bg-nav)]/50 sticky top-0">
+        <span className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider">{label}</span>
+        {range && <span className="text-[10px] text-[var(--text-muted)]">{range}</span>}
+      </div>
+      {entries.map(e => (
+        <StudioRecord
+          key={e.id}
+          onClick={() => onSelect(e.id)}
+          active={selectedId === e.id}
+        >
+          <div className="text-sm font-medium text-[var(--text-main)] truncate">{e.title}</div>
+          {(e.startYear != null || e.date) && (
+            <div className="text-xs text-[var(--text-muted)] mt-0.5">
+              {e.startYear != null
+                ? e.endYear != null ? `${e.startYear} – ${e.endYear}` : String(e.startYear)
+                : e.date}
+            </div>
+          )}
+        </StudioRecord>
+      ))}
+    </div>
   )
 }
