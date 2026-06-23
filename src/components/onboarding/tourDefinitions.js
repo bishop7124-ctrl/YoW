@@ -16,7 +16,7 @@ export const LIBRARY_TOUR = [
   {
     target: 'import-btn',
     title: 'Import existing work',
-    body: 'Already have writing? Use AI Import to upload any file, or Import ZIP to restore a YOW backup or NovelCrafter export.',
+    body: 'Already have writing? Use AI Import to upload any file, or Import ZIP to restore a YOW backup or compatible project archive.',
   },
   {
     target: 'active-project-hero',
@@ -163,8 +163,8 @@ export const WORLDHISTORY_TOUR = [
 export const FAMILYTREE_TOUR = [
   {
     target: 'familytree-header',
-    title: 'Relationships',
-    body: 'See all your characters laid out by family group and generation. Connections you define on character profiles appear as links here.',
+    title: 'Family Tree',
+    body: 'See family members laid out by family group and generation. Social links have their own focal-character Relationship Map.',
   },
   {
     target: 'familytree-canvas',

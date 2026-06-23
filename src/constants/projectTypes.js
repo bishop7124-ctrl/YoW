@@ -24,7 +24,7 @@ export const PROJECT_TYPES = {
     exportLabel: 'Project Encyclopaedia',
     defaultWordTarget: 80000,
     defaultSections: [
-      'outline','characters','familytree','factions',
+      'outline','characters','relationships','familytree','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','aitools',
     ],
     starterOutline: [
@@ -52,7 +52,7 @@ export const PROJECT_TYPES = {
     exportLabel: 'Project Encyclopaedia',
     defaultWordTarget: 30000,
     defaultSections: [
-      'outline','characters','locations','lore','ideas','schedule','timeline','aitools',
+      'outline','characters','relationships','locations','lore','ideas','schedule','timeline','aitools',
     ],
     starterOutline: [
       { title: 'Part 1', children: [{ title: 'Chapter 1', scenes: ['Opening Turn'] }] },
@@ -79,7 +79,7 @@ export const PROJECT_TYPES = {
     exportLabel: 'Story Project Export',
     defaultWordTarget: 5000,
     defaultSections: [
-      'outline','characters','locations','lore','ideas','schedule','timeline','aitools',
+      'outline','characters','relationships','locations','lore','ideas','schedule','timeline','aitools',
     ],
     starterOutline: [
       { title: 'Story Draft', children: [{ title: 'Main Section', scenes: ['Opening Image'] }] },
@@ -108,7 +108,7 @@ export const PROJECT_TYPES = {
     analyticsLabel: 'Campaign Draft Analytics',
     exportLabel: 'Campaign Bible Export',
     defaultSections: [
-      'outline','characters','familytree','factions',
+      'outline','characters','relationships','familytree','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
     ],
     starterOutline: [
@@ -137,7 +137,7 @@ export const PROJECT_TYPES = {
     analyticsLabel: 'Campaign Analytics',
     exportLabel: 'Campaign Bible Export',
     defaultSections: [
-      'outline','characters','familytree','factions',
+      'outline','characters','relationships','familytree','factions',
       'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
     ],
     starterOutline: [
@@ -163,7 +163,7 @@ export const PROJECT_TYPES = {
     analyticsLabel: 'Page Draft Analytics',
     exportLabel: 'Comic Project Export',
     defaultSections: [
-      'outline','characters','familytree','locations',
+      'outline','characters','relationships','familytree','locations',
       'lore','ideas','schedule','timeline','map','aitools',
     ],
     starterOutline: [
@@ -195,7 +195,7 @@ export const RETIRED_PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING', writingTab: 'SCRIPT', workspaceLabel: 'Script',
     analyticsLabel: 'Script Draft Analytics', exportLabel: 'Play Project Export',
-    defaultSections: ['outline','characters','familytree','locations','lore','ideas','schedule','aitools'],
+    defaultSections: ['outline','characters','relationships','familytree','locations','lore','ideas','schedule','aitools'],
     starterOutline: [{ title: 'Act I', children: [{ title: 'Scene 1', scenes: ['Opening Beat'] }] }],
   },
   screenplay: {
@@ -214,7 +214,7 @@ export const RETIRED_PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING', writingTab: 'SCRIPT', workspaceLabel: 'Script',
     analyticsLabel: 'Script Draft Analytics', exportLabel: 'Screenplay Project Export',
-    defaultSections: ['outline','characters','familytree','factions','locations','lore','ideas','schedule','timeline','aitools'],
+    defaultSections: ['outline','characters','relationships','familytree','factions','locations','lore','ideas','schedule','timeline','aitools'],
     starterOutline: [{ title: 'Act I', children: [{ title: 'Opening Sequence', scenes: ['Opening Image'] }] }],
   },
   tv_show: {
@@ -233,7 +233,7 @@ export const RETIRED_PROJECT_TYPES = {
     ],
     planningTab: 'PLANNING', writingTab: 'EPISODES', workspaceLabel: 'Episodes',
     analyticsLabel: 'Episode Draft Analytics', exportLabel: 'TV Series Project Export',
-    defaultSections: ['outline','characters','familytree','factions','locations','lore','ideas','schedule','timeline','worldhistory','aitools'],
+    defaultSections: ['outline','characters','relationships','familytree','factions','locations','lore','ideas','schedule','timeline','worldhistory','aitools'],
     starterOutline: [{ title: 'Season 1', children: [{ title: 'Pilot', scenes: ['Act One'] }] }],
   },
   video_game: {
@@ -252,7 +252,7 @@ export const RETIRED_PROJECT_TYPES = {
     ],
     planningTab: 'WORLDBUILDING', writingTab: 'LEVELS', workspaceLabel: 'Narrative',
     analyticsLabel: 'Narrative Draft Analytics', exportLabel: 'Game Narrative Bible Export',
-    defaultSections: ['outline','characters','factions','locations','lore','ideas','schedule','timeline','worldhistory','map','aitools'],
+    defaultSections: ['outline','characters','relationships','factions','locations','lore','ideas','schedule','timeline','worldhistory','map','aitools'],
     starterOutline: [{ title: 'Act 1', children: [{ title: 'Opening Mission', scenes: ['Tutorial Hook'] }] }],
   },
 }
@@ -301,7 +301,7 @@ export const getProjectTypeStage = (type) => PROJECT_TYPE_STAGE[type] ?? PROJECT
 
 // All section IDs that exist in the app — used to validate enabledSections overrides.
 export const ALL_SECTION_IDS = [
-  'outline','characters','familytree','factions',
+  'outline','characters','relationships','familytree','factions',
   'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools','characterbuilder',
 ]
 
@@ -310,6 +310,12 @@ export const ALL_SECTION_IDS = [
 // Use novel.enabledSections (saved by ProjectSettings) to persist preferences.
 export const getEnabledSections = (novel) => {
   const override = novel?.enabledSections
-  if (Array.isArray(override)) return override.filter(id => id !== 'network')
+  if (Array.isArray(override)) {
+    const enabled = override.filter(id => id !== 'network')
+    if (!novel?.relationshipMapConfigured && enabled.includes('characters') && !enabled.includes('relationships')) {
+      enabled.splice(enabled.indexOf('characters') + 1, 0, 'relationships')
+    }
+    return enabled
+  }
   return ALL_SECTION_IDS
 }

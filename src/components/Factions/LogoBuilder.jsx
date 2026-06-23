@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { getShapeElement } from './FactionLogo'
 import { DEFAULT_LOGO_BACKGROUND, normalizeFactionLogo } from './logoData'
+import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
 
 const uid = () => Math.random().toString(36).slice(2)
 
@@ -45,9 +46,12 @@ const checkerboard = {
 }
 
 export default function LogoBuilder({ logo, onChange }) {
+  const uploadInputRef = useRef(null)
   const [selectedIdx, setSelectedIdx] = useState(null)
+  const [uploadError, setUploadError] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
   const logoData = normalizeFactionLogo(logo)
-  const { shapes, backgroundColor, backgroundTransparent } = logoData
+  const { source, image, shapes, backgroundColor, backgroundTransparent } = logoData
   const selected = selectedIdx !== null && selectedIdx < shapes.length ? shapes[selectedIdx] : null
 
   const updateLogo = (updates) => onChange({ ...logoData, ...updates })
@@ -89,8 +93,82 @@ export default function LogoBuilder({ logo, onChange }) {
 
   const clearAll = () => { updateLogo({ shapes: [] }); setSelectedIdx(null) }
 
+  const handleImageUpload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Please choose an image file.')
+      return
+    }
+
+    setUploadError('')
+    setIsUploading(true)
+    try {
+      const dataUrl = await optimizeImageToDataUrl(file, {
+        maxDimension: 800,
+        maxOutputBytes: 1024 * 1024,
+      })
+      updateLogo({ source: 'image', image: dataUrl })
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Could not process that image.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   return (
-    <div className="flex gap-5">
+    <div>
+      <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-lg bg-[var(--bg-main)] border border-[var(--border)]" role="group" aria-label="Faction logo source">
+        <button
+          type="button"
+          onClick={() => updateLogo({ source: 'builder' })}
+          className={`px-3 py-2 rounded-md text-xs font-bold transition-colors ${source === 'builder' ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+        >
+          Build an Emblem
+        </button>
+        <button
+          type="button"
+          onClick={() => image ? updateLogo({ source: 'image' }) : uploadInputRef.current?.click()}
+          className={`px-3 py-2 rounded-md text-xs font-bold transition-colors ${source === 'image' ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+        >
+          Upload an Image
+        </button>
+        <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isUploading} />
+      </div>
+
+      {source === 'image' ? (
+        <div className="flex flex-col items-center gap-3 py-2">
+          <div className="w-44 h-44 rounded-xl border-2 border-[var(--border)] bg-[var(--bg-main)] overflow-hidden flex items-center justify-center">
+            <img src={image} alt="Faction logo preview" className="w-full h-full object-contain" />
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            <label className="btn btn-secondary btn-sm cursor-pointer">
+              Replace Image
+              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isUploading} />
+            </label>
+            <button type="button" onClick={() => updateLogo({ source: 'builder', image: '' })} className="btn btn-secondary btn-sm text-red-500">
+              Remove Image
+            </button>
+          </div>
+          {uploadError && <p className="text-xs text-red-500 text-center" role="alert">{uploadError}</p>}
+        </div>
+      ) : image ? null : (
+        <div className="mb-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-main)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-[var(--text-main)]">Have a logo already?</p>
+            <p className="text-xs text-[var(--text-muted)]">Upload PNG, JPG, WebP, GIF, or another image format.</p>
+          </div>
+          <label className="btn btn-secondary btn-sm cursor-pointer">
+            {isUploading ? 'Processing…' : 'Choose Image'}
+            <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isUploading} />
+          </label>
+          {uploadError && <p className="w-full text-xs text-red-500" role="alert">{uploadError}</p>}
+        </div>
+      )}
+
+      {source === 'builder' && (
+      <div className="flex flex-col sm:flex-row gap-5">
 
       {/* Canvas */}
       <div className="flex flex-col items-center gap-2 flex-shrink-0">
@@ -338,6 +416,8 @@ export default function LogoBuilder({ logo, onChange }) {
           )
         )}
       </div>
+      </div>
+      )}
     </div>
   )
 }

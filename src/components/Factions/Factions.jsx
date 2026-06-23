@@ -195,7 +195,7 @@ export default function Factions({ store }) {
         <Modal title={editTarget ? 'Edit Faction' : 'New Faction'} onClose={() => setShowForm(false)} wide>
           <form onSubmit={handleSave} className="space-y-5 text-left">
             <div>
-              <label className={LABEL}>Logo Builder</label>
+              <label className={LABEL}>Faction Logo</label>
               <LogoBuilder
                 logo={form.logo}
                 onChange={logo => setForm(f => ({ ...f, logo }))}

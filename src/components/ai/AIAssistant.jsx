@@ -26,7 +26,8 @@ const SECTION_CONFIG = {
   manuscript:   { label: 'Manuscript',    createType: 'scene',     placeholder: 'Ask about your story, add a scene, or brainstorm ideas…' },
   outline:      { label: 'Outline',       createType: null,        placeholder: 'Ask about your story structure…' },
   dashboard:    { label: 'Overview',      createType: null,        placeholder: 'Ask about your project…' },
-  familytree:   { label: 'Relationships',  createType: null,        placeholder: 'Ask about character relationships…' },
+  relationships: { label: 'Relationship Map', createType: null,     placeholder: 'Ask about character relationships…' },
+  familytree:   { label: 'Family Tree',     createType: null,        placeholder: 'Ask about family connections…' },
   map:          { label: 'Map',           createType: null,        placeholder: 'Ask about your world map…' },
 }
 

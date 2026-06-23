@@ -208,17 +208,8 @@ function ThemeLivePreview({ colors, radiusUnit, visualStrength, label }) {
   )
 }
 
-function PreferencesPanel() {
-  const [cookieLevel, setCookieLevel] = useState(() => getCookieConsent() || 'essential')
-  const [cookieSaved, setCookieSaved] = useState(false)
-
-  const saveCookies = () => {
-    setCookieConsent(cookieLevel)
-    setCookieSaved(true)
-    setTimeout(() => setCookieSaved(false), 2200)
-  }
-
-  const Toggle = ({ checked, onChange, label }) => (
+function PreferenceToggle({ checked, onChange, label }) {
+  return (
     <button
       type="button"
       role="switch"
@@ -238,6 +229,17 @@ function PreferencesPanel() {
       }} />
     </button>
   )
+}
+
+function PreferencesPanel({ tourStore }) {
+  const [cookieLevel, setCookieLevel] = useState(() => getCookieConsent() || 'essential')
+  const [cookieSaved, setCookieSaved] = useState(false)
+
+  const saveCookies = () => {
+    setCookieConsent(cookieLevel)
+    setCookieSaved(true)
+    setTimeout(() => setCookieSaved(false), 2200)
+  }
 
   return (
     <section className="account-settings-panel">
@@ -245,6 +247,21 @@ function PreferencesPanel() {
         <div>
           <p className="eyebrow">Preferences</p>
           <h2>Appearance &amp; privacy</h2>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 28, paddingBottom: 24, borderBottom: '1px solid var(--border)' }}>
+        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Guidance</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', marginBottom: 2 }}>Guided tours</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Show automatic walkthroughs and tour buttons around the app.</p>
+          </div>
+          <PreferenceToggle
+            checked={tourStore?.toursEnabled !== false}
+            label="Guided tours"
+            onChange={() => tourStore?.setToursEnabled(tourStore.toursEnabled === false)}
+          />
         </div>
       </div>
 
@@ -266,15 +283,15 @@ function PreferencesPanel() {
                 </div>
                 <div style={{ opacity: disabled ? 0.45 : 1, flexShrink: 0 }}>
                   {disabled ? (
-                    <Toggle checked={true} onChange={() => {}} label={`${label} cookies (always active)`} />
+                    <PreferenceToggle checked={true} onChange={() => {}} label={`${label} cookies (always active)`} />
                   ) : key === 'all' ? (
-                    <Toggle
+                    <PreferenceToggle
                       checked={checked}
                       label={`${label} cookies`}
                       onChange={() => setCookieLevel(p => p === 'all' ? 'preferences' : 'all')}
                     />
                   ) : (
-                    <Toggle
+                    <PreferenceToggle
                       checked={checked}
                       label={`${label} cookies`}
                       onChange={() => setCookieLevel(p => p === 'essential' ? 'preferences' : 'essential')}
@@ -1249,7 +1266,7 @@ function DeleteAccountModal({ novels, store, onClose }) {
   )
 }
 
-export default function AccountSettings({ open, onClose, storageUsedBytes = 0, activeTab = 'profile', onTabChange, store }) {
+export default function AccountSettings({ open, onClose, storageUsedBytes = 0, activeTab = 'profile', onTabChange, store, tourStore }) {
   const { user, getAccessToken, updateProfile, refreshUser } = useAuth()
   const membership = useMemo(() => getMembership(user), [user])
   const [billingBusy, setBillingBusy] = useState('')
@@ -1379,7 +1396,7 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
           )}
 
           {selectedTab === 'preferences' && (
-            <PreferencesPanel />
+            <PreferencesPanel tourStore={tourStore} />
           )}
 
           {selectedTab === 'ai' && (

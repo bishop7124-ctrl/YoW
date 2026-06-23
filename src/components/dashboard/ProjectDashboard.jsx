@@ -648,9 +648,10 @@ export default function ProjectDashboard({ store }) {
   const workspaceLabel = stats.projectType.workspaceLabel || 'Manuscript'
   const analyticsLabel = stats.projectType.analyticsLabel || 'Writing Analytics'
   const projectStatusLabel = formatProjectStatus(project.status)
+  const heroBgImage = project.bannerImage || project.coverPhoto
   const overviewHeroStyle = {
     '--overview-cover-fallback': getCoverGradient(project.title),
-    ...(project.coverPhoto ? { '--overview-cover-art': `url("${project.coverPhoto}")` } : {}),
+    ...(heroBgImage ? { '--overview-cover-art': `url("${heroBgImage}")` } : {}),
   }
 
   const updateDailyGoal = value => {
@@ -662,7 +663,7 @@ export default function ProjectDashboard({ store }) {
   return (
     <StudioBoard className="overview-board">
       <div className="overview-layout">
-        <header data-tour="dashboard-header" className={`overview-hero${project.coverPhoto ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
+        <header data-tour="dashboard-header" className={`overview-hero${heroBgImage ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
           <div className="overview-hero-copy">
             <p className="studio-kicker">{stats.projectType.label} project</p>
             <div className="overview-hero-badges">

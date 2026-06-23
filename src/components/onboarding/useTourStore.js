@@ -21,6 +21,8 @@ export function useTourStore() {
   }, [])
 
   return {
+    toursEnabled:      state.toursEnabled !== false,
+    setToursEnabled:   (enabled) => set('toursEnabled', !!enabled),
     wizardShown:      !!state.wizardShown,
     markWizardShown:  () => set('wizardShown', true),
     checklistDismissed: !!state.checklistDismissed,

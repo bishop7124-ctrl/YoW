@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { getRelType } from "../../constants/Constants";
 import { FACTION_ICONS } from "../../constants/factionIcons";
-
-const toArray = (v) => Array.isArray(v) ? v : []
 
 const NODE_W = 190;
 const NODE_H = 78;
@@ -31,8 +28,6 @@ const extractYear = (value) => {
 
 export default function FamilyTree({ store }) {
   const { characters, factions, selectedCharacterId, setSelectedCharacterId, saveCharacter, currentYear } = store;
-  const [relTargetId, setRelTargetId] = useState("");
-  const [relType, setRelType] = useState("ally");
   const [hoveredCharId, setHoveredCharId] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const [treeColumnCount, setTreeColumnCount] = useState(getTreeColumnCount);
@@ -214,30 +209,13 @@ export default function FamilyTree({ store }) {
     if (savedId) setSelectedCharacterId(savedId);
   };
 
-  const addRelationshipFromTree = () => {
-    if (!selectedCharacterId || !relTargetId || relTargetId === selectedCharacterId) return;
-    const source = byId.get(selectedCharacterId);
-    if (!source) return;
-    const existing = toArray(source.relationships);
-    const next = [...existing.filter((r) => !(r.targetId === relTargetId && r.type === relType)), { targetId: relTargetId, type: relType }];
-    saveCharacter({ relationships: next }, selectedCharacterId);
-  };
-
-  const removeRelationshipFromTree = (targetId, type) => {
-    if (!selectedCharacterId) return;
-    const source = byId.get(selectedCharacterId);
-    if (!source) return;
-    const next = (toArray(source.relationships)).filter((r) => !(r.targetId === targetId && r.type === type));
-    saveCharacter({ relationships: next }, selectedCharacterId);
-  };
-
   return (
     <div className="h-full bg-[var(--bg-main)] overflow-auto p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-end justify-between" data-tour="familytree-header">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--text-main)]">Relationships</h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">Tree layout by family group and generation. Works for any character network.</p>
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">Family Tree</h1>
+            <p className="text-sm text-[var(--text-muted)] mt-1">Genealogy by family group and generation. Social connections live in the Relationship Map.</p>
           </div>
           <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-nav)] border border-[var(--border)] rounded px-3 py-2">
             Current Year: <span className="text-[var(--accent)] font-bold">{parsedCurrentYear}</span>
@@ -247,7 +225,7 @@ export default function FamilyTree({ store }) {
         {characters.length === 0 ? (
           <div className="h-[60vh] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-[var(--border)] rounded-xl px-8">
             <p className="text-[var(--text-muted)] text-sm font-medium">No characters yet</p>
-            <p className="text-[var(--text-muted)] text-xs leading-relaxed max-w-xs">Add someone here, then assign family groups and relationship links as the tree grows.</p>
+            <p className="text-[var(--text-muted)] text-xs leading-relaxed max-w-xs">Add someone here, then assign parents, children, spouses, and family groups as the tree grows.</p>
             <button onClick={addCharacterFromTree} className="bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold px-4 py-2 rounded hover:opacity-90">Add Character</button>
           </div>
         ) : (
@@ -364,31 +342,6 @@ export default function FamilyTree({ store }) {
                       })}
 
                       {section.members.map((char) => {
-                        const source = section.positions.get(char.id);
-                        if (!source) return null;
-                        return toArray(char.relationships)
-                          .filter((rel) => section.positions.has(rel.targetId))
-                          .filter((rel) => rel.targetId > char.id)
-                          .map((rel) => {
-                            const target = section.positions.get(rel.targetId);
-                            const relCfg = getRelType(rel.type);
-                            return (
-                              <line
-                                key={`rel-${char.id}-${rel.targetId}-${rel.type}`}
-                                x1={source.x + NODE_W / 2}
-                                y1={source.y + NODE_H / 2}
-                                x2={target.x + NODE_W / 2}
-                                y2={target.y + NODE_H / 2}
-                                stroke={relCfg.color || "var(--text-muted)"}
-                                strokeWidth="1.6"
-                                strokeDasharray={relCfg.dash || "4 3"}
-                                opacity="0.8"
-                              />
-                            );
-                          });
-                      })}
-
-                      {section.members.map((char) => {
                         const p = section.positions.get(char.id);
                         if (!p) return null;
                         const ageLabel = getAgeLabel(char);
@@ -445,10 +398,10 @@ export default function FamilyTree({ store }) {
             </div>
 
             <aside className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 sticky top-4">
-              <h3 className="text-sm font-bold text-[var(--text-main)] mb-2">Tree Relationships</h3>
+              <h3 className="text-sm font-bold text-[var(--text-main)] mb-2">Family Details</h3>
               {!selectedCharacter ? (
                 <div className="space-y-3">
-                  <p className="text-xs text-[var(--text-muted)]">Select a character node to edit links or add someone new.</p>
+                  <p className="text-xs text-[var(--text-muted)]">Select a character node to review their family links or add someone new.</p>
                   <button onClick={addCharacterFromTree} className="w-full bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold py-1.5 rounded hover:opacity-90">Add Character</button>
                 </div>
               ) : (
@@ -466,33 +419,10 @@ export default function FamilyTree({ store }) {
                       <div className="text-sm text-[var(--text-main)] font-semibold">{selectedCharacter.name}</div>
                     </div>
                   </div>
-                  <select value={relTargetId} onChange={(e) => setRelTargetId(e.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]">
-                    <option value="">Select target character</option>
-                    {characters.filter((c) => c.id !== selectedCharacter.id).map((c) => <option key={`target-${c.id}`} value={c.id}>{c.name}</option>)}
-                  </select>
-                  <select value={relType} onChange={(e) => setRelType(e.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]">
-                    {["enemy", "ally", "romantic", "friend", "partner", "sibling", "cousin", "auntuncle", "grandparent"].map((id) => {
-                      const t = getRelType(id);
-                      return <option key={`type-${id}`} value={id}>{t.label}</option>;
-                    })}
-                  </select>
-                  <button onClick={addRelationshipFromTree} className="w-full bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold py-1.5 rounded hover:opacity-90">Add Link</button>
-
-                  <div className="border-t border-[var(--border)] pt-2">
-                    <div className="text-xs text-[var(--text-muted)] mb-1">Existing links</div>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {toArray(selectedCharacter.relationships).length === 0 && <p className="text-xs text-[var(--text-muted)] italic">No custom links yet.</p>}
-                      {toArray(selectedCharacter.relationships).map((rel, idx) => {
-                        const target = byId.get(rel.targetId);
-                        if (!target) return null;
-                        return (
-                          <div key={`existing-${idx}`} className="flex items-center justify-between text-xs bg-[var(--bg-main)] border border-[var(--border)] rounded px-2 py-1">
-                            <span className="text-[var(--text-main)]">{target.name} - {getRelType(rel.type).label}</span>
-                            <button onClick={() => removeRelationshipFromTree(rel.targetId, rel.type)} className="text-red-400">✕</button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="border-t border-[var(--border)] pt-3 space-y-2 text-xs">
+                    <div><span className="text-[var(--text-muted)]">Parents: </span><span className="text-[var(--text-main)]">{(selectedCharacter.parentIds || []).map(id => byId.get(id)?.name).filter(Boolean).join(', ') || 'None set'}</span></div>
+                    <div><span className="text-[var(--text-muted)]">Children: </span><span className="text-[var(--text-main)]">{characters.filter(character => (character.parentIds || []).includes(selectedCharacter.id)).map(character => character.name).join(', ') || 'None set'}</span></div>
+                    <div><span className="text-[var(--text-muted)]">Spouses / partners: </span><span className="text-[var(--text-main)]">{(selectedCharacter.spouseIds || []).map(id => byId.get(id)?.name).filter(Boolean).join(', ') || 'None set'}</span></div>
                   </div>
 
                   <button onClick={() => jumpToCharacters(selectedCharacter.id)} className="w-full border border-[var(--border)] text-[var(--text-main)] text-xs py-1.5 rounded hover:border-[var(--accent)]">

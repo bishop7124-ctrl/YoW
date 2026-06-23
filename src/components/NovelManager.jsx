@@ -1147,10 +1147,10 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
 
   // Auto-show library tour on first visit
   useEffect(() => {
-    if (!tourStore || tourStore.isTourComplete('library')) return
+    if (!tourStore || !tourStore.toursEnabled || tourStore.isTourComplete('library')) return
     const t = setTimeout(() => setLibraryTourOpen(true), 500)
     return () => clearTimeout(t)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tourStore?.toursEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showImportMenu) return
@@ -1322,7 +1322,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                   <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.35)', minWidth: 196, overflow: 'hidden' }}>
                     {[
                       { label: 'AI Import', sublabel: 'Upload any file — AI builds your project', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
-                      { label: 'Import ZIP', sublabel: 'YOW backup or NovelCrafter export', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
+                      { label: 'Import ZIP', sublabel: 'YOW backup or compatible project archive', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
                     ].map(({ label, sublabel, onClick }, i, arr) => (
                       <button key={label} type="button" onClick={onClick}
                         style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
@@ -1343,7 +1343,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           <button className="library-chat-button" type="button" onClick={handleOpenLibraryChat} title="Open AI chat" aria-label="Open AI chat">
             ✦
           </button>
-          {tourStore && (
+          {tourStore?.toursEnabled && (
             <button
               className="library-tour-button"
               type="button"
@@ -1677,7 +1677,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
       })()}
 
       {/* Library tour */}
-      {libraryTourOpen && (
+      {tourStore?.toursEnabled && libraryTourOpen && (
         <OnboardingTour
           steps={LIBRARY_TOUR}
           onFinish={() => { setLibraryTourOpen(false); tourStore?.markTourComplete('library') }}

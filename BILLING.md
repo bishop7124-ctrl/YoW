@@ -55,7 +55,7 @@ Membership state lives exclusively in `user.app_metadata` (written server-side v
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin key — webhook writes only |
 | `STRIPE_SECRET_KEY` | Stripe secret key (`sk_live_...` or `sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | From Stripe Dashboard → Webhooks → signing secret |
-| `STRIPE_PRICE_ID_PREMIUM_MONTHLY` | Monthly Creator subscription price ID |
+| `STRIPE_PRICE_ID_PREMIUM_MONTHLY` | Monthly subscription price ID |
 | `STRIPE_PRICE_ID_PREMIUM_LIFETIME` | Lifetime Launch one-time price ID |
 | `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME` | Premium Plus one-time price ID |
 | `STRIPE_PRICE_ID_FOUNDER` | Founder one-time price ID |
@@ -82,9 +82,9 @@ Create one **Product** per plan in the Stripe Dashboard. Under each product, cre
 
 | Plan | Product name | Price type | Amount |
 |---|---|---|---|
-| YOW Monthly Creator | YOW Monthly Creator | Recurring / Monthly | £10.00 GBP |
+| YOW Monthly | YOW Monthly | Recurring / Monthly | £10.00 GBP |
 | YOW Launch Edition Lifetime | YOW Launch Edition Lifetime | One-time | £149.00 GBP |
-| YOW Creator Lifetime | YOW Creator Lifetime | One-time | £249.00 GBP |
+| YOW Lifetime | YOW Lifetime | One-time | £249.00 GBP |
 | YOW Founder | YOW Founder | One-time | £399.00 GBP |
 
 Copy each **Price ID** (`price_...`) into the corresponding Vercel environment variable.
@@ -251,9 +251,9 @@ Before going live:
 
 ### Subscription flow
 
-1. Click Upgrade on Monthly Creator
+1. Click Upgrade on Monthly
 2. Complete checkout
-3. ✓ Plan badge shows "Monthly Creator"
+3. ✓ Plan badge shows "Monthly"
 4. ✓ "Manage subscription & billing" button appears
 5. Click that button → Stripe portal opens ✓
 6. Cancel subscription via portal
@@ -286,7 +286,7 @@ Before going live:
 | Lifetime Launch | 5 GB |
 | Premium Plus | 10 GB |
 | Founder | 25 GB |
-| Monthly Creator | 10 GB |
+| Monthly | 10 GB |
 
 ### Check the storage card
 
@@ -389,9 +389,9 @@ These keys are stored in `user.app_metadata.subscription_plan` and **must not be
 
 | Key | Display name | Type | Price |
 |---|---|---|---|
-| `premium_monthly` | YOW Monthly Creator | Subscription | £10/month |
+| `premium_monthly` | YOW Monthly | Subscription | £10/month |
 | `premium_lifetime` | YOW Launch Edition Lifetime | One-time | £149 |
-| `premium_plus_lifetime` | YOW Creator Lifetime | One-time | £249 |
+| `premium_plus_lifetime` | YOW Lifetime | One-time | £249 |
 | `founder` | YOW Founder | One-time | £399 |
 | `free` | Free | — | £0 |
 

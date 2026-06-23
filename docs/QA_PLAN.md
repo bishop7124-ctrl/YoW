@@ -68,7 +68,7 @@ Status: Partial — autosave and structure CRUD automated; deep editing deferred
 Status: Deferred
 
 - YOW backup round-trip: export a project ZIP, import it through Import ZIP, verify all project, manuscript, worldbuilding, structure, and settings content returns under a new project.
-- NovelCrafter import: import a full NovelCrafter ZIP and verify characters, locations, lore/items, manuscript chapters-as-scenes, and other/snippets/notes-as-ideas import correctly.
+- Compatible project archive: import a structured ZIP and verify characters, locations, lore/items, manuscript chapters-as-scenes, and other/snippets/notes-as-ideas import correctly through Import ZIP.
 - Project export contents: verify small, medium, and large project ZIPs contain complete manuscript and worldbuilding data.
 - DOCX export: verify formatting, ordering, empty scenes, large manuscripts, and project-type-specific labels.
 - PDF export: verify readable, ordered, nonblank output for realistic project content.
@@ -104,7 +104,7 @@ Status: Deferred
 - Locations: create/edit/delete, search/sort, project scoping, forward-series overrides, scoped deletes, and timeline/lore link cleanup.
 - Lore: create/edit/delete, categorize, search/filter/tag/sort, character/location/lore links, reverse references, forward-series overrides, counters, and export inclusion.
 - Timeline and World History: create/edit/delete/link/unlink, era grouping, chronological display, instant refresh, forward-series overrides, scoped deletes, inherited dashboard counts, and import migration of orphan world-history entries.
-- Ideas: per-column empty states and imported raw captures from NovelCrafter.
+- Ideas: per-column empty states and raw captures imported from compatible structured project archives.
 
 ## Priority 7: Project-Type Workflows
 
@@ -128,6 +128,7 @@ Status: Deferred
 - Search and filtering: verify empty states, populated search, no-match search, sorting, filters, active filter count, and clear controls for every worldbuilding index.
 - Storage usage tracking: trigger a storage-exceeded action, verify used/quota values in toast and StorageCard, and confirm Plan settings opens the membership tab.
 - Empty/loading/error states: verify zero-record and no-match states across dashboard, characters, locations, lore, timeline/history, ideas, and detail panes.
+- Guided-tour preference: turn Guided tours off in Account Settings → Preferences, verify the choice survives refresh, automatic tours no longer open, and tour buttons are hidden in both the Library and project workspaces; turn it back on and verify incomplete tours and buttons return while the welcome wizard and getting-started checklist remain unaffected.
 - Landing/features/FAQ: hard-reload `/features/` and `/faq/`, verify nav links, FAQ accordion behavior, Blog absence, Compare plans scroll, beta-live homepage copy, and back/forward navigation.
 - Focused writing mode — independent states: verify focused mode works inside the browser window, focused mode and browser fullscreen work together, and fullscreen workspace works without focused mode. Verify Fullscreen API rejection/unavailability does not prevent focused mode, including mobile Safari.
 - Focused writing mode — shell and tools: verify the minimal top bar shows project title, saving state, word count, and a visible exit; optional chapter/scene breadcrumb remains accurate; sidebars are hidden by default; structure, notes, formatting, AI, and goals remain reachable through temporary drawers, sheets, panels, or floating controls. Escape closes a panel before it exits focused mode.
@@ -138,7 +139,8 @@ Status: Deferred
 - Manuscript page zoom: verify the 80–150% control is available in normal, focused, and fullscreen writing states; all three modes use the same base manuscript width; zoom scales the complete manuscript canvas (text, headings, spacing, and scene controls) rather than changing the saved font preference; persists per user across refresh/project switches; remains usable at 375px; and supplies the same scale to textarea caret measurement without jumping.
 - ✅ Focused writing mode automated baseline: `useCaretComfortScroll.test.js` covers no movement inside the 35–65% zone and exact upper/lower boundary adjustments; `focused-writing.spec.js` covers the independent focused shell, layered Escape behavior, explicit persistence, long wrapped prose, and the mobile bottom-sheet layout. Unit suite and production build pass. Browser execution remains deferred where the local Chromium/server sandbox cannot bind or launch; run the spec in CI or a normal local terminal.
 - Finalized draft reader: finalise a novel draft, verify the working manuscript remains editable, verify the finalized copy is selectable/read-only, verify reader scroll/page controls, and verify non-novel project types do not show the Finalise action.
-- Factions and family grouping: verify faction CRUD, family group display/filtering, character cleanup after faction delete, series sync behaviour, export inclusion, and empty/no-match states.
+- Factions and family grouping: verify faction CRUD; heraldry-builder and uploaded faction logos; upload validation, optimisation, replacement, removal, refresh persistence, and card/profile rendering; family group display/filtering; character cleanup after faction delete; series sync behaviour; export inclusion; and empty/no-match states.
+- Character relationship map: verify the selected character stays central and gets one short zoom-in when focus changes (with no perpetual floating and no animation under reduced motion); each directly connected character appears only once even with legacy duplicate/reciprocal links; incoming and outgoing non-family links render with the correct type; dense casts adapt into readable rings; each direct character's wider network is consolidated into an accurate `+N` badge/tooltip, including links shared with characters already visible in the focal ring while excluding only the focal link itself; family links remain exclusive to Family Tree; changing focus, add/remove, refresh persistence, empty states, profile navigation, and 375px/768px/1280px layouts all work.
 - World Bible export review: generate PDF/HTML World Bible exports for realistic projects and verify cover, table of contents, character dossiers, relationship atlas, factions, locations, lore encyclopedia, timelines, map plates, notes, theme styling, readable pagination, and embedded project JSON.
 - Theme system v2: while signed in, switch presets, edit custom colours, adjust roundness/atmosphere, save, refresh, sign out/in, and verify preview/workspace surfaces retain legible theme state.
 - Founders directory: verify `/founders/` and profile pages, theme, nav, footer, pricing CTA, homepage footer link, and example-founder replacement process.
@@ -179,6 +181,7 @@ Status: Deferred
 Status: Deferred
 
 - Pricing and purchase flow: confirm Free, Monthly (£12/month), Lifetime (£179 once), and Founder (£399 once) plan copy is accurate; checkout links work; cancellation language is clear; and paid/final-launch promises do not overstate beta workflows. Verify Stripe products/prices, checkout success/cancel states, and SEO schema all match the final approved decision.
+- Pricing plan interaction: verify no plan card or comparison-table column appears selected at desktop or mobile widths, the Lifetime plan is never labelled Creator, clicking card content does nothing, and only the signup/upgrade CTA buttons initiate plan selection.
 - Lifetime/cloud-hosting copy: verify pricing, FAQ, checkout, account settings, renewal, expiry, and legal copy clearly distinguish lifetime app access from cloud hosting, never imply indefinite free Supabase hosting for Lifetime users, and never say the lifetime app licence expires.
 - Hosting renewal flow: verify Lifetime users approaching expiry, in grace, and lapsed can reach the renewal checkout; successful renewal restores Cloud Mode immediately and sets the next hosting expiry date.
 - Cloud data grace/archive flow: verify paid/Lifetime users receive abundant in-app/email warnings, have a 90-day grace period, can use the final email "Export all data" button, stop generating cloud writes after grace, and have expired cloud data archived rather than fully deleted by default.

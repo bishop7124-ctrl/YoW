@@ -4,6 +4,7 @@ import AIPanel from './ai/AIPanel'
 import AIAssistant from './ai/AIAssistant'
 import Characters from './characters/Characters'
 import FamilyTree from './familytree/FamilyTree'
+import RelationshipMap from './relationships/RelationshipMap'
 import Factions from './Factions/Factions'
 import Lore from './lore/Lore'
 import IdeasKanban from './ideas/IdeasKanban'
@@ -61,6 +62,7 @@ function Icon({ name, size = 16 }) {
     manuscript: <><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 12h6" /><path d="M9 16h6" /></>,
     outline: <><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></>,
     familytree: <><circle cx="12" cy="5" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M12 8v4" /><path d="M6 15v-3h12v3" /></>,
+    relationships: <><circle cx="7" cy="12" r="3" /><circle cx="17" cy="7" r="3" /><circle cx="17" cy="17" r="3" /><path d="M10 11l4-2.5" /><path d="M10 13l4 2.5" /></>,
     factions: <><path d="M5 21V4" /><path d="M5 4h12l-2 4 2 4H5" /></>,
     locations: <><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11z" /><circle cx="12" cy="10" r="2.5" /></>,
     ideas: <><path d="M9 18h6" /><path d="M10 22h4" /><path d="M8.5 14.5a6 6 0 1 1 7 0c-.8.7-1.5 1.5-1.5 2.5h-4c0-1-.7-1.8-1.5-2.5z" /></>,
@@ -124,7 +126,8 @@ const ALL_SECTIONS = [
   { id: 'dashboard',    label: 'Overview',     icon: 'overview' },
   { id: 'outline',      label: 'Outline',      icon: 'outline' },
   { id: 'characters',   label: 'Characters',   icon: 'characters' },
-  { id: 'familytree',   label: 'Relationships', icon: 'familytree' },
+  { id: 'relationships', label: 'Relationship Map', icon: 'relationships' },
+  { id: 'familytree',   label: 'Family Tree', icon: 'familytree' },
   { id: 'factions',     label: 'Factions',     icon: 'factions' },
   { id: 'locations',    label: 'Locations',    icon: 'locations' },
   { id: 'lore',         label: 'Lore',         icon: 'lore' },
@@ -140,7 +143,7 @@ const ALL_SECTIONS = [
 const STUDIO_ROOMS = [
   { id: 'overview',          label: 'Overview',          icon: 'overview',          sections: ['dashboard'] },
   { id: 'planning',          label: 'Planning',          icon: 'planning',          sections: ['outline', 'ideas', 'schedule'] },
-  { id: 'characters',        label: 'Characters',        icon: 'characters',        sections: ['characters', 'familytree', 'factions'] },
+  { id: 'characters',        label: 'Characters',        icon: 'characters',        sections: ['characters', 'relationships', 'familytree', 'factions'] },
   { id: 'atlas',             label: 'Atlas',             icon: 'atlas',             sections: ['locations', 'map'] },
   { id: 'lore',              label: 'Lore',              icon: 'lore',              sections: ['lore', 'timeline', 'worldhistory'] },
   { id: 'party',             label: 'Party',             icon: 'characterbuilder',  sections: ['characterbuilder'], ttrpgOnly: true },
@@ -149,7 +152,7 @@ const STUDIO_ROOMS = [
 
 const SETTINGS_GROUPS = [
   { label: 'Planning',          sections: ['outline', 'ideas', 'schedule'] },
-  { label: 'Characters',        sections: ['characters', 'familytree', 'factions'] },
+  { label: 'Characters',        sections: ['characters', 'relationships', 'familytree', 'factions'] },
   { label: 'Atlas',             sections: ['locations', 'map'] },
   { label: 'Lore',              sections: ['lore', 'timeline', 'worldhistory'] },
   { label: 'Tabletop RPG',      sections: ['characterbuilder'] },
@@ -190,7 +193,7 @@ const downloadBlob = (blob, filename) => {
 
 const stripMediaFromBackup = data => ({
   ...data,
-  project: data.project ? { ...data.project, coverPhoto: null } : data.project,
+  project: data.project ? { ...data.project, coverPhoto: null, bannerImage: null } : data.project,
   series: data.series ? { ...data.series, coverPhoto: null } : data.series,
   characters: (data.characters || []).map(item => ({ ...item, image: null, portrait: null, photo: null })),
   locations: (data.locations || []).map(item => ({ ...item, image: null, photo: null })),
@@ -217,7 +220,7 @@ function ProjectSettings({ store, onClose }) {
   const novel = store.activeNovel
   const settingsProjectType = getProjectType(novel?.type)
   const settingsProjectStage = getProjectTypeStage(novel?.type)
-  const initial = (novel?.enabledSections ?? ALL_SECTION_IDS).filter(id => ALL_SECTION_IDS.includes(id))
+  const initial = getEnabledSections(novel).filter(id => ALL_SECTION_IDS.includes(id))
   const [enabled, setEnabled] = useState(() => new Set(initial))
   const dialogRef = useRef(null)
   useEffect(() => { dialogRef.current?.focus() }, [])
@@ -237,6 +240,7 @@ function ProjectSettings({ store, onClose }) {
     status: novel?.status ?? null,
   }))
   const [coverError, setCoverError] = useState('')
+  const [bannerError, setBannerError] = useState('')
   const [exporting, setExporting] = useState('')
   const [backupMessage, setBackupMessage] = useState('')
   const [categoryDraft, setCategoryDraft] = useState(() => ({
@@ -254,7 +258,7 @@ function ProjectSettings({ store, onClose }) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEnabled(new Set((novel?.enabledSections ?? ALL_SECTION_IDS).filter(id => ALL_SECTION_IDS.includes(id))))
+    setEnabled(new Set(getEnabledSections(novel).filter(id => ALL_SECTION_IDS.includes(id))))
     setDetails({
       title: novel?.title || '',
       description: novel?.description || '',
@@ -389,11 +393,27 @@ function ProjectSettings({ store, onClose }) {
     }
   }
 
+  const handleBannerSelect = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !file.type.startsWith('image/')) return
+    try {
+      setBannerError('')
+      const photo = await resizeCoverPhoto(file)
+      store.updateNovel(store.activeNovelId, { bannerImage: photo })
+    } catch {
+      setBannerError('Could not use that image.')
+    }
+  }
+
   const toggle = (id) => {
     setEnabled(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
-      store.updateNovel(store.activeNovelId, { enabledSections: [...next] })
+      store.updateNovel(store.activeNovelId, {
+        enabledSections: [...next],
+        ...(id === 'relationships' ? { relationshipMapConfigured: true } : {}),
+      })
       return next
     })
   }
@@ -585,6 +605,7 @@ function ProjectSettings({ store, onClose }) {
 
               <div style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Cover Photo</span>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>Thumbnail shown in the project list and sidebar.</p>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   {novel?.coverPhoto && (
                     <img src={novel.coverPhoto} alt="" style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }} />
@@ -604,6 +625,32 @@ function ProjectSettings({ store, onClose }) {
                       </button>
                     )}
                     {coverError && <p style={{ fontSize: 11, color: '#f87171', margin: 0 }}>{coverError}</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Header Banner</span>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>Background image for the project overview header.</p>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  {novel?.bannerImage && (
+                    <img src={novel.bannerImage} alt="" style={{ width: 80, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }} />
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1 }}>
+                      <input type="file" accept="image/*" onChange={handleBannerSelect} style={{ display: 'none' }} />
+                      {novel?.bannerImage ? 'Change banner' : 'Add header banner'}
+                    </label>
+                    {novel?.bannerImage && (
+                      <button
+                        type="button"
+                        onClick={() => store.updateNovel(store.activeNovelId, { bannerImage: null })}
+                        style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                    {bannerError && <p style={{ fontSize: 11, color: '#f87171', margin: 0 }}>{bannerError}</p>}
                   </div>
                 </div>
               </div>
@@ -857,12 +904,12 @@ export default function Layout({
 
   // Auto-show tour on first visit to each section
   useEffect(() => {
-    if (!tourStore || !activeSectionTour) return
+    if (!tourStore || !tourStore.toursEnabled || !activeSectionTour) return
     if (tourStore.isTourComplete(activeSectionTourId)) return
     // Small delay so the section content can mount and data-tour elements can appear
     const t = setTimeout(() => setOpenSectionTourId(activeSectionTourId), 400)
     return () => clearTimeout(t)
-  }, [activeSectionTourId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSectionTourId, tourStore?.toursEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetStudioIndex = useCallback(() => {
     window.dispatchEvent(new Event('studio-index-reset'))
@@ -928,6 +975,7 @@ export default function Layout({
     dashboard:    <ProjectDashboard store={store} />,
     outline:      <StoryOutline store={store} />,
     characters:   <Characters store={store} />,
+    relationships: <RelationshipMap store={store} />,
     familytree:   <FamilyTree store={store} />,
     factions:     <Factions store={store} />,
     locations:    <Locations store={store} />,
@@ -995,7 +1043,7 @@ export default function Layout({
         topBar={null}
         utilityContent={(
           <div className="studio-utility-btns">
-            {activeSectionTour && (
+            {tourStore?.toursEnabled && activeSectionTour && (
               <button
                 className="studio-utility-btn library-tour-button"
                 onClick={() => setOpenSectionTourId(activeSectionTourId)}
@@ -1113,7 +1161,7 @@ export default function Layout({
 
       <AIPanel store={store} open={aiOpen} onClose={() => setAiOpen(false)} initialContext={initialContext} membership={membership} />
 
-      {openSectionTourId === activeSectionTourId && activeSectionTour && (
+      {tourStore?.toursEnabled && openSectionTourId === activeSectionTourId && activeSectionTour && (
         <OnboardingTour
           key={activeSectionTourId}
           steps={activeSectionTour}

@@ -421,6 +421,13 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   const upsertRelationship = (index, patch) => {
     setForm(prev => {
       const next = [...prev.relationships]
+      if (patch.targetId) {
+        next.forEach((relationship, relationshipIndex) => {
+          if (relationshipIndex !== index && relationship.targetId === patch.targetId) {
+            next[relationshipIndex] = { ...relationship, targetId: '' }
+          }
+        })
+      }
       next[index] = { ...next[index], ...patch }
       return { ...prev, relationships: next }
     })
@@ -448,7 +455,9 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   }
   const removeKeyword = (kw) => setForm(prev => ({ ...prev, keywords: prev.keywords.filter(k => k !== kw) }))
   const relationshipTargets = characters.filter(c => c.id !== initial?.id)
-  const validRelationships = form.relationships.filter(r => r.targetId && r.type)
+  const validRelationships = [...new Map(
+    form.relationships.filter(r => r.targetId && r.type).map(relationship => [relationship.targetId, relationship]),
+  ).values()]
   const validAbilities = form.extraAbilities
     .map(ability => ({ name: ability.name?.trim() || '', description: ability.description?.trim() || '' }))
     .filter(ability => ability.name || ability.description)

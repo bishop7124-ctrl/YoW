@@ -511,9 +511,9 @@ function populateYowProject(store, data, sel) {
   }
 }
 
-// ── NovelCrafter export import ────────────────────────────────────────────────
+// Compatible structured ZIP import
 
-async function tryReadNovelCrafterZip(file) {
+async function tryReadStructuredZip(file) {
   const { unzip, unzipSync } = await import('fflate')
   const buffer = await file.arrayBuffer()
   return new Promise((resolve) => {
@@ -754,7 +754,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
   const [, setStreamedText] = useState('')
   const [parsed, setParsed] = useState(null)
   const [yowImport, setYowImport] = useState(null)   // native YOW export data (no AI needed)
-  const [ncImport, setNcImport] = useState(null)     // NovelCrafter export data
+  const [ncImport, setNcImport] = useState(null)     // compatible structured ZIP data
   const [aiError, setAiError] = useState('')
   const [selections, setSelections] = useState({})
   // Phase-2 payload: wait for activeNovelId to update before populating entries
@@ -816,9 +816,9 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
         }
       }
 
-      // Check for NovelCrafter export ZIP
+      // Check for a compatible structured project archive.
       if (accepted.length === 1 && /\.zip$/i.test(accepted[0].name)) {
-        const nc = await tryReadNovelCrafterZip(accepted[0])
+        const nc = await tryReadStructuredZip(accepted[0])
         if (nc) {
           const initialSel = {}
           NC_SECTIONS.forEach(s => { if (ncSectionCount(nc, s.key) > 0) initialSel[s.key] = true })
@@ -961,9 +961,9 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>Import</p>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              {phase === 'upload'    && 'Upload files — drop a YOW export, NovelCrafter ZIP, or any writing file'}
+              {phase === 'upload'    && 'Upload files — drop a YOW export, compatible project archive, or any writing file'}
               {phase === 'analyzing' && 'Analyzing your files…'}
-              {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : ncImport ? `NovelCrafter export — "${ncImport.projectTitle}"` : 'Review what will be created')}
+              {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : ncImport ? `Project archive detected — "${ncImport.projectTitle}"` : 'Review what will be created')}
               {phase === 'creating'  && 'Creating your project…'}
               {phase === 'done'      && 'Project created successfully!'}
             </p>
@@ -1005,7 +1005,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
                 ) : (
                   <>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Drop files here or click to browse</p>
-                    <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>.txt · .md · .docx · .pdf · .zip (YOW or NovelCrafter export)</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>.txt · .md · .docx · .pdf · .zip (YOW or compatible project archive)</p>
                   </>
                 )}
               </div>
@@ -1093,13 +1093,13 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
             </div>
           )}
 
-          {/* ── PREVIEW (NovelCrafter export) ── */}
+          {/* PREVIEW (compatible structured ZIP) */}
           {phase === 'preview' && ncImport && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ padding: '12px 14px', background: 'var(--accent-fade)', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--accent) 28%, transparent)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Project</p>
-                  <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 99, background: 'color-mix(in srgb, #f59e0b 16%, transparent)', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)', letterSpacing: '.06em', textTransform: 'uppercase' }}>NovelCrafter</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 99, background: 'color-mix(in srgb, #f59e0b 16%, transparent)', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)', letterSpacing: '.06em', textTransform: 'uppercase' }}>ZIP Archive</span>
                 </div>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{ncImport.projectTitle}</p>
               </div>

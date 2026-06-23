@@ -527,6 +527,7 @@ function AppInner() {
         activeTab={accountTab}
         onTabChange={setAccountTab}
         store={store}
+        tourStore={tourStore}
       />
       <HelpContact open={helpOpen} onClose={() => setHelpOpen(false)} />
       {readOnlyNotice && (

@@ -26,17 +26,17 @@ function removeSchema(id) {
 // Feature comparison table data
 // --------------------------------------------------------------------------
 const FEATURE_ROWS = [
-  { label: 'Active projects',         free: '1',         creator: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
-  { label: 'Storage',                 free: '250 MB',    creator: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
-  { label: 'All studio rooms',        free: '✓',         creator: '✓',         founder: '✓',         monthly: '✓'         },
-  { label: 'Premium exports',         free: '—',         creator: '✓',         founder: '✓',         monthly: '✓'         },
-  { label: 'Bring-your-own-key AI',   free: '✓',         creator: '✓',         founder: '✓',         monthly: '✓'         },
-  { label: 'Founder badge',           free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Feature your debut work', free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Priority feature input',  free: '—',         creator: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Mode after hosting ends',  free: 'Local + free cloud limits', creator: 'Local Mode forever', founder: 'Cloud Mode', monthly: 'Local after cancellation' },
-  { label: 'Cloud hosting included',   free: 'Free limits', creator: `${HOSTING_INCLUDED_YEARS} years, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime fair-use', monthly: 'While subscribed' },
-  { label: 'Support tier',            free: 'Community', creator: 'Priority',  founder: 'Priority',  monthly: 'Priority'  },
+  { label: 'Active projects',         free: '1',         lifetime: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
+  { label: 'Storage',                 free: '250 MB',    lifetime: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
+  { label: 'All studio rooms',        free: '✓',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Premium exports',         free: '—',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Bring-your-own-key AI',   free: '✓',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Founder badge',           free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
+  { label: 'Feature your debut work', free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
+  { label: 'Priority feature input',  free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
+  { label: 'Mode after hosting ends',  free: 'Local + free cloud limits', lifetime: 'Local Mode forever', founder: 'Cloud Mode', monthly: 'Local after cancellation' },
+  { label: 'Cloud hosting included',   free: 'Free limits', lifetime: `${HOSTING_INCLUDED_YEARS} years, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime fair-use', monthly: 'While subscribed' },
+  { label: 'Support tier',            free: 'Community', lifetime: 'Priority',  founder: 'Priority',  monthly: 'Priority'  },
 ]
 
 // --------------------------------------------------------------------------
@@ -149,8 +149,8 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
       style={{
         position: 'relative',
         borderRadius: 14,
-        border: `1.5px solid ${plan.highlight ? 'var(--accent)' : 'var(--border)'}`,
-        background: plan.highlight ? 'var(--accent-fade)' : 'var(--bg-nav)',
+        border: '1.5px solid var(--border)',
+        background: 'var(--bg-nav)',
         padding: '28px 24px',
         display: 'flex',
         flexDirection: 'column',
@@ -162,9 +162,9 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
       {plan.badge && (
         <div style={{
           position: 'absolute', top: -12, left: 20,
-          background: plan.highlight ? 'var(--accent)' : 'var(--bg-nav)',
-          border: `1px solid ${plan.highlight ? 'var(--accent)' : 'var(--border)'}`,
-          color: plan.highlight ? 'var(--bg-main)' : 'var(--text-muted)',
+          background: 'var(--bg-nav)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-muted)',
           fontSize: 10, fontWeight: 900, letterSpacing: '.08em',
           textTransform: 'uppercase', borderRadius: 99,
           padding: '3px 10px',
@@ -235,9 +235,9 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
             width: '100%',
             padding: '12px 0',
             borderRadius: 8,
-            border: plan.highlight ? 'none' : `1.5px solid var(--accent)`,
-            background: plan.highlight ? 'var(--accent)' : 'transparent',
-            color: plan.highlight ? 'var(--bg-main)' : 'var(--accent)',
+            border: '1.5px solid var(--accent)',
+            background: 'transparent',
+            color: 'var(--accent)',
             fontSize: 14, fontWeight: 800,
             cursor: busy || soldOut ? 'not-allowed' : 'pointer',
             opacity: busy || soldOut ? 0.55 : 1,
@@ -580,12 +580,12 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
                   }}>
                     Feature
                   </th>
-                  {['Free', 'Creator', 'Founder', 'Monthly'].map((h, i) => (
+                  {['Free', 'Lifetime', 'Founder', 'Monthly'].map(h => (
                     <th key={h} style={{
                       textAlign: 'center', padding: '10px 8px',
-                      color: i === 1 ? 'var(--accent)' : 'var(--text-muted)',
-                      fontWeight: i === 1 ? 900 : 700,
-                      borderBottom: `2px solid ${i === 1 ? 'var(--accent)' : 'var(--border)'}`,
+                      color: 'var(--text-muted)',
+                      fontWeight: 700,
+                      borderBottom: '1px solid var(--border)',
                       fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase',
                       minWidth: 80,
                     }}>
@@ -603,13 +603,11 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
                     }}>
                       {row.label}
                     </td>
-                    {[row.free, row.creator, row.founder, row.monthly].map((val, ci) => (
+                    {[row.free, row.lifetime, row.founder, row.monthly].map((val, ci) => (
                       <td key={ci} style={{
                         textAlign: 'center', padding: '12px 8px',
                         color: val === '✓' ? 'var(--accent)' : val === '—' ? 'var(--border)' : 'var(--text-muted)',
                         fontWeight: val === '✓' ? 900 : 500,
-                        borderLeft: ci === 1 ? '1px solid var(--accent)' : undefined,
-                        borderRight: ci === 1 ? '1px solid var(--accent)' : undefined,
                       }}>
                         {val}
                       </td>

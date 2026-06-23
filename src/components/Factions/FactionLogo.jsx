@@ -114,6 +114,19 @@ export function getShapeElement(shape, extraProps = {}) {
 export default function FactionLogo({ shapes = [], size = 64 }) {
   const logo = normalizeFactionLogo(shapes)
 
+  if (logo.source === 'image' && logo.image) {
+    return (
+      <img
+        src={logo.image}
+        alt=""
+        width={size}
+        height={size}
+        className="block object-contain"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+
   if (logo.shapes.length === 0) {
     return (
       <svg viewBox="0 0 100 100" width={size} height={size}>
