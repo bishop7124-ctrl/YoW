@@ -1,89 +1,164 @@
 import { supabase } from '../supabase'
 import { OFFLINE_MODE } from './offlineMock'
 
-const PROJECT_FIELDS = [
-  'characters', 'factions', 'locations', 'timeline',
-  'worldHistory', 'acts', 'chapters', 'loreEntries',
-  'ideaEntries', 'maps', 'whiteboards', 'storySchedule',
+// Tables that hold per-novel entity rows
+const NOVEL_TABLES = [
+  'characters',
+  'factions',
+  'locations',
+  'timeline_events',
+  'world_history',
+  'acts',
+  'chapters',
+  'scenes',
+  'lore_entries',
+  'idea_entries',
+  'maps_data',
+  'whiteboards_data',
+  'story_schedule',
+  'rpg_characters',
+  'comic_pages',
+  'comic_panels',
+  'eras',
 ]
 
+// Tables that hold user-level rows (no novel_id)
+const USER_TABLES = ['novels', 'series_items']
+
+// Load all user data from normalized tables on login
 export async function loadUserData(userId) {
   if (OFFLINE_MODE) return { _savedAt: 0 }
-  const [{ data: appData }, { data: projectRows }, { data: scenesData }] = await Promise.all([
-    supabase.from('user_data').select('data').eq('user_id', userId).maybeSingle(),
-    supabase.from('project_data').select('project_id, data').eq('user_id', userId),
-    supabase.from('scenes').select('data').eq('user_id', userId)
+
+  const entityTables = [...USER_TABLES, ...NOVEL_TABLES]
+
+  const [settingsResult, ...entityResults] = await Promise.all([
+    supabase.from('user_settings').select('data').eq('user_id', userId).maybeSingle(),
+    ...entityTables.map(table => {
+      // scenes uses scene_id as the id column (legacy schema)
+      const idCol = table === 'scenes' ? 'scene_id' : 'id'
+      return supabase.from(table).select(`${idCol}, data`).eq('user_id', userId)
+    }),
   ])
 
-  const ud = appData?.data ?? {}
+  const settings = settingsResult.data?.data ?? {}
 
-  const flat = {
-    characters: [], factions: [], locations: [], timeline: [],
-    worldHistory: [], acts: [], chapters: [], loreEntries: [],
-    ideaEntries: [], maps: [], whiteboards: [], storySchedule: [],
-    activeMapByNovel: {},
+  const result = {
+    _savedAt:        Date.now(),
+    activeNovelId:   settings.activeNovelId   ?? null,
+    currentYear:     settings.currentYear     ?? 0,
+    activeMapByNovel: settings.activeMapByNovel ?? {},
+    novels:          [],
+    series:          [],
+    characters:      [],
+    factions:        [],
+    locations:       [],
+    timeline:        [],
+    worldHistory:    [],
+    acts:            [],
+    chapters:        [],
+    scenes:          [],
+    loreEntries:     [],
+    ideaEntries:     [],
+    maps:            [],
+    whiteboards:     [],
+    storySchedule:   [],
+    rpgCharacters:   [],
+    comicPages:      [],
+    comicPanels:     [],
+    eras:            [],
   }
 
-  for (const row of (projectRows ?? [])) {
-    const pd = row.data ?? {}
-    for (const field of PROJECT_FIELDS) {
-      flat[field].push(...(pd[field] ?? []))
-    }
-    if (pd.activeMapId != null) {
-      flat.activeMapByNovel[row.project_id] = pd.activeMapId
-    }
+  const tableToKey = {
+    novels:           'novels',
+    series_items:     'series',
+    characters:       'characters',
+    factions:         'factions',
+    locations:        'locations',
+    timeline_events:  'timeline',
+    world_history:    'worldHistory',
+    acts:             'acts',
+    chapters:         'chapters',
+    scenes:           'scenes',
+    lore_entries:     'loreEntries',
+    idea_entries:     'ideaEntries',
+    maps_data:        'maps',
+    whiteboards_data: 'whiteboards',
+    story_schedule:   'storySchedule',
+    rpg_characters:   'rpgCharacters',
+    comic_pages:      'comicPages',
+    comic_panels:     'comicPanels',
+    eras:             'eras',
   }
 
-  // Migration: if no project_data rows exist yet, read project-level arrays from old user_data blob
-  if (!projectRows?.length && PROJECT_FIELDS.some(f => ud[f]?.length > 0)) {
-    for (const field of PROJECT_FIELDS) {
-      flat[field].push(...(ud[field] ?? []))
-    }
-    if (ud.activeMapByNovel) {
-      Object.assign(flat.activeMapByNovel, ud.activeMapByNovel)
-    }
-  }
+  entityTables.forEach((table, i) => {
+    const { data, error } = entityResults[i]
+    if (error) { console.warn(`[sync] load error for ${table}:`, error); return }
+    const key = tableToKey[table]
+    result[key] = (data ?? []).map(row => row.data).filter(Boolean)
+  })
 
-  return {
-    _savedAt:      ud._savedAt      ?? 0,
-    novels:        ud.novels        ?? [],
-    series:        ud.series        ?? [],
-    activeNovelId: ud.activeNovelId ?? null,
-    ...flat,
-    scenes: (scenesData ?? []).map(s => s.data)
-  }
+  return result
 }
 
-export async function saveAppData(userId, data) {
+// Upsert an array of items into a table (one row per item).
+// Each item must have an `id` field. novel_id is taken from item.novelId.
+export async function upsertItems(table, userId, items) {
+  if (OFFLINE_MODE || !items?.length) return
+
+  // scenes uses scene_id (legacy schema kept intact)
+  if (table === 'scenes') {
+    await Promise.all(items.map(item =>
+      supabase.from('scenes').upsert({ user_id: userId, scene_id: item.id, data: item })
+    ))
+    return
+  }
+
+  const isUserLevel = USER_TABLES.includes(table)
+  const rows = items.map(item => ({
+    id:      item.id,
+    user_id: userId,
+    ...(isUserLevel ? {} : { novel_id: item.novelId ?? null }),
+    data:    item,
+    updated_at: new Date().toISOString(),
+  }))
+
+  const { error } = await supabase.from(table).upsert(rows)
+  if (error) console.error(`[sync] upsert error for ${table}:`, error)
+}
+
+// Delete a single item row by id
+export async function deleteItem(table, userId, itemId) {
+  if (OFFLINE_MODE || !itemId) return
+  if (table === 'scenes') {
+    await supabase.from('scenes').delete().eq('user_id', userId).eq('scene_id', itemId)
+    return
+  }
+  const { error } = await supabase.from(table).delete().eq('user_id', userId).eq('id', itemId)
+  if (error) console.error(`[sync] delete error for ${table}:`, error)
+}
+
+// Delete all entity rows for a novel (used when deleting a project)
+export async function deleteItemsByNovel(userId, novelId) {
+  if (OFFLINE_MODE || !novelId) return
+  await Promise.all(NOVEL_TABLES.map(table => {
+    const col = table === 'scenes' ? 'scene_id' : 'id'
+    void col // unused in delete — we filter by user_id + novel_id
+    return supabase.from(table).delete().eq('user_id', userId).eq('novel_id', novelId)
+  }))
+}
+
+// Save user-level scalars (activeNovelId, currentYear, activeMapByNovel)
+export async function saveUserSettings(userId, settings) {
   if (OFFLINE_MODE) return
-  // Group project-scoped arrays by novelId into per-project blobs
-  const projectBlobs = {}
-  for (const field of PROJECT_FIELDS) {
-    for (const item of (data[field] ?? [])) {
-      if (!item?.novelId) continue
-      const b = (projectBlobs[item.novelId] ??= {})
-      ;(b[field] ??= []).push(item)
-    }
-  }
-  for (const [novelId, mapId] of Object.entries(data.activeMapByNovel ?? {})) {
-    ;(projectBlobs[novelId] ??= {}).activeMapId = mapId
-  }
-
-  const userData = {
-    _savedAt:      Date.now(),
-    novels:        data.novels        ?? [],
-    series:        data.series        ?? [],
-    activeNovelId: data.activeNovelId ?? null,
-  }
-
-  await Promise.all([
-    supabase.from('user_data').upsert({ user_id: userId, data: userData }),
-    ...Object.entries(projectBlobs).map(([projectId, pData]) =>
-      supabase.from('project_data').upsert({ user_id: userId, project_id: projectId, data: pData })
-    )
-  ])
+  const { error } = await supabase.from('user_settings').upsert({
+    user_id: userId,
+    data: settings,
+    updated_at: new Date().toISOString(),
+  })
+  if (error) console.error('[sync] user_settings upsert error:', error)
 }
 
+// Per-scene saves (called directly from updateScene / updateSceneContent)
 export async function saveSceneDoc(userId, scene) {
   if (OFFLINE_MODE) return
   await supabase.from('scenes').upsert({ user_id: userId, scene_id: scene.id, data: scene })
@@ -94,16 +169,11 @@ export async function deleteSceneDoc(userId, sceneId) {
   await supabase.from('scenes').delete().eq('user_id', userId).eq('scene_id', sceneId)
 }
 
-export async function deleteProjectData(userId, projectId) {
-  if (OFFLINE_MODE) return
-  await supabase.from('project_data').delete().eq('user_id', userId).eq('project_id', projectId)
-}
-
+// Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
   if (OFFLINE_MODE) return
-  await Promise.all([
-    supabase.from('user_data').delete().eq('user_id', userId),
-    supabase.from('project_data').delete().eq('user_id', userId),
-    supabase.from('scenes').delete().eq('user_id', userId),
-  ])
+  const allTables = [...USER_TABLES, ...NOVEL_TABLES, 'user_settings']
+  await Promise.all(allTables.map(table =>
+    supabase.from(table).delete().eq('user_id', userId)
+  ))
 }

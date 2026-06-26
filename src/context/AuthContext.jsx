@@ -3,7 +3,7 @@ import { supabase } from '../supabase'
 import { OFFLINE_MODE, OFFLINE_USER } from '../utils/offlineMock'
 import { deleteAllUserData } from '../utils/firestoreSync'
 
-const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
+const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
 // Read the cached Supabase session from localStorage synchronously so the app
 // renders immediately on return visits without waiting for a network round-trip.
@@ -35,8 +35,11 @@ export function AuthProvider({ children }) {
       if (event === 'PASSWORD_RECOVERY') {
         setRecoveryMode(true)
         setUser(session?.user ?? null)
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setRecoveryMode(false)
+        setUser(null)
+      } else {
+        // Don't clear recoveryMode here — SIGNED_IN fires right after PASSWORD_RECOVERY
         setUser(session?.user ?? null)
       }
     })
@@ -79,15 +82,32 @@ export function AuthProvider({ children }) {
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
     : (email, password) => supabase.auth.signInWithPassword({ email, password })
 
+  const signInWithGoogle = OFFLINE_MODE
+    ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: {}, error: null }) }
+    : () => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+
   const signOut = OFFLINE_MODE
     ? () => { setUser(null); return Promise.resolve() }
     : () => supabase.auth.signOut()
 
   const resetPassword = OFFLINE_MODE
     ? () => Promise.resolve({ data: null, error: null })
-    : (email) => supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
-      })
+    : async (email) => {
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reset-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ email, redirectTo: `${window.location.origin}/login` }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          return { data: null, error: { message: body.error || 'Failed to send reset email' } }
+        }
+        return { data: null, error: null }
+      }
 
   const updatePassword = OFFLINE_MODE
     ? () => Promise.resolve({ data: null, error: null })
@@ -145,7 +165,7 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.app_metadata?.is_admin === true
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, resendConfirmation, sendWelcomeEmail, signIn, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, resendConfirmation, sendWelcomeEmail, signIn, signInWithGoogle, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )

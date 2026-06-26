@@ -563,8 +563,114 @@ These items are now confirmed final-launch scope and must become either complete
 | Character journey / arc tracking | Users can track a character's journey across the project with visible arc stages, turning points, emotional/internal change, external goal progress, linked scenes/events, and current state. For series projects, the tracker must make it clear whether the arc is project-local or series-spanning. | Implemented, needs QA | Character profiles now include a dedicated Journey tab with guided arc overview, project/series intent, Before & After comparison, ordered expandable journey beats, major-turning-point emphasis, links to timeline events/chapters/scenes/characters, validated CRUD/reordering, automatic deleted-link cleanup, forward-series character sync, and ZIP/DOCX/PDF export inclusion. Journey editing is intentionally excluded from the general Add/Edit Character modal. QA persistence, forward-series overrides, link cleanup/navigation expectations, export/restore, and mobile/tablet/desktop layout. | Product/Engineering/QA |
 | Focused writing mode | Final launch includes a distraction-reduced editor state that is independent of browser fullscreen. Focused mode keeps the active manuscript, a minimal status bar, optional breadcrumb, and on-demand access to structure, notes, formatting, AI, and goals. It uses mirror-based textarea caret measurement and a calm 35–65% comfort zone rather than strict cursor centring. Autosave, drafts, spellcheck, selection, IME, accessibility, script/prose formatting, and mobile Safari usability must remain intact. | Implemented 2026-06-22; needs browser/device QA | Focused and fullscreen states are separate; the focused shell, temporary desktop drawers/mobile sheets, per-user local preference, mirror caret measurement, composition/selection guards, instant comfort scrolling, reduced-motion rules, and focused regression tests are implemented. Unit suite and production build pass. Run the deferred browser/device matrix below, especially long wrapped prose, real IME, mobile Safari keyboard resize, screen-reader operation, and combined native fullscreen. | Product/Engineering/QA |
 | Reliable map builder | D&D/TTRPG and worldbuilding users can create reliable, readable maps for planning. The map builder must feel predictable, persist safely, export/restore correctly, and include a grid overlay for movement/planning. Interior maps must feel like a dungeon-building tool for D&D/TTRPG planning, not a reskinned world/region map, while non-campaign projects use neutral interior-design language. It remains a planning map tool, not a live virtual tabletop. | Partial base; lazy grouped layers, placement workflow, and simplified interior construction implemented, needs authenticated browser QA | Current map builder has multi-map support, typed layers, paths, stamps, labels, linked locations, JSON import/export, grouping, undo/redo, rendered export plates, and high-resolution PNG export. Built-in type groups are now lazy: no empty defaults appear, and a compact grouped category exists only while it owns objects. Objects nest beneath their category and expose an inline Move to layer picker containing every built-in destination plus custom layers; moving the last item removes the empty source group, while moving into an absent built-in destination creates it. Object Properties retains the same movement capability. Category controls and sibling-only ordering remain grouped; custom categories remain editable/deletable. Schema v2 performs a one-time legacy sort while preserving deliberate custom assignments. Interior maps use grey stone and customizable Walls. Doors, labels, and named locations preview at the cursor. Next action is authenticated browser QA for lazy group creation/removal, layer movement/undo/locking/export persistence, grouped density, selection/order, migration, cursor previews, modal flows, locations, labels, walls, terminology, ZIP restore, and map stability. | Product/Design/Engineering |
-| Series management and cross-project references | Series management is part of final launch. Users can organise projects into a series, keep project order clear, understand inherited/shared records, and safely reference continuity across projects without corrupting single-project data. | Partial; remove future copy and finish continuity | Series dashboard, project ordering, settings, and forward-series sync already exist for characters, locations, lore, factions, ideas, timeline, and world history. Remaining launch work: replace the "Coming in Phase 2" continuity panel with launch-appropriate functionality/copy, add or clearly scope series-wide search and character arc continuity if part of the paid promise, QA inherited/shared records, and ensure series export/restore preserves order and continuity data. | Product/Engineering/QA |
+| Series management and cross-project references | Series management is part of final launch. Users can organise projects into a series, keep project order clear, understand inherited/shared records, and safely reference continuity across projects without corrupting single-project data. | First continuity slice implemented, needs deeper implementation + QA | Series dashboard, project ordering, settings, and forward-series sync already exist for characters, locations, lore, factions, ideas, timeline, world history, and character journeys. First Series Continuity slice now replaces future-facing copy with Continuity sub-tabs, a read-only/searchable continuity index, Series-dashboard detail panels with project links, selectable horizontal character journey lanes, project-to-project continuity field editing, story-order timeline with shared Undated section, deterministic possible-match/death-status warnings with Reviewed state, and map preview cards. Remaining work: richer contradiction rules, true inherited-edit choice prompts, hidden-from-later scope controls, visual map rendering beyond placeholder previews, dedicated Series Bible export, export/restore coverage, and browser QA. | Product/Engineering/QA |
+
+Series continuity UX follow-up note (2026-06-26): Overview now always exposes Series Settings, adds an inline Character selector plus a dedicated Characters sub-tab, adds a Series Summary sub-tab/card with compact edit action, gives Timeline a By Project vs chronological All Events mode, issue cards include detailed detection explanations, per-entry evidence, Review Entry links that open and scroll to the relevant Series Index detail, and Open Project links that target the affected project section/entry where supported while reviewed warnings minimize, same-name character records are treated as unified series character identities instead of project fragments, and Series Settings uses the full dashboard width before stacking.
 | AI import launch-scope review | AI import must not contradict the 6 active project-type launch promise. Users should understand whether AI import creates only Novel projects or supports type-specific imports for Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel. | Review then decide | Current AI import implementation still contains "other project types are deferred until after launch" language/behaviour. Decide whether AI import is Novel-only at launch with honest copy, or expand it to all 6 project types before final paid launch. | Product/AI/Engineering |
+
+### Series Continuity Plan
+
+Product decision: final launch should include practical series continuity management, not a future-promised AI continuity engine. The launch version should help writers see connections, character/world growth, and worldbuilding changes from project to project, while letting later projects build on earlier project data through the existing forward-sync model. It should primarily serve prose series, but D&D/TTRPG campaigns should use the same continuity system. It must not imply collaboration, public sharing, live play, or AI-required contradiction detection.
+
+Current baseline:
+
+- Series dashboard, series project ordering, series settings, and add/remove project flows exist.
+- Forward-series sync exists for characters, locations, lore, factions, ideas, timeline, world history, and character journeys through the existing sync-category model.
+- The Continuity tab already shows shared sync categories and detects same-named characters across projects.
+- The remaining blocker is product polish and utility: the current tab still contains "Coming in Phase 2" copy and does not yet provide enough actionable continuity navigation for final launch.
+
+Launch scope:
+
+1. Replace future-facing copy with a launch-ready Continuity tab.
+   - Remove "Coming in Phase 2", "after launch", and similar language from the Series dashboard.
+   - Show a plain continuity overview that explains the current sharing model: earlier projects flow forward; later-project edits can fork forward; earlier projects are not mutated unless the user explicitly chooses a synced delete/update path.
+   - Show empty states that guide the user to Settings when no sync categories are enabled and to Projects when the series has no projects. Empty-state copy: "To see your series journey, enable story linking here," with a direct link/button to Series Settings.
+   - Use sub-tabs inside Continuity: Overview, Summary, Index, Characters, Timeline, Issues, and Export.
+
+2. Add a series-wide continuity index.
+   - Provide search across synced and project-local series records for characters, locations, lore, factions, timeline/world-history entries, maps, and character journeys.
+   - Include filter chips for record type, project, synced/local scope, and "appears in multiple projects".
+   - Each result must show record title/name, type, source project, whether it is inherited/shared or project-local, and a direct action to open the owning project/section when possible.
+   - Clicking a continuity result should open the relevant detail page/panel inside the Series dashboard first. From that series detail view, users should also have links to navigate to the relevant entry in the relevant project workspace.
+   - Single-project data must remain scoped; the index may read across projects in the selected series but must not change what an individual project can see unless the existing sync rules allow it.
+   - Ideas are deliberately excluded from series continuity because they are rough captures rather than canonical worldbuilding records.
+
+3. Surface recurring-entity continuity.
+   - Treat same-name characters as possible matches for manual review, not as confirmed identical characters.
+   - Keep same-name detection for characters, but make it more useful: group matches by normalized name, list all projects where the character appears, and show whether those records are synced lineage, local forks, or separate same-name records.
+   - Add similar lightweight grouping for locations and lore titles.
+   - Character continuity should treat same-name character records as one series identity for dashboard/search/journey purposes unless the user deliberately separates the names. This identity layer must be non-destructive and must not rewrite the underlying project records.
+
+4. Surface character arc continuity.
+   - Series-spanning journeys should appear in the Continuity tab with character name, arc type, before/current/after state, major beats, relationship changes, faction/allegiance changes, location movement, death/status changes, external goal progress, and projects touched by linked beats.
+   - Project-local journeys should remain visible as local records when searching/filtering but should be labelled as project-local.
+   - Users can choose which characters appear in the series journey overview. This visibility setting should live wherever it is simplest and least error-prone across series projects, has no selection limit, and defaults to no noisy assumptions beyond user choice.
+   - The default character-journey layout should be a horizontal project-by-project journey lane, with an option to open each project entry for deeper profile detail.
+   - Character arcs can be edited from the Series dashboard as well as from the character profile Journey tab, but Series dashboard editing should focus on project-to-project continuity fields rather than every full profile field. Series editing must reuse the same data model and save paths so it does not create a second competing arc system.
+
+5. Add timeline continuity review.
+   - Show a combined series timeline/world-history stream for story-order continuity, using series project order as the primary structure.
+   - Dated entries can be shown within their project context, with a second "all events" option that lays timeline/history entries into chronological order by available event date regardless of project number.
+   - Entries with no dates should group together in one shared "Undated" section across all projects.
+   - Highlight missing dates, duplicate/similar event titles across projects, linked characters/locations, and story-order continuity warnings where data already exists.
+
+6. Add deterministic contradiction warnings.
+   - Contradiction warnings are launch scope, but AI is not required and should not be part of the launch promise for this feature.
+   - Detect straightforward data conflicts using existing structured fields where possible: conflicting character age/status/death state, character appearing after a recorded death, relationship inconsistency, faction/allegiance mismatch, location detail mismatch, lore title/detail conflicts, timeline/story-order conflicts, duplicate/similar records, and map/location link inconsistencies.
+   - Warnings should be explainable and reviewable. They should link to the relevant records and allow the user to move warnings to a Reviewed list rather than deleting them outright, so reviewed warnings can be revisited or disabled in future.
+   - Avoid auto-correction, auto-merge, or destructive changes.
+
+7. Series-wide record scope controls.
+   - Users should be able to mark relevant records as series-wide, project-local, forked from an earlier project, or hidden from later projects where this can be implemented without destabilising the current forward-sync model.
+   - Records hidden from later projects should also be hidden from series continuity.
+   - When a later project edits inherited data, ask first. The prompt should offer: update shared series record, fork from this project forward, keep change project-local, or cancel.
+   - Earlier-project safety remains the rule: later work must not mutate earlier projects without an explicit user choice.
+
+8. Map continuity.
+   - Maps should appear in continuity primarily through visual previews, with source project, map type, linked locations, and project navigation.
+   - Map continuity should prioritise useful visual review over deep map editing inside the Series dashboard.
+   - Contradiction warnings can flag map/location link inconsistencies where structured data is available.
+
+9. Series Bible export.
+   - Add a dedicated Series Bible export separate from the individual project World Bible export.
+   - Include everything in the continuity surface: series overview, project order, characters, selected character journeys, locations, lore, history, timeline, factions, maps, contradiction/review notes, sync settings, and inherited/shared/local scope labels.
+   - Export one big readable Series Bible document plus folders of project data.
+   - Package separate projects into their own folders within the export.
+   - Individual project exports should include inherited records so a user exporting a later project has the context it depends on.
+
+10. Export and restore expectations.
+   - Series export/restore must preserve series membership, project order, sync categories, include-later settings, and enough linked record IDs/remapped IDs for continuity review to remain coherent after restore.
+   - Project-level exports should include inherited/shared records with clear scope labels.
+
+Implementation slices:
+
+1. Copy cleanup and dashboard summary: remove future copy, add continuity overview cards, empty states, and shared-model explanation.
+2. Continuity sub-tabs and selectors: add Overview, Summary, Index, Characters, Timeline, Issues, and Export, plus search, record-type filter, project filter, and scope filter in `SeriesDashboard`.
+3. Series continuity data builder: add pure helpers that derive searchable results from ordered projects and store arrays without mutating store state.
+4. Recurring entities: group characters, locations, and lore titles as reviewable possible matches.
+5. Character journeys: add configurable visible-character selection, editable horizontal project-by-project journey lanes, and navigation targets.
+6. Timeline stream: add story-order timeline stream with one shared Undated section and duplicate/missing-data hints.
+7. Deterministic issues engine: add structured contradiction warning helpers with active/reviewed state if low-risk.
+8. Map previews: add series map preview cards with linked-location context.
+9. Series Bible export: add one big readable document plus project folders and inherited context.
+10. Export/restore QA: verify series metadata and linked continuity data survive a ZIP round trip.
+
+Acceptance criteria:
+
+- The Series dashboard Continuity tab contains no future/Phase 2 copy.
+- A user can search across a series and find characters, locations, lore, factions, timeline/world-history entries, maps, and character journeys.
+- Ideas are excluded from series continuity.
+- Results clearly identify source project and inherited/shared/local scope.
+- Clicking/opening a result takes the user to a Series dashboard detail view first, with links onward to the owning project entry/workspace.
+- Series-spanning character journeys are visible as horizontal project-by-project lanes and project-to-project continuity fields are editable from the Series dashboard for user-selected visible characters.
+- Recurring characters across projects are grouped into unified series character identities without mutating underlying project records.
+- The combined timeline/history view follows story order in By Project mode, includes one shared Undated section in the project-grouped view, and offers one chronological all-events stream regardless of project number.
+- Deterministic contradiction warnings work without AI, never auto-correct user data, and can move to a Reviewed list.
+- Forward-sync behavior remains safe: later-project overrides do not mutate earlier projects without explicit user choice; inherited edits ask whether to update shared, fork forward, keep local, or cancel; synced deletes still use scoped-delete prompts.
+- Users can mark records series-wide, project-local, forked, or hidden from later projects where the current sync model can support it safely; hidden-from-later records are also hidden from continuity.
+- Maps appear through visual previews with linked-location context.
+- Series Bible export preserves membership, order, sync categories, include-later settings, inherited records, maps, character journeys, review warnings, one big readable document, and per-project folders.
+- Mobile/tablet/desktop layouts remain usable with long series names, many projects, and many continuity results.
 
 ### Focused Writing Mode Product Decision
 

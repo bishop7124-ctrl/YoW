@@ -4,6 +4,7 @@ import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
 import { getStorageQuota } from '../../utils/storageQuota'
+import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS } from '../../utils/aiApi'
@@ -946,12 +947,50 @@ function ProfileDetails({ user, updateProfile }) {
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
   const [profileError, setProfileError] = useState('')
+  const avatarInputRef = useRef(null)
   const profileDisplayName = profileDraft.fullName.trim() || profileDraft.alias.trim() || user.email?.split('@')[0] || 'Writer'
   const avatarInitial = profileDisplayName[0]?.toUpperCase() || '?'
   const createdAt = user.created_at || user.createdAt
 
   const updateProfileField = (field) => (event) => {
     setProfileDraft(current => ({ ...current, [field]: event.target.value }))
+    setProfileMessage('')
+    setProfileError('')
+  }
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      setProfileBusy(true)
+      setProfileMessage('')
+      setProfileError('')
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please choose an image file.')
+      }
+      if (!canOptimize()) {
+        throw new Error('This browser cannot process image uploads here. Use an avatar URL instead.')
+      }
+      const avatarUrl = await optimizeImageToDataUrl(file, {
+        maxDimension: 512,
+        quality: 0.82,
+        fallbackQuality: 0.68,
+        maxInputBytes: 8 * 1024 * 1024,
+        maxOutputBytes: 350 * 1024,
+      })
+      setProfileDraft(current => ({ ...current, avatarUrl }))
+      setProfileMessage('Avatar ready. Save your profile to keep it.')
+    } catch (error) {
+      setProfileError(error.message || 'Avatar image could not be uploaded.')
+    } finally {
+      setProfileBusy(false)
+      event.target.value = ''
+    }
+  }
+
+  const clearAvatar = () => {
+    setProfileDraft(current => ({ ...current, avatarUrl: '' }))
     setProfileMessage('')
     setProfileError('')
   }
@@ -1019,6 +1058,36 @@ function ProfileDetails({ user, updateProfile }) {
           <span>Avatar URL</span>
           <input value={profileDraft.avatarUrl} onChange={updateProfileField('avatarUrl')} placeholder="https://..." inputMode="url" />
         </label>
+        <div className="account-profile-upload">
+          <span>Avatar image</span>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={handleAvatarUpload}
+          />
+          <div className="account-profile-upload-actions">
+            <button
+              type="button"
+              className="account-secondary-button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={profileBusy}
+            >
+              Upload image
+            </button>
+            {profileDraft.avatarUrl && (
+              <button
+                type="button"
+                className="account-secondary-button"
+                onClick={clearAvatar}
+                disabled={profileBusy}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <small>PNG, JPG, WebP, or GIF. Images are compressed before saving.</small>
+        </div>
 
         <div className="account-profile-summary account-profile-wide">
           <div>

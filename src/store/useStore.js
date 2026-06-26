@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { saveAppData, saveSceneDoc, deleteSceneDoc, deleteProjectData } from '../utils/firestoreSync'
+import { upsertItems, deleteItem, deleteItemsByNovel, saveUserSettings, saveSceneDoc, deleteSceneDoc } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -308,6 +308,7 @@ export function useStore(userId = null, options = {}) {
   const [selectedLocationId, setSelectedLocationId] = useState(null)
   const [selectedLoreEntryId, setSelectedLoreEntryId] = useState(null)
   const [selectedIdeaEntryId, setSelectedIdeaEntryId] = useState(null)
+  const [selectedTimelineEventId, setSelectedTimelineEventId] = useState(null)
 
   // Track whether we're mid-import to suppress Firestore saves during bulk load
   const importing = useRef(false)
@@ -401,9 +402,15 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
   useEffect(() => { comicPanelsRef.current = comicPanels; save('nf_comicPanels', comicPanels) }, [comicPanels])
 
-  // Debounced Firestore save for all non-scene data (2s delay)
-  const debouncedSaveAppData = useMemo(
-    () => debounce((uid, data) => saveAppData(uid, data).catch(console.error), 2000),
+  // Debounced per-entity save — key is the table name
+  const debouncedSaveItems = useMemo(
+    () => createKeyedDebounce((table, uid, items) => upsertItems(table, uid, items).catch(console.error), 2000),
+    []
+  )
+
+  // Debounced user-settings save (activeNovelId, currentYear, activeMapByNovel)
+  const debouncedSaveSettings = useMemo(
+    () => debounce((uid, settings) => saveUserSettings(uid, settings).catch(console.error), 2000),
     []
   )
 
@@ -413,17 +420,28 @@ export function useStore(userId = null, options = {}) {
     []
   )
 
-  // Sync non-scene data to Firestore whenever anything changes
-  useEffect(() => {
-    if (!canSyncCloud || importing.current || !remoteReady.current) return
-    debouncedSaveAppData(userId, buildAppDataPayload({
-      novels, characters, factions, locations, timeline,
-      worldHistory, acts, chapters, loreEntries, ideaEntries,
-      maps, activeMapByNovel, whiteboards, series, storySchedule,
-      currentYear, activeNovelId, comicPages, comicPanels,
-    }))
-  }, [userId, canSyncCloud, novels, characters, factions, locations, timeline,
-      worldHistory, acts, chapters, loreEntries, ideaEntries, maps, activeMapByNovel, whiteboards, series, storySchedule, currentYear, activeNovelId, comicPages, comicPanels, debouncedSaveAppData])
+  // Per-entity cloud sync effects — each only fires when its own collection changes
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('novels', userId, novels) }, [userId, canSyncCloud, novels])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('series_items', userId, series) }, [userId, canSyncCloud, series])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('characters', userId, characters) }, [userId, canSyncCloud, characters])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('factions', userId, factions) }, [userId, canSyncCloud, factions])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('locations', userId, locations) }, [userId, canSyncCloud, locations])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('timeline_events', userId, timeline) }, [userId, canSyncCloud, timeline])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('world_history', userId, worldHistory) }, [userId, canSyncCloud, worldHistory])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('acts', userId, acts) }, [userId, canSyncCloud, acts])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('chapters', userId, chapters) }, [userId, canSyncCloud, chapters])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('lore_entries', userId, loreEntries) }, [userId, canSyncCloud, loreEntries])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('idea_entries', userId, ideaEntries) }, [userId, canSyncCloud, ideaEntries])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('maps_data', userId, maps) }, [userId, canSyncCloud, maps])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('whiteboards_data', userId, whiteboards) }, [userId, canSyncCloud, whiteboards])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('story_schedule', userId, storySchedule) }, [userId, canSyncCloud, storySchedule])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('rpg_characters', userId, rpgCharacters) }, [userId, canSyncCloud, rpgCharacters])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('comic_pages', userId, comicPages) }, [userId, canSyncCloud, comicPages])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('comic_panels', userId, comicPanels) }, [userId, canSyncCloud, comicPanels])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('eras', userId, eras) }, [userId, canSyncCloud, eras])
+  useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveSettings(userId, { activeNovelId, currentYear, activeMapByNovel }) }, [userId, canSyncCloud, activeNovelId, currentYear, activeMapByNovel])
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   // Bulk import from Firestore after login
   const importData = useCallback((data) => {
@@ -438,10 +456,26 @@ export function useStore(userId = null, options = {}) {
 
     if (shouldPreferLocal && canSyncCloud) {
       const snapshot = getLocalSnapshot()
-      saveAppData(userId, buildAppDataPayload(snapshot)).catch(console.error)
-      ;(snapshot.scenes ?? []).forEach(scene => {
-        saveSceneDoc(userId, scene).catch(console.error)
-      })
+      upsertItems('novels', userId, snapshot.novels ?? []).catch(console.error)
+      upsertItems('series_items', userId, snapshot.series ?? []).catch(console.error)
+      upsertItems('characters', userId, snapshot.characters ?? []).catch(console.error)
+      upsertItems('factions', userId, snapshot.factions ?? []).catch(console.error)
+      upsertItems('locations', userId, snapshot.locations ?? []).catch(console.error)
+      upsertItems('timeline_events', userId, snapshot.timeline ?? []).catch(console.error)
+      upsertItems('world_history', userId, snapshot.worldHistory ?? []).catch(console.error)
+      upsertItems('acts', userId, snapshot.acts ?? []).catch(console.error)
+      upsertItems('chapters', userId, snapshot.chapters ?? []).catch(console.error)
+      upsertItems('lore_entries', userId, snapshot.loreEntries ?? []).catch(console.error)
+      upsertItems('idea_entries', userId, snapshot.ideaEntries ?? []).catch(console.error)
+      upsertItems('maps_data', userId, snapshot.maps ?? []).catch(console.error)
+      upsertItems('whiteboards_data', userId, snapshot.whiteboards ?? []).catch(console.error)
+      upsertItems('story_schedule', userId, snapshot.storySchedule ?? []).catch(console.error)
+      upsertItems('rpg_characters', userId, snapshot.rpgCharacters ?? []).catch(console.error)
+      upsertItems('comic_pages', userId, snapshot.comicPages ?? []).catch(console.error)
+      upsertItems('comic_panels', userId, snapshot.comicPanels ?? []).catch(console.error)
+      upsertItems('eras', userId, snapshot.eras ?? []).catch(console.error)
+      saveUserSettings(userId, { activeNovelId: snapshot.activeNovelId ?? null, currentYear: snapshot.currentYear ?? 0, activeMapByNovel: snapshot.activeMapByNovel ?? {} }).catch(console.error)
+      ;(snapshot.scenes ?? []).forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
     markLocalOwner(userId)
 
@@ -507,31 +541,26 @@ export function useStore(userId = null, options = {}) {
     if (!canSyncCloud) return
 
     setTimeout(() => {
-      saveAppData(userId, {
-        novels: data.novels ?? [],
-        characters: data.characters ?? [],
-        factions: data.factions ?? [],
-        locations: data.locations ?? [],
-        timeline: data.timeline ?? [],
-        worldHistory: data.worldHistory ?? [],
-        acts: data.acts ?? [],
-        chapters: data.chapters ?? [],
-        loreEntries: data.loreEntries ?? [],
-        ideaEntries: data.ideaEntries ?? [],
-        maps: data.maps ?? [],
-        activeMapByNovel: data.activeMapByNovel ?? {},
-        whiteboards: data.whiteboards ?? [],
-        series: data.series ?? [],
-        storySchedule: data.storySchedule ?? [],
-        currentYear: data.currentYear ?? 0,
-        activeNovelId: data.activeNovelId ?? null,
-        comicPages: data.comicPages ?? [],
-        comicPanels: data.comicPanels ?? [],
-      }).catch(console.error)
-
-      ;(data.scenes ?? []).forEach(scene => {
-        saveSceneDoc(userId, scene).catch(console.error)
-      })
+      upsertItems('novels', userId, data.novels ?? []).catch(console.error)
+      upsertItems('series_items', userId, data.series ?? []).catch(console.error)
+      upsertItems('characters', userId, data.characters ?? []).catch(console.error)
+      upsertItems('factions', userId, data.factions ?? []).catch(console.error)
+      upsertItems('locations', userId, data.locations ?? []).catch(console.error)
+      upsertItems('timeline_events', userId, data.timeline ?? []).catch(console.error)
+      upsertItems('world_history', userId, data.worldHistory ?? []).catch(console.error)
+      upsertItems('acts', userId, data.acts ?? []).catch(console.error)
+      upsertItems('chapters', userId, data.chapters ?? []).catch(console.error)
+      upsertItems('lore_entries', userId, data.loreEntries ?? []).catch(console.error)
+      upsertItems('idea_entries', userId, data.ideaEntries ?? []).catch(console.error)
+      upsertItems('maps_data', userId, data.maps ?? []).catch(console.error)
+      upsertItems('whiteboards_data', userId, data.whiteboards ?? []).catch(console.error)
+      upsertItems('story_schedule', userId, data.storySchedule ?? []).catch(console.error)
+      upsertItems('rpg_characters', userId, data.rpgCharacters ?? []).catch(console.error)
+      upsertItems('comic_pages', userId, data.comicPages ?? []).catch(console.error)
+      upsertItems('comic_panels', userId, data.comicPanels ?? []).catch(console.error)
+      upsertItems('eras', userId, data.eras ?? []).catch(console.error)
+      saveUserSettings(userId, { activeNovelId: data.activeNovelId ?? null, currentYear: data.currentYear ?? 0, activeMapByNovel: data.activeMapByNovel ?? {} }).catch(console.error)
+      ;(data.scenes ?? []).forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }, 700)
   }, [importData, userId, canSyncCloud])
 
@@ -1024,6 +1053,10 @@ export function useStore(userId = null, options = {}) {
     const chapterIds = chaptersRef.current.filter(c => c.actId === id).map(c => c.id)
     const sceneIds = scenesRef.current.filter(s => chapterIds.includes(s.chapterId)).map(s => s.id)
     sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    if (canSyncCloud) {
+      deleteItem('acts', userId, id).catch(console.error)
+      chapterIds.forEach(cId => deleteItem('chapters', userId, cId).catch(console.error))
+    }
     commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => a.id !== id))
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.actId !== id))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
@@ -1041,6 +1074,7 @@ export function useStore(userId = null, options = {}) {
   const deleteChapter = (id) => {
     const sceneIds = scenesRef.current.filter(s => s.chapterId === id).map(s => s.id)
     sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    if (canSyncCloud) deleteItem('chapters', userId, id).catch(console.error)
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.id !== id))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
@@ -1149,9 +1183,15 @@ export function useStore(userId = null, options = {}) {
     id,
     () => null
   )
+  const updateCharacterJourneyForSeries = (id, journey) => {
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => (
+      character.id === id ? { ...character, journey } : character
+    )))
+  }
   const deleteCharacter = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(charactersRef, setCharacters, 'characters', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('characters', userId, dId).catch(console.error))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => {
       return prev
         .map(c => ({
@@ -1187,6 +1227,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const deleteRpgCharacter = (id) => {
+    if (canSyncCloud) deleteItem('rpg_characters', userId, id).catch(console.error)
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.id !== id))
   }
 
@@ -1206,6 +1247,7 @@ export function useStore(userId = null, options = {}) {
   const deleteFaction = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(factionsRef, setFactions, 'factions', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('factions', userId, dId).catch(console.error))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
       deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
     ))
@@ -1226,6 +1268,7 @@ export function useStore(userId = null, options = {}) {
   const deleteLocation = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(locationsRef, setLocations, 'locations', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('locations', userId, dId).catch(console.error))
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => ({
         ...entry,
@@ -1309,6 +1352,7 @@ export function useStore(userId = null, options = {}) {
   const deleteEvent = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(timelineRef, setTimeline, 'timeline', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('timeline_events', userId, dId).catch(console.error))
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => deletedSet.has(h.timelineEventId) ? { ...h, timelineEventId: null } : h))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
@@ -1323,7 +1367,10 @@ export function useStore(userId = null, options = {}) {
     return entry
   }
   const updateScheduleEvent = (id, data) => commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
-  const deleteScheduleEvent = (id) => commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.id !== id))
+  const deleteScheduleEvent = (id) => {
+    if (canSyncCloud) deleteItem('story_schedule', userId, id).catch(console.error)
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.id !== id))
+  }
 
   const addHistoryEntry = (data, options = {}) => {
     if (storageExceededCheck()) { return null }
@@ -1389,6 +1436,7 @@ export function useStore(userId = null, options = {}) {
   const deleteHistoryEntry = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(worldHistoryRef, setWorldHistory, 'worldhistory', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('world_history', userId, dId).catch(console.error))
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => deletedSet.has(e.worldHistoryEntryId) ? { ...e, worldHistoryEntryId: null } : e))
   }
   const linkTimelineHistory = (timelineEventId, historyEntryId) => {
@@ -1409,7 +1457,10 @@ export function useStore(userId = null, options = {}) {
     return entry
   }
   const updateLoreEntry = (id, data) => saveSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data }))
-  const deleteLoreEntry = (id, options = {}) => deleteSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', id, options)
+  const deleteLoreEntry = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', id, options)
+    if (canSyncCloud) (deletedIds.length ? deletedIds : [id]).forEach(dId => deleteItem('lore_entries', userId, dId).catch(console.error))
+  }
 
   const addIdeaEntry = (data) => {
     if (storageExceededCheck()) { return null }
@@ -1438,7 +1489,10 @@ export function useStore(userId = null, options = {}) {
     return entry
   }
   const updateIdeaEntry = (id, data) => saveSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), updatedAt: Date.now(), title: '', description: '', body: '', group: '', tags: [], status: 'raw', order: 0, isFavourite: false, isPinned: false, aiExpanded: false, linkedEntities: [], linkedIdeas: [], convertedTo: null, ...data }))
-  const deleteIdeaEntry = (id, options = {}) => deleteSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', id, options)
+  const deleteIdeaEntry = (id, options = {}) => {
+    const deletedIds = deleteSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', id, options)
+    if (canSyncCloud) (deletedIds.length ? deletedIds : [id]).forEach(dId => deleteItem('idea_entries', userId, dId).catch(console.error))
+  }
 
   const addMap = (name, mapType) => {
     if (storageExceededCheck()) { return null }
@@ -1476,6 +1530,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const deleteMap = (mapId) => {
+    if (canSyncCloud) deleteItem('maps_data', userId, mapId).catch(console.error)
     setMaps(prev => prev.filter(m => m.id !== mapId))
     setActiveMapByNovel(prev => {
       if (prev[activeNovelId] !== mapId) return prev
@@ -1546,6 +1601,10 @@ export function useStore(userId = null, options = {}) {
   }
 
   const deleteComicPage = (pageId) => {
+    if (canSyncCloud) {
+      deleteItem('comic_pages', userId, pageId).catch(console.error)
+      comicPanelsRef.current.filter(p => p.pageId === pageId).forEach(p => deleteItem('comic_panels', userId, p.id).catch(console.error))
+    }
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.id !== pageId))
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.pageId !== pageId))
   }
@@ -1606,6 +1665,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const deleteComicPanel = (panelId) => {
+    if (canSyncCloud) deleteItem('comic_panels', userId, panelId).catch(console.error)
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.id !== panelId))
   }
 
@@ -1669,12 +1729,13 @@ export function useStore(userId = null, options = {}) {
   const novelEras = eras.filter(e => e.novelId === activeNovelId)
 
   const addEra = (data) => {
-    const era = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data }
+    const era = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data } // eslint-disable-line react-hooks/purity
     setEras(prev => [...prev, era])
     return era
   }
   const updateEra = (id, data) => setEras(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
   const deleteEra = (id) => {
+    if (canSyncCloud) deleteItem('eras', userId, id).catch(console.error)
     setEras(prev => prev.filter(e => e.id !== id))
     // clear era reference from timeline entries
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev =>
@@ -1688,10 +1749,19 @@ export function useStore(userId = null, options = {}) {
     return s
   }
   const deleteSeries = (id) => {
+    if (canSyncCloud) deleteItem('series_items', userId, id).catch(console.error)
     setSeries(prev => prev.filter(s => s.id !== id))
     setNovels(prev => prev.map(n => n.seriesId === id ? { ...n, seriesId: null } : n))
   }
   const updateSeries = (id, data) => setSeries(prev => prev.map(s => s.id === id ? { ...s, ...data } : s))
+  const updateSeriesContinuity = (id, patch) => setSeries(prev => prev.map(s => s.id === id ? {
+    ...s,
+    continuity: {
+      ...(s.continuity || {}),
+      ...patch,
+    },
+    updatedAt: new Date().toISOString(),
+  } : s))
   const reorderSeries = (orderedIds) => setSeries(prev => {
     const map = new Map(prev.map(s => [s.id, s]))
     return orderedIds.map(id => map.get(id)).filter(Boolean)
@@ -1729,15 +1799,8 @@ export function useStore(userId = null, options = {}) {
       return next
     })
     if (canSyncCloud) {
-      deleteProjectData(userId, id).catch(console.error)
-      // Immediately persist updated novels list so deletion survives logout
-      // (the debounced save may not fire in time if user logs out quickly)
-      saveAppData(userId, buildAppDataPayload({
-        novels: updatedNovels, characters, factions, locations, timeline,
-        worldHistory, acts, chapters, loreEntries, ideaEntries,
-        maps, activeMapByNovel, whiteboards, series, storySchedule,
-        currentYear, activeNovelId,
-      })).catch(console.error)
+      deleteItemsByNovel(userId, id).catch(console.error)
+      deleteItem('novels', userId, id).catch(console.error)
     }
     if (activeNovelId === id) setActiveNovelId(null)
     setSelectedCharacterId(null)
@@ -1813,10 +1876,19 @@ export function useStore(userId = null, options = {}) {
     readOnly,
     freeProjectId,
     novels, activeNovelId, activeNovel, setActiveNovelId, addNovel, updateNovel, deleteNovel, importProjectFromData, getProjectExportData, getProjectContextData,
-    series, addSeries, deleteSeries, updateSeries, reorderSeries, reorderNovels,
+    series, addSeries, deleteSeries, updateSeries, updateSeriesContinuity, reorderSeries, reorderNovels,
+    continuityRecords: {
+      characters,
+      factions,
+      locations,
+      loreEntries,
+      timeline,
+      worldHistory,
+      maps,
+    },
     allProjectStats, activeProjectStats,
     characters: seriesScope(characters, 'characters'),
-    saveCharacter, saveCharacterJourney, deleteCharacter,
+    saveCharacter, saveCharacterJourney, updateCharacterJourneyForSeries, deleteCharacter,
     factions: novelFactions,
     saveFaction, deleteFaction,
     setFactions: (updater) => {
@@ -1847,6 +1919,7 @@ export function useStore(userId = null, options = {}) {
     selectedLocationId, setSelectedLocationId,
     selectedLoreEntryId, setSelectedLoreEntryId,
     selectedIdeaEntryId, setSelectedIdeaEntryId,
+    selectedTimelineEventId, setSelectedTimelineEventId,
     storySchedule: novelStorySchedule, addScheduleEvent, updateScheduleEvent, deleteScheduleEvent,
     rpgCharacters: rpgCharacters.filter(c => c.novelId === activeNovelId),
     saveRpgCharacter, deleteRpgCharacter,

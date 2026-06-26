@@ -5,10 +5,12 @@ import { useStore } from './useStore.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
-  saveAppData:       vi.fn().mockResolvedValue({}),
-  saveSceneDoc:      vi.fn().mockResolvedValue({}),
-  deleteSceneDoc:    vi.fn().mockResolvedValue({}),
-  deleteProjectData: vi.fn().mockResolvedValue({}),
+  upsertItems:        vi.fn().mockResolvedValue({}),
+  deleteItem:         vi.fn().mockResolvedValue({}),
+  deleteItemsByNovel: vi.fn().mockResolvedValue({}),
+  saveUserSettings:   vi.fn().mockResolvedValue({}),
+  saveSceneDoc:       vi.fn().mockResolvedValue({}),
+  deleteSceneDoc:     vi.fn().mockResolvedValue({}),
 }))
 vi.mock('../utils/projectStats', () => ({
   buildProjectStats: vi.fn().mockReturnValue({}),

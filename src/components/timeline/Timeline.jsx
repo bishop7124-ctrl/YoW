@@ -21,11 +21,13 @@ export default function Timeline({ store }) {
     addEvent, updateEvent, deleteEvent,
     currentYear,
     setSelectedCharacterId, setSelectedLocationId,
+    selectedTimelineEventId, setSelectedTimelineEventId,
   } = store
 
   const [search, setSearch] = useState('')
   const [activeEraId, setActiveEraId] = useState('all')
-  const [selectedId, setSelectedId] = useState(null)
+  const selectedId = selectedTimelineEventId
+  const setSelectedId = setSelectedTimelineEventId
   const [formState, setFormState] = useState(null)
   const eraRefs = useRef({})
   const scrollRef = useRef(null)

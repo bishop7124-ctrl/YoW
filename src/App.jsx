@@ -22,6 +22,7 @@ import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
 import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
+import FounderProfilePage from './components/founders/FounderProfilePage'
 import { getMembership } from './utils/membership'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import {
@@ -60,6 +61,13 @@ function isFoundersPath(path) {
   return path === '/founders' || path === '/founders/'
 }
 
+function getFounderProfileSlug(path) {
+  const m = path.match(/^\/founders\/([^/]+)\/?$/)
+  if (!m) return null
+  const slug = m[1]
+  return (slug === '' || slug === 'founders') ? null : slug
+}
+
 function getAuthRouteMode(path) {
   if (path === '/login' || path === '/login/') return 'login'
   if (path === '/signup' || path === '/signup/') return 'signup'
@@ -93,7 +101,7 @@ function parseRoute() {
 }
 
 function buildRoute(viewMode, novelId, seriesId, section, layoutViewMode, overlays = {}) {
-  let path = '/'
+  let path = '/dashboard'
   if (viewMode === 'series' && seriesId) {
     path = `/series/${encodeURIComponent(seriesId)}`
   } else if (viewMode === 'editor' && novelId) {
@@ -180,6 +188,7 @@ function AppInner() {
   const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
   const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
   const [showFounders, setShowFounders] = useState(() => isFoundersPath(window.location.pathname))
+  const [founderProfileSlug, setFounderProfileSlug] = useState(() => getFounderProfileSlug(window.location.pathname))
   const [authRouteMode, setAuthRouteMode] = useState(() => getAuthRouteMode(window.location.pathname))
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(() => initialRouteSnapshot.accountOpen)
@@ -200,6 +209,7 @@ function AppInner() {
     setShowFeatures(isFeaturesPath(path))
     setShowFAQ(isFAQPath(path))
     setShowFounders(isFoundersPath(path))
+    setFounderProfileSlug(getFounderProfileSlug(path))
     setAuthRouteMode(getAuthRouteMode(path))
   }
 
@@ -249,7 +259,14 @@ function AppInner() {
 
   // Sync browser URL with navigation state
   useEffect(() => {
-    if (firstUrlSync.current) { firstUrlSync.current = false; return }
+    if (firstUrlSync.current) {
+      firstUrlSync.current = false
+      // Redirect bare "/" to "/dashboard" when logged in
+      if (user && (window.location.pathname === '/' || window.location.pathname === '')) {
+        history.replaceState(null, '', '/dashboard')
+      }
+      return
+    }
     if (!user && authRouteMode) return
     const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, {
       accountOpen,
@@ -277,7 +294,12 @@ function AppInner() {
         return
       }
       if (isFoundersPath(path)) {
-        setShowFounders(true); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
+        setShowFounders(true); setFounderProfileSlug(null); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
+        return
+      }
+      const profileSlug = getFounderProfileSlug(path)
+      if (profileSlug) {
+        setFounderProfileSlug(profileSlug); setShowFounders(false); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
         return
       }
       const nextAuthRouteMode = getAuthRouteMode(path)
@@ -341,6 +363,24 @@ function AppInner() {
       window.clearTimeout(handleReadOnly.timeout)
     }
   }, [])
+
+  // Force default theme on all public/marketing pages so user theme choices
+  // never leak into the landing experience.
+  const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || !!founderProfileSlug || !user
+  useEffect(() => {
+    if (isPublicPage) {
+      applyThemeToDocument(DEFAULT_THEME, {})
+      applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
+    } else {
+      const savedTheme = loadThemeChoice()
+      const customColors = (() => {
+        try { return JSON.parse(localStorage.getItem('nf-custom-colors') || '{}') }
+        catch { return {} }
+      })()
+      applyThemeToDocument(savedTheme, customColors)
+      applyThemeTuning(loadThemeTuning(), getThemeColors(savedTheme, customColors))
+    }
+  }, [isPublicPage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Apply account-owned appearance on login. New accounts should not inherit
   // a previous user's browser-local theme choice.
@@ -455,6 +495,22 @@ function AppInner() {
     return (
       <>
         <FoundersPage
+          user={user}
+          onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
+          onLogin={() => navigatePublic(user ? '/' : '/login')}
+        />
+        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+        <BetaBanner />
+      </>
+    )
+  }
+
+  if (founderProfileSlug) {
+    return (
+      <>
+        <FounderProfilePage
+          slug={founderProfileSlug}
           user={user}
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onLogin={() => navigatePublic(user ? '/' : '/login')}
@@ -592,11 +648,21 @@ function AppInner() {
     store.setActiveNovelId(null)
   }
 
+  const applyProjectEntryTarget = (target = {}) => {
+    if (!target?.type || !target?.itemId) return
+    if (target.type === 'character') store.setSelectedCharacterId?.(target.itemId)
+    if (target.type === 'location') store.setSelectedLocationId?.(target.itemId)
+    if (target.type === 'lore') store.setSelectedLoreEntryId?.(target.itemId)
+    if (target.type === 'timeline' || target.type === 'history') store.setSelectedTimelineEventId?.(target.itemId)
+    if (target.type === 'map') store.selectMap?.(target.itemId)
+  }
+
   // Open a book from within a Series Dashboard — remembers which series to return to
-  const handleOpenBookFromSeries = (novelId) => {
+  const handleOpenBookFromSeries = (novelId, target = {}) => {
     setSeriesEntryNovelId(activeSeriesId)
+    applyProjectEntryTarget(target)
     store.setActiveNovelId(novelId)
-    setSection('dashboard')
+    setSection(target.section || 'dashboard')
     setViewMode('editor')
     setLayoutViewMode('planning')
     setProjectSettingsOpen(false)

@@ -3,13 +3,13 @@ import MarketingFooter from '../marketing/MarketingFooter'
 
 const FOUNDERS = [
   {
-    slug: 'example-founder',
-    name: 'A. N. Writer',
-    genre: 'Epic Fantasy · Grimdark',
-    bio: 'Author of the Ashen Crown series. Writes sprawling worlds with morally grey characters and histories that matter. Fuelled by tea and spite.',
-    works: '3 published works',
+    slug: 'morgan-bishop',
+    name: 'Morgan Bishop',
+    genre: 'Fantasy · World-builder',
+    bio: 'American writer based in England. Degree in English Literature, background in tech. Currently building a three-part fantasy series with a world big enough to get lost in — which is exactly why she made this tool. Wife, mum, dog owner. Writes late.',
+    works: 'Trilogy in progress',
     avatar: null,
-    emoji: '✍',
+    emoji: '🌍',
   },
 ]
 

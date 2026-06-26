@@ -5,9 +5,10 @@ import ChronicleEntryForm from '../shared/ChronicleEntryForm'
 import EraManager from './EraManager'
 
 export default function WorldHistory({ store }) {
-  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId, eras, addEra, updateEra, deleteEra } = store
+  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId, selectedTimelineEventId, setSelectedTimelineEventId, eras, addEra, updateEra, deleteEra } = store
   const [search, setSearch] = useState('')
-  const [selectedId, setSelectedId] = useState(null)
+  const selectedId = selectedTimelineEventId
+  const setSelectedId = setSelectedTimelineEventId
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [showEraManager, setShowEraManager] = useState(false)
@@ -28,11 +29,6 @@ export default function WorldHistory({ store }) {
     if (e.startYear != null) return e.startYear
     const match = (e.date || '').match(/-?\d+/)
     return match ? parseInt(match[0], 10) : Infinity
-  }
-
-  const eraStartYear = (eraId) => {
-    const era = (eras || []).find(er => er.id === eraId)
-    return era?.startYear ?? Infinity
   }
 
   // Sort eras by startYear, then entries within each era by year
