@@ -30,20 +30,19 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
 test('rename a scene and verify it persists', async ({ page }) => {
   const newName = `Renamed Scene ${Date.now()}`
 
-  // Double-click or use context menu to rename the first scene in the sidebar
-  const sceneItem = page.locator('.ms-sidebar-scene').first()
-  await sceneItem.dblclick()
+  // Click the scene in the sidebar to select it and open the scene editor
+  await page.locator('.ms-sidebar-scene-btn').first().click()
 
-  const renameInput = page.getByPlaceholder(/scene title|scene name/i).first()
-  if (await renameInput.isVisible().catch(() => false)) {
-    await renameInput.fill(newName)
-    await renameInput.press('Enter')
-  } else {
-    // Fallback: look for an inline editable title in the editor toolbar
-    const titleField = page.locator('input[placeholder*="cene"]').first()
-    await titleField.fill(newName)
-    await titleField.press('Tab')
-  }
+  // The scene header appears on focus — click the title button to activate inline edit
+  const titleBtn = page.locator('.ms-scene-header button[title="Click to rename scene"]').first()
+  await titleBtn.waitFor({ timeout: 5000 })
+  await titleBtn.click()
+
+  // Fill the inline input that replaces the title button
+  const renameInput = page.locator('.ms-scene-header input').first()
+  await renameInput.waitFor({ timeout: 3000 })
+  await renameInput.fill(newName)
+  await renameInput.press('Enter')
 
   const prefix = newName.slice(0, 15)
   await waitForStorage(page, (p) => {

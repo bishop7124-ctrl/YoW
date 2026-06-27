@@ -176,7 +176,7 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
 
   // Writing should open
   await page.getByRole('button', { name: 'Write' }).click()
-  await expect(page.locator('.ms-preview').first()).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
 })
 
 test('large scene content (>10k words) loads without crash', async ({ page }) => {
@@ -206,7 +206,7 @@ test('large scene content (>10k words) loads without crash', async ({ page }) =>
   await page.getByRole('button', { name: 'Write' }).click()
 
   // Editor should open with the large content, no crash
-  await expect(page.locator('.ms-preview').first()).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
 })
 
 // ─── Import / restore round-trip ──────────────────────────────────────────────
