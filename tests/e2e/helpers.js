@@ -28,8 +28,8 @@ export async function seedCleanStorage(page) {
       sessionStorage.setItem('yow_qa_storage_seeded', '1')
     }
     localStorage.setItem('yow_beta_acknowledged', '1')
-    // Suppress the first-run wizard so it never blocks button clicks
-    localStorage.setItem('yow_onboarding', JSON.stringify({ wizardShown: true, checklistDismissed: true }))
+    // Suppress the first-run wizard and all tours so they never block button clicks
+    localStorage.setItem('yow_onboarding', JSON.stringify({ wizardShown: true, checklistDismissed: true, toursEnabled: false }))
     document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
   }, storageKeys)
 }
@@ -43,6 +43,12 @@ export async function dismissLaunchPrompts(page) {
   const cookieBanner = page.getByRole('region', { name: 'Cookie consent' })
   if (await cookieBanner.isVisible().catch(() => false)) {
     await page.getByRole('button', { name: 'Essential only' }).click()
+  }
+
+  const tourDialog = page.getByRole('dialog', { name: /^Tour:/ })
+  if (await tourDialog.isVisible().catch(() => false)) {
+    const skipBtn = page.getByRole('button', { name: /skip/i })
+    if (await skipBtn.isVisible().catch(() => false)) await skipBtn.click()
   }
 }
 
