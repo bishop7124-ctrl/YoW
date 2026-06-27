@@ -83,12 +83,14 @@ test.describe('Characters', () => {
 
     // Character delete fires two native confirm() dialogs — accept both
     page.on('dialog', dialog => dialog.accept())
-    await page.getByRole('button', { name: /Delete/i }).first().click()
+    // Use exact text match to avoid hitting other Delete buttons
+    await page.getByRole('button', { name: 'Delete' }).first().click()
 
+    // Give extra time — deletion cascades through relationships and useEffect saves async
     await waitForStorage(page, (n) => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
       return !chars.some(c => c.name === n)
-    }, charName)
+    }, charName, 15_000)
 
     await page.reload()
     const chars = await readStorage(page, 'nf_characters')
@@ -125,9 +127,10 @@ test.describe('Characters', () => {
 
 test.describe('Locations', () => {
   test.beforeEach(async ({ page }) => {
-    // "Locations" is a section inside the "Atlas" room — click the room first
+    // "Locations" is inside the "Atlas" room — heading only appears when an item is selected
     await page.getByRole('button', { name: 'Atlas' }).first().click()
-    await expect(page.getByRole('heading', { name: /Locations/i })).toBeVisible()
+    // Wait for the New button which is always present in the index
+    await page.getByRole('button', { name: 'New' }).first().waitFor({ state: 'visible' })
   })
 
   test('create a location and verify persistence', async ({ page }) => {
@@ -179,9 +182,9 @@ test.describe('Locations', () => {
 
 test.describe('Lore', () => {
   test.beforeEach(async ({ page }) => {
-    // "Lore" is a top-level room button
+    // "Lore" is a top-level room button; heading only renders when an entry is selected
     await page.getByRole('button', { name: 'Lore' }).first().click()
-    await expect(page.getByRole('heading', { name: /Lore/i })).toBeVisible()
+    await page.getByRole('button', { name: 'New' }).first().waitFor({ state: 'visible' })
   })
 
   test('create a lore entry and verify persistence', async ({ page }) => {

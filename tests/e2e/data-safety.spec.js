@@ -113,40 +113,33 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
 test('dashboard and writing remain usable with 10 projects in storage', async ({ page }) => {
   test.setTimeout(120_000)
 
-  await page.evaluate(() => {
+  // Seed via addInitScript so it runs AFTER seedCleanStorage on the next navigation,
+  // guaranteeing data survives regardless of sessionStorage preservation.
+  await page.addInitScript(() => {
     const novels = []
     const acts = []
     const chapters = []
     const scenes = []
-
     for (let i = 0; i < 10; i++) {
       const novelId = `stress-novel-${i}`
       const actId = `stress-act-${i}`
       const chapterId = `stress-chapter-${i}`
       const sceneId = `stress-scene-${i}`
-
       novels.push({ id: novelId, title: `Stress Project ${i}`, type: 'novel', createdAt: Date.now() - i * 1000 })
       acts.push({ id: actId, novelId, title: `Act ${i}`, order: 0 })
       chapters.push({ id: chapterId, novelId, actId, title: `Chapter ${i}`, order: 0 })
-      scenes.push({
-        id: sceneId, novelId, chapterId, actId,
-        title: `Scene ${i}`,
-        content: `Content for stress project ${i}. `.repeat(50),
-        order: 0,
-      })
+      scenes.push({ id: sceneId, novelId, chapterId, actId, title: `Scene ${i}`, content: `Content for stress project ${i}. `.repeat(50), order: 0 })
     }
-
     localStorage.setItem('nf_novels', JSON.stringify(novels))
     localStorage.setItem('nf_acts', JSON.stringify(acts))
     localStorage.setItem('nf_chapters', JSON.stringify(chapters))
     localStorage.setItem('nf_scenes', JSON.stringify(scenes))
-    // Do NOT set nf_activeNovel — leave manager as the default view
   })
 
   await page.reload()
   await expect(page.getByRole('button', { name: 'New Project' }).first()).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('.project-dash-card').first()).toBeVisible({ timeout: 10_000 })
 
-  // Click the first project card (role="button" with class project-dash-card)
   await page.locator('.project-dash-card').first().click()
   await expect(page).toHaveURL(/\/project\//, { timeout: 10_000 })
 
@@ -207,18 +200,22 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
     return !novels.some(n => n.title === t)
   }, projectTitle)
 
-  // Restore from ZIP via the Import ZIP flow
+  // Restore from ZIP via the Import ZIP flow (upload → preview → Create Project)
   await page.goto('/')
   await dismissLaunchPrompts(page)
   const fileInput = await openImportZip(page)
   await fileInput.setInputFiles(zipPath)
+
+  // Wait for the native YOW export preview phase, then confirm
+  await page.getByRole('button', { name: 'Create Project' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Create Project' }).click()
 
   await waitForStorage(page, (t) => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
     return novels.some(n => n.title === t)
       && chars.some(c => c.name === 'Restore Test Character')
-  }, projectTitle, 15_000)
+  }, projectTitle, 20_000)
 
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Restore Test Character')).toBe(true)
