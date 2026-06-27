@@ -21,9 +21,7 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
 
   // Delete is in the project manager card settings, not the studio panel
   await page.getByRole('button', { name: 'Back to projects' }).click()
-  // Click the gear icon on the project card (aria-label="Project settings")
   await page.locator('.dash-card-settings-button').first().click()
-  // Inside the EditProjectModal, click "Delete project"
   await page.getByRole('button', { name: 'Delete project' }).click()
 
   await waitForStorage(page, (id) => {
@@ -43,18 +41,18 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
 test('deleting a character removes it from relationship lists', async ({ page }) => {
   await createProject(page, { title: 'Character Cascade Test' })
 
-  await page.getByRole('button', { name: /Characters/i }).first().click()
+  await page.getByRole('button', { name: 'Characters' }).first().click()
   await expect(page.getByRole('heading', { name: /Characters/i })).toBeVisible()
 
-  // Create two characters
-  for (const name of ['Alice', 'Bob']) {
+  // Create two characters — use charName variable to avoid window.name collision
+  for (const charName of ['Alice', 'Bob']) {
     await page.getByRole('button', { name: 'New' }).first().click()
-    await page.locator('[role="dialog"] input[required]').first().fill(name)
+    await page.locator('[role="dialog"] input[required]').first().fill(charName)
     await page.getByRole('button', { name: 'Save Character' }).click()
-    await waitForStorage(page, () => {
+    await waitForStorage(page, (n) => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
-      return chars.some(c => c.name === name)
-    })
+      return chars.some(c => c.name === n)
+    }, charName)
   }
 
   // Delete Alice
@@ -70,13 +68,10 @@ test('deleting a character removes it from relationship lists', async ({ page })
     return !chars.some(c => c.name === 'Alice')
   })
 
-  // Bob should still be there
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Bob')).toBe(true)
 
-  // No character should have a relationship pointing to the deleted Alice ID
-  const deletedId = (await readStorage(page, 'nf_characters'))
-    .find(c => c.name === 'Alice')?.id
+  const deletedId = chars.find(c => c.name === 'Alice')?.id
   if (deletedId) {
     expect(
       chars.some(c =>
@@ -94,7 +89,7 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
 
   // Create project A and add a character
   await createProject(page, { title: titleA })
-  await page.getByRole('button', { name: /Characters/i }).first().click()
+  await page.getByRole('button', { name: 'Characters' }).first().click()
   await page.getByRole('button', { name: 'New' }).first().click()
   await page.locator('[role="dialog"] input[required]').first().fill('Project A Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
@@ -108,7 +103,7 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   // Create project B and add a character
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await createProject(page, { title: titleB })
-  await page.getByRole('button', { name: /Characters/i }).first().click()
+  await page.getByRole('button', { name: 'Characters' }).first().click()
   await page.getByRole('button', { name: 'New' }).first().click()
   await page.locator('[role="dialog"] input[required]').first().fill('Project B Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
@@ -117,7 +112,6 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
     return chars.some(c => c.name === 'Project B Character')
   })
 
-  // Characters for project A should only include project A's character
   const allChars = await readStorage(page, 'nf_characters')
   const projectAChars = allChars.filter(c => c.novelId === projectAId)
   expect(projectAChars.some(c => c.name === 'Project A Character')).toBe(true)
@@ -129,7 +123,6 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
 test('dashboard and writing remain usable with 10 projects in storage', async ({ page }) => {
   test.setTimeout(120_000)
 
-  // Seed 10 projects directly into localStorage for speed
   await page.evaluate(() => {
     const novels = []
     const acts = []
@@ -146,10 +139,7 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
       acts.push({ id: actId, novelId, title: `Act ${i}`, order: 0 })
       chapters.push({ id: chapterId, novelId, actId, title: `Chapter ${i}`, order: 0 })
       scenes.push({
-        id: sceneId,
-        novelId,
-        chapterId,
-        actId,
+        id: sceneId, novelId, chapterId, actId,
         title: `Scene ${i}`,
         content: `Content for stress project ${i}. `.repeat(50),
         order: 0,
@@ -160,19 +150,19 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
     localStorage.setItem('nf_acts', JSON.stringify(acts))
     localStorage.setItem('nf_chapters', JSON.stringify(chapters))
     localStorage.setItem('nf_scenes', JSON.stringify(scenes))
-    localStorage.setItem('nf_activeNovel', 'stress-novel-0')
+    localStorage.setItem('nf_activeNovel', JSON.stringify('stress-novel-0'))
   })
 
   await page.reload()
 
-  // Dashboard should load without crashing
   await expect(page.getByRole('button', { name: 'New Project' }).first()).toBeVisible({ timeout: 10_000 })
 
-  // Open one of the stress projects
-  await page.getByText('Stress Project 0').first().click()
-  await expect(page).toHaveURL(/\/project\//)
+  // Wait for project cards to render then click
+  const stressCard = page.getByText('Stress Project 0').first()
+  await stressCard.waitFor({ timeout: 15_000 })
+  await stressCard.click()
+  await expect(page).toHaveURL(/\/project\//, { timeout: 10_000 })
 
-  // Writing should open
   await page.getByRole('button', { name: 'Write' }).click()
   await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
 })
@@ -180,41 +170,30 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
 test('large scene content (>10k words) loads without crash', async ({ page }) => {
   await createProject(page, { title: 'Large Scene Test' })
 
-  // Seed a large scene directly
   await page.evaluate(() => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
     const novel = novels[0]
     if (!novel) return
-    const acts = JSON.parse(localStorage.getItem('nf_acts') || '[]')
-    const act = acts.find(a => a.novelId === novel.id)
-    const chapters = JSON.parse(localStorage.getItem('nf_chapters') || '[]')
-    const chapter = chapters.find(c => c.novelId === novel.id)
-    if (!act || !chapter) return
-
-    const largeContent = 'The quick brown fox jumps over the lazy dog. '.repeat(500)
     const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
     const scene = scenes.find(s => s.novelId === novel.id)
     if (scene) {
-      scene.content = largeContent
+      scene.content = 'The quick brown fox jumps over the lazy dog. '.repeat(500)
       localStorage.setItem('nf_scenes', JSON.stringify(scenes))
     }
   })
 
   await page.reload()
   await page.getByRole('button', { name: 'Write' }).click()
-
-  // Editor should open with the large content, no crash
   await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
 })
 
 // ─── Import / restore round-trip ──────────────────────────────────────────────
 
 test('exported ZIP restores all worldbuilding data', async ({ page }) => {
-  const title = `Export Restore ${Date.now()}`
-  await createProject(page, { title })
+  const projectTitle = `Export Restore ${Date.now()}`
+  await createProject(page, { title: projectTitle })
 
-  // Add a character
-  await page.getByRole('button', { name: /Characters/i }).first().click()
+  await page.getByRole('button', { name: 'Characters' }).first().click()
   await page.getByRole('button', { name: 'New' }).first().click()
   await page.locator('[role="dialog"] input[required]').first().fill('Restore Test Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
@@ -223,7 +202,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
     return chars.some(c => c.name === 'Restore Test Character')
   })
 
-  // Export via the studio project settings panel (which has the Backup zip button)
+  // Export via the studio project settings panel (Backup zip button)
   await page.getByRole('button', { name: 'Project settings' }).click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: /Backup zip/i }).click()
@@ -231,25 +210,25 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   const zipPath = await download.path()
   await page.getByRole('button', { name: 'Done' }).click()
 
-  // Delete via project manager card settings (the only place with "Delete project")
+  // Delete via project manager card settings
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await page.locator('.dash-card-settings-button').first().click()
   await page.getByRole('button', { name: 'Delete project' }).click()
-  await waitForStorage(page, () => {
+  await waitForStorage(page, (t) => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-    return !novels.some(n => n.title === title)
-  })
+    return !novels.some(n => n.title === t)
+  }, projectTitle)
 
   // Restore from ZIP
   await page.goto('/')
   await page.locator('input[type="file"][accept=".zip"]').setInputFiles(zipPath)
 
-  await waitForStorage(page, () => {
+  await waitForStorage(page, (t) => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
-    return novels.some(n => n.title === title)
+    return novels.some(n => n.title === t)
       && chars.some(c => c.name === 'Restore Test Character')
-  }, 15_000)
+  }, projectTitle, 15_000)
 
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Restore Test Character')).toBe(true)

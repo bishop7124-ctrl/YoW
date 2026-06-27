@@ -251,7 +251,7 @@ export default function WorldHistory({ store }) {
 function EraSection({ label, range, entries, selectedId, onSelect }) {
   return (
     <div>
-      <div className="px-3 py-1.5 flex items-baseline gap-2 border-b border-[var(--border)] bg-[var(--bg-nav)]/50 sticky top-0">
+      <div className="px-3 py-1.5 flex items-baseline gap-2 border-b border-[var(--border)] bg-[var(--bg-nav)] sticky top-0 z-10">
         <span className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider">{label}</span>
         {range && <span className="text-[10px] text-[var(--text-muted)]">{range}</span>}
       </div>
