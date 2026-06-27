@@ -33,6 +33,7 @@ const PROJECT_STORAGE_KEYS = [
   'nf_rpg_characters',
   'nf_comicPages',
   'nf_comicPanels',
+  'nf_eras',
   LOCAL_WRITE_AT_KEY,
   LOCAL_OWNER_KEY,
 ]
@@ -211,6 +212,7 @@ const getLocalSnapshot = () => ({
   activeNovelId: load('nf_activeNovel', null),
   comicPages: load('nf_comicPages', []),
   comicPanels: load('nf_comicPanels', []),
+  eras: load('nf_eras', []),
 })
 
 const _buildAppDataPayload = (data) => ({
@@ -523,6 +525,7 @@ export function useStore(userId = null, options = {}) {
     setActiveNovelId(sourceData.activeNovelId ?? null)
     setComicPages(sourceData.comicPages ?? [])
     setComicPanels(sourceData.comicPanels ?? [])
+    setEras(sourceData.eras ?? [])
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
       importing.current = false
@@ -588,6 +591,7 @@ export function useStore(userId = null, options = {}) {
     setNovels([]); setCharacters([]); setFactions([]); setLocations([])
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
     setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setComicPages([]); setComicPanels([]); setCurrentYear(0); setActiveNovelId(null)
+    setEras([])
     setTimeout(() => {
       importing.current = false
       remoteReady.current = true
@@ -1494,20 +1498,14 @@ export function useStore(userId = null, options = {}) {
     if (canSyncCloud) (deletedIds.length ? deletedIds : [id]).forEach(dId => deleteItem('idea_entries', userId, dId).catch(console.error))
   }
 
-  const addMap = (name, mapType) => {
+  const addMap = (name, mapType, options = {}) => {
     if (storageExceededCheck()) { return null }
-    const normalizedMapType = mapType || 'regional'
+    const normalizedMapType = mapType || 'region'
     const isInterior = normalizedMapType === 'interior'
     const isCampaignInterior = ['dnd_campaign', 'tabletop_rpg'].includes(activeNovel?.type)
-    const map = {
-      id: uid(),
-      novelId: activeNovelId,
-      name,
-      mapType: normalizedMapType,
-      mapPins: [],
-      mapRegions: [],
-      metadata: isInterior ? {
-        stylePreset: 'dungeon',
+    const metadata = {
+      ...(isInterior ? {
+        stylePreset: 'blueprint',
         gridSettings: {
           enabled: true,
           type: 'square',
@@ -1517,7 +1515,20 @@ export function useStore(userId = null, options = {}) {
           snapToGrid: true,
           scale: isCampaignInterior ? '1 square = 5 ft' : '1 square = 1 unit',
         },
-      } : {},
+      } : {}),
+      ...(options.metadata || {}),
+    }
+    if (options.stylePreset) metadata.stylePreset = options.stylePreset
+    const map = {
+      id: uid(),
+      novelId: activeNovelId,
+      name,
+      mapType: normalizedMapType,
+      mapPins: [],
+      mapRegions: [],
+      mapObjects: [],
+      mapLayers: [],
+      metadata,
       created: Date.now(), // eslint-disable-line react-hooks/purity
     }
     setMaps(prev => [...prev, map])

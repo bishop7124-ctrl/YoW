@@ -1118,7 +1118,7 @@ export default function Layout({
           ) : null}
           footer={
             viewMode === 'planning'
-              ? <AIAssistant store={store} section={section} onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} />
+              ? (section === 'map' ? null : <AIAssistant store={store} section={section} onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} />)
               : <AIAssistant store={store} section="manuscript" onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} />
           }
         >

@@ -190,7 +190,7 @@ export function buildSystemPrompt(novel, context, store) {
     'Help with writing, plot, character development, world-building, and any creative task.',
   ].filter(Boolean)
 
-  const { characterIds, locationIds, loreEntryIds, chapterIds, customInstruction } = context
+  const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, customInstruction } = context
 
   if (characterIds?.length) {
     const chars = (store.characters || []).filter(c => characterIds.includes(c.id))
@@ -223,6 +223,20 @@ export function buildSystemPrompt(novel, context, store) {
       entries.forEach(e => {
         lines.push(`\n${e.title}${e.category ? ` (${e.category})` : ''}`)
         if (e.content) lines.push(e.content)
+      })
+    }
+  }
+
+  if (worldHistoryIds?.length) {
+    const history = (store.worldHistory || []).filter(entry => worldHistoryIds.includes(entry.id))
+    if (history.length) {
+      lines.push('\n--- HISTORY ---')
+      history.forEach(entry => {
+        lines.push(`\n${entry.title}`)
+        if (entry.era) lines.push(`Era: ${entry.era}`)
+        if (entry.startYear || entry.endYear) lines.push(`Years: ${[entry.startYear, entry.endYear].filter(Boolean).join(' - ')}`)
+        if (entry.dateRange) lines.push(`Date range: ${entry.dateRange}`)
+        if (entry.content) lines.push(entry.content)
       })
     }
   }

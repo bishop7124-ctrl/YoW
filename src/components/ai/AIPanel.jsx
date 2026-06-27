@@ -1,9 +1,38 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
 const save = (key, val) => localStorage.setItem(key, JSON.stringify(val))
+
+const AI_PANEL_FRAME_KEY = 'nf_aiPanelFrame'
+const MIN_PANEL_WIDTH = 380
+const MIN_PANEL_HEIGHT = 430
+const PANEL_MARGIN = 12
+
+const getDefaultPanelFrame = () => {
+  const width = Math.min(560, Math.max(MIN_PANEL_WIDTH, window.innerWidth - PANEL_MARGIN * 2))
+  const height = Math.min(760, Math.max(MIN_PANEL_HEIGHT, window.innerHeight - 92))
+  return {
+    width,
+    height,
+    left: Math.max(PANEL_MARGIN, window.innerWidth - width - 24),
+    top: Math.max(PANEL_MARGIN, window.innerHeight - height - 24),
+  }
+}
+
+const clampPanelFrame = (frame) => {
+  const maxWidth = Math.max(MIN_PANEL_WIDTH, window.innerWidth - PANEL_MARGIN * 2)
+  const maxHeight = Math.max(MIN_PANEL_HEIGHT, window.innerHeight - PANEL_MARGIN * 2)
+  const width = Math.min(Math.max(frame.width || MIN_PANEL_WIDTH, MIN_PANEL_WIDTH), maxWidth)
+  const height = Math.min(Math.max(frame.height || MIN_PANEL_HEIGHT, MIN_PANEL_HEIGHT), maxHeight)
+  return {
+    width,
+    height,
+    left: Math.min(Math.max(frame.left ?? PANEL_MARGIN, PANEL_MARGIN), Math.max(PANEL_MARGIN, window.innerWidth - width - PANEL_MARGIN)),
+    top: Math.min(Math.max(frame.top ?? PANEL_MARGIN, PANEL_MARGIN), Math.max(PANEL_MARGIN, window.innerHeight - height - PANEL_MARGIN)),
+  }
+}
 
 const DEFAULT_SETTINGS = {
   activeProvider: 'openrouter',
@@ -28,7 +57,7 @@ function ProviderSettings({ settings, onSave, onCancel }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
+      <div className="ai-panel-subheader px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
         <h3 className="font-bold text-[var(--text-main)] text-sm">AI Settings</h3>
         <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Keys are stored locally and sent only to the chosen provider.</p>
         {/* Active model callout */}
@@ -181,18 +210,21 @@ function CheckItem({ label, sub, checked, onChange, image }) {
 }
 
 function ContextSelector({ store, onStart, onCancel, initialContext }) {
-  const [ctx, setCtx] = useState(initialContext || {
-    characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '',
-  })
+  const defaultContext = {
+    characterIds: [], locationIds: [], loreEntryIds: [], worldHistoryIds: [], chapterIds: [], customInstruction: '',
+  }
+  const [ctx, setCtx] = useState({ ...defaultContext, ...(initialContext || {}) })
 
   const toggle = (field, id) => setCtx(prev => {
-    const arr = prev[field]
+    const arr = prev[field] || []
     return { ...prev, [field]: arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id] }
   })
   const selectAll = (field, ids) => setCtx(prev => ({ ...prev, [field]: ids }))
   const clearAll  = (field)      => setCtx(prev => ({ ...prev, [field]: [] }))
 
-  const { characters, locations, loreEntries, chapters, acts } = store
+  const {
+    characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [],
+  } = store
 
   const chaptersByAct = useMemo(() => {
     const map = {}
@@ -210,11 +242,22 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
     return map
   }, [loreEntries])
 
-  const total = ctx.characterIds.length + ctx.locationIds.length + ctx.loreEntryIds.length + ctx.chapterIds.length
+  const historyByEra = useMemo(() => {
+    const map = {}
+    worldHistory.forEach(entry => {
+      const era = entry.era || entry.dateRange || 'Unassigned'
+      if (!map[era]) map[era] = []
+      map[era].push(entry)
+    })
+    return map
+  }, [worldHistory])
+
+  const total = ctx.characterIds.length + ctx.locationIds.length + ctx.loreEntryIds.length +
+    ctx.worldHistoryIds.length + ctx.chapterIds.length
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
+      <div className="ai-panel-subheader px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
         <h3 className="font-bold text-[var(--text-main)] text-sm">Configure context for this chat</h3>
         <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Choose what the AI knows about your novel.</p>
       </div>
@@ -250,6 +293,29 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
               <div key={cat}>
                 <div className="text-[10px] text-[var(--accent)] uppercase tracking-wider mb-1 mt-2">{cat}</div>
                 {entries.map(e => <CheckItem key={e.id} label={e.title} checked={ctx.loreEntryIds.includes(e.id)} onChange={() => toggle('loreEntryIds', e.id)} />)}
+              </div>
+            ))}
+          </Section>
+        )}
+
+        {worldHistory.length > 0 && (
+          <Section title={`History${ctx.worldHistoryIds.length ? ` (${ctx.worldHistoryIds.length})` : ''}`} defaultOpen={ctx.worldHistoryIds.length > 0}>
+            <div className="flex gap-2 mb-2">
+              <button type="button" onClick={() => selectAll('worldHistoryIds', worldHistory.map(h => h.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
+              <button type="button" onClick={() => clearAll('worldHistoryIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
+            </div>
+            {Object.entries(historyByEra).map(([era, entries]) => (
+              <div key={era}>
+                <div className="text-[10px] text-[var(--accent)] uppercase tracking-wider mb-1 mt-2">{era}</div>
+                {entries.map(entry => (
+                  <CheckItem
+                    key={entry.id}
+                    label={entry.title}
+                    sub={entry.startYear || entry.endYear ? [entry.startYear, entry.endYear].filter(Boolean).join(' - ') : entry.dateRange}
+                    checked={ctx.worldHistoryIds.includes(entry.id)}
+                    onChange={() => toggle('worldHistoryIds', entry.id)}
+                  />
+                ))}
               </div>
             ))}
           </Section>
@@ -320,9 +386,9 @@ function Message({ msg }) {
   }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3 group/message`}>
+    <div className={`ai-chat-message flex ${isUser ? 'justify-end is-user' : 'justify-start is-assistant'} mb-3 group/message`}>
       <div className={`max-w-[88%] min-w-0 ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-        <div className={`w-full px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
+        <div className={`ai-chat-bubble w-full px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
           isUser
             ? 'bg-[var(--accent)] text-[var(--bg-main)] rounded-br-sm'
             : 'bg-[var(--bg-nav)] border border-[var(--border)] text-[var(--text-main)] rounded-bl-sm'
@@ -359,6 +425,16 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const inputRef       = useRef(null)
   const categoryInputRef = useRef(null)
 
+  const resizeInput = useCallback(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const maxHeight = 150
+    const nextHeight = Math.min(el.scrollHeight, maxHeight)
+    el.style.height = `${nextHeight}px`
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [])
+
   const startEditCategory = () => {
     setCategoryDraft(session.category || '')
     setEditingCategory(true)
@@ -371,6 +447,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [session.messages])
   useEffect(() => { inputRef.current?.focus() }, [session.id])
+  useEffect(() => { resizeInput() }, [input, session.id, resizeInput])
 
   const provider  = aiSettings.activeProvider
   const provCfg   = aiSettings[provider]
@@ -445,11 +522,12 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   ]
 
   const contextCount = (session.context.characterIds?.length || 0) + (session.context.locationIds?.length || 0) +
-    (session.context.loreEntryIds?.length || 0) + (session.context.chapterIds?.length || 0)
+    (session.context.loreEntryIds?.length || 0) + (session.context.worldHistoryIds?.length || 0) +
+    (session.context.chapterIds?.length || 0)
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-3 py-2 border-b border-[var(--border)] flex items-center gap-2 flex-shrink-0">
+    <div className="ai-chat-view flex flex-col h-full">
+      <div className="ai-chat-session-header px-3 py-2 border-b border-[var(--border)] flex items-center gap-2 flex-shrink-0">
         <button onClick={onBack} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
@@ -498,7 +576,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
         {session.messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-3">
             <div className="text-2xl text-[var(--accent)] opacity-70">✦</div>
@@ -524,17 +602,20 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         <div ref={bottomRef} />
       </div>
 
-      <div className="px-3 pb-3 pt-2 border-t border-[var(--border)] flex-shrink-0">
+      <div className="ai-chat-composer px-3 pb-3 pt-2 border-t border-[var(--border)] flex-shrink-0">
         <div className="flex gap-2 items-end">
           <textarea
             ref={inputRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              setInput(e.target.value)
+              queueMicrotask(resizeInput)
+            }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
             placeholder="Ask the AI…  (Shift+Enter for new line)"
             rows={1}
             disabled={streaming}
-            className="flex-1 min-h-10 max-h-28 bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-y disabled:opacity-50 transition-colors"
+            className="ai-chat-input flex-1 min-h-10 max-h-36 bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-none disabled:opacity-50 transition-colors"
           />
           {streaming && (
             <button
@@ -603,7 +684,7 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between flex-shrink-0">
+      <div className="ai-chat-list-header px-4 py-3 border-b border-[var(--border)] flex items-center justify-between flex-shrink-0">
         <div>
           <h3 className="font-bold text-[var(--text-main)] text-sm">Chats</h3>
           <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{provLabel} · {model}</div>
@@ -617,7 +698,7 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
       </div>
 
       {categories.length > 0 && (
-        <div className="px-3 py-2 border-b border-[var(--border)] flex gap-1.5 flex-wrap">
+        <div className="ai-chat-filter-bar px-3 py-2 border-b border-[var(--border)] flex gap-1.5 flex-wrap">
           <button
             type="button"
             onClick={() => setCategoryFilter('')}
@@ -662,7 +743,8 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
           const lastMsg = s.messages[s.messages.length - 1]
           const preview = lastMsg?.content?.slice(0, 70) || 'No messages yet'
           const total   = (s.context.characterIds?.length || 0) + (s.context.locationIds?.length || 0) +
-            (s.context.loreEntryIds?.length || 0) + (s.context.chapterIds?.length || 0)
+            (s.context.loreEntryIds?.length || 0) + (s.context.worldHistoryIds?.length || 0) +
+            (s.context.chapterIds?.length || 0)
           const isEditingCat = editingCategoryFor === s.id
 
           return (
@@ -811,7 +893,9 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
   const [activeId,   setActiveId]   = useState(null)
   const [fullscreen, setFullscreen] = useState(() => load('nf_aiFullscreen', false))
   const [minimized,  setMinimized]  = useState(false)
+  const [panelFrame, setPanelFrame] = useState(() => clampPanelFrame(load(AI_PANEL_FRAME_KEY, getDefaultPanelFrame())))
   const activeChatStorageKey = useRef(chatStorageKey)
+  const panelFrameRef = useRef(panelFrame)
 
   useEffect(() => { save('nf_aiSettings', aiSettings) }, [aiSettings])
   useEffect(() => {
@@ -825,6 +909,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     save(chatStorageKey, sessions)
   }, [sessions, chatStorageKey])
   useEffect(() => { save('nf_aiFullscreen', fullscreen) }, [fullscreen])
+  useEffect(() => { panelFrameRef.current = panelFrame; save(AI_PANEL_FRAME_KEY, panelFrame) }, [panelFrame])
   useEffect(() => {
     if (!open || docked) return undefined
     const handleKey = (event) => {
@@ -833,6 +918,12 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [open, docked])
+  useEffect(() => {
+    if (!open || docked || fullscreen) return undefined
+    const handleResize = () => setPanelFrame(prev => clampPanelFrame(prev))
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [open, docked, fullscreen])
 
   const projectStore = useMemo(
     () => store.getProjectContextData?.(novelId) ?? store,
@@ -881,6 +972,52 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     if (activeId === id) { setActiveId(null); setView('sessions') }
   }
 
+  const startMove = (event) => {
+    if (docked || fullscreen || event.button !== 0) return
+    if (event.target.closest('button, input, textarea, select, a')) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startY = event.clientY
+    const startFrame = panelFrameRef.current
+
+    const move = (moveEvent) => {
+      setPanelFrame(clampPanelFrame({
+        ...startFrame,
+        left: startFrame.left + moveEvent.clientX - startX,
+        top: startFrame.top + moveEvent.clientY - startY,
+      }))
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
+  const startResize = (event) => {
+    if (docked || fullscreen || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startY = event.clientY
+    const startFrame = panelFrameRef.current
+
+    const move = (moveEvent) => {
+      setPanelFrame(clampPanelFrame({
+        ...startFrame,
+        width: startFrame.width + moveEvent.clientX - startX,
+        height: startFrame.height + moveEvent.clientY - startY,
+      }))
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }
+
   const handleClose = () => {
     setMinimized(false)
     onClose?.()
@@ -915,23 +1052,31 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     ? 'fixed inset-3 sm:inset-5 rounded-xl'
     : docked
       ? 'ai-panel-docked rounded-lg'
-      : 'ai-tool-panel fixed right-3 bottom-3 left-3 top-20 sm:left-auto sm:top-auto sm:right-5 sm:bottom-5 rounded-xl'
+      : 'ai-tool-panel fixed rounded-xl'
+
+  const panelStyle = !fullscreen && !docked
+    ? { left: panelFrame.left, top: panelFrame.top, width: panelFrame.width, height: panelFrame.height }
+    : undefined
 
   return (
     <div
       className={`z-50 bg-[var(--bg-nav)] border border-[var(--border)] flex flex-col shadow-2xl overflow-hidden transition-all duration-200 ${panelMode}`}
+      style={panelStyle}
       role="dialog"
       aria-label="AI chat"
     >
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
+        <div
+          className={`ai-chat-header flex items-center justify-between px-4 py-3 border-b border-[var(--border)] flex-shrink-0 ${!docked && !fullscreen ? 'is-draggable' : ''}`}
+          onPointerDown={startMove}
+        >
           <div className="flex items-center gap-2">
-            <span className="text-[var(--accent)]">✦</span>
+            <span className="ai-chat-pulse text-[var(--accent)]">✦</span>
             <div className="min-w-0">
               <span className="block text-sm font-bold text-[var(--text-main)] uppercase tracking-wider leading-tight">AI Chat</span>
               <span className="block text-[10px] text-[var(--text-muted)] leading-tight">
-                {fullscreen ? 'Full screen' : docked ? 'Docked tool' : 'Integrated tool'}
+                {fullscreen ? 'Full screen' : docked ? 'Docked tool' : 'Drag to move'}
               </span>
             </div>
           </div>
@@ -1031,6 +1176,15 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
             />
           )}
         </div>
+        {!docked && !fullscreen && (
+          <button
+            type="button"
+            className="ai-resize-grip"
+            onPointerDown={startResize}
+            aria-label="Resize AI chat"
+            title="Resize"
+          />
+        )}
       </div>
   )
 }

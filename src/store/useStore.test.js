@@ -69,6 +69,31 @@ describe('localStorage persistence', () => {
     const stored = JSON.parse(localStorage.getItem('nf_characters'))
     expect(stored.some(c => c.name === 'Aragorn')).toBe(true)
   })
+
+  it('restores and clears timeline eras with imported project data', () => {
+    const { result } = renderHook(() => useStore(null))
+    const novel = { id: 'novel-1', title: 'Chronicle', type: 'novel' }
+    const era = { id: 'era-1', novelId: novel.id, name: 'Founding Age', startYear: 1, endYear: 99 }
+
+    act(() => {
+      result.current.importData({
+        novels: [novel],
+        activeNovelId: novel.id,
+        eras: [era],
+        timeline: [{ id: 'event-1', novelId: novel.id, title: 'First Gate', eraId: era.id }],
+      })
+    })
+
+    expect(result.current.eras).toEqual([era])
+    expect(JSON.parse(localStorage.getItem('nf_eras'))).toEqual([era])
+
+    act(() => {
+      result.current.clearData()
+    })
+
+    expect(result.current.eras).toEqual([])
+    expect(JSON.parse(localStorage.getItem('nf_eras'))).toEqual([])
+  })
 })
 
 // ─── ownership guard ─────────────────────────────────────────────────────────
