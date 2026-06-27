@@ -81,11 +81,15 @@ test.describe('Characters', () => {
 
     await page.locator('.studio-record', { hasText: charName }).first().click()
 
+    // Wait for the detail panel header to be visible (Edit button is always next to Delete)
+    const editBtn = page.locator('.studio-page-actions').getByRole('button', { name: 'Edit' })
+    await editBtn.waitFor({ state: 'visible', timeout: 5000 })
+
     // Mock confirm() so both delete dialogs return true without UI interaction
     await page.evaluate(() => { window.confirm = () => true })
-    await page.getByRole('button', { name: 'Delete' }).first().click()
+    // Scope Delete to the header actions to avoid any ambiguity
+    await page.locator('.studio-page-actions').getByRole('button', { name: 'Delete' }).click()
 
-    // Give extra time — deletion cascades through relationships and useEffect saves async
     await waitForStorage(page, (n) => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
       return !chars.some(c => c.name === n)
