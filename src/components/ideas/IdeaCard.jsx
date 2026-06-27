@@ -1,10 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 
-function truncate(str, len) {
-  if (!str) return ''
-  return str.length > len ? str.slice(0, len) + '…' : str
-}
-
 export default function IdeaCard({
   idea,
   isSelected,
@@ -43,8 +38,6 @@ export default function IdeaCard({
   const isAiExpanding = aiExpandId === idea.id
   const hasDesc = !!(idea.description || idea.body)
   const descText = idea.description || idea.body || ''
-  const PREVIEW_CHARS = 180
-  const isLongBody = descText.length > PREVIEW_CHARS + 20
   const hasLinks = (idea.linkedEntities || []).length > 0
   const isConverted = !!idea.convertedTo
   const isArchived = idea.status === 'archived'

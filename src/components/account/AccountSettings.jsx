@@ -344,6 +344,7 @@ function AppearancePanel({ user, updateProfile }) {
     setTheme(getAccountTheme(user))
     setCustomColors(getAccountCustomColors(user))
     setThemeTuning(getAccountThemeTuning(user))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     user?.id,
     user?.user_metadata?.theme,

@@ -174,8 +174,8 @@ const CONTENT = {
   },
 }
 
-export const LEGAL_PAGES = Object.keys(CONTENT)
-export const LEGAL_LABELS = {
+const LEGAL_PAGES = Object.keys(CONTENT)
+const LEGAL_LABELS = {
   privacy: 'Privacy Policy',
   terms: 'Terms of Service',
   ethics: 'Ethics Statement',

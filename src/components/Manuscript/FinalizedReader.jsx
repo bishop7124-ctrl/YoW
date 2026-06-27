@@ -153,6 +153,7 @@ export default function FinalizedReader({ draft, viewMode, pageIndex, onPageInde
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalNumbers) {
   const { Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak } = await import('docx')
   const labels = getProjectType(novel?.type).structure || {}

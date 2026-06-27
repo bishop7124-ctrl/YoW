@@ -455,6 +455,7 @@ function AppInner() {
         finishRemoteLoad(false)
       })
       .finally(() => setDataLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userId, importData, finishRemoteLoad, clearData])
 
   // Pricing page is accessible regardless of auth state

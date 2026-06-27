@@ -443,9 +443,8 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
   )
 }
 
-// ─── Detail panel (legacy, kept for reference) ────────────────────────────────
-
-function IdeaDetailPanel({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
+// eslint-disable-next-line no-unused-vars
+function _IdeaDetailPanel({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
   const [descDraft, setDescDraft] = useState(idea.description || idea.body || '')
   const [editingDesc, setEditingDesc] = useState(false)
   const [linkSearch, setLinkSearch] = useState('')
@@ -1228,7 +1227,6 @@ export default function IdeasKanban({ store }) {
 
   // ── Derived ──────────────────────────────────────────────────────────────────
 
-  const selectedIdea = selectedId ? ideas.find(i => i.id === selectedId) ?? null : null
   const editingIdea = editingId ? ideas.find(i => i.id === editingId) ?? null : null
   const convertIdea = convertId ? ideas.find(i => i.id === convertId) ?? null : null
   const visibleStatuses = showArchived ? KANBAN_STATUSES : KANBAN_STATUSES.filter(s => s.id !== 'archived')

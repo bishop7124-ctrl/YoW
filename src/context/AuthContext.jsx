@@ -111,7 +111,6 @@ export function AuthProvider({ children }) {
   const resetPassword = OFFLINE_MODE
     ? () => Promise.resolve({ data: null, error: null })
     : async (email) => {
-        const { data: { session } } = await supabase.auth.getSession()
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-reset-email`, {
           method: 'POST',
           headers: {

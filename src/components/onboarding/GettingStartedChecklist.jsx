@@ -10,6 +10,7 @@ function CheckIcon({ done }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function buildMilestones({ allProjectStats, characters, loreEntries, locations, hasExported, onCreateProject }) {
   return [
     {

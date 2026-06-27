@@ -213,7 +213,7 @@ const getLocalSnapshot = () => ({
   comicPanels: load('nf_comicPanels', []),
 })
 
-const buildAppDataPayload = (data) => ({
+const _buildAppDataPayload = (data) => ({
   novels: data.novels ?? [],
   characters: data.characters ?? [],
   factions: data.factions ?? [],
