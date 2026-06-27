@@ -475,7 +475,7 @@ export function useStore(userId = null, options = {}) {
       upsertItems('comic_panels', userId, snapshot.comicPanels ?? []).catch(console.error)
       upsertItems('eras', userId, snapshot.eras ?? []).catch(console.error)
       saveUserSettings(userId, { activeNovelId: snapshot.activeNovelId ?? null, currentYear: snapshot.currentYear ?? 0, activeMapByNovel: snapshot.activeMapByNovel ?? {} }).catch(console.error)
-      ;(snapshot.scenes ?? []).forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+      upsertItems('scenes', userId, snapshot.scenes ?? []).catch(console.error)
     }
     markLocalOwner(userId)
 
@@ -560,7 +560,7 @@ export function useStore(userId = null, options = {}) {
       upsertItems('comic_panels', userId, data.comicPanels ?? []).catch(console.error)
       upsertItems('eras', userId, data.eras ?? []).catch(console.error)
       saveUserSettings(userId, { activeNovelId: data.activeNovelId ?? null, currentYear: data.currentYear ?? 0, activeMapByNovel: data.activeMapByNovel ?? {} }).catch(console.error)
-      ;(data.scenes ?? []).forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+      upsertItems('scenes', userId, data.scenes ?? []).catch(console.error)
     }, 700)
   }, [importData, userId, canSyncCloud])
 

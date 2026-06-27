@@ -107,9 +107,9 @@ export async function upsertItems(table, userId, items) {
 
   // scenes uses scene_id (legacy schema kept intact)
   if (table === 'scenes') {
-    await Promise.all(items.map(item =>
-      supabase.from('scenes').upsert({ user_id: userId, scene_id: item.id, data: item })
-    ))
+    const rows = items.map(item => ({ user_id: userId, scene_id: item.id, data: item }))
+    const { error } = await supabase.from('scenes').upsert(rows)
+    if (error) console.error('[sync] upsert error for scenes:', error)
     return
   }
 

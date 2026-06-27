@@ -19,7 +19,7 @@ function placeTip(vpW, vpH) {
   }
 }
 
-export default function OnboardingTour({ steps, onFinish, onSkip }) {
+export default function OnboardingTour({ steps, onFinish, onSkip, onDisableTours }) {
   const [idx, setIdx] = useState(0)
   const [rect, setRect] = useState(null)
   const [vpW, setVpW] = useState(window.innerWidth)
@@ -103,6 +103,11 @@ export default function OnboardingTour({ steps, onFinish, onSkip }) {
         </div>
         <h3 className="tour-tip-title">{step.title}</h3>
         <p className="tour-tip-body">{step.body}</p>
+        {onDisableTours && (
+          <button className="tour-disable" type="button" onClick={onDisableTours}>
+            Turn off all tours
+          </button>
+        )}
         <div className="tour-tip-footer">
           <div className="tour-dots">
             {steps.map((_, i) => (

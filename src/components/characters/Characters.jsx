@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Modal from '../shared/Modal'
 import { FACTION_ICONS } from '../../constants/factionIcons'
-import { REL_TYPES } from '../../constants/Constants'
+import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } from '../../constants/Constants'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { allRefsFor } from '../../utils/worldLinks'
 import CharacterJourney from './CharacterJourney'
@@ -441,7 +441,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   const addRelationship = () => {
     setForm(prev => ({
       ...prev,
-      relationships: [...prev.relationships, { targetId: '', type: 'ally' }],
+      relationships: [...prev.relationships, { targetId: '', type: DEFAULT_CHARACTER_LINK_REL_TYPE }],
     }))
   }
 
@@ -702,7 +702,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                   <ComboSelect
                     value={rel.type}
                     onChange={v => upsertRelationship(index, { type: v })}
-                    options={REL_TYPES.filter(t => !t.structural).map(t => ({ value: t.id, label: t.label }))}
+                    options={CHARACTER_LINK_REL_TYPES.map(t => ({ value: t.id, label: t.label }))}
                     placeholder="Relationship type"
                   />
                   <button type="button" onClick={() => removeRelationship(index)} className="px-3 text-red-400 hover:text-red-300">✕</button>

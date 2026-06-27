@@ -1130,7 +1130,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
   )
 }
 
-export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership, tourStore }) {
+export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership, tourStore, suppressAutoTour = false }) {
   const [libraryTourOpen, setLibraryTourOpen] = useState(false)
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -1147,10 +1147,10 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
 
   // Auto-show library tour on first visit
   useEffect(() => {
-    if (!tourStore || !tourStore.toursEnabled || tourStore.isTourComplete('library')) return
+    if (suppressAutoTour || !tourStore || !tourStore.toursEnabled || tourStore.isTourComplete('library')) return
     const t = setTimeout(() => setLibraryTourOpen(true), 500)
     return () => clearTimeout(t)
-  }, [tourStore?.toursEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [suppressAutoTour, tourStore?.toursEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showImportMenu) return

@@ -88,7 +88,15 @@ export function AuthProvider({ children }) {
 
   const signOut = OFFLINE_MODE
     ? () => { setUser(null); return Promise.resolve() }
-    : () => supabase.auth.signOut()
+    : async () => {
+        const { error } = await supabase.auth.signOut().catch(() => ({ error: true }))
+        if (error) {
+          // Network timeout or error — clear session locally so the UI still signs out
+          const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+          if (storageKey) localStorage.removeItem(storageKey)
+          setUser(null)
+        }
+      }
 
   const resetPassword = OFFLINE_MODE
     ? () => Promise.resolve({ data: null, error: null })

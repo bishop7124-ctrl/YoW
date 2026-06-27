@@ -15168,13 +15168,14 @@ body {
 
 .overview-nav {
   display: grid;
-  grid-template-columns: repeat(6, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 12px;
   padding: 0;
 }
 
 .overview-nav-card {
   position: relative;
+  min-width: 0;
   min-height: 168px;
   align-content: start;
   grid-template-columns: auto minmax(0, 1fr);
@@ -15219,11 +15220,17 @@ body {
 
 .overview-nav-card-label {
   min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 3px;
 }
 
 .overview-nav-card-label span {
+  max-width: 100%;
   font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
 .overview-nav-card-label small,
@@ -15231,6 +15238,14 @@ body {
 .overview-nav-card-cta {
   letter-spacing: 0;
   text-transform: none;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.overview-nav-card-label small {
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .overview-nav-card-summary {
@@ -18180,6 +18195,26 @@ body {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.55;
+}
+
+.tour-disable {
+  width: 100%;
+  margin-top: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.tour-disable:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-fade);
+  color: var(--text-main);
 }
 
 .tour-tip-footer {

@@ -23,6 +23,8 @@ export function useTourStore() {
   return {
     toursEnabled:      state.toursEnabled !== false,
     setToursEnabled:   (enabled) => set('toursEnabled', !!enabled),
+    welcomeShown:      (userId = 'local') => !!state[`welcome_${userId || 'local'}`],
+    markWelcomeShown:  (userId = 'local') => set(`welcome_${userId || 'local'}`, true),
     wizardShown:      !!state.wizardShown,
     markWizardShown:  () => set('wizardShown', true),
     checklistDismissed: !!state.checklistDismissed,

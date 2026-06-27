@@ -2,6 +2,24 @@
 // Each step: { target: string (data-tour attr), title: string, body: string }
 // target can be null for a centered tip with no spotlight.
 
+export const WELCOME_TOUR = [
+  {
+    target: null,
+    title: 'Welcome to YOW',
+    body: 'This is your private workspace for shaping worlds, drafting stories, and keeping the important details close at hand.',
+  },
+  {
+    target: null,
+    title: 'Tours will appear as you explore',
+    body: 'Short guided tours will introduce the library, manuscript editor, characters, lore, maps, and other tools the first time you visit them.',
+  },
+  {
+    target: null,
+    title: 'You stay in control',
+    body: 'You can skip any tour, replay tours from the question-mark buttons, or turn all guided tours off now or later in Account Settings.',
+  },
+]
+
 export const LIBRARY_TOUR = [
   {
     target: 'library-top-bar',

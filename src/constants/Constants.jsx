@@ -73,5 +73,26 @@ export const REL_TYPES = [
   },
 ];
 
+export const FAMILY_RELATIONSHIP_TYPE_IDS = new Set([
+  "spouse",
+  "parent",
+  "child",
+  "sibling",
+  "cousin",
+  "auntuncle",
+  "grandparent",
+]);
+
 export const getRelType = (id) =>
   REL_TYPES.find((r) => r.id === id) ?? REL_TYPES[0];
+
+export const isCharacterLinkRelType = (id) =>
+  Boolean(id) &&
+  !FAMILY_RELATIONSHIP_TYPE_IDS.has(id) &&
+  !getRelType(id).structural;
+
+export const CHARACTER_LINK_REL_TYPES = REL_TYPES.filter((type) =>
+  isCharacterLinkRelType(type.id)
+);
+
+export const DEFAULT_CHARACTER_LINK_REL_TYPE = "friend";

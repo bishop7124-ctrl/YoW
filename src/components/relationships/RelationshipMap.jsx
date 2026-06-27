@@ -1,16 +1,11 @@
 import { useMemo, useState } from 'react'
-import { getRelType, REL_TYPES } from '../../constants/Constants'
-
-const FAMILY_RELATIONSHIP_TYPES = new Set([
-  'spouse', 'parent', 'child', 'sibling', 'cousin', 'auntuncle', 'grandparent',
-])
+import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType, isCharacterLinkRelType } from '../../constants/Constants'
 
 const toArray = value => Array.isArray(value) ? value : []
 
 const isSocialRelationship = relationship => (
   Boolean(relationship?.targetId)
-  && !FAMILY_RELATIONSHIP_TYPES.has(relationship.type)
-  && !getRelType(relationship.type).structural
+  && isCharacterLinkRelType(relationship.type)
 )
 
 const getFocalConnections = (characters, focalId) => {
@@ -65,7 +60,7 @@ function CharacterAvatar({ character, size = 62 }) {
 export default function RelationshipMap({ store }) {
   const { characters, selectedCharacterId, setSelectedCharacterId, saveCharacter } = store
   const [targetId, setTargetId] = useState('')
-  const [relationshipType, setRelationshipType] = useState('friend')
+  const [relationshipType, setRelationshipType] = useState(DEFAULT_CHARACTER_LINK_REL_TYPE)
 
   const focalCharacter = characters.find(character => character.id === selectedCharacterId) || characters[0] || null
   const connections = useMemo(
@@ -98,7 +93,6 @@ export default function RelationshipMap({ store }) {
         .filter(connection => connection.character.id !== focalCharacter?.id),
     ]))
   }, [characters, focalCharacter?.id, networkNodes])
-  const socialTypes = REL_TYPES.filter(type => !FAMILY_RELATIONSHIP_TYPES.has(type.id) && !type.structural)
   const connectedIds = new Set(connections.map(connection => connection.character.id))
   const availableTargets = characters.filter(character => character.id !== focalCharacter?.id && !connectedIds.has(character.id))
 
@@ -228,7 +222,7 @@ export default function RelationshipMap({ store }) {
                   {availableTargets.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
                 </select>
                 <select value={relationshipType} onChange={event => setRelationshipType(event.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2 text-xs text-[var(--text-main)]">
-                  {socialTypes.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
+                  {CHARACTER_LINK_REL_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
                 </select>
                 <button disabled={!targetId} onClick={addConnection} className="w-full bg-[var(--accent)] disabled:opacity-40 text-[var(--bg-main)] text-xs font-bold py-2 rounded-lg">Add Connection</button>
               </div>

@@ -17,7 +17,9 @@ import AboutPage from './components/about/AboutPage'
 import YOWLogo from './components/brand/YOWLogo'
 import FreeProjectSelector from './components/account/FreeProjectSelector'
 import WelcomeWizard from './components/onboarding/WelcomeWizard'
+import OnboardingTour from './components/onboarding/OnboardingTour'
 import { useTourStore } from './components/onboarding/useTourStore'
+import { WELCOME_TOUR } from './components/onboarding/tourDefinitions'
 import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
 import FAQPage from './components/faq/FAQPage'
@@ -736,11 +738,25 @@ function AppInner() {
     )
   }
 
-  const isFirstRun = !tourStore.wizardShown && store.novels.length === 0 && !dataLoading
+  const showWelcomeTour = user && tourStore.toursEnabled && !tourStore.welcomeShown(userId) && !dataLoading
+  const closeWelcomeTour = () => tourStore.markWelcomeShown(userId)
+  const disableWelcomeTours = () => {
+    tourStore.setToursEnabled(false)
+    tourStore.markWelcomeShown(userId)
+  }
+  const isFirstRun = !showWelcomeTour && !tourStore.wizardShown && store.novels.length === 0 && !dataLoading
 
   return (
     <>
-      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} />
+      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} suppressAutoTour={showWelcomeTour} />
+      {showWelcomeTour && (
+        <OnboardingTour
+          steps={WELCOME_TOUR}
+          onFinish={closeWelcomeTour}
+          onSkip={closeWelcomeTour}
+          onDisableTours={disableWelcomeTours}
+        />
+      )}
       {isFirstRun && (
         <WelcomeWizard
           store={store}
