@@ -200,8 +200,12 @@ function AppInner() {
   const [readOnlyNotice, setReadOnlyNotice] = useState(null)
   const [emailConfirmed, setEmailConfirmed] = useState(() => {
     const hash = window.location.hash
-    if (!hash.includes('type=signup') && !hash.includes('type=email_change')) return false
-    history.replaceState(null, '', window.location.pathname + window.location.search)
+    const search = window.location.search
+    const isConfirmation =
+      hash.includes('type=signup') || hash.includes('type=email_change') ||
+      search.includes('type=signup') || search.includes('type=email_change')
+    if (!isConfirmation) return false
+    history.replaceState(null, '', window.location.pathname)
     return true
   })
   const [freeProjectBusy, setFreeProjectBusy] = useState(false)
