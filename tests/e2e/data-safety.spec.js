@@ -19,14 +19,12 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
   const novels = await readStorage(page, 'nf_novels')
   const projectId = novels[0].id
 
-  await page.getByRole('button', { name: 'Project settings' }).click()
-  const deleteBtn = page.getByRole('button', { name: /Delete project|Delete/i }).last()
-  await deleteBtn.click()
-
-  const confirmBtn = page.getByRole('button', { name: /Confirm|Yes, delete|Delete/i }).first()
-  if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await confirmBtn.click()
-  }
+  // Delete is in the project manager card settings, not the studio panel
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  // Click the gear icon on the project card (aria-label="Project settings")
+  await page.locator('.dash-card-settings-button').first().click()
+  // Inside the EditProjectModal, click "Delete project"
+  await page.getByRole('button', { name: 'Delete project' }).click()
 
   await waitForStorage(page, () => {
     const storedNovels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
@@ -50,9 +48,9 @@ test('deleting a character removes it from relationship lists', async ({ page })
 
   // Create two characters
   for (const name of ['Alice', 'Bob']) {
-    await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-    await page.getByPlaceholder(/name/i).first().fill(name)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.getByRole('button', { name: 'Save Character' }).click()
     await waitForStorage(page, () => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
       return chars.some(c => c.name === name)
@@ -61,7 +59,7 @@ test('deleting a character removes it from relationship lists', async ({ page })
 
   // Delete Alice
   await page.getByText('Alice').first().click()
-  await page.getByRole('button', { name: /Delete|Remove/i }).first().click()
+  await page.getByRole('button', { name: /Delete/i }).first().click()
   const confirmBtn = page.getByRole('button', { name: /Confirm|Yes|Delete/i }).first()
   if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await confirmBtn.click()
@@ -97,9 +95,9 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   // Create project A and add a character
   await createProject(page, { title: titleA })
   await page.getByRole('button', { name: /Characters/i }).first().click()
-  await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-  await page.getByPlaceholder(/name/i).first().fill('Project A Character')
-  await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+  await page.getByRole('button', { name: 'New' }).first().click()
+  await page.getByLabel(/^Name$/i).first().fill('Project A Character')
+  await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
     return chars.some(c => c.name === 'Project A Character')
@@ -111,9 +109,9 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await createProject(page, { title: titleB })
   await page.getByRole('button', { name: /Characters/i }).first().click()
-  await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-  await page.getByPlaceholder(/name/i).first().fill('Project B Character')
-  await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+  await page.getByRole('button', { name: 'New' }).first().click()
+  await page.getByLabel(/^Name$/i).first().fill('Project B Character')
+  await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
     return chars.some(c => c.name === 'Project B Character')
@@ -217,15 +215,15 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
 
   // Add a character
   await page.getByRole('button', { name: /Characters/i }).first().click()
-  await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-  await page.getByPlaceholder(/name/i).first().fill('Restore Test Character')
-  await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+  await page.getByRole('button', { name: 'New' }).first().click()
+  await page.getByLabel(/^Name$/i).first().fill('Restore Test Character')
+  await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
     return chars.some(c => c.name === 'Restore Test Character')
   })
 
-  // Export
+  // Export via the studio project settings panel (which has the Backup zip button)
   await page.getByRole('button', { name: 'Project settings' }).click()
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: /Backup zip/i }).click()
@@ -233,14 +231,10 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   const zipPath = await download.path()
   await page.getByRole('button', { name: 'Done' }).click()
 
-  // Delete the project
-  await page.getByRole('button', { name: 'Project settings' }).click()
-  const deleteBtn = page.getByRole('button', { name: /Delete project|Delete/i }).last()
-  await deleteBtn.click()
-  const confirmBtn = page.getByRole('button', { name: /Confirm|Yes, delete|Delete/i }).first()
-  if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await confirmBtn.click()
-  }
+  // Delete via project manager card settings (the only place with "Delete project")
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await page.locator('.dash-card-settings-button').first().click()
+  await page.getByRole('button', { name: 'Delete project' }).click()
   await waitForStorage(page, () => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
     return !novels.some(n => n.title === title)
