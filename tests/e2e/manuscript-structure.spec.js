@@ -30,17 +30,17 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
 test('rename a scene and verify it persists', async ({ page }) => {
   const newName = `Renamed Scene ${Date.now()}`
 
-  // Click the scene in the sidebar to select it and open the scene editor
-  await page.locator('.ms-sidebar-scene-btn').first().click()
+  // Click the ms-preview area to focus the scene (sets focused=true, shows scene header)
+  await page.locator('.ms-preview').first().click()
 
-  // The scene header appears on focus — click the title button to activate inline edit
+  // Scene header is now is-visible — click the title button to open inline edit
   const titleBtn = page.locator('.ms-scene-header button[title="Click to rename scene"]').first()
-  await titleBtn.waitFor({ timeout: 5000 })
+  await titleBtn.waitFor({ state: 'visible', timeout: 5000 })
   await titleBtn.click()
 
-  // Fill the inline input that replaces the title button
+  // Fill the inline input and commit with Enter
   const renameInput = page.locator('.ms-scene-header input').first()
-  await renameInput.waitFor({ timeout: 3000 })
+  await renameInput.waitFor({ state: 'visible', timeout: 3000 })
   await renameInput.fill(newName)
   await renameInput.press('Enter')
 

@@ -26,10 +26,10 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
   // Inside the EditProjectModal, click "Delete project"
   await page.getByRole('button', { name: 'Delete project' }).click()
 
-  await waitForStorage(page, () => {
+  await waitForStorage(page, (id) => {
     const storedNovels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-    return !storedNovels.some(n => n.id === projectId)
-  })
+    return !storedNovels.some(n => n.id === id)
+  }, projectId)
 
   const acts = await readStorage(page, 'nf_acts')
   const chapters = await readStorage(page, 'nf_chapters')
@@ -49,7 +49,7 @@ test('deleting a character removes it from relationship lists', async ({ page })
   // Create two characters
   for (const name of ['Alice', 'Bob']) {
     await page.getByRole('button', { name: 'New' }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.locator('[role="dialog"] input[required]').first().fill(name)
     await page.getByRole('button', { name: 'Save Character' }).click()
     await waitForStorage(page, () => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -96,7 +96,7 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   await createProject(page, { title: titleA })
   await page.getByRole('button', { name: /Characters/i }).first().click()
   await page.getByRole('button', { name: 'New' }).first().click()
-  await page.getByLabel(/^Name$/i).first().fill('Project A Character')
+  await page.locator('[role="dialog"] input[required]').first().fill('Project A Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -110,7 +110,7 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   await createProject(page, { title: titleB })
   await page.getByRole('button', { name: /Characters/i }).first().click()
   await page.getByRole('button', { name: 'New' }).first().click()
-  await page.getByLabel(/^Name$/i).first().fill('Project B Character')
+  await page.locator('[role="dialog"] input[required]').first().fill('Project B Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -216,7 +216,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   // Add a character
   await page.getByRole('button', { name: /Characters/i }).first().click()
   await page.getByRole('button', { name: 'New' }).first().click()
-  await page.getByLabel(/^Name$/i).first().fill('Restore Test Character')
+  await page.locator('[role="dialog"] input[required]').first().fill('Restore Test Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
     const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')

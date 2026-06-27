@@ -24,8 +24,8 @@ test.describe('Characters', () => {
 
     // Button is labeled "New" (data-tour="characters-add")
     await page.getByRole('button', { name: 'New' }).first().click()
-    // Name field has a label "Name" but no placeholder — use getByLabel
-    await page.getByLabel(/^Name$/i).first().fill(name)
+    // Name field has a label but no `for` attr — scope to the dialog's first required input
+    await page.locator('[role="dialog"] input[required]').first().fill(name)
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
@@ -43,7 +43,7 @@ test.describe('Characters', () => {
     const updatedName = `Updated ${Date.now()}`
 
     await page.getByRole('button', { name: 'New' }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(originalName)
+    await page.locator('[role="dialog"] input[required]').first().fill(originalName)
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
@@ -54,7 +54,7 @@ test.describe('Characters', () => {
     // Click the character to select it, then click Edit
     await page.getByText(originalName).first().click()
     await page.getByRole('button', { name: /^Edit$/i }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(updatedName)
+    await page.locator('[role="dialog"] input[required]').first().fill(updatedName)
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
@@ -72,7 +72,7 @@ test.describe('Characters', () => {
     const name = `Delete Me ${Date.now()}`
 
     await page.getByRole('button', { name: 'New' }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.locator('[role="dialog"] input[required]').first().fill(name)
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
@@ -104,7 +104,7 @@ test.describe('Characters', () => {
 
     for (const name of [nameA, nameB]) {
       await page.getByRole('button', { name: 'New' }).first().click()
-      await page.getByLabel(/^Name$/i).first().fill(name)
+      await page.locator('[role="dialog"] input[required]').first().fill(name)
       await page.getByRole('button', { name: 'Save Character' }).click()
       await waitForStorage(page, () => {
         const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -136,7 +136,7 @@ test.describe('Locations', () => {
     const name = `Location ${Date.now()}`
 
     await page.getByRole('button', { name: 'New' }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.locator('[role="dialog"] input[required]').first().fill(name)
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
@@ -154,7 +154,7 @@ test.describe('Locations', () => {
     const updated = `Loc Updated ${Date.now()}`
 
     await page.getByRole('button', { name: 'New' }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(original)
+    await page.locator('[role="dialog"] input[required]').first().fill(original)
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
@@ -164,7 +164,7 @@ test.describe('Locations', () => {
 
     await page.getByText(original).first().click()
     await page.getByRole('button', { name: /^Edit$/i }).first().click()
-    await page.getByLabel(/^Name$/i).first().fill(updated)
+    await page.locator('[role="dialog"] input[required]').first().fill(updated)
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
@@ -224,7 +224,7 @@ test.describe('Timeline', () => {
 
     await page.getByRole('button', { name: 'New Event' }).click()
     // Title field is labeled "Title *" with no placeholder
-    await page.getByLabel(/^Title/i).first().fill(eventTitle)
+    await page.locator('[role="dialog"] input[required]').first().fill(eventTitle)
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
