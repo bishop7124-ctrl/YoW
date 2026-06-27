@@ -111,8 +111,10 @@ export async function writeInDefaultScene(page, text) {
 }
 
 // Poll localStorage until predicate returns truthy, or throw on timeout.
-export async function waitForStorage(page, predicate, timeout = 8000) {
-  await page.waitForFunction(predicate, undefined, { timeout })
+// Pass `arg` as the third param to forward a value into the browser predicate.
+export async function waitForStorage(page, predicate, arg, timeout = 8000) {
+  if (typeof arg === 'number') { timeout = arg; arg = undefined }
+  await page.waitForFunction(predicate, arg, { timeout })
 }
 
 // Read a localStorage key and JSON-parse it.

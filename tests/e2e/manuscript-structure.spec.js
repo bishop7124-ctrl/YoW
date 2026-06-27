@@ -45,14 +45,15 @@ test('rename a scene and verify it persists', async ({ page }) => {
     await titleField.press('Tab')
   }
 
-  await waitForStorage(page, () => {
+  const prefix = newName.slice(0, 15)
+  await waitForStorage(page, (p) => {
     const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
-    return scenes.some(s => s.title === newName || (s.title || '').includes(newName.slice(0, 15)))
-  })
+    return scenes.some(s => (s.title || '').includes(p))
+  }, prefix)
 
   await page.reload()
   const scenes = await readStorage(page, 'nf_scenes')
-  expect(scenes.some(s => (s.title || '').includes(newName.slice(0, 15)))).toBe(true)
+  expect(scenes.some(s => (s.title || '').includes(prefix))).toBe(true)
 })
 
 test('word count updates when content is added', async ({ page }) => {

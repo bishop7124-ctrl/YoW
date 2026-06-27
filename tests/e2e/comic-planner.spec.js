@@ -220,8 +220,10 @@ test('prose project does not show Comic Planner UI', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Write' }).click()
 
-  // The normal prose editor should appear, not the comic planner
-  await expect(page.getByPlaceholder('Begin writing here…')).toBeVisible({ timeout: 8000 })
-  const comicUi = page.locator('.comic-planner, [data-tour*="comic"]').first()
+  // Wait for the manuscript editor to mount
+  await page.locator('[data-tour="manuscript-editor"]').waitFor({ timeout: 8000 })
+
+  // The comic planner UI must not be visible in a prose project
+  const comicUi = page.locator('[data-tour*="comic"], .cp-page-list, .cp-issue-panel').first()
   await expect(comicUi).not.toBeVisible()
 })
