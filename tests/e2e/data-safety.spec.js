@@ -20,7 +20,7 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
   const projectId = novels[0].id
 
   // Accept the native confirm() dialog that fires on delete
-  page.on('dialog', async (dialog) => { await dialog.accept() })
+  await page.evaluate(() => { window.confirm = () => true })
 
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await page.locator('.dash-card-settings-button').first().click()
@@ -60,7 +60,7 @@ test('deleting a character removes it from relationship lists', async ({ page })
   await page.locator('.studio-record', { hasText: 'Alice' }).first().click()
 
   // Character delete fires two confirm() dialogs — accept both
-  page.on('dialog', async (dialog) => { await dialog.accept() })
+  await page.evaluate(() => { window.confirm = () => true })
   await page.getByRole('button', { name: /Delete/i }).first().click()
 
   await waitForStorage(page, () => {
@@ -190,7 +190,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await page.getByRole('button', { name: 'Done' }).click()
 
   // Delete via project manager — accept the confirm() dialog
-  page.on('dialog', async (dialog) => { await dialog.accept() })
+  await page.evaluate(() => { window.confirm = () => true })
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await page.locator('.dash-card-settings-button').first().click()
   await page.getByRole('button', { name: 'Delete project' }).click()

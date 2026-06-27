@@ -81,9 +81,8 @@ test.describe('Characters', () => {
 
     await page.locator('.studio-record', { hasText: charName }).first().click()
 
-    // Character delete fires two native confirm() dialogs — accept both
-    page.on('dialog', async (dialog) => { await dialog.accept() })
-    // Use exact text match to avoid hitting other Delete buttons
+    // Mock confirm() so both delete dialogs return true without UI interaction
+    await page.evaluate(() => { window.confirm = () => true })
     await page.getByRole('button', { name: 'Delete' }).first().click()
 
     // Give extra time — deletion cascades through relationships and useEffect saves async
