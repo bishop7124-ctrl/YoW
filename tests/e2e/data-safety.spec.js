@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readStorage,
+  createProject, dismissLaunchPrompts, openImportZip, readStorage,
   seedCleanStorage, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
@@ -146,8 +146,8 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
   await page.reload()
   await expect(page.getByRole('button', { name: 'New Project' }).first()).toBeVisible({ timeout: 10_000 })
 
-  // Navigate directly to the stress project URL rather than clicking a card
-  await page.goto('/project/stress-novel-0')
+  // Click the first project card (role="button" with class project-dash-card)
+  await page.locator('.project-dash-card').first().click()
   await expect(page).toHaveURL(/\/project\//, { timeout: 10_000 })
 
   await page.getByRole('button', { name: 'Write' }).click()
@@ -207,9 +207,11 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
     return !novels.some(n => n.title === t)
   }, projectTitle)
 
-  // Restore from ZIP
+  // Restore from ZIP via the Import ZIP flow
   await page.goto('/')
-  await page.locator('input[type="file"][accept=".zip"]').setInputFiles(zipPath)
+  await dismissLaunchPrompts(page)
+  const fileInput = await openImportZip(page)
+  await fileInput.setInputFiles(zipPath)
 
   await waitForStorage(page, (t) => {
     const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')

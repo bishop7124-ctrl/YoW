@@ -51,7 +51,7 @@ test.describe('Characters', () => {
       return chars.some(c => c.name === n)
     }, originalName)
 
-    await page.getByText(originalName).first().click()
+    await page.locator('.studio-record', { hasText: originalName }).first().click()
     await page.getByRole('button', { name: /^Edit$/i }).first().click()
     await page.locator('[role="dialog"] input[required]').first().fill(updatedName)
     await page.getByRole('button', { name: 'Save Character' }).click()
@@ -79,13 +79,11 @@ test.describe('Characters', () => {
       return chars.some(c => c.name === n)
     }, charName)
 
-    await page.getByText(charName).first().click()
-    await page.getByRole('button', { name: /Delete/i }).first().click()
+    await page.locator('.studio-record', { hasText: charName }).first().click()
 
-    const confirmBtn = page.getByRole('button', { name: /Confirm|Yes|Delete/i }).first()
-    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await confirmBtn.click()
-    }
+    // Character delete fires two native confirm() dialogs — accept both
+    page.on('dialog', dialog => dialog.accept())
+    await page.getByRole('button', { name: /Delete/i }).first().click()
 
     await waitForStorage(page, (n) => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -118,8 +116,8 @@ test.describe('Characters', () => {
     }
 
     await searchBox.fill('Alpha')
-    await expect(page.getByText(nameA)).toBeVisible()
-    await expect(page.getByText(nameB)).not.toBeVisible()
+    await expect(page.locator('.studio-record', { hasText: nameA }).first()).toBeVisible()
+    await expect(page.locator('.studio-record', { hasText: nameB }).first()).not.toBeVisible()
   })
 })
 
@@ -162,7 +160,7 @@ test.describe('Locations', () => {
       return locs.some(l => l.name === n)
     }, original)
 
-    await page.getByText(original).first().click()
+    await page.locator('.studio-record', { hasText: original }).first().click()
     await page.getByRole('button', { name: /^Edit$/i }).first().click()
     await page.locator('[role="dialog"] input[required]').first().fill(updated)
     await page.getByRole('button', { name: 'Save' }).click()
