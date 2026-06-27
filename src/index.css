@@ -4164,7 +4164,7 @@ textarea:focus {
 
 .yow-home-copy {
   text-align: center;
-  text-shadow: 0 2px 24px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.35);
+  text-shadow: none;
 }
 
 .yow-home-copy h1 {
@@ -9310,6 +9310,14 @@ body {
   opacity: .8;
 }
 
+.membership-toast--success {
+  border-color: rgba(52,211,153,.32);
+  color: #6ee7b7;
+}
+.membership-toast--success .membership-toast-link {
+  color: #6ee7b7;
+}
+
 .membership-toast-link {
   align-self: flex-start;
   background: none;
@@ -10473,7 +10481,7 @@ body {
   cursor: pointer;
 }
 
-.active-project-command:hover .active-project-command-main,
+.active-project-command:hover:not(:has(.active-project-command-snapshot:hover)) .active-project-command-main,
 .active-project-command:focus-within .active-project-command-main {
   border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
 }
@@ -10568,7 +10576,7 @@ body {
   transition: opacity .16s ease, transform .16s ease;
 }
 
-.active-project-command:hover .active-project-command-cue,
+.active-project-command:hover:not(:has(.active-project-command-snapshot:hover)) .active-project-command-cue,
 .active-project-command:focus-within .active-project-command-cue {
   opacity: 1;
   transform: translateY(0);

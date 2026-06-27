@@ -198,6 +198,12 @@ function AppInner() {
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(() => initialRouteSnapshot.projectSettingsOpen)
   const [helpOpen, setHelpOpen] = useState(false)
   const [readOnlyNotice, setReadOnlyNotice] = useState(null)
+  const [emailConfirmed, setEmailConfirmed] = useState(() => {
+    const hash = window.location.hash
+    if (!hash.includes('type=signup') && !hash.includes('type=email_change')) return false
+    history.replaceState(null, '', window.location.pathname + window.location.search)
+    return true
+  })
   const [freeProjectBusy, setFreeProjectBusy] = useState(false)
   const [legalPage, setLegalPage] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -588,6 +594,14 @@ function AppInner() {
         tourStore={tourStore}
       />
       <HelpContact open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {emailConfirmed && (
+        <div role="status" className="membership-toast membership-toast--success">
+          <span>Email confirmed successfully. Welcome to Your Own World!</span>
+          <button type="button" className="membership-toast-link" onClick={() => setEmailConfirmed(false)}>
+            Dismiss
+          </button>
+        </div>
+      )}
       {readOnlyNotice && (
         <div role="alert" className="membership-toast">
           <span>{readOnlyNotice.msg}</span>
