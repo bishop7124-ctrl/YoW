@@ -76,6 +76,7 @@ export default function LoginPage({
   onOpenAbout,
   onNavigateHome,
   onAuthModeChange,
+  onSignedUp,
   recoveryMode,
   initialScreen = 'home',
   initialMode = 'login',
@@ -187,11 +188,16 @@ export default function LoginPage({
               ? 'An account with this email already exists. Try logging in instead.'
               : err.message
           )
+        } else if (data?.user && data.user.identities?.length === 0) {
+          // Supabase silently "succeeds" for existing emails when confirmation is on
+          setError('An account with this email already exists. Try logging in instead.')
         } else if (!data?.session) {
           // Email confirmation required — session won't exist until the link is clicked
           setSent(true)
+        } else {
+          // Auto-confirm: session created immediately — notify parent to show welcome toast
+          onSignedUp?.()
         }
-        // If session is already set (confirmation disabled), onAuthStateChange handles it
       }
     } catch (e) {
       setError(e.message || 'Something went wrong.')

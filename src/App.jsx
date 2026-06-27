@@ -561,6 +561,7 @@ function AppInner() {
           onOpenAbout={() => setAboutOpen(true)}
           onNavigateHome={() => navigatePublic('/')}
           onAuthModeChange={(mode) => navigatePublic(mode === 'signup' ? '/signup' : '/login')}
+          onSignedUp={() => setEmailConfirmed(true)}
           recoveryMode={recoveryMode}
           initialScreen={recoveryMode || authRouteMode || openLoginAfterSignOut ? 'auth' : 'home'}
           initialMode={authRouteMode || 'login'}

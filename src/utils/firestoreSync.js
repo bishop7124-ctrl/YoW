@@ -172,7 +172,18 @@ export async function deleteSceneDoc(userId, sceneId) {
 // Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
   if (OFFLINE_MODE) return
-  const allTables = [...USER_TABLES, ...NOVEL_TABLES, 'user_settings']
+  const allTables = [
+    ...USER_TABLES,
+    ...NOVEL_TABLES,
+    'user_settings',
+    'user_profiles',
+    'ai_findings',
+    'character_interviews',
+    'feedback',
+    // legacy pre-migration tables
+    'project_data',
+    'user_data',
+  ]
   await Promise.all(allTables.map(table =>
     supabase.from(table).delete().eq('user_id', userId)
   ))

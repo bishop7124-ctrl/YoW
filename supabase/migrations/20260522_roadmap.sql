@@ -14,10 +14,12 @@ create table if not exists public.roadmap_items (
 alter table public.roadmap_items enable row level security;
 
 -- Anyone (including logged-out visitors) can read the roadmap
+drop policy if exists "Public read roadmap" on public.roadmap_items;
 create policy "Public read roadmap" on public.roadmap_items
   for select using (true);
 
 -- Only users whose JWT app_metadata contains is_admin: true can write
+drop policy if exists "Admin write roadmap" on public.roadmap_items;
 create policy "Admin write roadmap" on public.roadmap_items
   for all using (
     coalesce((auth.jwt() -> 'app_metadata' ->> 'is_admin')::boolean, false)

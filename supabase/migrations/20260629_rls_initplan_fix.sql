@@ -10,7 +10,7 @@
 DROP POLICY IF EXISTS "Users can read own feedback" ON public.feedback;
 CREATE POLICY "Users can read own feedback"
   ON public.feedback FOR SELECT
-  USING ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text);
 
 -- ── roadmap_items ─────────────────────────────────────────────────────────────
 -- Drop both, then recreate write-only admin policy (fixes multiple_permissive_policies too)
@@ -37,137 +37,157 @@ CREATE POLICY "Admin delete roadmap" ON public.roadmap_items
 DROP POLICY IF EXISTS "Users read own profile" ON public.user_profiles;
 CREATE POLICY "Users read own profile"
   ON public.user_profiles FOR SELECT
-  USING ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text);
 
 -- ── ai_findings ───────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "Users manage own findings" ON public.ai_findings;
 CREATE POLICY "Users manage own findings"
   ON public.ai_findings
-  USING     ((select auth.uid()) = user_id)
-  WITH CHECK ((select auth.uid()) = user_id);
+  USING     ((select auth.uid())::text = user_id::text)
+  WITH CHECK ((select auth.uid())::text = user_id::text);
 
 -- ── character_interviews ──────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "Users manage own interviews" ON public.character_interviews;
 CREATE POLICY "Users manage own interviews"
   ON public.character_interviews
-  USING     ((select auth.uid()) = user_id)
-  WITH CHECK ((select auth.uid()) = user_id);
+  USING     ((select auth.uid())::text = user_id::text)
+  WITH CHECK ((select auth.uid())::text = user_id::text);
 
--- ── user_data (pre-migration table) ──────────────────────────────────────────
-DROP POLICY IF EXISTS "Users can access own data" ON public.user_data;
-CREATE POLICY "Users can access own data"
-  ON public.user_data
-  USING     ((select auth.uid()) = user_id)
-  WITH CHECK ((select auth.uid()) = user_id);
+-- ── user_data (pre-migration table, user_id is text) ─────────────────────────
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_data') THEN
+    DROP POLICY IF EXISTS "Users can access own data" ON public.user_data;
+    EXECUTE $p$
+      CREATE POLICY "Users can access own data"
+        ON public.user_data
+        USING     ((select auth.uid())::text = user_id::text)
+        WITH CHECK ((select auth.uid())::text = user_id::text)
+    $p$;
+  END IF;
+END $$;
 
 -- ── scenes (pre-migration table) ─────────────────────────────────────────────
-DROP POLICY IF EXISTS "Users can access own scenes" ON public.scenes;
-CREATE POLICY "Users can access own scenes"
-  ON public.scenes
-  USING     ((select auth.uid()) = user_id)
-  WITH CHECK ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'scenes') THEN
+    DROP POLICY IF EXISTS "Users can access own scenes" ON public.scenes;
+    EXECUTE $p$
+      CREATE POLICY "Users can access own scenes"
+        ON public.scenes
+        USING     ((select auth.uid())::text = user_id::text)
+        WITH CHECK ((select auth.uid())::text = user_id::text)
+    $p$;
+  END IF;
+END $$;
 
 -- ── project_data (pre-migration table) ───────────────────────────────────────
-DROP POLICY IF EXISTS "Users can read own project data"   ON public.project_data;
-DROP POLICY IF EXISTS "Users can insert own project data" ON public.project_data;
-DROP POLICY IF EXISTS "Users can update own project data" ON public.project_data;
-DROP POLICY IF EXISTS "Users can delete own project data" ON public.project_data;
-
-CREATE POLICY "Users can read own project data"
-  ON public.project_data FOR SELECT
-  USING ((select auth.uid()) = user_id);
-
-CREATE POLICY "Users can insert own project data"
-  ON public.project_data FOR INSERT
-  WITH CHECK ((select auth.uid()) = user_id);
-
-CREATE POLICY "Users can update own project data"
-  ON public.project_data FOR UPDATE
-  USING     ((select auth.uid()) = user_id)
-  WITH CHECK ((select auth.uid()) = user_id);
-
-CREATE POLICY "Users can delete own project data"
-  ON public.project_data FOR DELETE
-  USING ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'project_data') THEN
+    DROP POLICY IF EXISTS "Users can read own project data"   ON public.project_data;
+    DROP POLICY IF EXISTS "Users can insert own project data" ON public.project_data;
+    DROP POLICY IF EXISTS "Users can update own project data" ON public.project_data;
+    DROP POLICY IF EXISTS "Users can delete own project data" ON public.project_data;
+    EXECUTE $p$
+      CREATE POLICY "Users can read own project data"
+        ON public.project_data FOR SELECT
+        USING ((select auth.uid())::text = user_id::text)
+    $p$;
+    EXECUTE $p$
+      CREATE POLICY "Users can insert own project data"
+        ON public.project_data FOR INSERT
+        WITH CHECK ((select auth.uid())::text = user_id::text)
+    $p$;
+    EXECUTE $p$
+      CREATE POLICY "Users can update own project data"
+        ON public.project_data FOR UPDATE
+        USING     ((select auth.uid())::text = user_id::text)
+        WITH CHECK ((select auth.uid())::text = user_id::text)
+    $p$;
+    EXECUTE $p$
+      CREATE POLICY "Users can delete own project data"
+        ON public.project_data FOR DELETE
+        USING ((select auth.uid())::text = user_id::text)
+    $p$;
+  END IF;
+END $$;
 
 -- ── normalized_storage tables ─────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Users manage own novels" ON public.novels;
 CREATE POLICY "Users manage own novels" ON public.novels
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own series_items" ON public.series_items;
 CREATE POLICY "Users manage own series_items" ON public.series_items
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own characters" ON public.characters;
 CREATE POLICY "Users manage own characters" ON public.characters
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own factions" ON public.factions;
 CREATE POLICY "Users manage own factions" ON public.factions
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own locations" ON public.locations;
 CREATE POLICY "Users manage own locations" ON public.locations
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own timeline_events" ON public.timeline_events;
 CREATE POLICY "Users manage own timeline_events" ON public.timeline_events
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own world_history" ON public.world_history;
 CREATE POLICY "Users manage own world_history" ON public.world_history
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own acts" ON public.acts;
 CREATE POLICY "Users manage own acts" ON public.acts
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own chapters" ON public.chapters;
 CREATE POLICY "Users manage own chapters" ON public.chapters
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own scenes" ON public.scenes;
 CREATE POLICY "Users manage own scenes" ON public.scenes
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own lore_entries" ON public.lore_entries;
 CREATE POLICY "Users manage own lore_entries" ON public.lore_entries
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own idea_entries" ON public.idea_entries;
 CREATE POLICY "Users manage own idea_entries" ON public.idea_entries
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own maps_data" ON public.maps_data;
 CREATE POLICY "Users manage own maps_data" ON public.maps_data
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own whiteboards_data" ON public.whiteboards_data;
 CREATE POLICY "Users manage own whiteboards_data" ON public.whiteboards_data
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own story_schedule" ON public.story_schedule;
 CREATE POLICY "Users manage own story_schedule" ON public.story_schedule
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own rpg_characters" ON public.rpg_characters;
 CREATE POLICY "Users manage own rpg_characters" ON public.rpg_characters
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own comic_pages" ON public.comic_pages;
 CREATE POLICY "Users manage own comic_pages" ON public.comic_pages
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own comic_panels" ON public.comic_panels;
 CREATE POLICY "Users manage own comic_panels" ON public.comic_panels
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own eras" ON public.eras;
 CREATE POLICY "Users manage own eras" ON public.eras
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);
 
 DROP POLICY IF EXISTS "Users manage own settings" ON public.user_settings;
 CREATE POLICY "Users manage own settings" ON public.user_settings
-  USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+  USING ((select auth.uid())::text = user_id::text) WITH CHECK ((select auth.uid())::text = user_id::text);

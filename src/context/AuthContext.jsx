@@ -27,6 +27,14 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (OFFLINE_MODE) return
 
+    // Exchange PKCE code from email confirmation/magic links before reading session
+    const code = new URLSearchParams(window.location.search).get('code')
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code)
+        .then(() => window.history.replaceState({}, '', window.location.pathname))
+        .catch(console.warn)
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
     }).catch(console.warn)
@@ -41,6 +49,11 @@ export function AuthProvider({ children }) {
       } else {
         // Don't clear recoveryMode here — SIGNED_IN fires right after PASSWORD_RECOVERY
         setUser(session?.user ?? null)
+        // Fire welcome email after email confirmation is complete (PKCE flow)
+        if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at && session.user.id) {
+          const confirmedJustNow = new Date(session.user.email_confirmed_at) > new Date(Date.now() - 30_000)
+          if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email)
+        }
       }
     })
 
@@ -65,9 +78,6 @@ export function AuthProvider({ children }) {
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
     : async (email, password) => {
         const result = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/` } })
-        if (!result.error && result.data?.user?.id) {
-          sendWelcomeEmail(result.data.user.id, email)
-        }
         return result
       }
 
@@ -164,8 +174,9 @@ export function AuthProvider({ children }) {
         const currentUser = user
         if (!currentUser) throw new Error('No user is signed in.')
         await deleteAllUserData(currentUser.id)
-        // Attempt server-side auth deletion via RPC (requires a delete_user Postgres function)
-        try { await supabase.rpc('delete_user') } catch { /* no-op if function not installed */ }
+        // Attempt server-side auth deletion via RPC
+        const { error: rpcError } = await supabase.rpc('delete_user')
+        if (rpcError) throw new Error(`Account deletion failed: ${rpcError.message}`)
         await supabase.auth.signOut()
         setUser(null)
       }

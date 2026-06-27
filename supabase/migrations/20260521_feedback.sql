@@ -18,12 +18,14 @@ create table if not exists public.feedback (
 alter table public.feedback enable row level security;
 
 -- Anyone (logged in or anonymous) can insert
+drop policy if exists "Anyone can submit feedback" on public.feedback;
 create policy "Anyone can submit feedback"
   on public.feedback
   for insert
   with check (true);
 
 -- Authenticated users can read their own submissions
+drop policy if exists "Users can read own feedback" on public.feedback;
 create policy "Users can read own feedback"
   on public.feedback
   for select
