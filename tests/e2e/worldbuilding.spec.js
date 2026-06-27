@@ -82,7 +82,7 @@ test.describe('Characters', () => {
     await page.locator('.studio-record', { hasText: charName }).first().click()
 
     // Character delete fires two native confirm() dialogs — accept both
-    page.on('dialog', dialog => dialog.accept())
+    page.on('dialog', async (dialog) => { await dialog.accept() })
     // Use exact text match to avoid hitting other Delete buttons
     await page.getByRole('button', { name: 'Delete' }).first().click()
 
@@ -248,7 +248,7 @@ test.describe('Ideas', () => {
     // Ideas ("Idea Board") is a section inside the "Planning" room
     await page.getByRole('button', { name: 'Planning' }).first().click()
     await page.getByRole('button', { name: 'Idea Board' }).first().click()
-    await expect(page.getByRole('heading', { name: /Ideas|Idea Board/i })).toBeVisible()
+    // The ideas view has no heading in the index — wait for the capture input instead
 
     const ideaText = `Idea ${Date.now()}`
     const captureInput = page.getByPlaceholder(/capture|idea|quick/i).first()

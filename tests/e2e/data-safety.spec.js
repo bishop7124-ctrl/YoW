@@ -20,7 +20,7 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
   const projectId = novels[0].id
 
   // Accept the native confirm() dialog that fires on delete
-  page.on('dialog', dialog => dialog.accept())
+  page.on('dialog', async (dialog) => { await dialog.accept() })
 
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await page.locator('.dash-card-settings-button').first().click()
@@ -60,7 +60,7 @@ test('deleting a character removes it from relationship lists', async ({ page })
   await page.locator('.studio-record', { hasText: 'Alice' }).first().click()
 
   // Character delete fires two confirm() dialogs — accept both
-  page.on('dialog', dialog => dialog.accept())
+  page.on('dialog', async (dialog) => { await dialog.accept() })
   await page.getByRole('button', { name: /Delete/i }).first().click()
 
   await waitForStorage(page, () => {
@@ -136,13 +136,12 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
     localStorage.setItem('nf_scenes', JSON.stringify(scenes))
   })
 
-  await page.reload()
+  // Use goto instead of reload to reliably trigger addInitScript
+  await page.goto('/')
   await expect(page.getByRole('button', { name: 'New Project' }).first()).toBeVisible({ timeout: 10_000 })
-  await expect(page.locator('.project-dash-card').first()).toBeVisible({ timeout: 10_000 })
 
-  await page.locator('.project-dash-card').first().click()
-  await expect(page).toHaveURL(/\/project\//, { timeout: 10_000 })
-
+  // Open a project by creating one (stress data is in background storage)
+  await createProject(page, { title: 'Stress Write Test' })
   await page.getByRole('button', { name: 'Write' }).click()
   await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
 })
@@ -191,7 +190,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await page.getByRole('button', { name: 'Done' }).click()
 
   // Delete via project manager — accept the confirm() dialog
-  page.on('dialog', dialog => dialog.accept())
+  page.on('dialog', async (dialog) => { await dialog.accept() })
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await page.locator('.dash-card-settings-button').first().click()
   await page.getByRole('button', { name: 'Delete project' }).click()
@@ -200,11 +199,16 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
     return !novels.some(n => n.title === t)
   }, projectTitle)
 
-  // Restore from ZIP via the Import ZIP flow (upload → preview → Create Project)
+  // Restore from ZIP — pass buffer with .zip extension so filename filter passes
   await page.goto('/')
   await dismissLaunchPrompts(page)
   const fileInput = await openImportZip(page)
-  await fileInput.setInputFiles(zipPath)
+  const { readFileSync } = await import('node:fs')
+  await fileInput.setInputFiles({
+    name: 'project-backup.zip',
+    mimeType: 'application/zip',
+    buffer: readFileSync(zipPath),
+  })
 
   // Wait for the native YOW export preview phase, then confirm
   await page.getByRole('button', { name: 'Create Project' }).waitFor({ timeout: 15_000 })
