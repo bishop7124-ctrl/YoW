@@ -66,7 +66,7 @@ test('add a panel to a page and verify localStorage persistence', async ({ page 
   })
 
   // Click on the page to open it
-  await page.locator('.comic-page, [data-page]').first().click()
+  await page.locator('.cp-page-row').first().click()
 
   // Add a panel
   const addPanelBtn = page.getByRole('button', { name: /Add panel|New panel|\+ Panel/i }).first()
@@ -94,7 +94,7 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
     return JSON.parse(localStorage.getItem('nf_comicPages') || '[]').length >= 1
   })
 
-  await page.locator('.comic-page, [data-page]').first().click()
+  await page.locator('.cp-page-row').first().click()
   await page.getByRole('button', { name: /Add panel|New panel|\+ Panel/i }).first().click()
   await waitForStorage(page, () => {
     return JSON.parse(localStorage.getItem('nf_comicPanels') || '[]').length >= 1
@@ -163,7 +163,7 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   const pageId = pagesBefore[0]?.id
 
   // Open page then delete
-  await page.locator('.comic-page, [data-page]').first().click()
+  await page.locator('.cp-page-row').first().click()
   const deletePageBtn = page.getByRole('button', { name: /Delete page|Remove page/i }).first()
   if (!(await deletePageBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()

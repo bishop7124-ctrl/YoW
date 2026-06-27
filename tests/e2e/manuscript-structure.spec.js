@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 // ─── Scene CRUD ───────────────────────────────────────────────────────────────
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
-  await page.getByRole('button', { name: /Add scene/i }).first().click()
+  await page.locator('.ms-sidebar-add-btn').first().click()
 
   await waitForStorage(page, () => {
     const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
@@ -31,7 +31,7 @@ test('rename a scene and verify it persists', async ({ page }) => {
   const newName = `Renamed Scene ${Date.now()}`
 
   // Double-click or use context menu to rename the first scene in the sidebar
-  const sceneItem = page.locator('.ms-scene-item, [data-scene]').first()
+  const sceneItem = page.locator('.ms-sidebar-scene').first()
   await sceneItem.dblclick()
 
   const renameInput = page.getByPlaceholder(/scene title|scene name/i).first()
@@ -76,17 +76,8 @@ test('word count updates when content is added', async ({ page }) => {
 // ─── Chapter CRUD ─────────────────────────────────────────────────────────────
 
 test('add a chapter and verify it appears and persists', async ({ page }) => {
-  // Look for "Add chapter" or the level-2 structure add button
-  const addChapterBtn = page
-    .getByRole('button', { name: /Add chapter|Add section|Add issue/i })
-    .first()
-
-  if (await addChapterBtn.isVisible().catch(() => false)) {
-    await addChapterBtn.click()
-  } else {
-    // Fallback: sidebar "+" at chapter level
-    await page.locator('.ms-sidebar').getByRole('button', { name: /\+/ }).first().click()
-  }
+  // Use the sidebar add-chapter button (text is the level2 label, e.g. "Chapter")
+  await page.locator('.ms-sidebar-add-chapter').first().click()
 
   await waitForStorage(page, () => {
     const chapters = JSON.parse(localStorage.getItem('nf_chapters') || '[]')
