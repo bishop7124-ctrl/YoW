@@ -22,9 +22,11 @@ test.describe('Characters', () => {
   test('create a character and verify localStorage persistence', async ({ page }) => {
     const name = `Character ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-    await page.getByPlaceholder(/name/i).first().fill(name)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    // Button is labeled "New" (data-tour="characters-add")
+    await page.getByRole('button', { name: 'New' }).first().click()
+    // Name field has a label "Name" but no placeholder — use getByLabel
+    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -37,24 +39,23 @@ test.describe('Characters', () => {
   })
 
   test('edit a character and verify the change persists', async ({ page }) => {
-    // First create one
     const originalName = `Edit Target ${Date.now()}`
     const updatedName = `Updated ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-    await page.getByPlaceholder(/name/i).first().fill(originalName)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(originalName)
+    await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
       return chars.some(c => c.name === originalName)
     })
 
-    // Open and edit
+    // Click the character to select it, then click Edit
     await page.getByText(originalName).first().click()
-    const nameField = page.getByPlaceholder(/name/i).first()
-    await nameField.fill(updatedName)
-    await page.getByRole('button', { name: /Save|Done/i }).first().click()
+    await page.getByRole('button', { name: /^Edit$/i }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(updatedName)
+    await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
@@ -70,20 +71,18 @@ test.describe('Characters', () => {
   test('delete a character and verify it is removed', async ({ page }) => {
     const name = `Delete Me ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-    await page.getByPlaceholder(/name/i).first().fill(name)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, () => {
       const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
       return chars.some(c => c.name === name)
     })
 
-    // Delete — open character then find delete button
     await page.getByText(name).first().click()
-    await page.getByRole('button', { name: /Delete|Remove/i }).first().click()
+    await page.getByRole('button', { name: /Delete/i }).first().click()
 
-    // Confirm if a dialog appears
     const confirmBtn = page.getByRole('button', { name: /Confirm|Yes|Delete/i }).first()
     if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await confirmBtn.click()
@@ -104,9 +103,9 @@ test.describe('Characters', () => {
     const nameB = `Beta ${Date.now()}`
 
     for (const name of [nameA, nameB]) {
-      await page.getByRole('button', { name: /Add character|New character|\+/i }).first().click()
-      await page.getByPlaceholder(/name/i).first().fill(name)
-      await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+      await page.getByRole('button', { name: 'New' }).first().click()
+      await page.getByLabel(/^Name$/i).first().fill(name)
+      await page.getByRole('button', { name: 'Save Character' }).click()
       await waitForStorage(page, () => {
         const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
         return chars.some(c => c.name === name)
@@ -136,9 +135,9 @@ test.describe('Locations', () => {
   test('create a location and verify persistence', async ({ page }) => {
     const name = `Location ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add location|New location|\+/i }).first().click()
-    await page.getByPlaceholder(/name/i).first().fill(name)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(name)
+    await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
       const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
@@ -154,9 +153,9 @@ test.describe('Locations', () => {
     const original = `Loc Edit ${Date.now()}`
     const updated = `Loc Updated ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add location|New location|\+/i }).first().click()
-    await page.getByPlaceholder(/name/i).first().fill(original)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(original)
+    await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
       const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
@@ -164,9 +163,9 @@ test.describe('Locations', () => {
     })
 
     await page.getByText(original).first().click()
-    const nameField = page.getByPlaceholder(/name/i).first()
-    await nameField.fill(updated)
-    await page.getByRole('button', { name: /Save|Done/i }).first().click()
+    await page.getByRole('button', { name: /^Edit$/i }).first().click()
+    await page.getByLabel(/^Name$/i).first().fill(updated)
+    await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
       const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
@@ -189,10 +188,10 @@ test.describe('Lore', () => {
   test('create a lore entry and verify persistence', async ({ page }) => {
     const title = `Lore Entry ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add entry|New entry|\+/i }).first().click()
-    const titleField = page.getByPlaceholder(/title|name/i).first()
-    await titleField.fill(title)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New' }).first().click()
+    // Lore title input has placeholder "e.g. The Binding Laws"
+    await page.getByPlaceholder(/binding laws/i).first().fill(title)
+    await page.getByRole('button', { name: 'Save Entry' }).click()
 
     await waitForStorage(page, () => {
       const lore = JSON.parse(localStorage.getItem('nf_loreEntries') || '[]')
@@ -205,11 +204,9 @@ test.describe('Lore', () => {
   })
 
   test('lore entries are scoped to the active project', async ({ page }) => {
-    const novels = await readStorage(page, 'nf_novels')
     const activeId = await page.evaluate(() => localStorage.getItem('nf_activeNovel'))
     const lore = await readStorage(page, 'nf_loreEntries')
     const scoped = lore.filter(e => e.novelId === activeId)
-    // All lore for this project should reference the active project ID
     expect(scoped.length).toBe(lore.filter(e => e.novelId).length)
   })
 })
@@ -225,10 +222,10 @@ test.describe('Timeline', () => {
   test('create a timeline event and verify persistence', async ({ page }) => {
     const eventTitle = `Event ${Date.now()}`
 
-    await page.getByRole('button', { name: /Add event|New event|\+/i }).first().click()
-    const titleField = page.getByPlaceholder(/title|event/i).first()
-    await titleField.fill(eventTitle)
-    await page.getByRole('button', { name: /Save|Done|Create/i }).first().click()
+    await page.getByRole('button', { name: 'New Event' }).click()
+    // Title field is labeled "Title *" with no placeholder
+    await page.getByLabel(/^Title/i).first().fill(eventTitle)
+    await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, () => {
       const timeline = JSON.parse(localStorage.getItem('nf_timeline') || '[]')
