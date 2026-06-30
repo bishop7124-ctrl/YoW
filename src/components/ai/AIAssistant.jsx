@@ -1,16 +1,10 @@
 import { useState, useRef } from 'react'
 import { streamMessage, PROVIDERS } from '../../utils/aiApi'
+import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 
-const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
 const uid  = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-const DEFAULT_SETTINGS = {
-  activeProvider: 'google',
-  google:     { apiKey: '', model: 'gemini-2.0-flash' },
-  anthropic:  { apiKey: '', model: 'claude-sonnet-4-6' },
-  openrouter: { apiKey: '', model: 'google/gemma-3-27b-it' },
-  openai:     { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' },
-}
+const DEFAULT_SETTINGS = DEFAULT_AI_SETTINGS
 
 // ── Section config ────────────────────────────────────────────────────────────
 
@@ -241,7 +235,7 @@ function AnswerDisplay({ message, onDismiss }) {
 
 // ── Root component ────────────────────────────────────────────────────────────
 
-export default function AIAssistant({ store, section, onOpenChat, aiOpen }) {
+export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId = null }) {
   const [input,  setInput]  = useState('')
   const [status, setStatus] = useState('idle')
   const [parsed, setParsed] = useState(null)
@@ -255,7 +249,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen }) {
     if (!text || status === 'loading') return
 
     // Read settings fresh each send so changes in AIPanel are reflected
-    const settings = load('nf_aiSettings', DEFAULT_SETTINGS)
+    const settings = loadAiSettings(userId, DEFAULT_SETTINGS)
     const provider = settings.activeProvider || 'google'
     const provCfg  = settings[provider] || {}
 

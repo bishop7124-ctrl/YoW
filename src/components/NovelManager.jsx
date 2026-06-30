@@ -1561,6 +1561,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           store={store}
           onClose={() => setShowAIImport(false)}
           onImportDone={(novelId) => { onOpenProject?.(novelId) }}
+          userId={user?.id || user?.uid || null}
         />
       )}
 

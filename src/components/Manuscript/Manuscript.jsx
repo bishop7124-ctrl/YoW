@@ -761,6 +761,7 @@ export default function Manuscript({ store, userId }) {
               characters={characters}
               locations={locations}
               onAppendToScene={handleAppendToScene}
+              userId={userId}
             />
           }
         />

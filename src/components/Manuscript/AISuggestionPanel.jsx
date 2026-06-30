@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { streamMessage } from '../../utils/aiApi'
+import { getActiveAiConfig } from '../../utils/aiSettings'
 
 const QUICK_PROMPTS = [
   { label: 'Continue', text: "Continue writing this scene naturally from where it ends. Match the author's existing style, voice, tone, and POV. Write 2-3 paragraphs." },
@@ -8,15 +9,10 @@ const QUICK_PROMPTS = [
   { label: 'Add dialogue', text: 'Write a short, natural dialogue exchange that fits the current scene context and characters.' },
 ]
 
-function loadAIConfig() {
-  try {
-    const s = JSON.parse(localStorage.getItem('nf_aiSettings') || '{}')
-    const provider = s.activeProvider || 'google'
-    const cfg = s[provider] || {}
-    if (!cfg.apiKey?.trim()) return null
-    const defaults = { google: 'gemini-2.0-flash', anthropic: 'claude-sonnet-4-6', openrouter: 'google/gemma-3-27b-it', openai: '' }
-    return { provider, apiKey: cfg.apiKey, model: cfg.model || defaults[provider] || '', baseUrl: cfg.baseUrl }
-  } catch { return null }
+function loadAIConfig(userId) {
+  const cfg = getActiveAiConfig(userId)
+  if (!cfg.apiKey?.trim()) return null
+  return cfg
 }
 
 function buildSystemPrompt(activeNovel, activeScene, characters, locations) {
@@ -45,17 +41,17 @@ function buildSystemPrompt(activeNovel, activeScene, characters, locations) {
   return lines.join('\n')
 }
 
-export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, onAppendToScene }) {
+export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, onAppendToScene, userId = null }) {
   const [prompt, setPrompt] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
   const abortRef = useRef(false)
 
-  const configured = !!loadAIConfig()
+  const configured = !!loadAIConfig(userId)
 
   const generate = useCallback((overridePrompt) => {
-    const config = loadAIConfig()
+    const config = loadAIConfig(userId)
     if (!config) { setError('No AI provider configured. Add an API key in AI Settings.'); return }
     const userText = (overridePrompt || prompt).trim()
     if (!userText) return
@@ -75,7 +71,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
       onDone:  ()  => { if (!abortRef.current) setStreaming(false) },
       onError: e   => { if (!abortRef.current) { setError(e); setStreaming(false) } },
     })
-  }, [prompt, activeScene, activeNovel, characters, locations])
+  }, [prompt, activeScene, activeNovel, characters, locations, userId])
 
   const handleStop = () => { abortRef.current = true; setStreaming(false) }
 

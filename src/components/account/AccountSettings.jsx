@@ -8,6 +8,7 @@ import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS } from '../../utils/aiApi'
+import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
   BUILT_IN_THEMES,
   DEFAULT_CUSTOM_COLORS,
@@ -620,23 +621,13 @@ function AppearancePanel({ user, updateProfile }) {
   )
 }
 
-function AISettingsPanel() {
-  const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
-  const save = (key, val) => localStorage.setItem(key, JSON.stringify(val))
-
-  const DEFAULT_SETTINGS = {
-    activeProvider: 'openrouter',
-    google:      { apiKey: '', model: 'gemini-2.0-flash' },
-    anthropic:   { apiKey: '', model: 'claude-sonnet-4-6' },
-    openrouter:  { apiKey: '', model: 'google/gemma-3-27b-it' },
-    openai:      { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' },
-  }
-
-  const [settings, setSettings] = useState(() => {
-    const stored = load('nf_aiSettings', {})
-    return { ...DEFAULT_SETTINGS, ...stored }
-  })
+function AISettingsPanel({ userId }) {
+  const [settings, setSettings] = useState(() => loadAiSettings(userId, DEFAULT_AI_SETTINGS))
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
+  }, [userId])
 
   const active = settings.activeProvider
   const prov = PROVIDERS[active]
@@ -646,7 +637,7 @@ function AISettingsPanel() {
     setSettings(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
 
   const handleSave = () => {
-    save('nf_aiSettings', settings)
+    saveAiSettings(settings, userId)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -1470,7 +1461,7 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
           )}
 
           {selectedTab === 'ai' && (
-            <AISettingsPanel />
+            <AISettingsPanel userId={user.id} />
           )}
 
           {selectedTab === 'membership' && (

@@ -1,16 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
+import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 
-const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-const DEFAULT_SETTINGS = {
-  activeProvider: 'google',
-  google:     { apiKey: '', model: 'gemini-2.0-flash' },
-  anthropic:  { apiKey: '', model: 'claude-sonnet-4-6' },
-  openrouter: { apiKey: '', model: 'google/gemma-3-27b-it' },
-  openai:     { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' },
-}
+const DEFAULT_SETTINGS = DEFAULT_AI_SETTINGS
 
 // ── File reading ──────────────────────────────────────────────────────────────
 
@@ -746,7 +740,7 @@ function hasContent(parsed, key) {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-export default function AIImportModal({ store, onClose, onImportDone }) {
+export default function AIImportModal({ store, onClose, onImportDone, userId = null }) {
   const [phase, setPhase] = useState('upload') // upload | analyzing | preview | creating | done
   const [files, setFiles] = useState([])
   const [dragging, setDragging] = useState(false)
@@ -776,7 +770,7 @@ export default function AIImportModal({ store, onClose, onImportDone }) {
   }, [store.activeNovelId, pendingImport]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getAIConfig = () => {
-    const settings = load('nf_aiSettings', DEFAULT_SETTINGS)
+    const settings = loadAiSettings(userId, DEFAULT_SETTINGS)
     const provider = settings.activeProvider || 'google'
     const provCfg = settings[provider] || {}
     if (!provCfg.apiKey?.trim()) return null

@@ -2,16 +2,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { streamMessage } from '../../utils/aiApi'
 import { buildLoreConflictSystemPrompt, buildLoreConflictUserPrompt } from '../../utils/aiToolPrompts'
 import { loadFindings, saveAllFindings, updateFindingStatus, rowToFinding } from '../../utils/aiFindings'
+import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
-
-const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
-const DEFAULT_AI = { activeProvider: 'google', google: { apiKey: '', model: 'gemini-2.0-flash' }, anthropic: { apiKey: '', model: 'claude-sonnet-4-6' }, openrouter: { apiKey: '', model: 'google/gemma-3-27b-it:free' }, openai: { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' } }
-
-function getAiConfig() {
-  const s = load('nf_aiSettings', DEFAULT_AI)
-  const p = s.activeProvider || 'google'
-  return { provider: p, apiKey: s[p]?.apiKey || '', model: s[p]?.model || '', baseUrl: s[p]?.baseUrl }
-}
 
 function parseResult(raw) {
   try {
@@ -51,7 +43,7 @@ export default function LoreConflictChecker({ store, userId }) {
   }, [userId, novelId])
 
   const run = useCallback(() => {
-    const ai = getAiConfig()
+    const ai = getActiveAiConfig(userId)
     if (!ai.apiKey) { setError('No AI API key configured. Add one in AI Settings.'); return }
     setRunning(true)
     setError(null)
@@ -78,7 +70,7 @@ export default function LoreConflictChecker({ store, userId }) {
       },
       onError: msg => { setRunning(false); setError(msg) },
     })
-  }, [novel, store, novelId])
+  }, [novel, store, novelId, userId])
 
   const handleStatus = useCallback(async (finding, status) => {
     setFindings(prev => prev.map(f => f._id === finding._id ? { ...f, status } : f))

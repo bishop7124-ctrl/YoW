@@ -4,6 +4,7 @@ import { FACTION_ICONS } from '../../constants/factionIcons'
 import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } from '../../constants/Constants'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { allRefsFor } from '../../utils/worldLinks'
+import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
 import CharacterJourney from './CharacterJourney'
 
 // The Fix: uses theme variables so all 4 themes apply correctly
@@ -61,35 +62,6 @@ const CHARACTER_TABS = [
 ]
 
 const CHARACTER_FORM_TABS = CHARACTER_TABS.filter(([id]) => id !== 'journey')
-
-function extractYear(value) {
-  if (value === null || value === undefined) return null
-  const match = String(value).match(/-?\d+/)
-  return match ? Number(match[0]) : null
-}
-
-function getCharacterAge(character, currentYear) {
-  const birthYear = extractYear(character?.birthDate)
-  if (birthYear === null) return null
-  const endYear = extractYear(character?.deathDate) ?? extractYear(currentYear)
-  if (endYear === null) return null
-  if (birthYear > endYear) return `Born ${birthYear}`
-  return `${endYear - birthYear}${character?.deathDate ? ' at death' : ''}`
-}
-
-function getAgeInputValue(character, currentYear) {
-  const birthYear = extractYear(character?.birthDate)
-  const year = extractYear(currentYear)
-  if (birthYear === null || year === null || birthYear > year) return ''
-  return String(year - birthYear)
-}
-
-function getBirthDateFromAge(age, currentYear) {
-  const parsedAge = Number(age)
-  const year = extractYear(currentYear)
-  if (!Number.isFinite(parsedAge) || parsedAge < 0 || year === null) return ''
-  return `Year ${year - Math.floor(parsedAge)}`
-}
 
 function getChildIds(character, characters) {
   const explicit = character?.childIds || []
@@ -462,7 +434,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     .map(ability => ({ name: ability.name?.trim() || '', description: ability.description?.trim() || '' }))
     .filter(ability => ability.name || ability.description)
   const saveForm = () => {
-    const birthDate = form.age === '' ? '' : getBirthDateFromAge(form.age, currentYear)
+    const birthDate = form.age === '' ? '' : getBirthDateFromAge(form.age, currentYear, form.deathDate)
     const rest = { ...form }
     delete rest.age
     onSave({ ...rest, birthDate, relationships: validRelationships, extraAbilities: validAbilities })

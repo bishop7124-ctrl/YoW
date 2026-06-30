@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
+import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
@@ -34,13 +35,7 @@ const clampPanelFrame = (frame) => {
   }
 }
 
-const DEFAULT_SETTINGS = {
-  activeProvider: 'openrouter',
-  google:      { apiKey: '', model: 'gemini-2.0-flash' },
-  anthropic:   { apiKey: '', model: 'claude-sonnet-4-6' },
-  openrouter:  { apiKey: import.meta.env.VITE_OPENROUTER_API_KEY ?? '', model: 'google/gemma-3-27b-it' },
-  openai:      { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' },
-}
+const DEFAULT_SETTINGS = DEFAULT_AI_SETTINGS
 
 // ── Provider Settings ─────────────────────────────────────────────────────────
 
@@ -226,6 +221,24 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
     characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [],
   } = store
 
+  const allContextIds = useMemo(() => ({
+    characterIds: characters.map(c => c.id),
+    locationIds: locations.map(l => l.id),
+    loreEntryIds: loreEntries.map(e => e.id),
+    worldHistoryIds: worldHistory.map(h => h.id),
+    chapterIds: chapters.map(c => c.id),
+  }), [characters, locations, loreEntries, worldHistory, chapters])
+
+  const selectAllRecords = () => setCtx(prev => ({ ...prev, ...allContextIds }))
+  const clearAllRecords = () => setCtx(prev => ({
+    ...prev,
+    characterIds: [],
+    locationIds: [],
+    loreEntryIds: [],
+    worldHistoryIds: [],
+    chapterIds: [],
+  }))
+
   const chaptersByAct = useMemo(() => {
     const map = {}
     acts.forEach(act => { map[act.id] = { act, chapters: chapters.filter(c => c.actId === act.id) } })
@@ -254,6 +267,10 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
 
   const total = ctx.characterIds.length + ctx.locationIds.length + ctx.loreEntryIds.length +
     ctx.worldHistoryIds.length + ctx.chapterIds.length
+  const availableTotal = Object.values(allContextIds).reduce((sum, ids) => sum + ids.length, 0)
+  const allRecordsSelected = availableTotal > 0 && Object.entries(allContextIds).every(([field, ids]) =>
+    ids.every(id => (ctx[field] || []).includes(id))
+  )
 
   return (
     <div className="flex flex-col h-full">
@@ -263,6 +280,22 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {availableTotal > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-nav)] px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">Context records</div>
+              <div className="text-[11px] text-[var(--text-muted)]">{total} of {availableTotal} selected</div>
+            </div>
+            <button
+              type="button"
+              onClick={allRecordsSelected ? clearAllRecords : selectAllRecords}
+              className="flex-shrink-0 rounded border border-[var(--accent)]/40 px-2.5 py-1 text-xs font-bold text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors"
+            >
+              {allRecordsSelected ? 'Clear all' : 'Select all'}
+            </button>
+          </div>
+        )}
+
         {characters.length > 0 && (
           <Section title={`Characters${ctx.characterIds.length ? ` (${ctx.characterIds.length})` : ''}`} defaultOpen={ctx.characterIds.length > 0}>
             <div className="flex gap-2 mb-2">
@@ -362,9 +395,18 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
 
 // ── Chat View ─────────────────────────────────────────────────────────────────
 
-function Message({ msg }) {
+function responseTitle(content, fallback = 'AI response') {
+  const firstLine = (content || '').split('\n').map(line => line.trim()).find(Boolean) || fallback
+  return firstLine
+    .replace(/^#+\s*/, '')
+    .replace(/^[-*]+\s*/, '')
+    .slice(0, 72)
+}
+
+function Message({ msg, onSaveResponse }) {
   const isUser = msg.role === 'user'
   const [copied, setCopied] = useState(false)
+  const [savedAs, setSavedAs] = useState('')
 
   const copyMessage = async () => {
     if (!msg.content) return
@@ -383,6 +425,14 @@ function Message({ msg }) {
     }
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1200)
+  }
+
+  const saveResponse = (type) => {
+    if (!msg.content || msg.streaming || isUser) return
+    const saved = onSaveResponse?.(type, msg.content)
+    if (!saved) return
+    setSavedAs(type)
+    window.setTimeout(() => setSavedAs(''), 1400)
   }
 
   return (
@@ -410,6 +460,30 @@ function Message({ msg }) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
           {copied ? 'Copied' : 'Copy'}
         </button>
+        {!isUser && (
+          <div className="ai-response-save-actions flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => saveResponse('idea')}
+              disabled={!msg.content || msg.streaming}
+              title="Save answer as an idea"
+              className="h-6 px-2 inline-flex items-center gap-1 rounded border border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18h6" /><path d="M10 22h4" /><path d="M8.5 14.5A6 6 0 1 1 15.5 14.5c-.9.7-1.5 1.6-1.5 2.5h-4c0-.9-.6-1.8-1.5-2.5Z" /></svg>
+              {savedAs === 'idea' ? 'Saved' : 'Idea'}
+            </button>
+            <button
+              type="button"
+              onClick={() => saveResponse('lore')}
+              disabled={!msg.content || msg.streaming}
+              title="Save answer as a lore entry"
+              className="h-6 px-2 inline-flex items-center gap-1 rounded border border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg>
+              {savedAs === 'lore' ? 'Saved' : 'Lore'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -515,6 +589,28 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     onUpdate(session.id, { messages })
   }
 
+  const saveResponse = (type, content) => {
+    const title = responseTitle(content)
+    if (type === 'idea') {
+      return store.addIdeaEntry?.({
+        title,
+        description: content,
+        body: content,
+        group: 'AI Chat',
+        tags: ['AI Chat'],
+      })
+    }
+    if (type === 'lore') {
+      return store.addLoreEntry?.({
+        title,
+        category: 'AI Chat',
+        content,
+        tags: ['AI Chat'],
+      })
+    }
+    return null
+  }
+
   const quickPrompts = [
     'What should I work on next?',
     'Find continuity risks in this context.',
@@ -598,7 +694,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             </div>
           </div>
         )}
-        {session.messages.map(msg => <Message key={msg.id} msg={msg} />)}
+        {session.messages.map(msg => <Message key={msg.id} msg={msg} onSaveResponse={saveResponse} />)}
         <div ref={bottomRef} />
       </div>
 
@@ -874,20 +970,10 @@ function AIUpgradeWall({ onClose, docked }) {
   )
 }
 
-export default function AIPanel({ store, open, onClose, initialContext, membership, docked = false, onPopOut }) {
+export default function AIPanel({ store, open, onClose, initialContext, membership, userId = null, docked = false, onPopOut }) {
   const novelId = store.activeNovelId
   const chatStorageKey = `nf_chats_${novelId ?? 'library'}`
-  const [aiSettings, setAiSettings] = useState(() => {
-    const stored = load('nf_aiSettings', {})
-    const merged = { ...DEFAULT_SETTINGS, ...stored }
-    // Fill in env-seeded keys only when the stored value is blank
-    for (const [prov, def] of Object.entries(DEFAULT_SETTINGS)) {
-      if (typeof def === 'object' && def.apiKey && !merged[prov]?.apiKey) {
-        merged[prov] = { ...merged[prov], apiKey: def.apiKey }
-      }
-    }
-    return merged
-  })
+  const [aiSettings, setAiSettings] = useState(() => loadAiSettings(userId, DEFAULT_SETTINGS))
   const [sessions,   setSessions]   = useState(() => load(chatStorageKey, []))
   const [view,       setView]       = useState('sessions') // 'sessions' | 'settings' | 'context' | 'chat'
   const [activeId,   setActiveId]   = useState(null)
@@ -896,8 +982,19 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
   const [panelFrame, setPanelFrame] = useState(() => clampPanelFrame(load(AI_PANEL_FRAME_KEY, getDefaultPanelFrame())))
   const activeChatStorageKey = useRef(chatStorageKey)
   const panelFrameRef = useRef(panelFrame)
+  const skipAiSettingsSave = useRef(false)
 
-  useEffect(() => { save('nf_aiSettings', aiSettings) }, [aiSettings])
+  useEffect(() => {
+    skipAiSettingsSave.current = true
+    setAiSettings(loadAiSettings(userId, DEFAULT_SETTINGS))
+  }, [userId])
+  useEffect(() => {
+    if (skipAiSettingsSave.current) {
+      skipAiSettingsSave.current = false
+      return
+    }
+    saveAiSettings(aiSettings, userId)
+  }, [aiSettings, userId])
   useEffect(() => {
     if (activeChatStorageKey.current !== chatStorageKey) {
       activeChatStorageKey.current = chatStorageKey
@@ -1057,10 +1154,11 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
   const panelStyle = !fullscreen && !docked
     ? { left: panelFrame.left, top: panelFrame.top, width: panelFrame.width, height: panelFrame.height }
     : undefined
+  const activeChatOpen = view === 'chat' && activeSession
 
   return (
     <div
-      className={`z-50 bg-[var(--bg-nav)] border border-[var(--border)] flex flex-col shadow-2xl overflow-hidden transition-all duration-200 ${panelMode}`}
+      className={`z-50 bg-[var(--bg-nav)] border border-[var(--border)] flex flex-col shadow-2xl overflow-hidden transition-all duration-200 ${activeChatOpen ? 'ai-chat-active' : ''} ${panelMode}`}
       style={panelStyle}
       role="dialog"
       aria-label="AI chat"
@@ -1068,14 +1166,14 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
 
         {/* Header */}
         <div
-          className={`ai-chat-header flex items-center justify-between px-4 py-3 border-b border-[var(--border)] flex-shrink-0 ${!docked && !fullscreen ? 'is-draggable' : ''}`}
+          className={`ai-chat-header flex items-center justify-between px-4 py-3 border-b border-[var(--border)] flex-shrink-0 ${activeChatOpen ? 'is-compact' : ''} ${!docked && !fullscreen ? 'is-draggable' : ''}`}
           onPointerDown={startMove}
         >
           <div className="flex items-center gap-2">
             <span className="ai-chat-pulse text-[var(--accent)]">✦</span>
             <div className="min-w-0">
               <span className="block text-sm font-bold text-[var(--text-main)] uppercase tracking-wider leading-tight">AI Chat</span>
-              <span className="block text-[10px] text-[var(--text-muted)] leading-tight">
+              <span className="ai-chat-mode-label block text-[10px] text-[var(--text-muted)] leading-tight">
                 {fullscreen ? 'Full screen' : docked ? 'Docked tool' : 'Drag to move'}
               </span>
             </div>

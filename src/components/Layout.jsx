@@ -980,7 +980,7 @@ export default function Layout({
     factions:     <Factions store={store} />,
     locations:    <Locations store={store} />,
     lore:         <Lore store={store} />,
-    ideas:        <IdeasKanban store={store} />,
+    ideas:        <IdeasKanban store={store} userId={userId} />,
     schedule:     <ScheduleCalendar store={store} />,
     timeline:     <Timeline store={store} />,
     worldhistory: <WorldHistory store={store} />,
@@ -1117,9 +1117,7 @@ export default function Layout({
             </>
           ) : null}
           footer={
-            viewMode === 'planning'
-              ? (section === 'map' ? null : <AIAssistant store={store} section={section} onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} />)
-              : <AIAssistant store={store} section="manuscript" onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} />
+            <AIAssistant store={store} section={section === 'map' ? 'atlas' : (viewMode === 'writing' ? 'manuscript' : section)} onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} userId={userId} />
           }
         >
           <div className="h-full overflow-hidden" style={{ position: 'relative' }}>
@@ -1159,7 +1157,7 @@ export default function Layout({
         />
       )}
 
-      <AIPanel store={store} open={aiOpen} onClose={() => setAiOpen(false)} initialContext={initialContext} membership={membership} />
+      <AIPanel store={store} open={aiOpen} onClose={() => setAiOpen(false)} initialContext={initialContext} membership={membership} userId={userId} />
 
       {tourStore?.toursEnabled && openSectionTourId === activeSectionTourId && activeSectionTour && (
         <OnboardingTour

@@ -790,6 +790,7 @@ function AppInner() {
         onClose={() => setLibraryAiOpen(false)}
         initialContext={{ characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '' }}
         membership={membership}
+        userId={userId}
       />
       {accountPage}
       {globalOverlays}

@@ -4,6 +4,7 @@ import QuickCapture from './QuickCapture'
 import FiltersBar from './FiltersBar'
 import ConvertModal from './ConvertModal'
 import { streamMessage } from '../../utils/aiApi'
+import { loadAiSettings } from '../../utils/aiSettings'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -13,10 +14,6 @@ const KANBAN_STATUSES = [
   { id: 'inStory',    label: 'In Story',     desc: 'Active in your story' },
   { id: 'archived',   label: 'Archived',     desc: 'Saved but inactive' },
 ]
-
-const loadAiSettings = () => {
-  try { return JSON.parse(localStorage.getItem('nf-ai-settings')) ?? {} } catch { return {} }
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -481,7 +478,7 @@ function GhostCard({ idea, style }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function IdeasKanban({ store }) {
+export default function IdeasKanban({ store, userId = null }) {
   const {
     ideaEntries,
     addIdeaEntry,
@@ -642,7 +639,7 @@ export default function IdeasKanban({ store }) {
     const idea = ideas.find(i => i.id === id)
     if (!idea) return
 
-    const aiSettings = loadAiSettings()
+    const aiSettings = loadAiSettings(userId)
     const provider = aiSettings?.activeProvider || 'google'
     const cfg = aiSettings?.[provider] || {}
     if (!cfg.apiKey?.trim()) {
@@ -672,7 +669,7 @@ export default function IdeasKanban({ store }) {
         setAiExpandId(null)
       },
     })
-  }, [ideas, handleUpdate, aiExpandId])
+  }, [ideas, handleUpdate, aiExpandId, userId])
 
   // ── Drag & drop ──────────────────────────────────────────────────────────────
 

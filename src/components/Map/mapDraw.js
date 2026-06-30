@@ -127,7 +127,10 @@ export function drawMovementGrid(ctx, width, height, settings = {}) {
 export function drawObject(ctx, object, isSelected, opts = {}) {
   if (object.visible === false) return
   ctx.save()
-  ctx.globalAlpha = (object.locked ? 0.6 : 1) * (Number.isFinite(object.properties?.opacity) ? object.properties.opacity : 1)
+  const objectOpacity = object.type === 'region'
+    ? 1
+    : (Number.isFinite(object.properties?.opacity) ? object.properties.opacity : 1)
+  ctx.globalAlpha = (object.locked ? 0.6 : 1) * objectOpacity
   switch (object.type) {
     case 'shape': drawLandShape(ctx, object, isSelected, opts); break
     case 'region': drawRegion(ctx, object, isSelected, opts); break   // terrain region
@@ -232,7 +235,7 @@ function drawLandShape(ctx, object, isSelected, opts) {
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash([])
   drawSmoothPath(ctx, jitter, true); ctx.stroke()
 
-  if (isSelected) drawPolygonHandles(ctx, pts)
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -254,9 +257,15 @@ function drawRegion(ctx, object, isSelected, opts) {
 
   ctx.save()
 
-  // Background fill — slightly stronger so terrain is visible
-  ctx.fillStyle = colorWithAlpha(fill, (object.properties?.opacity ?? 0.44))
-  drawSmoothPath(ctx, jitter, true); ctx.fill()
+  // Background fill is independent from terrain symbols, so it can be transparent.
+  const rawBackgroundOpacity = Number.isFinite(object.properties?.terrainFillOpacity)
+    ? object.properties.terrainFillOpacity
+    : (Number.isFinite(object.properties?.opacity) ? object.properties.opacity : 0.44)
+  const backgroundOpacity = object.properties?.terrainBackgroundTransparent ? 0 : rawBackgroundOpacity
+  if (backgroundOpacity > 0) {
+    ctx.fillStyle = colorWithAlpha(fill, backgroundOpacity)
+    drawSmoothPath(ctx, jitter, true); ctx.fill()
+  }
 
   // Clip and draw terrain symbols inside the region
   ctx.save()
@@ -264,18 +273,18 @@ function drawRegion(ctx, object, isSelected, opts) {
   const b = getBoundsFromPoints(pts)
   // Ink color: dark for parchment/atlas, blue for blueprint
   const inkColor = isBlueprint ? '#3060a8' : isParchment ? '#1a1206' : '#1a2010'
-  drawTerrainSymbols(ctx, terrainType, pts, b, seed, inkColor, opts)
+  drawTerrainSymbols(ctx, terrainType, pts, b, seed, inkColor, { ...(object.properties || {}), terrainFillOpacity: backgroundOpacity }, opts)
   ctx.restore()
 
-  // Dashed boundary
-  ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(fill, 0.6)
-  ctx.lineWidth = isSelected ? 2.5 : 1.5
-  ctx.setLineDash(isSelected ? [] : [7, 5])
-  ctx.lineJoin = 'round'
-  drawSmoothPath(ctx, jitter, true); ctx.stroke()
-  ctx.setLineDash([])
+  if (isSelected) {
+    ctx.strokeStyle = '#1677ff'
+    ctx.lineWidth = 2.5
+    ctx.setLineDash([])
+    ctx.lineJoin = 'round'
+    drawSmoothPath(ctx, jitter, true); ctx.stroke()
+  }
 
-  if (isSelected) drawPolygonHandles(ctx, pts)
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -308,22 +317,41 @@ function drawTerritory(ctx, object, isSelected, opts) {
   ctx.stroke()
   ctx.setLineDash([])
 
-  // Territory name label centred inside polygon
-  if (name) {
-    const cx = b.x + b.w / 2
-    const cy = b.y + b.h / 2
-    const fontSize = Math.max(18, Math.min(52, Math.sqrt(b.w * b.h) * 0.12))
+  // Territory name label — position/size/colour overrideable via properties
+  if (name && !object.properties?.labelHidden) {
+    const autoCx = b.x + b.w / 2
+    const autoCy = b.y + b.h / 2
+    const cx = autoCx + (object.properties?.labelOffsetX || 0)
+    const cy = autoCy + (object.properties?.labelOffsetY || 0)
+    const autoFontSize = Math.max(18, Math.min(52, Math.sqrt(b.w * b.h) * 0.12))
+    const fontSize = object.properties?.labelFontSize || autoFontSize
+    const labelColor = object.properties?.labelColor || null
+    const labelOutlineColor = object.properties?.labelOutlineColor || null
     ctx.font = `italic 600 ${fontSize}px "Palatino Linotype", Georgia, serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.lineWidth = Math.max(3, fontSize * 0.09)
-    ctx.strokeStyle = isBlueprint ? colorWithAlpha('#1a2b4a', 0.9) : colorWithAlpha('#f4e8c4', 0.88)
-    ctx.fillStyle = isBlueprint ? '#8cc8f0' : colorWithAlpha(fill, 0.9)
-    ctx.strokeText(name, cx, cy)
+    const outlineStyle = isBlueprint ? colorWithAlpha('#1a2b4a', 0.9) : (labelOutlineColor || colorWithAlpha('#f4e8c4', 0.88))
+    ctx.fillStyle = isBlueprint ? '#8cc8f0' : (labelColor || colorWithAlpha(fill, 0.9))
+    if (outlineStyle !== 'transparent') {
+      ctx.strokeStyle = outlineStyle
+      ctx.strokeText(name, cx, cy)
+    }
     ctx.fillText(name, cx, cy)
+
+    // Show label position handle when selected
+    if (isSelected) {
+      ctx.save()
+      ctx.strokeStyle = '#1677ff'
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      ctx.lineWidth = 1.5
+      const hr = 6
+      ctx.beginPath(); ctx.arc(cx, cy, hr, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      ctx.restore()
+    }
   }
 
-  if (isSelected) drawPolygonHandles(ctx, pts)
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -347,6 +375,33 @@ function terrainGrid(pts, b, seed, spacing, callback) {
   }
 }
 
+function terrainClusterGrid(pts, b, seed, spacingX, spacingY, callback, options = {}) {
+  const cols = Math.ceil(b.w / spacingX) + 2
+  const rows = Math.ceil(b.h / spacingY) + 2
+  const minCount = options.minCount ?? 2
+  const extraCount = options.extraCount ?? 2
+  const jitterX = options.jitterX ?? spacingX * 0.7
+  const jitterY = options.jitterY ?? spacingY * 0.62
+  let idx = 0
+
+  for (let row = 0; row < rows; row++) {
+    const offset = row % 2 === 0 ? 0 : spacingX * 0.5
+    for (let col = 0; col < cols; col++) {
+      const x = b.x + col * spacingX + offset
+      const y = b.y + row * spacingY
+      const count = minCount + Math.floor(seededNoise(seed, idx * 17 + 1) * (extraCount + 1))
+
+      for (let mark = 0; mark < count; mark++) {
+        const px = x + (seededNoise(seed, idx * 31 + mark * 7 + 2) - 0.5) * jitterX
+        const py = y + (seededNoise(seed, idx * 31 + mark * 7 + 3) - 0.5) * jitterY
+        if (polyContains(pts, px, py)) callback(px, py, idx, mark, row, col)
+      }
+
+      idx++
+    }
+  }
+}
+
 function polyContains(polygon, px, py) {
   let inside = false
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -357,183 +412,162 @@ function polyContains(polygon, px, py) {
   return inside
 }
 
-function drawTerrainSymbols(ctx, terrainType, pts, b, seed, inkColor, _opts) {
+function boundsFitPolygon(pts, bounds) {
+  const samples = [
+    [bounds.minX, bounds.minY],
+    [bounds.maxX, bounds.minY],
+    [bounds.maxX, bounds.maxY],
+    [bounds.minX, bounds.maxY],
+    [(bounds.minX + bounds.maxX) / 2, bounds.minY],
+    [bounds.maxX, (bounds.minY + bounds.maxY) / 2],
+    [(bounds.minX + bounds.maxX) / 2, bounds.maxY],
+    [bounds.minX, (bounds.minY + bounds.maxY) / 2],
+    [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2],
+  ]
+  return samples.every(([x, y]) => polyContains(pts, x, y))
+}
+
+function centeredBoundsFitPolygon(pts, x, y, radiusX, radiusY = radiusX) {
+  return boundsFitPolygon(pts, {
+    minX: x - radiusX,
+    minY: y - radiusY,
+    maxX: x + radiusX,
+    maxY: y + radiusY,
+  })
+}
+
+function lineMarkFitsPolygon(pts, x1, y1, x2, y2, pad = 0) {
+  return boundsFitPolygon(pts, {
+    minX: Math.min(x1, x2) - pad,
+    minY: Math.min(y1, y2) - pad,
+    maxX: Math.max(x1, x2) + pad,
+    maxY: Math.max(y1, y2) + pad,
+  })
+}
+
+function drawTerrainSymbols(ctx, terrainType, pts, b, seed, inkColor, terrainProps = {}, _opts) {
   ctx.strokeStyle = inkColor
   ctx.fillStyle = inkColor
   ctx.lineWidth = 1.5
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   ctx.globalAlpha = 0.72
+  const symbolScale = clamp(Number(terrainProps.terrainSymbolScale) || 1, 0.55, 1.8)
+  const hasTerrainBackground = !terrainProps.terrainBackgroundTransparent && Number(terrainProps.terrainFillOpacity) > 0
 
   if (terrainType === 'forest') {
-    // Staggered grid of pine trees
-    terrainGrid(pts, b, seed, 52, (x, y, i) => {
-      const h = 26 + seededNoise(seed, i + 200) * 12
-      const w = h * 0.46
-      const isPine = seededNoise(seed, i + 300) > 0.38
-      ctx.lineWidth = Math.max(1, h * 0.045)
-      if (isPine) {
-        // 3-layer pine
-        ;[[0.54, 0.62], [0.28, 0.76], [0, 0.9]].forEach(([yOff, widthScale]) => {
-          const lw = w * widthScale
-          ctx.beginPath()
-          ctx.moveTo(x, y - h * (0.5 - yOff * 0.5))
-          ctx.lineTo(x - lw, y - h * (0.12 - yOff * 0.5))
-          ctx.lineTo(x + lw, y - h * (0.12 - yOff * 0.5))
-          ctx.closePath(); ctx.fill(); ctx.stroke()
-        })
-        ctx.lineWidth = Math.max(1, h * 0.06)
-        ctx.beginPath(); ctx.moveTo(x, y + h * 0.06); ctx.lineTo(x, y + h * 0.38); ctx.stroke()
-      } else {
-        // Deciduous: circle blob + trunk
-        ctx.beginPath(); ctx.arc(x, y - h * 0.18, w * 0.88, 0, Math.PI * 2)
-        ctx.fill(); ctx.stroke()
-        ctx.lineWidth = Math.max(1, h * 0.06)
-        ctx.beginPath(); ctx.moveTo(x, y - h * 0.18 + w * 0.82); ctx.lineTo(x, y + h * 0.32); ctx.stroke()
+    // A continuous muted canopy texture underneath clustered individual trees.
+    drawForestCanopyTexture(ctx, pts, b, seed, inkColor)
+    terrainClusterGrid(pts, b, seed, 28 * symbolScale, 22 * symbolScale, (x, y, i, mark) => {
+      const h = (12 + seededNoise(seed, i * 17 + mark * 5 + 3) * 13) * symbolScale
+      const kind = seededNoise(seed, i * 17 + mark * 5 + 4)
+      const lean = (seededNoise(seed, i * 17 + mark * 5 + 5) - 0.5) * 0.22
+      if (!forestTreeFitsPolygon(pts, x, y, h, kind)) return
+      drawForestTree(ctx, x, y, h, kind, lean, inkColor)
+      if (mark === 0 && seededNoise(seed, i + 900) > 0.28 && forestUndergrowthFitsPolygon(pts, x, y + h * 0.24)) {
+        drawUndergrowth(ctx, x, y + h * 0.24, seed, i, inkColor)
       }
-    })
+    }, { minCount: 3, extraCount: 3, jitterX: 24, jitterY: 18 })
 
   } else if (terrainType === 'mountains') {
-    // Mountain peak clusters
-    terrainGrid(pts, b, seed, 96, (x, y, i) => {
-      const clusterSize = 2 + Math.floor(seededNoise(seed, i + 100) * 2)
-      for (let p = 0; p < clusterSize; p++) {
-        const px = x + (seededNoise(seed, i * 5 + p * 3 + 10) - 0.5) * 60
-        const py = y + (seededNoise(seed, i * 5 + p * 3 + 11) - 0.5) * 28
-        const h = 40 + seededNoise(seed, i * 5 + p + 12) * 22
-        const hw = h * (0.44 + seededNoise(seed, i * 5 + p + 13) * 0.24)
-        ctx.lineWidth = Math.max(1.2, h * 0.05)
-        // Mountain body
-        ctx.beginPath()
-        ctx.moveTo(px, py - h * 0.52)
-        ctx.lineTo(px - hw, py + h * 0.42)
-        ctx.lineTo(px + hw, py + h * 0.42)
-        ctx.closePath(); ctx.fill(); ctx.stroke()
-        // Snow cap
-        ctx.save()
-        ctx.globalAlpha = 0.55
-        ctx.fillStyle = '#f0ece4'
-        ctx.beginPath()
-        ctx.moveTo(px, py - h * 0.52)
-        ctx.lineTo(px - hw * 0.3, py - h * 0.2)
-        ctx.lineTo(px + hw * 0.3, py - h * 0.2)
-        ctx.closePath(); ctx.fill()
-        ctx.restore()
-        ctx.strokeStyle = inkColor; ctx.fillStyle = inkColor
+    // Staggered rows of peaks: x x x x /  x x x / x x x x.
+    ctx.save()
+    ctx.globalAlpha = 1
+    const spacingX = 46 * symbolScale
+    const spacingY = 28 * symbolScale
+    const cols = Math.ceil(b.w / spacingX) + 2
+    const rows = Math.ceil(b.h / spacingY) + 2
+    const clusters = []
+    let idx = 0
+    for (let row = 0; row < rows; row++) {
+      const offset = row % 2 === 0 ? 0 : spacingX * 0.5
+      for (let col = 0; col < cols; col++) {
+        const px = b.x + col * spacingX + offset + (seededNoise(seed, idx * 11 + 1) - 0.5) * 10
+        const py = b.y + row * spacingY + (seededNoise(seed, idx * 11 + 2) - 0.5) * 10
+        if (!polyContains(pts, px, py)) { idx++; continue }
+        const h = (24 + seededNoise(seed, idx * 11 + 3) * 32) * symbolScale
+        const cluster = seededNoise(seed, idx * 11 + 4) > 0.48 ? 2 : 1
+        const config = { x: px, y: py, h, cluster, seed, index: idx, row }
+        if (mountainClusterFitsPolygon(pts, config)) clusters.push(config)
+
+        idx++
       }
-    })
+    }
+    const frontRow = clusters.reduce((max, cluster) => Math.max(max, cluster.row), -Infinity)
+    clusters.forEach(cluster => { cluster.showBase = cluster.row === frontRow })
+    clusters
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .forEach(cluster => drawMountainCluster(ctx, cluster, inkColor))
+    ctx.restore()
 
   } else if (terrainType === 'hills') {
-    // Rounded hill humps
-    terrainGrid(pts, b, seed, 72, (x, y, i) => {
-      const w = 30 + seededNoise(seed, i + 200) * 18
-      const h = w * 0.46
-      ctx.lineWidth = Math.max(1.2, w * 0.05)
-      ctx.beginPath()
-      ctx.moveTo(x - w * 0.62, y + h * 0.1)
-      ctx.quadraticCurveTo(x - w * 0.2, y - h * 0.82, x, y - h * 0.88)
-      ctx.quadraticCurveTo(x + w * 0.2, y - h * 0.82, x + w * 0.62, y + h * 0.1)
-      ctx.stroke()
-      // Light right-side shadow
-      ctx.save(); ctx.globalAlpha = 0.28
-      ctx.beginPath()
-      ctx.moveTo(x + w * 0.1, y - h * 0.7)
-      ctx.quadraticCurveTo(x + w * 0.35, y - h * 0.38, x + w * 0.6, y + h * 0.1)
-      ctx.lineWidth = Math.max(2, w * 0.08); ctx.stroke()
-      ctx.restore()
-    })
+    // Sparser rounded hill humps with reserved footprints so they never overlap.
+    const spacingX = 82 * symbolScale
+    const spacingY = 54 * symbolScale
+    const cols = Math.ceil(b.w / spacingX) + 2
+    const rows = Math.ceil(b.h / spacingY) + 2
+    const hills = []
+    let idx = 0
+    for (let row = 0; row < rows; row++) {
+      const offset = row % 2 === 0 ? 0 : spacingX * 0.45
+      for (let col = 0; col < cols; col++) {
+        if (seededNoise(seed, idx * 13 + 90) < 0.32) { idx++; continue }
+        const x = b.x + col * spacingX + offset + (seededNoise(seed, idx * 13 + 91) - 0.5) * 18
+        const y = b.y + row * spacingY + (seededNoise(seed, idx * 13 + 92) - 0.5) * 14
+        const w = (34 + seededNoise(seed, idx * 13 + 93) * 18) * symbolScale
+        const hill = { x, y, w, h: w * 0.46 }
+        const bounds = getHillBounds(hill, 10)
+        if (!hillFitsPolygon(pts, bounds)) { idx++; continue }
+        if (hills.some(other => boundsOverlap(bounds, getHillBounds(other, 10)))) { idx++; continue }
+        hills.push(hill)
+        idx++
+      }
+    }
+    hills
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .forEach(hill => drawHillSymbol(ctx, hill))
 
   } else if (terrainType === 'desert') {
-    // Crescent dune arcs in rows
-    terrainGrid(pts, b, seed, 38, (x, y, i) => {
-      const w = 28 + seededNoise(seed, i + 100) * 18
-      const tilt = (seededNoise(seed, i + 200) - 0.5) * 0.4
-      ctx.lineWidth = Math.max(1, w * 0.055)
+    // Quiet wind-dune arcs: sparse and light so the desert texture does not shout.
+    terrainClusterGrid(pts, b, seed, 62 * symbolScale, 44 * symbolScale, (x, y, i, mark) => {
+      if (seededNoise(seed, i * 19 + mark + 80) < 0.2) return
+      const w = (16 + seededNoise(seed, i * 19 + mark + 100) * 20) * symbolScale
+      const tilt = (seededNoise(seed, i * 19 + mark + 200) - 0.5) * 0.24
+      if (!centeredBoundsFitPolygon(pts, x, y, w * 0.62, w * 0.34)) return
+      ctx.save()
+      ctx.globalAlpha = 0.38
+      ctx.lineWidth = Math.max(0.65, w * 0.032)
       ctx.save(); ctx.translate(x, y); ctx.rotate(tilt)
       ctx.beginPath()
       ctx.moveTo(-w * 0.5, 0)
-      ctx.quadraticCurveTo(0, -w * 0.22, w * 0.5, 0)
+      ctx.quadraticCurveTo(0, -w * 0.18, w * 0.5, 0)
       ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(-w * 0.32, w * 0.08)
-      ctx.quadraticCurveTo(0, -w * 0.08, w * 0.32, w * 0.08)
-      ctx.stroke()
+      if (seededNoise(seed, i * 19 + mark + 240) > 0.48) {
+        ctx.globalAlpha = 0.24
+        ctx.beginPath()
+        ctx.moveTo(-w * 0.28, w * 0.1)
+        ctx.quadraticCurveTo(0, -w * 0.03, w * 0.28, w * 0.1)
+        ctx.stroke()
+      }
       ctx.restore()
-    })
+      ctx.restore()
+    }, { minCount: 1, extraCount: 1, jitterX: 34 * symbolScale, jitterY: 24 * symbolScale })
 
   } else if (terrainType === 'swamp') {
-    // Reed clusters with water ripple
-    terrainGrid(pts, b, seed, 44, (x, y, i) => {
-      const h = 22 + seededNoise(seed, i + 100) * 14
-      ctx.lineWidth = Math.max(1, h * 0.06)
-      // 3 reed stems
-      ;[-6, 0, 7].forEach((xOff, k) => {
-        const rh = h * (0.76 + seededNoise(seed, i * 5 + k) * 0.28)
-        const lean = (seededNoise(seed, i * 5 + k + 30) - 0.5) * 6
-        ctx.beginPath()
-        ctx.moveTo(x + xOff, y + rh * 0.3)
-        ctx.lineTo(x + xOff + lean, y - rh * 0.48)
-        ctx.stroke()
-        // Cattail head
-        ctx.beginPath()
-        ctx.ellipse(x + xOff + lean, y - rh * 0.48, h * 0.055, h * 0.14, lean * 0.04, 0, Math.PI * 2)
-        ctx.fill()
-      })
-      // Water ripple
-      if (seededNoise(seed, i + 300) > 0.5) {
-        ctx.save(); ctx.globalAlpha = 0.38
-        ctx.beginPath(); ctx.ellipse(x + 10, y + h * 0.42, 9, 4, 0, 0, Math.PI * 2); ctx.stroke()
-        ctx.restore()
-      }
-    })
+    drawSwampTerrain(ctx, pts, b, seed, inkColor, symbolScale, hasTerrainBackground)
 
   } else if (terrainType === 'farmland') {
-    // Field blocks: rectangles divided by lines
-    terrainGrid(pts, b, seed, 58, (x, y, i) => {
-      const fw = 38 + seededNoise(seed, i + 100) * 18
-      const fh = 24 + seededNoise(seed, i + 200) * 14
-      const rot = (seededNoise(seed, i + 300) - 0.5) * 0.3
-      ctx.lineWidth = 1
-      ctx.save(); ctx.translate(x, y); ctx.rotate(rot)
-      ctx.strokeRect(-fw / 2, -fh / 2, fw, fh)
-      // Interior field rows
-      const rowCount = 2 + Math.floor(seededNoise(seed, i + 400) * 2)
-      for (let r = 1; r < rowCount; r++) {
-        const ry = -fh / 2 + (fh / rowCount) * r
-        ctx.beginPath(); ctx.moveTo(-fw / 2, ry); ctx.lineTo(fw / 2, ry); ctx.stroke()
-      }
-      ctx.restore()
-    })
+    drawFarmlandTerrain(ctx, pts, b, seed, inkColor, symbolScale)
 
-  } else if (terrainType === 'tundra') {
-    // Dot clusters
-    terrainGrid(pts, b, seed, 36, (x, y, _i) => {
-      ctx.lineWidth = 1
-      ;[[0, 0, 2.8], [-6, -2, 1.8], [5, 3, 1.6], [-3, 5, 1.4]].forEach(([dx, dy, r]) => {
-        ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2); ctx.fill()
-      })
-    })
-
-  } else if (terrainType === 'snow') {
-    // Snowflake crosses
-    terrainGrid(pts, b, seed, 38, (x, y, i) => {
-      const r = 6 + seededNoise(seed, i + 100) * 5
-      ctx.lineWidth = Math.max(1, r * 0.14)
-      for (let a = 0; a < 6; a++) {
-        const ang = (a * Math.PI) / 3
-        ctx.beginPath()
-        ctx.moveTo(x, y)
-        ctx.lineTo(x + Math.cos(ang) * r, y + Math.sin(ang) * r)
-        ctx.stroke()
-      }
-      // Center dot
-      ctx.beginPath(); ctx.arc(x, y, r * 0.18, 0, Math.PI * 2); ctx.fill()
-    })
+  } else if (terrainType === 'tundra' || terrainType === 'snow') {
+    // Snowy tundra: one cold terrain treatment for tundra and legacy snow objects.
+    drawSnowyTundraTerrain(ctx, pts, b, seed, inkColor, symbolScale, hasTerrainBackground)
 
   } else if (terrainType === 'volcanic') {
-    // Flame/peak marks
-    terrainGrid(pts, b, seed, 62, (x, y, i) => {
-      const h = 28 + seededNoise(seed, i + 100) * 18
+    // Dark jagged vents with small hot centers.
+    terrainClusterGrid(pts, b, seed, 54 * symbolScale, 38 * symbolScale, (x, y, i, mark) => {
+      const h = (22 + seededNoise(seed, i * 41 + mark + 100) * 18) * symbolScale
+      if (!centeredBoundsFitPolygon(pts, x, y - h * 0.07, h * 0.36, h * 0.58)) return
       ctx.lineWidth = Math.max(1.2, h * 0.05)
       ctx.beginPath()
       ctx.moveTo(x, y - h * 0.52)
@@ -541,48 +575,1281 @@ function drawTerrainSymbols(ctx, terrainType, pts, b, seed, inkColor, _opts) {
       ctx.lineTo(x - h * 0.16, y + h * 0.38)
       ctx.bezierCurveTo(x - h * 0.32, y + h * 0.12, x - h * 0.24, y - h * 0.28, x, y - h * 0.52)
       ctx.closePath(); ctx.fill(); ctx.stroke()
-      // Hot glow dot
       ctx.save(); ctx.fillStyle = '#e05020'; ctx.globalAlpha = 0.55
       ctx.beginPath(); ctx.arc(x, y + h * 0.14, h * 0.11, 0, Math.PI * 2); ctx.fill()
       ctx.restore()
-    })
-
-  } else if (terrainType === 'wasteland') {
-    // Cracks and X marks
-    terrainGrid(pts, b, seed, 50, (x, y, i) => {
-      const sz = 16 + seededNoise(seed, i + 100) * 12
-      ctx.lineWidth = Math.max(1, sz * 0.06)
-      if (seededNoise(seed, i + 200) > 0.5) {
-        // X mark
-        ctx.beginPath(); ctx.moveTo(x - sz * 0.4, y - sz * 0.4); ctx.lineTo(x + sz * 0.4, y + sz * 0.4); ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(x + sz * 0.4, y - sz * 0.4); ctx.lineTo(x - sz * 0.4, y + sz * 0.4); ctx.stroke()
-      } else {
-        // Jagged crack
-        const steps = 3 + Math.floor(seededNoise(seed, i + 300) * 3)
-        ctx.beginPath(); ctx.moveTo(x - sz * 0.3, y)
-        for (let s = 1; s <= steps; s++) {
-          const tx = x - sz * 0.3 + (s / steps) * sz * 0.7
-          const ty = y + (seededNoise(seed, i * 10 + s) - 0.5) * sz * 0.6
-          ctx.lineTo(tx, ty)
-        }
-        ctx.stroke()
-      }
-    })
+    }, { minCount: 1, extraCount: 1, jitterX: 32, jitterY: 24 })
 
   } else {
-    // Grassland / plains — subtle grass blades
-    terrainGrid(pts, b, seed, 30, (x, y, i) => {
-      const h = 7 + seededNoise(seed, i + 100) * 5
+    // Grassland / plains — clustered grass blades.
+    terrainClusterGrid(pts, b, seed, 30 * symbolScale, 26 * symbolScale, (x, y, i, mark) => {
+      const h = (6 + seededNoise(seed, i * 47 + mark + 100) * 7) * symbolScale
+      if (!boundsFitPolygon(pts, { minX: x - 9 * symbolScale, minY: y - h - 2, maxX: x + 9 * symbolScale, maxY: y + 2 })) return
       ctx.lineWidth = 0.9; ctx.globalAlpha = 0.45
       ;[-4, 0, 4].forEach((xOff, k) => {
-        const lean = (seededNoise(seed, i * 5 + k) - 0.5) * 4
+        const lean = (seededNoise(seed, i * 5 + mark * 3 + k) - 0.5) * 4
         ctx.beginPath(); ctx.moveTo(x + xOff, y); ctx.lineTo(x + xOff + lean, y - h); ctx.stroke()
       })
       ctx.globalAlpha = 0.72
-    })
+    }, { minCount: 1, extraCount: 2, jitterX: 24, jitterY: 18 })
   }
 }
 
+function drawForestCanopyTexture(ctx, pts, b, seed, inkColor) {
+  const leaf = inkColor === '#3060a8' ? '#8eb4d0' : '#7f876e'
+  const leafDark = inkColor === '#3060a8' ? '#6f9cc3' : '#626d58'
+  const leafLight = inkColor === '#3060a8' ? '#c9e2f2' : '#a6a585'
+
+  ctx.save()
+  terrainClusterGrid(pts, b, seed + 71, 18, 16, (x, y, i, mark) => {
+    const r = 2.4 + seededNoise(seed, i * 13 + mark + 1) * 3.8
+    const rot = seededNoise(seed, i * 13 + mark + 2) * Math.PI
+    if (!centeredBoundsFitPolygon(pts, x, y, r * 1.45, r * 1.45)) return
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(rot)
+    ctx.globalAlpha = 0.32
+    ctx.fillStyle = seededNoise(seed, i * 13 + mark + 3) > 0.45 ? leaf : leafDark
+    ctx.beginPath()
+    ctx.ellipse(0, 0, r * 1.35, r * 0.72, 0, 0, Math.PI * 2)
+    ctx.fill()
+    if (seededNoise(seed, i * 13 + mark + 4) > 0.58) {
+      ctx.globalAlpha = 0.3
+      ctx.strokeStyle = leafLight
+      ctx.lineWidth = 0.7
+      ctx.beginPath()
+      ctx.moveTo(-r, 0)
+      ctx.quadraticCurveTo(0, -r * 0.5, r, 0)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }, { minCount: 2, extraCount: 3, jitterX: 18, jitterY: 15 })
+  ctx.restore()
+}
+
+function drawForestTree(ctx, x, y, h, kind, lean, inkColor) {
+  const w = h * (0.38 + kind * 0.22)
+  const outline = inkColor === '#3060a8' ? '#214b80' : '#33412f'
+  const canopy = inkColor === '#3060a8' ? '#98bdd8' : (kind > 0.5 ? '#78856b' : '#879070')
+  const canopyShade = inkColor === '#3060a8' ? '#6f9cc3' : '#5c684f'
+  const trunk = inkColor === '#3060a8' ? '#6f88a8' : '#79654d'
+  const highlight = inkColor === '#3060a8' ? '#d9ecf7' : '#c9c2a0'
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(lean)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = outline
+  ctx.fillStyle = canopy
+  ctx.lineWidth = Math.max(0.9, h * 0.055)
+
+  if (kind > 0.5) {
+    ;[
+      [-h * 0.42, w * 0.4, h * 0.22],
+      [-h * 0.24, w * 0.68, h * 0.26],
+      [-h * 0.04, w * 0.86, h * 0.3],
+      [h * 0.14, w * 0.66, h * 0.24],
+    ].forEach(([cy, half, height], layer) => {
+      ctx.beginPath()
+      ctx.moveTo(0, cy - height * 0.72)
+      ctx.bezierCurveTo(-half * 0.42, cy - height * 0.86, -half, cy - height * 0.32, -half * 0.86, cy + height * 0.16)
+      ctx.bezierCurveTo(-half * 0.64, cy + height * 0.68, -half * 0.16, cy + height * 0.54, 0, cy + height * 0.42)
+      ctx.bezierCurveTo(half * 0.2, cy + height * 0.58, half * 0.7, cy + height * 0.58, half * 0.9, cy + height * 0.12)
+      ctx.bezierCurveTo(half * 1.04, cy - height * 0.34, half * 0.42, cy - height * 0.86, 0, cy - height * 0.72)
+      ctx.closePath()
+      ctx.fillStyle = layer >= 2 ? canopyShade : canopy
+      ctx.fill()
+      ctx.stroke()
+    })
+  } else {
+    const crown = [
+      [0, -h * 0.58],
+      [-w * 0.42, -h * 0.5],
+      [-w * 0.62, -h * 0.3],
+      [-w * 0.74, -h * 0.08],
+      [-w * 0.48, h * 0.08],
+      [-w * 0.18, h * 0.0],
+      [0, h * 0.12],
+      [w * 0.24, h * 0.04],
+      [w * 0.62, h * 0.1],
+      [w * 0.78, -h * 0.12],
+      [w * 0.58, -h * 0.36],
+      [w * 0.32, -h * 0.5],
+    ]
+    ctx.beginPath()
+    ctx.moveTo(crown[0][0], crown[0][1])
+    for (let i = 1; i < crown.length; i++) {
+      const [px, py] = crown[i]
+      const [prevX, prevY] = crown[i - 1]
+      ctx.quadraticCurveTo((prevX + px) / 2, Math.min(prevY, py) - h * 0.04, px, py)
+    }
+    ctx.quadraticCurveTo(w * 0.12, -h * 0.62, crown[0][0], crown[0][1])
+    ctx.closePath()
+    ctx.fillStyle = canopy
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.save()
+    ctx.fillStyle = canopyShade
+    ctx.beginPath()
+    ctx.moveTo(w * 0.04, -h * 0.48)
+    ctx.lineTo(w * 0.5, -h * 0.36)
+    ctx.lineTo(w * 0.32, -h * 0.18)
+    ctx.lineTo(w * 0.58, -h * 0.08)
+    ctx.lineTo(w * 0.18, h * 0.02)
+    ctx.lineTo(0, -h * 0.08)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+  }
+
+  ctx.save()
+  ctx.globalAlpha = 0.62
+  ctx.strokeStyle = highlight
+  ctx.lineWidth = Math.max(0.7, h * 0.03)
+  ctx.beginPath()
+  ctx.moveTo(-w * 0.16, -h * 0.46)
+  ctx.lineTo(-w * 0.36, -h * 0.14)
+  ctx.stroke()
+  ctx.restore()
+
+  ctx.strokeStyle = outline
+  ctx.fillStyle = trunk
+  ctx.lineWidth = Math.max(0.9, h * 0.06)
+  ctx.beginPath()
+  ctx.moveTo(-h * 0.045, -h * 0.02)
+  ctx.lineTo(-h * 0.03, h * 0.34)
+  ctx.lineTo(h * 0.045, h * 0.34)
+  ctx.lineTo(h * 0.03, -h * 0.02)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  ctx.restore()
+}
+
+function forestTreeFitsPolygon(pts, x, y, h, kind) {
+  const w = h * (0.38 + kind * 0.22)
+  const padX = w * 0.92
+  const top = y - h * 0.66
+  const bottom = y + h * 0.42
+  return [
+    [x - padX, top],
+    [x + padX, top],
+    [x + padX, bottom],
+    [x - padX, bottom],
+    [x, top],
+    [x, bottom],
+    [x - padX, y],
+    [x + padX, y],
+  ].every(([px, py]) => polyContains(pts, px, py))
+}
+
+function forestUndergrowthFitsPolygon(pts, x, y) {
+  return [
+    [x - 16, y - 12],
+    [x + 16, y - 12],
+    [x + 16, y + 8],
+    [x - 16, y + 8],
+    [x, y],
+  ].every(([px, py]) => polyContains(pts, px, py))
+}
+
+function drawUndergrowth(ctx, x, y, seed, i, inkColor) {
+  ctx.save()
+  ctx.strokeStyle = inkColor
+  ctx.globalAlpha = 0.38
+  ctx.lineWidth = 0.9
+  for (let k = 0; k < 3; k++) {
+    const ox = (seededNoise(seed, i * 11 + k + 1) - 0.5) * 18
+    const oy = (seededNoise(seed, i * 11 + k + 2) - 0.5) * 8
+    const h = 5 + seededNoise(seed, i * 11 + k + 3) * 7
+    ctx.beginPath()
+    ctx.moveTo(x + ox - 4, y + oy)
+    ctx.quadraticCurveTo(x + ox, y + oy - h, x + ox + 4, y + oy)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawHillSymbol(ctx, hill) {
+  const { x, y, w, h } = hill
+  ctx.lineWidth = Math.max(1.1, w * 0.045)
+  ctx.beginPath()
+  ctx.moveTo(x - w * 0.62, y + h * 0.1)
+  ctx.quadraticCurveTo(x - w * 0.2, y - h * 0.82, x, y - h * 0.88)
+  ctx.quadraticCurveTo(x + w * 0.2, y - h * 0.82, x + w * 0.62, y + h * 0.1)
+  ctx.stroke()
+  ctx.save()
+  ctx.globalAlpha = 0.28
+  ctx.beginPath()
+  ctx.moveTo(x + w * 0.1, y - h * 0.7)
+  ctx.quadraticCurveTo(x + w * 0.35, y - h * 0.38, x + w * 0.6, y + h * 0.1)
+  ctx.lineWidth = Math.max(2, w * 0.08)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function getHillBounds(hill, pad = 0) {
+  return {
+    minX: hill.x - hill.w * 0.72 - pad,
+    minY: hill.y - hill.h * 0.98 - pad,
+    maxX: hill.x + hill.w * 0.72 + pad,
+    maxY: hill.y + hill.h * 0.2 + pad,
+  }
+}
+
+function hillFitsPolygon(pts, bounds) {
+  const samples = [
+    [bounds.minX, bounds.minY],
+    [bounds.maxX, bounds.minY],
+    [bounds.maxX, bounds.maxY],
+    [bounds.minX, bounds.maxY],
+    [(bounds.minX + bounds.maxX) / 2, bounds.minY],
+    [(bounds.minX + bounds.maxX) / 2, bounds.maxY],
+    [bounds.minX, (bounds.minY + bounds.maxY) / 2],
+    [bounds.maxX, (bounds.minY + bounds.maxY) / 2],
+    [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2],
+  ]
+  return samples.every(([x, y]) => polyContains(pts, x, y))
+}
+
+function boundsOverlap(a, b) {
+  return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY
+}
+
+function drawSwampTerrain(ctx, pts, b, seed, inkColor, symbolScale = 1, hasTerrainBackground = true) {
+  const isBlueprint = inkColor === '#3060a8'
+  const outline = isBlueprint ? '#244f8f' : '#293226'
+  const water = isBlueprint ? '#6aa2c8' : '#667359'
+  const mud = isBlueprint ? '#5f7fa0' : '#6b5d3f'
+  const reed = isBlueprint ? '#315f96' : '#2f3d24'
+  const cattail = isBlueprint ? '#244f8f' : '#3f321f'
+  const pad = isBlueprint ? '#7ea5c6' : '#4f6a3b'
+  const grass = isBlueprint ? '#7ea5c6' : '#746b49'
+
+  ctx.save()
+  if (hasTerrainBackground) {
+    drawSwampMuddyWaterWash(ctx, pts, b, seed, water, mud, outline, symbolScale)
+  }
+
+  terrainClusterGrid(pts, b, seed, 48 * symbolScale, 36 * symbolScale, (x, y, i, mark) => {
+    const roll = seededNoise(seed, i * 23 + mark * 7 + 1)
+    if (roll > 0.58) {
+      const size = (16 + seededNoise(seed, i * 23 + mark * 7 + 2) * 16) * symbolScale
+      if (!centeredBoundsFitPolygon(pts, x, y - size * 0.42, size * 1.02, size * 1.1)) return
+      drawSwampCattailCluster(ctx, x, y + size * 0.2, size, seed, i * 3 + mark, reed, cattail, grass, outline)
+    } else if (roll > 0.18) {
+      const size = (12 + seededNoise(seed, i * 23 + mark * 7 + 3) * 12) * symbolScale
+      if (!centeredBoundsFitPolygon(pts, x, y, size * 1.16, size * 0.68)) return
+      drawSwampLilyPads(ctx, x, y, size, seed, i * 3 + mark, pad, outline)
+    } else {
+      const size = (14 + seededNoise(seed, i * 23 + mark * 7 + 4) * 12) * symbolScale
+      if (!centeredBoundsFitPolygon(pts, x, y, size * 0.72, size * 0.34)) return
+      drawSwampRippleMark(ctx, x, y, size, seed, i * 3 + mark, outline)
+    }
+  }, { minCount: 2, extraCount: 2, jitterX: 30 * symbolScale, jitterY: 24 * symbolScale })
+
+  drawSwampFineSpeckles(ctx, pts, b, seed, mud, outline, symbolScale)
+
+  ctx.restore()
+}
+
+function drawSwampMuddyWaterWash(ctx, pts, b, seed, water, mud, outline, symbolScale) {
+  ctx.save()
+  ctx.fillStyle = colorWithAlpha(water, 0.2)
+  ctx.fillRect(b.x, b.y, b.w, b.h)
+
+  const pools = Math.max(3, Math.floor((b.w * b.h) / 42000))
+  for (let i = 0; i < pools; i++) {
+    const x = b.x + seededNoise(seed, i * 31 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 31 + 2) * b.h
+    if (!polyContains(pts, x, y)) continue
+    const rx = (32 + seededNoise(seed, i * 31 + 3) * 70) * symbolScale
+    const ry = (18 + seededNoise(seed, i * 31 + 4) * 34) * symbolScale
+    if (!centeredBoundsFitPolygon(pts, x, y, rx * 1.16, ry * 1.16)) continue
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate((seededNoise(seed, i * 31 + 5) - 0.5) * 0.8)
+    drawOrganicSwampPatch(ctx, rx, ry, seed, i)
+    ctx.fillStyle = colorWithAlpha(i % 2 ? mud : water, i % 2 ? 0.16 : 0.22)
+    ctx.fill()
+    ctx.strokeStyle = colorWithAlpha(outline, 0.12)
+    ctx.lineWidth = Math.max(0.6, symbolScale)
+    ctx.stroke()
+    ctx.restore()
+  }
+  ctx.restore()
+}
+
+function drawOrganicSwampPatch(ctx, rx, ry, seed, index) {
+  const count = 11
+  ctx.beginPath()
+  for (let i = 0; i <= count; i++) {
+    const angle = (Math.PI * 2 * i) / count
+    const wobble = 0.78 + seededNoise(seed, index * 97 + i) * 0.42
+    const x = Math.cos(angle) * rx * wobble
+    const y = Math.sin(angle) * ry * (0.82 + seededNoise(seed, index * 101 + i) * 0.3)
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.closePath()
+}
+
+function drawSwampCattailCluster(ctx, x, y, size, seed, index, reed, cattail, grass, outline) {
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  ctx.strokeStyle = colorWithAlpha(outline, 0.18)
+  ctx.lineWidth = Math.max(1, size * 0.04)
+  ctx.beginPath()
+  ctx.moveTo(x - size * 0.64, y + size * 0.08)
+  ctx.quadraticCurveTo(x, y - size * 0.08, x + size * 0.7, y + size * 0.08)
+  ctx.stroke()
+
+  const stems = 5 + Math.floor(seededNoise(seed, index * 17 + 1) * 4)
+  for (let i = 0; i < stems; i++) {
+    const t = stems === 1 ? 0.5 : i / (stems - 1)
+    const baseX = x + (t - 0.5) * size * 1.08 + (seededNoise(seed, index * 17 + i + 2) - 0.5) * size * 0.16
+    const baseY = y + (seededNoise(seed, index * 17 + i + 12) - 0.5) * size * 0.1
+    const h = size * (0.72 + seededNoise(seed, index * 17 + i + 22) * 0.72)
+    const lean = (seededNoise(seed, index * 17 + i + 32) - 0.5) * size * 0.3
+    ctx.strokeStyle = reed
+    ctx.lineWidth = Math.max(0.9, size * 0.045)
+    ctx.beginPath()
+    ctx.moveTo(baseX, baseY)
+    ctx.quadraticCurveTo(baseX + lean * 0.2, baseY - h * 0.54, baseX + lean, baseY - h)
+    ctx.stroke()
+    if (i % 2 === 0) {
+      ctx.strokeStyle = cattail
+      ctx.lineWidth = Math.max(1.7, size * 0.08)
+      ctx.beginPath()
+      ctx.moveTo(baseX + lean, baseY - h - size * 0.12)
+      ctx.lineTo(baseX + lean * 1.02, baseY - h + size * 0.08)
+      ctx.stroke()
+    }
+  }
+
+  ctx.strokeStyle = grass
+  ctx.lineWidth = Math.max(0.8, size * 0.035)
+  ;[-0.38, -0.14, 0.12, 0.38].forEach((off, blade) => {
+    const bladeH = size * (0.42 + seededNoise(seed, index * 19 + blade) * 0.36)
+    ctx.beginPath()
+    ctx.moveTo(x + off * size, y + size * 0.08)
+    ctx.quadraticCurveTo(x + off * size * 0.75, y - bladeH * 0.48, x + off * size * 1.25, y - bladeH)
+    ctx.stroke()
+  })
+  ctx.restore()
+}
+
+function drawSwampLilyPads(ctx, x, y, size, seed, index, pad, outline) {
+  const count = 2 + Math.floor(seededNoise(seed, index * 29 + 1) * 3)
+  ctx.save()
+  for (let i = 0; i < count; i++) {
+    const px = x + (seededNoise(seed, index * 29 + i + 2) - 0.5) * size * 1.2
+    const py = y + (seededNoise(seed, index * 29 + i + 8) - 0.5) * size * 0.72
+    const r = size * (0.24 + seededNoise(seed, index * 29 + i + 14) * 0.22)
+    const rot = seededNoise(seed, index * 29 + i + 20) * Math.PI * 2
+    ctx.save()
+    ctx.translate(px, py)
+    ctx.rotate(rot)
+    ctx.scale(1.25, 0.72)
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.arc(0, 0, r, 0.42, Math.PI * 2 - 0.42)
+    ctx.closePath()
+    ctx.fillStyle = colorWithAlpha(pad, 0.72)
+    ctx.fill()
+    ctx.strokeStyle = colorWithAlpha(outline, 0.55)
+    ctx.lineWidth = Math.max(0.65, size * 0.025)
+    ctx.stroke()
+    ctx.restore()
+  }
+  ctx.restore()
+}
+
+function drawSwampRippleMark(ctx, x, y, size, seed, index, outline) {
+  ctx.save()
+  ctx.strokeStyle = colorWithAlpha(outline, 0.28)
+  ctx.lineWidth = Math.max(0.6, size * 0.03)
+  const arcs = 1 + Math.floor(seededNoise(seed, index * 31 + 1) * 3)
+  for (let i = 0; i < arcs; i++) {
+    const w = size * (0.42 + i * 0.24)
+    ctx.beginPath()
+    ctx.moveTo(x - w, y + i * size * 0.12)
+    ctx.quadraticCurveTo(x, y - size * (0.12 + i * 0.04), x + w, y + i * size * 0.1)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawSwampFineSpeckles(ctx, pts, b, seed, mud, outline, symbolScale) {
+  ctx.save()
+  const count = Math.min(170, Math.max(30, Math.floor((b.w * b.h) / (2300 * symbolScale * symbolScale))))
+  for (let i = 0; i < count; i++) {
+    const x = b.x + seededNoise(seed, i * 43 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 43 + 2) * b.h
+    const r = (0.7 + seededNoise(seed, i * 43 + 3) * 1.2) * symbolScale
+    if (!centeredBoundsFitPolygon(pts, x, y, r, r)) continue
+    ctx.fillStyle = colorWithAlpha(i % 4 === 0 ? outline : mud, i % 4 === 0 ? 0.24 : 0.32)
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+function buildSwampChannelPaths(b, seed) {
+  const pathCount = b.w > 280 ? 3 : 2
+  const paths = []
+  for (let p = 0; p < pathCount; p++) {
+    const points = []
+    const steps = 8
+    const baseX = b.x + b.w * ((p + 0.52) / (pathCount + 0.1))
+    const amp = b.w * (0.12 + seededNoise(seed, p * 17 + 1) * 0.12)
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const wave = Math.sin((t * Math.PI * 2.2) + p * 1.4 + seededNoise(seed, p * 17 + 2) * 1.2)
+      const cross = Math.sin((t * Math.PI * 5.1) + p * 0.9) * amp * 0.34
+      points.push({
+        x: baseX + wave * amp + cross + (seededNoise(seed, p * 101 + i * 7 + 3) - 0.5) * b.w * 0.08,
+        y: b.y - b.h * 0.08 + t * b.h * 1.16,
+      })
+    }
+    paths.push(points)
+  }
+
+  if (b.w > 220 && b.h > 160) {
+    const sidePath = []
+    const steps = 7
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      sidePath.push({
+        x: b.x - b.w * 0.04 + t * b.w * 1.08,
+        y: b.y + b.h * (0.28 + Math.sin(t * Math.PI * 2.5 + seededNoise(seed, 501) * 1.8) * 0.16) + (seededNoise(seed, i * 19 + 502) - 0.5) * b.h * 0.12,
+      })
+    }
+    paths.push(sidePath)
+  }
+
+  return paths
+}
+
+function drawSwampChannel(ctx, points, width, seed, index, water, bank, outline) {
+  const leftBank = jitterPath(offsetPath(points, width * -0.64), seed, index * 37 + 1, width * 0.12)
+  const rightBank = jitterPath(offsetPath(points, width * 0.64), seed, index * 37 + 2, width * 0.12)
+  const leftWater = jitterPath(offsetPath(points, width * -0.38), seed, index * 37 + 3, width * 0.07)
+  const rightWater = jitterPath(offsetPath(points, width * 0.38), seed, index * 37 + 4, width * 0.07)
+
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  drawRibbon(ctx, leftBank, rightBank)
+  ctx.fillStyle = colorWithAlpha(bank, 0.34)
+  ctx.fill()
+
+  drawRibbon(ctx, leftWater, rightWater)
+  ctx.fillStyle = colorWithAlpha(water, 0.76)
+  ctx.fill()
+
+  ctx.strokeStyle = colorWithAlpha(water, 0.28)
+  ctx.lineWidth = Math.max(1, width * 0.18)
+  drawSmoothPath(ctx, jitterPath(points, seed, index * 31 + 12, width * 0.05), false)
+  ctx.stroke()
+
+  ctx.strokeStyle = colorWithAlpha(outline, 0.52)
+  ctx.lineWidth = Math.max(0.75, width * 0.035)
+  drawBrokenPath(ctx, leftBank, seed, index * 43 + 1, 0.64)
+  drawBrokenPath(ctx, rightBank, seed, index * 43 + 2, 0.64)
+
+  ctx.strokeStyle = colorWithAlpha(outline, 0.28)
+  ctx.lineWidth = Math.max(0.6, width * 0.025)
+  drawBrokenPath(ctx, leftWater, seed, index * 43 + 3, 0.38)
+  drawBrokenPath(ctx, rightWater, seed, index * 43 + 4, 0.38)
+  ctx.restore()
+}
+
+function drawRibbon(ctx, left, right) {
+  if (!left.length || !right.length) return
+  ctx.beginPath()
+  ctx.moveTo(left[0].x, left[0].y)
+  left.slice(1).forEach(p => ctx.lineTo(p.x, p.y))
+  ;[...right].reverse().forEach(p => ctx.lineTo(p.x, p.y))
+  ctx.closePath()
+}
+
+function drawBrokenPath(ctx, points, seed, offset, keepChance = 0.5) {
+  for (let i = 1; i < points.length; i++) {
+    if (seededNoise(seed, offset + i) > keepChance) continue
+    const a = points[i - 1]
+    const b = points[i]
+    const mid = {
+      x: a.x + (b.x - a.x) * (0.42 + (seededNoise(seed, offset + i + 40) - 0.5) * 0.18),
+      y: a.y + (b.y - a.y) * (0.42 + (seededNoise(seed, offset + i + 80) - 0.5) * 0.18),
+    }
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.quadraticCurveTo(mid.x, mid.y, b.x, b.y)
+    ctx.stroke()
+  }
+}
+
+function offsetPath(points, amount) {
+  return points.map((point, i) => {
+    const prev = points[Math.max(0, i - 1)]
+    const next = points[Math.min(points.length - 1, i + 1)]
+    const dx = next.x - prev.x
+    const dy = next.y - prev.y
+    const len = Math.hypot(dx, dy) || 1
+    return {
+      x: point.x + (-dy / len) * amount,
+      y: point.y + (dx / len) * amount,
+    }
+  })
+}
+
+function jitterPath(points, seed, offset, amount) {
+  return points.map((point, i) => ({
+    x: point.x + (seededNoise(seed, offset + i * 2) - 0.5) * amount,
+    y: point.y + (seededNoise(seed, offset + i * 2 + 1) - 0.5) * amount,
+  }))
+}
+
+function drawSwampGroundTexture(ctx, pts, b, seed, mud, grass, symbolScale) {
+  drawSwampStipple(ctx, pts, b, seed, mud)
+  ctx.save()
+  ctx.strokeStyle = colorWithAlpha(grass, 0.48)
+  ctx.lineWidth = Math.max(0.55, 0.8 * symbolScale)
+  const count = Math.min(160, Math.max(22, Math.floor((b.w * b.h) / (3100 * symbolScale * symbolScale))))
+  for (let i = 0; i < count; i++) {
+    const x = b.x + seededNoise(seed, i * 53 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 53 + 2) * b.h
+    if (!polyContains(pts, x, y)) continue
+    const len = (5 + seededNoise(seed, i * 53 + 3) * 9) * symbolScale
+    const rot = (seededNoise(seed, i * 53 + 4) - 0.5) * 0.9
+    ctx.beginPath()
+    ctx.moveTo(x - Math.cos(rot) * len * 0.5, y - Math.sin(rot) * len * 0.5)
+    ctx.quadraticCurveTo(x, y - len * 0.24, x + Math.cos(rot) * len * 0.5, y + Math.sin(rot) * len * 0.5)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawSwampBankReeds(ctx, points, width, seed, index, reed, grass, symbolScale) {
+  ctx.save()
+  const banks = [offsetPath(points, -width * 0.72), offsetPath(points, width * 0.72)]
+  banks.forEach((bank, bankIndex) => {
+    for (let i = 1; i < bank.length - 1; i++) {
+      if (seededNoise(seed, index * 101 + bankIndex * 31 + i) < 0.24) continue
+      const p = bank[i]
+      const size = (8 + seededNoise(seed, index * 101 + bankIndex * 31 + i + 50) * 12) * symbolScale
+      drawSwampLowReedClump(ctx, p.x, p.y, size, seed, index * 100 + bankIndex * 20 + i, reed, grass)
+    }
+  })
+  ctx.restore()
+}
+
+function drawSwampLowReedClump(ctx, x, y, size, seed, index, reed, grass) {
+  ctx.save()
+  ctx.strokeStyle = reed
+  ctx.lineCap = 'round'
+  ctx.lineWidth = Math.max(0.8, size * 0.055)
+  const count = 4 + Math.floor(seededNoise(seed, index * 19 + 1) * 5)
+  for (let i = 0; i < count; i++) {
+    const spread = (i / Math.max(1, count - 1) - 0.5) * size * 0.9
+    const baseX = x + spread + (seededNoise(seed, index * 19 + i + 2) - 0.5) * size * 0.18
+    const h = size * (0.45 + seededNoise(seed, index * 19 + i + 9) * 0.65)
+    const lean = (seededNoise(seed, index * 19 + i + 16) - 0.5) * size * 0.34
+    ctx.beginPath()
+    ctx.moveTo(baseX, y)
+    ctx.quadraticCurveTo(baseX + lean * 0.22, y - h * 0.58, baseX + lean, y - h)
+    ctx.stroke()
+  }
+  ctx.strokeStyle = colorWithAlpha(grass, 0.72)
+  ctx.lineWidth = Math.max(0.55, size * 0.03)
+  ctx.beginPath()
+  ctx.moveTo(x - size * 0.55, y + size * 0.05)
+  ctx.quadraticCurveTo(x, y - size * 0.12, x + size * 0.56, y + size * 0.04)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawSwampStipple(ctx, pts, b, seed, mud) {
+  ctx.save()
+  ctx.fillStyle = colorWithAlpha(mud, 0.42)
+  const count = Math.min(220, Math.max(36, Math.floor((b.w * b.h) / 1800)))
+  for (let i = 0; i < count; i++) {
+    const x = b.x + seededNoise(seed, i * 29 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 29 + 2) * b.h
+    if (!polyContains(pts, x, y)) continue
+    const r = 0.9 + seededNoise(seed, i * 29 + 3) * 1.5
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+function drawSwampSymbol(ctx, symbol, inkColor) {
+  const { x, y, size, kind, seed, index } = symbol
+  const outline = inkColor === '#3060a8' ? '#244f8f' : '#293226'
+  const water = inkColor === '#3060a8' ? '#5f95bd' : '#5f745f'
+  const reed = inkColor === '#3060a8' ? '#315f96' : '#3f5136'
+  const dryGrass = inkColor === '#3060a8' ? '#7ea5c6' : '#777054'
+  const bubble = inkColor === '#3060a8' ? '#c8e6f6' : '#a8ad8a'
+  const w = size * (1.05 + seededNoise(seed, index * 7 + 1) * 0.45)
+  const h = size * (0.72 + seededNoise(seed, index * 7 + 2) * 0.2)
+  const rot = (seededNoise(seed, index * 7 + 3) - 0.5) * 0.28
+
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(rot)
+  ctx.globalAlpha = 1
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  if (kind === 'channel') {
+    drawMarshWaterCut(ctx, -w * 0.46, -h * 0.06, w * 0.92, h * 0.26, seed, index, water, outline)
+    drawMarshBubbleCluster(ctx, w * 0.02, -h * 0.03, size * 1.18, seed, index, bubble, outline)
+    drawMarshBubbleCluster(ctx, w * 0.28, h * 0.02, size * 0.82, seed, index + 4, bubble, outline)
+    drawMarshReedTuft(ctx, -w * 0.34, h * 0.18, size * 0.98, seed, index + 7, reed, dryGrass, true)
+    drawMarshReedTuft(ctx, w * 0.3, h * 0.14, size * 0.86, seed, index + 13, reed, dryGrass)
+  } else if (kind === 'reedBank') {
+    drawMarshWaterCut(ctx, -w * 0.44, h * 0.18, w * 0.82, h * 0.18, seed, index, water, outline)
+    drawMarshBubbleCluster(ctx, -w * 0.04, h * 0.16, size * 0.9, seed, index + 2, bubble, outline)
+    drawMarshReedTuft(ctx, -w * 0.22, h * 0.12, size * 1.16, seed, index + 3, reed, dryGrass, true)
+    drawMarshReedTuft(ctx, w * 0.22, h * 0.1, size * 0.98, seed, index + 11, reed, dryGrass, true)
+  } else {
+    drawMarshGroundHachures(ctx, w, h, size, seed, index, dryGrass)
+    drawMarshBubbleCluster(ctx, w * 0.08, h * 0.12, size * 0.64, seed, index + 9, bubble, outline)
+    drawMarshReedTuft(ctx, -w * 0.18, h * 0.2, size * 0.88, seed, index + 5, reed, dryGrass, true)
+    drawMarshReedTuft(ctx, w * 0.2, h * 0.2, size * 0.76, seed, index + 17, reed, dryGrass)
+  }
+
+  ctx.restore()
+}
+
+function drawMarshWaterCut(ctx, x, y, w, h, seed, index, water, outline) {
+  ctx.save()
+  ctx.strokeStyle = water
+  ctx.lineWidth = Math.max(1.2, h * 0.2)
+  ctx.beginPath()
+  const midA = y - h * (0.28 + seededNoise(seed, index * 29 + 1) * 0.18)
+  const midB = y + h * (0.2 + seededNoise(seed, index * 29 + 2) * 0.16)
+  ctx.moveTo(x, y)
+  ctx.bezierCurveTo(x + w * 0.24, midA, x + w * 0.5, midB, x + w, y - h * 0.06)
+  ctx.stroke()
+  ctx.strokeStyle = outline
+  ctx.globalAlpha = 0.64
+  ctx.lineWidth = Math.max(0.75, h * 0.08)
+  ctx.beginPath()
+  ctx.moveTo(x + w * 0.08, y - h * 0.13)
+  ctx.bezierCurveTo(x + w * 0.28, y - h * 0.34, x + w * 0.46, y - h * 0.16, x + w * 0.62, y - h * 0.22)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x + w * 0.48, y + h * 0.18)
+  ctx.bezierCurveTo(x + w * 0.66, y + h * 0.32, x + w * 0.82, y + h * 0.16, x + w * 0.94, y + h * 0.08)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawMarshReedTuft(ctx, x, y, size, seed, index, reed, dryGrass, hasCattails = false) {
+  const count = 6 + Math.floor(seededNoise(seed, index * 31 + 1) * 5)
+  ctx.save()
+  ctx.strokeStyle = reed
+  ctx.lineWidth = Math.max(1.25, size * 0.052)
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0 : i / (count - 1)
+    const baseX = x + (t - 0.5) * size * (0.72 + seededNoise(seed, index * 31 + i + 2) * 0.22)
+    const baseY = y + (seededNoise(seed, index * 31 + i + 12) - 0.5) * size * 0.12
+    const height = size * (0.48 + seededNoise(seed, index * 31 + i + 22) * 0.42)
+    const lean = (seededNoise(seed, index * 31 + i + 32) - 0.5) * size * 0.26
+    ctx.beginPath()
+    ctx.moveTo(baseX, baseY)
+    ctx.quadraticCurveTo(baseX + lean * 0.24, baseY - height * 0.52, baseX + lean, baseY - height)
+    ctx.stroke()
+    if (hasCattails && i % 3 !== 0) {
+      const tipX = baseX + lean
+      const tipY = baseY - height
+      ctx.save()
+      ctx.strokeStyle = reed
+      ctx.lineWidth = Math.max(1.8, size * 0.075)
+      ctx.beginPath()
+      ctx.moveTo(tipX, tipY - size * 0.12)
+      ctx.lineTo(tipX + lean * 0.06, tipY + size * 0.12)
+      ctx.stroke()
+      ctx.strokeStyle = dryGrass
+      ctx.lineWidth = Math.max(0.8, size * 0.03)
+      ctx.beginPath()
+      ctx.moveTo(tipX + size * 0.08, tipY - size * 0.02)
+      ctx.lineTo(tipX + size * 0.16, tipY - size * 0.16)
+      ctx.stroke()
+      ctx.restore()
+    }
+  }
+  ctx.strokeStyle = dryGrass
+  ctx.lineWidth = Math.max(0.7, size * 0.025)
+  ctx.beginPath()
+  ctx.moveTo(x - size * 0.5, y + size * 0.08)
+  ctx.quadraticCurveTo(x - size * 0.16, y - size * 0.02, x + size * 0.2, y + size * 0.04)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawMarshBubbleCluster(ctx, x, y, size, seed, index, bubble, outline) {
+  ctx.save()
+  ctx.strokeStyle = bubble
+  ctx.lineWidth = Math.max(1.1, size * 0.035)
+  ctx.globalAlpha = 0.95
+  const count = 3 + Math.floor(seededNoise(seed, index * 43 + 1) * 3)
+  for (let i = 0; i < count; i++) {
+    const r = size * (0.05 + seededNoise(seed, index * 43 + i + 2) * 0.045)
+    const ox = (seededNoise(seed, index * 43 + i + 8) - 0.5) * size * 0.48
+    const oy = (seededNoise(seed, index * 43 + i + 14) - 0.5) * size * 0.24
+    const gap = seededNoise(seed, index * 43 + i + 20) * Math.PI * 0.5
+    ctx.beginPath()
+    ctx.arc(x + ox, y + oy, r, gap, Math.PI * 1.75 + gap)
+    ctx.stroke()
+    ctx.save()
+    ctx.strokeStyle = outline
+    ctx.globalAlpha = 0.28
+    ctx.lineWidth = Math.max(0.45, size * 0.014)
+    ctx.beginPath()
+    ctx.arc(x + ox, y + oy, r * 1.28, gap + Math.PI * 0.18, gap + Math.PI * 1.1)
+    ctx.stroke()
+    ctx.restore()
+  }
+  ctx.strokeStyle = outline
+  ctx.globalAlpha = 0.42
+  ctx.lineWidth = Math.max(0.45, size * 0.014)
+  ctx.beginPath()
+  ctx.moveTo(x - size * 0.18, y + size * 0.12)
+  ctx.quadraticCurveTo(x, y + size * 0.06, x + size * 0.2, y + size * 0.12)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawMarshGroundHachures(ctx, w, h, size, seed, index, dryGrass) {
+  ctx.save()
+  ctx.strokeStyle = dryGrass
+  ctx.lineWidth = Math.max(0.75, size * 0.026)
+  for (let i = 0; i < 3; i++) {
+    const x = -w * 0.38 + i * w * 0.32 + (seededNoise(seed, index * 23 + i + 1) - 0.5) * size * 0.18
+    const y = h * (0.18 + seededNoise(seed, index * 23 + i + 5) * 0.18)
+    ctx.beginPath()
+    ctx.moveTo(x - size * 0.14, y)
+    ctx.quadraticCurveTo(x, y - size * 0.09, x + size * 0.16, y + size * 0.02)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function getSwampSymbolBounds(symbol, pad = 0) {
+  const width = symbol.size * 0.9
+  return {
+    minX: symbol.x - width - pad,
+    minY: symbol.y - symbol.size * 0.62 - pad,
+    maxX: symbol.x + width + pad,
+    maxY: symbol.y + symbol.size * 0.5 + pad,
+  }
+}
+
+function drawFarmlandTerrain(ctx, pts, b, seed, inkColor, symbolScale) {
+  const crop = inkColor === '#3060a8' ? '#4f8fc4' : '#5f6f2f'
+  const divider = inkColor === '#3060a8' ? '#2d6fa6' : '#7b6f34'
+  const rowGap = Math.max(9, 15 * symbolScale)
+  const bandGap = rowGap * 4.4
+  const angle = -0.16 + (seededNoise(seed, 811) - 0.5) * 0.16
+  const cx = b.x + b.w / 2
+  const cy = b.y + b.h / 2
+  const span = Math.hypot(b.w, b.h) * 1.25
+
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(angle)
+  ctx.lineCap = 'round'
+
+  let bandIndex = 0
+  for (let y = -span / 2; y <= span / 2; y += bandGap) {
+    const rows = 3 + Math.floor(seededNoise(seed, bandIndex * 19 + 1) * 2)
+    const bandJitter = (seededNoise(seed, bandIndex * 19 + 2) - 0.5) * rowGap * 0.8
+    for (let r = 0; r < rows; r++) {
+      const yy = y + bandJitter + r * rowGap
+      const start = -span * (0.42 + seededNoise(seed, bandIndex * 29 + r + 4) * 0.08)
+      const end = span * (0.42 + seededNoise(seed, bandIndex * 29 + r + 8) * 0.08)
+      ctx.strokeStyle = colorWithAlpha(crop, r % 2 === 0 ? 0.5 : 0.34)
+      ctx.lineWidth = Math.max(0.8, symbolScale * 1.1)
+      drawFarmlandRow(ctx, start, end, yy, seed, bandIndex * 37 + r, rowGap)
+    }
+
+    if (bandIndex % 2 === 0) {
+      const y1 = y - rowGap * 0.72
+      const y2 = y1 + (seededNoise(seed, bandIndex * 17 + 9) - 0.5) * rowGap
+      ctx.strokeStyle = colorWithAlpha(divider, 0.34)
+      ctx.lineWidth = Math.max(1, symbolScale * 1.25)
+      ctx.beginPath()
+      ctx.moveTo(-span * 0.44, y1)
+      ctx.lineTo(span * 0.44, y2)
+      ctx.stroke()
+    }
+    bandIndex++
+  }
+  ctx.restore()
+}
+
+function drawFarmlandRow(ctx, start, end, y, seed, index, rowGap) {
+  const segments = 5
+  ctx.beginPath()
+  for (let s = 0; s <= segments; s++) {
+    const t = s / segments
+    const x = start + (end - start) * t
+    const yy = y + (seededNoise(seed, index * 13 + s) - 0.5) * rowGap * 0.28
+    if (s === 0) ctx.moveTo(x, yy)
+    else ctx.lineTo(x, yy)
+  }
+  ctx.stroke()
+}
+
+function drawSnowyTundraTerrain(ctx, pts, b, seed, inkColor, symbolScale, hasTerrainBackground = true) {
+  const isBlueprint = inkColor === '#3060a8'
+  const snow = isBlueprint ? '#d5f1ff' : '#f2f3e9'
+  const ice = isBlueprint ? '#8cc8f0' : '#a9c3c2'
+  const crack = isBlueprint ? '#2f6fa8' : '#5e6f70'
+  const shadow = isBlueprint ? '#4d92c8' : '#89938b'
+
+  ctx.save()
+  if (hasTerrainBackground) {
+    ctx.fillStyle = colorWithAlpha(snow, 0.34)
+    ctx.fillRect(b.x, b.y, b.w, b.h)
+  }
+
+  const driftCount = Math.max(14, Math.floor((b.w * b.h) / (6500 * symbolScale * symbolScale)))
+  for (let i = 0; i < driftCount; i++) {
+    const x = b.x + seededNoise(seed, i * 41 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 41 + 2) * b.h
+    const len = (22 + seededNoise(seed, i * 41 + 3) * 38) * symbolScale
+    const tilt = -0.18 + (seededNoise(seed, i * 41 + 4) - 0.5) * 0.14
+    const driftA = { x: x - Math.cos(tilt) * len * 0.5, y: y - Math.sin(tilt) * len * 0.5 }
+    const driftB = { x: x + Math.cos(tilt) * len * 0.5, y: y + Math.sin(tilt) * len * 0.5 + 4 * symbolScale }
+    if (!lineMarkFitsPolygon(pts, driftA.x, driftA.y, driftB.x, driftB.y, 4 * symbolScale)) continue
+    ctx.lineCap = 'butt'
+    ctx.strokeStyle = colorWithAlpha(snow, 0.82)
+    ctx.lineWidth = Math.max(0.9, 1.25 * symbolScale)
+    ctx.beginPath()
+    ctx.moveTo(x - Math.cos(tilt) * len * 0.5, y - Math.sin(tilt) * len * 0.5)
+    ctx.lineTo(x + Math.cos(tilt) * len * 0.5, y + Math.sin(tilt) * len * 0.5)
+    ctx.stroke()
+
+    if (i % 2 === 0) {
+      ctx.strokeStyle = colorWithAlpha(ice, 0.54)
+      ctx.lineWidth = Math.max(0.7, 0.9 * symbolScale)
+      ctx.beginPath()
+      ctx.moveTo(x - Math.cos(tilt) * len * 0.28, y - Math.sin(tilt) * len * 0.28 + 4 * symbolScale)
+      ctx.lineTo(x + Math.cos(tilt) * len * 0.32, y + Math.sin(tilt) * len * 0.32 + 4 * symbolScale)
+      ctx.stroke()
+    }
+  }
+
+  const shardCount = Math.max(8, Math.floor((b.w * b.h) / (14500 * symbolScale * symbolScale)))
+  for (let i = 0; i < shardCount; i++) {
+    const x = b.x + seededNoise(seed, i * 53 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 53 + 2) * b.h
+    const size = (13 + seededNoise(seed, i * 53 + 3) * 14) * symbolScale
+    if (!centeredBoundsFitPolygon(pts, x, y, size * 0.72, size * 0.48)) continue
+    drawSnowyTundraShard(ctx, x, y, size, seed, i, ice, crack, shadow)
+  }
+
+  const crackCount = Math.max(5, Math.floor((b.w * b.h) / (24000 * symbolScale * symbolScale)))
+  for (let i = 0; i < crackCount; i++) {
+    const x = b.x + seededNoise(seed, i * 67 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 67 + 2) * b.h
+    const size = (22 + seededNoise(seed, i * 67 + 3) * 28) * symbolScale
+    if (!centeredBoundsFitPolygon(pts, x, y, size * 0.64, size * 0.5)) continue
+    drawSnowyTundraCrack(ctx, x, y, size, seed, i, crack)
+  }
+
+  ctx.restore()
+}
+
+function drawSnowyTundraShard(ctx, x, y, size, seed, index, ice, crack, shadow) {
+  const angle = -0.16 + (seededNoise(seed, index * 17 + 1) - 0.5) * 0.36
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(angle)
+  ctx.lineJoin = 'miter'
+  ctx.lineCap = 'butt'
+  ctx.fillStyle = colorWithAlpha(ice, 0.32)
+  ctx.strokeStyle = colorWithAlpha(crack, 0.58)
+  ctx.lineWidth = Math.max(0.8, size * 0.045)
+  ctx.beginPath()
+  ctx.moveTo(-size * 0.52, size * 0.08)
+  ctx.lineTo(-size * 0.08, -size * 0.28)
+  ctx.lineTo(size * 0.5, -size * 0.08)
+  ctx.lineTo(size * 0.12, size * 0.28)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  ctx.strokeStyle = colorWithAlpha(shadow, 0.42)
+  ctx.lineWidth = Math.max(0.55, size * 0.026)
+  ctx.beginPath()
+  ctx.moveTo(-size * 0.22, -size * 0.08)
+  ctx.lineTo(size * 0.28, -size * 0.02)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawSnowyTundraCrack(ctx, x, y, size, seed, index, crack) {
+  const angle = -0.22 + (seededNoise(seed, index * 23 + 1) - 0.5) * 0.28
+  ctx.save()
+  ctx.strokeStyle = colorWithAlpha(crack, 0.68)
+  ctx.lineWidth = Math.max(0.9, size * 0.05)
+  ctx.lineCap = 'butt'
+  ctx.lineJoin = 'miter'
+  ctx.beginPath()
+  ctx.moveTo(x - Math.cos(angle) * size * 0.48, y - Math.sin(angle) * size * 0.48)
+  ctx.lineTo(x - Math.cos(angle) * size * 0.08, y - Math.sin(angle) * size * 0.08)
+  ctx.lineTo(x + Math.cos(angle + 0.24) * size * 0.42, y + Math.sin(angle + 0.24) * size * 0.42)
+  ctx.stroke()
+  if (seededNoise(seed, index * 23 + 2) > 0.36) {
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + Math.cos(angle - 0.95) * size * 0.24, y + Math.sin(angle - 0.95) * size * 0.24)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawTundraIcyOverlay(ctx, pts, b, seed, inkColor, symbolScale) {
+  const isBlueprint = inkColor === '#3060a8'
+  const frost = isBlueprint ? '#b9e2ff' : '#d8e4dc'
+  const blueShade = isBlueprint ? '#6faad8' : '#9fb8b5'
+  const shadow = isBlueprint ? '#3f78a8' : '#707d76'
+
+  ctx.save()
+  ctx.fillStyle = colorWithAlpha(frost, 0.26)
+  ctx.fillRect(b.x, b.y, b.w, b.h)
+
+  const streakCount = Math.max(20, Math.floor((b.w * b.h) / (5200 * symbolScale * symbolScale)))
+  for (let i = 0; i < streakCount; i++) {
+    const x = b.x + seededNoise(seed, i * 41 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 41 + 2) * b.h
+    if (!polyContains(pts, x, y)) continue
+    const len = (16 + seededNoise(seed, i * 41 + 3) * 34) * symbolScale
+    const tilt = -0.18 + (seededNoise(seed, i * 41 + 4) - 0.5) * 0.16
+    const isDark = i % 4 === 0
+    ctx.strokeStyle = colorWithAlpha(isDark ? shadow : frost, isDark ? 0.42 : 0.68)
+    ctx.lineWidth = Math.max(0.75, (isDark ? 1.25 : 1) * symbolScale)
+    ctx.lineCap = 'butt'
+    ctx.beginPath()
+    ctx.moveTo(x - Math.cos(tilt) * len * 0.5, y - Math.sin(tilt) * len * 0.5)
+    ctx.lineTo(x + Math.cos(tilt) * len * 0.5, y + Math.sin(tilt) * len * 0.5)
+    ctx.stroke()
+    if (i % 3 === 0) {
+      const branchLen = len * 0.28
+      const bx = x + (seededNoise(seed, i * 41 + 5) - 0.5) * len * 0.35
+      const by = y + (seededNoise(seed, i * 41 + 6) - 0.5) * len * 0.12
+      ctx.strokeStyle = colorWithAlpha(blueShade, 0.44)
+      ctx.beginPath()
+      ctx.moveTo(bx, by)
+      ctx.lineTo(bx + Math.cos(tilt + 0.9) * branchLen, by + Math.sin(tilt + 0.9) * branchLen)
+      ctx.stroke()
+    }
+  }
+
+  const crackCount = Math.max(4, Math.floor((b.w * b.h) / (26000 * symbolScale * symbolScale)))
+  for (let i = 0; i < crackCount; i++) {
+    const x = b.x + seededNoise(seed, i * 67 + 1) * b.w
+    const y = b.y + seededNoise(seed, i * 67 + 2) * b.h
+    if (!polyContains(pts, x, y)) continue
+    const len = (24 + seededNoise(seed, i * 67 + 3) * 28) * symbolScale
+    const angle = -0.2 + (seededNoise(seed, i * 67 + 4) - 0.5) * 0.22
+    ctx.strokeStyle = colorWithAlpha(shadow, 0.48)
+    ctx.lineWidth = Math.max(0.9, 1.35 * symbolScale)
+    ctx.lineCap = 'butt'
+    ctx.lineJoin = 'miter'
+    ctx.beginPath()
+    ctx.moveTo(x - Math.cos(angle) * len * 0.45, y - Math.sin(angle) * len * 0.45)
+    ctx.lineTo(x - Math.cos(angle) * len * 0.05, y - Math.sin(angle) * len * 0.05)
+    ctx.lineTo(x + Math.cos(angle + 0.22) * len * 0.34, y + Math.sin(angle + 0.22) * len * 0.34)
+    ctx.stroke()
+    if (seededNoise(seed, i * 67 + 5) > 0.42) {
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+      ctx.lineTo(x + Math.cos(angle - 0.95) * len * 0.22, y + Math.sin(angle - 0.95) * len * 0.22)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+function drawTundraScrub(ctx, x, y, size, seed, index, inkColor) {
+  const muted = inkColor === '#3060a8' ? '#6f9bc4' : '#58664d'
+  ctx.save()
+  ctx.strokeStyle = muted
+  ctx.lineCap = 'round'
+  ctx.lineWidth = Math.max(0.7, size * 0.045)
+  const blades = 4 + Math.floor(seededNoise(seed, index * 17 + 1) * 4)
+  for (let i = 0; i < blades; i++) {
+    const t = blades === 1 ? 0 : i / (blades - 1)
+    const bx = x + (t - 0.5) * size * 0.9
+    const h = size * (0.2 + seededNoise(seed, index * 17 + i + 2) * 0.3)
+    const lean = (seededNoise(seed, index * 17 + i + 10) - 0.5) * size * 0.24
+    ctx.beginPath()
+    ctx.moveTo(bx, y)
+    ctx.quadraticCurveTo(bx + lean * 0.4, y - h * 0.55, bx + lean, y - h)
+    ctx.stroke()
+  }
+  ctx.strokeStyle = colorWithAlpha(muted, 0.54)
+  ctx.lineWidth = Math.max(0.6, size * 0.025)
+  ctx.beginPath()
+  ctx.moveTo(x - size * 0.58, y + size * 0.08)
+  ctx.quadraticCurveTo(x, y - size * 0.05, x + size * 0.58, y + size * 0.06)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawTundraFrostCrack(ctx, x, y, size, seed, index, inkColor) {
+  const crack = inkColor === '#3060a8' ? '#8bbce0' : '#5d675f'
+  ctx.save()
+  ctx.strokeStyle = colorWithAlpha(crack, 0.58)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = Math.max(0.65, size * 0.026)
+  ctx.beginPath()
+  ctx.moveTo(x - size * 0.48, y)
+  const midX = x + (seededNoise(seed, index * 23 + 1) - 0.5) * size * 0.18
+  const midY = y + (seededNoise(seed, index * 23 + 2) - 0.5) * size * 0.22
+  ctx.lineTo(midX, midY)
+  ctx.lineTo(x + size * 0.5, y + (seededNoise(seed, index * 23 + 3) - 0.5) * size * 0.24)
+  ctx.stroke()
+  if (seededNoise(seed, index * 23 + 4) > 0.45) {
+    ctx.beginPath()
+    ctx.moveTo(midX, midY)
+    ctx.lineTo(midX + (seededNoise(seed, index * 23 + 5) - 0.5) * size * 0.38, midY - size * 0.28)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawTundraStoneCluster(ctx, x, y, size, seed, index, inkColor) {
+  const stone = inkColor === '#3060a8' ? '#78a8cf' : '#69706a'
+  ctx.save()
+  ctx.fillStyle = colorWithAlpha(stone, 0.62)
+  ctx.strokeStyle = colorWithAlpha(inkColor, 0.42)
+  ctx.lineWidth = Math.max(0.45, size * 0.02)
+  const stones = 2 + Math.floor(seededNoise(seed, index * 29 + 1) * 3)
+  for (let i = 0; i < stones; i++) {
+    const sx = x + (seededNoise(seed, index * 29 + i + 2) - 0.5) * size * 0.85
+    const sy = y + (seededNoise(seed, index * 29 + i + 8) - 0.5) * size * 0.4
+    const rx = size * (0.08 + seededNoise(seed, index * 29 + i + 14) * 0.08)
+    const ry = size * (0.05 + seededNoise(seed, index * 29 + i + 20) * 0.06)
+    ctx.beginPath()
+    ctx.ellipse(sx, sy, rx, ry, (seededNoise(seed, index * 29 + i + 26) - 0.5) * 0.6, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawMountainCluster(ctx, config, inkColor) {
+  getMountainClusterParts(config)
+    .sort((a, b) => a.y - b.y)
+    .forEach(mountain => drawMountainPeak(ctx, mountain, inkColor))
+}
+
+function getMountainClusterParts(config) {
+  const { x, y, h, cluster, seed, index } = config
+  const largeFirst = seededNoise(seed, index * 11 + 5) > 0.5
+  const main = {
+    x,
+    y,
+    h,
+    hw: h * (0.62 + seededNoise(seed, index * 11 + 6) * 0.3),
+    lean: (seededNoise(seed, index * 11 + 7) - 0.5) * 0.16,
+    snow: seededNoise(seed, index * 11 + 8) > 0.38,
+    seed,
+    index: index * 2,
+    showBase: config.showBase,
+  }
+
+  if (cluster === 1) {
+    return [main]
+  }
+
+  const side = seededNoise(seed, index * 11 + 9) > 0.5 ? 1 : -1
+  const smallH = h * (0.58 + seededNoise(seed, index * 11 + 12) * 0.28)
+  const secondary = {
+    x: x + side * h * (0.42 + seededNoise(seed, index * 11 + 13) * 0.2),
+    y: y + h * (0.14 + seededNoise(seed, index * 11 + 14) * 0.12),
+    h: smallH,
+    hw: smallH * (0.62 + seededNoise(seed, index * 11 + 15) * 0.28),
+    lean: (seededNoise(seed, index * 11 + 16) - 0.5) * 0.16,
+    snow: seededNoise(seed, index * 11 + 17) > 0.5,
+    seed,
+    index: index * 2 + 1,
+    showBase: config.showBase,
+  }
+
+  return largeFirst ? [main, secondary] : [secondary, main]
+}
+
+function mountainClusterFitsPolygon(pts, config) {
+  const bounds = getMountainClusterBounds(config)
+  const samples = [
+    [bounds.minX, bounds.minY],
+    [bounds.maxX, bounds.minY],
+    [bounds.maxX, bounds.maxY],
+    [bounds.minX, bounds.maxY],
+    [(bounds.minX + bounds.maxX) / 2, bounds.minY],
+    [bounds.maxX, (bounds.minY + bounds.maxY) / 2],
+    [(bounds.minX + bounds.maxX) / 2, bounds.maxY],
+    [bounds.minX, (bounds.minY + bounds.maxY) / 2],
+    [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2],
+  ]
+  return samples.every(([x, y]) => polyContains(pts, x, y))
+}
+
+function getMountainClusterBounds(config) {
+  const mountains = getMountainClusterParts(config)
+  return mountains.reduce((bounds, mountain) => {
+    const peakBounds = getMountainPeakBounds(mountain)
+    return {
+      minX: Math.min(bounds.minX, peakBounds.minX),
+      minY: Math.min(bounds.minY, peakBounds.minY),
+      maxX: Math.max(bounds.maxX, peakBounds.maxX),
+      maxY: Math.max(bounds.maxY, peakBounds.maxY),
+    }
+  }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity })
+}
+
+function getMountainPeakBounds(mountain) {
+  const width = mountain.hw * 1.42
+  return {
+    minX: mountain.x - width,
+    minY: mountain.y - mountain.h * 1.08,
+    maxX: mountain.x + width,
+    maxY: mountain.y + mountain.h * 0.5,
+  }
+}
+
+function drawMountainPeak(ctx, peak, inkColor) {
+  const { x, y, h, hw, lean, snow, showBase = true, seed = 1, index = 0 } = peak
+  const peakH = h * (0.95 + seededNoise(seed, index * 23 + 1) * 0.18)
+  const baseY = h * (0.32 + seededNoise(seed, index * 23 + 2) * 0.08)
+  const summitX = (seededNoise(seed, index * 23 + 3) - 0.5) * hw * 0.22
+  const summitY = -peakH * (0.62 + seededNoise(seed, index * 23 + 4) * 0.08)
+  const leftFoot = -hw * (1.08 + seededNoise(seed, index * 23 + 5) * 0.22)
+  const rightFoot = hw * (1.08 + seededNoise(seed, index * 23 + 6) * 0.24)
+  const spineBaseX = hw * (-0.08 + seededNoise(seed, index * 23 + 7) * 0.18)
+  const spineBaseY = baseY - h * (0.02 + seededNoise(seed, index * 23 + 8) * 0.08)
+  const leftRidge = [
+    [summitX, summitY],
+    [-hw * (0.12 + seededNoise(seed, index * 23 + 9) * 0.1), -peakH * 0.48],
+    [-hw * (0.3 + seededNoise(seed, index * 23 + 10) * 0.12), -peakH * 0.34],
+    [-hw * (0.46 + seededNoise(seed, index * 23 + 11) * 0.16), -peakH * 0.18],
+    [-hw * (0.72 + seededNoise(seed, index * 23 + 16) * 0.12), h * 0.0],
+    [-hw * (0.9 + seededNoise(seed, index * 23 + 17) * 0.12), baseY - h * 0.05],
+    [leftFoot, baseY],
+  ]
+  const rightRidge = [
+    [summitX, summitY],
+    [hw * (0.1 + seededNoise(seed, index * 23 + 12) * 0.12), -peakH * 0.46],
+    [hw * (0.28 + seededNoise(seed, index * 23 + 13) * 0.14), -peakH * 0.3],
+    [hw * (0.5 + seededNoise(seed, index * 23 + 14) * 0.16), -peakH * 0.1],
+    [hw * (0.78 + seededNoise(seed, index * 23 + 18) * 0.12), h * 0.02],
+    [hw * (0.94 + seededNoise(seed, index * 23 + 19) * 0.12), baseY - h * 0.03],
+    [rightFoot, baseY + (seededNoise(seed, index * 23 + 15) - 0.5) * h * 0.08],
+  ]
+  const outline = inkColor === '#3060a8' ? '#244f8f' : '#35281f'
+  const bodyWash = inkColor === '#3060a8' ? '#b9d4ee' : '#c4b39b'
+  const snowWash = inkColor === '#3060a8' ? '#d6edff' : '#f7f0df'
+  const shadeWash = inkColor === '#3060a8' ? '#5c8dcc' : '#9b866d'
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(lean)
+  ctx.lineCap = 'butt'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = outline
+  ctx.lineWidth = Math.max(1.1, h * 0.045)
+
+  // Solid mountain body first so no face is transparent when rows overlap.
+  ctx.beginPath()
+  leftRidge.forEach(([px, py], i) => { if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py) })
+  ;[...rightRidge].reverse().slice(0, -1).forEach(([px, py]) => ctx.lineTo(px, py))
+  ctx.closePath()
+  ctx.fillStyle = bodyWash
+  ctx.fill()
+
+  // Shaded face.
+  ctx.beginPath()
+  ctx.moveTo(summitX, summitY)
+  rightRidge.slice(1).forEach(([px, py]) => ctx.lineTo(px, py))
+  ctx.lineTo(spineBaseX, spineBaseY)
+  ctx.closePath()
+  ctx.fillStyle = shadeWash
+  ctx.fill()
+
+  if (snow) {
+    ctx.beginPath()
+    ctx.moveTo(summitX, summitY)
+    ctx.lineTo(-hw * 0.16, summitY + peakH * 0.24)
+    ctx.lineTo(-hw * 0.46, summitY + peakH * 0.48)
+    ctx.lineTo(-hw * 0.24, summitY + peakH * 0.45)
+    ctx.lineTo(-hw * 0.38, summitY + peakH * 0.7)
+    ctx.lineTo(spineBaseX, spineBaseY)
+    ctx.lineTo(hw * 0.2, summitY + peakH * 0.48)
+    ctx.lineTo(hw * 0.12, summitY + peakH * 0.24)
+    ctx.closePath()
+    ctx.fillStyle = snowWash
+    ctx.fill()
+  }
+
+  // Outer inked ridges and central snow break.
+  ctx.strokeStyle = outline
+  ctx.lineWidth = Math.max(1.1, h * 0.048)
+  ;[leftRidge, rightRidge].forEach(ridge => {
+    const visibleRidge = showBase ? ridge : ridge.slice(0, -2)
+    ctx.beginPath()
+    visibleRidge.forEach(([px, py], i) => { if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py) })
+    ctx.stroke()
+  })
+  ctx.beginPath()
+  ctx.moveTo(summitX, summitY)
+  ctx.lineTo(-hw * 0.08, summitY + peakH * 0.3)
+  ctx.lineTo(-hw * 0.02, summitY + peakH * 0.48)
+  ctx.lineTo(spineBaseX, spineBaseY)
+  ctx.stroke()
+
+  // Two disciplined shade strokes; enough texture without fuzzy noise.
+  ctx.save()
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = outline
+  ctx.lineWidth = Math.max(0.55, h * 0.018)
+  ctx.beginPath()
+  ctx.moveTo(hw * 0.22, summitY + peakH * 0.34)
+  ctx.lineTo(hw * 0.34, baseY - h * 0.08)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(hw * 0.42, summitY + peakH * 0.48)
+  ctx.lineTo(hw * 0.52, baseY - h * 0.02)
+  ctx.stroke()
+  ctx.restore()
+
+  if (showBase) {
+    // A single calm foothill curve only on front-most clusters.
+    ctx.save()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = outline
+    ctx.lineWidth = Math.max(0.75, h * 0.024)
+    ctx.beginPath()
+    ctx.moveTo(leftFoot - hw * 0.18, baseY + h * 0.04)
+    ctx.quadraticCurveTo((leftFoot + rightFoot) / 2, baseY - h * 0.1, rightFoot + hw * 0.18, baseY + h * 0.03)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  ctx.restore()
+}
 
 // ─── Mountain ridge ───────────────────────────────────────────────────────────
 
@@ -640,6 +1907,7 @@ function drawMountainRidge(ctx, object, isSelected, opts) {
       ctx.lineTo(base.x - tang.x * hw * 0.18, base.y - tang.y * hw * 0.18); ctx.stroke()
     }
   }
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -654,19 +1922,23 @@ function drawRiver(ctx, object, isSelected, opts) {
   const organic = opts.style !== 'blueprint'
   const riverPts = organic ? organicPoints(pts, seed, { closed: false, amplitude: 12, spacing: 36 }) : pts
 
+  const outerWidth = thickness * 1.4
+  const borderPx = Math.max(2, thickness * 0.15)
+  const strokeRingPx = Math.max(2, thickness * 0.18)
   ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-  // shadow
-  ctx.strokeStyle = colorWithAlpha('#1a3d58', 0.22)
-  ctx.lineWidth = thickness * 2.4
+  // outer dark border — thin ring
+  ctx.strokeStyle = colorWithAlpha('#1a3d58', 0.6)
+  ctx.lineWidth = outerWidth
   drawSmoothPath(ctx, riverPts, false); ctx.stroke()
-  // body
-  ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(stroke, 0.8)
-  ctx.lineWidth = thickness * 1.3
+  // stroke colour — thin ring inside the border
+  ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(stroke, 0.9)
+  ctx.lineWidth = outerWidth - borderPx * 2
   drawSmoothPath(ctx, riverPts, false); ctx.stroke()
-  // highlight
-  ctx.strokeStyle = colorWithAlpha('#c8eeff', 0.32)
-  ctx.lineWidth = Math.max(1, thickness * 0.38)
+  // highlight — widest inner fill (the dominant bulk)
+  ctx.strokeStyle = colorWithAlpha('#c8eeff', 0.55)
+  ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2
   drawSmoothPath(ctx, riverPts, false); ctx.stroke()
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -682,18 +1954,27 @@ function drawRoad(ctx, object, isSelected, opts) {
   const organic = opts.style !== 'blueprint'
   const roadPts = organic ? organicPoints(pts, seed, { closed: false, amplitude: 6, spacing: 32 }) : pts
 
+  const borderStroke = object.properties?.borderStroke || '#2c1a0a'
+  const highlight = object.properties?.highlight || '#f0d8a0'
+  const outerWidth = thickness * 1.4
+  const borderPx = Math.max(2, thickness * 0.15)
+  const strokeRingPx = Math.max(2, thickness * 0.18)
   ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-  ctx.strokeStyle = colorWithAlpha('#2c1a0a', 0.22)
-  ctx.lineWidth = thickness + 5
+  // outer dark border — thin ring
+  ctx.strokeStyle = isSelected ? colorWithAlpha('#1677ff', 0.5) : colorWithAlpha(borderStroke, 0.9)
+  ctx.lineWidth = outerWidth
   ctx.setLineDash(dashed ? [thickness * 2, thickness * 1.5] : [])
   drawSmoothPath(ctx, roadPts, false); ctx.stroke()
-  ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(stroke, 0.85)
-  ctx.lineWidth = thickness
+  // stroke colour — thin ring inside border
+  ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(stroke, 0.95)
+  ctx.lineWidth = outerWidth - borderPx * 2
   drawSmoothPath(ctx, roadPts, false); ctx.stroke()
-  ctx.strokeStyle = colorWithAlpha('#f0d8a0', 0.3)
-  ctx.lineWidth = Math.max(1, thickness * 0.3)
+  // highlight — widest inner fill (the dominant bulk)
+  ctx.strokeStyle = colorWithAlpha(highlight, 0.75)
+  ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2
   ctx.setLineDash([])
   drawSmoothPath(ctx, roadPts, false); ctx.stroke()
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -716,6 +1997,7 @@ function drawBorderLine(ctx, object, isSelected, opts) {
   ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(stroke, 0.82)
   ctx.lineWidth = thickness
   drawSmoothPath(ctx, borderPts, false); ctx.stroke()
+  if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
@@ -740,28 +2022,27 @@ function drawStamp(ctx, object, isSelected, opts) {
   }
 
   if (isSelected) {
+    const pad = Math.max(4, 7 / Math.max(opts.zoom || 1, 0.1))
+    const handleSize = Math.max(7, 8 / Math.max(opts.zoom || 1, 0.1))
     ctx.strokeStyle = '#1677ff'
-    ctx.lineWidth = 2
-    ctx.setLineDash([5, 3])
-    ctx.strokeRect(-size / 2 - 4, -size / 2 - 4, size + 8, size + 8)
+    ctx.fillStyle = '#fff'
+    ctx.lineWidth = Math.max(1.5, 2 / Math.max(opts.zoom || 1, 0.1))
+    ctx.setLineDash([5 / Math.max(opts.zoom || 1, 0.1), 3 / Math.max(opts.zoom || 1, 0.1)])
+    ctx.strokeRect(-size / 2 - pad, -size / 2 - pad, size + pad * 2, size + pad * 2)
     ctx.setLineDash([])
+    ;[
+      [-size / 2 - pad, -size / 2 - pad],
+      [size / 2 + pad, -size / 2 - pad],
+      [size / 2 + pad, size / 2 + pad],
+      [-size / 2 - pad, size / 2 + pad],
+    ].forEach(([x, y]) => {
+      ctx.beginPath()
+      ctx.rect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize)
+      ctx.fill()
+      ctx.stroke()
+    })
   }
 
-  // Label below stamp
-  const label = object.properties?.showLabel !== false ? (object.properties?.name || '') : ''
-  if (label) {
-    const fontSize = Math.max(13, size * 0.21)
-    ctx.font = `600 ${fontSize}px "Palatino Linotype", Georgia, serif`
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-    const tw = ctx.measureText(label).width
-    // Background pill
-    ctx.fillStyle = opts.style === 'blueprint' ? colorWithAlpha('#1a2b4a', 0.78) : colorWithAlpha('#f4e8c4', 0.84)
-    ctx.beginPath()
-    ctx.roundRect(-tw / 2 - 5, size / 2 + 2, tw + 10, fontSize + 4, 3)
-    ctx.fill()
-    ctx.fillStyle = opts.style === 'blueprint' ? '#8cc8f0' : '#1a140a'
-    ctx.fillText(label, 0, size / 2 + 4)
-  }
   ctx.restore()
 }
 
@@ -785,26 +2066,33 @@ function drawStampGlyph(ctx, stampId, R, opts) {
 
   switch (stampId) {
     case 'capital': {
-      // Crown shape
+      // Capitol building: dome, pediment, columns, and steps.
+      r(-0.68, 0.44, 1.36, 0.14)
+      r(-0.58, 0.28, 1.16, 0.16)
+      r(-0.42, -0.08, 0.84, 0.42)
       ctx.beginPath()
-      ctx.moveTo(-R * 0.7, R * 0.38)
-      ctx.lineTo(-R * 0.7, -R * 0.15)
-      ctx.lineTo(-R * 0.36, -R * 0.52)
-      ctx.lineTo(-R * 0.12, R * 0.05)
-      ctx.lineTo(0, -R * 0.64)
-      ctx.lineTo(R * 0.12, R * 0.05)
-      ctx.lineTo(R * 0.36, -R * 0.52)
-      ctx.lineTo(R * 0.7, -R * 0.15)
-      ctx.lineTo(R * 0.7, R * 0.38)
+      ctx.moveTo(-R * 0.5, -R * 0.08)
+      ctx.lineTo(0, -R * 0.36)
+      ctx.lineTo(R * 0.5, -R * 0.08)
       ctx.closePath(); ctx.fill(); ctx.stroke()
-      // Crown jewels
-      ctx.fillStyle = highlight
-      ;[[-R * 0.36, -R * 0.62], [0, -R * 0.72], [R * 0.36, -R * 0.62]].forEach(([cx2, cy2]) => {
-        ctx.beginPath(); ctx.arc(cx2, cy2, R * 0.07, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath()
+      ctx.arc(0, -R * 0.34, R * 0.24, Math.PI, Math.PI * 2)
+      ctx.lineTo(R * 0.24, -R * 0.28)
+      ctx.lineTo(-R * 0.24, -R * 0.28)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+      r(-0.07, -0.68, 0.14, 0.16)
+      ctx.beginPath(); ctx.arc(0, -R * 0.74, R * 0.07, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      ;[-0.5, 0.5].forEach(side => {
+        r(side * 0.52 - 0.08, -0.02, 0.16, 0.46)
+        ctx.beginPath()
+        ctx.moveTo(R * (side * 0.61), -R * 0.02)
+        ctx.lineTo(R * (side * 0.52), -R * 0.18)
+        ctx.lineTo(R * (side * 0.43), -R * 0.02)
+        ctx.closePath(); ctx.fill(); ctx.stroke()
       })
+      ctx.fillStyle = highlight
+      ;[-0.27, -0.09, 0.09, 0.27].forEach(x => r(x - 0.025, 0.02, 0.05, 0.34))
       ctx.fillStyle = fill
-      // Base band
-      r(-0.72, 0.28, 1.44, 0.14)
       break
     }
     case 'city': {
@@ -1075,16 +2363,29 @@ function drawStampGlyph(ctx, stampId, R, opts) {
       break
     }
     case 'camp': {
-      // 3 tent shapes
-      ;[[-0.36, 0.86], [0.0, 1.0], [0.36, 0.82]].forEach(([tx, sc]) => {
-        const h2 = R * sc
-        ctx.beginPath()
-        ctx.moveTo(R * tx, R * 0.44 - h2 * 0.56)
-        ctx.lineTo(R * (tx - 0.28), R * 0.44)
-        ctx.lineTo(R * (tx + 0.28), R * 0.44)
-        ctx.closePath(); ctx.fill(); ctx.stroke()
-      })
-      ctx.beginPath(); ctx.moveTo(-R * 0.68, R * 0.48); ctx.lineTo(R * 0.68, R * 0.48); ctx.stroke()
+      // Canvas tent with open flap, guy ropes, and stakes.
+      ctx.beginPath()
+      ctx.moveTo(0, -R * 0.72)
+      ctx.lineTo(-R * 0.7, R * 0.5)
+      ctx.lineTo(R * 0.7, R * 0.5)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = highlight
+      ctx.beginPath()
+      ctx.moveTo(0, -R * 0.48)
+      ctx.lineTo(-R * 0.22, R * 0.5)
+      ctx.lineTo(R * 0.22, R * 0.5)
+      ctx.closePath(); ctx.fill()
+      ctx.fillStyle = fill
+      ctx.beginPath()
+      ctx.moveTo(0, -R * 0.48)
+      ctx.lineTo(-R * 0.22, R * 0.5)
+      ctx.lineTo(0, R * 0.28)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.lineWidth = Math.max(1.4, R * 0.055)
+      ctx.beginPath(); ctx.moveTo(-R * 0.42, -R * 0.06); ctx.lineTo(-R * 0.86, R * 0.58); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(R * 0.42, -R * 0.06); ctx.lineTo(R * 0.86, R * 0.58); ctx.stroke()
+      r(-0.9, 0.56, 0.14, 0.06); r(0.76, 0.56, 0.14, 0.06)
+      r(-0.72, 0.5, 1.44, 0.1)
       break
     }
     case 'bridge': {
@@ -1116,12 +2417,15 @@ function drawStampGlyph(ctx, stampId, R, opts) {
 
 function drawLocation(ctx, object, isSelected, opts) {
   const cx = object.x, cy = object.y
-  const size = object.width || 64
+  const size = Number(object.properties?.iconSize) || object.width || 64
   const r = size / 2
   const markerIcon = object.properties?.markerIcon || 'pin'
   const fill = object.properties?.fill || (opts.style === 'blueprint' ? '#5090cc' : '#c8602a')
   const stroke = object.properties?.stroke || (opts.style === 'blueprint' ? '#2050a0' : '#6a2a0a')
   const label = object.properties?.name || ''
+  const labelFontSize = clamp(Number(object.properties?.labelFontSize) || Math.max(13, r * 0.38), 8, 96)
+  const labelColor = object.properties?.labelColor || (opts.style === 'blueprint' ? '#8cc8f0' : '#1a140a')
+  const labelOutlineColor = object.properties?.labelOutlineColor || (opts.style === 'blueprint' ? '#1a2b4a' : '#f4e8c4')
 
   ctx.save()
   ctx.translate(cx, cy)
@@ -1168,12 +2472,12 @@ function drawLocation(ctx, object, isSelected, opts) {
   }
 
   if (label) {
-    const fontSize = Math.max(13, r * 0.38)
+    const fontSize = labelFontSize
     ctx.font = `600 ${fontSize}px "Palatino Linotype", Georgia, serif`
     ctx.textAlign = 'center'; ctx.textBaseline = 'top'
     ctx.lineWidth = Math.max(3, fontSize * 0.08)
-    ctx.strokeStyle = opts.style === 'blueprint' ? colorWithAlpha('#1a2b4a', 0.9) : colorWithAlpha('#f4e8c4', 0.94)
-    ctx.fillStyle = opts.style === 'blueprint' ? '#8cc8f0' : '#1a140a'
+    ctx.strokeStyle = colorWithAlpha(labelOutlineColor, 0.94)
+    ctx.fillStyle = labelColor
     ctx.strokeText(label, 0, r + 5); ctx.fillText(label, 0, r + 5)
   }
   ctx.restore()
@@ -1303,24 +2607,56 @@ function drawNote(ctx, object, isSelected, opts) {
 
 // ─── Selection / handle helpers ───────────────────────────────────────────────
 
-function drawPolygonHandles(ctx, points) {
+function drawGeometryHandles(ctx, points, zoom = 1, mode = 'points') {
+  if (mode === 'resize') {
+    drawGeometryResizeHandles(ctx, points, zoom)
+    return
+  }
+  drawPolygonHandles(ctx, points, zoom)
+}
+
+function drawPolygonHandles(ctx, points, zoom = 1) {
+  const radius = Math.max(5, 6 / Math.max(zoom, 0.1))
   ctx.save()
   ctx.fillStyle = '#fff'
   ctx.strokeStyle = '#1677ff'
-  ctx.lineWidth = 2
+  ctx.lineWidth = Math.max(1.5, 2 / Math.max(zoom, 0.1))
   points.forEach(p => {
-    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    ctx.beginPath(); ctx.arc(p.x, p.y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
   })
   ctx.restore()
 }
 
-// drawResizeHandles kept for future use
-function _drawResizeHandles(ctx, half) {
-  const corners = [[-half, -half], [half, -half], [half, half], [-half, half]]
-  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1677ff'; ctx.lineWidth = 1.5
-  corners.forEach(([x, y]) => {
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+function drawGeometryResizeHandles(ctx, points, zoom = 1) {
+  if (!points?.length) return
+  const xs = points.map(p => p.x)
+  const ys = points.map(p => p.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const pad = Math.max(6, 8 / Math.max(zoom, 0.1))
+  const size = Math.max(7, 8 / Math.max(zoom, 0.1))
+  const handles = [
+    [minX - pad, minY - pad],
+    [maxX + pad, minY - pad],
+    [maxX + pad, maxY + pad],
+    [minX - pad, maxY + pad],
+  ]
+  ctx.save()
+  ctx.strokeStyle = '#1677ff'
+  ctx.fillStyle = '#fff'
+  ctx.lineWidth = Math.max(1.5, 2 / Math.max(zoom, 0.1))
+  ctx.setLineDash([6 / Math.max(zoom, 0.1), 4 / Math.max(zoom, 0.1)])
+  ctx.strokeRect(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2)
+  ctx.setLineDash([])
+  handles.forEach(([x, y]) => {
+    ctx.beginPath()
+    ctx.rect(x - size / 2, y - size / 2, size, size)
+    ctx.fill()
+    ctx.stroke()
   })
+  ctx.restore()
 }
 
 // ─── Draft overlay ────────────────────────────────────────────────────────────
@@ -1331,23 +2667,51 @@ export function drawDraft(ctx, draft, zoom) {
   if (!pts.length) return
   ctx.save()
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-  ctx.strokeStyle = '#1677ff'
-  ctx.lineWidth = 2 / zoom
-  ctx.setLineDash([6 / zoom, 4 / zoom])
 
-  if (pts.length >= 2) {
-    ctx.beginPath()
-    ctx.moveTo(pts[0].x, pts[0].y)
-    pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y))
-    if (draft.preview) ctx.lineTo(draft.preview.x, draft.preview.y)
-    ctx.stroke()
-  }
+  const allPts = draft.preview ? [...pts, draft.preview] : pts
 
-  // close line for polygon drafts
-  if (draft.closed && pts.length >= 3 && draft.preview) {
-    ctx.strokeStyle = colorWithAlpha('#1677ff', 0.38)
-    ctx.beginPath(); ctx.moveTo(draft.preview.x, draft.preview.y)
-    ctx.lineTo(pts[0].x, pts[0].y); ctx.stroke()
+  if (pts.length >= 2 || (pts.length >= 1 && draft.preview)) {
+    const drawLine = (pts) => { ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke() }
+    if (draft.kind === 'river' && allPts.length >= 2) {
+      const stroke = draft.properties?.stroke || '#3a80b0'
+      const thickness = draft.properties?.lineThickness || 7
+      const outerWidth = thickness * 1.4
+      const borderPx = Math.max(2, thickness * 0.15)
+      const strokeRingPx = Math.max(2, thickness * 0.18)
+      ctx.setLineDash([])
+      ctx.strokeStyle = colorWithAlpha('#1a3d58', 0.6); ctx.lineWidth = outerWidth; drawLine(allPts)
+      ctx.strokeStyle = colorWithAlpha(stroke, 0.9); ctx.lineWidth = outerWidth - borderPx * 2; drawLine(allPts)
+      ctx.strokeStyle = colorWithAlpha('#c8eeff', 0.55); ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2; drawLine(allPts)
+    } else if (draft.kind === 'road' && allPts.length >= 2) {
+      const stroke = draft.properties?.stroke || '#8b6030'
+      const borderStroke = draft.properties?.borderStroke || '#2c1a0a'
+      const highlight = draft.properties?.highlight || '#f0d8a0'
+      const thickness = draft.properties?.lineThickness || 5
+      const outerWidth = thickness * 1.4
+      const borderPx = Math.max(2, thickness * 0.15)
+      const strokeRingPx = Math.max(2, thickness * 0.18)
+      const dashed = Boolean(draft.properties?.dashed)
+      ctx.setLineDash(dashed ? [thickness * 2, thickness * 1.5] : [])
+      ctx.strokeStyle = colorWithAlpha(borderStroke, 0.9); ctx.lineWidth = outerWidth; drawLine(allPts)
+      ctx.strokeStyle = colorWithAlpha(stroke, 0.95); ctx.lineWidth = outerWidth - borderPx * 2; drawLine(allPts)
+      ctx.setLineDash([])
+      ctx.strokeStyle = colorWithAlpha(highlight, 0.75); ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2; drawLine(allPts)
+    } else {
+      ctx.strokeStyle = '#1677ff'
+      ctx.lineWidth = 2 / zoom
+      ctx.setLineDash([6 / zoom, 4 / zoom])
+      ctx.beginPath()
+      ctx.moveTo(pts[0].x, pts[0].y)
+      pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y))
+      if (draft.preview) ctx.lineTo(draft.preview.x, draft.preview.y)
+      ctx.stroke()
+      // close line for polygon drafts
+      if (draft.closed && pts.length >= 3 && draft.preview) {
+        ctx.strokeStyle = colorWithAlpha('#1677ff', 0.38)
+        ctx.beginPath(); ctx.moveTo(draft.preview.x, draft.preview.y)
+        ctx.lineTo(pts[0].x, pts[0].y); ctx.stroke()
+      }
+    }
   }
 
   ctx.setLineDash([])

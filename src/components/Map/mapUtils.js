@@ -71,8 +71,9 @@ export function objectContainsPoint(object, point) {
   if (object.geometry?.type === 'path') {
     return pointNearPath(point, object.geometry.points || [], (object.properties?.lineThickness || 8) + 12)
   }
-  const w = object.width || 80
-  const h = object.height || 80
+  const pointSize = Number(object.properties?.iconSize) || 0
+  const w = Math.max(object.width || 80, pointSize)
+  const h = Math.max(object.height || 80, pointSize)
   const cx = object.x || 0
   const cy = object.y || 0
   return Math.abs(point.x - cx) <= w / 2 && Math.abs(point.y - cy) <= h / 2

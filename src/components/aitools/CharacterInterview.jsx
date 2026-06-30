@@ -2,15 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { streamMessage } from '../../utils/aiApi'
 import { buildInterviewSystemPrompt } from '../../utils/aiToolPrompts'
 import { createInterview, updateInterview, loadInterviews, deleteInterview } from '../../utils/aiFindings'
-
-const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
-const DEFAULT_AI = { activeProvider: 'google', google: { apiKey: '', model: 'gemini-2.0-flash' }, anthropic: { apiKey: '', model: 'claude-sonnet-4-6' }, openrouter: { apiKey: '', model: 'google/gemma-3-27b-it:free' }, openai: { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' } }
-
-function getAiConfig() {
-  const s = load('nf_aiSettings', DEFAULT_AI)
-  const p = s.activeProvider || 'google'
-  return { provider: p, apiKey: s[p]?.apiKey || '', model: s[p]?.model || '', baseUrl: s[p]?.baseUrl }
-}
+import { getActiveAiConfig } from '../../utils/aiSettings'
 
 const INTERVIEW_MODES = [
   { id: 'general',       label: 'General',        desc: 'Open conversation in character' },
@@ -111,7 +103,7 @@ export default function CharacterInterview({ store, userId }) {
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || streaming || !character) return
-    const ai = getAiConfig()
+    const ai = getActiveAiConfig(userId)
     if (!ai.apiKey) { setError('No AI API key configured. Add one in AI Settings.'); return }
 
     const userMsg = { role: 'user', content: input.trim() }
@@ -152,7 +144,7 @@ export default function CharacterInterview({ store, userId }) {
       },
       onError: msg => { setStreaming(false); setError(msg) },
     })
-  }, [input, streaming, character, messages, novel, store, mode, timelinePos, interviewId, savedNotes])
+  }, [input, streaming, character, messages, novel, store, mode, timelinePos, interviewId, savedNotes, userId])
 
   const saveNote = useCallback(async (content, msgIndex) => {
     const note = { content, savedAt: new Date().toISOString(), msgIndex }

@@ -30,10 +30,8 @@ export const TERRAIN_TYPES = [
   { value: 'grassland', label: 'Grassland', color: '#6b9e44' },
   { value: 'desert', label: 'Desert', color: '#c9a85c' },
   { value: 'swamp', label: 'Swamp', color: '#4a6b47' },
-  { value: 'tundra', label: 'Tundra', color: '#a0b0b8' },
-  { value: 'snow', label: 'Snow / Ice', color: '#d8e8f0' },
+  { value: 'tundra', label: 'Snowy Tundra', color: '#c9d6d4' },
   { value: 'farmland', label: 'Farmland', color: '#b8c87a' },
-  { value: 'wasteland', label: 'Wasteland', color: '#7a6248' },
 ]
 
 export const TOOLS = [
@@ -48,18 +46,17 @@ export const TOOLS = [
   { id: 'stamp', label: 'Stamp', icon: '✦', group: 'place' },
   { id: 'location', label: 'Location', icon: '⌖', group: 'place' },
   { id: 'label', label: 'Label', icon: 'T', group: 'place' },
-  { id: 'note', label: 'Note', icon: '✎', group: 'place' },
 ]
 
 // 'terrain' draws filled terrain regions; 'region' draws named political territories
 export const POINT_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'river', 'road', 'border'])
 
-const ALL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'river', 'road', 'border', 'stamp', 'location', 'label', 'note']
+const ALL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'river', 'road', 'border', 'stamp', 'location', 'label']
 export const MAP_TYPE_TOOLS = {
   world: ALL_DRAWING_TOOLS,
   region: ALL_DRAWING_TOOLS,
   local: ALL_DRAWING_TOOLS,
-  interior: ['select', 'pan', 'shape', 'terrain', 'region', 'road', 'border', 'stamp', 'location', 'label', 'note'],
+  interior: ['select', 'pan', 'shape', 'terrain', 'region', 'road', 'border', 'stamp', 'location', 'label'],
 }
 
 export const stampAssetCache = new Map()
@@ -106,7 +103,7 @@ export const STAMP_LIBRARY = [
   { id: 'shrine', name: 'Shrine', category: 'Magic', size: 88, keywords: 'shrine small sacred altar' },
   // Conflict
   { id: 'battlefield', name: 'Battlefield', category: 'Conflict', assetSrc: '/map-stamps/battlefield.png', size: 98, keywords: 'battlefield battle swords war' },
-  { id: 'camp', name: 'Camp', category: 'Conflict', size: 90, keywords: 'camp military encampment tents' },
+  { id: 'camp', name: 'Camp', category: 'Conflict', assetSrc: '/map-stamps/camp.png', size: 90, keywords: 'camp military encampment tents' },
 ]
 
 export const LOCATION_ICON_OPTIONS = [
