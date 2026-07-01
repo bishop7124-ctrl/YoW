@@ -9,7 +9,7 @@ import {
   uid, clamp, round, screenToMap, snapToGrid,
   objectContainsPoint, normalizeObject, loadJson, saveJson, getObjectBounds,
 } from './mapUtils.js'
-import { drawBackground, drawMovementGrid, drawObject, drawDraft, drawHoverHighlight } from './mapDraw.js'
+import { drawBackground, drawMovementGrid, drawObject, drawDraft, drawHoverHighlight, drawRiverGroup } from './mapDraw.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,8 +38,9 @@ const MAP_TYPE_ICON = {
   interior: '▦',
 }
 
-const POLYGON_DRAW_TOOLS = new Set(['shape', 'terrain', 'region'])
-const FREEHAND_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'river', 'road', 'border'])
+const POLYGON_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water'])
+const FREEHAND_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water', 'river', 'road', 'border'])
+const CLOSED_POINT_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water'])
 const OBJECT_CULL_PADDING = 220
 const DEFAULT_LOCATION_FILL = '#c8602a'
 const DEFAULT_LOCATION_STROKE = '#6a2a0a'
@@ -670,7 +671,11 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     ctx.save()
     ctx.beginPath(); ctx.rect(0, 0, MAP_W, MAP_H); ctx.clip()
     const drawableObjects = getDrawableObjects(getViewportMapBounds(rect))
-    drawableObjects.forEach(o => drawObject(ctx, o, selectedIdsRef.current.includes(o.id), { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode }))
+    const drawableRivers = drawableObjects.filter(o => o.type === 'river')
+    drawableObjects
+      .filter(o => o.type !== 'river')
+      .forEach(o => drawObject(ctx, o, selectedIdsRef.current.includes(o.id), { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode }))
+    drawRiverGroup(ctx, drawableRivers, selectedIdsRef.current, { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode })
     ctx.restore()
 
     // cursor preview
@@ -860,11 +865,14 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       const pts = cur.points
       const first = pts[0]
       const dist = Math.hypot(point.x - first.x, point.y - first.y)
-      const isPolygon = tool === 'shape' || tool === 'terrain' || tool === 'region'
-      const minClose = isPolygon ? 3 : 2
-      const closesOnOrigin = isPolygon && pts.length >= minClose && dist <= Math.max(10, 18 / viewRef.current.zoom)
+      const canClose = CLOSED_POINT_DRAW_TOOLS.has(tool)
+      const minPoints = POLYGON_DRAW_TOOLS.has(tool) ? 3 : 2
+      const closesOnOrigin = canClose && pts.length >= 3 && dist <= Math.max(10, 18 / viewRef.current.zoom)
       if (shouldClose || closesOnOrigin) {
-        if (pts.length >= minClose) { setTimeout(() => completeDraft({ ...cur, points: pts }), 0); return null }
+        if (pts.length >= minPoints) {
+          setTimeout(() => completeDraft({ ...cur, points: pts, closed: closesOnOrigin || POLYGON_DRAW_TOOLS.has(tool) }), 0)
+          return null
+        }
         return cur
       }
       return { ...cur, points: [...pts, point], preview: point }
@@ -890,12 +898,12 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   function completeDraft(source) {
     const src = source || draftRef.current
     if (!src?.points?.length) return
-    const isPolygon = ['shape', 'terrain', 'region'].includes(src.kind)
+    const isPolygon = POLYGON_DRAW_TOOLS.has(src.kind)
     const minPts = isPolygon ? 3 : 2
     if (src.points.length < minPts) { setDraft(null); return }
 
     // Map tool ID to object type
-    const typeMap = { terrain: 'region', region: 'territory', shape: 'shape', river: 'river', road: 'road', border: 'border', mountain: 'mountain' }
+    const typeMap = { terrain: 'region', region: 'territory', shape: 'shape', water: 'water', river: 'river', road: 'road', border: 'border', mountain: 'mountain' }
     const objectType = typeMap[src.kind] || src.kind
 
     const maxZ = Math.max(0, ...objectsRef.current.map(o => o.zIndex || 0)) + 1
@@ -908,7 +916,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         type: isPolygon ? 'polygon' : 'path',
         points: src.points,
       },
-      properties: getDefaultProperties(src.kind),
+      properties: { ...getDefaultProperties(src.kind), ...(objectType === 'water' && isPolygon ? { waterKind: 'mass', lineThickness: 3 } : {}) },
     })
     updateObjects(cur => [...cur, obj])
     setSelectedIds([obj.id])
@@ -927,10 +935,11 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       case 'shape': return stylePreset === 'parchment'
         ? { fill: '#f0e3bd', stroke: '#b79a62', organicEdges: true }
         : { fill: '#1e3d20', stroke: '#142a16', organicEdges: true }
-      case 'terrain': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: 0.44, terrainType: selectedTerrainType, terrainSymbolScale: 1 }
-      case 'region': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: 0.44, terrainType: selectedTerrainType, terrainSymbolScale: 1 } // legacy compat
-      case 'territory': return { fill: '#7050a8', stroke: '#4a3070', opacity: 0.14, name: '' }
-      case 'river': return { stroke: '#3a80b0', lineThickness: 7 }
+      case 'terrain': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: 1, terrainType: selectedTerrainType, terrainSymbolScale: 1 }
+      case 'region': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: 1, terrainType: selectedTerrainType, terrainSymbolScale: 1 } // legacy compat
+      case 'territory': return { fill: '#7050a8', stroke: '#4a3070', name: '' }
+      case 'water': return { fill: '#73b8cf', stroke: '#2f769f', lineThickness: 3, organicEdges: true, waveTexture: true }
+      case 'river': return { fill: '#7faec0', stroke: '#2f5f78', lineThickness: 7 }
       case 'road': return { stroke: '#8b6030', borderStroke: '#2c1a0a', highlight: '#f0d8a0', lineThickness: 5 }
       case 'border': return { stroke: '#9050a0', lineThickness: 4 }
       case 'mountain': return { fill: '#7a7060', stroke: '#3a3228', lineThickness: 22 }
@@ -1190,7 +1199,14 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
     if (!ia) {
       if (draftRef.current?.points?.length && POINT_DRAW_TOOLS.has(mode)) {
-        setDraft(cur => cur ? { ...cur, preview: getSnappedPoint(pt) } : cur)
+        setDraft(cur => {
+          if (!cur) return cur
+          const preview = getSnappedPoint(pt)
+          const first = cur.points?.[0]
+          const closesOnOrigin = cur.kind === 'water' && cur.points.length >= 3 && first &&
+            Math.hypot(preview.x - first.x, preview.y - first.y) <= Math.max(10, 18 / viewRef.current.zoom)
+          return { ...cur, preview, closed: closesOnOrigin || (POLYGON_DRAW_TOOLS.has(cur.kind) && cur.points.length >= 3) }
+        })
         setHoveredId(null)
         return
       }
@@ -1299,6 +1315,11 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         drawMode: 'freehand',
       }
       interactionRef.current = null
+      if (curDraft.kind === 'water' && curDraft.points.length >= 3) {
+        const first = curDraft.points[0]
+        const last = curDraft.points[curDraft.points.length - 1]
+        curDraft.closed = Math.hypot(last.x - first.x, last.y - first.y) <= Math.max(18, 28 / viewRef.current.zoom)
+      }
       const minPoints = POLYGON_DRAW_TOOLS.has(curDraft.kind) ? 3 : 2
       if (curDraft?.points?.length >= minPoints) completeDraft(curDraft)
       else setDraft(null)
@@ -1363,7 +1384,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     drawBackground(ctx, MAP_W, MAP_H, stylePreset)
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, MAP_W, MAP_H); ctx.clip()
     drawMovementGrid(ctx, MAP_W, MAP_H, gridSettings)
-    visibleObjects.forEach(o => drawObject(ctx, o, false, opts))
+    visibleObjects.filter(o => o.type !== 'river').forEach(o => drawObject(ctx, o, false, opts))
+    drawRiverGroup(ctx, visibleObjects.filter(o => o.type === 'river'), [], opts)
     ctx.restore()
     exportCanvas.toBlob(blob => {
       if (!blob) return
@@ -2025,14 +2047,26 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
       )}
 
       {/* Line objects */}
-      {['river', 'road', 'border', 'mountain'].includes(o.type) && (
+      {['water', 'river', 'road', 'border', 'mountain'].includes(o.type) && (
         <>
-          <Field label="Colour"><input type="color" value={prop('stroke') || '#333'} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+          {o.type === 'water' && o.geometry?.type === 'polygon' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <Field label="Fill"><input type="color" value={prop('fill') || '#73b8cf'} onChange={e => setProp('fill', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+                <Field label="Outline"><input type="color" value={prop('stroke') || '#2f769f'} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+              </div>
+              <label style={checkStyle}><input type="checkbox" checked={prop('organicEdges') !== false} onChange={e => setProp('organicEdges', e.target.checked)} /> Organic edge</label>
+              <label style={checkStyle}><input type="checkbox" checked={prop('waveTexture') !== false} onChange={e => setProp('waveTexture', e.target.checked)} /> Wave texture</label>
+            </>
+          )}
+          {(o.type !== 'water' || o.geometry?.type !== 'polygon') && (
+            <Field label="Colour"><input type="color" value={prop('stroke') || (o.type === 'river' ? '#2f5f78' : '#333')} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+          )}
           {o.type === 'road' && <>
             <Field label="Border"><input type="color" value={prop('borderStroke') || '#2c1a0a'} onChange={e => setProp('borderStroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
             <Field label="Fill"><input type="color" value={prop('highlight') || '#f0d8a0'} onChange={e => setProp('highlight', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
           </>}
-          <Field label="Thickness"><SliderInput min={1} max={40} step={1} value={prop('lineThickness') || 5} onChange={e => setProp('lineThickness', Math.max(1, Number(e.target.value)))} /></Field>
+          <Field label={o.type === 'water' && o.geometry?.type === 'polygon' ? 'Outline' : 'Thickness'}><SliderInput min={1} max={40} step={1} value={prop('lineThickness') || 5} onChange={e => setProp('lineThickness', Math.max(1, Number(e.target.value)))} /></Field>
         </>
       )}
 
@@ -2043,24 +2077,18 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
             <input
               type="checkbox"
               checked={Boolean(prop('terrainBackgroundTransparent')) || (prop('terrainFillOpacity') ?? prop('opacity') ?? 0.44) === 0}
-              onChange={e => patchSelected({ properties: { terrainBackgroundTransparent: e.target.checked, terrainFillOpacity: e.target.checked ? 0 : 0.44 } })}
+              onChange={e => patchSelected({ properties: { terrainBackgroundTransparent: e.target.checked, terrainFillOpacity: e.target.checked ? 0 : 1 } })}
             />
           </Field>
           <Field label="Background %">
             <SliderInput
               min={0} max={100} step={1}
-              value={prop('terrainBackgroundTransparent') ? 0 : round(((prop('terrainFillOpacity') ?? prop('opacity') ?? 0.44) * 100), 0)}
+              value={prop('terrainBackgroundTransparent') ? 0 : round((((prop('terrainFillOpacity') ?? prop('opacity') ?? 1) === 0.44 ? 1 : (prop('terrainFillOpacity') ?? prop('opacity') ?? 1)) * 100), 0)}
               onChange={e => patchSelected({ properties: { terrainBackgroundTransparent: Number(e.target.value) <= 0, terrainFillOpacity: clamp(Number(e.target.value) / 100, 0, 1) } })}
             />
           </Field>
         </>
       )}
-      {!['label', 'stamp', 'region', 'territory'].includes(o.type) && (
-        <Field label="Opacity %">
-          <SliderInput min={0} max={100} step={1} value={round((prop('opacity') ?? 1) * 100, 0)} onChange={e => setProp('opacity', clamp(Number(e.target.value) / 100, 0, 1))} />
-        </Field>
-      )}
-
       {/* Notes (private, for all objects) */}
       <Field label="Notes (private)">
         <textarea
@@ -2137,8 +2165,8 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
 
 // ─── Layers Panel ─────────────────────────────────────────────────────────────
 
-const TYPE_ICONS = { shape: '▰', region: '◫', territory: '□', river: '〜', road: '—', border: '⋯', mountain: '△', stamp: '✦', location: '⌖', label: 'T', note: '✎', marker: '•' }
-const TYPE_COLORS = { shape: '#3a7a3a', region: '#6a9a44', territory: '#7050a8', river: '#3a80b0', road: '#8b6030', border: '#9050a0', mountain: '#7a7060', stamp: '#8f6a33', location: '#c8602a', label: '#2a6090', note: '#c8a020' }
+const TYPE_ICONS = { shape: '▰', region: '◫', territory: '□', water: '≈', river: '〜', road: '—', border: '⋯', mountain: '△', stamp: '✦', location: '⌖', label: 'T', note: '✎', marker: '•' }
+const TYPE_COLORS = { shape: '#3a7a3a', region: '#6a9a44', territory: '#7050a8', water: '#2f769f', river: '#2f5f78', road: '#8b6030', border: '#9050a0', mountain: '#7a7060', stamp: '#8f6a33', location: '#c8602a', label: '#2a6090', note: '#c8a020' }
 
 function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjects, persistLayers, setMode }) {
   const [draggingId, setDraggingId] = useState(null) // object id or 'group:groupId'

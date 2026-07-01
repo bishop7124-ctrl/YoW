@@ -40,6 +40,7 @@ export const TOOLS = [
   { id: 'shape', label: 'Landmass', icon: '▰', group: 'draw' },
   { id: 'terrain', label: 'Terrain', icon: '◫', group: 'draw' },
   { id: 'region', label: 'Region', icon: '□', group: 'draw' },
+  { id: 'water', label: 'Water', icon: '≈', group: 'draw' },
   { id: 'river', label: 'River', icon: '〜', group: 'draw' },
   { id: 'road', label: 'Road', icon: '—', group: 'draw' },
   { id: 'border', label: 'Border', icon: '⋯', group: 'draw' },
@@ -49,14 +50,14 @@ export const TOOLS = [
 ]
 
 // 'terrain' draws filled terrain regions; 'region' draws named political territories
-export const POINT_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'river', 'road', 'border'])
+export const POINT_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water', 'river', 'road', 'border'])
 
-const ALL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'river', 'road', 'border', 'stamp', 'location', 'label']
+const ALL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'water', 'river', 'road', 'border', 'stamp', 'location', 'label']
 export const MAP_TYPE_TOOLS = {
   world: ALL_DRAWING_TOOLS,
   region: ALL_DRAWING_TOOLS,
   local: ALL_DRAWING_TOOLS,
-  interior: ['select', 'pan', 'shape', 'terrain', 'region', 'road', 'border', 'stamp', 'location', 'label'],
+  interior: ALL_DRAWING_TOOLS,
 }
 
 export const stampAssetCache = new Map()
