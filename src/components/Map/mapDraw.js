@@ -320,6 +320,14 @@ function drawTerritory(ctx, object, isSelected, opts) {
   if (!pts || pts.length < 3) return
   const seed = hashString(object.id)
   const fill = object.properties?.fill || '#7050a8'
+  const stroke = object.properties?.stroke || fill
+  const fillOpacity = clamp(
+    Number.isFinite(object.properties?.fillOpacity)
+      ? object.properties.fillOpacity
+      : (Number.isFinite(object.properties?.opacity) ? object.properties.opacity : 1),
+    0,
+    1,
+  )
   const name = object.properties?.name || ''
   const isBlueprint = opts.style === 'blueprint'
   const organic = !isBlueprint
@@ -328,12 +336,14 @@ function drawTerritory(ctx, object, isSelected, opts) {
 
   ctx.save()
 
-  ctx.fillStyle = fill
-  drawSmoothPath(ctx, jitter, true)
-  ctx.fill()
+  if (fillOpacity > 0) {
+    ctx.fillStyle = fillOpacity >= 1 ? fill : colorWithAlpha(fill, fillOpacity)
+    drawSmoothPath(ctx, jitter, true)
+    ctx.fill()
+  }
 
   // Prominent dashed border
-  ctx.strokeStyle = isSelected ? '#1677ff' : fill
+  ctx.strokeStyle = isSelected ? '#1677ff' : stroke
   ctx.lineWidth = isSelected ? 3 : 2.5
   ctx.setLineDash([10, 6])
   ctx.lineJoin = 'round'

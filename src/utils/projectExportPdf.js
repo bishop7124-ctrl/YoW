@@ -149,20 +149,24 @@ const summarizeMap = (map, projectData) => {
   }
 }
 
-const mapObjectPoints = (object) =>
-  asArray(object?.metadata?.points)
+const mapObjectPoints = (object) => {
+  const geometryPoints = asArray(object?.geometry?.points)
+    .filter(point => Number.isFinite(point?.x) && Number.isFinite(point?.y))
+  if (geometryPoints.length) return geometryPoints
+  return asArray(object?.metadata?.points)
     .filter(point => Number.isFinite(point?.x) && Number.isFinite(point?.y))
     .map(point => ({
       x: (Number(object.x) || 0) + point.x * (Number(object.width) || 1),
       y: (Number(object.y) || 0) + point.y * (Number(object.height) || 1),
     }))
+}
 
 const safeMapColor = (value, fallback) =>
   /^#[0-9a-f]{3,8}$/i.test(String(value || '')) ? value : fallback
 
 const mapPreviewElement = (object, locationsById) => {
   if (!object || object.visible === false) return ''
-  const meta = object.metadata || {}
+  const meta = { ...(object.metadata || {}), ...(object.properties || {}) }
   const x = Number(object.x) || 0
   const y = Number(object.y) || 0
   const width = Math.max(1, Number(object.width) || 1)
@@ -171,7 +175,13 @@ const mapPreviewElement = (object, locationsById) => {
   const top = y - height / 2
   const fill = safeMapColor(meta.fill, object.type === 'river' ? '#7fb7c9' : object.type === 'road' ? '#9a7a4d' : '#d8c08a')
   const stroke = safeMapColor(meta.stroke, '#3f3527')
-  const opacity = Number.isFinite(meta.opacity) ? Math.max(0.08, Math.min(1, meta.opacity)) : 1
+  const opacity = Number.isFinite(meta.fillOpacity)
+    ? Math.max(0, Math.min(1, meta.fillOpacity))
+    : Number.isFinite(meta.terrainFillOpacity)
+      ? Math.max(0, Math.min(1, meta.terrainFillOpacity))
+      : Number.isFinite(meta.opacity)
+        ? Math.max(0.08, Math.min(1, meta.opacity))
+        : 1
   const name = escapeHtml(mapObjectName(object, locationsById))
   const points = mapObjectPoints(object)
 
@@ -221,7 +231,7 @@ const mapPreviewElement = (object, locationsById) => {
     }
     return `<polyline points="${pointList}" fill="none" stroke="${stroke}" stroke-width="${Math.max(2, Number(meta.lineThickness) || 5)}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`
   }
-  if ((object.type === 'region' || meta.shapeKind === 'polygon') && points.length >= 3) {
+  if ((object.type === 'region' || object.type === 'territory' || meta.shapeKind === 'polygon') && points.length >= 3) {
     return `<polygon points="${points.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')}" fill="${fill}" fill-opacity="${Math.min(0.55, opacity)}" stroke="${stroke}" stroke-width="3"/>`
   }
   if (meta.shapeKind === 'circle') {

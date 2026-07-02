@@ -48,6 +48,7 @@ const DEFAULT_LOCATION_ICON_SIZE = 64
 const DEFAULT_LOCATION_LABEL_SIZE = 13
 const DEFAULT_LOCATION_LABEL_COLOR = '#1a140a'
 const DEFAULT_LOCATION_LABEL_OUTLINE = '#f4e8c4'
+const DEFAULT_REGION_FILL_OPACITY = 0.16
 
 function sortVisibleObjects(objects) {
   return [...objects].filter(o => o.visible !== false).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
@@ -935,9 +936,9 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       case 'shape': return stylePreset === 'parchment'
         ? { fill: '#f0e3bd', stroke: '#b79a62', organicEdges: true }
         : { fill: '#1e3d20', stroke: '#142a16', organicEdges: true }
-      case 'terrain': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: 1, terrainType: selectedTerrainType, terrainSymbolScale: 1 }
-      case 'region': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: 1, terrainType: selectedTerrainType, terrainSymbolScale: 1 } // legacy compat
-      case 'territory': return { fill: '#7050a8', stroke: '#4a3070', name: '' }
+      case 'terrain': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: DEFAULT_REGION_FILL_OPACITY, terrainType: selectedTerrainType, terrainSymbolScale: 1 }
+      case 'region': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: DEFAULT_REGION_FILL_OPACITY, terrainType: selectedTerrainType, terrainSymbolScale: 1 } // legacy compat
+      case 'territory': return { fill: '#7050a8', stroke: '#4a3070', fillOpacity: DEFAULT_REGION_FILL_OPACITY, name: '' }
       case 'water': return { fill: '#73b8cf', stroke: '#2f769f', lineThickness: 3, organicEdges: true, waveTexture: true }
       case 'river': return { fill: '#7faec0', stroke: '#2f5f78', lineThickness: 7 }
       case 'road': return { stroke: '#8b6030', borderStroke: '#2c1a0a', highlight: '#f0d8a0', lineThickness: 5 }
@@ -1999,6 +2000,15 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
             <Field label="Fill"><input type="color" value={prop('fill') || '#7050a8'} onChange={e => setProp('fill', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
             <Field label="Outline"><input type="color" value={prop('stroke') || '#4a3070'} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
           </div>
+          <Field label="Fill opacity %">
+            <SliderInput
+              min={0}
+              max={100}
+              step={1}
+              value={round((Number.isFinite(prop('fillOpacity')) ? prop('fillOpacity') : 1) * 100, 0)}
+              onChange={e => setProp('fillOpacity', clamp(Number(e.target.value) / 100, 0, 1))}
+            />
+          </Field>
           <Field label="Label">
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={!prop('labelHidden')} onChange={e => setProp('labelHidden', !e.target.checked)} />
@@ -2083,7 +2093,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
           <Field label="Background %">
             <SliderInput
               min={0} max={100} step={1}
-              value={prop('terrainBackgroundTransparent') ? 0 : round((((prop('terrainFillOpacity') ?? prop('opacity') ?? 1) === 0.44 ? 1 : (prop('terrainFillOpacity') ?? prop('opacity') ?? 1)) * 100), 0)}
+              value={prop('terrainBackgroundTransparent') ? 0 : round((((prop('terrainFillOpacity') ?? prop('opacity') ?? DEFAULT_REGION_FILL_OPACITY) === 0.44 ? 1 : (prop('terrainFillOpacity') ?? prop('opacity') ?? DEFAULT_REGION_FILL_OPACITY)) * 100), 0)}
               onChange={e => patchSelected({ properties: { terrainBackgroundTransparent: Number(e.target.value) <= 0, terrainFillOpacity: clamp(Number(e.target.value) / 100, 0, 1) } })}
             />
           </Field>
