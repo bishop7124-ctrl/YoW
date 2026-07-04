@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 5174,
       "autoPort": true
+    },
+    {
+      "name": "yow-offline",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["VITE_OFFLINE_MODE=true", "npm", "run", "dev"],
+      "port": 5174,
+      "autoPort": true
     }
   ]
 }

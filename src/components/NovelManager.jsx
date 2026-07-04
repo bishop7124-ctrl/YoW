@@ -1130,7 +1130,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
   )
 }
 
-export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership, tourStore, suppressAutoTour = false }) {
+export default function NovelManager({ store, user, onOpenProject, onOpenSeries, onOpenChat, onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout, membership, tourStore, suppressAutoTour = false, localModeBubble }) {
   const [libraryTourOpen, setLibraryTourOpen] = useState(false)
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -1341,6 +1341,18 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {localModeBubble && (
+            <button
+              type="button"
+              className="local-mode-bubble"
+              onClick={localModeBubble.onOpenSettings}
+              title={localModeBubble.message}
+              aria-label={`${localModeBubble.label}. ${localModeBubble.message}`}
+            >
+              <span aria-hidden="true">!</span>
+              <span>{localModeBubble.label}</span>
+            </button>
+          )}
           <button className="library-chat-button" type="button" onClick={handleOpenLibraryChat} title="Open AI chat" aria-label="Open AI chat">
             ✦
           </button>

@@ -150,6 +150,31 @@ export function drawSmoothPath(ctx, points, closed = false) {
   }
 }
 
+// Flattens the same quadratic curve drawSmoothPath draws into a dense polyline,
+// so textures can follow the curve instead of the straight control segments.
+export function smoothPathPoints(points, spacing = 12) {
+  if (points.length < 3) return points
+  const result = [points[0]]
+  let start = points[0]
+  for (let i = 1; i < points.length - 1; i++) {
+    const ctrl = points[i]
+    const end = { x: (points[i].x + points[i + 1].x) / 2, y: (points[i].y + points[i + 1].y) / 2 }
+    const approx = Math.hypot(ctrl.x - start.x, ctrl.y - start.y) + Math.hypot(end.x - ctrl.x, end.y - ctrl.y)
+    const steps = Math.max(2, Math.ceil(approx / spacing))
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps
+      const u = 1 - t
+      result.push({
+        x: u * u * start.x + 2 * u * t * ctrl.x + t * t * end.x,
+        y: u * u * start.y + 2 * u * t * ctrl.y + t * t * end.y,
+      })
+    }
+    start = end
+  }
+  result.push(points[points.length - 1])
+  return result
+}
+
 export function normalizeObject(obj) {
   return {
     id: obj.id || uid(obj.type || 'obj'),
@@ -162,6 +187,7 @@ export function normalizeObject(obj) {
     zIndex: obj.zIndex ?? 0,
     locked: Boolean(obj.locked),
     visible: obj.visible !== false,
+    groupId: obj.groupId || null,
     geometry: obj.geometry || null,
     properties: obj.properties || {},
     linkedEntity: obj.linkedEntity || null,

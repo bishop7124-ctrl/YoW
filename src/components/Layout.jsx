@@ -868,6 +868,7 @@ export default function Layout({
   onOpenSeries,
   onGoHome,
   tourStore,
+  localModeBubble,
 }) {
   const projectTypeCfg = getProjectType(store.activeNovel?.type)
   const projectTypeStage = getProjectTypeStage(store.activeNovel?.type)
@@ -1043,6 +1044,18 @@ export default function Layout({
         topBar={null}
         utilityContent={(
           <div className="studio-utility-btns">
+            {localModeBubble && (
+              <button
+                type="button"
+                className="local-mode-bubble"
+                onClick={localModeBubble.onOpenSettings}
+                title={localModeBubble.message}
+                aria-label={`${localModeBubble.label}. ${localModeBubble.message}`}
+              >
+                <span aria-hidden="true">!</span>
+                <span>{localModeBubble.label}</span>
+              </button>
+            )}
             {tourStore?.toursEnabled && activeSectionTour && (
               <button
                 className="studio-utility-btn library-tour-button"

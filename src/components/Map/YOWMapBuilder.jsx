@@ -4,6 +4,7 @@ import {
   DRAG_THRESHOLD_PX, MIN_SIZE, STYLE_PRESETS,
   TERRAIN_TYPES, TOOLS, POINT_DRAW_TOOLS, MAP_TYPE_TOOLS, STAMP_LIBRARY,
   LOCATION_ICON_OPTIONS, MAP_FONT_OPTIONS, MAP_TYPE_OPTIONS, SCHEMA_VERSION,
+  territoryNounFor, territoryNounPluralFor, DEFAULT_GRID_SCALES,
 } from './mapConstants.js'
 import {
   uid, clamp, round, screenToMap, snapToGrid,
@@ -26,7 +27,7 @@ const STYLE_SWATCHES = {
 
 const MAP_TYPE_HELP = {
   world: 'Continents, oceans, and kingdoms',
-  region: 'Provinces, routes, and landmarks',
+  region: 'Territories, routes, and landmarks',
   local: 'Towns, islands, and battlefields',
   interior: 'Dungeons, buildings, and rooms',
 }
@@ -38,9 +39,24 @@ const MAP_TYPE_ICON = {
   interior: '▦',
 }
 
+// Line-type objects support per-segment selection: double-click picks the
+// segment between two path points; Delete removes just that segment.
+const LINE_SEGMENT_TYPES = new Set(['wall', 'river', 'road', 'path', 'border', 'mountain'])
 const POLYGON_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water'])
-const FREEHAND_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water', 'river', 'road', 'border'])
+const FREEHAND_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water', 'river', 'road', 'path', 'border'])
 const CLOSED_POINT_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'water'])
+const INTERIOR_STAMP_CATEGORIES = new Set(['Furniture', 'Fixtures', 'Signifiers'])
+const LOCAL_STAMP_CATEGORIES = new Set(['Local Structures', 'Local Features', 'Local Nature', 'Local Markers', 'Signifiers'])
+const LOCAL_WALL_MATERIALS = [
+  { value: 'grey-brick', label: 'Grey brick', stroke: '#62686b', highlight: '#aeb4b2', mortar: '#3e4447' },
+  { value: 'beige-brick', label: 'Beige brick', stroke: '#b89f78', highlight: '#ead8b2', mortar: '#8f7652' },
+  { value: 'white-brick', label: 'White brick', stroke: '#d9d9d2', highlight: '#ffffff', mortar: '#9a9a92' },
+  { value: 'black-brick', label: 'Black brick', stroke: '#262626', highlight: '#545454', mortar: '#0f0f0f' },
+  { value: 'red-brick', label: 'Red brick', stroke: '#9b4539', highlight: '#d27a64', mortar: '#5d2924' },
+  { value: 'wood', label: 'Wood', stroke: '#8a5a30', highlight: '#c58b4a', mortar: '#4c2d17' },
+  { value: 'plaster', label: 'Plaster', stroke: '#c9c1ad', highlight: '#f0ead8', mortar: '#a49a84' },
+]
+const OPENING_PLACE_RADIUS = 34
 const OBJECT_CULL_PADDING = 220
 const DEFAULT_LOCATION_FILL = '#c8602a'
 const DEFAULT_LOCATION_STROKE = '#6a2a0a'
@@ -61,6 +77,20 @@ function boundsIntersect(a, b, padding = 0) {
     a.y + a.height >= b.y - padding
 }
 
+function projectPointToSegment(point, a, b) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len2 = dx * dx + dy * dy
+  if (!len2) return { point: a, t: 0, distance: Math.hypot(point.x - a.x, point.y - a.y), segmentLength: 0 }
+  const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / len2, 0, 1)
+  const projected = { x: a.x + dx * t, y: a.y + dy * t }
+  return { point: projected, t, distance: Math.hypot(point.x - projected.x, point.y - projected.y), segmentLength: Math.sqrt(len2), dx, dy }
+}
+
+function getLocalWallMaterial(value) {
+  return LOCAL_WALL_MATERIALS.find(m => m.value === value) || LOCAL_WALL_MATERIALS[0]
+}
+
 function getObjectRenderBounds(object) {
   const b = getObjectBounds(object)
   const pointSize = Math.max(object.height || 0, object.width || 0, Number(object.properties?.iconSize) || 0, 80)
@@ -77,7 +107,7 @@ function StampPreviewCanvas({ stamp, stylePreset, active }) {
     function render() {
       const canvas = canvasRef.current
       if (!canvas || !stamp) return
-      const size = 46
+      const size = 58
       const dpr = window.devicePixelRatio || 1
       canvas.width = size * dpr
       canvas.height = size * dpr
@@ -86,7 +116,7 @@ function StampPreviewCanvas({ stamp, stylePreset, active }) {
       const ctx = canvas.getContext('2d')
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, size, size)
-      const stampSize = Math.min(42, Math.max(34, (stamp.size || 80) * 0.42))
+      const stampSize = Math.min(48, Math.max(34, (stamp.size || 80) * 0.4))
       drawObject(ctx, {
         id: `stamp-preview-${stamp.id}`,
         type: 'stamp',
@@ -110,8 +140,11 @@ function StampPreviewCanvas({ stamp, stylePreset, active }) {
       aria-hidden="true"
       style={{
         display: 'block',
-        width: 46,
-        height: 46,
+        width: 58,
+        height: 58,
+        borderRadius: 8,
+        background: 'color-mix(in srgb, var(--surface) 82%, #fff 18%)',
+        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--border) 65%, transparent)',
         filter: active ? 'drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 45%, transparent))' : 'none',
       }}
     />
@@ -355,6 +388,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   const cursorMapPointRef = useRef(null)
   const draftRef = useRef(null)
   const activeMapRef = useRef(null)
+  const schemaRef = useRef({ objects: [], layers: [], metadata: {} })
   const baseCanvasRef = useRef({ key: '', canvas: null })
   const undoStackRef = useRef([])
   const redoStackRef = useRef([])
@@ -376,11 +410,26 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   const [geometryEditMode, setGeometryEditMode] = useState('points')
   const [selectedTerrainType, setSelectedTerrainType] = useState('forest')
   const [selectedStampId, setSelectedStampId] = useState('capital')
+  const [selectedOpeningKind, setSelectedOpeningKind] = useState('door')
+  const [selectedDoorSwing, setSelectedDoorSwing] = useState('left-a')
+  const [roomLineStyle, setRoomLineStyle] = useState('straight')
+  const [wallLineStyle, setWallLineStyle] = useState('straight')
+  const [localWallMaterial, setLocalWallMaterial] = useState('grey-brick')
+  const [localWallThickness, setLocalWallThickness] = useState(16)
+  const [localPathThickness, setLocalPathThickness] = useState(14)
   const [favoriteStamps, setFavoriteStamps] = useState(() => loadJson('yow_map_fav_stamps', []))
   const [recentStamps, setRecentStamps] = useState(() => loadJson('yow_map_recent_stamps', []))
   const [modal, setModal] = useState(null) // { kind, point?, ... }
   const [showNewMapModal, setShowNewMapModal] = useState(false)
-  const [inspectorTab, setInspectorTab] = useState('object')
+  // Per-segment selection on line objects: { objectId, index } where index is
+  // the segment between geometry points[index] and points[index + 1].
+  const [selectedSegment, setSelectedSegment] = useState(null)
+  const selectedSegmentRef = useRef(null)
+  // MapEditor remounts whenever the active map changes (key={activeMap.id}),
+  // so the selected inspector tab is kept outside component state to survive
+  // map switches and deletions.
+  const [inspectorTab, setInspectorTabState] = useState(() => loadJson('yow_map_inspector_tab', 'object'))
+  const setInspectorTab = (tab) => { setInspectorTabState(tab); saveJson('yow_map_inspector_tab', tab) }
 
   // Label tool config
   const [labelConfig, setLabelConfig] = useState({ text: '', fontSize: 40, fontFamily: MAP_FONT_OPTIONS[0].value, fontWeight: 600, fontStyle: 'normal', textColor: '#1a140a', outlineColor: '#f4e8c4', backgroundColor: 'transparent' })
@@ -408,7 +457,14 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   const stylePreset = schema.metadata?.stylePreset || 'parchment'
   const gridSettings = useMemo(() => normalizeGrid(schema.metadata?.gridSettings, activeMap?.mapType), [schema.metadata?.gridSettings, activeMap?.mapType])
   const activeMapType = activeMap?.mapType || 'region'
+  const isInteriorMap = activeMapType === 'interior'
+  const isLocalMap = activeMapType === 'local'
+  const isWorldMap = activeMapType === 'world'
   const isCampaign = ['dnd_campaign', 'tabletop_rpg'].includes(project?.type)
+  const territoryNoun = territoryNounFor(activeMapType)
+  const territoryNounPlural = territoryNounPluralFor(activeMapType)
+  // Existing maps saved before the base-layer setting keep the water default.
+  const baseLayer = schema.metadata?.baseLayer || 'water'
 
   const visibleObjects = useMemo(() => sortVisibleObjects(objects), [objects])
 
@@ -416,23 +472,42 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   const primarySelection = selectedObjects[0] || null
 
   const allowedTools = MAP_TYPE_TOOLS[activeMapType] || MAP_TYPE_TOOLS.region
-  const activeTools = TOOLS.filter(t => allowedTools.includes(t.id))
+  const activeTools = TOOLS
+    .filter(t => allowedTools.includes(t.id))
+    .map(t => {
+      if (isInteriorMap && t.id === 'region') return { ...t, label: 'Room', icon: '▣' }
+      if (isLocalMap && t.id === 'region') return { ...t, label: 'Area', icon: '▱' }
+      if (isWorldMap && t.id === 'region') return { ...t, label: 'Kingdom', icon: '♔' }
+      if (t.id === 'region') return { ...t, label: 'Territory', icon: '▢' }
+      return t
+    })
 
   const allStampCategories = useMemo(() => {
-    const cats = new Set(STAMP_LIBRARY.map(s => s.category))
+    const source = isInteriorMap
+      ? STAMP_LIBRARY.filter(s => INTERIOR_STAMP_CATEGORIES.has(s.category))
+      : isLocalMap
+        ? STAMP_LIBRARY.filter(s => LOCAL_STAMP_CATEGORIES.has(s.category))
+        : STAMP_LIBRARY
+    const cats = new Set(source.map(s => s.category))
     return ['All', 'Favourites', 'Recent', ...cats]
-  }, [])
+  }, [isInteriorMap, isLocalMap])
 
   const filteredStamps = useMemo(() => {
     const q = stampSearch.trim().toLowerCase()
     return STAMP_LIBRARY.filter(s => {
+      if (isInteriorMap && !INTERIOR_STAMP_CATEGORIES.has(s.category)) return false
+      if (isLocalMap && !LOCAL_STAMP_CATEGORIES.has(s.category)) return false
       if (stampCategory === 'Favourites') return favoriteStamps.includes(s.id)
       if (stampCategory === 'Recent') return recentStamps.includes(s.id)
       if (stampCategory !== 'All' && s.category !== stampCategory) return false
       if (q) return `${s.name} ${s.category} ${s.keywords || ''}`.toLowerCase().includes(q)
       return true
     })
-  }, [stampSearch, stampCategory, favoriteStamps, recentStamps])
+  }, [stampSearch, stampCategory, favoriteStamps, recentStamps, isInteriorMap, isLocalMap])
+
+  const effectiveSelectedStampId = filteredStamps.some(s => s.id === selectedStampId)
+    ? selectedStampId
+    : (filteredStamps[0]?.id || selectedStampId)
 
   // Sync refs
   useEffect(() => {
@@ -440,6 +515,16 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     visibleObjectsRef.current = visibleObjects
     selectedIdsRef.current = selectedIds
   }, [objects, selectedIds, visibleObjects])
+  // Layers/metadata must be read through a ref inside persistence paths: the
+  // window keydown handler mounts once, so a closed-over `schema` goes stale
+  // and keyboard delete/undo/redo would write back old metadata (dropping
+  // e.g. baseLayer) and old layers.
+  useEffect(() => { schemaRef.current = schema }, [schema])
+  useEffect(() => { selectedSegmentRef.current = selectedSegment; requestRender() }, [selectedSegment]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Segment selection only survives while its object stays the selection.
+  useEffect(() => {
+    if (selectedSegmentRef.current && !selectedIds.includes(selectedSegmentRef.current.objectId)) setSelectedSegment(null)
+  }, [selectedIds])
   useEffect(() => { hoveredIdRef.current = hoveredId; requestRender() }, [hoveredId]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { activeMapRef.current = activeMap }, [activeMap])
   useEffect(() => { draftRef.current = draft; requestRender() }, [draft]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -450,6 +535,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       cursorMapPointRef.current = null
       requestRender()
     }
+    if (mode !== 'select') setSelectedSegment(null)
   }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -464,7 +550,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       if (e.code === 'Space') { spacePressedRef.current = true; return }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIdsRef.current.length) { e.preventDefault(); deleteSelected(); return }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedSegmentRef.current || selectedIdsRef.current.length)) { e.preventDefault(); deleteSelected(); return }
+      if (e.key === 'Escape' && selectedSegmentRef.current) { e.preventDefault(); setSelectedSegment(null); return }
       if (e.key === 'Escape' && draftRef.current) { e.preventDefault(); setDraft(null); return }
       if (e.key === 'Enter' && draftRef.current?.points?.length >= 2) { e.preventDefault(); completeDraft(); return }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); setSelectedIds(objectsRef.current.filter(o => !o.locked).map(o => o.id)); return }
@@ -494,8 +581,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       schemaVersion: SCHEMA_VERSION,
       width: MAP_W, height: MAP_H,
       mapObjects: nextObjects,
-      mapLayers: schema.layers,
-      metadata: schema.metadata,
+      mapLayers: schemaRef.current.layers,
+      metadata: schemaRef.current.metadata,
     }))
   }
 
@@ -505,7 +592,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       width: MAP_W, height: MAP_H,
       mapObjects: objectsRef.current,
       mapLayers: nextLayers,
-      metadata: schema.metadata,
+      metadata: schemaRef.current.metadata,
     }))
   }
 
@@ -514,8 +601,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       schemaVersion: SCHEMA_VERSION,
       width: MAP_W, height: MAP_H,
       mapObjects: objectsRef.current,
-      mapLayers: schema.layers,
-      metadata: { ...(schema.metadata || {}), ...patch },
+      mapLayers: schemaRef.current.layers,
+      metadata: { ...(schemaRef.current.metadata || {}), ...patch },
     }))
   }
 
@@ -526,8 +613,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     if (!cur) return
     undoStackRef.current = [...undoStackRef.current.slice(-39), {
       mapObjects: objectsRef.current.map(o => ({ ...o })),
-      mapLayers: schema.layers,
-      metadata: schema.metadata,
+      mapLayers: schemaRef.current.layers,
+      metadata: schemaRef.current.metadata,
     }]
     redoStackRef.current = []
     setHistoryVersion(v => v + 1)
@@ -542,7 +629,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     const prev = undoStackRef.current.pop()
     const cur = activeMapRef.current
     if (!prev || !cur) return
-    redoStackRef.current = [...redoStackRef.current.slice(-39), { mapObjects: objectsRef.current, mapLayers: schema.layers, metadata: schema.metadata }]
+    redoStackRef.current = [...redoStackRef.current.slice(-39), { mapObjects: objectsRef.current, mapLayers: schemaRef.current.layers, metadata: schemaRef.current.metadata }]
     applySnapshot(prev); setHistoryVersion(v => v + 1)
   }
 
@@ -550,7 +637,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     const next = redoStackRef.current.pop()
     const cur = activeMapRef.current
     if (!next || !cur) return
-    undoStackRef.current = [...undoStackRef.current.slice(-39), { mapObjects: objectsRef.current, mapLayers: schema.layers, metadata: schema.metadata }]
+    undoStackRef.current = [...undoStackRef.current.slice(-39), { mapObjects: objectsRef.current, mapLayers: schemaRef.current.layers, metadata: schemaRef.current.metadata }]
     applySnapshot(next); setHistoryVersion(v => v + 1)
   }
 
@@ -577,9 +664,44 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   }
 
   function deleteSelected() {
+    // A selected segment takes priority: Delete removes just that segment
+    // rather than the whole object.
+    if (deleteSelectedSegment()) return
     const ids = new Set(selectedIdsRef.current)
     updateObjects(cur => cur.filter(o => !ids.has(o.id) || o.locked))
     setSelectedIds([])
+  }
+
+  // Removes one segment of a line object. End segments drop their endpoint;
+  // a middle segment splits the path into two objects of the same type that
+  // keep the original layer/group. Returns true when a segment was handled.
+  function deleteSelectedSegment() {
+    const seg = selectedSegmentRef.current
+    if (!seg) return false
+    const obj = objectsRef.current.find(o => o.id === seg.objectId)
+    const pts = obj?.geometry?.points
+    setSelectedSegment(null)
+    if (!obj || obj.locked || isLayerLocked(obj) || !pts || pts.length < 2 || seg.index >= pts.length - 1) return false
+    if (pts.length === 2) {
+      updateObjects(cur => cur.filter(o => o.id !== obj.id))
+      setSelectedIds([])
+    } else if (seg.index === 0) {
+      updateObjects(cur => cur.map(o => o.id === obj.id ? { ...o, geometry: { ...o.geometry, points: pts.slice(1).map(p => ({ ...p })) } } : o))
+    } else if (seg.index === pts.length - 2) {
+      updateObjects(cur => cur.map(o => o.id === obj.id ? { ...o, geometry: { ...o.geometry, points: pts.slice(0, -1).map(p => ({ ...p })) } } : o))
+    } else {
+      const second = {
+        ...obj,
+        id: uid(obj.type),
+        properties: { ...obj.properties },
+        geometry: { ...obj.geometry, points: pts.slice(seg.index + 1).map(p => ({ ...p })) },
+      }
+      updateObjects(cur => cur.flatMap(o => o.id === obj.id
+        ? [{ ...o, geometry: { ...o.geometry, points: pts.slice(0, seg.index + 1).map(p => ({ ...p })) } }, second]
+        : [o]))
+      setSelectedIds([obj.id])
+    }
+    return true
   }
 
   function duplicateSelected() {
@@ -604,13 +726,13 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   }
 
   function getBaseCanvas() {
-    const key = JSON.stringify({ stylePreset, gridSettings })
+    const key = JSON.stringify({ stylePreset, gridSettings, baseLayer })
     if (baseCanvasRef.current.key === key && baseCanvasRef.current.canvas) return baseCanvasRef.current.canvas
     const base = document.createElement('canvas')
     base.width = MAP_W
     base.height = MAP_H
     const baseCtx = base.getContext('2d')
-    drawBackground(baseCtx, MAP_W, MAP_H, stylePreset)
+    drawBackground(baseCtx, MAP_W, MAP_H, stylePreset, baseLayer)
     baseCtx.save()
     baseCtx.beginPath()
     baseCtx.rect(0, 0, MAP_W, MAP_H)
@@ -639,6 +761,32 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       o.id === hovered ||
       boundsIntersect(getObjectRenderBounds(o), mapBounds, OBJECT_CULL_PADDING)
     ))
+  }
+
+  function drawObjectsInLayerOrder(ctx, orderedObjects, selectedIds, opts) {
+    const selected = new Set(selectedIds)
+    let riverRun = []
+    const openings = []
+    const flushRivers = () => {
+      if (!riverRun.length) return
+      drawRiverGroup(ctx, riverRun, selectedIds, opts)
+      riverRun = []
+    }
+
+    orderedObjects.forEach(object => {
+      if (object.type === 'river') {
+        riverRun.push(object)
+        return
+      }
+      if (object.type === 'opening') {
+        openings.push(object)
+        return
+      }
+      flushRivers()
+      drawObject(ctx, object, selected.has(object.id), opts)
+    })
+    flushRivers()
+    openings.forEach(object => drawObject(ctx, object, selected.has(object.id), opts))
   }
 
   function renderCanvas() {
@@ -672,21 +820,41 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     ctx.save()
     ctx.beginPath(); ctx.rect(0, 0, MAP_W, MAP_H); ctx.clip()
     const drawableObjects = getDrawableObjects(getViewportMapBounds(rect))
-    const drawableRivers = drawableObjects.filter(o => o.type === 'river')
-    drawableObjects
-      .filter(o => o.type !== 'river')
-      .forEach(o => drawObject(ctx, o, selectedIdsRef.current.includes(o.id), { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode }))
-    drawRiverGroup(ctx, drawableRivers, selectedIdsRef.current, { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode })
+    drawObjectsInLayerOrder(ctx, drawableObjects, selectedIdsRef.current, { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode })
+
+    // Selected line segment highlight (double-click selection)
+    const seg = selectedSegmentRef.current
+    if (seg) {
+      const segObj = objectsRef.current.find(o => o.id === seg.objectId)
+      const segPts = segObj?.geometry?.points
+      if (segObj && segPts && seg.index < segPts.length - 1) {
+        const a = segPts[seg.index], b = segPts[seg.index + 1]
+        const zoom = viewRef.current.zoom || 1
+        ctx.save()
+        ctx.lineCap = 'round'
+        ctx.strokeStyle = '#ffb020'
+        ctx.globalAlpha = 0.85
+        ctx.lineWidth = (Number(segObj.properties?.lineThickness) || 6) + 6 / zoom
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
+        ctx.globalAlpha = 1
+        ctx.fillStyle = '#ffb020'
+        ctx.strokeStyle = '#5a3a00'
+        ctx.lineWidth = 2 / zoom
+        const r = 6 / zoom
+        ;[a, b].forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke() })
+        ctx.restore()
+      }
+    }
     ctx.restore()
 
     // cursor preview
     const cursorMapPoint = cursorMapPointRef.current
-    if (cursorMapPoint && !modal && ['stamp', 'location'].includes(mode)) {
+    if (cursorMapPoint && !modal && ['stamp', 'location', 'opening'].includes(mode)) {
       const previewOpts = { style: stylePreset, mapType: activeMapType, preview: true }
       if (mode === 'stamp') {
-        const stamp = STAMP_LIBRARY.find(s => s.id === selectedStampId)
+        const stamp = STAMP_LIBRARY.find(s => s.id === effectiveSelectedStampId)
         const size = stamp?.size || 80
-        const prev = { id: 'preview', type: 'stamp', x: cursorMapPoint.x, y: cursorMapPoint.y, width: size, height: size, zIndex: 9999, properties: { stampId: selectedStampId, name: stamp?.name || '', showLabel: false } }
+        const prev = { id: 'preview', type: 'stamp', x: cursorMapPoint.x, y: cursorMapPoint.y, width: size, height: size, zIndex: 9999, properties: { stampId: effectiveSelectedStampId, name: stamp?.name || '', showLabel: false } }
         ctx.save(); ctx.globalAlpha = 0.68; drawObject(ctx, prev, false, previewOpts); ctx.restore()
       } else if (mode === 'location') {
         const size = locConfig.size || 64
@@ -710,6 +878,28 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           },
         }
         ctx.save(); ctx.globalAlpha = 0.68; drawObject(ctx, prev, false, previewOpts); ctx.restore()
+      } else if (mode === 'opening') {
+        const match = findNearestWallOpening(cursorMapPoint)
+        if (match) {
+          const prev = {
+            id: 'preview',
+            type: 'opening',
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            zIndex: 9999,
+            geometry: { type: 'path', points: match.points },
+            properties: {
+              name: selectedOpeningKind === 'window' ? 'Window' : 'Door',
+              openingKind: selectedOpeningKind,
+              doorSwing: selectedDoorSwing,
+              wallId: match.wall.id,
+              wallThickness: match.wallThickness,
+            },
+          }
+          drawObject(ctx, prev, false, previewOpts)
+        }
       }
     }
 
@@ -765,6 +955,28 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       if (o.geometry?.type && objectContainsPoint(o, point)) return o
     }
     return null
+  }
+
+  function getTerritoryLabelPoint(object) {
+    if (!object || object.type !== 'territory' || !object.geometry?.points?.length) return null
+    const name = object.properties?.name || ''
+    if (!name || object.properties?.labelHidden) return null
+    const b = getObjectBounds(object)
+    return {
+      x: b.x + b.width / 2 + (object.properties?.labelOffsetX || 0),
+      y: b.y + b.height / 2 + (object.properties?.labelOffsetY || 0),
+    }
+  }
+
+  function hitTestTerritoryLabelHandle(point) {
+    if (mode !== 'select' || selectedIdsRef.current.length !== 1) return null
+    const object = objectsRef.current.find(o => o.id === selectedIdsRef.current[0])
+    if (!object || object.locked || isLayerLocked(object)) return null
+    const labelPoint = getTerritoryLabelPoint(object)
+    if (!labelPoint) return null
+    const radius = Math.max(8, 12 / viewRef.current.zoom)
+    if (Math.hypot(point.x - labelPoint.x, point.y - labelPoint.y) > radius) return null
+    return { objectId: object.id, labelPoint }
   }
 
   function hitTestPointHandle(point) {
@@ -904,7 +1116,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     if (src.points.length < minPts) { setDraft(null); return }
 
     // Map tool ID to object type
-    const typeMap = { terrain: 'region', region: 'territory', shape: 'shape', water: 'water', river: 'river', road: 'road', border: 'border', mountain: 'mountain' }
+    const typeMap = { terrain: 'region', region: 'territory', shape: 'shape', wall: 'wall', water: 'water', river: 'river', road: 'road', path: 'path', border: 'border', mountain: 'mountain' }
     const objectType = typeMap[src.kind] || src.kind
 
     const maxZ = Math.max(0, ...objectsRef.current.map(o => o.zIndex || 0)) + 1
@@ -917,13 +1129,17 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         type: isPolygon ? 'polygon' : 'path',
         points: src.points,
       },
-      properties: { ...getDefaultProperties(src.kind), ...(objectType === 'water' && isPolygon ? { waterKind: 'mass', lineThickness: 3 } : {}) },
+      properties: {
+        ...getDefaultProperties(src.kind),
+        ...(objectType === 'territory' && isInteriorMap ? { semanticType: 'room', lineStyle: roomLineStyle, fillOpacity: 0.08, labelColor: '#d7e4ec', labelOutlineColor: 'transparent' } : {}),
+        ...(objectType === 'water' && isPolygon ? { waterKind: 'mass', lineThickness: 3 } : {}),
+      },
     })
     updateObjects(cur => [...cur, obj])
     setSelectedIds([obj.id])
     setDraft(null)
 
-    // Political regions need a name — open naming modal
+    // Political regions/rooms need a name — open naming modal
     if (objectType === 'territory') {
       setModal({ kind: 'territory', objectId: obj.id })
     } else {
@@ -939,9 +1155,19 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       case 'terrain': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: DEFAULT_REGION_FILL_OPACITY, terrainType: selectedTerrainType, terrainSymbolScale: 1 }
       case 'region': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: DEFAULT_REGION_FILL_OPACITY, terrainType: selectedTerrainType, terrainSymbolScale: 1 } // legacy compat
       case 'territory': return { fill: '#7050a8', stroke: '#4a3070', fillOpacity: DEFAULT_REGION_FILL_OPACITY, name: '' }
+      case 'wall': {
+        // Local and interior walls share the material preset system; interior
+        // walls keep semanticType 'wall' so door/window placement is unaffected.
+        if (isLocalMap || isInteriorMap) {
+          const material = getLocalWallMaterial(localWallMaterial)
+          return { stroke: material.stroke, highlight: material.highlight, mortar: material.mortar, lineThickness: localWallThickness, semanticType: isLocalMap ? 'localWall' : 'wall', wallMaterial: material.value, lineStyle: wallLineStyle }
+        }
+        return { stroke: stylePreset === 'blueprint' ? '#d7e4ec' : '#30343a', highlight: stylePreset === 'blueprint' ? '#88aeca' : '#6b7078', lineThickness: 14, semanticType: 'wall', lineStyle: wallLineStyle }
+      }
       case 'water': return { fill: '#73b8cf', stroke: '#2f769f', lineThickness: 3, organicEdges: true, waveTexture: true }
       case 'river': return { fill: '#7faec0', stroke: '#2f5f78', lineThickness: 7 }
       case 'road': return { stroke: '#8b6030', borderStroke: '#2c1a0a', highlight: '#f0d8a0', lineThickness: 5 }
+      case 'path': return { stroke: '#8f7652', borderStroke: '#6a4b2d', highlight: '#d8c095', lineThickness: localPathThickness, semanticType: 'localPath' }
       case 'border': return { stroke: '#9050a0', lineThickness: 4 }
       case 'mountain': return { fill: '#7a7060', stroke: '#3a3228', lineThickness: 22 }
       default: return {}
@@ -952,7 +1178,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   function placeStampAt(rawPoint) {
     const point = getSnappedPoint(rawPoint)
-    const stamp = STAMP_LIBRARY.find(s => s.id === selectedStampId) || STAMP_LIBRARY[0]
+    const stamp = STAMP_LIBRARY.find(s => s.id === effectiveSelectedStampId) || filteredStamps[0] || STAMP_LIBRARY[0]
     const size = stamp.size || 80
     const maxZ = Math.max(0, ...objectsRef.current.map(o => o.zIndex || 0)) + 1
     const obj = normalizeObject({ id: uid('stamp'), type: 'stamp', x: point.x, y: point.y, width: size, height: size, zIndex: maxZ, properties: { stampId: stamp.id, name: stamp.name, showLabel: false } })
@@ -1020,13 +1246,95 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     setSelectedIds([obj.id])
   }
 
+  function findNearestWallOpening(rawPoint) {
+    const walls = objectsRef.current.filter(o => o.type === 'wall' && o.geometry?.points?.length >= 2)
+    let best = null
+    walls.forEach(wall => {
+      const pts = wall.geometry.points || []
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1]
+        const b = pts[i]
+        const projected = projectPointToSegment(rawPoint, a, b)
+        if (!best || projected.distance < best.distance) {
+          best = { ...projected, wall, a, b }
+        }
+      }
+    })
+    if (!best || best.distance > OPENING_PLACE_RADIUS / Math.max(viewRef.current.zoom || 1, 0.45)) return null
+    const wallThickness = Number(best.wall.properties?.lineThickness) || 14
+    const openingLength = selectedOpeningKind === 'window' ? 96 : 76
+    const halfT = Math.min(0.42, (openingLength / 2) / Math.max(best.segmentLength, 1))
+    const t1 = clamp(best.t - halfT, 0, 1)
+    const t2 = clamp(best.t + halfT, 0, 1)
+    return {
+      wall: best.wall,
+      wallThickness,
+      points: [
+        { x: best.a.x + (best.b.x - best.a.x) * t1, y: best.a.y + (best.b.y - best.a.y) * t1 },
+        { x: best.a.x + (best.b.x - best.a.x) * t2, y: best.a.y + (best.b.y - best.a.y) * t2 },
+      ],
+    }
+  }
+
+  function placeOpeningAt(rawPoint) {
+    const match = findNearestWallOpening(rawPoint)
+    if (!match) return
+    const maxZ = Math.max(0, ...objectsRef.current.map(o => o.zIndex || 0)) + 1
+    const obj = normalizeObject({
+      id: uid('opening'),
+      type: 'opening',
+      x: 0, y: 0, width: 0, height: 0,
+      zIndex: maxZ,
+      geometry: { type: 'path', points: match.points },
+      properties: {
+        name: selectedOpeningKind === 'window' ? 'Window' : 'Door',
+        openingKind: selectedOpeningKind,
+        doorSwing: selectedDoorSwing,
+        wallId: match.wall.id,
+        wallThickness: match.wallThickness,
+      },
+    })
+    updateObjects(cur => [...cur, obj])
+    setSelectedIds([obj.id])
+  }
+
   // ── Pointer events ──────────────────────────────────────────────────────────
+
+  // Double-click on a line object selects just the segment under the cursor.
+  // Single click keeps its existing whole-object behaviour.
+  function handleDoubleClick(e) {
+    if (!activeMap || editorMode === 'view' || mode !== 'select') return
+    const point = screenToMap(e.clientX, e.clientY, viewportRef.current, viewRef.current)
+    const tolerance = 12 / (viewRef.current.zoom || 1)
+    for (const o of [...visibleObjectsRef.current].reverse()) {
+      if (!LINE_SEGMENT_TYPES.has(o.type) || o.locked || isLayerLocked(o)) continue
+      const pts = o.geometry?.points
+      if (!pts || pts.length < 2) continue
+      const hitWidth = (Number(o.properties?.lineThickness) || 6) / 2 + tolerance
+      let best = null
+      for (let i = 0; i < pts.length - 1; i++) {
+        const proj = projectPointToSegment(point, pts[i], pts[i + 1])
+        if (proj.distance <= hitWidth && (!best || proj.distance < best.distance)) {
+          best = { index: i, distance: proj.distance }
+        }
+      }
+      if (best) {
+        setSelectedIds([o.id])
+        setSelectedSegment({ objectId: o.id, index: best.index })
+        return
+      }
+    }
+    setSelectedSegment(null)
+  }
 
   function handlePointerDown(e) {
     if (!activeMap || e.button !== 0) return
     const vp = viewportRef.current
     const point = screenToMap(e.clientX, e.clientY, vp, viewRef.current)
     e.currentTarget.setPointerCapture(e.pointerId)
+    // Single click always returns to whole-object selection; a double-click
+    // re-selects the segment right after.
+    if (selectedSegmentRef.current) setSelectedSegment(null)
 
     // view mode — pan or navigate to linked entry on click
     if (editorMode === 'view') {
@@ -1035,7 +1343,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         return
       }
       const hit = hitTest(point)
-      if (hit?.linkedEntity?.entityType === 'location') {
+      if (!isInteriorMap && hit?.linkedEntity?.entityType === 'location') {
         const locId = hit.linkedEntity.entityId
         if (locId) {
           setSelectedLocationId?.(locId)
@@ -1047,7 +1355,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     }
 
     // pan modes
-    if (mode === 'pan' || e.altKey || spacePressedRef.current || (e.shiftKey && !hitTest(point))) {
+    if (mode === 'pan' || e.altKey || spacePressedRef.current || e.shiftKey) {
       interactionRef.current = { type: 'pan', startX: e.clientX, startY: e.clientY, startPan: viewRef.current.pan }
       return
     }
@@ -1062,6 +1370,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       }
       return
     }
+
+    if (mode === 'opening') { placeOpeningAt(point); return }
 
     // stamp
     if (mode === 'stamp') { placeStampAt(point); return }
@@ -1100,6 +1410,23 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     }
 
     // select
+    const labelHandleHit = hitTestTerritoryLabelHandle(point)
+    if (labelHandleHit) {
+      const object = objectsRef.current.find(o => o.id === labelHandleHit.objectId)
+      if (!object) return
+      interactionRef.current = {
+        type: 'label-position-drag',
+        objectId: object.id,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        hasMoved: false,
+        startPoint: point,
+        startOffsetX: object.properties?.labelOffsetX || 0,
+        startOffsetY: object.properties?.labelOffsetY || 0,
+      }
+      return
+    }
+
     const resizeHit = hitTestResizeHandle(point)
     if (resizeHit) {
       const object = objectsRef.current.find(o => o.id === selectedIdsRef.current[0])
@@ -1183,7 +1510,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         return
       }
       const hit = hitTest(pt)
-      const hasLink = hit?.linkedEntity?.entityType === 'location'
+      const hasLink = !isInteriorMap && hit?.linkedEntity?.entityType === 'location'
       if (hoveredIdRef.current !== (hit?.id || null)) setHoveredId(hit?.id || null)
       if (hasLink) {
         setViewTooltip({ x: e.clientX, y: e.clientY, object: hit })
@@ -1193,8 +1520,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       return
     }
 
-    if (!ia && ['stamp', 'location'].includes(mode) && !modal) {
-      cursorMapPointRef.current = getSnappedPoint(pt)
+    if (!ia && ['stamp', 'location', 'opening'].includes(mode) && !modal) {
+      cursorMapPointRef.current = mode === 'opening' ? pt : getSnappedPoint(pt)
       requestRender()
     }
 
@@ -1276,6 +1603,25 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       }))
     }
 
+    if (ia.type === 'label-position-drag') {
+      const screenDist = Math.hypot(e.clientX - ia.startClientX, e.clientY - ia.startClientY)
+      if (!ia.hasMoved && screenDist < DRAG_THRESHOLD_PX) return
+      if (!ia.hasMoved) { takeSnapshot(); ia.hasMoved = true }
+      const dx = pt.x - ia.startPoint.x
+      const dy = pt.y - ia.startPoint.y
+      updateObjectsTransient(cur => cur.map(o => {
+        if (o.id !== ia.objectId || o.locked || isLayerLocked(o)) return o
+        return {
+          ...o,
+          properties: {
+            ...(o.properties || {}),
+            labelOffsetX: ia.startOffsetX + dx,
+            labelOffsetY: ia.startOffsetY + dy,
+          },
+        }
+      }))
+    }
+
     if (ia.type === 'geometry-resize') {
       const screenDist = Math.hypot(e.clientX - ia.startClientX, e.clientY - ia.startClientY)
       if (!ia.hasMoved && screenDist < DRAG_THRESHOLD_PX) return
@@ -1330,7 +1676,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     if (interactionRef.current?.type === 'drag' && !interactionRef.current.hasMoved && selectedIds.length === 1) {
       // single click on already-selected object — keep selection
     }
-    if (['drag', 'point-drag', 'geometry-resize', 'stamp-resize'].includes(interactionRef.current?.type) && interactionRef.current.hasMoved) {
+    if (['drag', 'point-drag', 'label-position-drag', 'geometry-resize', 'stamp-resize'].includes(interactionRef.current?.type) && interactionRef.current.hasMoved) {
       persistObjects(objectsRef.current)
     }
     if (interactionRef.current?.type === 'pan') {
@@ -1382,11 +1728,10 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     const ctx = exportCanvas.getContext('2d')
     ctx.scale(scale, scale)
     const opts = { style: stylePreset, mapType: activeMapType }
-    drawBackground(ctx, MAP_W, MAP_H, stylePreset)
+    drawBackground(ctx, MAP_W, MAP_H, stylePreset, baseLayer)
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, MAP_W, MAP_H); ctx.clip()
     drawMovementGrid(ctx, MAP_W, MAP_H, gridSettings)
-    visibleObjects.filter(o => o.type !== 'river').forEach(o => drawObject(ctx, o, false, opts))
-    drawRiverGroup(ctx, visibleObjects.filter(o => o.type === 'river'), [], opts)
+    drawObjectsInLayerOrder(ctx, visibleObjects, [], opts)
     ctx.restore()
     exportCanvas.toBlob(blob => {
       if (!blob) return
@@ -1413,7 +1758,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     : mode === 'zoom' ? 'zoom-in'
     : mode === 'select' ? (hoveredResizeHandle ? `${hoveredResizeHandle.handle}-resize` : hoveredPointHandle ? 'grab' : hoveredId ? 'move' : 'default')
     : POINT_DRAW_TOOLS.has(mode) ? 'crosshair'
-    : ['stamp', 'location', 'label', 'note'].includes(mode) ? 'crosshair'
+    : ['stamp', 'location', 'label', 'note', 'opening'].includes(mode) ? 'crosshair'
     : 'default'
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -1510,27 +1855,34 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
           {/* Terrain type picker */}
           {mode === 'terrain' && (
-            <div style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 196, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, boxShadow: 'var(--shadow-md)' }}>
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onWheelCapture={e => e.stopPropagation()}
+              onWheel={e => e.stopPropagation()}
+              style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 196, maxHeight: 'min(340px, calc(100vh - 156px))', overflow: 'hidden', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, boxShadow: 'var(--shadow-md)' }}
+            >
               <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)', marginBottom: 2 }}>Terrain type</div>
               <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>Click to select, then draw on the canvas.</div>
-              {TERRAIN_TYPES.map(t => {
-                const isActive = selectedTerrainType === t.value
-                return (
-                  <button
-                    key={t.value}
-                    onClick={() => setSelectedTerrainType(t.value)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
-                      borderRadius: 7, border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-                      background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
-                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                    }}
-                  >
-                    <span style={{ width: 18, height: 18, borderRadius: 4, background: t.color, flexShrink: 0, border: '1px solid rgba(0,0,0,0.18)' }} />
-                    <span style={{ fontSize: 12, fontWeight: isActive ? 700 : 400, color: isActive ? 'var(--accent)' : 'var(--text)' }}>{t.label}</span>
-                  </button>
-                )
-              })}
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
+                {TERRAIN_TYPES.map(t => {
+                  const isActive = selectedTerrainType === t.value
+                  return (
+                    <button
+                      key={t.value}
+                      onClick={() => setSelectedTerrainType(t.value)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
+                        borderRadius: 7, border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ width: 18, height: 18, borderRadius: 4, background: t.color, flexShrink: 0, border: '1px solid rgba(0,0,0,0.18)' }} />
+                      <span style={{ fontSize: 12, fontWeight: isActive ? 700 : 400, color: isActive ? 'var(--accent)' : 'var(--text)' }}>{t.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -1566,6 +1918,180 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                   )
                 })}
               </div>
+              {isInteriorMap && mode === 'region' && (
+                <>
+                  <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+                  <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Room edges</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {[
+                      ['straight', 'Straight'],
+                      ['curved', 'Curved'],
+                    ].map(([value, label]) => {
+                      const isActive = roomLineStyle === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setRoomLineStyle(value)}
+                          aria-pressed={isActive}
+                          style={{
+                            minHeight: 30,
+                            borderRadius: 7,
+                            border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                            background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                            color: isActive ? 'var(--accent)' : 'var(--text)',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            fontSize: 11,
+                            fontWeight: isActive ? 700 : 500,
+                          }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {mode === 'wall' && (isInteriorMap || isLocalMap) && (
+            <div style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 196, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'var(--shadow-md)' }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Wall lines</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  ['straight', 'Straight'],
+                  ['curved', 'Curved'],
+                ].map(([value, label]) => {
+                  const isActive = wallLineStyle === value
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setWallLineStyle(value)}
+                      aria-pressed={isActive}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 7,
+                        border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                        color: isActive ? 'var(--accent)' : 'var(--text)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+              {(isLocalMap || isInteriorMap) && (
+                <>
+                  <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+                  <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>
+                    Material
+                    <select
+                      value={localWallMaterial}
+                      onChange={e => setLocalWallMaterial(e.target.value)}
+                      style={{ ...inputStyle, width: '100%', minWidth: 0, fontSize: 12, padding: '5px 8px' }}
+                    >
+                      {LOCAL_WALL_MATERIALS.map(material => <option key={material.value} value={material.value}>{material.label}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>
+                    Wall size
+                    <SliderInput min={6} max={48} step={1} value={localWallThickness} onChange={e => setLocalWallThickness(Math.max(6, Number(e.target.value)))} />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+
+          {mode === 'path' && isLocalMap && (
+            <div style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 196, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'var(--shadow-md)' }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Path brush</div>
+              <div style={{ height: 54, borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--surface2) 72%, #fff 28%)', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+                <div style={{ position: 'relative', width: '78%', height: Math.max(3, localPathThickness + Math.max(1, localPathThickness * 0.14)), background: '#6a4b2d' }}>
+                  <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: localPathThickness, transform: 'translateY(-50%)', background: '#8f7652' }} />
+                  <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: Math.max(2, localPathThickness * 0.7), transform: 'translateY(-50%)', background: '#d8c095', opacity: 0.78 }} />
+                </div>
+              </div>
+              <label style={{ display: 'grid', gap: 4, fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>
+                Brush size
+                <SliderInput min={3} max={128} step={1} value={localPathThickness} onChange={e => setLocalPathThickness(Math.max(3, Number(e.target.value)))} />
+              </label>
+            </div>
+          )}
+
+          {mode === 'opening' && (
+            <div style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 196, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'var(--shadow-md)' }}>
+              <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Opening</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>Choose a type, then click an existing wall.</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  ['door', 'Door'],
+                  ['window', 'Window'],
+                ].map(([value, label]) => {
+                  const isActive = selectedOpeningKind === value
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => { setSelectedOpeningKind(value); requestRender() }}
+                      aria-pressed={isActive}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 7,
+                        border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                        color: isActive ? 'var(--accent)' : 'var(--text)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedOpeningKind === 'door' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {[
+                    ['left-a', 'Left A'],
+                    ['left-b', 'Left B'],
+                    ['right-a', 'Right A'],
+                    ['right-b', 'Right B'],
+                  ].map(([value, label]) => {
+                    const isActive = selectedDoorSwing === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => { setSelectedDoorSwing(value); requestRender() }}
+                        aria-pressed={isActive}
+                        style={{
+                          minHeight: 30,
+                          borderRadius: 7,
+                          border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                          background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                          color: isActive ? 'var(--accent)' : 'var(--text)',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          fontSize: 11,
+                          fontWeight: isActive ? 700 : 500,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1584,26 +2110,26 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                     onClick={() => setSelectedStampId(stamp.id)}
                     title={stamp.name}
                     style={{
-                      minHeight: 76,
+                      minHeight: 92,
                       minWidth: 0,
-                      padding: '6px 4px', borderRadius: 7, border: `2px solid ${selectedStampId === stamp.id ? 'var(--accent)' : 'var(--border)'}`,
-                      background: selectedStampId === stamp.id ? 'color-mix(in srgb, var(--accent) 14%, var(--surface2))' : 'var(--surface2)',
+                      padding: '6px 4px', borderRadius: 7, border: `2px solid ${effectiveSelectedStampId === stamp.id ? 'var(--accent)' : 'var(--border)'}`,
+                      background: effectiveSelectedStampId === stamp.id ? 'color-mix(in srgb, var(--accent) 14%, var(--surface2))' : 'var(--surface2)',
                       cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
                       fontFamily: 'inherit',
                     }}
                   >
-                    <StampPreviewCanvas stamp={stamp} stylePreset={stylePreset} active={selectedStampId === stamp.id} />
-                    <span style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{stamp.name}</span>
+                    <StampPreviewCanvas stamp={stamp} stylePreset={stylePreset} active={effectiveSelectedStampId === stamp.id} />
+                    <span style={{ fontSize: 10, lineHeight: 1.15, color: 'var(--muted)', textAlign: 'center', whiteSpace: 'normal', overflowWrap: 'anywhere', width: '100%' }}>{stamp.name}</span>
                   </button>
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 5 }}>
                 <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 11 }}
                   onClick={() => setFavoriteStamps(prev => {
-                    const next = prev.includes(selectedStampId) ? prev.filter(id => id !== selectedStampId) : [...prev, selectedStampId]
+                    const next = prev.includes(effectiveSelectedStampId) ? prev.filter(id => id !== effectiveSelectedStampId) : [...prev, effectiveSelectedStampId]
                     saveJson('yow_map_fav_stamps', next); return next
                   })}
-                >{favoriteStamps.includes(selectedStampId) ? '★ Unfave' : '☆ Favourite'}</button>
+                >{favoriteStamps.includes(effectiveSelectedStampId) ? '★ Unfave' : '☆ Favourite'}</button>
               </div>
             </div>
           )}
@@ -1617,6 +2143,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onDoubleClick={handleDoubleClick}
           onPointerLeave={handlePointerLeave}
         >
           <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
@@ -1634,7 +2161,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           {/* View mode hint */}
           {editorMode === 'view' && (
             <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.6)', color: 'rgba(255,255,255,0.75)', borderRadius: 8, padding: '5px 14px', fontSize: 11, backdropFilter: 'blur(4px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-              Hover linked locations to preview · Click to open entry
+              {isInteriorMap ? 'View and pan this interior map' : 'Hover linked locations to preview · Click to open entry'}
             </div>
           )}
 
@@ -1661,7 +2188,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3, padding: 8, borderBottom: '1px solid var(--border)' }}>
             <button onClick={() => setInspectorTab('object')} style={tabStyle(inspectorTab === 'object')}>Object</button>
             <button onClick={() => setInspectorTab('layers')} style={tabStyle(inspectorTab === 'layers')}>Layers</button>
-            <button onClick={() => setInspectorTab('places')} style={tabStyle(inspectorTab === 'places')}>Places</button>
+            <button onClick={() => setInspectorTab('places')} style={tabStyle(inspectorTab === 'places')}>{isInteriorMap ? 'Rooms' : 'Places'}</button>
             <button onClick={() => setInspectorTab('map')} style={tabStyle(inspectorTab === 'map')}>Map</button>
           </div>
 
@@ -1670,6 +2197,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
               <ObjectInspector
                 primarySelection={primarySelection}
                 selectedIds={selectedIds}
+                selectedSegment={selectedSegment}
                 patchSelected={patchSelected}
                 deleteSelected={deleteSelected}
                 duplicateSelected={duplicateSelected}
@@ -1677,6 +2205,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                 setGeometryEditMode={setGeometryEditMode}
                 project={project}
                 isCampaign={isCampaign}
+                isInteriorMap={isInteriorMap}
                 locations={project.locations || []}
                 setSelectedLocationId={setSelectedLocationId}
               />
@@ -1689,6 +2218,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                 updateObjects={updateObjects}
                 persistLayers={persistLayers}
                 setMode={setMode}
+                territoryNoun={territoryNoun}
               />
             ) : inspectorTab === 'places' ? (
               <PlacesPanel
@@ -1698,7 +2228,10 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                 setMode={setMode}
                 setInspectorTab={setInspectorTab}
                 project={project}
+                isInteriorMap={isInteriorMap}
                 setSelectedLocationId={setSelectedLocationId}
+                territoryNoun={territoryNoun}
+                territoryNounPlural={territoryNounPlural}
               />
             ) : (
               <MapInspector
@@ -1706,6 +2239,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                 project={project}
                 stylePreset={stylePreset}
                 gridSettings={gridSettings}
+                baseLayer={baseLayer}
                 persistMeta={persistMeta}
                 selectMap={selectMap}
                 deleteMap={deleteMap}
@@ -1728,15 +2262,18 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           territoryConfig={territoryConfig} setTerritoryConfig={setTerritoryConfig}
           locations={project.locations || []}
           isCampaign={isCampaign}
+          isInteriorMap={isInteriorMap}
+          isLocalMap={isLocalMap}
+          territoryNoun={territoryNoun}
           onConfirm={() => {
             if (modal.kind === 'location' && modal.point) { placeLocationAt(modal.point, locConfig); setModal(null); setMode('select') }
             if (modal.kind === 'label' && modal.point && labelConfig.text.trim()) { placeLabelAt(modal.point, labelConfig); setModal(null); setMode('select') }
             if (modal.kind === 'note' && modal.point) { placeNoteAt(modal.point, noteConfig); setModal(null); setMode('select') }
             if (modal.kind === 'territory' && modal.objectId) {
               const name = (territoryConfig.name || '').trim()
-              let locationId = territoryConfig.linkToId || null
-              if (territoryConfig.createNewLocation && name && saveLocation) {
-                const loc = saveLocation({ name, category: 'Region', description: '' })
+              let locationId = isInteriorMap ? null : (territoryConfig.linkToId || null)
+              if (!isInteriorMap && territoryConfig.createNewLocation && name && saveLocation) {
+                const loc = saveLocation({ name, category: territoryNoun, description: '' })
                 if (loc?.id) locationId = loc.id
               }
               const ids = new Set([modal.objectId])
@@ -1770,7 +2307,31 @@ function SliderInput({ value, min, max, step = 1, onChange, numWidth = 54 }) {
   )
 }
 
-function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteSelected, duplicateSelected, geometryEditMode, setGeometryEditMode, project, isCampaign, locations, setSelectedLocationId }) {
+function TransparentColorInput({ value, fallback, onChange, noneLabel = 'None' }) {
+  const isTransparent = value === 'transparent'
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <input
+        type="color"
+        value={isTransparent ? fallback : (value || fallback)}
+        onChange={e => onChange(e.target.value)}
+        disabled={isTransparent}
+        style={{ ...inputStyle, height: 32, padding: 2, flex: 1, opacity: isTransparent ? 0.4 : 1 }}
+      />
+      <label title="Transparent" style={{ cursor: 'pointer', fontSize: 10, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+        <input
+          type="checkbox"
+          checked={isTransparent}
+          onChange={e => onChange(e.target.checked ? 'transparent' : fallback)}
+          style={{ marginRight: 3 }}
+        />
+        {noneLabel}
+      </label>
+    </div>
+  )
+}
+
+function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteSelected, duplicateSelected, geometryEditMode, setGeometryEditMode, project, isCampaign, isInteriorMap, locations, setSelectedLocationId }) {
   if (!primarySelection) {
     return <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.5 }}>Select an object on the canvas to edit its properties.</div>
   }
@@ -1826,8 +2387,8 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
         </Field>
       )}
 
-      {/* Worldbuilding integration — most prominent for location/stamp */}
-      {(o.type === 'location' || (o.type === 'stamp' && ['capital', 'city', 'village', 'castle', 'fortress', 'harbor'].includes(prop('stampId')))) && (
+      {/* Worldbuilding integration — most prominent for location/stamp/region */}
+      {!isInteriorMap && (o.type === 'location' || o.type === 'territory' || (o.type === 'stamp' && ['capital', 'city', 'village', 'castle', 'fortress', 'harbor'].includes(prop('stampId')))) && (
         <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7, background: 'color-mix(in srgb, var(--accent) 7%, var(--surface))' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Worldbuilding link</div>
           {linkedLocation ? (
@@ -1876,7 +2437,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
               <input type="color" value={prop('fill') || DEFAULT_LOCATION_FILL} onChange={e => setProp('fill', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} />
             </Field>
             <Field label="Icon outline">
-              <input type="color" value={prop('stroke') || DEFAULT_LOCATION_STROKE} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} />
+              <TransparentColorInput value={prop('stroke')} fallback={DEFAULT_LOCATION_STROKE} onChange={value => setProp('stroke', value)} />
             </Field>
           </div>
           <Field label="Label size">
@@ -1887,7 +2448,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
               <input type="color" value={prop('labelColor') || DEFAULT_LOCATION_LABEL_COLOR} onChange={e => setProp('labelColor', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} />
             </Field>
             <Field label="Label outline">
-              <input type="color" value={prop('labelOutlineColor') || DEFAULT_LOCATION_LABEL_OUTLINE} onChange={e => setProp('labelOutlineColor', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} />
+              <TransparentColorInput value={prop('labelOutlineColor')} fallback={DEFAULT_LOCATION_LABEL_OUTLINE} onChange={value => setProp('labelOutlineColor', value)} />
             </Field>
           </div>
         </>
@@ -1965,7 +2526,9 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
           </Field>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Text colour"><input type="color" value={prop('textColor') === 'transparent' ? '#1a140a' : (prop('textColor') || '#1a140a')} onChange={e => setProp('textColor', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
-            <Field label="Outline colour"><input type="color" value={prop('outlineColor') === 'transparent' ? '#f4e8c4' : (prop('outlineColor') || '#f4e8c4')} onChange={e => setProp('outlineColor', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+            <Field label="Outline colour">
+              <TransparentColorInput value={prop('outlineColor')} fallback="#f4e8c4" onChange={value => setProp('outlineColor', value)} />
+            </Field>
           </div>
         </>
       )}
@@ -1989,7 +2552,9 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
       {(o.type === 'shape' || o.type === 'region') && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <Field label="Fill"><input type="color" value={prop('fill') || '#1e3d20'} onChange={e => setProp('fill', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
-          <Field label="Outline"><input type="color" value={prop('stroke') || '#142a16'} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+          <Field label="Outline">
+            <TransparentColorInput value={prop('stroke')} fallback="#142a16" onChange={value => setProp('stroke', value)} />
+          </Field>
         </div>
       )}
 
@@ -1998,7 +2563,9 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Fill"><input type="color" value={prop('fill') || '#7050a8'} onChange={e => setProp('fill', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
-            <Field label="Outline"><input type="color" value={prop('stroke') || '#4a3070'} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+            <Field label="Outline">
+              <TransparentColorInput value={prop('stroke')} fallback="#4a3070" onChange={value => setProp('stroke', value)} />
+            </Field>
           </div>
           <Field label="Fill opacity %">
             <SliderInput
@@ -2009,6 +2576,39 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
               onChange={e => setProp('fillOpacity', clamp(Number(e.target.value) / 100, 0, 1))}
             />
           </Field>
+          {prop('semanticType') === 'room' && (
+            <Field label="Room edges">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  ['straight', 'Straight'],
+                  ['curved', 'Curved'],
+                ].map(([value, label]) => {
+                  const isActive = (prop('lineStyle') || 'straight') === value
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setProp('lineStyle', value)}
+                      aria-pressed={isActive}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 7,
+                        border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                        color: isActive ? 'var(--accent)' : 'var(--text)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          )}
           <Field label="Label">
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
               <input type="checkbox" checked={!prop('labelHidden')} onChange={e => setProp('labelHidden', !e.target.checked)} />
@@ -2025,19 +2625,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
                   <input type="color" value={prop('labelColor') || prop('fill') || '#7050a8'} onChange={e => setProp('labelColor', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} />
                 </Field>
                 <Field label="Label outline">
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={prop('labelOutlineColor') === 'transparent' ? '#f4e8c4' : (prop('labelOutlineColor') || '#f4e8c4')}
-                      onChange={e => setProp('labelOutlineColor', e.target.value)}
-                      disabled={prop('labelOutlineColor') === 'transparent'}
-                      style={{ ...inputStyle, height: 32, padding: 2, flex: 1, opacity: prop('labelOutlineColor') === 'transparent' ? 0.4 : 1 }}
-                    />
-                    <label title="Transparent outline" style={{ cursor: 'pointer', fontSize: 10, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                      <input type="checkbox" checked={prop('labelOutlineColor') === 'transparent'} onChange={e => setProp('labelOutlineColor', e.target.checked ? 'transparent' : '#f4e8c4')} style={{ marginRight: 3 }} />
-                      None
-                    </label>
-                  </div>
+                  <TransparentColorInput value={prop('labelOutlineColor')} fallback="#f4e8c4" onChange={value => setProp('labelOutlineColor', value)} />
                 </Field>
               </div>
               <Field label="Label offset X">
@@ -2056,27 +2644,141 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
         </>
       )}
 
+      {o.type === 'opening' && (
+        <>
+          <Field label="Opening type">
+            <select value={prop('openingKind') || 'door'} onChange={e => patchSelected({ properties: { openingKind: e.target.value, name: e.target.value === 'window' ? 'Window' : 'Door' } })} style={inputStyle}>
+              <option value="door">Door</option>
+              <option value="window">Window</option>
+            </select>
+          </Field>
+          {(prop('openingKind') || 'door') === 'door' && (
+            <Field label="Door swing">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  ['left-a', 'Left A'],
+                  ['left-b', 'Left B'],
+                  ['right-a', 'Right A'],
+                  ['right-b', 'Right B'],
+                ].map(([value, label]) => {
+                  const currentSwing = prop('doorSwing') === -1 ? 'left-b' : (prop('doorSwing') || 'left-a')
+                  const isActive = currentSwing === value
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setProp('doorSwing', value)}
+                      aria-pressed={isActive}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 7,
+                        border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                        color: isActive ? 'var(--accent)' : 'var(--text)',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          )}
+        </>
+      )}
+
       {/* Line objects */}
-      {['water', 'river', 'road', 'border', 'mountain'].includes(o.type) && (
+      {['water', 'river', 'road', 'path', 'border', 'mountain', 'wall'].includes(o.type) && (
         <>
           {o.type === 'water' && o.geometry?.type === 'polygon' && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 <Field label="Fill"><input type="color" value={prop('fill') || '#73b8cf'} onChange={e => setProp('fill', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
-                <Field label="Outline"><input type="color" value={prop('stroke') || '#2f769f'} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+                <Field label="Outline">
+                  <TransparentColorInput value={prop('stroke')} fallback="#2f769f" onChange={value => setProp('stroke', value)} />
+                </Field>
               </div>
               <label style={checkStyle}><input type="checkbox" checked={prop('organicEdges') !== false} onChange={e => setProp('organicEdges', e.target.checked)} /> Organic edge</label>
               <label style={checkStyle}><input type="checkbox" checked={prop('waveTexture') !== false} onChange={e => setProp('waveTexture', e.target.checked)} /> Wave texture</label>
             </>
           )}
-          {(o.type !== 'water' || o.geometry?.type !== 'polygon') && (
+          {(o.type !== 'water' || o.geometry?.type !== 'polygon') && o.type !== 'border' && (
             <Field label="Colour"><input type="color" value={prop('stroke') || (o.type === 'river' ? '#2f5f78' : '#333')} onChange={e => setProp('stroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
           )}
+          {o.type === 'wall' && (
+            <>
+              {(prop('semanticType') === 'localWall' || isInteriorMap) && (
+                <Field label="Material">
+                  <select
+                    value={prop('wallMaterial') || 'grey-brick'}
+                    onChange={e => {
+                      const material = getLocalWallMaterial(e.target.value)
+                      patchSelected({ properties: { wallMaterial: material.value, stroke: material.stroke, highlight: material.highlight, mortar: material.mortar } })
+                    }}
+                    style={inputStyle}
+                  >
+                    {LOCAL_WALL_MATERIALS.map(material => <option key={material.value} value={material.value}>{material.label}</option>)}
+                  </select>
+                </Field>
+              )}
+              <Field label="Wall lines">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {[
+                    ['straight', 'Straight'],
+                    ['curved', 'Curved'],
+                  ].map(([value, label]) => {
+                    const isActive = (prop('lineStyle') || 'straight') === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setProp('lineStyle', value)}
+                        aria-pressed={isActive}
+                        style={{
+                          minHeight: 30,
+                          borderRadius: 7,
+                          border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                          background: isActive ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+                          color: isActive ? 'var(--accent)' : 'var(--text)',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          fontSize: 11,
+                          fontWeight: isActive ? 700 : 500,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+              <Field label="Inner mark">
+                <TransparentColorInput value={prop('highlight')} fallback="#88aeca" onChange={value => setProp('highlight', value)} />
+              </Field>
+            </>
+          )}
+          {o.type === 'border' && (
+            <Field label="Border">
+              <TransparentColorInput value={prop('stroke')} fallback="#9050a0" onChange={value => setProp('stroke', value)} />
+            </Field>
+          )}
           {o.type === 'road' && <>
-            <Field label="Border"><input type="color" value={prop('borderStroke') || '#2c1a0a'} onChange={e => setProp('borderStroke', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+            <Field label="Border">
+              <TransparentColorInput value={prop('borderStroke')} fallback="#2c1a0a" onChange={value => setProp('borderStroke', value)} />
+            </Field>
             <Field label="Fill"><input type="color" value={prop('highlight') || '#f0d8a0'} onChange={e => setProp('highlight', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
           </>}
-          <Field label={o.type === 'water' && o.geometry?.type === 'polygon' ? 'Outline' : 'Thickness'}><SliderInput min={1} max={40} step={1} value={prop('lineThickness') || 5} onChange={e => setProp('lineThickness', Math.max(1, Number(e.target.value)))} /></Field>
+          {o.type === 'path' && <>
+            <Field label="Border">
+              <TransparentColorInput value={prop('borderStroke')} fallback="#6a4b2d" onChange={value => setProp('borderStroke', value)} />
+            </Field>
+            <Field label="Fill"><input type="color" value={prop('highlight') || '#d8c095'} onChange={e => setProp('highlight', e.target.value)} style={{ ...inputStyle, height: 32, padding: 2 }} /></Field>
+          </>}
+          <Field label={o.type === 'water' && o.geometry?.type === 'polygon' ? 'Outline' : 'Thickness'}><SliderInput min={1} max={o.type === 'path' ? 128 : o.type === 'wall' ? 64 : 40} step={1} value={prop('lineThickness') || 5} onChange={e => setProp('lineThickness', Math.max(1, Number(e.target.value)))} /></Field>
         </>
       )}
 
@@ -2116,33 +2818,61 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
       )}
 
       {o.type === 'stamp' && !o.geometry && (
-        <Field label="Stamp size">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 54px', gap: 8, alignItems: 'center' }}>
-            <input
-              type="range"
-              min={MIN_SIZE}
-              max="320"
-              step="2"
-              value={round(o.width || o.height || 80, 0)}
-              onChange={e => {
-                const size = clamp(Number(e.target.value) || 80, MIN_SIZE, 320)
-                patchSelected({ width: size, height: size })
-              }}
-              style={{ width: '100%' }}
-            />
-            <input
-              type="number"
-              min={MIN_SIZE}
-              max="320"
-              value={round(o.width || o.height || 80, 0)}
-              onChange={e => {
-                const size = clamp(Number(e.target.value) || 80, MIN_SIZE, 320)
-                patchSelected({ width: size, height: size })
-              }}
-              style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }}
-            />
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <Field label="Fill / tint">
+              <input
+                type="color"
+                value={prop('stampFill') || '#1a140a'}
+                onChange={e => setProp('stampFill', e.target.value)}
+                style={{ ...inputStyle, height: 32, padding: 3 }}
+              />
+            </Field>
+            <Field label="Outline">
+              <input
+                type="color"
+                value={prop('stampStroke') || '#1a140a'}
+                onChange={e => setProp('stampStroke', e.target.value)}
+                style={{ ...inputStyle, height: 32, padding: 3 }}
+              />
+            </Field>
+            <Field label="Accent">
+              <input
+                type="color"
+                value={prop('stampHighlight') || '#f4ecd4'}
+                onChange={e => setProp('stampHighlight', e.target.value)}
+                style={{ ...inputStyle, height: 32, padding: 3 }}
+              />
+            </Field>
           </div>
-        </Field>
+          <Field label="Stamp size">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 54px', gap: 8, alignItems: 'center' }}>
+              <input
+                type="range"
+                min={MIN_SIZE}
+                max="320"
+                step="2"
+                value={round(o.width || o.height || 80, 0)}
+                onChange={e => {
+                  const size = clamp(Number(e.target.value) || 80, MIN_SIZE, 320)
+                  patchSelected({ width: size, height: size })
+                }}
+                style={{ width: '100%' }}
+              />
+              <input
+                type="number"
+                min={MIN_SIZE}
+                max="320"
+                value={round(o.width || o.height || 80, 0)}
+                onChange={e => {
+                  const size = clamp(Number(e.target.value) || 80, MIN_SIZE, 320)
+                  patchSelected({ width: size, height: size })
+                }}
+                style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }}
+              />
+            </div>
+          </Field>
+        </>
       )}
 
       {/* Position/size for point objects */}
@@ -2175,32 +2905,28 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
 
 // ─── Layers Panel ─────────────────────────────────────────────────────────────
 
-const TYPE_ICONS = { shape: '▰', region: '◫', territory: '□', water: '≈', river: '〜', road: '—', border: '⋯', mountain: '△', stamp: '✦', location: '⌖', label: 'T', note: '✎', marker: '•' }
-const TYPE_COLORS = { shape: '#3a7a3a', region: '#6a9a44', territory: '#7050a8', water: '#2f769f', river: '#2f5f78', road: '#8b6030', border: '#9050a0', mountain: '#7a7060', stamp: '#8f6a33', location: '#c8602a', label: '#2a6090', note: '#c8a020' }
+const TYPE_ICONS = { shape: '▰', region: '◫', territory: '□', wall: '▊', opening: '⌞', water: '≈', river: '〜', road: '—', path: '╌', border: '⋯', mountain: '△', stamp: '✦', location: '⌖', label: 'T', note: '✎', marker: '•' }
+const TYPE_COLORS = { shape: '#3a7a3a', region: '#6a9a44', territory: '#7050a8', wall: '#6f8796', opening: '#9fb7c5', water: '#2f769f', river: '#2f5f78', road: '#8b6030', path: '#9a7448', border: '#9050a0', mountain: '#7a7060', stamp: '#8f6a33', location: '#c8602a', label: '#2a6090', note: '#c8a020' }
+const TYPE_LABELS = { shape: 'Landmass', region: 'Terrain', territory: 'Region', wall: 'Wall', opening: 'Door / Window', water: 'Water', river: 'River', road: 'Road', path: 'Path', border: 'Border', mountain: 'Mountain ridge', stamp: 'Stamp', location: 'Location', label: 'Label', note: 'Note', marker: 'Marker' }
 
-function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjects, persistLayers, setMode }) {
+function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjects, persistLayers, setMode, territoryNoun = 'Region' }) {
   const [draggingId, setDraggingId] = useState(null) // object id or 'group:groupId'
   const [dropTarget, setDropTarget] = useState(null) // { id, position: 'before'|'after'|'into', isGroup }
   const [renamingGroupId, setRenamingGroupId] = useState(null)
   const [renameVal, setRenameVal] = useState('')
   const [collapsedGroups, setCollapsedGroups] = useState({})
+  const [filterSelectedType, setFilterSelectedType] = useState(false)
 
   const groups = layers || []
   const sorted = [...objects].sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
-  const ungrouped = sorted.filter(o => !o.groupId)
+  const selectedType = objects.find(o => selectedIds.includes(o.id))?.type || ''
+  const selectedTypeLabel = selectedType ? (selectedType === 'territory' ? territoryNoun : TYPE_LABELS[selectedType] || selectedType) : ''
+  const typeFiltered = Boolean(filterSelectedType && selectedType)
+  const displayedSorted = typeFiltered ? sorted.filter(o => o.type === selectedType) : sorted
+  const ungrouped = displayedSorted.filter(o => !o.groupId)
   const groupedMap = {}
-  groups.forEach(g => { groupedMap[g.id] = sorted.filter(o => o.groupId === g.id) })
-
-  function applyDisplayOrder(displayObjects, newGroupId = undefined) {
-    const count = displayObjects.length
-    const zById = new Map(displayObjects.map((o, index) => [o.id, count - index]))
-    updateObjects(cur => cur.map(o => {
-      const updates = {}
-      if (zById.has(o.id)) updates.zIndex = zById.get(o.id)
-      if (newGroupId !== undefined && zById.has(o.id)) updates.groupId = newGroupId
-      return Object.keys(updates).length ? { ...o, ...updates } : o
-    }))
-  }
+  groups.forEach(g => { groupedMap[g.id] = displayedSorted.filter(o => o.groupId === g.id) })
+  const visibleGroups = typeFiltered ? groups.filter(g => groupedMap[g.id]?.length) : groups
 
   function moveObjectInList(id, direction) {
     const allSorted = buildFlatList()
@@ -2220,7 +2946,7 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
 
   function buildFlatList() {
     const items = []
-    groups.forEach(g => {
+    visibleGroups.forEach(g => {
       items.push({ type: 'group', id: g.id })
       if (!collapsedGroups[g.id]) {
         groupedMap[g.id]?.forEach(o => items.push({ type: 'object', id: o.id, groupId: g.id }))
@@ -2237,7 +2963,6 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
     const draggingObj = objects.find(o => o.id === draggingId)
     if (!draggingObj) return
 
-    const allObjects = [...objects]
     const sourceIdx = sorted.findIndex(o => o.id === draggingId)
     const targetIdx = sorted.findIndex(o => o.id === targetId)
     if (sourceIdx < 0 || targetIdx < 0) return
@@ -2331,13 +3056,35 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{objects.length} objects</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{typeFiltered ? `${displayedSorted.length} of ${objects.length}` : objects.length} objects</div>
         <button onClick={createGroup} title="New group" style={{ ...layerBtnStyle, fontSize: 11, padding: '2px 7px', border: '1px solid var(--border)', borderRadius: 5, background: 'var(--surface2)' }}>+ Group</button>
       </div>
 
+      <button
+        type="button"
+        disabled={!selectedType}
+        onClick={() => setFilterSelectedType(v => !v)}
+        title={selectedType ? `Show only ${selectedTypeLabel} objects` : 'Select an object to filter by type'}
+        style={{
+          width: '100%',
+          border: `1px solid ${typeFiltered ? 'var(--accent)' : 'var(--border)'}`,
+          borderRadius: 7,
+          padding: '6px 8px',
+          background: typeFiltered ? 'color-mix(in srgb, var(--accent) 12%, var(--surface2))' : 'var(--surface2)',
+          color: selectedType ? (typeFiltered ? 'var(--accent)' : 'var(--text)') : 'var(--faint)',
+          cursor: selectedType ? 'pointer' : 'not-allowed',
+          fontFamily: 'inherit',
+          fontSize: 11,
+          fontWeight: typeFiltered ? 700 : 600,
+          textAlign: 'left',
+        }}
+      >
+        {typeFiltered ? `Showing ${selectedTypeLabel} only` : selectedType ? `Only show ${selectedTypeLabel}` : 'Only show selected type'}
+      </button>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {/* Groups first */}
-        {groups.map((group, gIdx) => {
+        {visibleGroups.map(group => {
           const groupObjs = groupedMap[group.id] || []
           const isCollapsed = collapsedGroups[group.id]
           const isDraggingThisGroup = draggingId === `group:${group.id}`
@@ -2400,7 +3147,7 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
               </div>
 
               {/* Group objects */}
-              {!isCollapsed && groupObjs.map((o, idx) => {
+              {!isCollapsed && groupObjs.map(o => {
                 const isSelected = selectedIds.includes(o.id)
                 const name = o.properties?.name || o.properties?.text || o.properties?.title || o.properties?.stampId || o.type
                 const icon = TYPE_ICONS[o.type] || '□'
@@ -2496,6 +3243,11 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
             </div>
           )
         })}
+        {typeFiltered && displayedSorted.length === 0 && (
+          <div style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.5, padding: '8px 4px' }}>
+            No {selectedTypeLabel.toLowerCase()} objects in this map.
+          </div>
+        )}
       </div>
 
       {groups.length > 0 && (
@@ -2509,17 +3261,18 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
 
 // ─── Places Panel ──────────────────────────────────────────────────────────────
 
-function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspectorTab, project, setSelectedLocationId }) {
+function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspectorTab, project, isInteriorMap, setSelectedLocationId, territoryNoun = 'Region', territoryNounPlural = 'Regions' }) {
   const [filter, setFilter] = useState('all') // 'all' | 'location' | 'territory'
   const [search, setSearch] = useState('')
 
-  const PLACE_TYPES = ['location', 'territory']
+  const PLACE_TYPES = isInteriorMap ? ['territory'] : ['location', 'territory']
   const places = objects.filter(o => PLACE_TYPES.includes(o.type))
   const locations = places.filter(o => o.type === 'location')
   const territories = places.filter(o => o.type === 'territory')
+  const activeFilter = isInteriorMap ? 'all' : filter
 
   const filtered = places.filter(o => {
-    if (filter !== 'all' && o.type !== filter) return false
+    if (activeFilter !== 'all' && o.type !== activeFilter) return false
     if (search.trim()) {
       const name = (o.properties?.name || '').toLowerCase()
       return name.includes(search.trim().toLowerCase())
@@ -2543,7 +3296,7 @@ function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspect
   if (!places.length) {
     return (
       <div style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>
-        No locations or regions yet.<br />Use the Location tool or draw a Region to add places to your map.
+        {isInteriorMap ? 'No rooms yet.' : `No locations or ${territoryNounPlural.toLowerCase()} yet.`}<br />{isInteriorMap ? 'Use the Room tool to mark rooms on your interior map.' : `Use the Location tool or draw a ${territoryNoun} to add places to your map.`}
       </div>
     )
   }
@@ -2557,17 +3310,20 @@ function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspect
           placeholder="Search places…"
           style={{ ...inputStyle, fontSize: 12, padding: '5px 8px' }}
         />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-          {[['all', `All (${places.length})`], ['location', `Locations (${locations.length})`], ['territory', `Regions (${territories.length})`]].map(([val, label]) => (
+        <div style={{ display: 'grid', gridTemplateColumns: isInteriorMap ? '1fr' : 'repeat(3, 1fr)', gap: 4 }}>
+          {(isInteriorMap
+            ? [['all', `Rooms (${territories.length})`]]
+            : [['all', `All (${places.length})`], ['location', `Locations (${locations.length})`], ['territory', `${territoryNounPlural} (${territories.length})`]]
+          ).map(([val, label]) => (
             <button
               key={val}
               onClick={() => setFilter(val)}
               style={{
                 padding: '4px 6px', fontSize: 10, borderRadius: 5, cursor: 'pointer',
-                fontFamily: 'inherit', fontWeight: filter === val ? 700 : 400,
-                border: `1px solid ${filter === val ? 'var(--accent)' : 'var(--border)'}`,
-                background: filter === val ? 'color-mix(in srgb, var(--accent) 14%, var(--surface2))' : 'var(--surface2)',
-                color: filter === val ? 'var(--accent)' : 'var(--muted)',
+                fontFamily: 'inherit', fontWeight: activeFilter === val ? 700 : 400,
+                border: `1px solid ${activeFilter === val ? 'var(--accent)' : 'var(--border)'}`,
+                background: activeFilter === val ? 'color-mix(in srgb, var(--accent) 14%, var(--surface2))' : 'var(--surface2)',
+                color: activeFilter === val ? 'var(--accent)' : 'var(--muted)',
               }}
             >{label}</button>
           ))}
@@ -2601,11 +3357,11 @@ function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspect
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || '(unnamed)'}</div>
                 <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
-                  {o.type === 'location' ? 'Location marker' : 'Region'}
-                  {linkedLoc && <span style={{ color: 'var(--accent)' }}> · {linkedLoc.name}</span>}
+                  {isInteriorMap ? 'Room indicator' : (o.type === 'location' ? 'Location marker' : territoryNoun)}
+                  {!isInteriorMap && linkedLoc && <span style={{ color: 'var(--accent)' }}> · {linkedLoc.name}</span>}
                 </div>
               </div>
-              {linkedLoc && (
+              {!isInteriorMap && linkedLoc && (
                 <button
                   onClick={e => { e.stopPropagation(); openLinkedLocation(o) }}
                   title="Open linked entry"
@@ -2619,7 +3375,7 @@ function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspect
 
       {filtered.length > 0 && (
         <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', paddingTop: 4 }}>
-          Click a place to select it on the canvas
+          Click {isInteriorMap ? 'a room' : 'a place'} to select it on the canvas
         </div>
       )}
     </>
@@ -2630,10 +3386,11 @@ const layerBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', c
 
 // ─── Map Inspector ────────────────────────────────────────────────────────────
 
-function MapInspector({ activeMap, project, stylePreset, gridSettings, persistMeta, selectMap, deleteMap, renameMap, onOpenNewMap }) {
+function MapInspector({ activeMap, project, stylePreset, gridSettings, baseLayer = 'water', persistMeta, selectMap, deleteMap, renameMap, onOpenNewMap }) {
   const [renamingId, setRenamingId] = useState(null)
   const [renameVal, setRenameVal] = useState('')
   const maps = project.maps || []
+  const isInterior = activeMap?.mapType === 'interior'
 
   function updateGrid(patch) { persistMeta({ gridSettings: { ...gridSettings, ...patch } }) }
 
@@ -2645,6 +3402,14 @@ function MapInspector({ activeMap, project, stylePreset, gridSettings, persistMe
           {STYLE_PRESETS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </Field>
+      {!isInterior && (
+        <Field label="Base layer">
+          <select value={baseLayer} onChange={e => persistMeta({ baseLayer: e.target.value })} style={inputStyle}>
+            <option value="water">Open water — draw landmasses on top</option>
+            <option value="land">Land — draw water on top</option>
+          </select>
+        </Field>
+      )}
 
       <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginTop: 6 }}>Grid overlay</div>
       <label style={checkStyle}><input type="checkbox" checked={Boolean(gridSettings.enabled)} onChange={e => updateGrid({ enabled: e.target.checked })} /> Show grid</label>
@@ -2685,12 +3450,13 @@ function MapInspector({ activeMap, project, stylePreset, gridSettings, persistMe
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-function MapModal({ modal, onClose, locConfig, setLocConfig, labelConfig, setLabelConfig, noteConfig, setNoteConfig, territoryConfig, setTerritoryConfig, locations, isCampaign, onConfirm }) {
+function MapModal({ modal, onClose, locConfig, setLocConfig, labelConfig, setLabelConfig, noteConfig, setNoteConfig, territoryConfig, setTerritoryConfig, locations, isCampaign, isInteriorMap, isLocalMap, territoryNoun = 'Region', onConfirm }) {
+  const nounLower = territoryNoun.toLowerCase()
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 999 }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 380, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: 'var(--shadow-md)' }}>
         <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
-          {modal.kind === 'location' ? 'Place location' : modal.kind === 'label' ? 'Add label' : modal.kind === 'territory' ? 'Name this region' : 'Add note'}
+          {modal.kind === 'location' ? 'Place location' : modal.kind === 'label' ? 'Add label' : modal.kind === 'territory' ? `Name this ${nounLower}` : 'Add note'}
         </div>
 
         {modal.kind === 'location' && (
@@ -2783,31 +3549,37 @@ function MapModal({ modal, onClose, locConfig, setLocConfig, labelConfig, setLab
         {modal.kind === 'territory' && (
           <>
             <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.45 }}>
-              Name this political region. It will appear as a label on the map and can create an entry in your worldbuilding locations.
+              {isInteriorMap
+                ? 'Name this room. It will appear as a local label on this interior map.'
+                : `Name this ${nounLower}. It will appear as a label on the map and can create an entry in your worldbuilding locations.`}
             </div>
-            <Field label="Region name">
-              <input autoFocus value={territoryConfig.name} onChange={e => setTerritoryConfig(c => ({ ...c, name: e.target.value }))} placeholder="e.g. Kingdom of Aurethos" style={inputStyle} />
+            <Field label={`${territoryNoun} name`}>
+              <input autoFocus value={territoryConfig.name} onChange={e => setTerritoryConfig(c => ({ ...c, name: e.target.value }))} placeholder={isInteriorMap ? 'e.g. Library' : isLocalMap ? 'e.g. Market Square' : territoryNoun === 'Kingdom' ? 'e.g. Kingdom of Aurethos' : 'e.g. The Northern Reaches'} style={inputStyle} />
             </Field>
-            <Field label="Region colour">
+            <Field label={`${territoryNoun} colour`}>
               <input type="color" value={territoryConfig.fill} onChange={e => setTerritoryConfig(c => ({ ...c, fill: e.target.value }))} style={{ ...inputStyle, height: 36, padding: 3, cursor: 'pointer' }} />
             </Field>
-            <Field label="Link to existing location (optional)">
-              <select value={territoryConfig.linkToId} onChange={e => setTerritoryConfig(c => ({ ...c, linkToId: e.target.value, createNewLocation: false }))} style={inputStyle}>
-                <option value="">— none —</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </Field>
-            <label style={checkStyle}>
-              <input type="checkbox" checked={Boolean(territoryConfig.createNewLocation)} onChange={e => setTerritoryConfig(c => ({ ...c, createNewLocation: e.target.checked, linkToId: '' }))} />
-              {' '}Create a new location entry for this region
-            </label>
+            {!isInteriorMap && (
+              <>
+                <Field label="Link to existing location (optional)">
+                  <select value={territoryConfig.linkToId} onChange={e => setTerritoryConfig(c => ({ ...c, linkToId: e.target.value, createNewLocation: false }))} style={inputStyle}>
+                    <option value="">— none —</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </Field>
+                <label style={checkStyle}>
+                  <input type="checkbox" checked={Boolean(territoryConfig.createNewLocation)} onChange={e => setTerritoryConfig(c => ({ ...c, createNewLocation: e.target.checked, linkToId: '' }))} />
+                  {' '}Create a new location entry for this {nounLower}
+                </label>
+              </>
+            )}
           </>
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary btn-sm" disabled={modal.kind === 'label' && !labelConfig.text.trim()} onClick={onConfirm}>
-            {modal.kind === 'location' ? 'Place' : modal.kind === 'label' ? 'Place label' : modal.kind === 'territory' ? 'Save region' : 'Place note'}
+            {modal.kind === 'location' ? 'Place' : modal.kind === 'label' ? 'Place label' : modal.kind === 'territory' ? `Save ${nounLower}` : 'Place note'}
           </button>
         </div>
       </div>
@@ -2951,6 +3723,6 @@ function normalizeGrid(settings, mapType) {
     opacity: base.opacity ?? 0.28,
     color: base.color || '#5b4630',
     snapToGrid: base.snapToGrid ?? false,
-    scale: base.scale || '',
+    scale: base.scale || (isInterior ? '' : DEFAULT_GRID_SCALES[mapType] || ''),
   }
 }

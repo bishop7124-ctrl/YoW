@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
+import { STORAGE_MODES } from '../../utils/storageMode'
 import { getStorageQuota } from '../../utils/storageQuota'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import StorageCard from './StorageCard'
@@ -1327,7 +1328,18 @@ function DeleteAccountModal({ novels, store, onClose }) {
   )
 }
 
-export default function AccountSettings({ open, onClose, storageUsedBytes = 0, activeTab = 'profile', onTabChange, store, tourStore }) {
+export default function AccountSettings({
+  open,
+  onClose,
+  storageUsedBytes = 0,
+  activeTab = 'profile',
+  onTabChange,
+  store,
+  tourStore,
+  storageMode = STORAGE_MODES.CLOUD_SYNC,
+  onStorageModeChange,
+  effectiveLocalMode = false,
+}) {
   const { user, getAccessToken, updateProfile, refreshUser } = useAuth()
   const membership = useMemo(() => getMembership(user), [user])
   const [billingBusy, setBillingBusy] = useState('')
@@ -1539,7 +1551,7 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
               <div>
                 <span>Access level</span>
                 <strong>
-                  {membership.isLocalMode
+                  {effectiveLocalMode
                     ? 'Local Mode'
                     : membership.isPaid
                     ? 'Full access'
@@ -1547,6 +1559,44 @@ export default function AccountSettings({ open, onClose, storageUsedBytes = 0, a
                       ? 'Full access (trial)'
                       : 'Free plan'}
                 </strong>
+              </div>
+            </div>
+
+            <div style={{
+              marginBottom: 18,
+              padding: '14px 16px',
+              borderRadius: 10,
+              background: 'var(--bg-nav)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>
+                    Local-first writing
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
+                    Save projects on this device first and pause automatic cloud sync. Turning Cloud Sync back on uploads the current browser copy rather than replacing it with older cloud data.
+                  </div>
+                </div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                  <input
+                    type="checkbox"
+                    checked={storageMode === STORAGE_MODES.LOCAL_FIRST || membership.isLocalMode}
+                    disabled={membership.isLocalMode || !onStorageModeChange}
+                    onChange={event => onStorageModeChange?.(event.target.checked ? STORAGE_MODES.LOCAL_FIRST : STORAGE_MODES.CLOUD_SYNC)}
+                  />
+                  Local-first
+                </label>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {membership.isLocalMode
+                  ? 'Cloud hosting is inactive for this account, so Local Mode is currently required.'
+                  : storageMode === STORAGE_MODES.LOCAL_FIRST
+                    ? 'Cloud sync is paused. Use exports to move work between devices until you re-enable Cloud Sync.'
+                    : 'Cloud Sync is active while your plan includes hosted sync.'}
               </div>
             </div>
 

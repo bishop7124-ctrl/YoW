@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useStore } from './useStore.js'
+import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -124,6 +125,35 @@ describe('ownership guard', () => {
 
     const { result } = renderHook(() => useStore(null))
     expect(result.current.novels).toEqual(novels)
+  })
+})
+
+// ─── Local-first sign-out safety ────────────────────────────────────────────
+
+describe('Local-first sign-out safety', () => {
+  it('snapshots live local work before clearing the signed-out store', () => {
+    saveStorageMode('user-local', STORAGE_MODES.LOCAL_FIRST)
+
+    const { result, rerender } = renderHook(
+      ({ userId }) => useStore(userId, { cloudSyncEnabled: false }),
+      { initialProps: { userId: 'user-local' } }
+    )
+
+    act(() => {
+      result.current.addNovel({ title: 'Offline Draft', type: 'novel' })
+    })
+    const draftId = result.current.novels[0].id
+    act(() => {
+      result.current.saveCharacter({ name: 'Saved Person', novelId: draftId })
+    })
+
+    rerender({ userId: null })
+
+    const snapshot = loadLocalFirstSnapshot('user-local')
+    expect(snapshot.novels).toHaveLength(1)
+    expect(snapshot.novels[0].title).toBe('Offline Draft')
+    expect(snapshot.characters).toHaveLength(1)
+    expect(snapshot.characters[0].name).toBe('Saved Person')
   })
 })
 

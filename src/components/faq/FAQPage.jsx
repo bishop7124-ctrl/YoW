@@ -83,7 +83,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'How do I use Local Mode?',
-        a: "Local Mode stores your projects on your device instead of the cloud. It's available on the Lifetime plan and activates automatically if your Cloud Mode period lapses. To switch manually: open Account Settings → Membership → and toggle Cloud Mode off. Your data stays on this device, nothing is uploaded, and you can keep writing without an internet connection. To move projects between devices in Local Mode, use the Export (ZIP) option from the project menu and Import on the other device.",
+        a: "Local Mode stores your projects on your device instead of the cloud. It activates automatically if your Cloud Mode period lapses, and you can also choose Local-first writing from Account Settings → Membership while Cloud Sync is available. Your data stays on this device, automatic cloud sync pauses, and you can keep writing without relying on an internet connection. To move projects between devices in Local Mode, use Export (ZIP) and Import.",
       },
       {
         q: 'What is the difference between Cloud Mode and Local Mode?',
@@ -91,7 +91,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Can I switch between Local Mode and Cloud Mode?',
-        a: "Lifetime users can toggle between modes in Account Settings → Membership. When you switch to Cloud Mode, your local projects are uploaded. When you switch to Local Mode, your cloud data is downloaded to this device. Monthly subscribers are always in Cloud Mode while their subscription is active.",
+        a: "You can turn Local-first writing on from Account Settings → Membership. While it is on, YOW keeps using the current browser copy and will not pull older cloud data over your local work. When you turn Cloud Sync back on, the current browser copy is uploaded. Export a ZIP backup before changing modes if you want an extra safety copy.",
       },
     ],
   },

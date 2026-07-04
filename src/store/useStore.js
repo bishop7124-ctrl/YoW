@@ -4,11 +4,10 @@ import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
 import { clearJourneyLinks } from '../utils/characterJourney'
+import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
+import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 
-const load = (key, def) => {
-  try { return JSON.parse(localStorage.getItem(key)) ?? def }
-  catch { return def }
-}
+const load = (key, def) => loadValue(key, def)
 const LOCAL_WRITE_AT_KEY = 'nf_localWriteAt'
 const LOCAL_OWNER_KEY = 'nf_localOwner'
 const PROJECT_STORAGE_KEYS = [
@@ -38,27 +37,27 @@ const PROJECT_STORAGE_KEYS = [
   LOCAL_OWNER_KEY,
 ]
 const loadLocalWriteAt = () => {
-  try { return Number(localStorage.getItem(LOCAL_WRITE_AT_KEY) || 0) || 0 }
+  try { return Number(readItem(LOCAL_WRITE_AT_KEY) || 0) || 0 }
   catch { return 0 }
 }
 const loadLocalOwner = () => {
-  try { return localStorage.getItem(LOCAL_OWNER_KEY) || null }
+  try { return readItem(LOCAL_OWNER_KEY) || null }
   catch { return null }
 }
 const markLocalOwner = (ownerId) => {
   try {
-    if (ownerId) localStorage.setItem(LOCAL_OWNER_KEY, ownerId)
-    else localStorage.removeItem(LOCAL_OWNER_KEY)
+    if (ownerId) writeItem(LOCAL_OWNER_KEY, ownerId)
+    else removeItem(LOCAL_OWNER_KEY)
   } catch { /* Ignore metadata writes; content saves are handled separately. */ }
 }
 const markLocalWrite = (ownerId) => {
-  try { localStorage.setItem(LOCAL_WRITE_AT_KEY, String(Date.now())) }
+  try { writeItem(LOCAL_WRITE_AT_KEY, String(Date.now())) }
   catch { /* Ignore metadata writes; the actual content save is handled separately. */ }
   markLocalOwner(ownerId)
 }
 const clearProjectLocalStorage = () => {
   try {
-    PROJECT_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
+    PROJECT_STORAGE_KEYS.forEach(key => removeItem(key))
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {
@@ -79,12 +78,12 @@ const clearProjectRefs = (refs) => {
 }
 const save = (key, val) => {
   try {
-    localStorage.setItem(key, JSON.stringify(val))
+    writeItem(key, JSON.stringify(val))
   } catch (error) {
     if (key === 'nf_novels' && Array.isArray(val)) {
       try {
         const withoutCovers = val.map(item => ({ ...item, coverPhoto: null }))
-        localStorage.setItem(key, JSON.stringify(withoutCovers))
+        writeItem(key, JSON.stringify(withoutCovers))
         console.warn('Project data was saved without cover photos because browser storage is full.', error)
         return
       } catch {
@@ -208,6 +207,7 @@ const getLocalSnapshot = () => ({
   whiteboards: load('nf_whiteboards', []),
   series: load('nf_series', []),
   storySchedule: load('nf_storySchedule', []),
+  rpgCharacters: load('nf_rpg_characters', []),
   currentYear: load('nf_currentYear', 0),
   activeNovelId: load('nf_activeNovel', null),
   comicPages: load('nf_comicPages', []),
@@ -317,9 +317,60 @@ export function useStore(userId = null, options = {}) {
   const remoteReady = useRef(!userId)
   const previousUserId = useRef(userId)
 
+  const getCurrentSnapshot = useCallback(() => ({
+    novels,
+    characters,
+    factions,
+    locations,
+    timeline,
+    worldHistory,
+    acts,
+    chapters,
+    scenes,
+    loreEntries,
+    ideaEntries,
+    maps,
+    activeMapByNovel,
+    whiteboards,
+    series,
+    storySchedule,
+    rpgCharacters,
+    currentYear,
+    activeNovelId,
+    comicPages,
+    comicPanels,
+    eras,
+  }), [
+    novels,
+    characters,
+    factions,
+    locations,
+    timeline,
+    worldHistory,
+    acts,
+    chapters,
+    scenes,
+    loreEntries,
+    ideaEntries,
+    maps,
+    activeMapByNovel,
+    whiteboards,
+    series,
+    storySchedule,
+    rpgCharacters,
+    currentYear,
+    activeNovelId,
+    comicPages,
+    comicPanels,
+    eras,
+  ])
+
   useEffect(() => {
     if (previousUserId.current === userId) return
     const previous = previousUserId.current
+    if (previous && loadStorageMode(previous) === STORAGE_MODES.LOCAL_FIRST) {
+      saveLocalFirstSnapshot(previous, getCurrentSnapshot())
+    }
     previousUserId.current = userId
     remoteReady.current = false
     importing.current = true
@@ -369,7 +420,7 @@ export function useStore(userId = null, options = {}) {
       importing.current = false
       remoteReady.current = true
     }
-  }, [userId])
+  }, [userId, getCurrentSnapshot])
 
   const commitLocal = useCallback((ref, setter, key, updater) => {
     const next = typeof updater === 'function' ? updater(ref.current) : updater
@@ -1504,6 +1555,10 @@ export function useStore(userId = null, options = {}) {
     const isInterior = normalizedMapType === 'interior'
     const isCampaignInterior = ['dnd_campaign', 'tabletop_rpg'].includes(activeNovel?.type)
     const metadata = {
+      // Region and local maps start land-first (you are usually inside a
+      // continent); world maps start as open water. Existing maps without
+      // this key keep rendering as water.
+      baseLayer: ['region', 'local'].includes(normalizedMapType) ? 'land' : 'water',
       ...(isInterior ? {
         stylePreset: 'blueprint',
         gridSettings: {
@@ -1938,7 +1993,8 @@ export function useStore(userId = null, options = {}) {
     comicPanels: novelComicPanels,
     addComicPage, updateComicPage, deleteComicPage, reorderComicPage, duplicateComicPage,
     addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
-    importData, replaceData, clearData, finishRemoteLoad
+    importData, replaceData, clearData, finishRemoteLoad,
+    getLocalSnapshot: getCurrentSnapshot,
   }
 
   if (!readOnly) return api

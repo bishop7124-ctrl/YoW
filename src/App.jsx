@@ -26,6 +26,7 @@ import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
 import { getMembership } from './utils/membership'
+import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import {
   DEFAULT_CUSTOM_COLORS,
@@ -77,6 +78,21 @@ function getAuthRouteMode(path) {
 }
 
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'membership'])
+
+function getLocalModeNoticeKey(userId, membership, storageMode) {
+  if (!userId) return null
+  const modeKey = membership?.isLocalMode ? 'account-local-mode' : storageMode
+  return `nf_localModeNoticeDismissed:${userId}:${modeKey}`
+}
+
+function isLocalModeNoticeDismissed(key) {
+  if (!key) return false
+  try { return localStorage.getItem(key) === '1' } catch { return false }
+}
+
+function loadStorageModeState(userId) {
+  return { userId: userId || null, mode: loadStorageMode(userId) }
+}
 
 function parseRoute() {
   const path = window.location.pathname
@@ -165,13 +181,19 @@ function AppInner() {
   }, [user, authLoading, recoveryMode])
   const userId = user?.uid || user?.id || null
   const membership = getMembership(user)
+  const [storageModeState, setStorageModeState] = useState(() => loadStorageModeState(userId))
+  const storageMode = storageModeState.userId === (userId || null)
+    ? storageModeState.mode
+    : loadStorageMode(userId)
+  const userLocalFirstMode = isLocalFirstMode(storageMode)
+  const effectiveLocalMode = membership.isLocalMode || userLocalFirstMode
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
   const store = useStore(userId, {
     readOnly: membership.isReadOnly,
     freeProjectId: membership.freeProjectId,
     storageQuotaBytes: devStorageExceeded ? 1 : membership.storageQuotaBytes,
-    cloudSyncEnabled: membership.canSyncCloud,
+    cloudSyncEnabled: membership.canSyncCloud && !userLocalFirstMode,
   })
   const { importData, finishRemoteLoad, clearData } = store
   const [dataLoading, setDataLoading] = useState(false)
@@ -198,6 +220,7 @@ function AppInner() {
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(() => initialRouteSnapshot.projectSettingsOpen)
   const [helpOpen, setHelpOpen] = useState(false)
   const [readOnlyNotice, setReadOnlyNotice] = useState(null)
+  const [dismissedLocalModeNotices, setDismissedLocalModeNotices] = useState({})
   const [emailConfirmed, setEmailConfirmed] = useState(() => {
     const hash = window.location.hash
     const search = window.location.search
@@ -214,6 +237,61 @@ function AppInner() {
   const tourStore = useTourStore()
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
+  const localModeNoticeKey = useMemo(
+    () => getLocalModeNoticeKey(userId, membership, storageMode),
+    [userId, membership, storageMode]
+  )
+  const localModeNoticeDismissed = effectiveLocalMode && localModeNoticeKey
+    ? (dismissedLocalModeNotices[localModeNoticeKey] ?? isLocalModeNoticeDismissed(localModeNoticeKey))
+    : false
+
+  useEffect(() => {
+    setStorageModeState(prev => {
+      const next = loadStorageModeState(userId)
+      return prev.userId === next.userId && prev.mode === next.mode ? prev : next
+    })
+  }, [userId])
+
+  const handleStorageModeChange = (nextMode) => {
+    const savedMode = saveStorageMode(userId, nextMode)
+    setStorageModeState({ userId: userId || null, mode: savedMode })
+    const nextNoticeKey = getLocalModeNoticeKey(userId, membership, nextMode)
+    if (nextNoticeKey) {
+      setDismissedLocalModeNotices(prev => ({ ...prev, [nextNoticeKey]: false }))
+      try { localStorage.removeItem(nextNoticeKey) } catch { /* storage unavailable */ }
+    }
+    if (nextMode === STORAGE_MODES.CLOUD_SYNC) {
+      // Cloud Sync resumes from the current browser copy. We avoid pulling remote
+      // data over local work when the user intentionally leaves Local-first mode.
+      finishRemoteLoad(true)
+      loadedUid.current = userId ? `${userId}:cloud-sync` : null
+    } else {
+      saveLocalFirstSnapshot(userId, store.getLocalSnapshot?.())
+      finishRemoteLoad(false)
+      loadedUid.current = userId ? `${userId}:local-first` : null
+    }
+  }
+
+  const openCloudSettings = () => {
+    setAccountTab('membership')
+    setAccountOpen(true)
+  }
+
+  const dismissLocalModeNotice = () => {
+    if (!localModeNoticeKey) return
+    setDismissedLocalModeNotices(prev => ({ ...prev, [localModeNoticeKey]: true }))
+    try { localStorage.setItem(localModeNoticeKey, '1') } catch { /* storage unavailable */ }
+  }
+
+  const localModeNotice = effectiveLocalMode
+    ? {
+        label: membership.isLocalMode ? 'Local Mode' : 'Local-first',
+        message: membership.isLocalMode
+          ? 'Your lifetime licence is active. Cloud hosting is inactive, so YOW is running in Local Mode on this device.'
+          : 'Local-first mode is active. Your writing is saved on this device and cloud sync is paused.',
+        onOpenSettings: openCloudSettings,
+      }
+    : null
 
   const navigatePublic = (path) => {
     window.history.pushState(null, '', path)
@@ -433,9 +511,24 @@ function AppInner() {
       return
     }
 
-    // Don't reload if we already fetched for this uid
-    if (loadedUid.current === userId) return
-    loadedUid.current = userId
+    const loadKey = `${userId}:${userLocalFirstMode ? 'local-first' : 'cloud-sync'}`
+    if (loadedUid.current === loadKey) return
+    if (userLocalFirstMode) {
+      loadedUid.current = loadKey
+      const localFirstSnapshot = loadLocalFirstSnapshot(userId)
+      if (localFirstSnapshot) importData(localFirstSnapshot)
+      finishRemoteLoad(false)
+      window.setTimeout(() => finishRemoteLoad(false), 650)
+      setDataLoading(false)
+      return
+    }
+    if (loadedUid.current === `${userId}:local-first`) {
+      loadedUid.current = loadKey
+      finishRemoteLoad(true)
+      setDataLoading(false)
+      return
+    }
+    loadedUid.current = loadKey
 
     setDataLoading(true)
     loadUserData(userId)
@@ -456,7 +549,7 @@ function AppInner() {
       })
       .finally(() => setDataLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userId, importData, finishRemoteLoad, clearData])
+  }, [user, userId, userLocalFirstMode, importData, finishRemoteLoad, clearData])
 
   // Pricing page is accessible regardless of auth state
   if (showPricing) {
@@ -598,6 +691,9 @@ function AppInner() {
         onTabChange={setAccountTab}
         store={store}
         tourStore={tourStore}
+        storageMode={storageMode}
+        onStorageModeChange={handleStorageModeChange}
+        effectiveLocalMode={effectiveLocalMode}
       />
       <HelpContact open={helpOpen} onClose={() => setHelpOpen(false)} />
       {emailConfirmed && (
@@ -630,18 +726,18 @@ function AppInner() {
           )}
         </div>
       )}
-      {membership.isLocalMode && (
+      {effectiveLocalMode && !localModeNoticeDismissed && (
         <div role="status" className="membership-toast">
-          <span>Your lifetime licence is active. Cloud hosting is inactive, so YOW is running in Local Mode on this device.</span>
+          <span>{localModeNotice.message}</span>
           <button
             type="button"
             className="membership-toast-link"
-            onClick={() => {
-              setAccountTab('membership')
-              setAccountOpen(true)
-            }}
+            onClick={openCloudSettings}
           >
             Cloud settings
+          </button>
+          <button type="button" className="membership-toast-link" onClick={dismissLocalModeNotice}>
+            Dismiss
           </button>
         </div>
       )}
@@ -731,6 +827,7 @@ function AppInner() {
           onOpenSeries={seriesContext ? handleBackToSeries : null}
           onGoHome={() => { store.setActiveNovelId(null); setViewMode('manager') }}
           tourStore={tourStore}
+          localModeBubble={localModeNoticeDismissed ? localModeNotice : null}
         />
         {accountPage}
         {globalOverlays}
@@ -768,7 +865,7 @@ function AppInner() {
 
   return (
     <>
-      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} suppressAutoTour={showWelcomeTour} />
+      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} suppressAutoTour={showWelcomeTour} localModeBubble={localModeNoticeDismissed ? localModeNotice : null} />
       {showWelcomeTour && (
         <OnboardingTour
           steps={WELCOME_TOUR}
