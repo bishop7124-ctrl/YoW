@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react'
+import { readItem, writeItem } from '../../storage/projectStorage'
 
 // ─── Script types ─────────────────────────────────────────────────────────────
 
@@ -129,8 +130,8 @@ export function persistSceneDraftToLocalStorage(scene, content) {
   try {
     const now = Date.now()
     const today = dateKey(now)
-    localStorage.setItem('nf_localWriteAt', String(now))
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
+    writeItem('nf_localWriteAt', String(now))
+    const scenes = JSON.parse(readItem('nf_scenes') || '[]')
     if (!Array.isArray(scenes)) return
 
     const nextScenes = scenes.map(item => {
@@ -147,7 +148,7 @@ export function persistSceneDraftToLocalStorage(scene, content) {
     if (!nextScenes.some(item => item.id === scene.id)) {
       nextScenes.push({ ...scene, content, lastModified: now, wordHistory: [{ date: today, words: countWords(content), timestamp: now }] })
     }
-    localStorage.setItem('nf_scenes', JSON.stringify(nextScenes))
+    writeItem('nf_scenes', JSON.stringify(nextScenes))
 
     import('../../utils/sceneVersions').then(m => {
       m.saveSceneVersion({ ...scene, content })

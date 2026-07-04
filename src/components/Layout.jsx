@@ -29,6 +29,7 @@ import {
   downloadProjectPdf,
   getProjectExportFilename,
 } from '../utils/projectExport'
+import { readItem, writeItem } from '../storage/projectStorage'
 
 // ─── Project status ──────────────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ function ProjectSettings({ store, onClose }) {
     ...(novel?.backupConfig || {}),
   }))
   const [localBackups, setLocalBackups] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(backupKey(novel?.id)) || '[]') }
+    try { return JSON.parse(readItem(backupKey(novel?.id)) || '[]') }
     catch { return [] }
   })
 
@@ -274,7 +275,7 @@ function ProjectSettings({ store, onClose }) {
       lore: (novel?.categoryOptions?.lore || DEFAULT_CATEGORY_OPTIONS.lore).join(', '),
       schedule: (novel?.categoryOptions?.schedule || DEFAULT_CATEGORY_OPTIONS.schedule).join(', '),
     })
-    try { setLocalBackups(JSON.parse(localStorage.getItem(backupKey(novel?.id)) || '[]')) }
+    try { setLocalBackups(JSON.parse(readItem(backupKey(novel?.id)) || '[]')) }
     catch { setLocalBackups([]) }
   }, [novel?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -333,7 +334,7 @@ function ProjectSettings({ store, onClose }) {
     }
     const nextBackups = [entry, ...localBackups].slice(0, backupConfig.retention)
     try {
-      localStorage.setItem(backupKey(store.activeNovelId), JSON.stringify(nextBackups))
+      writeItem(backupKey(store.activeNovelId), JSON.stringify(nextBackups))
       setLocalBackups(nextBackups)
       patchProject({ backupConfig: { ...backupConfig, lastBackupAt: entry.createdAt } })
       setBackupMessage(kind === 'auto' ? 'Automatic backup refreshed.' : 'Backup created.')

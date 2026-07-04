@@ -2,21 +2,22 @@ import { useState, useMemo } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { loreRefsFor, timelineRefsFor } from '../../utils/worldLinks'
-
-const loadJ = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
+import { loadValue, writeItem } from '../../storage/projectStorage'
 
 function removeLocationFromAllMaps(locationId) {
-  const maps = loadJ('nf_maps_list', []);
+  const maps = loadValue('nf_maps_list', []);
   maps.forEach(map => {
     const mk = `nf_markers_${map.id}`;
     const rk = `nf_regions_${map.id}`;
     const ik = `nf_icons_${map.id}`;
-    const markers = loadJ(mk, []).filter(x => x.locationId !== locationId);
-    const regions = loadJ(rk, []).filter(x => x.locationId !== locationId);
-    const icons   = loadJ(ik, []).filter(x => x.locationId !== locationId);
-    localStorage.setItem(mk, JSON.stringify(markers));
-    localStorage.setItem(rk, JSON.stringify(regions));
-    localStorage.setItem(ik, JSON.stringify(icons));
+    const markers = loadValue(mk, []).filter(x => x.locationId !== locationId);
+    const regions = loadValue(rk, []).filter(x => x.locationId !== locationId);
+    const icons   = loadValue(ik, []).filter(x => x.locationId !== locationId);
+    try {
+      writeItem(mk, JSON.stringify(markers));
+      writeItem(rk, JSON.stringify(regions));
+      writeItem(ik, JSON.stringify(icons));
+    } catch { /* legacy pin cleanup is best-effort */ }
   });
 }
 
@@ -160,7 +161,7 @@ export default function Locations({ store }) {
                   if (!confirm('Delete this location?')) return
                   const scope = confirm('Delete this location from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
                   deleteLocation(selected.id, { scope })
-                  if (loadJ('nf_linked_delete', false)) removeLocationFromAllMaps(selected.id)
+                  if (loadValue('nf_linked_delete', false)) removeLocationFromAllMaps(selected.id)
                   setSelectedLocationId(null)
                 }}>Delete</StudioButton>
                 </>

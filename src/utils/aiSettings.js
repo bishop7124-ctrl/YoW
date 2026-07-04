@@ -1,3 +1,5 @@
+import { readItem } from '../storage/projectStorage'
+
 export const AI_SETTINGS_KEY = 'nf_aiSettings'
 export const AI_SETTINGS_OWNER_KEY = 'nf_aiSettingsOwner'
 export const LEGACY_AI_SETTINGS_KEY = 'nf-ai-settings'
@@ -35,7 +37,11 @@ export function loadAiSettings(userId = null, defaults = DEFAULT_AI_SETTINGS) {
     return settingsOwner === userId ? mergeAiSettings(settings, defaults) : mergeAiSettings({}, defaults)
   }
 
-  const localOwner = localStorage.getItem(LOCAL_OWNER_KEY)
+  // Owner marker lives in project storage (the vault on desktop) — read it
+  // through the abstraction so the cross-check follows the active backend.
+  const localOwner = (() => {
+    try { return readItem(LOCAL_OWNER_KEY) } catch { return null }
+  })()
   if (localOwner === userId) return mergeAiSettings(settings, defaults)
 
   return mergeAiSettings({}, defaults)

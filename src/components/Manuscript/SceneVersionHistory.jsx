@@ -1,13 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getSceneVersions, clearSceneVersions } from '../../utils/sceneVersions'
-
-const STORAGE_KEY = 'nf_scene_versions'
+import { getSceneVersions, clearSceneVersions, deleteSceneVersion } from '../../utils/sceneVersions'
 
 function deleteVersion(id) {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all.filter(v => v.id !== id)))
-  } catch { /* ignore */ }
+  try { deleteSceneVersion(id) } catch { /* ignore */ }
 }
 
 function formatTimestamp(ts) {

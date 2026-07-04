@@ -1,14 +1,16 @@
+import { readItem, writeItem } from '../storage/projectStorage'
+
 const STORAGE_KEY = 'nf_scene_versions'
 const MAX_VERSIONS_PER_SCENE = 50
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 function load() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') }
+  try { return JSON.parse(readItem(STORAGE_KEY) || '[]') }
   catch { return [] }
 }
 
 function save(versions) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(versions)) }
+  try { writeItem(STORAGE_KEY, JSON.stringify(versions)) }
   catch { console.warn('Could not save scene versions.') }
 }
 
@@ -47,4 +49,9 @@ export function getSceneVersions(sceneId) {
 export function clearSceneVersions(sceneId) {
   const all = load()
   save(all.filter(v => v.sceneId !== sceneId))
+}
+
+export function deleteSceneVersion(versionId) {
+  const all = load()
+  save(all.filter(v => v.id !== versionId))
 }
