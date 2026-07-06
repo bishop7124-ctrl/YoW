@@ -1,10 +1,5 @@
 import { getProjectType } from '../constants/projectTypes'
-
-const countWords = (value) => {
-  if (!value || typeof value !== 'string') return 0
-  const matches = value.trim().match(/\S+/g)
-  return matches ? matches.length : 0
-}
+import { wordCount } from './projectExportHelpers'
 
 const scoped = (items, projectId) => (items || []).filter(item => item.novelId === projectId)
 
@@ -43,7 +38,7 @@ export const buildProjectStats = (project, data) => {
   const whiteboard = scoped(data.whiteboards, projectId)[0]?.whiteboard || { notes: [], groups: [] }
   const activeMapId = data.activeMapByNovel?.[projectId] ?? maps[0]?.id ?? null
   const activeMap = maps.find(map => map.id === activeMapId) ?? maps[0] ?? null
-  const manuscriptWords = scenes.reduce((sum, scene) => sum + countWords(scene.content), 0)
+  const manuscriptWords = scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0)
   const planningItems =
     characters.length +
     factions.length +

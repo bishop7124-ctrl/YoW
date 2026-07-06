@@ -25,15 +25,66 @@ const NOVEL_TABLES = [
 // Tables that hold user-level rows (no novel_id)
 const USER_TABLES = ['novels', 'series_items']
 
+const TABLE_TO_KEY = {
+  novels:           'novels',
+  series_items:     'series',
+  characters:       'characters',
+  factions:         'factions',
+  locations:        'locations',
+  timeline_events:  'timeline',
+  world_history:    'worldHistory',
+  acts:             'acts',
+  chapters:         'chapters',
+  scenes:           'scenes',
+  lore_entries:     'loreEntries',
+  idea_entries:     'ideaEntries',
+  maps_data:        'maps',
+  whiteboards_data: 'whiteboards',
+  story_schedule:   'storySchedule',
+  rpg_characters:   'rpgCharacters',
+  comic_pages:      'comicPages',
+  comic_panels:     'comicPanels',
+  eras:             'eras',
+}
+
+const APP_DATA_TABLES = [...USER_TABLES, ...NOVEL_TABLES]
+
+function getTableRows(table, userId, items = []) {
+  if (!items?.length) return []
+
+  if (table === 'scenes') {
+    return items.map(item => ({ user_id: userId, scene_id: item.id, data: item }))
+  }
+
+  const isUserLevel = USER_TABLES.includes(table)
+  return items.map(item => ({
+    id:      item.id,
+    user_id: userId,
+    ...(isUserLevel ? {} : { novel_id: item.novelId ?? null }),
+    data:    item,
+    updated_at: new Date().toISOString(),
+  }))
+}
+
+function getUserSettingsPayload(data = {}) {
+  return {
+    activeNovelId: data.activeNovelId ?? null,
+    currentYear: data.currentYear ?? 0,
+    activeMapByNovel: data.activeMapByNovel ?? {},
+  }
+}
+
+function throwIfSupabaseError(error, label) {
+  if (error) throw new Error(`[sync] ${label}: ${error.message || 'Unknown cloud error'}`)
+}
+
 // Load all user data from normalized tables on login
 export async function loadUserData(userId) {
   if (OFFLINE_MODE) return { _savedAt: 0 }
 
-  const entityTables = [...USER_TABLES, ...NOVEL_TABLES]
-
   const [settingsResult, ...entityResults] = await Promise.all([
     supabase.from('user_settings').select('data').eq('user_id', userId).maybeSingle(),
-    ...entityTables.map(table => {
+    ...APP_DATA_TABLES.map(table => {
       // scenes uses scene_id as the id column (legacy schema)
       const idCol = table === 'scenes' ? 'scene_id' : 'id'
       return supabase.from(table).select(`${idCol}, data`).eq('user_id', userId)
@@ -68,32 +119,10 @@ export async function loadUserData(userId) {
     eras:            [],
   }
 
-  const tableToKey = {
-    novels:           'novels',
-    series_items:     'series',
-    characters:       'characters',
-    factions:         'factions',
-    locations:        'locations',
-    timeline_events:  'timeline',
-    world_history:    'worldHistory',
-    acts:             'acts',
-    chapters:         'chapters',
-    scenes:           'scenes',
-    lore_entries:     'loreEntries',
-    idea_entries:     'ideaEntries',
-    maps_data:        'maps',
-    whiteboards_data: 'whiteboards',
-    story_schedule:   'storySchedule',
-    rpg_characters:   'rpgCharacters',
-    comic_pages:      'comicPages',
-    comic_panels:     'comicPanels',
-    eras:             'eras',
-  }
-
-  entityTables.forEach((table, i) => {
+  APP_DATA_TABLES.forEach((table, i) => {
     const { data, error } = entityResults[i]
     if (error) { console.warn(`[sync] load error for ${table}:`, error); return }
-    const key = tableToKey[table]
+    const key = TABLE_TO_KEY[table]
     result[key] = (data ?? []).map(row => row.data).filter(Boolean)
   })
 
@@ -105,23 +134,7 @@ export async function loadUserData(userId) {
 export async function upsertItems(table, userId, items) {
   if (OFFLINE_MODE || !items?.length) return
 
-  // scenes uses scene_id (legacy schema kept intact)
-  if (table === 'scenes') {
-    const rows = items.map(item => ({ user_id: userId, scene_id: item.id, data: item }))
-    const { error } = await supabase.from('scenes').upsert(rows)
-    if (error) console.error('[sync] upsert error for scenes:', error)
-    return
-  }
-
-  const isUserLevel = USER_TABLES.includes(table)
-  const rows = items.map(item => ({
-    id:      item.id,
-    user_id: userId,
-    ...(isUserLevel ? {} : { novel_id: item.novelId ?? null }),
-    data:    item,
-    updated_at: new Date().toISOString(),
-  }))
-
+  const rows = getTableRows(table, userId, items)
   const { error } = await supabase.from(table).upsert(rows)
   if (error) console.error(`[sync] upsert error for ${table}:`, error)
 }
@@ -156,6 +169,37 @@ export async function saveUserSettings(userId, settings) {
     updated_at: new Date().toISOString(),
   })
   if (error) console.error('[sync] user_settings upsert error:', error)
+}
+
+export async function saveUserData(userId, data = {}) {
+  if (OFFLINE_MODE || !userId) return
+
+  const settings = getUserSettingsPayload(data)
+  const { error: settingsError } = await supabase.from('user_settings').upsert({
+    user_id: userId,
+    data: settings,
+    updated_at: new Date().toISOString(),
+  })
+  throwIfSupabaseError(settingsError, 'user_settings upsert error')
+
+  await Promise.all(APP_DATA_TABLES.map(async table => {
+    const key = TABLE_TO_KEY[table]
+    const rows = getTableRows(table, userId, data[key] ?? [])
+    if (!rows.length) return
+    const { error } = await supabase.from(table).upsert(rows)
+    throwIfSupabaseError(error, `${table} upsert error`)
+  }))
+}
+
+export async function replaceUserData(userId, data = {}) {
+  if (OFFLINE_MODE || !userId) return
+
+  await Promise.all([...APP_DATA_TABLES, 'user_settings'].map(async table => {
+    const { error } = await supabase.from(table).delete().eq('user_id', userId)
+    throwIfSupabaseError(error, `${table} delete error`)
+  }))
+
+  await saveUserData(userId, data)
 }
 
 // Per-scene saves (called directly from updateScene / updateSceneContent)

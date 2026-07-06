@@ -1,9 +1,33 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 
+function MenuIcon({ name }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  const paths = {
+    account: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.8 2.8 0 0 1 5.1 1.6c0 2.1-2.6 2.3-2.6 4" /><path d="M12 18h.01" /></>,
+    about: <><circle cx="12" cy="12" r="9" /><path d="M12 10v6" /><path d="M12 7h.01" /></>,
+    legal: <><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 12h6" /><path d="M9 16h4" /></>,
+    back: <><path d="M15 18l-6-6 6-6" /></>,
+    signout: <><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M21 5v14" /></>,
+  }
+  return <svg {...common}>{paths[name] || paths.account}</svg>
+}
+
 export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpenAbout }) {
   const { user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
+  const [panel, setPanel] = useState('main')
   const ref = useRef(null)
 
   useEffect(() => {
@@ -12,88 +36,120 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (!open) setPanel('main')
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const handler = (e) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open])
+
   if (!user) return null
 
   const metadata = user.user_metadata || {}
   const displayName = metadata.full_name || metadata.name || metadata.alias || metadata.writer_alias || user.displayName || user.email
   const avatarUrl = metadata.avatar_url || user.photoURL
   const initial = (displayName || '?')[0].toUpperCase()
+  const legalItems = [
+    ['privacy', 'Privacy'],
+    ['terms', 'Terms'],
+    ['ethics', 'AI ethics'],
+    ['beta', 'Beta notice'],
+    ['cookies', 'Cookie settings'],
+  ]
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="user-menu-root" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+        className="user-menu-trigger"
         title={displayName || user.email}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {avatarUrl ? (
-          <img src={avatarUrl} alt="avatar" className="w-7 h-7 rounded-full border border-[var(--border)]" referrerPolicy="no-referrer" />
+          <img src={avatarUrl} alt="" className="user-menu-avatar" referrerPolicy="no-referrer" />
         ) : (
-          <span className="w-7 h-7 rounded-full bg-[var(--accent)] text-[var(--bg-main)] flex items-center justify-center text-xs font-black">
+          <span className="user-menu-avatar user-menu-avatar-fallback">
             {initial}
           </span>
         )}
-        <span className="text-xs text-[var(--text-muted)] max-w-[120px] truncate hidden sm:block">
+        <span className="user-menu-trigger-name">
           {displayName || user.email}
         </span>
-        <span className="text-[var(--text-muted)] text-xs">▾</span>
+        <span className="user-menu-trigger-caret" aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-52 bg-[var(--bg-nav)] border border-[var(--border)] rounded-lg shadow-xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-[var(--border)]">
-            <p className="text-xs font-semibold text-[var(--text-main)] truncate">
-              {displayName || 'Account'}
-            </p>
-            <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">{user.email}</p>
-          </div>
-          {onOpenAccount && (
-            <button
-              onClick={() => { setOpen(false); onOpenAccount() }}
-              className="w-full text-left px-4 py-3 text-sm text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors"
-            >
-              Account settings
-            </button>
-          )}
-          {onOpenHelp && (
-            <button
-              onClick={() => { setOpen(false); onOpenHelp() }}
-              className="w-full text-left px-4 py-3 text-sm text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors"
-            >
-              Help &amp; Support
-            </button>
-          )}
-          {onOpenAbout && (
-            <button
-              onClick={() => { setOpen(false); onOpenAbout() }}
-              className="w-full text-left px-4 py-3 text-sm text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors"
-            >
-              About
-            </button>
-          )}
-          {onOpenLegal && (
-            <div className="border-t border-[var(--border)]">
-              <div className="px-4 py-2 flex flex-wrap gap-x-3 gap-y-1">
-                {[['privacy','Privacy'],['terms','Terms'],['ethics','Ethics'],['beta','Beta'],['cookies','Cookies']].map(([key, label]) => (
+        <div className="user-menu-popover" role="menu" aria-label="Account menu">
+          {panel === 'main' ? (
+            <>
+              <div className="user-menu-profile">
+                <span className="user-menu-profile-name">{displayName || 'Account'}</span>
+                <span className="user-menu-profile-email">{user.email}</span>
+              </div>
+              <div className="user-menu-section">
+                {onOpenAccount && (
+                  <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpenAccount() }} className="user-menu-item">
+                    <MenuIcon name="account" />
+                    <span>Account settings</span>
+                  </button>
+                )}
+                {onOpenHelp && (
+                  <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpenHelp() }} className="user-menu-item">
+                    <MenuIcon name="help" />
+                    <span>Help and support</span>
+                  </button>
+                )}
+                {onOpenAbout && (
+                  <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpenAbout() }} className="user-menu-item">
+                    <MenuIcon name="about" />
+                    <span>About YOW</span>
+                  </button>
+                )}
+                {onOpenLegal && (
+                  <button type="button" role="menuitem" onClick={() => setPanel('legal')} className="user-menu-item">
+                    <MenuIcon name="legal" />
+                    <span>Legal and privacy</span>
+                    <span className="user-menu-item-caret" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+              <div className="user-menu-section user-menu-section-bottom">
+                <button type="button" role="menuitem" onClick={() => { setOpen(false); signOut() }} className="user-menu-item user-menu-item-danger">
+                  <MenuIcon name="signout" />
+                  <span>Sign out</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="user-menu-panel-head">
+                <button type="button" className="user-menu-back" onClick={() => setPanel('main')} aria-label="Back to account menu">
+                  <MenuIcon name="back" />
+                </button>
+                <span>Legal and privacy</span>
+              </div>
+              <div className="user-menu-section">
+                {legalItems.map(([key, label]) => (
                   <button
+                    type="button"
+                    role="menuitem"
                     key={key}
                     onClick={() => { setOpen(false); onOpenLegal(key) }}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+                    className="user-menu-item"
                   >
-                    {label}
+                    <MenuIcon name="legal" />
+                    <span>{label}</span>
                   </button>
                 ))}
               </div>
-            </div>
+            </>
           )}
-          <div className="border-t border-[var(--border)]">
-            <button
-              onClick={() => { setOpen(false); signOut() }}
-              className="w-full text-left px-4 py-3 text-sm text-[var(--text-muted)] hover:text-red-400 hover:bg-red-400/5 transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
         </div>
       )}
     </div>

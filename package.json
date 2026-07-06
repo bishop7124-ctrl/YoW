@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:desktop": "vite --host 127.0.0.1 --mode desktop",
     "dev:vercel": "vercel dev",
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop",
     "check:load": "node ./scripts/check-load.mjs",
     "lint": "eslint src --ext .js,.jsx",
     "test": "vitest run",
@@ -14,7 +16,13 @@
     "qa:all": "npm run qa && npm run qa:smoke",
     "qa:smoke:install": "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/private/tmp/yow-ms-playwright} playwright install chromium",
     "qa:smoke": "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/private/tmp/yow-ms-playwright} playwright test --config playwright.config.mjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:build:app": "tauri build --bundles app",
+    "desktop:package:dmg:local": "bash scripts/package-macos-dmg-local.sh",
+    "desktop:build:local": "npm run desktop:build:app && npm run desktop:package:dmg:local"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
@@ -33,6 +41,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
+    "@tauri-apps/cli": "^2.11.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",

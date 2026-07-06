@@ -10,6 +10,17 @@ import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import { isDesktopAppRuntime } from '../../utils/runtime'
+import { loadValue, writeItem } from '../../storage/projectStorage'
+import {
+  createDesktopVaultSnapshot,
+  getDesktopVaultIntegrityStatus,
+  getDesktopVaultInfo,
+  isTauriVaultAvailable,
+  listDesktopVaultSnapshots,
+  restoreDesktopVaultSnapshot,
+  revealDesktopVaultInFinder,
+} from '../../storage/tauriVaultAdapter'
 import {
   BUILT_IN_THEMES,
   DEFAULT_CUSTOM_COLORS,
@@ -234,7 +245,249 @@ function PreferenceToggle({ checked, onChange, label }) {
   )
 }
 
+function formatVaultBytes(bytes) {
+  const value = Number(bytes) || 0
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`
+  return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function getSnapshotLabel(snapshot) {
+  if (!snapshot?.name) return 'Snapshot'
+  if (snapshot.name.startsWith('vault-auto-')) return 'Automatic'
+  if (snapshot.name.startsWith('vault-before-restore-')) return 'Pre-restore safety copy'
+  return 'Manual'
+}
+
+function formatSnapshotTime(seconds) {
+  const value = Number(seconds) || 0
+  if (!value) return ''
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value * 1000))
+  } catch {
+    return ''
+  }
+}
+
+function DesktopVaultPanel() {
+  const [info, setInfo] = useState(null)
+  const [integrity, setIntegrity] = useState(null)
+  const [snapshots, setSnapshots] = useState([])
+  const [selectedSnapshot, setSelectedSnapshot] = useState('')
+  const [busy, setBusy] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const available = isDesktopAppRuntime() && isTauriVaultAvailable()
+
+  const refreshInfo = async () => {
+    if (!available) return
+    try {
+      setError('')
+      const [nextInfo, nextSnapshots] = await Promise.all([
+        getDesktopVaultInfo(),
+        listDesktopVaultSnapshots(),
+      ])
+      setInfo(nextInfo)
+      setSnapshots(nextSnapshots || [])
+      setSelectedSnapshot(current => (
+        current && nextSnapshots?.some(snapshot => snapshot.name === current)
+          ? current
+          : nextSnapshots?.[0]?.name || ''
+      ))
+    } catch (err) {
+      setError(err.message || 'Could not read local vault details.')
+    }
+  }
+
+  const checkIntegrity = async () => {
+    if (!available) return
+    setBusy('integrity')
+    setMessage('')
+    setError('')
+    try {
+      const nextIntegrity = await getDesktopVaultIntegrityStatus()
+      setIntegrity(nextIntegrity)
+      setMessage(nextIntegrity?.ok ? 'Vault integrity check passed.' : 'Vault integrity check found a problem. Choose a snapshot to restore.')
+      await refreshInfo()
+    } catch (err) {
+      setError(err.message || 'Could not check vault integrity.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  useEffect(() => {
+    refreshInfo()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [available])
+
+  if (!available) return null
+
+  const createSnapshot = async () => {
+    setBusy('snapshot')
+    setMessage('')
+    setError('')
+    try {
+      const snapshot = await createDesktopVaultSnapshot()
+      setMessage(`Snapshot created: ${snapshot?.path || 'Backups folder'}`)
+      await refreshInfo()
+    } catch (err) {
+      setError(err.message || 'Could not create a vault snapshot.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const revealVault = async () => {
+    setBusy('reveal')
+    setMessage('')
+    setError('')
+    try {
+      await revealDesktopVaultInFinder()
+    } catch (err) {
+      setError(err.message || 'Could not reveal the vault in Finder.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const restoreSnapshot = async () => {
+    if (!selectedSnapshot) return
+    const snapshot = snapshots.find(item => item.name === selectedSnapshot)
+    const label = snapshot?.name || selectedSnapshot
+    const confirmed = window.confirm(`Restore ${label}? YOW will first create a safety copy of your current vault, then reload the app from the selected snapshot.`)
+    if (!confirmed) return
+    setBusy('restore')
+    setMessage('')
+    setError('')
+    try {
+      await restoreDesktopVaultSnapshot(selectedSnapshot)
+      setMessage('Snapshot restored. Reloading YOW...')
+      window.setTimeout(() => window.location.reload(), 500)
+    } catch (err) {
+      setError(err.message || 'Could not restore the selected snapshot.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 28, paddingBottom: 24, borderBottom: '1px solid var(--border)' }}>
+      <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Local vault</p>
+      <div style={{
+        padding: '14px 16px',
+        borderRadius: 8,
+        border: '1px solid var(--border)',
+        background: 'var(--bg-main)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main)', marginBottom: 4 }}>Desktop project vault</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            YOW stores desktop project data in a local SQLite vault on this Mac. Create a snapshot before testing risky flows or moving files.
+          </p>
+        </div>
+        {info && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: 8,
+            fontSize: 12,
+          }}>
+            <div><span style={{ color: 'var(--text-muted)' }}>Entries</span><br /><strong style={{ color: 'var(--text-main)' }}>{info.entry_count ?? 0}</strong></div>
+            <div><span style={{ color: 'var(--text-muted)' }}>Vault size</span><br /><strong style={{ color: 'var(--text-main)' }}>{formatVaultBytes(info.size_bytes)}</strong></div>
+            <div><span style={{ color: 'var(--text-muted)' }}>Pending WAL</span><br /><strong style={{ color: 'var(--text-main)' }}>{formatVaultBytes(info.wal_size_bytes)}</strong></div>
+          </div>
+        )}
+        {info?.vault_path && (
+          <code style={{
+            display: 'block',
+            padding: '9px 10px',
+            borderRadius: 6,
+            background: 'var(--bg-nav)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            fontSize: 11,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>{info.vault_path}</code>
+        )}
+        {integrity && (
+          <div style={{
+            padding: '10px 12px',
+            borderRadius: 7,
+            background: integrity.ok ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'color-mix(in srgb, #ef4444 10%, transparent)',
+            border: `1px solid ${integrity.ok ? 'color-mix(in srgb, var(--accent) 35%, var(--border))' : 'color-mix(in srgb, #ef4444 40%, var(--border))'}`,
+            color: integrity.ok ? 'var(--accent)' : '#ef4444',
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.45,
+          }}>
+            Integrity: {integrity.ok ? 'OK' : integrity.message || 'Needs attention'}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" onClick={createSnapshot} disabled={!!busy} className="account-primary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+            {busy === 'snapshot' ? 'Creating...' : 'Create snapshot'}
+          </button>
+          <button type="button" onClick={revealVault} disabled={!!busy} className="account-secondary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+            {busy === 'reveal' ? 'Opening...' : 'Show in Finder'}
+          </button>
+          <button type="button" onClick={refreshInfo} disabled={!!busy} className="account-secondary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+            Refresh
+          </button>
+          <button type="button" onClick={checkIntegrity} disabled={!!busy} className="account-secondary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+            {busy === 'integrity' ? 'Checking...' : 'Check integrity'}
+          </button>
+        </div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <select
+            value={selectedSnapshot}
+            onChange={event => setSelectedSnapshot(event.target.value)}
+            disabled={!!busy || snapshots.length === 0}
+            className="field"
+            style={{ minWidth: 0, fontSize: 12 }}
+            aria-label="Vault snapshot to restore"
+          >
+            {snapshots.length === 0 ? (
+              <option value="">No snapshots yet</option>
+            ) : snapshots.map(snapshot => (
+              <option key={snapshot.name} value={snapshot.name}>
+                {getSnapshotLabel(snapshot)} · {formatSnapshotTime(snapshot.modified_seconds) || snapshot.name} · {formatVaultBytes(snapshot.size_bytes)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={restoreSnapshot}
+            disabled={!!busy || !selectedSnapshot}
+            className="account-secondary-button"
+            style={{ width: 'auto', padding: '8px 14px', borderColor: 'color-mix(in srgb, #ef4444 45%, var(--border))', color: '#ef4444' }}
+          >
+            {busy === 'restore' ? 'Restoring...' : 'Restore'}
+          </button>
+        </div>
+        {message && <p style={{ margin: 0, fontSize: 12, color: 'var(--accent)', lineHeight: 1.5 }}>{message}</p>}
+        {error && <p style={{ margin: 0, fontSize: 12, color: '#ef4444', lineHeight: 1.5 }}>{error}</p>}
+      </div>
+    </div>
+  )
+}
+
 function PreferencesPanel({ tourStore }) {
+  const desktopApp = isDesktopAppRuntime()
   const [cookieLevel, setCookieLevel] = useState(() => getCookieConsent() || 'essential')
   const [cookieSaved, setCookieSaved] = useState(false)
 
@@ -268,50 +521,416 @@ function PreferencesPanel({ tourStore }) {
         </div>
       </div>
 
-      {/* Cookie preferences */}
-      <div>
-        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Cookie preferences</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
-          {[
-            { key: 'essential', label: 'Essential', desc: 'Authentication and security. Always active.', disabled: true },
-            { key: 'preferences', label: 'Preferences', desc: 'Theme, font, and interface settings between sessions.' },
-            { key: 'all', label: 'Analytics', desc: 'Anonymous usage data to help improve the product.' },
-          ].map(({ key, label, desc, disabled }) => {
-            const checked = key === 'essential' ? true : key === 'all' ? cookieLevel === 'all' : cookieLevel !== 'essential'
-            return (
-              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', marginBottom: 2 }}>{label}</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{desc}</p>
+      {!desktopApp && (
+        <div>
+          <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Cookie preferences</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
+            {[
+              { key: 'essential', label: 'Essential', desc: 'Authentication and security. Always active.', disabled: true },
+              { key: 'preferences', label: 'Preferences', desc: 'Theme, font, and interface settings between sessions.' },
+              { key: 'all', label: 'Analytics', desc: 'Anonymous usage data to help improve the product.' },
+            ].map(({ key, label, desc, disabled }) => {
+              const checked = key === 'essential' ? true : key === 'all' ? cookieLevel === 'all' : cookieLevel !== 'essential'
+              return (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', marginBottom: 2 }}>{label}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{desc}</p>
+                  </div>
+                  <div style={{ opacity: disabled ? 0.45 : 1, flexShrink: 0 }}>
+                    {disabled ? (
+                      <PreferenceToggle checked={true} onChange={() => {}} label={`${label} cookies (always active)`} />
+                    ) : key === 'all' ? (
+                      <PreferenceToggle
+                        checked={checked}
+                        label={`${label} cookies`}
+                        onChange={() => setCookieLevel(p => p === 'all' ? 'preferences' : 'all')}
+                      />
+                    ) : (
+                      <PreferenceToggle
+                        checked={checked}
+                        label={`${label} cookies`}
+                        onChange={() => setCookieLevel(p => p === 'essential' ? 'preferences' : 'essential')}
+                      />
+                    )}
+                  </div>
                 </div>
-                <div style={{ opacity: disabled ? 0.45 : 1, flexShrink: 0 }}>
-                  {disabled ? (
-                    <PreferenceToggle checked={true} onChange={() => {}} label={`${label} cookies (always active)`} />
-                  ) : key === 'all' ? (
-                    <PreferenceToggle
-                      checked={checked}
-                      label={`${label} cookies`}
-                      onChange={() => setCookieLevel(p => p === 'all' ? 'preferences' : 'all')}
-                    />
-                  ) : (
-                    <PreferenceToggle
-                      checked={checked}
-                      label={`${label} cookies`}
-                      onChange={() => setCookieLevel(p => p === 'essential' ? 'preferences' : 'essential')}
-                    />
-                  )}
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button type="button" onClick={saveCookies} className="account-primary-button" style={{ width: 'auto', padding: '8px 16px' }}>
+              Save cookie preferences
+            </button>
+            {cookieSaved && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>Saved</span>}
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button type="button" onClick={saveCookies} className="account-primary-button" style={{ width: 'auto', padding: '8px 16px' }}>
-            Save cookie preferences
-          </button>
-          {cookieSaved && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>Saved</span>}
+      )}
+    </section>
+  )
+}
+
+function StorageConfigurationPanel({
+  membership,
+  storageUsedBytes,
+  storageMode,
+  onStorageModeChange,
+  onResumeCloudSyncPreview,
+  onManualCloudSyncPreview,
+  onManualCloudSync,
+  effectiveLocalMode,
+  desktopApp,
+}) {
+  const cloudQuota = getStorageQuota(membership)
+  const localFirstSelected = storageMode === STORAGE_MODES.LOCAL_FIRST
+  const localModeActive = localFirstSelected || membership.isLocalMode
+  const [manualSyncBusy, setManualSyncBusy] = useState('')
+  const [manualSyncMessage, setManualSyncMessage] = useState('')
+  const [manualSyncError, setManualSyncError] = useState('')
+  const [pendingManualSync, setPendingManualSync] = useState(null)
+  const [pendingModeChange, setPendingModeChange] = useState(null)
+  const manualSyncAvailable = desktopApp && localFirstSelected && membership.canSyncCloud && onManualCloudSync && onManualCloudSyncPreview
+
+  const requestStorageModeChange = (nextMode) => {
+    if (!onStorageModeChange) return
+    if (localFirstSelected && nextMode === STORAGE_MODES.CLOUD_SYNC && membership.canSyncCloud) {
+      const preview = onResumeCloudSyncPreview?.() || {}
+      setPendingModeChange({ nextMode, ...preview })
+      return
+    }
+    onStorageModeChange(nextMode)
+  }
+
+  const confirmStorageModeChange = () => {
+    if (!pendingModeChange) return
+    onStorageModeChange?.(pendingModeChange.nextMode)
+    setPendingModeChange(null)
+  }
+
+  const runManualCloudSync = async (direction) => {
+    if (!onManualCloudSyncPreview) return
+    setManualSyncBusy(`${direction}-preview`)
+    setManualSyncMessage('')
+    setManualSyncError('')
+    try {
+      const preview = await onManualCloudSyncPreview(direction)
+      setPendingManualSync({ direction, ...preview })
+    } catch (error) {
+      setManualSyncError(error.message || 'Manual cloud sync failed.')
+    } finally {
+      setManualSyncBusy('')
+    }
+  }
+
+  const confirmManualCloudSync = async () => {
+    if (!pendingManualSync || !onManualCloudSync) return
+    const { direction } = pendingManualSync
+    setManualSyncBusy(direction)
+    setManualSyncMessage('')
+    setManualSyncError('')
+    try {
+      const message = await onManualCloudSync(direction)
+      setPendingManualSync(null)
+      setManualSyncMessage(message || 'Sync finished.')
+    } catch (error) {
+      setManualSyncError(error.message || 'Manual cloud sync failed.')
+    } finally {
+      setManualSyncBusy('')
+    }
+  }
+
+  return (
+    <section className="account-settings-panel account-storage-panel">
+      <div className="account-panel-heading">
+        <div>
+          <p className="eyebrow">Storage configuration</p>
+          <h2>Storage &amp; sync</h2>
         </div>
       </div>
+
+      {desktopApp ? (
+        <>
+          <div style={{ marginBottom: 18 }}>
+            <StorageCard
+              usedBytes={storageUsedBytes}
+              quotaBytes={null}
+              limitLabel="local disk"
+              planLabel="Desktop local vault"
+            />
+          </div>
+
+          <div style={{
+            marginBottom: 18,
+            padding: '14px 16px',
+            borderRadius: 10,
+            background: 'var(--bg-nav)',
+            border: '1px solid var(--border)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>
+                  Local-first writing
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
+                  Keep the desktop vault as the source of truth and make cloud sync manual. Cloud Sync mode still keeps a local vault copy for offline access.
+                </div>
+              </div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={localFirstSelected}
+                  disabled={!onStorageModeChange}
+                  onChange={event => requestStorageModeChange(event.target.checked ? STORAGE_MODES.LOCAL_FIRST : STORAGE_MODES.CLOUD_SYNC)}
+                />
+                Local-first
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              {membership.isLocalMode
+                ? localFirstSelected
+                  ? 'Cloud hosting is inactive, so YOW is local-only on this device. You can still switch the preference off; hosted sync will resume only after Cloud Mode is renewed.'
+                  : 'Cloud hosting is inactive, so YOW remains local-only on this device until Cloud Mode is renewed.'
+                : localFirstSelected
+                  ? 'Automatic cloud sync is paused. Use manual sync when you want to move this device copy to cloud, or bring the cloud copy onto this device.'
+                  : 'Cloud Sync is active by default, and the desktop vault keeps the latest local copy for offline use.'}
+            </div>
+          </div>
+
+          {localFirstSelected && (
+            <div style={{
+              marginBottom: 18,
+              padding: '14px 16px',
+              borderRadius: 10,
+              background: 'var(--bg-nav)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>
+                  Manual cloud sync
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
+                  Choose which copy wins before anything is replaced. YOW will show project, word, and entry counts first.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="account-primary-button"
+                  style={{ width: 'auto', padding: '8px 14px' }}
+                  disabled={!manualSyncAvailable || Boolean(manualSyncBusy)}
+                  onClick={() => runManualCloudSync('push')}
+                >
+                  {manualSyncBusy === 'push-preview' ? 'Preparing...' : manualSyncBusy === 'push' ? 'Uploading...' : 'Upload this device copy'}
+                </button>
+                <button
+                  type="button"
+                  className="account-secondary-button"
+                  style={{ width: 'auto', padding: '8px 14px' }}
+                  disabled={!manualSyncAvailable || Boolean(manualSyncBusy)}
+                  onClick={() => runManualCloudSync('pull')}
+                >
+                  {manualSyncBusy === 'pull-preview' ? 'Preparing...' : manualSyncBusy === 'pull' ? 'Downloading...' : 'Download cloud copy'}
+                </button>
+              </div>
+              {!membership.canSyncCloud && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Cloud hosting is inactive for this account, so manual cloud sync is unavailable.
+                </div>
+              )}
+              {manualSyncMessage && (
+                <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 800 }}>
+                  {manualSyncMessage}
+                </div>
+              )}
+              {manualSyncError && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 800 }}>
+                  {manualSyncError}
+                </div>
+              )}
+              {pendingManualSync && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={pendingManualSync.direction === 'push' ? 'Confirm upload' : 'Confirm download'}
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 3000,
+                    background: 'rgba(5, 8, 12, 0.62)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 20,
+                  }}
+                >
+                  <div style={{
+                    width: 'min(520px, 100%)',
+                    borderRadius: 10,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-main)',
+                    boxShadow: '0 24px 80px rgba(0,0,0,0.38)',
+                    padding: 20,
+                    color: 'var(--text-main)',
+                  }}>
+                    <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>
+                      {pendingManualSync.direction === 'push' ? 'Upload this device copy?' : 'Download the cloud copy?'}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
+                      {pendingManualSync.direction === 'push'
+                        ? 'This replaces the app project data currently in cloud. Profile, billing, and membership stay unchanged.'
+                        : 'This replaces the local vault copy on this device. Create a snapshot first if you want an extra backup.'}
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                      gap: 10,
+                      marginBottom: 16,
+                    }}>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          This device
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingManualSync.localSummary}</div>
+                      </div>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          Cloud
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingManualSync.cloudSummary}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="account-secondary-button"
+                        style={{ width: 'auto', padding: '8px 14px' }}
+                        disabled={Boolean(manualSyncBusy)}
+                        onClick={() => setPendingManualSync(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="account-primary-button"
+                        style={{ width: 'auto', padding: '8px 14px' }}
+                        disabled={Boolean(manualSyncBusy)}
+                        onClick={confirmManualCloudSync}
+                      >
+                        {manualSyncBusy ? 'Working...' : pendingManualSync.direction === 'push' ? 'Upload to cloud' : 'Download to this device'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {pendingModeChange && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Resume Cloud Sync"
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 3000,
+                    background: 'rgba(5, 8, 12, 0.62)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 20,
+                  }}
+                >
+                  <div style={{
+                    width: 'min(520px, 100%)',
+                    borderRadius: 10,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-main)',
+                    boxShadow: '0 24px 80px rgba(0,0,0,0.38)',
+                    padding: 20,
+                    color: 'var(--text-main)',
+                  }}>
+                    <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>
+                      Resume automatic Cloud Sync?
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
+                      Cloud Sync will resume from this device copy. Future conflict review will compare local and cloud summaries before overwrite decisions.
+                    </div>
+                    <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)', marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                        This device
+                      </div>
+                      <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.localSummary || 'No saved project data found.'}</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="account-secondary-button"
+                        style={{ width: 'auto', padding: '8px 14px' }}
+                        onClick={() => setPendingModeChange(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="account-primary-button"
+                        style={{ width: 'auto', padding: '8px 14px' }}
+                        onClick={confirmStorageModeChange}
+                      >
+                        Resume Cloud Sync
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DesktopVaultPanel />
+        </>
+      ) : (
+        <>
+          <div style={{ marginBottom: 18 }}>
+            <StorageCard
+              usedBytes={storageUsedBytes}
+              quotaBytes={cloudQuota}
+              planLabel={`${membership.activePlanDef?.label || 'Current'} cloud storage`}
+              onUpgrade={membership.isFree || membership.isTrialActive
+                ? () => { /* scroll to plans */ }
+                : undefined}
+            />
+          </div>
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: 10,
+            background: 'var(--bg-nav)',
+            border: '1px solid var(--border)',
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            lineHeight: 1.55,
+          }}>
+            Web accounts use Cloud Mode. Local project storage is available in the downloaded desktop app.
+          </div>
+        </>
+      )}
+
+      {(effectiveLocalMode || localModeActive) && (
+        <div style={{
+          marginTop: 18,
+          padding: '14px 16px',
+          borderRadius: 10,
+          background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+          color: 'var(--text-muted)',
+          fontSize: 12,
+          lineHeight: 1.55,
+        }}>
+          <strong style={{ color: 'var(--accent)' }}>Local Mode is active.</strong> Local edits are stored in this device vault and automatic cloud writes are paused.
+        </div>
+      )}
     </section>
   )
 }
@@ -924,19 +1543,33 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
   )
 }
 
-function getProfileDraft(user) {
+function localProfileKey(user) {
+  const id = user?.id || user?.uid || user?.email || 'anonymous'
+  return `nf_localProfile:${id}`
+}
+
+function loadLocalProfile(user) {
+  return loadValue(localProfileKey(user), {})
+}
+
+function saveLocalProfile(user, profile) {
+  writeItem(localProfileKey(user), JSON.stringify(profile))
+}
+
+function getProfileDraft(user, includeLocalProfile = false) {
   const metadata = user?.user_metadata || {}
+  const localProfile = includeLocalProfile ? loadLocalProfile(user) : {}
   return {
-    fullName: metadata.full_name || metadata.name || user?.displayName || '',
-    alias: metadata.alias || metadata.writer_alias || '',
-    bio: metadata.bio || '',
-    website: metadata.website || '',
-    avatarUrl: metadata.avatar_url || user?.photoURL || '',
+    fullName: localProfile.full_name || metadata.full_name || metadata.name || user?.displayName || '',
+    alias: localProfile.alias || localProfile.writer_alias || metadata.alias || metadata.writer_alias || '',
+    bio: localProfile.bio || metadata.bio || '',
+    website: localProfile.website || metadata.website || '',
+    avatarUrl: localProfile.avatar_url || metadata.avatar_url || user?.photoURL || '',
   }
 }
 
-function ProfileDetails({ user, updateProfile }) {
-  const [profileDraft, setProfileDraft] = useState(() => getProfileDraft(user))
+function ProfileDetails({ user, updateProfile, localProfileOnly = false }) {
+  const [profileDraft, setProfileDraft] = useState(() => getProfileDraft(user, localProfileOnly))
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
   const [profileError, setProfileError] = useState('')
@@ -1005,10 +1638,19 @@ function ProfileDetails({ user, updateProfile }) {
         website: profileDraft.website.trim(),
         avatar_url: profileDraft.avatarUrl.trim(),
       }
-      await updateProfile(nextProfile)
-      setProfileMessage('Profile details saved.')
+      if (localProfileOnly) {
+        saveLocalProfile(user, nextProfile)
+        setProfileMessage('Profile details saved on this device.')
+      } else {
+        await updateProfile(nextProfile)
+        setProfileMessage('Profile details saved.')
+      }
     } catch (error) {
-      setProfileError(error.message || 'Profile details could not be saved right now.')
+      if (localProfileOnly) {
+        setProfileError(error.message || 'Profile details could not be saved on this device.')
+      } else {
+        setProfileError(error.message || 'Profile details could not be saved right now.')
+      }
     } finally {
       setProfileBusy(false)
     }
@@ -1020,6 +1662,11 @@ function ProfileDetails({ user, updateProfile }) {
         <div>
           <p className="eyebrow">Profile</p>
           <h2>Writer details</h2>
+          {localProfileOnly && (
+            <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>
+              Cloud hosting is inactive, so profile changes are saved on this device.
+            </p>
+          )}
         </div>
         <div className="account-profile-avatar" aria-hidden="true">
           {profileDraft.avatarUrl ? (
@@ -1338,7 +1985,11 @@ export default function AccountSettings({
   tourStore,
   storageMode = STORAGE_MODES.CLOUD_SYNC,
   onStorageModeChange,
+  onResumeCloudSyncPreview,
+  onManualCloudSyncPreview,
+  onManualCloudSync,
   effectiveLocalMode = false,
+  desktopApp = false,
 }) {
   const { user, getAccessToken, updateProfile, refreshUser } = useAuth()
   const membership = useMemo(() => getMembership(user), [user])
@@ -1420,6 +2071,7 @@ export default function AccountSettings({
             { id: 'profile', label: 'Profile' },
             { id: 'appearance', label: 'Appearance' },
             { id: 'preferences', label: 'Preferences' },
+            { id: 'storage', label: 'Storage' },
             { id: 'ai', label: 'AI' },
             { id: 'membership', label: 'Membership' },
           ].map(tab => (
@@ -1438,7 +2090,12 @@ export default function AccountSettings({
         <main className="account-settings-grid account-settings-tab-panel">
           {selectedTab === 'profile' && (
             <>
-              <ProfileDetails key={user.id} user={user} updateProfile={updateProfile} />
+              <ProfileDetails
+                key={`${user.id}:${desktopApp && membership.isLocalMode ? 'local-profile' : 'cloud-profile'}`}
+                user={user}
+                updateProfile={updateProfile}
+                localProfileOnly={desktopApp && membership.isLocalMode}
+              />
               <section className="account-settings-panel" style={{ borderTop: '1px solid var(--border)', paddingTop: 28 }}>
                 <div className="account-panel-heading">
                   <div>
@@ -1470,6 +2127,20 @@ export default function AccountSettings({
 
           {selectedTab === 'preferences' && (
             <PreferencesPanel tourStore={tourStore} />
+          )}
+
+          {selectedTab === 'storage' && (
+            <StorageConfigurationPanel
+              membership={membership}
+              storageUsedBytes={storageUsedBytes}
+              storageMode={storageMode}
+              onStorageModeChange={onStorageModeChange}
+              onResumeCloudSyncPreview={onResumeCloudSyncPreview}
+              onManualCloudSyncPreview={onManualCloudSyncPreview}
+              onManualCloudSync={onManualCloudSync}
+              effectiveLocalMode={effectiveLocalMode}
+              desktopApp={desktopApp}
+            />
           )}
 
           {selectedTab === 'ai' && (
@@ -1562,43 +2233,33 @@ export default function AccountSettings({
               </div>
             </div>
 
-            <div style={{
-              marginBottom: 18,
-              padding: '14px 16px',
-              borderRadius: 10,
-              background: 'var(--bg-nav)',
-              border: '1px solid var(--border)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>
-                    Local-first writing
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
-                    Save projects on this device first and pause automatic cloud sync. Turning Cloud Sync back on uploads the current browser copy rather than replacing it with older cloud data.
-                  </div>
+            {/* Desktop app download (Lifetime/Founder entitlement, web only) */}
+            {membership.isLifetime && !desktopApp && (
+              <div style={{
+                marginBottom: 18,
+                padding: '14px 16px',
+                borderRadius: 10,
+                background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent)' }}>
+                  Desktop app included
                 </div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox"
-                    checked={storageMode === STORAGE_MODES.LOCAL_FIRST || membership.isLocalMode}
-                    disabled={membership.isLocalMode || !onStorageModeChange}
-                    onChange={event => onStorageModeChange?.(event.target.checked ? STORAGE_MODES.LOCAL_FIRST : STORAGE_MODES.CLOUD_SYNC)}
-                  />
-                  Local-first
-                </label>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Your plan includes the YOW desktop app with a local project vault, so your writing lives on your own device.
+                </div>
+                <a
+                  href="/download"
+                  onClick={e => { e.preventDefault(); window.history.pushState(null, '', '/download'); window.dispatchEvent(new PopStateEvent('popstate')) }}
+                  style={{ marginTop: 4, fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}
+                >
+                  Download the desktop app →
+                </a>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                {membership.isLocalMode
-                  ? 'Cloud hosting is inactive for this account, so Local Mode is currently required.'
-                  : storageMode === STORAGE_MODES.LOCAL_FIRST
-                    ? 'Cloud sync is paused. Use exports to move work between devices until you re-enable Cloud Sync.'
-                    : 'Cloud Sync is active while your plan includes hosted sync.'}
-              </div>
-            </div>
+            )}
 
             {/* Maintenance fee warning */}
             {membership.isLifetime && !membership.isFounder && membership.maintenanceWarning && (
@@ -1642,18 +2303,6 @@ export default function AccountSettings({
                 <MaintenancePayButton style={{ marginTop: 4 }} />
               </div>
             )}
-
-            {/* Storage card */}
-            <div style={{ marginBottom: 18 }}>
-              <StorageCard
-                usedBytes={storageUsedBytes}
-                quotaBytes={getStorageQuota(membership)}
-                planLabel={membership.activePlanDef?.label}
-                onUpgrade={membership.isFree || membership.isTrialActive
-                  ? () => { /* scroll to plans */ }
-                  : undefined}
-              />
-            </div>
 
             {/* Plan cards */}
             <p style={{

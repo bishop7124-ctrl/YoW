@@ -80,6 +80,7 @@ export default function LoginPage({
   recoveryMode,
   initialScreen = 'home',
   initialMode = 'login',
+  variant = 'web',
 }) {
   const { signIn, signUp, signInWithGoogle, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
   const [screen, setScreen] = useState(initialScreen)
@@ -94,6 +95,7 @@ export default function LoginPage({
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
   const [pwdUpdated, setPwdUpdated] = useState(false)
+  const isDesktop = variant === 'desktop'
 
   // Surface auth errors that Supabase encodes in the URL hash (e.g. expired link)
   useEffect(() => {
@@ -164,6 +166,10 @@ export default function LoginPage({
   }
 
   const goHome = () => {
+    if (isDesktop) {
+      openAuth('login')
+      return
+    }
     setScreen('home')
     onNavigateHome?.()
   }
@@ -206,7 +212,7 @@ export default function LoginPage({
     }
   }
 
-  if (screen === 'home') {
+  if (screen === 'home' && !isDesktop) {
     return (
       <div className="auth-shell">
         <HomePage
@@ -221,10 +227,10 @@ export default function LoginPage({
 
   return (
     <div className="auth-shell min-h-screen p-6 text-[var(--text-main)]">
-      <div className="auth-frame mx-auto grid min-h-[calc(100vh-48px)] max-w-6xl grid-cols-[minmax(300px,440px)_minmax(0,1fr)] overflow-hidden max-lg:grid-cols-1">
+      <div className={`${isDesktop ? 'mx-auto flex min-h-[calc(100vh-48px)] max-w-md items-center justify-center' : 'auth-frame mx-auto grid min-h-[calc(100vh-48px)] max-w-6xl grid-cols-[minmax(300px,440px)_minmax(0,1fr)] overflow-hidden max-lg:grid-cols-1'}`}>
 
         {/* Left panel */}
-        <aside className="auth-aside flex flex-col justify-between p-8 max-lg:border-r-0 max-lg:border-b">
+        {!isDesktop && <aside className="auth-aside flex flex-col justify-between p-8 max-lg:border-r-0 max-lg:border-b">
           <div>
             {/* Brand */}
             <button
@@ -269,11 +275,20 @@ export default function LoginPage({
               </div>
             ))}
           </div>
-        </aside>
+        </aside>}
 
         {/* Right panel — form */}
-        <main className="auth-main flex items-center justify-center">
+        <main className={`${isDesktop ? 'auth-main w-full rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-8 py-9 shadow-2xl' : 'auth-main flex items-center justify-center'}`}>
           <div className="w-full max-w-md">
+            {isDesktop && (
+              <div className="mb-8 flex flex-col items-center text-center">
+                <div className="studio-logo mb-4" style={{ width: 72, height: 72 }}>
+                  <YOWLogo />
+                </div>
+                <p className="eyebrow mb-2">Your Own World</p>
+                <h1 className="font-serif text-3xl font-medium leading-none">Sign in</h1>
+              </div>
+            )}
 
             {/* ── Set new password (arrived via reset link) ── */}
             {screen === 'newPassword' ? (
@@ -364,11 +379,11 @@ export default function LoginPage({
                     Back to login
                   </button>
                 </p>
-                <p className="mt-4 text-center text-xs">
+                {!isDesktop && <p className="mt-4 text-center text-xs">
                   <button type="button" onClick={goHome} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
                     Back to homepage
                   </button>
-                </p>
+                </p>}
               </>
 
             /* ── Signup email-confirmation sent ── */
@@ -417,11 +432,11 @@ export default function LoginPage({
                     Try again
                   </button>
                 </p>
-                <p className="mt-4 text-center text-xs">
+                {!isDesktop && <p className="mt-4 text-center text-xs">
                   <button type="button" onClick={goHome} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
                     Back to homepage
                   </button>
-                </p>
+                </p>}
               </>
 
             /* ── Login / Signup / Reset-request forms ── */
@@ -430,11 +445,11 @@ export default function LoginPage({
                 <div className="mb-6">
                   <p className="eyebrow mb-2">Your Own World</p>
                   <h2 className="font-serif text-4xl font-medium leading-none">
-                    {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Create account' : 'Reset password'}
+                    {mode === 'login' ? (isDesktop ? 'Welcome back' : 'Welcome back') : mode === 'signup' ? 'Create account' : 'Reset password'}
                   </h2>
                   <p className="page-copy mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
                     {mode === 'login'
-                      ? 'Sign in to return to your worlds, drafts, timelines, and story notes.'
+                      ? isDesktop ? 'Continue to your local YOW workspace.' : 'Sign in to return to your worlds, drafts, timelines, and story notes.'
                       : mode === 'signup'
                       ? 'Create your account and start building your first story world.'
                       : 'Enter your email and we\'ll send you a link to reset your password.'}
@@ -572,11 +587,11 @@ export default function LoginPage({
                   Your data is stored securely and synced across all your devices.
                 </p>
 
-                <p className="mt-4 text-center text-xs">
+                {!isDesktop && <p className="mt-4 text-center text-xs">
                   <button type="button" onClick={goHome} className="text-[var(--text-muted)] hover:text-[var(--accent)]">
                     Back to homepage
                   </button>
-                </p>
+                </p>}
 
                 {onOpenLegal && (
                   <div className="mt-6 flex justify-center gap-4 flex-wrap">

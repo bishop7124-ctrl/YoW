@@ -1,7 +1,7 @@
 import { Component, useMemo, useState, useEffect, useRef } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
-import { loadUserData } from './utils/firestoreSync'
+import { loadUserData, replaceUserData } from './utils/firestoreSync'
 import NovelManager from './components/NovelManager'
 import SeriesDashboard from './components/series/SeriesDashboard'
 import Layout from './components/Layout'
@@ -24,10 +24,13 @@ import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
 import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
+import DownloadPage from './components/download/DownloadPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
 import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
+import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
+import { isDesktopAppRuntime } from './utils/runtime'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
@@ -64,6 +67,10 @@ function isFoundersPath(path) {
   return path === '/founders' || path === '/founders/'
 }
 
+function isDownloadPath(path) {
+  return path === '/download' || path === '/download/'
+}
+
 function getFounderProfileSlug(path) {
   const m = path.match(/^\/founders\/([^/]+)\/?$/)
   if (!m) return null
@@ -77,7 +84,7 @@ function getAuthRouteMode(path) {
   return null
 }
 
-const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'membership'])
+const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'membership'])
 
 function getLocalModeNoticeKey(userId, membership, storageMode) {
   if (!userId) return null
@@ -92,6 +99,10 @@ function isLocalModeNoticeDismissed(key) {
 
 function loadStorageModeState(userId) {
   return { userId: userId || null, mode: loadStorageMode(userId) }
+}
+
+function buildLocalSaveSummary(store) {
+  return buildSaveSummary(store?.getLocalSnapshot?.() || store || {})
 }
 
 function parseRoute() {
@@ -171,7 +182,12 @@ class ErrorBoundary extends Component {
 }
 
 function AppInner() {
+  const desktopApp = isDesktopAppRuntime()
   const { user, loading: authLoading, updateProfile, recoveryMode } = useAuth()
+  useEffect(() => {
+    document.body.classList.toggle('desktop-app-shell', desktopApp)
+    return () => document.body.classList.remove('desktop-app-shell')
+  }, [desktopApp])
   const [signedOut, setSignedOut] = useState(false)
   const [openLoginAfterSignOut, setOpenLoginAfterSignOut] = useState(false)
   const prevUserRef = useRef(null)
@@ -185,14 +201,14 @@ function AppInner() {
   const storageMode = storageModeState.userId === (userId || null)
     ? storageModeState.mode
     : loadStorageMode(userId)
-  const userLocalFirstMode = isLocalFirstMode(storageMode)
-  const effectiveLocalMode = membership.isLocalMode || userLocalFirstMode
+  const userLocalFirstMode = desktopApp && isLocalFirstMode(storageMode)
+  const effectiveLocalMode = desktopApp && (membership.isLocalMode || userLocalFirstMode)
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
   const store = useStore(userId, {
-    readOnly: membership.isReadOnly,
+    readOnly: membership.isReadOnly || (!desktopApp && membership.isLocalMode),
     freeProjectId: membership.freeProjectId,
-    storageQuotaBytes: devStorageExceeded ? 1 : membership.storageQuotaBytes,
+    storageQuotaBytes: desktopApp ? null : devStorageExceeded ? 1 : membership.storageQuotaBytes,
     cloudSyncEnabled: membership.canSyncCloud && !userLocalFirstMode,
   })
   const { importData, finishRemoteLoad, clearData } = store
@@ -212,6 +228,7 @@ function AppInner() {
   const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
   const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
   const [showFounders, setShowFounders] = useState(() => isFoundersPath(window.location.pathname))
+  const [showDownload, setShowDownload] = useState(() => isDownloadPath(window.location.pathname))
   const [founderProfileSlug, setFounderProfileSlug] = useState(() => getFounderProfileSlug(window.location.pathname))
   const [authRouteMode, setAuthRouteMode] = useState(() => getAuthRouteMode(window.location.pathname))
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
@@ -253,6 +270,7 @@ function AppInner() {
   }, [userId])
 
   const handleStorageModeChange = (nextMode) => {
+    if (!desktopApp) return
     const savedMode = saveStorageMode(userId, nextMode)
     setStorageModeState({ userId: userId || null, mode: savedMode })
     const nextNoticeKey = getLocalModeNoticeKey(userId, membership, nextMode)
@@ -261,7 +279,7 @@ function AppInner() {
       try { localStorage.removeItem(nextNoticeKey) } catch { /* storage unavailable */ }
     }
     if (nextMode === STORAGE_MODES.CLOUD_SYNC) {
-      // Cloud Sync resumes from the current browser copy. We avoid pulling remote
+      // Cloud Sync resumes from the current local copy. We avoid pulling remote
       // data over local work when the user intentionally leaves Local-first mode.
       finishRemoteLoad(true)
       loadedUid.current = userId ? `${userId}:cloud-sync` : null
@@ -272,8 +290,52 @@ function AppInner() {
     }
   }
 
+  const getResumeCloudSyncPreview = () => ({
+    localSummary: formatSaveSummary(buildLocalSaveSummary(store)),
+    cloudAvailable: membership.canSyncCloud,
+  })
+
+  const getManualCloudSyncPreview = async () => {
+    if (!desktopApp || !userId) throw new Error('Sign in to use manual cloud sync.')
+    if (!userLocalFirstMode) throw new Error('Turn on Local-first before using manual cloud sync.')
+    if (!membership.canSyncCloud) throw new Error('Cloud hosting is inactive for this account.')
+
+    const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+    const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
+    return {
+      localSummary: formatSaveSummary(buildSaveSummary(localData)),
+      cloudSummary: formatSaveSummary(buildSaveSummary(cloudData)),
+    }
+  }
+
+  const handleManualCloudSync = async (direction) => {
+    if (!desktopApp || !userId) throw new Error('Sign in to use manual cloud sync.')
+    if (!userLocalFirstMode) throw new Error('Turn on Local-first before using manual cloud sync.')
+    if (!membership.canSyncCloud) throw new Error('Cloud hosting is inactive for this account.')
+
+    if (direction === 'push') {
+      const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+      await replaceUserData(userId, localData)
+      saveLocalFirstSnapshot(userId, localData)
+      finishRemoteLoad(false)
+      return 'Cloud copy updated from this device.'
+    }
+
+    if (direction === 'pull') {
+      const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
+      importData(cloudData)
+      saveLocalFirstSnapshot(userId, cloudData)
+      finishRemoteLoad(false)
+      window.setTimeout(() => finishRemoteLoad(false), 650)
+      loadedUid.current = `${userId}:local-first`
+      return 'This device was updated from the cloud copy.'
+    }
+
+    throw new Error('Choose upload or download.')
+  }
+
   const openCloudSettings = () => {
-    setAccountTab('membership')
+    setAccountTab('storage')
     setAccountOpen(true)
   }
 
@@ -299,6 +361,7 @@ function AppInner() {
     setShowFeatures(isFeaturesPath(path))
     setShowFAQ(isFAQPath(path))
     setShowFounders(isFoundersPath(path))
+    setShowDownload(isDownloadPath(path))
     setFounderProfileSlug(getFounderProfileSlug(path))
     setAuthRouteMode(getAuthRouteMode(path))
   }
@@ -371,6 +434,11 @@ function AppInner() {
   useEffect(() => {
     const handlePop = () => {
       const path = window.location.pathname
+      setShowDownload(isDownloadPath(path))
+      if (isDownloadPath(path)) {
+        setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setFounderProfileSlug(null); setAuthRouteMode(null)
+        return
+      }
       if (isPricingPath(path)) {
         setShowPricing(true); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
         return
@@ -437,7 +505,7 @@ function AppInner() {
       let msg = 'Your trial has ended. Upgrade in Account settings to edit again.'
       if (reason === 'free-project') msg = 'This project is view-only on your free plan. Upgrade to edit all projects.'
       if (reason === 'free-limit') msg = 'Free plan includes one active project. Upgrade to create unlimited projects.'
-      if (reason === 'storage-exceeded') msg = 'Storage limit reached. Delete some content or upgrade your plan to continue.'
+      if (reason === 'storage-exceeded') msg = 'Cloud storage limit reached. Delete some hosted content or upgrade your plan to continue.'
       setReadOnlyNotice({
         msg,
         storage: reason === 'storage-exceeded' && usedBytes != null && quotaBytes != null
@@ -456,7 +524,7 @@ function AppInner() {
 
   // Force default theme on all public/marketing pages so user theme choices
   // never leak into the landing experience.
-  const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || !!founderProfileSlug || !user
+  const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || showDownload || !!founderProfileSlug || !user
   useEffect(() => {
     if (isPublicPage) {
       applyThemeToDocument(DEFAULT_THEME, {})
@@ -560,7 +628,7 @@ function AppInner() {
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onSignIn={() => navigatePublic(user ? '/' : '/login')}
         />
-        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
       </>
@@ -575,7 +643,7 @@ function AppInner() {
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onLogin={() => navigatePublic(user ? '/' : '/login')}
         />
-        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
       </>
@@ -590,7 +658,7 @@ function AppInner() {
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onLogin={() => navigatePublic(user ? '/' : '/login')}
         />
-        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
       </>
@@ -605,7 +673,24 @@ function AppInner() {
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onLogin={() => navigatePublic(user ? '/' : '/login')}
         />
-        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
+        <BetaBanner />
+      </>
+    )
+  }
+
+  if (showDownload) {
+    return (
+      <>
+        <DownloadPage
+          user={user}
+          membership={membership}
+          authLoading={authLoading}
+          onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
+          onLogin={() => navigatePublic(user ? '/' : '/login')}
+        />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
       </>
@@ -621,7 +706,7 @@ function AppInner() {
           onGetStarted={() => navigatePublic(user ? '/' : '/signup')}
           onLogin={() => navigatePublic(user ? '/' : '/login')}
         />
-        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         <BetaBanner />
       </>
@@ -638,7 +723,7 @@ function AppInner() {
   }
 
   if (!user || recoveryMode) {
-    if (signedOut && !recoveryMode) return (
+    if (signedOut && !recoveryMode && !desktopApp) return (
       <>
         <SignedOutPage
           onLoginAgain={() => { setOpenLoginAfterSignOut(true); setSignedOut(false); navigatePublic('/login') }}
@@ -657,13 +742,14 @@ function AppInner() {
           onAuthModeChange={(mode) => navigatePublic(mode === 'signup' ? '/signup' : '/login')}
           onSignedUp={() => setEmailConfirmed(true)}
           recoveryMode={recoveryMode}
-          initialScreen={recoveryMode || authRouteMode || openLoginAfterSignOut ? 'auth' : 'home'}
+          initialScreen={desktopApp || recoveryMode || authRouteMode || openLoginAfterSignOut ? 'auth' : 'home'}
           initialMode={authRouteMode || 'login'}
+          variant={desktopApp ? 'desktop' : 'web'}
         />
-        <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+        {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
-        <BetaBanner />
+        {!desktopApp && <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />}
+        {!desktopApp && <BetaBanner />}
       </>
     )
   }
@@ -693,7 +779,11 @@ function AppInner() {
         tourStore={tourStore}
         storageMode={storageMode}
         onStorageModeChange={handleStorageModeChange}
+        onResumeCloudSyncPreview={getResumeCloudSyncPreview}
+        onManualCloudSyncPreview={getManualCloudSyncPreview}
+        onManualCloudSync={handleManualCloudSync}
         effectiveLocalMode={effectiveLocalMode}
+        desktopApp={desktopApp}
       />
       <HelpContact open={helpOpen} onClose={() => setHelpOpen(false)} />
       {emailConfirmed && (
@@ -721,7 +811,7 @@ function AppInner() {
                 setAccountOpen(true)
               }}
             >
-              Plan settings
+              Storage settings
             </button>
           )}
         </div>
@@ -794,7 +884,7 @@ function AppInner() {
 
   const globalOverlays = (
     <>
-      <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />
+      {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <BetaBanner />
