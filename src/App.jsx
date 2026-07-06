@@ -28,6 +28,7 @@ import DownloadPage from './components/download/DownloadPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
 import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
+import { readItem, writeItem } from './storage/projectStorage'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
@@ -337,6 +338,16 @@ function AppInner() {
   const openCloudSettings = () => {
     setAccountTab('storage')
     setAccountOpen(true)
+  }
+
+  // First-run vault notice (desktop only): tell the user where their writing
+  // lives and point at the Storage tab, once per vault.
+  const [vaultNoticeAck, setVaultNoticeAck] = useState(() => (
+    !desktopApp || readItem('nf_vault_setup_ack') === '1'
+  ))
+  const ackVaultNotice = () => {
+    setVaultNoticeAck(true)
+    try { writeItem('nf_vault_setup_ack', '1') } catch { /* storage unavailable */ }
   }
 
   const dismissLocalModeNotice = () => {
@@ -828,6 +839,21 @@ function AppInner() {
           </button>
           <button type="button" className="membership-toast-link" onClick={dismissLocalModeNotice}>
             Dismiss
+          </button>
+        </div>
+      )}
+      {desktopApp && user && !vaultNoticeAck && (
+        <div role="status" className="membership-toast">
+          <span>Your writing is saved in a local vault on this device. You can move it or create snapshots any time.</span>
+          <button
+            type="button"
+            className="membership-toast-link"
+            onClick={() => { ackVaultNotice(); openCloudSettings() }}
+          >
+            Storage settings
+          </button>
+          <button type="button" className="membership-toast-link" onClick={ackVaultNotice}>
+            Got it
           </button>
         </div>
       )}

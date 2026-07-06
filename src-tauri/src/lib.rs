@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};
 use std::fs;
 use std::os::raw::{c_char, c_int, c_void};
@@ -63,10 +63,26 @@ struct VaultInfo {
   vault_path: String,
   vault_dir: String,
   backup_dir: String,
+  default_dir: String,
+  configured_dir: Option<String>,
+  using_configured: bool,
   exists: bool,
   size_bytes: u64,
   wal_size_bytes: u64,
   entry_count: i64,
+}
+
+#[derive(Deserialize)]
+struct VaultLocationConfig {
+  vault_dir: String,
+}
+
+#[derive(Serialize)]
+struct VaultRelocateResult {
+  mode: String,
+  vault_dir: String,
+  vault_path: String,
+  previous_vault_path: String,
 }
 
 #[derive(Serialize)]
@@ -123,13 +139,45 @@ fn vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   Ok(vault_dir(app)?.join("vault.db"))
 }
 
-fn vault_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+// The app-data directory is fixed; it always holds the vault-location config,
+// and is the vault's home unless the user relocated it.
+fn app_default_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   let dir = app
     .path()
     .app_data_dir()
     .map_err(|error| format!("Could not locate app data directory: {error}"))?;
   fs::create_dir_all(&dir).map_err(|error| format!("Could not create vault directory: {error}"))?;
   Ok(dir)
+}
+
+fn vault_location_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  Ok(app_default_dir(app)?.join("vault-location.json"))
+}
+
+fn configured_vault_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+  let path = vault_location_config_path(app).ok()?;
+  let raw = fs::read_to_string(path).ok()?;
+  let config: VaultLocationConfig = serde_json::from_str(&raw).ok()?;
+  let dir = PathBuf::from(config.vault_dir);
+  if dir.as_os_str().is_empty() { None } else { Some(dir) }
+}
+
+fn write_vault_location_config(app: &tauri::AppHandle, dir: &PathBuf) -> Result<(), String> {
+  let path = vault_location_config_path(app)?;
+  let payload = serde_json::json!({ "vault_dir": dir.to_string_lossy() }).to_string();
+  fs::write(&path, payload).map_err(|error| format!("Could not save the vault location: {error}"))
+}
+
+// If a configured location is unreachable (for example an unplugged external
+// drive), fall back to the default rather than failing every vault command;
+// vault_info exposes using_configured so the UI can warn about the fallback.
+fn vault_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  if let Some(dir) = configured_vault_dir(app) {
+    if fs::create_dir_all(&dir).is_ok() {
+      return Ok(dir);
+    }
+  }
+  app_default_dir(app)
 }
 
 fn backup_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -283,16 +331,75 @@ fn vault_info(app: tauri::AppHandle) -> Result<VaultInfo, String> {
   let path = vault_path(&app)?;
   let dir = vault_dir(&app)?;
   let backups = backup_dir(&app)?;
+  let default_dir = app_default_dir(&app)?;
+  let configured = configured_vault_dir(&app);
+  let using_configured = configured.as_deref() == Some(dir.as_path());
   let wal_path = PathBuf::from(format!("{}-wal", path.to_string_lossy()));
   Ok(VaultInfo {
     vault_path: path.to_string_lossy().into_owned(),
     vault_dir: dir.to_string_lossy().into_owned(),
     backup_dir: backups.to_string_lossy().into_owned(),
+    default_dir: default_dir.to_string_lossy().into_owned(),
+    configured_dir: configured.map(|value| value.to_string_lossy().into_owned()),
+    using_configured,
     exists: path.exists(),
     size_bytes: file_size(&path),
     wal_size_bytes: file_size(&wal_path),
     entry_count: entry_count(db.raw)?,
   })
+}
+
+// Move the vault to a user-chosen folder, or adopt an existing vault found
+// there. The original vault.db is deliberately left in place as a safety copy.
+#[tauri::command]
+async fn vault_relocate(app: tauri::AppHandle) -> Result<Option<VaultRelocateResult>, String> {
+  use tauri_plugin_dialog::DialogExt;
+
+  let (tx, rx) = std::sync::mpsc::channel();
+  app.dialog().file().pick_folder(move |dir| {
+    let _ = tx.send(dir);
+  });
+  let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
+    .await
+    .map_err(|error| format!("Could not wait for the folder dialog: {error}"))?
+    .map_err(|error| format!("Folder dialog closed unexpectedly: {error}"))?;
+
+  let Some(folder) = picked else { return Ok(None) };
+  let target_dir = folder
+    .into_path()
+    .map_err(|error| format!("Could not resolve the chosen folder: {error}"))?;
+
+  let current_dir = vault_dir(&app)?;
+  let current_path = vault_path(&app)?;
+  if target_dir == current_dir {
+    return Err("The vault already lives in that folder.".to_string());
+  }
+  fs::create_dir_all(&target_dir)
+    .map_err(|error| format!("Could not use the chosen folder: {error}"))?;
+
+  let target_path = target_dir.join("vault.db");
+  let mode = if target_path.exists() {
+    "adopted"
+  } else {
+    if current_path.exists() {
+      {
+        let db = open_vault(&app)?;
+        exec(db.raw, "PRAGMA wal_checkpoint(FULL);")?;
+      }
+      fs::copy(&current_path, &target_path)
+        .map_err(|error| format!("Could not copy the vault to the chosen folder: {error}"))?;
+    }
+    "moved"
+  };
+
+  write_vault_location_config(&app, &target_dir)?;
+
+  Ok(Some(VaultRelocateResult {
+    mode: mode.to_string(),
+    vault_dir: target_dir.to_string_lossy().into_owned(),
+    vault_path: target_path.to_string_lossy().into_owned(),
+    previous_vault_path: current_path.to_string_lossy().into_owned(),
+  }))
 }
 
 #[tauri::command]
@@ -506,6 +613,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
       export_save_file,
+      vault_relocate,
       vault_read_all,
       vault_set_item,
       vault_remove_item,

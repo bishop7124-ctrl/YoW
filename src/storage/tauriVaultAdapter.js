@@ -104,3 +104,12 @@ export async function revealDesktopVaultInFinder() {
   if (!invoke) return null
   return invoke('vault_reveal_in_finder')
 }
+
+// Opens a native folder picker; moves the vault there (or adopts an existing
+// vault.db found there) and records the location. Resolves null on cancel.
+export async function relocateDesktopVault() {
+  const invoke = getTauriInvoke()
+  if (!invoke) return null
+  await flushDesktopVaultBackend()
+  return invoke('vault_relocate')
+}

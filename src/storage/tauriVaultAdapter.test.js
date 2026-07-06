@@ -97,4 +97,27 @@ describe('tauri vault adapter', () => {
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_restore_snapshot', { name: 'vault-snapshot-1.db' })
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_reveal_in_finder')
   })
+
+  it('relocates the vault through the native folder picker command', async () => {
+    vi.stubEnv('MODE', 'desktop')
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async (command) => {
+          if (command === 'vault_relocate') {
+            return { mode: 'moved', vault_dir: '/tmp/NewVault', vault_path: '/tmp/NewVault/vault.db', previous_vault_path: '/tmp/YOW/vault.db' }
+          }
+          return []
+        }),
+      },
+    }
+
+    const { relocateDesktopVault } = await import('./tauriVaultAdapter.js')
+    await expect(relocateDesktopVault()).resolves.toEqual({
+      mode: 'moved',
+      vault_dir: '/tmp/NewVault',
+      vault_path: '/tmp/NewVault/vault.db',
+      previous_vault_path: '/tmp/YOW/vault.db',
+    })
+    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_relocate')
+  })
 })

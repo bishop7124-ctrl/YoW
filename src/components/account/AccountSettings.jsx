@@ -18,6 +18,7 @@ import {
   getDesktopVaultInfo,
   isTauriVaultAvailable,
   listDesktopVaultSnapshots,
+  relocateDesktopVault,
   restoreDesktopVaultSnapshot,
   revealDesktopVaultInFinder,
 } from '../../storage/tauriVaultAdapter'
@@ -281,6 +282,7 @@ function DesktopVaultPanel() {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [moveConfirmOpen, setMoveConfirmOpen] = useState(false)
   const available = isDesktopAppRuntime() && isTauriVaultAvailable()
 
   const refreshInfo = async () => {
@@ -351,6 +353,27 @@ function DesktopVaultPanel() {
     } catch (err) {
       setError(err.message || 'Could not reveal the vault in Finder.')
     } finally {
+      setBusy('')
+    }
+  }
+
+  const relocateVault = async () => {
+    setBusy('relocate')
+    setMessage('')
+    setError('')
+    try {
+      const result = await relocateDesktopVault()
+      if (!result) {
+        setBusy('')
+        return
+      }
+      setMoveConfirmOpen(false)
+      setMessage(result.mode === 'adopted'
+        ? 'Now using the vault found in the chosen folder. Reloading YOW...'
+        : 'Vault moved. The previous copy stays in the old location as a backup. Reloading YOW...')
+      window.setTimeout(() => window.location.reload(), 800)
+    } catch (err) {
+      setError(typeof err === 'string' ? err : err?.message || 'Could not move the vault.')
       setBusy('')
     }
   }
@@ -446,7 +469,51 @@ function DesktopVaultPanel() {
           <button type="button" onClick={checkIntegrity} disabled={!!busy} className="account-secondary-button" style={{ width: 'auto', padding: '8px 14px' }}>
             {busy === 'integrity' ? 'Checking...' : 'Check integrity'}
           </button>
+          <button type="button" onClick={() => { setMoveConfirmOpen(open => !open); setMessage(''); setError('') }} disabled={!!busy} className="account-secondary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+            Move vault…
+          </button>
         </div>
+        {moveConfirmOpen && (
+          <div style={{
+            padding: '12px 14px',
+            borderRadius: 7,
+            border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))',
+            background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+              Choose where YOW keeps this device's vault. Pick an empty folder to move the current
+              vault there, or pick a folder that already contains a YOW <code>vault.db</code> to switch
+              to that vault. The current file stays in place as a backup, and YOW reloads afterwards.
+              Avoid folders synced by Dropbox or iCloud — sync tools can corrupt a live database.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={relocateVault} disabled={!!busy} className="account-primary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+                {busy === 'relocate' ? 'Waiting for folder…' : 'Choose folder…'}
+              </button>
+              <button type="button" onClick={() => setMoveConfirmOpen(false)} disabled={!!busy} className="account-secondary-button" style={{ width: 'auto', padding: '8px 14px' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {info?.configured_dir && !info.using_configured && (
+          <div style={{
+            padding: '10px 12px',
+            borderRadius: 7,
+            background: 'color-mix(in srgb, #f59e0b 10%, transparent)',
+            border: '1px solid color-mix(in srgb, #f59e0b 40%, var(--border))',
+            color: '#f59e0b',
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.45,
+          }}>
+            The chosen vault folder ({info.configured_dir}) is unreachable, so YOW is temporarily
+            using the default location. Reconnect the drive and restart YOW, or move the vault again.
+          </div>
+        )}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0, 1fr) auto',
