@@ -216,6 +216,9 @@ export function getMembership(user) {
     isPaid,
     isLifetime,
     isFounder,
+    // Desktop app access is a Lifetime/Founder entitlement (PRD Phase 4).
+    // Browser plan behavior is unchanged — this only gates the desktop shell.
+    isDesktopEntitled: isLifetime,
     isTrialActive,
     isFree,
     isReadOnly: false,

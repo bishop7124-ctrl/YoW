@@ -22,6 +22,7 @@ import {
   restoreDesktopVaultSnapshot,
   revealDesktopVaultInFinder,
 } from '../../storage/tauriVaultAdapter'
+import { deactivateDesktopDevice, listDesktopDevices } from '../../utils/desktopEntitlement'
 import {
   BUILT_IN_THEMES,
   DEFAULT_CUSTOM_COLORS,
@@ -272,6 +273,87 @@ function formatSnapshotTime(seconds) {
   } catch {
     return ''
   }
+}
+
+// Desktop device activations (PRD Phase 4): list this account's activated
+// devices with self-service deactivation to free cap slots.
+function DesktopDevicesPanel() {
+  const [data, setData] = useState(null)
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const available = isDesktopAppRuntime()
+
+  const load = async () => {
+    if (!available) return
+    try {
+      setError('')
+      setData(await listDesktopDevices())
+    } catch {
+      setError('Could not load your desktop devices.')
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [available])
+
+  if (!available || !data?.devices?.length) return null
+
+  const removeDevice = async (deviceId) => {
+    setBusy(deviceId)
+    setError('')
+    try {
+      await deactivateDesktopDevice(deviceId)
+      await load()
+    } catch (err) {
+      setError(typeof err === 'string' ? err : err?.message || 'Could not deactivate the device.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <p style={{
+        fontSize: 11, fontWeight: 800, letterSpacing: '.08em',
+        textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8,
+      }}>
+        Desktop devices ({data.devices.length}{data.cap ? `/${data.cap}` : ''})
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {data.devices.map(device => {
+          const isCurrent = device.device_id === data.currentDeviceId
+          return (
+            <div
+              key={device.device_id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '9px 12px', borderRadius: 7,
+                border: '1px solid var(--border)', background: 'var(--bg-main)',
+                fontSize: 12,
+              }}
+            >
+              <span style={{ color: 'var(--text-main)', fontWeight: 700, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {device.device_name || device.platform || 'Desktop device'}
+                {isCurrent && <span style={{ marginLeft: 8, color: 'var(--accent)', fontWeight: 800 }}>This device</span>}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeDevice(device.device_id)}
+                disabled={!!busy}
+                className="account-secondary-button"
+                style={{ width: 'auto', padding: '5px 10px', fontSize: 12 }}
+              >
+                {busy === device.device_id ? 'Removing…' : 'Deactivate'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      {error && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#ef4444' }}>{error}</p>}
+    </div>
+  )
 }
 
 function DesktopVaultPanel() {
@@ -2299,6 +2381,8 @@ export default function AccountSettings({
                 </strong>
               </div>
             </div>
+
+            {desktopApp && membership.isLifetime && <DesktopDevicesPanel />}
 
             {/* Desktop app download (Lifetime/Founder entitlement, web only) */}
             {membership.isLifetime && !desktopApp && (

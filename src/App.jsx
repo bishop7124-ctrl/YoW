@@ -29,6 +29,8 @@ import FounderProfilePage from './components/founders/FounderProfilePage'
 import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
+import DesktopUpgradeWall from './components/desktop/DesktopUpgradeWall'
+import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
@@ -184,7 +186,7 @@ class ErrorBoundary extends Component {
 
 function AppInner() {
   const desktopApp = isDesktopAppRuntime()
-  const { user, loading: authLoading, updateProfile, recoveryMode } = useAuth()
+  const { user, loading: authLoading, updateProfile, recoveryMode, signOut } = useAuth()
   useEffect(() => {
     document.body.classList.toggle('desktop-app-shell', desktopApp)
     return () => document.body.classList.remove('desktop-app-shell')
@@ -339,6 +341,34 @@ function AppInner() {
     setAccountTab('storage')
     setAccountOpen(true)
   }
+
+  // Desktop licence activation (PRD Phase 4): opportunistic re-verification on
+  // startup. Failures never gate the app — staleness past the grace window and
+  // the device cap only drive dismissible toasts.
+  const [desktopLicenceStale, setDesktopLicenceStale] = useState(false)
+  const [desktopDeviceLimit, setDesktopDeviceLimit] = useState(false)
+  useEffect(() => {
+    if (!desktopApp || !userId || !membership.isDesktopEntitled) return
+    let cancelled = false
+    verifyDesktopEntitlement()
+      .then(result => {
+        if (cancelled) return
+        if (result.ok) {
+          setDesktopLicenceStale(false)
+          setDesktopDeviceLimit(false)
+          return
+        }
+        if (result.status === 409) {
+          setDesktopDeviceLimit(true)
+          return
+        }
+        const evaluation = evaluateDesktopEntitlement({ membership, cached: loadCachedDesktopEntitlement() })
+        setDesktopLicenceStale(evaluation.stale)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopApp, userId, membership.isDesktopEntitled])
 
   // First-run vault notice (desktop only): tell the user where their writing
   // lives and point at the Storage tab, once per vault.
@@ -765,6 +795,12 @@ function AppInner() {
     )
   }
 
+  // Desktop is a Lifetime/Founder feature: browser-plan accounts get a clear
+  // upgrade state, not a broken app (PRD Phase 4).
+  if (desktopApp && !membership.isDesktopEntitled) {
+    return <DesktopUpgradeWall user={user} onSignOut={signOut} />
+  }
+
   const showFreeSelector = membership.isFree && !membership.freeProjectId && store.novels.length >= 1
 
   const handleFreeProjectConfirm = async (projectId) => {
@@ -838,6 +874,29 @@ function AppInner() {
             Cloud settings
           </button>
           <button type="button" className="membership-toast-link" onClick={dismissLocalModeNotice}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {desktopApp && desktopLicenceStale && (
+        <div role="status" className="membership-toast">
+          <span>YOW hasn't been able to verify your Lifetime licence for a while. Connect to the internet when you can — your writing is not affected.</span>
+          <button type="button" className="membership-toast-link" onClick={() => setDesktopLicenceStale(false)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {desktopApp && desktopDeviceLimit && (
+        <div role="status" className="membership-toast">
+          <span>This device isn't activated yet — your plan has reached its device limit.</span>
+          <button
+            type="button"
+            className="membership-toast-link"
+            onClick={() => { setDesktopDeviceLimit(false); setAccountTab('membership'); setAccountOpen(true) }}
+          >
+            Manage devices
+          </button>
+          <button type="button" className="membership-toast-link" onClick={() => setDesktopDeviceLimit(false)}>
             Dismiss
           </button>
         </div>

@@ -503,6 +503,20 @@ fn prune_auto_snapshots(app: &tauri::AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+// The desktop webview cannot navigate to external sites; marketing/upgrade
+// links open in the user's default browser instead. https-only by design.
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+  if !url.starts_with("https://") {
+    return Err("Only https links can be opened.".to_string());
+  }
+  let status = Command::new("open")
+    .arg(&url)
+    .status()
+    .map_err(|error| format!("Could not open the link: {error}"))?;
+  if status.success() { Ok(()) } else { Err("The link could not be opened.".to_string()) }
+}
+
 #[tauri::command]
 fn vault_reveal_in_finder(app: tauri::AppHandle) -> Result<(), String> {
   let path = vault_path(&app)?;
@@ -613,6 +627,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
       export_save_file,
+      open_external_url,
       vault_relocate,
       vault_read_all,
       vault_set_item,

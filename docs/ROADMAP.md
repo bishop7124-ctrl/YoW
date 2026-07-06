@@ -663,12 +663,12 @@ Status: Phase 3 local vault bridge in progress 2026-07-04.
 - [x] Startup integrity/recovery surface. The desktop vault panel can run SQLite `PRAGMA integrity_check`, shows a clear OK/problem status, and pairs any problem with the existing snapshot restore list. Automatic restore is deliberately not performed without user confirmation; `vault.db.bak` rotation before migrations remains future schema-migration work.
 - [x] Map pixel data storage in the vault — resolved as obsolete 2026-07-06: the current map builder is vector-object based and persists everything through `updateActiveMapData` → `nf_maps` → projectStorage, which is already vault-backed on desktop (`updateActiveMapData` also strips the legacy `mapData`/`mapOverlay` pixel fields). The old IndexedDB heightmap module `src/store/mapStorage.js` had zero imports and was deleted; the `yow-maps` IndexedDB is never written by the current app, so no desktop blob storage is needed.
 
-**Phase 4 — Licence activation and offline grace**
+**Phase 4 — Licence activation and offline grace** (implemented 2026-07-06; live QA pending)
 
-- [ ] Activation flow: sign in once, store signed entitlement record, server-side device activation registry with soft cap + self-service deactivation.
-- [ ] Offline grace: cached entitlement honored for the grace window; banner-only degradation after; export/editing never gated.
-- [ ] `desktop_entitlement` derivation added to `membership.js` (or a desktop-aware wrapper) without changing browser plan behavior.
-- [ ] Free/Monthly accounts signing into the desktop app get a clear "desktop is a Lifetime feature" state with an upgrade path, not a broken app.
+- [x] Activation flow: `api/desktop-devices.js` (POST activate/re-verify, GET list, DELETE self-service deactivate) against the new `desktop_devices` table (`supabase/migrations/20260706_desktop_devices.sql` — **user action: apply this migration in Supabase before desktop sign-ins hit the endpoint**). Issues an HMAC-signed entitlement record (`ENTITLEMENT_SIGNING_SECRET` Vercel env var; unsigned-but-functional when unset). Soft cap defaults to 3 active devices (`DESKTOP_DEVICE_CAP` env var), adopting the open-decision proposal; cap-exceeded returns 409 with the active device list. Desktop calls the production API absolutely (tauri:// origin has no relative /api) via `VITE_DESKTOP_API_BASE_URL` fallback to www.yourownworld.co.uk. Device list + Deactivate UI in Account Settings → Membership (desktop only).
+- [x] Offline grace: `src/utils/desktopEntitlement.js` caches the record + verifiedAt on-device (localStorage — device secret, never vault/sync). Startup re-verification is opportunistic; network failure is treated as offline, not error. Staleness past 30 days (`DESKTOP_GRACE_DAYS`, adopting the open-decision proposal) or a hit device cap only show dismissible toasts — editing and export are never gated client-side. Unit-tested.
+- [x] `membership.js` now returns `isDesktopEntitled` (= isLifetime); browser plan behavior untouched.
+- [x] Free/Monthly/trial accounts in the desktop app get `DesktopUpgradeWall`: clear "comes with Lifetime" state with open-in-browser, view-plans (opens default browser via https-only `open_external_url` command), and sign-out. Live QA for all four items deferred to [docs/QA_PLAN.md](QA_PLAN.md) Priority 1 (desktop licence activation).
 
 **Phase 5 — Optional Cloud Sync bridge**
 
