@@ -696,6 +696,7 @@ Status: Phase 3 local vault bridge in progress 2026-07-04.
 ### Open Product Decisions
 
 - Lifetime price/copy implications of "downloadable desktop app" positioning (update the Pricing recommendation row when copy changes in Phase 6).
+- Code-signing costs and timing (2026-07-06 findings): unsigned macOS builds are Gatekeeper-blocked at both DMG-open and app-launch, often silently — not shippable to customers. Apple Developer Program (£79/yr, flat, not per-user) is required before the first desktop Lifetime sale; there is no free macOS path. Windows can launch unsigned (SmartScreen shows a visible "More info → Run anyway" bypass) with signing (~£100/yr EV or Azure Trusted Signing) deferred until revenue justifies it. No cost is incurred until desktop selling begins.
 - Whether Lifetime also keeps browser access during its included cloud-hosting years (recommended: yes while Cloud Sync is entitled, since the data is hosted anyway) or becomes desktop-only at purchase.
 - Offline grace length (default proposal: 30 days) and device activation soft cap (proposal: 3 active devices).
 - Whether Founder desktop users get browser access for life (their Cloud Mode is lifetime, so recommended yes).
