@@ -4,6 +4,7 @@ import {
   formatFinalizedDate, paginateFinalizedDraft,
   buildScriptBlocks, SCRIPT_TYPES,
 } from './manuscriptUtils.js'
+import { downloadBlob } from '../../utils/projectExportHelpers.js'
 
 function renderInlineMarkdown(text, keyPrefix = '') {
   if (!text) return []
@@ -237,13 +238,6 @@ export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalN
 
   const doc = new Document({ sections: [{ properties: {}, children }] })
   const blob = await Packer.toBlob(doc)
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
   const exportName = getProjectType(novel?.type).workspaceLabel || 'manuscript'
-  a.download = `${(novel?.title || exportName).replace(/[^a-z0-9 ]/gi, '_')}.docx`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  await downloadBlob(blob, `${(novel?.title || exportName).replace(/[^a-z0-9 ]/gi, '_')}.docx`)
 }

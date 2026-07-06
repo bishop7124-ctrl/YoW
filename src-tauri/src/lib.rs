@@ -470,10 +470,42 @@ fn vault_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<VaultRe
   })
 }
 
+// Blob downloads via anchor clicks do nothing in the desktop webview, so
+// exports (ZIP/DOCX/PDF/PNG) hand their bytes to this command, which shows a
+// native save dialog and writes the file. Returns the saved path, or None if
+// the user cancelled.
+#[tauri::command]
+async fn export_save_file(app: tauri::AppHandle, file_name: String, bytes: Vec<u8>) -> Result<Option<String>, String> {
+  use tauri_plugin_dialog::DialogExt;
+
+  let (tx, rx) = std::sync::mpsc::channel();
+  app
+    .dialog()
+    .file()
+    .set_file_name(&file_name)
+    .save_file(move |path| {
+      let _ = tx.send(path);
+    });
+
+  let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
+    .await
+    .map_err(|error| format!("Could not wait for the save dialog: {error}"))?
+    .map_err(|error| format!("Save dialog closed unexpectedly: {error}"))?;
+
+  let Some(file_path) = picked else { return Ok(None) };
+  let path = file_path
+    .into_path()
+    .map_err(|error| format!("Could not resolve the chosen save location: {error}"))?;
+  fs::write(&path, &bytes).map_err(|error| format!("Could not save the file: {error}"))?;
+  Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
+      export_save_file,
       vault_read_all,
       vault_set_item,
       vault_remove_item,

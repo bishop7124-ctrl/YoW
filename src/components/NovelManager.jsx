@@ -8,6 +8,7 @@ import AIImportModal from './AIImportModal'
 import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../constants/projectTypes'
 import {
   createProjectZipBlob,
+  downloadBlob,
   downloadProjectDocx,
   downloadProjectPdf,
   EXPORT_PDF_THEME_OPTIONS,
@@ -1272,14 +1273,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     }
 
     const blob = createProjectZipBlob(projectData)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = getProjectExportFilename(projectData.project)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+    await downloadBlob(blob, getProjectExportFilename(projectData.project))
   }
 
   const focusStats = store.allProjectStats.find(s => s.project.focus) ?? null

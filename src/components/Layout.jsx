@@ -25,6 +25,7 @@ import { StudioFrame, StudioWorkspace, StudioTab, StudioButton, StudioEmpty } fr
 import {
   EXPORT_PDF_THEME_OPTIONS,
   createProjectZipBlob,
+  downloadBlob,
   downloadProjectDocx,
   downloadProjectPdf,
   getProjectExportFilename,
@@ -180,17 +181,6 @@ const safeSlug = value => String(value || 'project')
   .replace(/\s+/g, '-')
   .replace(/-+/g, '-')
   .replace(/^[-_.]+|[-_.]+$/g, '') || 'project'
-
-const downloadBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
 
 const stripMediaFromBackup = data => ({
   ...data,
@@ -357,7 +347,7 @@ function ProjectSettings({ store, onClose }) {
       setExporting(format)
       if (format === 'docx') await downloadProjectDocx(projectData)
       else if (format === 'pdf') await downloadProjectPdf(projectData, { themeId })
-      else downloadBlob(createProjectZipBlob(projectData), getProjectExportFilename(projectData.project))
+      else await downloadBlob(createProjectZipBlob(projectData), getProjectExportFilename(projectData.project))
     } catch (error) {
       console.error('Project export failed:', error)
       setBackupMessage('Export failed. Please try again.')

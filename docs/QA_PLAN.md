@@ -93,6 +93,7 @@ Status: Deferred
 - PDF export: verify readable, ordered, nonblank output for realistic project content.
 - Cloud backup definition: confirm logged-in users have data in cloud storage and manual ZIP export contains complete project data.
 - Lifetime Local Mode export safety: verify Local Mode projects export complete ZIP/DOCX/PDF files without requiring cloud hosting, and verify lapsed Lifetime users can export both existing local projects and any cloud projects still available during the grace/read-only window.
+- Desktop native export saves (added 2026-07-06): in the desktop app, exports route through the `export_save_file` Tauri command (native save dialog) instead of anchor downloads, which the webview ignores. Verify in the built app: project ZIP export (project settings and library), per-project export in Account Settings, DOCX export, PDF export, finalized-draft DOCX, map PNG export, and per-project backup ZIP each open a native save dialog, write a complete file to the chosen location, and cancelling the dialog neither writes a file nor errors. Verify the same actions in a browser still download normally. The visual/print PDF flow (`openProjectVisualPdf`, window.open based) is not yet desktop-routed — check its behavior in the webview and route it if broken.
 
 ## Priority 4: Responsive And Visual Safety
 

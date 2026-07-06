@@ -1,4 +1,5 @@
 import { getProjectType } from '../constants/projectTypes.js'
+import { isDesktopAppRuntime } from './runtime.js'
 
 export const sanitizeFilename = (value, fallback = 'project') => {
   const name = String(value || fallback)
@@ -10,7 +11,31 @@ export const sanitizeFilename = (value, fallback = 'project') => {
   return name || fallback
 }
 
+const getDesktopInvoke = () => {
+  if (typeof window === 'undefined') return null
+  return window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke || null
+}
+
+// Desktop webviews ignore anchor-click blob downloads, so exports hand their
+// bytes to the native save dialog instead. Resolves with the saved path, or
+// null when the user cancels.
+const saveBlobWithDesktopDialog = async (blob, filename) => {
+  const invoke = getDesktopInvoke()
+  if (!invoke) throw new Error('Native save is unavailable in this window.')
+  const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()))
+  return invoke('export_save_file', { fileName: filename, bytes })
+}
+
 export const downloadBlob = (blob, filename) => {
+  if (isDesktopAppRuntime() && getDesktopInvoke()) {
+    return saveBlobWithDesktopDialog(blob, filename).catch(error => {
+      console.error('[export] Could not save the file natively', error)
+      window.dispatchEvent(new CustomEvent('yow-export-save-error', {
+        detail: { filename, message: String(error?.message || error) },
+      }))
+      return null
+    })
+  }
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -19,6 +44,7 @@ export const downloadBlob = (blob, filename) => {
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+  return Promise.resolve(filename)
 }
 
 export const stripHtml = (value = '') =>

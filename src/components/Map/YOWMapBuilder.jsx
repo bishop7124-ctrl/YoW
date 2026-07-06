@@ -10,6 +10,7 @@ import {
   uid, clamp, round, screenToMap, snapToGrid,
   objectContainsPoint, normalizeObject, loadJson, saveJson, getObjectBounds,
 } from './mapUtils.js'
+import { downloadBlob } from '../../utils/projectExportHelpers.js'
 import { drawBackground, drawMovementGrid, drawObject, drawDraft, drawHoverHighlight, drawRiverGroup } from './mapDraw.js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1735,9 +1736,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     ctx.restore()
     exportCanvas.toBlob(blob => {
       if (!blob) return
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url; a.download = `${(activeMap.name || 'map').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`; a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, `${(activeMap.name || 'map').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`)
     }, 'image/png')
   }
 
