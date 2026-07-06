@@ -8,7 +8,7 @@ import { supabase } from '../../supabase'
 // fetched from the entitlement-gated API, never embedded in the bundle.
 
 const PLATFORM_HINTS = {
-  macos: 'macOS 12 or later · Apple Silicon & Intel',
+  macos: 'macOS 12 or later · Apple Silicon',
   windows: 'Windows 10 or later · 64-bit',
 }
 
@@ -156,6 +156,29 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
           <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--text-muted)' }}>
             Version {links.version}
           </p>
+        )}
+        {links.platforms.some(p => p.key === 'macos') && (
+          <div style={{
+            marginTop: 28, padding: '20px 24px',
+            border: '1px solid var(--border)', borderRadius: 12,
+            background: 'var(--bg-card)',
+          }}>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
+              First launch on macOS — one-time step
+            </p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              This beta build isn't yet notarized with Apple, so macOS blocks the first launch — sometimes silently.
+              If YOW doesn't open, that's the block, not a broken download.
+            </p>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8, listStyle: 'decimal' }}>
+              <li>Unzip the download and drag <strong>YOW</strong> into <strong>Applications</strong>.</li>
+              <li>Double-click YOW once. If it's blocked or nothing happens, continue to the next step.</li>
+              <li>Open <strong>System Settings → Privacy &amp; Security</strong>, scroll to the bottom, and click <strong>Open Anyway</strong> next to the YOW message, then confirm.</li>
+            </ol>
+            <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              After that, YOW opens normally with a double-click.
+            </p>
+          </div>
         )}
       </>
     )

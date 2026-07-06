@@ -22,6 +22,7 @@
     "desktop:build": "tauri build",
     "desktop:build:app": "tauri build --bundles app",
     "desktop:package:dmg:local": "bash scripts/package-macos-dmg-local.sh",
+    "desktop:package:zip:local": "bash scripts/package-macos-zip-local.sh",
     "desktop:build:local": "npm run desktop:build:app && npm run desktop:package:dmg:local"
   },
   "dependencies": {
