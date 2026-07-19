@@ -1,12 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
-
-const DAYS_PER_MONTH = 30
-
-const MONTH_NAMES = [
-  '', 'First Month', 'Second Month', 'Third Month', 'Fourth Month',
-  'Fifth Month', 'Sixth Month', 'Seventh Month', 'Eighth Month',
-  'Ninth Month', 'Tenth Month', 'Eleventh Month', 'Twelfth Month',
-]
+import { getScheduleCalendar, monthName, daysInMonth, absoluteDay } from '../../utils/scheduleCalendar'
+import ScheduleSettingsModal from './ScheduleSettingsModal'
 
 const CATEGORIES = [
   { id: 'scene',    label: 'Scene',    color: '#8b8fff' },
@@ -39,7 +33,7 @@ const LABEL_STYLE = { display: 'block', color: 'var(--text-muted)', fontSize: 12
 
 // ─── Event modal ─────────────────────────────────────────────────────────────
 
-function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categories, onClose }) {
+function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categories, calendar, onClose }) {
   const isEdit = Boolean(event)
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -64,11 +58,12 @@ function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categ
 
   const save = () => {
     if (!form.title.trim()) { setError('Title is required'); return }
+    const month = Math.max(1, Math.min(calendar.months.length, parseInt(form.month) || 1))
     const data = {
       ...form,
       year: parseInt(form.year) || 1,
-      month: Math.max(1, Math.min(12, parseInt(form.month) || 1)),
-      day: Math.max(1, Math.min(DAYS_PER_MONTH, parseInt(form.day) || 1)),
+      month,
+      day: Math.max(1, Math.min(daysInMonth(calendar, month), parseInt(form.day) || 1)),
       duration: Math.max(1, parseInt(form.duration) || 1),
       tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
     }
@@ -124,11 +119,11 @@ function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categ
             </div>
             <div>
               <label style={LABEL_STYLE}>Month</label>
-              <input type="number" min="1" max="12" value={form.month} onChange={set('month')} style={INPUT_STYLE} />
+              <input type="number" min="1" max={calendar.months.length} value={form.month} onChange={set('month')} style={INPUT_STYLE} />
             </div>
             <div>
               <label style={LABEL_STYLE}>Day</label>
-              <input type="number" min="1" max={DAYS_PER_MONTH} value={form.day} onChange={set('day')} style={INPUT_STYLE} />
+              <input type="number" min="1" max={daysInMonth(calendar, parseInt(form.month) || 1)} value={form.day} onChange={set('day')} style={INPUT_STYLE} />
             </div>
             <div>
               <label style={LABEL_STYLE}>Duration</label>
@@ -223,7 +218,7 @@ function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categ
 
 // ─── Event detail popover ─────────────────────────────────────────────────────
 
-function EventPopover({ event, store, categoriesById, onEdit, onClose }) {
+function EventPopover({ event, store, categoriesById, calendar, onEdit, onClose }) {
   const cat = categoriesById[event.category] || CAT_MAP[event.category] || CAT_MAP.other
   const chars = (event.linkedCharacters ?? [])
     .map(id => store.characters?.find(c => c.id === id)?.name).filter(Boolean)
@@ -240,7 +235,7 @@ function EventPopover({ event, store, categoriesById, onEdit, onClose }) {
           <div style={{ flex: 1 }}>
             <div style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: 15 }}>{event.title}</div>
             <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>
-              {MONTH_NAMES[event.month]}, Day {event.day} · Year {event.year}
+              {monthName(calendar, event.month)}, Day {event.day} · Year {event.year}
               {event.duration > 1 && ` · ${event.duration} days`}
             </div>
           </div>
@@ -295,14 +290,22 @@ export default function ScheduleCalendar({ store }) {
   const events = useMemo(() => store.storySchedule ?? [], [store.storySchedule])
   const categories = useMemo(() => getScheduleCategories(store.activeNovel), [store.activeNovel])
   const categoriesById = useMemo(() => Object.fromEntries(categories.map(cat => [cat.id, cat])), [categories])
+  const calendar = useMemo(() => getScheduleCalendar(store.activeNovel), [store.activeNovel])
+
+  const monthCount = calendar.months.length
+  const weekLength = calendar.weekLength
+  // Keep the view valid if the calendar shrinks under it (settings change, project switch)
+  const month = Math.min(viewMonth, monthCount)
+  const monthDays = daysInMonth(calendar, month)
+  const weeksInMonth = Math.ceil(monthDays / weekLength)
 
   const prevMonth = () => {
-    if (viewMonth === 1) { setViewMonth(12); setViewYear(y => y - 1) }
-    else setViewMonth(m => m - 1)
+    if (month === 1) { setViewMonth(monthCount); setViewYear(y => y - 1) }
+    else setViewMonth(month - 1)
   }
   const nextMonth = () => {
-    if (viewMonth === 12) { setViewMonth(1); setViewYear(y => y + 1) }
-    else setViewMonth(m => m + 1)
+    if (month === monthCount) { setViewMonth(1); setViewYear(y => y + 1) }
+    else setViewMonth(month + 1)
   }
   const goToday = () => {
     const year = store.activeNovel?.currentYear || 1
@@ -311,15 +314,15 @@ export default function ScheduleCalendar({ store }) {
   }
 
   const monthEvents = useMemo(() => {
+    const mAbsStart = calendar.monthStarts[month - 1]
+    const mAbsEnd = mAbsStart + (monthDays - 1)
     return events.filter(ev => {
       if (ev.year !== viewYear) return false
-      const evAbsStart = (ev.month - 1) * DAYS_PER_MONTH + (ev.day - 1)
-      const evAbsEnd = evAbsStart + (ev.duration - 1)
-      const mAbsStart = (viewMonth - 1) * DAYS_PER_MONTH
-      const mAbsEnd = mAbsStart + (DAYS_PER_MONTH - 1)
+      const evAbsStart = absoluteDay(calendar, ev.month, ev.day)
+      const evAbsEnd = evAbsStart + ((ev.duration || 1) - 1)
       return evAbsStart <= mAbsEnd && evAbsEnd >= mAbsStart
     })
-  }, [events, viewYear, viewMonth])
+  }, [events, viewYear, month, monthDays, calendar])
 
   const sortedEvents = useMemo(() => {
     return [...events].sort((a, b) => (a.year - b.year) || (a.month - b.month) || (a.day - b.day) || a.title.localeCompare(b.title))
@@ -327,22 +330,22 @@ export default function ScheduleCalendar({ store }) {
 
   const eventSegments = useMemo(() => {
     const segments = []
-    const lanesByWeek = Array.from({ length: 5 }, () => [])
+    const lanesByWeek = Array.from({ length: weeksInMonth }, () => [])
     const sortedMonthEvents = [...monthEvents].sort((a, b) => (a.day - b.day) || ((b.duration || 1) - (a.duration || 1)) || a.title.localeCompare(b.title))
 
     sortedMonthEvents.forEach(ev => {
-      const evAbsStart = (ev.month - 1) * DAYS_PER_MONTH + (ev.day - 1)
-      const evAbsEnd = evAbsStart + (ev.duration - 1)
-      const mAbsStart = (viewMonth - 1) * DAYS_PER_MONTH
-      const mAbsEnd = mAbsStart + (DAYS_PER_MONTH - 1)
+      const evAbsStart = absoluteDay(calendar, ev.month, ev.day)
+      const evAbsEnd = evAbsStart + ((ev.duration || 1) - 1)
+      const mAbsStart = calendar.monthStarts[month - 1]
+      const mAbsEnd = mAbsStart + (monthDays - 1)
       const overlapStart = Math.max(evAbsStart, mAbsStart)
       const overlapEnd = Math.min(evAbsEnd, mAbsEnd)
       let cursor = overlapStart
       while (cursor <= overlapEnd) {
         const dayIndex = cursor - mAbsStart
-        const week = Math.floor(dayIndex / 7)
-        const col = dayIndex % 7
-        const weekEnd = Math.min(overlapEnd, mAbsStart + (week * 7) + 6)
+        const week = Math.floor(dayIndex / weekLength)
+        const col = dayIndex % weekLength
+        const weekEnd = Math.min(overlapEnd, mAbsStart + (week * weekLength) + (weekLength - 1))
         const span = weekEnd - cursor + 1
         const endCol = col + span - 1
         const weekLanes = lanesByWeek[week]
@@ -357,9 +360,9 @@ export default function ScheduleCalendar({ store }) {
       }
     })
     return segments
-  }, [monthEvents, viewMonth])
+  }, [monthEvents, month, monthDays, weekLength, weeksInMonth, calendar])
 
-  const cells = Array.from({ length: 35 }, (_, i) => (i < DAYS_PER_MONTH ? i + 1 : null))
+  const cells = Array.from({ length: weeksInMonth * weekLength }, (_, i) => (i < monthDays ? i + 1 : null))
 
   const openCreate = day => setModal({ type: 'create', day })
   const openDetail = event => setModal({ type: 'detail', event })
@@ -374,8 +377,8 @@ export default function ScheduleCalendar({ store }) {
         <button onClick={prevMonth} title="Previous month" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>←</button>
 
         <div className="schedule-date-controls">
-          <select value={viewMonth} onChange={e => setViewMonth(Number(e.target.value))} className="field px-2 py-1.5 text-xs">
-            {MONTH_NAMES.slice(1).map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+          <select value={month} onChange={e => setViewMonth(Number(e.target.value))} className="field px-2 py-1.5 text-xs">
+            {calendar.months.map((m, index) => <option key={index} value={index + 1}>{m.name}</option>)}
           </select>
           <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || 1)} className="field px-2 py-1.5 text-xs" aria-label="Year" />
           <button type="button" onClick={goToday} className="btn btn-secondary btn-sm">Today</button>
@@ -402,6 +405,14 @@ export default function ScheduleCalendar({ store }) {
         </div>
 
         <button
+          onClick={() => setModal({ type: 'settings' })}
+          title="Calendar settings — months, week length, day labels"
+          style={{ padding: '5px 12px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginLeft: 4 }}
+        >
+          ⚙ Calendar
+        </button>
+
+        <button
           onClick={() => openCreate(1)}
           style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--bg-main)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
         >
@@ -414,18 +425,18 @@ export default function ScheduleCalendar({ store }) {
 
         {viewMode === 'month' ? (
           <>
-            <div className="schedule-month-title">{MONTH_NAMES[viewMonth]} · Year {viewYear}</div>
+            <div className="schedule-month-title">{monthName(calendar, month)} · Year {viewYear}</div>
             {/* Day-of-week header */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, paddingTop: 14, marginBottom: 2 }}>
-              {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 0' }}>
-                  Day {i + 1}
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weekLength}, 1fr)`, gap: 2, paddingTop: 14, marginBottom: 2 }}>
+              {calendar.dayNames.map((name, i) => (
+                <div key={i} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {name}
                 </div>
               ))}
             </div>
 
             {/* Calendar grid */}
-            <div className="schedule-grid">
+            <div className="schedule-grid" style={{ '--schedule-week': weekLength }}>
               {cells.map((day, idx) => {
                 const isReal = day !== null
                 return (
@@ -434,8 +445,8 @@ export default function ScheduleCalendar({ store }) {
                     className="schedule-day-cell"
                     onClick={() => isReal && openCreate(day)}
                     style={{
-                      gridColumn: (idx % 7) + 1,
-                      gridRow: Math.floor(idx / 7) + 1,
+                      gridColumn: (idx % weekLength) + 1,
+                      gridRow: Math.floor(idx / weekLength) + 1,
                       background: isReal ? 'var(--bg-nav)' : 'transparent',
                       border: isReal ? '1px solid var(--border)' : 'none',
                       borderRadius: 8,
@@ -484,7 +495,7 @@ export default function ScheduleCalendar({ store }) {
             </div>
             {monthEvents.length === 0 && (
               <div className="schedule-empty-month">
-                <p>No events in {MONTH_NAMES[viewMonth]}, Year {viewYear}</p>
+                <p>No events in {monthName(calendar, month)}, Year {viewYear}</p>
                 <button onClick={() => openCreate(1)} className="btn btn-primary btn-sm">Add event</button>
               </div>
             )}
@@ -552,7 +563,7 @@ export default function ScheduleCalendar({ store }) {
                             </span>
                             {ev.duration > 1 && (
                               <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                                Day {ev.day} to Day {Math.min(DAYS_PER_MONTH, ev.day + ev.duration - 1)} · {ev.duration} days
+                                Day {ev.day} to Day {Math.min(daysInMonth(calendar, ev.month), ev.day + ev.duration - 1)} · {ev.duration} days
                               </span>
                             )}
                             {chars.length > 0 && (
@@ -578,10 +589,11 @@ export default function ScheduleCalendar({ store }) {
         <EventModal
           event={null}
           prefillDay={modal.day}
-          prefillMonth={viewMonth}
+          prefillMonth={month}
           prefillYear={viewYear}
           store={store}
           categories={categories}
+          calendar={calendar}
           onClose={closeModal}
         />
       )}
@@ -593,6 +605,7 @@ export default function ScheduleCalendar({ store }) {
           prefillYear={modal.event.year}
           store={store}
           categories={categories}
+          calendar={calendar}
           onClose={closeModal}
         />
       )}
@@ -601,9 +614,13 @@ export default function ScheduleCalendar({ store }) {
           event={modal.event}
           store={store}
           categoriesById={categoriesById}
+          calendar={calendar}
           onEdit={() => setModal({ type: 'edit', event: modal.event })}
           onClose={closeModal}
         />
+      )}
+      {modal?.type === 'settings' && (
+        <ScheduleSettingsModal store={store} onClose={closeModal} />
       )}
     </div>
   )

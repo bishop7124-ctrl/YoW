@@ -5105,10 +5105,10 @@ textarea:focus {
 .schedule-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(7, minmax(92px, 1fr));
+  grid-template-columns: repeat(var(--schedule-week, 7), minmax(92px, 1fr));
   grid-auto-rows: 124px;
   gap: 2px;
-  min-width: 720px;
+  min-width: calc(var(--schedule-week, 7) * 103px);
 }
 
 .schedule-day-cell {
@@ -5258,7 +5258,7 @@ textarea:focus {
   }
 
   .schedule-grid {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--schedule-week, 7), minmax(0, 1fr));
     grid-auto-rows: clamp(72px, 19vw, 92px);
     min-width: 0;
     width: 100%;

@@ -31,6 +31,7 @@ import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMod
 import { readItem, writeItem } from './storage/projectStorage'
 import DesktopUpgradeWall from './components/desktop/DesktopUpgradeWall'
 import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
+import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
@@ -318,14 +319,14 @@ function AppInner() {
 
     if (direction === 'push') {
       const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
-      await replaceUserData(userId, localData)
+      await (store.trackSync ? store.trackSync(replaceUserData(userId, localData)) : replaceUserData(userId, localData))
       saveLocalFirstSnapshot(userId, localData)
       finishRemoteLoad(false)
       return 'Cloud copy updated from this device.'
     }
 
     if (direction === 'pull') {
-      const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
+      const cloudData = pruneSaveDataToProjects(await (store.trackSync ? store.trackSync(loadUserData(userId)) : loadUserData(userId)))
       importData(cloudData)
       saveLocalFirstSnapshot(userId, cloudData)
       finishRemoteLoad(false)
@@ -369,6 +370,29 @@ function AppInner() {
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopApp, userId, membership.isDesktopEntitled])
+
+  // Desktop auto-update (Phase 6): opportunistic check on startup. Never
+  // blocks the app — offline or no release published yet both resolve to
+  // no update found.
+  const [desktopUpdate, setDesktopUpdate] = useState(null)
+  const [desktopUpdateState, setDesktopUpdateState] = useState('idle')
+  useEffect(() => {
+    if (!desktopApp) return
+    let cancelled = false
+    checkForDesktopUpdate().then(update => {
+      if (!cancelled && update) setDesktopUpdate(update)
+    })
+    return () => { cancelled = true }
+  }, [desktopApp])
+  const handleInstallDesktopUpdate = async () => {
+    if (!desktopUpdate) return
+    setDesktopUpdateState('installing')
+    try {
+      await desktopUpdate.install()
+    } catch {
+      setDesktopUpdateState('error')
+    }
+  }
 
   // First-run vault notice (desktop only): tell the user where their writing
   // lives and point at the Storage tab, once per vault.
@@ -883,6 +907,28 @@ function AppInner() {
           <span>YOW hasn't been able to verify your Lifetime licence for a while. Connect to the internet when you can — your writing is not affected.</span>
           <button type="button" className="membership-toast-link" onClick={() => setDesktopLicenceStale(false)}>
             Dismiss
+          </button>
+        </div>
+      )}
+      {desktopApp && desktopUpdate && (
+        <div role="status" className="membership-toast">
+          <span>
+            {desktopUpdateState === 'error'
+              ? "Couldn't install the update. It'll be offered again next launch."
+              : `Update available: version ${desktopUpdate.version}.`}
+          </span>
+          {desktopUpdateState !== 'error' && (
+            <button
+              type="button"
+              className="membership-toast-link"
+              disabled={desktopUpdateState === 'installing'}
+              onClick={handleInstallDesktopUpdate}
+            >
+              {desktopUpdateState === 'installing' ? 'Installing…' : 'Restart to update'}
+            </button>
+          )}
+          <button type="button" className="membership-toast-link" onClick={() => setDesktopUpdate(null)}>
+            Later
           </button>
         </div>
       )}

@@ -317,6 +317,35 @@ export function useStore(userId = null, options = {}) {
   const remoteReady = useRef(!userId)
   const previousUserId = useRef(userId)
 
+  // Cloud sync status — surfaced to the desktop Storage settings UI (last synced/syncing/error).
+  // pendingRef counts in-flight pushes so overlapping debounced saves settle into one
+  // 'syncing' → 'synced' transition instead of flickering per-entity.
+  const syncPendingRef = useRef(0)
+  const [syncStatus, setSyncStatus] = useState({ state: 'idle', lastSyncedAt: null, lastError: null })
+  const trackSync = useCallback((promise) => {
+    syncPendingRef.current += 1
+    setSyncStatus(s => ({ ...s, state: 'syncing' }))
+    promise
+      .then(() => {
+        syncPendingRef.current = Math.max(0, syncPendingRef.current - 1)
+        setSyncStatus(() => ({
+          state: syncPendingRef.current > 0 ? 'syncing' : 'synced',
+          lastSyncedAt: Date.now(),
+          lastError: null,
+        }))
+      })
+      .catch(err => {
+        console.error(err)
+        syncPendingRef.current = Math.max(0, syncPendingRef.current - 1)
+        setSyncStatus(s => ({
+          state: syncPendingRef.current > 0 ? 'syncing' : 'error',
+          lastSyncedAt: s.lastSyncedAt,
+          lastError: err?.message || 'Sync failed',
+        }))
+      })
+    return promise
+  }, [])
+
   const getCurrentSnapshot = useCallback(() => ({
     novels,
     characters,
@@ -374,6 +403,8 @@ export function useStore(userId = null, options = {}) {
     previousUserId.current = userId
     remoteReady.current = false
     importing.current = true
+    syncPendingRef.current = 0
+    setSyncStatus({ state: 'idle', lastSyncedAt: null, lastError: null })
     clearProjectLocalStorage()
     clearProjectRefs({
       charactersRef,
@@ -457,20 +488,20 @@ export function useStore(userId = null, options = {}) {
 
   // Debounced per-entity save — key is the table name
   const debouncedSaveItems = useMemo(
-    () => createKeyedDebounce((table, uid, items) => upsertItems(table, uid, items).catch(console.error), 2000),
-    []
+    () => createKeyedDebounce((table, uid, items) => trackSync(upsertItems(table, uid, items)).catch(() => {}), 2000),
+    [trackSync]
   )
 
   // Debounced user-settings save (activeNovelId, currentYear, activeMapByNovel)
   const debouncedSaveSettings = useMemo(
-    () => debounce((uid, settings) => saveUserSettings(uid, settings).catch(console.error), 2000),
-    []
+    () => debounce((uid, settings) => trackSync(saveUserSettings(uid, settings)).catch(() => {}), 2000),
+    [trackSync]
   )
 
   // Debounced Firestore save for individual scenes (1s delay)
   const debouncedSaveScene = useMemo(
-    () => createKeyedDebounce((sceneId, uid, scene) => saveSceneDoc(uid, scene).catch(console.error), 1000),
-    []
+    () => createKeyedDebounce((sceneId, uid, scene) => trackSync(saveSceneDoc(uid, scene)).catch(() => {}), 1000),
+    [trackSync]
   )
 
   // Per-entity cloud sync effects — each only fires when its own collection changes
@@ -509,26 +540,28 @@ export function useStore(userId = null, options = {}) {
 
     if (shouldPreferLocal && canSyncCloud) {
       const snapshot = getLocalSnapshot()
-      upsertItems('novels', userId, snapshot.novels ?? []).catch(console.error)
-      upsertItems('series_items', userId, snapshot.series ?? []).catch(console.error)
-      upsertItems('characters', userId, snapshot.characters ?? []).catch(console.error)
-      upsertItems('factions', userId, snapshot.factions ?? []).catch(console.error)
-      upsertItems('locations', userId, snapshot.locations ?? []).catch(console.error)
-      upsertItems('timeline_events', userId, snapshot.timeline ?? []).catch(console.error)
-      upsertItems('world_history', userId, snapshot.worldHistory ?? []).catch(console.error)
-      upsertItems('acts', userId, snapshot.acts ?? []).catch(console.error)
-      upsertItems('chapters', userId, snapshot.chapters ?? []).catch(console.error)
-      upsertItems('lore_entries', userId, snapshot.loreEntries ?? []).catch(console.error)
-      upsertItems('idea_entries', userId, snapshot.ideaEntries ?? []).catch(console.error)
-      upsertItems('maps_data', userId, snapshot.maps ?? []).catch(console.error)
-      upsertItems('whiteboards_data', userId, snapshot.whiteboards ?? []).catch(console.error)
-      upsertItems('story_schedule', userId, snapshot.storySchedule ?? []).catch(console.error)
-      upsertItems('rpg_characters', userId, snapshot.rpgCharacters ?? []).catch(console.error)
-      upsertItems('comic_pages', userId, snapshot.comicPages ?? []).catch(console.error)
-      upsertItems('comic_panels', userId, snapshot.comicPanels ?? []).catch(console.error)
-      upsertItems('eras', userId, snapshot.eras ?? []).catch(console.error)
-      saveUserSettings(userId, { activeNovelId: snapshot.activeNovelId ?? null, currentYear: snapshot.currentYear ?? 0, activeMapByNovel: snapshot.activeMapByNovel ?? {} }).catch(console.error)
-      upsertItems('scenes', userId, snapshot.scenes ?? []).catch(console.error)
+      trackSync(Promise.all([
+        upsertItems('novels', userId, snapshot.novels ?? []),
+        upsertItems('series_items', userId, snapshot.series ?? []),
+        upsertItems('characters', userId, snapshot.characters ?? []),
+        upsertItems('factions', userId, snapshot.factions ?? []),
+        upsertItems('locations', userId, snapshot.locations ?? []),
+        upsertItems('timeline_events', userId, snapshot.timeline ?? []),
+        upsertItems('world_history', userId, snapshot.worldHistory ?? []),
+        upsertItems('acts', userId, snapshot.acts ?? []),
+        upsertItems('chapters', userId, snapshot.chapters ?? []),
+        upsertItems('lore_entries', userId, snapshot.loreEntries ?? []),
+        upsertItems('idea_entries', userId, snapshot.ideaEntries ?? []),
+        upsertItems('maps_data', userId, snapshot.maps ?? []),
+        upsertItems('whiteboards_data', userId, snapshot.whiteboards ?? []),
+        upsertItems('story_schedule', userId, snapshot.storySchedule ?? []),
+        upsertItems('rpg_characters', userId, snapshot.rpgCharacters ?? []),
+        upsertItems('comic_pages', userId, snapshot.comicPages ?? []),
+        upsertItems('comic_panels', userId, snapshot.comicPanels ?? []),
+        upsertItems('eras', userId, snapshot.eras ?? []),
+        saveUserSettings(userId, { activeNovelId: snapshot.activeNovelId ?? null, currentYear: snapshot.currentYear ?? 0, activeMapByNovel: snapshot.activeMapByNovel ?? {} }),
+        upsertItems('scenes', userId, snapshot.scenes ?? []),
+      ])).catch(() => {})
     }
     markLocalOwner(userId)
 
@@ -582,7 +615,7 @@ export function useStore(userId = null, options = {}) {
       importing.current = false
       remoteReady.current = true
     }, 500)
-  }, [userId, canSyncCloud])
+  }, [userId, canSyncCloud, trackSync])
 
   const finishRemoteLoad = useCallback((allowSaves = true) => {
     importing.current = false
@@ -1995,6 +2028,7 @@ export function useStore(userId = null, options = {}) {
     addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
     importData, replaceData, clearData, finishRemoteLoad,
     getLocalSnapshot: getCurrentSnapshot,
+    syncStatus, trackSync,
   }
 
   if (!readOnly) return api

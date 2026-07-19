@@ -22,6 +22,8 @@ fi
 mkdir -p "${OUT_DIR}"
 rm -f "${OUT_PATH}" "${IMAGE_BASE}.dmg"
 
+# Strip Finder/provenance metadata that ad-hoc codesign rejects as detritus.
+xattr -cr "${APP_PATH}"
 codesign --force --deep --sign - "${APP_PATH}" >/dev/null
 codesign --verify --deep --strict "${APP_PATH}"
 

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
+import { upsertItems } from '../utils/firestoreSync.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -225,5 +226,74 @@ describe('character CRUD', () => {
 
     expect(result.current.characters).toHaveLength(1)
     expect(result.current.characters[0].role).toBe('guide')
+  })
+})
+
+// ─── cloud sync status ───────────────────────────────────────────────────────
+// Phase 5 (desktop cloud sync bridge): last synced / syncing / error surfaced
+// to the Storage settings UI. Exercises the debounced push pipeline directly
+// rather than mocking trackSync, so it proves the real wiring.
+
+describe('cloud sync status', () => {
+  beforeEach(() => {
+    vi.mocked(upsertItems).mockClear()
+    vi.mocked(upsertItems).mockResolvedValue({})
+  })
+
+  it('starts idle before any cloud sync has run', () => {
+    const { result } = renderHook(() => useStore('user-sync', { cloudSyncEnabled: true }))
+    expect(result.current.syncStatus).toEqual({ state: 'idle', lastSyncedAt: null, lastError: null })
+  })
+
+  it('transitions to synced with a timestamp after a successful push', async () => {
+    const { result } = renderHook(() => useStore('user-sync', { cloudSyncEnabled: true }))
+    // Mirrors the app calling finishRemoteLoad after login data is ready —
+    // the debounced push effects are suppressed until remoteReady flips true.
+    act(() => { result.current.finishRemoteLoad(true) })
+    act(() => { result.current.addNovel({ title: 'Cloud Book', type: 'novel' }) })
+
+    await waitFor(() => expect(result.current.syncStatus.state).toBe('synced'), { timeout: 3000 })
+    expect(result.current.syncStatus.lastSyncedAt).toBeGreaterThan(0)
+    expect(result.current.syncStatus.lastError).toBeNull()
+  })
+
+  it('transitions to error with a message when a push fails', async () => {
+    const { result } = renderHook(() => useStore('user-sync', { cloudSyncEnabled: true }))
+    act(() => { result.current.finishRemoteLoad(true) })
+    // addNovel also touches activeNovelId, which debounces a concurrent
+    // settings push — let that settle first so only the characters push
+    // (the one we're about to fail) is in flight.
+    act(() => { result.current.addNovel({ title: 'Doomed Book', type: 'novel' }) })
+    await waitFor(() => expect(result.current.syncStatus.state).toBe('synced'), { timeout: 3000 })
+
+    vi.mocked(upsertItems).mockRejectedValueOnce(new Error('network unreachable'))
+    act(() => { result.current.saveCharacter({ name: 'Unsynced Hero' }) })
+
+    await waitFor(() => expect(result.current.syncStatus.state).toBe('error'), { timeout: 3000 })
+    expect(result.current.syncStatus.lastError).toBe('network unreachable')
+  })
+
+  it('does not update sync status when cloud sync is disabled', async () => {
+    const { result } = renderHook(() => useStore('user-sync', { cloudSyncEnabled: false }))
+    act(() => { result.current.finishRemoteLoad(true) })
+    act(() => { result.current.addNovel({ title: 'Local Only', type: 'novel' }) })
+    await new Promise(r => setTimeout(r, 50))
+
+    expect(result.current.syncStatus).toEqual({ state: 'idle', lastSyncedAt: null, lastError: null })
+    expect(upsertItems).not.toHaveBeenCalled()
+  })
+
+  it('resets to idle when the signed-in user changes', async () => {
+    const { result, rerender } = renderHook(
+      ({ userId }) => useStore(userId, { cloudSyncEnabled: true }),
+      { initialProps: { userId: 'user-a' } }
+    )
+    act(() => { result.current.finishRemoteLoad(true) })
+    act(() => { result.current.addNovel({ title: 'A Book', type: 'novel' }) })
+    await waitFor(() => expect(result.current.syncStatus.state).toBe('synced'), { timeout: 3000 })
+
+    rerender({ userId: 'user-b' })
+
+    expect(result.current.syncStatus).toEqual({ state: 'idle', lastSyncedAt: null, lastError: null })
   })
 })

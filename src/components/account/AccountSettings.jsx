@@ -5,6 +5,7 @@ import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '..
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
 import { STORAGE_MODES } from '../../utils/storageMode'
 import { getStorageQuota } from '../../utils/storageQuota'
+import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
@@ -719,6 +720,27 @@ function PreferencesPanel({ tourStore }) {
   )
 }
 
+// Cloud sync status line for the desktop Storage panel — reads store.syncStatus
+// (last synced/syncing/error from the automatic push pipeline and manual sync)
+// plus the same entitlement/local-first signals the rest of the panel already uses.
+const SYNC_DOT_COLOR = {
+  paused: 'var(--text-muted)',
+  active: 'var(--accent)',
+  synced: '#5dc878',
+  error: '#ef4444',
+}
+
+function SyncStatusLine({ syncStatus, localFirstSelected, canSyncCloud, isLocalMode }) {
+  const { tone, text } = deriveSyncStatusLine({ syncStatus, localFirstSelected, canSyncCloud, isLocalMode })
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--text-muted)' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: SYNC_DOT_COLOR[tone], flexShrink: 0 }} />
+      <span>{text}</span>
+    </div>
+  )
+}
+
 function StorageConfigurationPanel({
   membership,
   storageUsedBytes,
@@ -729,6 +751,7 @@ function StorageConfigurationPanel({
   onManualCloudSync,
   effectiveLocalMode,
   desktopApp,
+  syncStatus,
 }) {
   const cloudQuota = getStorageQuota(membership)
   const localFirstSelected = storageMode === STORAGE_MODES.LOCAL_FIRST
@@ -846,6 +869,12 @@ function StorageConfigurationPanel({
                   ? 'Automatic cloud sync is paused. Use manual sync when you want to move this device copy to cloud, or bring the cloud copy onto this device.'
                   : 'Cloud Sync is active by default, and the desktop vault keeps the latest local copy for offline use.'}
             </div>
+            <SyncStatusLine
+              syncStatus={syncStatus}
+              localFirstSelected={localFirstSelected}
+              canSyncCloud={membership.canSyncCloud}
+              isLocalMode={membership.isLocalMode}
+            />
           </div>
 
           {localFirstSelected && (
@@ -2289,6 +2318,7 @@ export default function AccountSettings({
               onManualCloudSync={onManualCloudSync}
               effectiveLocalMode={effectiveLocalMode}
               desktopApp={desktopApp}
+              syncStatus={store?.syncStatus}
             />
           )}
 

@@ -180,6 +180,29 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
             </p>
           </div>
         )}
+        {links.platforms.some(p => p.key === 'windows') && (
+          <div style={{
+            marginTop: 28, padding: '20px 24px',
+            border: '1px solid var(--border)', borderRadius: 12,
+            background: 'var(--bg-card)',
+          }}>
+            <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
+              First launch on Windows — one-time step
+            </p>
+            <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              This beta build isn't yet signed with a Windows code-signing certificate, so SmartScreen shows a
+              warning on the installer. That's the warning, not a broken download.
+            </p>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8, listStyle: 'decimal' }}>
+              <li>Run the downloaded installer. If SmartScreen shows "Windows protected your PC", continue to the next step.</li>
+              <li>Click <strong>More info</strong>, then click <strong>Run anyway</strong>.</li>
+              <li>Follow the installer prompts. If WebView2 isn't already installed, it downloads automatically during setup.</li>
+            </ol>
+            <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              After that, YOW opens normally from the Start menu.
+            </p>
+          </div>
+        )}
       </>
     )
   }

@@ -38,6 +38,19 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdBNjRCNkNDQTgzMUVEQTAKUldTZzdUR296TFprZW5SYzRYeUpTdHZhdTRsZFBTODFZdU5vd0tlbndUUGxpcnhuaGxwS3BpL2cK",
+      "endpoints": [
+        "https://github.com/bishop7124-ctrl/StoryAtlas/releases/latest/download/latest.json"
+      ]
     }
   }
 }

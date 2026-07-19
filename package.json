@@ -21,16 +21,19 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "desktop:build:app": "tauri build --bundles app",
+    "desktop:build:nsis": "tauri build --bundles nsis",
     "desktop:package:dmg:local": "bash scripts/package-macos-dmg-local.sh",
     "desktop:package:zip:local": "bash scripts/package-macos-zip-local.sh",
     "desktop:build:local": "npm run desktop:build:app && npm run desktop:package:dmg:local"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "@vercel/analytics": "^2.0.1",
     "docx": "^9.6.1",
     "fflate": "^0.8.3",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^9.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "stripe": "^22.1.1"

@@ -131,12 +131,14 @@ export async function loadUserData(userId) {
 
 // Upsert an array of items into a table (one row per item).
 // Each item must have an `id` field. novel_id is taken from item.novelId.
+// Throws on a Supabase-reported error (rather than only logging) so callers —
+// notably useStore's sync-status tracking — can tell a push actually failed.
 export async function upsertItems(table, userId, items) {
   if (OFFLINE_MODE || !items?.length) return
 
   const rows = getTableRows(table, userId, items)
   const { error } = await supabase.from(table).upsert(rows)
-  if (error) console.error(`[sync] upsert error for ${table}:`, error)
+  throwIfSupabaseError(error, `upsert error for ${table}`)
 }
 
 // Delete a single item row by id
@@ -168,7 +170,7 @@ export async function saveUserSettings(userId, settings) {
     data: settings,
     updated_at: new Date().toISOString(),
   })
-  if (error) console.error('[sync] user_settings upsert error:', error)
+  throwIfSupabaseError(error, 'user_settings upsert error')
 }
 
 export async function saveUserData(userId, data = {}) {
@@ -205,7 +207,8 @@ export async function replaceUserData(userId, data = {}) {
 // Per-scene saves (called directly from updateScene / updateSceneContent)
 export async function saveSceneDoc(userId, scene) {
   if (OFFLINE_MODE) return
-  await supabase.from('scenes').upsert({ user_id: userId, scene_id: scene.id, data: scene })
+  const { error } = await supabase.from('scenes').upsert({ user_id: userId, scene_id: scene.id, data: scene })
+  throwIfSupabaseError(error, 'scene upsert error')
 }
 
 export async function deleteSceneDoc(userId, sceneId) {

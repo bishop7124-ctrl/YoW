@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
+import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -138,7 +139,7 @@ const IMPORT_SYSTEM_PROMPT = `You are a writing project analyzer for YOW (Your O
 
 Return ONLY a valid JSON object (no markdown fences, no explanation) with this structure:
 {
-  "project": { "title": "string", "description": "string (1-3 sentence premise)", "type": "novel" },
+  "project": { "title": "string", "description": "string (1-3 sentence premise)", "type": "novel | novella | short_story | dnd_campaign | tabletop_rpg | comic" },
   "characters": [{ "name": "string", "role": "string (e.g. protagonist, antagonist, supporting)", "bio": "string (1-2 sentences)" }],
   "locations": [{ "name": "string", "category": "string (e.g. City, Dungeon, Forest, Planet)", "description": "string (1-2 sentences)" }],
   "factions": [{ "name": "string", "description": "string (1-2 sentences)" }],
@@ -149,7 +150,8 @@ Return ONLY a valid JSON object (no markdown fences, no explanation) with this s
 }
 
 Rules:
-- Always set project.type to "novel"; other project types are deferred until after launch
+- Set project.type to the best fit for the source material: "novel" (long-form prose fiction), "novella" (medium-length prose, roughly 15k-50k words), "short_story" (short prose), "dnd_campaign" (D&D campaign prep — sessions, encounters, monsters, DM/party notes), "tabletop_rpg" (system-neutral/non-D&D tabletop campaign material), "comic" (comic or graphic novel script — issues, pages, panels). When unsure, use "novel".
+- The "acts" hierarchy is a generic three-level structure. For campaign types treat level 1 as story arcs, level 2 as sessions, and level 3 as encounters. For comic treat level 1 as volumes, level 2 as issues, and level 3 as pages. For prose use acts/parts, chapters/sections, and scenes.
 - Only include arrays that have actual content — omit empty ones entirely
 - ALWAYS extract characters, locations, lore, and world-building elements regardless of content type
 - If the files contain ANY narrative prose, chapters, scenes, or story text — you MUST include an "acts" array. Even a single act with a single chapter is required.
@@ -343,9 +345,33 @@ function buildActs(sections, idxMap, titleMap) {
   }]
 }
 
+// Rename generated fallback titles ("Act 1", "Chapter 3") to the structure nouns
+// of the chosen project type (Part/Story Arc/Volume, Section/Session/Issue, …).
+// Titles taken from real document headings are left untouched unless they match
+// the generated pattern exactly. Scene titles that mirror their chapter follow it.
+const FALLBACK_L1 = /^Act \d+$/
+const FALLBACK_L2 = /^Chapter( \d+)?$/
+export function relabelActsForType(acts, typeKey) {
+  const { level1, level2 } = getProjectType(typeKey).structure
+  return (acts || []).map((a, i) => ({
+    ...a,
+    title: FALLBACK_L1.test(a.title || '') ? `${level1} ${i + 1}` : a.title,
+    chapters: (a.chapters || []).map((c, j) => {
+      if (!FALLBACK_L2.test(c.title || '')) return c
+      const newTitle = `${level2} ${j + 1}`
+      return {
+        ...c,
+        title: newTitle,
+        scenes: (c.scenes || []).map(s => s.title === c.title ? { ...s, title: newTitle } : s),
+      }
+    }),
+  }))
+}
+
 // ── Project creation (phase 2 — runs after activeNovelId has updated) ─────────
 
-function populateProject(store, data, sel) {
+export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
+  const structure = getProjectType(typeKey).structure
   if (sel.characters) {
     for (const c of data.characters || [])
       store.saveCharacter({ name: c.name || '', role: c.role || '', bio: c.bio || '', keywords: [], familyGroup: '' })
@@ -370,17 +396,30 @@ function populateProject(store, data, sel) {
     for (const ev of data.timeline || [])
       store.addEvent({ title: ev.title || '', date: ev.date || '', description: ev.description || '', tags: [] })
   }
+  if (sel.ideaEntries) {
+    for (const idea of data.ideaEntries || [])
+      store.addIdeaEntry({ title: idea.title || '', description: idea.description || '', body: idea.body || idea.description || '', status: 'raw' })
+  }
   if (sel.acts) {
-    for (const act of data.acts || []) {
-      const newAct = store.addAct(act.title || 'Act')
+    for (const act of relabelActsForType(data.acts, typeKey)) {
+      const newAct = store.addAct(act.title || structure.level1)
       if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
       for (const chap of act.chapters || []) {
-        const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
+        const newChap = store.addChapter(newAct.id, chap.title || structure.level2)
         if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
         for (const scene of chap.scenes || []) {
-          const newScene = store.addScene(newChap.id, scene.title || 'Scene')
-          if (scene.synopsis || scene.content)
-            store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
+          if (typeKey === 'comic') {
+            // Comic projects plan in pages, not prose scenes — the Pages workspace
+            // never shows scene records, so imported text must land on a page.
+            store.addComicPage(newChap.id, {
+              title: scene.title || structure.level3,
+              summary: (scene.content || '').trim() || scene.synopsis || '',
+            })
+          } else {
+            const newScene = store.addScene(newChap.id, scene.title || structure.level3)
+            if (scene.synopsis || scene.content)
+              store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
+          }
         }
       }
     }
@@ -391,7 +430,7 @@ function populateProject(store, data, sel) {
 // Remaps all IDs (prevents collisions if the same export is imported twice),
 // preserves family-tree links, faction membership, timeline↔worldHistory links.
 
-function populateYowProject(store, data, sel) {
+export function populateYowProject(store, data, sel) {
   const idMap = {}
   const ord = (arr) => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   const remap = (oldId) => (oldId && idMap[oldId]) ? idMap[oldId] : oldId
@@ -430,8 +469,9 @@ function populateYowProject(store, data, sel) {
 
   if (sel.locations) {
     for (const l of data.locations || []) {
-      const { id: _id, novelId: _nid, ...rest } = l
-      store.addLocation(rest)
+      const { id: oldId, novelId: _nid, ...rest } = l
+      const created = store.addLocation(rest)
+      if (created?.id) idMap[oldId] = created.id
     }
   }
 
@@ -477,6 +517,7 @@ function populateYowProject(store, data, sel) {
       if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
       for (const chap of ord((data.chapters || []).filter(c => c.actId === act.id))) {
         const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
+        idMap[chap.id] = newChap.id
         if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
         for (const scene of ord((data.scenes || []).filter(s => s.chapterId === chap.id))) {
           const newScene = store.addScene(newChap.id, scene.title || 'Scene')
@@ -484,6 +525,31 @@ function populateYowProject(store, data, sel) {
             store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
         }
       }
+    }
+    // Comic pages/panels belong to the Volume/Issue structure imported above.
+    for (const page of ord(data.comicPages)) {
+      const { id: oldId, novelId: _nid, issueId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = page
+      const created = store.addComicPage(remap(issueId), {
+        ...rest,
+        characterIds: (characterIds || []).map(remap),
+        locationIds: (locationIds || []).map(remap),
+      })
+      if (created?.id) idMap[oldId] = created.id
+    }
+    for (const panel of ord(data.comicPanels)) {
+      const { id: _id, novelId: _nid, pageId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = panel
+      store.addComicPanel(remap(pageId), {
+        ...rest,
+        characterIds: (characterIds || []).map(remap),
+        locationIds: (locationIds || []).map(remap),
+      })
+    }
+  }
+
+  if (sel.rpgCharacters) {
+    for (const c of data.rpgCharacters || []) {
+      const { id: _id, novelId: _nid, ...rest } = c
+      store.saveRpgCharacter(rest)
     }
   }
 
@@ -612,12 +678,13 @@ function ncSectionCount(data, key) {
   return (data[key] || []).length
 }
 
-function ncCountLabel(data, key) {
+function ncCountLabel(data, key, typeKey = DEFAULT_TYPE) {
   if (key === 'acts') {
+    const level2 = getProjectType(typeKey).structure.level2.toLowerCase()
     const chapters = (data.acts || []).flatMap(a => a.chapters || [])
     const words = chapters.flatMap(c => c.scenes || [])
       .reduce((sum, s) => sum + (s.content || '').split(/\s+/).filter(Boolean).length, 0)
-    return `${chapters.length} chapter${chapters.length !== 1 ? 's' : ''} · ${words.toLocaleString()} words`
+    return `${chapters.length} ${level2}${chapters.length !== 1 ? 's' : ''} · ${words.toLocaleString()} words`
   }
   const n = (data[key] || []).length
   if (key === 'ideaEntries') return `${n} ${n !== 1 ? 'entries' : 'entry'} → ideas board`
@@ -634,40 +701,6 @@ const NC_SECTIONS = [
   { key: 'ideaEntries', label: 'Other entries' },
 ]
 
-function populateNcProject(store, data, sel) {
-  if (sel.characters) {
-    for (const c of data.characters || [])
-      store.saveCharacter({ name: c.name || '', role: c.role || '', bio: c.bio || '', keywords: [], familyGroup: '' })
-  }
-  if (sel.locations) {
-    for (const l of data.locations || [])
-      store.addLocation({ name: l.name || '', category: l.category || '', description: l.description || '' })
-  }
-  if (sel.lore) {
-    for (const e of data.lore || [])
-      store.addLoreEntry({ title: e.title || '', category: e.category || '', content: e.content || '' })
-  }
-  if (sel.acts) {
-    for (const act of data.acts || []) {
-      const newAct = store.addAct(act.title || 'Act')
-      if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
-      for (const chap of act.chapters || []) {
-        const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
-        if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
-        for (const scene of chap.scenes || []) {
-          const newScene = store.addScene(newChap.id, scene.title || 'Scene')
-          if (scene.synopsis || scene.content)
-            store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
-        }
-      }
-    }
-  }
-  if (sel.ideaEntries) {
-    for (const idea of data.ideaEntries || [])
-      store.addIdeaEntry({ title: idea.title || '', description: idea.description || '', body: idea.description || '', status: 'raw' })
-  }
-}
-
 // ── YOW section config & helpers ──────────────────────────────────────────────
 
 const YOW_SECTIONS = [
@@ -678,25 +711,39 @@ const YOW_SECTIONS = [
   { key: 'worldHistory',  label: 'World history' },
   { key: 'timeline',      label: 'Timeline events' },
   { key: 'acts',          label: 'Manuscript' },
+  { key: 'rpgCharacters', label: 'Character builder' },
   { key: 'ideaEntries',   label: 'Ideas & notes' },
   { key: 'maps',          label: 'Maps' },
   { key: 'storySchedule', label: 'Story schedule' },
 ]
 
 function yowSectionCount(data, key) {
-  if (key === 'acts') return (data.acts || []).length
+  if (key === 'acts') return (data.acts || []).length + (data.comicPages || []).length
   return (data[key] || []).length
+}
+
+function yowSectionLabel(data, key, label) {
+  if (key === 'acts') return getProjectType(data.project?.type).workspaceLabel || label
+  return label
 }
 
 function yowCountLabel(data, key) {
   if (key === 'acts') {
+    const type = getProjectType(data.project?.type)
+    const lc = (s) => s.toLowerCase()
+    const { level1, level2, level3 } = type.structure
     const nA = data.acts?.length || 0
     const nC = data.chapters?.length || 0
+    if (data.project?.type === 'comic') {
+      const nP = data.comicPages?.length || 0
+      const nPn = data.comicPanels?.length || 0
+      return `${nA} ${lc(level1)}${nA !== 1 ? 's' : ''}, ${nC} ${lc(level2)}${nC !== 1 ? 's' : ''}, ${nP} ${lc(level3)}${nP !== 1 ? 's' : ''}, ${nPn} panel${nPn !== 1 ? 's' : ''}`
+    }
     const nS = data.scenes?.length || 0
     const words = (data.scenes || []).reduce((sum, s) =>
       sum + (s.content || '').replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean).length, 0)
     const wordNote = words > 0 ? ` · ${words.toLocaleString()} words` : ''
-    return `${nA} act${nA !== 1 ? 's' : ''}, ${nC} chapter${nC !== 1 ? 's' : ''}, ${nS} scene${nS !== 1 ? 's' : ''}${wordNote}`
+    return `${nA} ${lc(level1)}${nA !== 1 ? 's' : ''}, ${nC} ${lc(level2)}${nC !== 1 ? 's' : ''}, ${nS} ${lc(level3)}${nS !== 1 ? 's' : ''}${wordNote}`
   }
   const n = (data[key] || []).length
   if (key === 'loreEntries')   return `${n} lore ${n !== 1 ? 'entries' : 'entry'}`
@@ -704,6 +751,7 @@ function yowCountLabel(data, key) {
   if (key === 'ideaEntries')   return `${n} ${n !== 1 ? 'ideas' : 'idea'}`
   if (key === 'maps')          return `${n} ${n !== 1 ? 'maps' : 'map'}`
   if (key === 'storySchedule') return `${n} schedule ${n !== 1 ? 'events' : 'event'}`
+  if (key === 'rpgCharacters') return `${n} party character${n !== 1 ? 's' : ''}`
   const singular = { characters: 'character', factions: 'faction', locations: 'location', timeline: 'timeline event' }[key] || key
   return `${n} ${singular}${n !== 1 ? 's' : ''}`
 }
@@ -720,14 +768,16 @@ const SECTIONS = [
   { key: 'acts',         label: 'Manuscript structure' },
 ]
 
-function countLabel(parsed, key) {
+function countLabel(parsed, key, typeKey = DEFAULT_TYPE) {
   if (key === 'acts') {
+    const lc = (s) => s.toLowerCase()
+    const { level1, level2, level3 } = getProjectType(typeKey).structure
     const acts = parsed.acts || []
     const chapters = acts.flatMap(a => a.chapters || [])
     const scenes = chapters.flatMap(c => c.scenes || [])
     const withText = scenes.filter(s => s.content?.trim()).length
     const textNote = withText > 0 ? ` · ${withText} with text` : ''
-    return `${acts.length} act${acts.length !== 1 ? 's' : ''}, ${chapters.length} chapter${chapters.length !== 1 ? 's' : ''}, ${scenes.length} scene${scenes.length !== 1 ? 's' : ''}${textNote}`
+    return `${acts.length} ${lc(level1)}${acts.length !== 1 ? 's' : ''}, ${chapters.length} ${lc(level2)}${chapters.length !== 1 ? 's' : ''}, ${scenes.length} ${lc(level3)}${scenes.length !== 1 ? 's' : ''}${textNote}`
   }
   const n = (parsed[key] || []).length
   return `${n} ${key === 'lore' ? 'entr' + (n === 1 ? 'y' : 'ies') : key.replace(/([A-Z])/g, ' $1').toLowerCase().trim() + (n !== 1 ? 's' : '')}`
@@ -736,6 +786,32 @@ function countLabel(parsed, key) {
 function hasContent(parsed, key) {
   if (key === 'acts') return (parsed.acts || []).length > 0
   return (parsed[key] || []).length > 0
+}
+
+// ── Create-as project type selector (AI + archive imports) ───────────────────
+
+function TypeSelect({ value, onChange }) {
+  const structure = getProjectType(value).structure
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label htmlFor="import-type-select" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>Create as</label>
+        <select
+          id="import-type-select"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+        >
+          {Object.entries(PROJECT_TYPES).map(([key, cfg]) => (
+            <option key={key} value={key}>{cfg.label}</option>
+          ))}
+        </select>
+      </div>
+      <p style={{ margin: '5px 0 0', fontSize: 10.5, color: 'var(--text-muted)' }}>
+        Structure imports as {structure.level1} → {structure.level2} → {structure.level3}.
+      </p>
+    </div>
+  )
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
@@ -751,6 +827,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const [ncImport, setNcImport] = useState(null)     // compatible structured ZIP data
   const [aiError, setAiError] = useState('')
   const [selections, setSelections] = useState({})
+  const [targetType, setTargetType] = useState(DEFAULT_TYPE) // create-as type for AI/archive imports
   // Phase-2 payload: wait for activeNovelId to update before populating entries
   const [pendingImport, setPendingImport] = useState(null)
   const fileInputRef = useRef()
@@ -760,9 +837,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   useEffect(() => {
     if (!pendingImport) return
     if (store.activeNovelId !== pendingImport.novelId) return
-    if (pendingImport.isYow)      populateYowProject(store, pendingImport.data, pendingImport.sel)
-    else if (pendingImport.isNc)  populateNcProject(store, pendingImport.data, pendingImport.sel)
-    else                          populateProject(store, pendingImport.data, pendingImport.sel)
+    if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
+    else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
     setPendingImport(null)
     setPhase('done')
     const id = pendingImport.novelId
@@ -820,6 +896,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
           setYowImport(null)
           setFiles([])
           setSelections(initialSel)
+          setTargetType(DEFAULT_TYPE)
           setPhase('preview')
           return
         }
@@ -889,6 +966,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
       const initialSel = {}
       SECTIONS.forEach(s => { if (hasContent(structureData, s.key)) initialSel[s.key] = true })
       setSelections(initialSel)
+      setTargetType(PROJECT_TYPES[structureData.project?.type] ? structureData.project.type : DEFAULT_TYPE)
       setPhase('preview')
     }
 
@@ -924,14 +1002,27 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const handleCreate = () => {
     const sourceData = yowImport || ncImport || parsed
     if (!sourceData) return
-    let title, description
-    if (yowImport) { title = yowImport.project?.title; description = yowImport.project?.description || '' }
-    else if (ncImport) { title = ncImport.projectTitle; description = '' }
-    else { title = parsed.project?.title; description = parsed.project?.description || '' }
-    const novel = store.addNovel({ title: title || 'Imported Project', description, type: 'novel' })
+    let title, description, type
+    if (yowImport) {
+      title = yowImport.project?.title; description = yowImport.project?.description || ''
+      // Restore keeps the exported type; unknown/retired types fall back safely to Novel
+      type = PROJECT_TYPES[yowImport.project?.type] ? yowImport.project.type : DEFAULT_TYPE
+    } else if (ncImport) {
+      title = ncImport.projectTitle; description = ''
+      type = PROJECT_TYPES[targetType] ? targetType : DEFAULT_TYPE
+    } else {
+      title = parsed.project?.title; description = parsed.project?.description || ''
+      type = PROJECT_TYPES[targetType] ? targetType : DEFAULT_TYPE
+    }
+    const extras = {}
+    if (yowImport?.project?.wordTarget) extras.wordTarget = yowImport.project.wordTarget
+    if (Array.isArray(yowImport?.project?.enabledSections)) extras.enabledSections = yowImport.project.enabledSections
+    if (yowImport?.project?.scheduleCalendar) extras.scheduleCalendar = yowImport.project.scheduleCalendar
+    if (yowImport?.project?.categoryOptions) extras.categoryOptions = yowImport.project.categoryOptions
+    const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras })
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
-    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, isYow: !!yowImport, isNc: !!ncImport })
+    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport })
   }
 
   const handleCancel = () => {
@@ -1022,7 +1113,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {aiError   && <p style={{ margin: 0, fontSize: 12, color: '#f87171', padding: '8px 12px', background: 'rgba(248,113,113,.08)', borderRadius: 6 }}>{aiError}</p>}
 
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                AI reads your files and extracts characters, locations, lore, manuscript structure, and more. Requires an AI provider configured in your settings.
+                AI reads your files, suggests the best project type — novel, novella, short story, D&D or tabletop campaign, or comic — and extracts characters, locations, lore, and structure. You can change the type before the project is created. Requires an AI provider configured in your settings.
               </p>
             </div>
           )}
@@ -1080,7 +1171,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>
                     <input type="checkbox" checked={!!selections[key]} onChange={e => setSelections(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
                     <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{yowCountLabel(yowImport, key)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{yowSectionLabel(yowImport, key, label)}</span>
                   </label>
                 ))}
               </div>
@@ -1096,6 +1187,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                   <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 99, background: 'color-mix(in srgb, #f59e0b 16%, transparent)', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)', letterSpacing: '.06em', textTransform: 'uppercase' }}>ZIP Archive</span>
                 </div>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{ncImport.projectTitle}</p>
+                <TypeSelect value={targetType} onChange={setTargetType} />
               </div>
 
               <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
@@ -1103,8 +1195,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 {NC_SECTIONS.filter(s => ncSectionCount(ncImport, s.key) > 0).map(({ key, label }) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>
                     <input type="checkbox" checked={!!selections[key]} onChange={e => setSelections(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{ncCountLabel(ncImport, key)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{ncCountLabel(ncImport, key, targetType)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{key === 'acts' ? getProjectType(targetType).workspaceLabel : label}</span>
                   </label>
                 ))}
               </div>
@@ -1121,7 +1213,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Project</p>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{parsed.project?.title}</p>
                 {parsed.project?.description && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{parsed.project.description}</p>}
-                <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--accent)', fontWeight: 700, textTransform: 'capitalize' }}>{(parsed.project?.type || 'novel').replace(/_/g, ' ')}</p>
+                <TypeSelect value={targetType} onChange={setTargetType} />
               </div>
 
               <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
@@ -1129,8 +1221,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 {SECTIONS.filter(s => hasContent(parsed, s.key)).map(({ key, label }) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>
                     <input type="checkbox" checked={!!selections[key]} onChange={e => setSelections(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{countLabel(parsed, key)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{countLabel(parsed, key, targetType)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{key === 'acts' ? getProjectType(targetType).workspaceLabel : label}</span>
                   </label>
                 ))}
               </div>
@@ -1165,7 +1257,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
         {(phase === 'upload' || phase === 'preview') && (
           <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
             {phase === 'preview' && (
-              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText('') }}
+              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText(''); setTargetType(DEFAULT_TYPE) }}
                 style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginRight: 'auto' }}>
                 Back
               </button>

@@ -1,0 +1,65 @@
+name: Desktop Build (Windows)
+
+# Manual build of the unsigned Windows installer. Runs on GitHub's free
+# windows-latest runner — no local Windows machine or paid signing
+# certificate required. The resulting .exe is unsigned: Windows SmartScreen
+# will show a "protected your PC" warning on first run, bypassed with
+# "More info" -> "Run anyway". See docs/ROADMAP.md Phase 6 for the signed
+# path once a code-signing certificate is in place.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build NSIS installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        env:
+          # Optional: if TAURI_UPDATER_PRIVATE_KEY[/_PASSWORD] repo secrets are
+          # set, Tauri signs the bundle for the auto-updater (a project-owned
+          # minisign signature, unrelated to and free regardless of OS-level
+          # code signing). Unset secrets leave these blank and the build
+          # proceeds unsigned, same as before.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: npm run desktop:build:nsis
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yow-windows-installer
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload updater signature (only present if signing secrets are set)
+        uses: actions/upload-artifact@v4
+        with:
+          name: yow-windows-installer-sig
+          path: src-tauri/target/release/bundle/nsis/*.exe.sig
+          if-no-files-found: ignore
+          retention-days: 30
