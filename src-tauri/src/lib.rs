@@ -20,7 +20,9 @@ const SQLITE_DONE: c_int = 101;
 const AUTO_SNAPSHOT_MIN_INTERVAL_SECONDS: u64 = 15 * 60;
 const AUTO_SNAPSHOT_RETENTION: usize = 10;
 
-#[link(name = "sqlite3")]
+// kind = "static" matches libsqlite3-sys's "bundled" feature, which always
+// compiles a real static archive (not a DLL import lib) on every platform.
+#[link(name = "sqlite3", kind = "static")]
 extern "C" {
   fn sqlite3_open(filename: *const c_char, pp_db: *mut *mut sqlite3) -> c_int;
   fn sqlite3_close(db: *mut sqlite3) -> c_int;
