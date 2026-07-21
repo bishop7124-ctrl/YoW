@@ -319,6 +319,34 @@ describe('novel CRUD', () => {
   })
 })
 
+describe('getProjectExportData', () => {
+  it('omits comicPages/comicPanels for a non-comic project even if stray comic records share its novelId', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'A Novel', type: 'novel' }) })
+    const id = result.current.novels[0].id
+    act(() => { result.current.setActiveNovelId(id) })
+    act(() => { result.current.addComicPage('issue-1') })
+
+    const data = result.current.getProjectExportData(id)
+    expect(data).not.toHaveProperty('comicPages')
+    expect(data).not.toHaveProperty('comicPanels')
+  })
+
+  it('includes comicPages/comicPanels for a comic project', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'A Comic', type: 'comic' }) })
+    const id = result.current.novels[0].id
+    act(() => { result.current.setActiveNovelId(id) })
+    act(() => { result.current.addComicPage('issue-1') })
+
+    const data = result.current.getProjectExportData(id)
+    expect(data.comicPages).toHaveLength(1)
+    expect(data.comicPanels).toEqual([])
+  })
+})
+
 // ─── character CRUD ──────────────────────────────────────────────────────────
 
 describe('character CRUD', () => {

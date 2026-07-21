@@ -2122,8 +2122,10 @@ export function useStore(userId = null, options = {}) {
       whiteboards: whiteboards.filter(w => w.novelId === id),
       storySchedule: storySchedule.filter(e => e.novelId === id),
       rpgCharacters: rpgCharacters.filter(c => c.novelId === id).map(normalizeRpgCharacter),
-      comicPages: comicPages.filter(p => p.novelId === id),
-      comicPanels: comicPanels.filter(p => p.novelId === id),
+      ...(project.type === 'comic' ? {
+        comicPages: comicPages.filter(p => p.novelId === id),
+        comicPanels: comicPanels.filter(p => p.novelId === id),
+      } : {}),
     }
   }
 
