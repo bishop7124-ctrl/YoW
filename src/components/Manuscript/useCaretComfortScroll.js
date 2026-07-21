@@ -47,6 +47,7 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
     if (!enabled) return undefined
     const textarea = textareaRef.current
     if (!textarea) return undefined
+    const container = scrollContainerRef.current || textarea.closest('.ms-scroll-container')
 
     const onCompositionStart = () => { composingRef.current = true }
     const onCompositionEnd = () => { composingRef.current = false; schedule() }
@@ -66,8 +67,23 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
     window.visualViewport?.addEventListener('resize', schedule)
     document.addEventListener('selectionchange', onSelectionChange)
 
+    // The browser natively scrolls a focused textarea's caret into view on
+    // keyboard navigation (End/Home/arrows) with its own animation that
+    // isn't governed by this container's `scroll-behavior` CSS, so it can
+    // still run — and win — after `schedule()` has already centered the
+    // caret. Once that native scroll settles, re-run the comfort-zone check
+    // once to correct for it, rather than fighting it mid-animation.
+    let settleTimer = null
+    const onContainerScroll = () => {
+      if (selectingRef.current) return
+      clearTimeout(settleTimer)
+      settleTimer = setTimeout(schedule, 180)
+    }
+    container?.addEventListener('scroll', onContainerScroll)
+
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
+      clearTimeout(settleTimer)
       events.forEach(event => textarea.removeEventListener(event, schedule))
       textarea.removeEventListener('compositionstart', onCompositionStart)
       textarea.removeEventListener('compositionend', onCompositionEnd)
@@ -76,8 +92,9 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
       window.removeEventListener('resize', schedule)
       window.visualViewport?.removeEventListener('resize', schedule)
       document.removeEventListener('selectionchange', onSelectionChange)
+      container?.removeEventListener('scroll', onContainerScroll)
     }
-  }, [enabled, schedule, textareaRef])
+  }, [enabled, schedule, textareaRef, scrollContainerRef])
 
   return schedule
 }

@@ -17,7 +17,10 @@ test('focused mode is independent, keeps tools available, and Escape closes in l
   await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
 
   await expect(page.locator('.manuscript-processor')).toHaveClass(/is-focused-writing/)
-  await expect(page.getByText('Focused Writing Test', { exact: true })).toBeVisible()
+  // The studio nav banner's <h1> also shows the project title and stays
+  // visible in focused mode (by design — "keeps tools available"), so this
+  // must target the focused-mode topbar's own title specifically.
+  await expect(page.locator('.ms-focus-project-title')).toHaveText('Focused Writing Test')
   await expect(page.getByRole('button', { name: 'Exit focused writing mode' })).toBeVisible()
 
   await expect(page.getByText('110%', { exact: true })).toBeVisible()

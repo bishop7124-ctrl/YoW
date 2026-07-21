@@ -21312,7 +21312,13 @@ body {
 .manuscript-processor.is-focused-writing .manuscript-page.ms-scroll-container {
   scroll-behavior: auto;
   overscroll-behavior: contain;
-  padding-bottom: 58px;
+  /* useCaretComfortScroll pulls the caret up into the container's 35-65%
+     band by scrolling, but can only do that if there's blank space below
+     the last line to scroll into — at the very end of a long document
+     there's nothing there otherwise, so the caret gets pinned at the
+     bottom of the scrollable area no matter what the JS wants. 50vh keeps
+     the last line centerable regardless of viewport size. */
+  padding-bottom: 50vh;
 }
 
 .manuscript-processor.is-focused-writing .manuscript-document {
