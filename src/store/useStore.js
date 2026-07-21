@@ -1580,7 +1580,7 @@ export function useStore(userId = null, options = {}) {
           childIds: (c.childIds || []).filter(childId => !deletedSet.has(childId)),
           parentIds: (c.parentIds || []).filter(parentId => !deletedSet.has(parentId)),
           spouseIds: (c.spouseIds || []).filter(spouseId => !deletedSet.has(spouseId)),
-          relationships: (c.relationships || []).filter(rel => !deletedSet.has(rel.characterId)),
+          relationships: (c.relationships || []).filter(rel => !deletedSet.has(rel.targetId)),
           ...(c.journey ? { journey: clearJourneyLinks(c.journey, { characterIds: [...deletedSet] }) } : {}),
         }))
     })
@@ -1840,7 +1840,14 @@ export function useStore(userId = null, options = {}) {
   const updateLoreEntry = (id, data) => saveSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data }))
   const deleteLoreEntry = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', id, options)
-    if (canSyncCloud) (deletedIds.length ? deletedIds : [id]).forEach(dId => deleteItem('lore_entries', userId, dId).catch(console.error))
+    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('lore_entries', userId, dId).catch(console.error))
+    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
+      return prev.map(entry => ({
+        ...entry,
+        loreIds: (entry.loreIds || []).filter(loreId => !deletedSet.has(loreId)),
+      }))
+    })
   }
 
   const addIdeaEntry = (data) => {

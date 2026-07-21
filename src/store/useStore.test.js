@@ -374,6 +374,36 @@ describe('character CRUD', () => {
     expect(result.current.characters).toHaveLength(1)
     expect(result.current.characters[0].role).toBe('guide')
   })
+
+  it('deleteCharacter strips the deleted character out of other characters\' relationships', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+    const frodoId = result.current.characters[0].id
+    act(() => { result.current.saveCharacter({ name: 'Sam', relationships: [{ targetId: frodoId, type: 'friend' }] }) })
+
+    act(() => { result.current.deleteCharacter(frodoId) })
+
+    const sam = result.current.characters.find(c => c.name === 'Sam')
+    expect(sam.relationships).toEqual([])
+  })
+})
+
+describe('lore CRUD', () => {
+  it('deleteLoreEntry strips the deleted entry out of other entries\' loreIds', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.addLoreEntry({ title: 'The Old War' }) })
+    const oldWarId = result.current.loreEntries[0].id
+    act(() => { result.current.addLoreEntry({ title: 'The Treaty', loreIds: [oldWarId] }) })
+
+    act(() => { result.current.deleteLoreEntry(oldWarId) })
+
+    const treaty = result.current.loreEntries.find(e => e.title === 'The Treaty')
+    expect(treaty.loreIds).toEqual([])
+  })
 })
 
 // ─── immediate data-safety persistence ───────────────────────────────────────
