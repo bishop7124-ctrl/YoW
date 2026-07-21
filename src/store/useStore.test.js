@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc } from '../utils/firestoreSync.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -403,6 +403,55 @@ describe('lore CRUD', () => {
 
     const treaty = result.current.loreEntries.find(e => e.title === 'The Treaty')
     expect(treaty.loreIds).toEqual([])
+  })
+})
+
+describe('scene reorder/move cloud sync', () => {
+  it('reorderScene pushes both swapped scenes to the cloud', async () => {
+    vi.mocked(saveSceneDoc).mockClear()
+    const { result } = renderHook(() => useStore('user-structure', { cloudSyncEnabled: true }))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    const novelId = result.current.novels[0].id
+    act(() => { result.current.setActiveNovelId(novelId) })
+    act(() => { result.current.addAct('Act One') })
+    const actId = result.current.acts[0].id
+    act(() => { result.current.addChapter(actId, 'Chapter One') })
+    const chapterId = result.current.chapters[0].id
+    act(() => { result.current.addScene(chapterId, 'Scene A') })
+    act(() => { result.current.addScene(chapterId, 'Scene B') })
+    const [sceneA, sceneB] = result.current.scenes
+
+    vi.mocked(saveSceneDoc).mockClear()
+    act(() => { result.current.reorderScene(sceneB.id, 'up') })
+
+    await waitFor(() => {
+      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure', expect.objectContaining({ id: sceneA.id, order: 1 }))
+      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure', expect.objectContaining({ id: sceneB.id, order: 0 }))
+    }, { timeout: 3000 })
+  })
+
+  it('moveScene pushes the moved scene to the cloud under its new chapter', async () => {
+    vi.mocked(saveSceneDoc).mockClear()
+    const { result } = renderHook(() => useStore('user-structure-2', { cloudSyncEnabled: true }))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    const novelId = result.current.novels[0].id
+    act(() => { result.current.setActiveNovelId(novelId) })
+    act(() => { result.current.addAct('Act One') })
+    const actId = result.current.acts[0].id
+    act(() => { result.current.addChapter(actId, 'Chapter One') })
+    act(() => { result.current.addChapter(actId, 'Chapter Two') })
+    const [chapterOne, chapterTwo] = result.current.chapters
+    act(() => { result.current.addScene(chapterOne.id, 'Scene A') })
+    const scene = result.current.scenes[0]
+
+    vi.mocked(saveSceneDoc).mockClear()
+    act(() => { result.current.moveScene(scene.id, chapterTwo.id, 0) })
+
+    await waitFor(() => {
+      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure-2', expect.objectContaining({ id: scene.id, chapterId: chapterTwo.id }))
+    }, { timeout: 3000 })
   })
 })
 

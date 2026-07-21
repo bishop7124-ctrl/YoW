@@ -1357,7 +1357,8 @@ export function useStore(userId = null, options = {}) {
   }, [commitLocal])
 
   const reorderScene = (id, direction) => {
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
+    let changedIds = []
+    const next = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       const scene = prev.find(s => s.id === id)
       if (!scene) return prev
       const scoped = prev.filter(s => s.chapterId === scene.chapterId).sort((a, b) => a.order - b.order)
@@ -1366,16 +1367,22 @@ export function useStore(userId = null, options = {}) {
       if (swapIdx < 0 || swapIdx >= scoped.length) return prev
       const newOrder = scoped[swapIdx].order
       const oldOrder = scoped[idx].order
+      changedIds = [id, scoped[swapIdx].id]
       return prev.map(s => {
         if (s.id === id) return { ...s, order: newOrder }
         if (s.id === scoped[swapIdx].id) return { ...s, order: oldOrder }
         return s
       })
     })
+    if (canSyncCloud) changedIds.forEach(sceneId => {
+      const scene = next.find(s => s.id === sceneId)
+      if (scene) debouncedSaveScene(sceneId, userId, scene)
+    })
   }
 
   const moveScene = useCallback((sceneId, toChapterId, toIndex) => {
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
+    let changedIds = []
+    const next = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       const scene = prev.find(s => s.id === sceneId)
       if (!scene) return prev
       const updatedScene = { ...scene, chapterId: toChapterId }
@@ -1383,16 +1390,22 @@ export function useStore(userId = null, options = {}) {
       const clampedTo = Math.max(0, Math.min(toIndex, destScenes.length))
       const reinserted = [...destScenes.slice(0, clampedTo), updatedScene, ...destScenes.slice(clampedTo)]
         .map((s, i) => ({ ...s, order: i }))
+      changedIds = reinserted.map(s => s.id)
       if (scene.chapterId !== toChapterId) {
         const srcScenes = prev.filter(s => s.chapterId === scene.chapterId && s.id !== sceneId)
           .sort((a, b) => a.order - b.order).map((s, i) => ({ ...s, order: i }))
+        changedIds = changedIds.concat(srcScenes.map(s => s.id))
         const others = prev.filter(s => s.chapterId !== toChapterId && s.chapterId !== scene.chapterId)
         return [...others, ...srcScenes, ...reinserted]
       }
       const others = prev.filter(s => s.chapterId !== toChapterId)
       return [...others, ...reinserted]
     })
-  }, [commitLocal])
+    if (canSyncCloud) changedIds.forEach(id => {
+      const scene = next.find(s => s.id === id)
+      if (scene) debouncedSaveScene(id, userId, scene)
+    })
+  }, [commitLocal, canSyncCloud, userId, debouncedSaveScene])
 
   const updateSceneContent = useCallback((sceneId, content) => {
     const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
