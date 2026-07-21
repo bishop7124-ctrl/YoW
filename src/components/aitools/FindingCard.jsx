@@ -22,9 +22,32 @@ const STATUS_COLORS = {
   intentional: '#a78bfa',
 }
 
-export default function FindingCard({ finding, onStatusChange, extraActions, children }) {
+// Renders `text` as a clickable "open" chip if it resolves against the nav index, plain text otherwise.
+function RefLink({ text, resolveRef, onNavigate }) {
+  const match = resolveRef?.(text)
+  if (!match) return <>{text}</>
+  return (
+    <button
+      onClick={() => onNavigate(match)}
+      title={`Open ${match.type}: ${match.name}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        background: 'none', border: 'none', padding: 0, margin: 0,
+        color: 'var(--accent)', fontWeight: 700, fontSize: 'inherit', cursor: 'pointer', textDecoration: 'underline',
+      }}
+    >
+      {text}
+      <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 17L17 7" /><path d="M8 7h9v9" />
+      </svg>
+    </button>
+  )
+}
+
+export default function FindingCard({ finding, onStatusChange, extraActions, children, resolveRef, onNavigate }) {
   const [expanded, setExpanded] = useState(false)
   const sev = SEVERITY_COLORS[finding.severity] || SEVERITY_COLORS.medium
+  const canLink = !!(resolveRef && onNavigate)
 
   return (
     <div style={{
@@ -57,7 +80,7 @@ export default function FindingCard({ finding, onStatusChange, extraActions, chi
           </p>
           {finding.location && (
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {finding.location}
+              {canLink ? <RefLink text={finding.location} resolveRef={resolveRef} onNavigate={onNavigate} /> : finding.location}
             </p>
           )}
         </div>
@@ -85,13 +108,17 @@ export default function FindingCard({ finding, onStatusChange, extraActions, chi
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               {finding.sourceA && (
                 <div style={{ background: 'color-mix(in srgb, var(--bg-main) 60%, transparent)', borderRadius: 6, padding: '8px 10px' }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>{finding.sourceA}</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
+                    {canLink ? <RefLink text={finding.sourceA} resolveRef={resolveRef} onNavigate={onNavigate} /> : finding.sourceA}
+                  </p>
                   <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.4 }}>{finding.evidenceA}</p>
                 </div>
               )}
               {finding.sourceB && (
                 <div style={{ background: 'color-mix(in srgb, var(--bg-main) 60%, transparent)', borderRadius: 6, padding: '8px 10px' }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>{finding.sourceB}</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
+                    {canLink ? <RefLink text={finding.sourceB} resolveRef={resolveRef} onNavigate={onNavigate} /> : finding.sourceB}
+                  </p>
                   <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.4 }}>{finding.evidenceB}</p>
                 </div>
               )}
@@ -112,7 +139,7 @@ export default function FindingCard({ finding, onStatusChange, extraActions, chi
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
               {finding.affectedRefs.map((ref, i) => (
                 <span key={i} style={{ fontSize: 11, background: 'color-mix(in srgb, var(--border) 40%, transparent)', borderRadius: 4, padding: '1px 6px', color: 'var(--text-muted)' }}>
-                  {ref}
+                  {canLink ? <RefLink text={ref} resolveRef={resolveRef} onNavigate={onNavigate} /> : ref}
                 </span>
               ))}
             </div>

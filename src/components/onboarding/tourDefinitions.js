@@ -187,7 +187,7 @@ export const FAMILYTREE_TOUR = [
   {
     target: 'familytree-canvas',
     title: 'The tree',
-    body: 'Each card is a character. Click one to select it, then use the panel on the right to add relationships, jump to their profile, or create a new character.',
+    body: 'Each card is a character. Click one to review their family links, then open their full profile in Characters to edit or add cast members.',
   },
 ]
 

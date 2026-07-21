@@ -7,6 +7,8 @@ export {
   getProjectPdfFilename,
 } from './projectExportHelpers.js'
 
+import { isComicProject } from './projectExportHelpers.js'
+
 export { createProjectDocxBlob, downloadProjectDocx } from './projectExportDocx.js'
 
 export {
@@ -103,8 +105,10 @@ export const createProjectZipBlob = (projectData) => {
     jsonFile('data/maps.json', projectData.maps ?? []),
     jsonFile('data/whiteboards.json', projectData.whiteboards ?? []),
     jsonFile('data/schedule.json', projectData.storySchedule ?? []),
-    jsonFile('data/comic-pages.json', projectData.comicPages ?? []),
-    jsonFile('data/comic-panels.json', projectData.comicPanels ?? []),
+    ...(isComicProject(projectData.project) ? [
+      jsonFile('data/comic-pages.json', projectData.comicPages ?? []),
+      jsonFile('data/comic-panels.json', projectData.comicPanels ?? []),
+    ] : []),
   ]
 
   const localChunks = []

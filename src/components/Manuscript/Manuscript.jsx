@@ -4,6 +4,7 @@ import WritingSidebar from './WritingSidebar'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
 import AISuggestionPanel from './AISuggestionPanel'
+import AIStar from '../ai/AIStar'
 import SceneVersionHistory from './SceneVersionHistory'
 import ManuscriptSearch from './ManuscriptSearch'
 import PacingChart from './PacingChart'
@@ -12,12 +13,97 @@ import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
 import { FormatContent, NotesPanel, SaveIndicator } from './ManuscriptToolbar.jsx'
-import { SCRIPT_TYPES, buildFinalizedDraft, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
+import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
 import FocusedWritingShell, { ManuscriptZoomControl } from './FocusedWritingShell.jsx'
 import { useFocusedWritingMode } from './useFocusedWritingMode.js'
+import SceneConflictReview from './SceneConflictReview.jsx'
 
+const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
 
-export default function Manuscript({ store, userId }) {
+const SESSION_PLAN_FIELDS = [
+  { key: 'hooks', label: 'Hooks', placeholder: 'Opening hooks, rumors, clues, or pressure that pulls the group in.' },
+  { key: 'encounters', label: 'Encounter flow', placeholder: 'Expected encounter order, alternate paths, and pacing notes.' },
+  { key: 'npcs', label: 'NPCs', placeholder: 'NPCs in play, what they want, what they know, and how they might react.' },
+  { key: 'rewards', label: 'Rewards', placeholder: 'Treasure, boons, clues, favors, levels, or information the group can earn.' },
+  { key: 'consequences', label: 'Consequences', placeholder: 'What changes if the group succeeds, fails, delays, or surprises you.' },
+  { key: 'notes', label: 'Session notes', placeholder: 'Prep reminders, table logistics, rules calls, safety notes, or improvisation anchors.' },
+]
+
+const SESSION_RECAP_FIELDS = [
+  { key: 'summary', label: 'Recap', placeholder: 'What actually happened at the table.' },
+  { key: 'playerChoices', label: 'Player choices', placeholder: 'Major decisions, alliances, routes, and unresolved questions.' },
+  { key: 'fallout', label: 'Fallout', placeholder: 'World, faction, NPC, location, and campaign-state consequences.' },
+  { key: 'nextHooks', label: 'Next hooks', placeholder: 'Threads to bring into the next session.' },
+]
+
+const filledFields = (source, fields) =>
+  fields.filter(field => String(source?.[field.key] || '').trim()).length
+
+function CampaignSessionWorkflow({ chapter, encounters, labels, projectType, onUpdateChapter }) {
+  const plan = chapter.sessionPlan || {}
+  const recap = chapter.sessionRecap || {}
+  const filledPlan = filledFields(plan, SESSION_PLAN_FIELDS)
+  const filledRecap = filledFields(recap, SESSION_RECAP_FIELDS)
+  const detailCount = filledPlan + filledRecap
+  const roleLabel = projectType === 'dnd_campaign' ? 'DM' : 'GM'
+  const groupLabel = projectType === 'dnd_campaign' ? 'party' : 'group'
+
+  const updatePlan = (key, value) => onUpdateChapter(chapter.id, {
+    sessionPlan: { ...plan, [key]: value },
+  })
+  const updateRecap = (key, value) => onUpdateChapter(chapter.id, {
+    sessionRecap: { ...recap, [key]: value },
+  })
+
+  return (
+    <details className="ms-campaign-session-panel" open={detailCount === 0}>
+      <summary>
+        <span>
+          {labels.level2} prep & recap
+          <small>{roleLabel} planning fields for hooks, encounters, NPCs, rewards, and consequences.</small>
+        </span>
+        <em>
+          {encounters.length} {labels.level3.toLowerCase()}{encounters.length === 1 ? '' : 's'}
+          {detailCount > 0 ? ` / ${detailCount} fields filled` : ''}
+        </em>
+      </summary>
+
+      <div className="ms-campaign-session-grid">
+        <section>
+          <h3>Prep</h3>
+          {SESSION_PLAN_FIELDS.map(field => (
+            <label key={field.key}>
+              <span>{field.label}</span>
+              <textarea
+                value={plan[field.key] || ''}
+                onChange={event => updatePlan(field.key, event.target.value)}
+                placeholder={field.placeholder.replace('group', groupLabel)}
+                rows={2}
+              />
+            </label>
+          ))}
+        </section>
+
+        <section>
+          <h3>Recap</h3>
+          {SESSION_RECAP_FIELDS.map(field => (
+            <label key={field.key}>
+              <span>{field.label}</span>
+              <textarea
+                value={recap[field.key] || ''}
+                onChange={event => updateRecap(field.key, event.target.value)}
+                placeholder={field.placeholder}
+                rows={2}
+              />
+            </label>
+          ))}
+        </section>
+      </div>
+    </details>
+  )
+}
+
+export default function Manuscript({ store, userId, membership = null }) {
   const {
     acts, chapters, scenes,
     addAct, addChapter, addScene,
@@ -26,13 +112,19 @@ export default function Manuscript({ store, userId }) {
     moveAct, moveChapter, moveScene,
     characters, locations,
     setSelectedCharacterId, setSelectedLocationId,
+    selectedSceneId, setSelectedSceneId,
+    writingSceneId, setWritingSceneId,
     activeNovel, updateNovel,
+    sceneConflicts = [], restoreSceneConflict, discardSceneConflict,
   } = store
 
   const projectTypeConfig = getProjectType(activeNovel?.type)
   const labels = projectTypeConfig.structure
 
-  const [activeSceneId, setActiveSceneId] = useState(null)
+  // Persisted in the URL (writingSceneId lives in the store) so a refresh in writing
+  // mode returns to this scene instead of the top of the manuscript.
+  const activeSceneId = writingSceneId
+  const setActiveSceneId = setWritingSceneId
   const [activeSidebarTab, setActiveSidebarTab] = useState('structure') // null | 'structure' | 'goals' | 'progress' | 'notes'
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
@@ -41,12 +133,15 @@ export default function Manuscript({ store, userId }) {
   const [saveState, setSaveState] = useState('saved') // 'saving' | 'saved'
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [conflictReviewOpen, setConflictReviewOpen] = useState(false)
   const [readerDraft, setReaderDraft] = useState({ projectId: null, draftId: null })
   const [finalizedReaderView, setFinalizedReaderView] = useState('scroll')
   const [finalizedPageIndex, setFinalizedPageIndex] = useState(0)
   const [versionHistorySceneId, setVersionHistorySceneId] = useState(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [pacingOpen, setPacingOpen] = useState(false)
+  const [liveSceneContent, setLiveSceneContent] = useState({})
+  const [aiSelectionContext, setAiSelectionContext] = useState({ sceneId: null, text: '' })
 
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
@@ -55,10 +150,20 @@ export default function Manuscript({ store, userId }) {
   const focusedWriting = useFocusedWritingMode(userId)
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
+  const activeSceneForAI = activeScene
+    ? {
+        ...activeScene,
+        content: Object.prototype.hasOwnProperty.call(liveSceneContent, activeScene.id)
+          ? liveSceneContent[activeScene.id]
+          : activeScene.content,
+      }
+    : null
+  const activeAISelectionText = aiSelectionContext.sceneId === activeSceneId ? aiSelectionContext.text : ''
   const activeChapter = activeScene ? chapters.find(chapter => chapter.id === activeScene.chapterId) ?? null : null
   const isScriptProject = SCRIPT_TYPES.has(activeNovel?.type)
   const isNovelProject = (activeNovel?.type || 'novel') === 'novel'
   const isComicProject = activeNovel?.type === 'comic'
+  const isCampaignProject = CAMPAIGN_PROJECT_TYPES.has(activeNovel?.type)
 
   const workspaceLabel = projectTypeConfig.workspaceLabel || 'Manuscript'
   const importTitle = isScriptProject
@@ -96,11 +201,16 @@ export default function Manuscript({ store, userId }) {
 
   // Autosave state tracking — wraps updateSceneContent with UI feedback
   const handleContentUpdate = useCallback((sceneId, content) => {
+    setLiveSceneContent(prev => ({ ...prev, [sceneId]: content }))
     updateSceneContent(sceneId, content)
     setSaveState('saving')
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => setSaveState('saved'), 2000)
   }, [updateSceneContent])
+
+  const handleLiveContentChange = useCallback((sceneId, content) => {
+    setLiveSceneContent(prev => prev[sceneId] === content ? prev : { ...prev, [sceneId]: content })
+  }, [])
 
   const handleRestoreVersion = useCallback((version) => {
     const scene = scenes.find(s => s.id === version.sceneId)
@@ -133,6 +243,26 @@ export default function Manuscript({ store, userId }) {
     document.addEventListener('fullscreenchange', handler)
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
+
+  // Jump to a scene requested from outside the manuscript (e.g. an AI finding's "open scene" link)
+  useEffect(() => {
+    if (!selectedSceneId) return
+    if (scenes.some(s => s.id === selectedSceneId)) setActiveSceneId(selectedSceneId)
+    setSelectedSceneId(null)
+  }, [selectedSceneId, scenes, setSelectedSceneId, setActiveSceneId])
+
+  // On first mount, scroll to the scene restored from the URL (e.g. after a page refresh
+  // while writing) instead of leaving the view at the top of the manuscript.
+  const restoredScrollRef = useRef(false)
+  useEffect(() => {
+    if (restoredScrollRef.current) return
+    if (!activeSceneId) return
+    if (!scenes.some(s => s.id === activeSceneId)) return
+    restoredScrollRef.current = true
+    requestAnimationFrame(() => {
+      document.getElementById(`ms-scene-${activeSceneId}`)?.scrollIntoView({ behavior: 'auto', block: 'center' })
+    })
+  }, [activeSceneId, scenes])
 
   useEffect(() => {
     if (!focusedWriting.enabled) return undefined
@@ -177,9 +307,15 @@ export default function Manuscript({ store, userId }) {
     return isDefault ? `${labels.level2} ${num}` : `${labels.level2} ${num}: ${chap.title}`
   }, [chapterGlobalNumbers, labels])
 
+  const liveScenes = useMemo(() => scenes.map(scene => (
+    Object.prototype.hasOwnProperty.call(liveSceneContent, scene.id)
+      ? { ...scene, content: liveSceneContent[scene.id] }
+      : scene
+  )), [liveSceneContent, scenes])
+
   const totalWordCount = useMemo(() =>
-    scenes.reduce((acc, s) => acc + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0)
-  , [scenes])
+    liveScenes.reduce((acc, s) => acc + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0)
+  , [liveScenes])
 
   const handleFinaliseDraft = useCallback(() => {
     if (!activeNovel?.id || !isNovelProject) return
@@ -217,7 +353,7 @@ export default function Manuscript({ store, userId }) {
       const actChapters = chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order)
       result.push({ type: 'act', act, hasChapters: actChapters.length > 0 })
       actChapters.forEach(chap => {
-        const chapScenes = scenes.filter(s => s.chapterId === chap.id).sort((a, b) => a.order - b.order)
+        const chapScenes = liveScenes.filter(s => s.chapterId === chap.id).sort((a, b) => a.order - b.order)
         result.push({ type: 'chapter', chap, hasScenes: chapScenes.length > 0 })
         chapScenes.forEach((scene, idx) => {
           result.push({ type: 'scene', scene, sceneIndex: idx, chapterSceneCount: chapScenes.length, chap })
@@ -225,14 +361,14 @@ export default function Manuscript({ store, userId }) {
       })
     })
     return result
-  }, [acts, chapters, scenes])
+  }, [acts, chapters, liveScenes])
 
   const handleSplitScene = (sceneId, chapterId, before, after) => {
     updateSceneContent(sceneId, before)
     const newScene = addScene(chapterId, labels.level3)
     setTimeout(() => {
       updateSceneContent(newScene.id, after)
-      editorRefs.current[newScene.id]?.focus()
+      editorRefs.current[newScene.id]?.focus({ placeCursor: 'end' })
       editorRefs.current[newScene.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 100)
   }
@@ -240,7 +376,7 @@ export default function Manuscript({ store, userId }) {
   const handleAddScene = chapterId => {
     const newScene = addScene(chapterId, labels.level3)
     setTimeout(() => {
-      editorRefs.current[newScene.id]?.focus()
+      editorRefs.current[newScene.id]?.focus({ placeCursor: 'end' })
       editorRefs.current[newScene.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 100)
   }
@@ -284,7 +420,14 @@ export default function Manuscript({ store, userId }) {
         for (let ci = 0; ci < tAct.chapters.length; ci++) {
           const tChap = tAct.chapters[ci]
           const newChap = addChapter(newAct.id, tChap.title)
-          if (tChap.guidance) updateChapter(newChap.id, { guidance: tChap.guidance })
+          if (isCampaignProject && tChap.guidance) {
+            updateChapter(newChap.id, {
+              guidance: tChap.guidance,
+              sessionPlan: { notes: tChap.guidance },
+            })
+          } else if (tChap.guidance) {
+            updateChapter(newChap.id, { guidance: tChap.guidance })
+          }
 
           if (withScenes) {
             addScene(newChap.id, labels.level3)
@@ -297,7 +440,7 @@ export default function Manuscript({ store, userId }) {
     if (template.targetWords && !writingGoals.manuscript) {
       handleUpdateGoals({ ...writingGoals, manuscript: template.targetWords })
     }
-  }, [addAct, addChapter, addScene, updateAct, updateChapter, labels.level3, writingGoals, handleUpdateGoals])
+  }, [addAct, addChapter, addScene, updateAct, updateChapter, labels.level3, writingGoals, handleUpdateGoals, isCampaignProject])
 
   const handleDocxImport = useCallback(async (importedActs) => {
     for (const tAct of importedActs) {
@@ -337,8 +480,8 @@ export default function Manuscript({ store, userId }) {
       document.getElementById(`ms-scene-${sceneId}`)
         ?.scrollIntoView({ behavior: focusedWriting.enabled ? 'auto' : 'smooth', block: 'center' })
     })
-    setTimeout(() => editorRefs.current[sceneId]?.focus(), 200)
-  }, [focusedWriting.enabled])
+    setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: 'end' }), 200)
+  }, [focusedWriting.enabled, setActiveSceneId])
 
   const handleSelectChapter = useCallback((chapId) => {
     requestAnimationFrame(() => {
@@ -420,6 +563,17 @@ export default function Manuscript({ store, userId }) {
           </span>
         )}
 
+        {sceneConflicts.length > 0 && (
+          <button
+            type="button"
+            className="ms-toolbar-conflict-btn"
+            onClick={() => setConflictReviewOpen(true)}
+            title="A scene was edited in two browser tabs at once — both versions were kept"
+          >
+            ⚠ {sceneConflicts.length} conflict {sceneConflicts.length === 1 ? 'copy' : 'copies'}
+          </button>
+        )}
+
         <div className="flex-1" />
 
         {isNovelProject && finalizedDrafts.length > 0 && (
@@ -436,7 +590,7 @@ export default function Manuscript({ store, userId }) {
             <option value="">Working draft</option>
             {finalizedDrafts.map(draft => (
               <option key={draft.id} value={draft.id}>
-                {draft.title || 'Final draft'}
+                {decodeHtmlEntities(draft.title) || 'Final draft'}
               </option>
             ))}
           </select>
@@ -525,6 +679,7 @@ export default function Manuscript({ store, userId }) {
             className={`ms-toolbar-btn${activeSidebarTab === 'ai' ? ' is-active' : ''}`}
             title="AI writing assistant"
           >
+            <AIStar size={11} />
             AI
           </button>
         )}
@@ -603,7 +758,15 @@ export default function Manuscript({ store, userId }) {
         <main ref={scrollContainerRef} data-tour="manuscript-editor" className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
           <div
             className="manuscript-document mx-auto py-16 px-6 md:px-12"
-            style={{ zoom: focusedWriting.pageZoom }}
+            style={{
+              zoom: focusedWriting.pageZoom,
+              // The base 960px column is tuned for the default 19px font. Scale it up with
+              // larger text sizes so a bigger font still gets a sensible line length instead
+              // of the column staying capped and wasting the extra width the page has to give.
+              // min(100%, …) keeps this from fighting the mobile full-width override below 640px,
+              // since inline styles otherwise take precedence over that media query.
+              maxWidth: `min(100%, ${Math.round(Math.max(960, 960 * (formatSettings.fontSize / 19)))}px)`,
+            }}
           >
 
             {acts.length === 0 && (
@@ -654,6 +817,15 @@ export default function Manuscript({ store, userId }) {
                       + Add {labels.level3}
                     </button>
                   )}
+                  {isCampaignProject && (
+                    <CampaignSessionWorkflow
+                      chapter={item.chap}
+                      encounters={liveScenes.filter(scene => scene.chapterId === item.chap.id).sort((a, b) => a.order - b.order)}
+                      labels={labels}
+                      projectType={activeNovel?.type}
+                      onUpdateChapter={updateChapter}
+                    />
+                  )}
                 </div>
               )
 
@@ -686,17 +858,21 @@ export default function Manuscript({ store, userId }) {
                       onFocus={() => setActiveSceneId(scene.id)}
                       entityMap={entityMap}
                       onEntityClick={handleEntityClick}
-                      onOpenNotes={() => setActiveSidebarTab('notes')}
-                      onNoteClick={handleNoteClick}
-                      formatSettings={formatSettings}
+	                      onOpenNotes={() => setActiveSidebarTab('notes')}
+	                      onNoteClick={handleNoteClick}
+	                      highlightedNoteSeq={highlightedNoteSeq}
+	                      formatSettings={formatSettings}
                       characterNames={characterNames}
                       locationNames={locationNames}
                       onPersistDraft={persistSceneDraftToLocalStorage}
+                      onLiveContentChange={handleLiveContentChange}
+                      onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
                       onOpenVersionHistory={setVersionHistorySceneId}
                       projectType={activeNovel?.type || 'novel'}
                       focusedWriting={focusedWriting.enabled && focusedWriting.caretFollow}
                       scrollContainerRef={scrollContainerRef}
                       pageZoom={focusedWriting.pageZoom}
+                      keepEditingOnExternalBlur={activeSidebarTab === 'ai'}
                     />
 
                     {isLastInChapter && (
@@ -725,7 +901,7 @@ export default function Manuscript({ store, userId }) {
           onSetPanel={setActiveSidebarTab}
           acts={acts}
           chapters={chapters}
-          scenes={scenes}
+          scenes={liveScenes}
           addAct={addAct}
           addChapter={addChapter}
           addScene={addScene}
@@ -748,20 +924,21 @@ export default function Manuscript({ store, userId }) {
           formatSlot={<FormatContent settings={formatSettings} onChange={handleFormatChange} />}
           notesSlot={
             <NotesPanel
-              scene={activeScene}
-              onUpdateScene={updateScene}
-              onClose={() => setActiveSidebarTab(null)}
-              highlightedSeq={highlightedNoteSeq}
-            />
+	              scene={activeScene}
+	              onUpdateScene={updateScene}
+	              highlightedSeq={highlightedNoteSeq}
+	            />
           }
-          aiSlot={
-            <AISuggestionPanel
-              activeScene={activeScene}
-              activeNovel={activeNovel}
-              characters={characters}
-              locations={locations}
-              onAppendToScene={handleAppendToScene}
-              userId={userId}
+	          aiSlot={
+	            <AISuggestionPanel
+	              activeScene={activeSceneForAI}
+	              activeNovel={activeNovel}
+	              characters={characters}
+	              locations={locations}
+	              selectedText={activeAISelectionText}
+	              onAppendToScene={handleAppendToScene}
+	              userId={userId}
+	              membership={membership}
             />
           }
         />
@@ -784,6 +961,16 @@ export default function Manuscript({ store, userId }) {
           hasExistingContent={acts.length > 0}
           onClose={() => setImportModalOpen(false)}
           onImport={handleDocxImport}
+        />
+      )}
+
+      {/* Scene conflict-copy review modal */}
+      {conflictReviewOpen && (
+        <SceneConflictReview
+          conflicts={sceneConflicts}
+          onRestore={(conflictId) => restoreSceneConflict(conflictId)}
+          onDiscard={(conflictId) => discardSceneConflict(conflictId)}
+          onClose={() => setConflictReviewOpen(false)}
         />
       )}
 

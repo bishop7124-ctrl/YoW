@@ -1,5 +1,6 @@
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import { usePageMeta } from '../../utils/usePageMeta'
 
 const FOUNDER_PROFILES = {
   'morgan-bishop': {
@@ -24,6 +25,12 @@ const FOUNDER_PROFILES = {
 
 export default function FounderProfilePage({ slug, user, onGetStarted, onLogin }) {
   const profile = FOUNDER_PROFILES[slug]
+
+  usePageMeta({
+    path: `/founders/${slug}/`,
+    title: profile ? `${profile.name} — Founder | Your Own World` : 'Founder not found | Your Own World',
+    description: profile ? `${profile.name}, ${profile.genre} — a Founder member of Your Own World. ${profile.series?.description || ''}`.trim() : 'This Founder profile could not be found.',
+  })
 
   if (!profile) {
     return (

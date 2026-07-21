@@ -99,56 +99,6 @@
     <priority>0.5</priority>
   </url>
 
-  <!-- Blog -->
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/how-to-organize-fantasy-lore/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/how-to-avoid-plot-holes/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/best-worldbuilding-tools/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/how-to-build-fictional-timelines/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/character-relationship-mapping/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/planning-a-fantasy-series/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://www.yourownworld.co.uk/blog/dnd-campaign-organisation/</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
   <url>
     <loc>https://www.yourownworld.co.uk/founders/</loc>
     <lastmod>2026-06-11</lastmod>

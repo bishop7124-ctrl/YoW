@@ -185,6 +185,7 @@ export const DEFAULT_FORMAT = {
   textAlign: 'left',
   autoIndent: true,
   indentSize: 4,
+  showSceneMetadata: true,
 }
 
 export function loadFormat() {
@@ -214,6 +215,19 @@ export function wordCountForScenes(scenes) {
   return scenes.reduce((sum, scene) => sum + countWords(scene.content || ''), 0)
 }
 
+// Content can pick up literal HTML entities (e.g. "don&apos;t") from DOCX/AI import
+// sources that escape text without ever decoding it back. Finalized drafts are a
+// permanent read-only snapshot, so decode once here rather than leaving entities
+// to leak into the reader and DOCX export.
+const HTML_ENTITY_RE = /&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);/
+export function decodeHtmlEntities(text) {
+  if (!text || typeof text !== 'string' || !HTML_ENTITY_RE.test(text)) return text
+  if (typeof document === 'undefined') return text
+  const el = document.createElement('textarea')
+  el.innerHTML = text
+  return el.value
+}
+
 export function buildFinalizedDraft({ novel, acts, chapters, scenes, labels, title }) {
   const sortedActs = [...acts].sort((a, b) => a.order - b.order)
   const snapshotActs = sortedActs.map((act, actIndex) => {
@@ -226,8 +240,8 @@ export function buildFinalizedDraft({ novel, acts, chapters, scenes, labels, tit
           .sort((a, b) => a.order - b.order)
           .map((scene, sceneIndex) => ({
             id: scene.id,
-            title: scene.title || `${labels.level3} ${sceneIndex + 1}`,
-            content: scene.content || '',
+            title: decodeHtmlEntities(scene.title) || `${labels.level3} ${sceneIndex + 1}`,
+            content: decodeHtmlEntities(scene.content) || '',
             textMode: scene.textMode || 'prose',
             scriptElement: scene.scriptElement || 'action',
             scriptBlocks: scene.scriptBlocks || [],
@@ -235,7 +249,7 @@ export function buildFinalizedDraft({ novel, acts, chapters, scenes, labels, tit
 
         return {
           id: chapter.id,
-          title: chapter.title || `${labels.level2} ${chapterIndex + 1}`,
+          title: decodeHtmlEntities(chapter.title) || `${labels.level2} ${chapterIndex + 1}`,
           order: chapterIndex,
           scenes: chapterScenes,
         }
@@ -243,7 +257,7 @@ export function buildFinalizedDraft({ novel, acts, chapters, scenes, labels, tit
 
     return {
       id: act.id,
-      title: act.title || `${labels.level1} ${actIndex + 1}`,
+      title: decodeHtmlEntities(act.title) || `${labels.level1} ${actIndex + 1}`,
       order: actIndex,
       chapters: actChapters,
     }
@@ -251,8 +265,8 @@ export function buildFinalizedDraft({ novel, acts, chapters, scenes, labels, tit
 
   return {
     id: uid(),
-    title,
-    projectTitle: novel?.title || 'Untitled',
+    title: decodeHtmlEntities(title),
+    projectTitle: decodeHtmlEntities(novel?.title) || 'Untitled',
     finalizedAt: new Date().toISOString(),
     wordCount: wordCountForScenes(scenes),
     structure: labels,
@@ -284,17 +298,17 @@ export function getFinalizedContentBlocks(draft) {
 
   visibleActs.forEach((act, actIndex) => {
     if (visibleActs.length > 1) {
-      blocks.push({ type: 'act', id: `act-${act.id || actIndex}`, text: act.title })
+      blocks.push({ type: 'act', id: `act-${act.id || actIndex}`, text: decodeHtmlEntities(act.title) })
     }
 
     ;(act.chapters || []).forEach((chapter, chapterIndex) => {
       const scenesWithText = (chapter.scenes || []).filter(scene => scene.content?.trim())
       if (!scenesWithText.length) return
-      blocks.push({ type: 'chapter', id: `chapter-${chapter.id || chapterIndex}`, text: chapter.title })
+      blocks.push({ type: 'chapter', id: `chapter-${chapter.id || chapterIndex}`, text: decodeHtmlEntities(chapter.title) })
 
       scenesWithText.forEach((scene, sceneIndex) => {
         if (sceneIndex > 0) blocks.push({ type: 'break', id: `break-${scene.id || sceneIndex}` })
-        scene.content.trim().split(/\n{2,}/).forEach((block, blockIndex) => {
+        decodeHtmlEntities(scene.content).trim().split(/\n{2,}/).forEach((block, blockIndex) => {
           const text = block.split('\n').map(line => line.trim()).filter(Boolean).join(' ')
           if (text) blocks.push({ type: 'paragraph', id: `p-${scene.id || sceneIndex}-${blockIndex}`, text })
         })

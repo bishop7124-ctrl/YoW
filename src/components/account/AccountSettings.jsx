@@ -11,6 +11,8 @@ import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import AIStar from '../ai/AIStar'
+import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 import { isDesktopAppRuntime } from '../../utils/runtime'
 import { loadValue, writeItem } from '../../storage/projectStorage'
 import {
@@ -1419,7 +1421,7 @@ function AppearancePanel({ user, updateProfile }) {
   )
 }
 
-function AISettingsPanel({ userId }) {
+function AISettingsPanel({ userId, membership }) {
   const [settings, setSettings] = useState(() => loadAiSettings(userId, DEFAULT_AI_SETTINGS))
   const [saved, setSaved] = useState(false)
 
@@ -1446,6 +1448,22 @@ function AISettingsPanel({ userId }) {
     return found ? found.label : model || 'Not set'
   })()
 
+  if (membership?.isFree) {
+    return (
+      <section className="account-settings-panel">
+        <div className="account-panel-heading">
+          <div>
+            <p className="eyebrow">AI Integration</p>
+            <h2>Model &amp; API keys</h2>
+          </div>
+        </div>
+        <AiUpgradeRequiredNotice>
+          AI settings are available after you upgrade. Paid plans unlock bring-your-own-key AI for chat, manuscript suggestions, and project analysis.
+        </AiUpgradeRequiredNotice>
+      </section>
+    )
+  }
+
   return (
     <section className="account-settings-panel">
       <div className="account-panel-heading">
@@ -1469,7 +1487,7 @@ function AISettingsPanel({ userId }) {
         border: '1.5px solid color-mix(in srgb, var(--accent) 40%, var(--border))',
         marginBottom: 24,
       }}>
-        <span style={{ fontSize: 22, lineHeight: 1, color: 'var(--accent)', flexShrink: 0 }}>✦</span>
+        <AIStar size={24} style={{ color: 'var(--accent)' }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3 }}>Active model — used for all AI features</p>
           <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: 'var(--text-main)', lineHeight: 1.2 }}>{activeModelLabel}</p>
@@ -2323,7 +2341,7 @@ export default function AccountSettings({
           )}
 
           {selectedTab === 'ai' && (
-            <AISettingsPanel userId={user.id} />
+            <AISettingsPanel userId={user.id} membership={membership} />
           )}
 
           {selectedTab === 'membership' && (
@@ -2374,7 +2392,7 @@ export default function AccountSettings({
                   </div>
                   <div>
                     <span>Cloud hosting</span>
-                    <strong>{membership.isFounder ? 'Cloud Mode included' : membership.isLocalMode ? 'Local Mode' : 'Cloud Mode included'}</strong>
+                    <strong>{membership.isFounder ? 'Cloud Mode included' : membership.isLocalMode ? 'Free cloud fallback' : 'Cloud Mode included'}</strong>
                   </div>
                   {membership.isFounder && (
                     <div>
@@ -2479,7 +2497,7 @@ export default function AccountSettings({
                   Local Mode is active
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Your lifetime licence is still active. Cloud hosting is inactive, so edits are saved on this device and will not sync to Supabase until you renew Cloud Mode.
+                  Your lifetime licence is still active. The desktop app keeps working in Local Mode, and web cloud access falls back to Free limits unless you renew Cloud Mode.
                 </div>
                 <MaintenancePayButton style={{ marginTop: 4 }} />
               </div>
@@ -2513,7 +2531,7 @@ export default function AccountSettings({
 
             {membership.isFree && (
               <div className="account-readonly-note" style={{ marginTop: 14 }}>
-                Free plan includes one active project — all others are view-only. No AI integration on the free plan.
+                Free plan includes one active text-first project, 5 MB cloud storage, and locked Map Builder/AI Tools. All other projects are view-only and exportable.
                 {membership.wasMonthly && ' Your active project is locked because you previously held a monthly subscription.'}
               </div>
             )}
@@ -2534,8 +2552,8 @@ export default function AccountSettings({
               </div>
             )}
 
-            {/* Portal access for active subscribers */}
-            {(membership.isPaid && !membership.isLifetime) && (
+            {/* Stripe customer portal: cancellation for subscribers, billing history/receipts for one-time purchasers */}
+            {membership.isPaid && (
               <div className="account-actions">
                 <button
                   type="button"
@@ -2543,7 +2561,9 @@ export default function AccountSettings({
                   onClick={() => openBilling(null)}
                   disabled={!!billingBusy}
                 >
-                  {billingBusy === 'portal' ? 'Opening...' : 'Manage subscription & billing'}
+                  {billingBusy === 'portal'
+                    ? 'Opening...'
+                    : membership.isLifetime ? 'Billing history & receipts' : 'Manage subscription & billing'}
                 </button>
               </div>
             )}

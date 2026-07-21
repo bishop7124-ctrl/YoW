@@ -3,6 +3,7 @@ import PlotHoleDetector from './PlotHoleDetector'
 import LoreConflictChecker from './LoreConflictChecker'
 import CharacterInterview from './CharacterInterview'
 import StyleConsistency from './StyleConsistency'
+import AIStar from '../ai/AIStar'
 
 const TOOLS = [
   {
@@ -57,8 +58,33 @@ const TOOLS = [
   },
 ]
 
-export default function AITools({ store, userId }) {
+function AIToolsUpgradeWall() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 12, padding: 40, textAlign: 'center' }}>
+      <AIStar size={36} style={{ opacity: 0.4 }} />
+      <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>AI Tools is a paid feature</p>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 320, margin: 0 }}>
+        Upgrade your plan to unlock Plot Hole Detector, Lore Conflict Checker, Character Interview, and Style Analysis.
+      </p>
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))}
+        style={{
+          marginTop: 8, background: 'var(--accent)', color: 'var(--bg-main)',
+          fontWeight: 800, fontSize: 13, padding: '9px 20px', borderRadius: 8,
+          border: 'none', cursor: 'pointer',
+        }}
+      >
+        View plans
+      </button>
+    </div>
+  )
+}
+
+export default function AITools({ store, userId, membership }) {
   const [activeTool, setActiveTool] = useState('plot_hole')
+
+  if (membership?.isFree) return <AIToolsUpgradeWall />
 
   const novel = store.activeNovel
   if (!novel) {

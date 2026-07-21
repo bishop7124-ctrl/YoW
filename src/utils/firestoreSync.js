@@ -78,23 +78,31 @@ function throwIfSupabaseError(error, label) {
   if (error) throw new Error(`[sync] ${label}: ${error.message || 'Unknown cloud error'}`)
 }
 
+function timestampMs(value) {
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 // Load all user data from normalized tables on login
 export async function loadUserData(userId) {
   if (OFFLINE_MODE) return { _savedAt: 0 }
 
   const [settingsResult, ...entityResults] = await Promise.all([
-    supabase.from('user_settings').select('data').eq('user_id', userId).maybeSingle(),
+    supabase.from('user_settings').select('data, updated_at').eq('user_id', userId).maybeSingle(),
     ...APP_DATA_TABLES.map(table => {
       // scenes uses scene_id as the id column (legacy schema)
       const idCol = table === 'scenes' ? 'scene_id' : 'id'
-      return supabase.from(table).select(`${idCol}, data`).eq('user_id', userId)
+      const columns = table === 'scenes' ? `${idCol}, data` : `${idCol}, data, updated_at`
+      return supabase.from(table).select(columns).eq('user_id', userId)
     }),
   ])
 
   const settings = settingsResult.data?.data ?? {}
+  let remoteSavedAt = timestampMs(settingsResult.data?.updated_at)
 
   const result = {
-    _savedAt:        Date.now(),
+    _savedAt:        0,
     activeNovelId:   settings.activeNovelId   ?? null,
     currentYear:     settings.currentYear     ?? 0,
     activeMapByNovel: settings.activeMapByNovel ?? {},
@@ -124,7 +132,12 @@ export async function loadUserData(userId) {
     if (error) { console.warn(`[sync] load error for ${table}:`, error); return }
     const key = TABLE_TO_KEY[table]
     result[key] = (data ?? []).map(row => row.data).filter(Boolean)
+    ;(data ?? []).forEach(row => {
+      remoteSavedAt = Math.max(remoteSavedAt, timestampMs(row.updated_at))
+    })
   })
+
+  result._savedAt = remoteSavedAt
 
   return result
 }

@@ -15,7 +15,6 @@ Allow: /faq/
 Allow: /about/
 Allow: /pricing/
 Allow: /ai-overview/
-Allow: /blog/
 Allow: /llms.txt
 
 # Block access to source assets and API internals

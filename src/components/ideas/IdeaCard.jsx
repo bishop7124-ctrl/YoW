@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import AIStar from '../ai/AIStar'
 
 export default function IdeaCard({
   idea,
@@ -218,14 +219,12 @@ export default function IdeaCard({
           <div style={{ display: 'flex', gap: 6, marginTop: 8, marginLeft: 18, alignItems: 'center' }}>
             {isAiExpanding && (
               <span style={{ fontSize: 10, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>✦</span> Expanding…
+                <AIStar size={10} style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} /> Expanding…
               </span>
             )}
             {idea.aiExpanded && !isAiExpanding && (
               <span title="AI expanded" style={{ fontSize: 10, color: 'var(--accent2)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
+                <AIStar size={10} />
                 AI
               </span>
             )}
@@ -287,9 +286,7 @@ export default function IdeaCard({
             {/* AI expand */}
             {!readOnly && !isAiExpanding && (
               <ActionBtn title="AI expand" onClick={() => onAiExpand?.(idea.id)}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
+                <AIStar size={12} />
               </ActionBtn>
             )}
 

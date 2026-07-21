@@ -1,9 +1,12 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { streamMessage } from '../../utils/aiApi'
 import { buildStyleSystemPrompt, buildStyleUserPrompt } from '../../utils/aiToolPrompts'
 import { loadFindings, saveAllFindings, updateFindingStatus, rowToFinding } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
+import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
+import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
+import { buildFindingNavIndex, resolveFindingRef, navigateToFindingRef } from '../../utils/aiFindingNav'
 
 function parseResult(raw) {
   try {
@@ -54,6 +57,11 @@ export default function StyleConsistency({ store, userId }) {
   const [saved,       setSaved]      = useState(false)
   const [filter,      setFilter]     = useState('all')
   const [selectedIds, setSelectedIds] = useState([])
+  const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
+  const { progressChars, begin, cancel } = useAiRunControls()
+  const navIndex = useMemo(() => buildFindingNavIndex(store, novelId), [store, novelId])
+  const resolveRef = useCallback(text => resolveFindingRef(navIndex, text), [navIndex])
+  const onNavigate = useCallback(match => navigateToFindingRef(store, match), [store])
 
   useEffect(() => {
     if (!userId || !novelId) { setLoading(false); return }
@@ -80,7 +88,7 @@ export default function StyleConsistency({ store, userId }) {
 
   const run = useCallback(() => {
     const ai = getActiveAiConfig(userId)
-    if (!ai.apiKey) { setError('No AI API key configured. Add one in AI Settings.'); return }
+    if (!ai.apiKey) { setError(AI_CONFIG_REQUIRED_TEXT); return }
     setRunning(true)
     setError(null)
     setResult(null)
@@ -90,23 +98,31 @@ export default function StyleConsistency({ store, userId }) {
 
     const system = buildStyleSystemPrompt(novel, hasStyleGuide)
     const user   = buildStyleUserPrompt(store, novelId, selectedIds.length ? selectedIds : undefined)
+    const ctl = begin(() => { setRunning(false); setError(STALL_ERROR_TEXT) })
     let buffer = ''
     streamMessage({
       provider: ai.provider, apiKey: ai.apiKey, model: ai.model, baseUrl: ai.baseUrl,
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 4096,
-      onChunk: chunk => { buffer += chunk },
+      signal: ctl.signal,
+      onChunk: chunk => { buffer += chunk; ctl.onChunkLength(buffer.length) },
       onDone: () => {
+        ctl.finish()
         setRunning(false)
         const parsed = parseResult(buffer)
         if (!parsed) { setError('Could not parse AI response. Try again.'); return }
         setResult(parsed)
         setFindings((parsed.findings || []).map((f, i) => ({ ...f, _id: `local-${i}`, status: 'unresolved' })))
       },
-      onError: msg => { setRunning(false); setError(msg) },
+      onError: msg => { ctl.finish(); setRunning(false); setError(msg) },
     })
-  }, [novel, store, novelId, selectedIds, hasStyleGuide, userId])
+  }, [novel, store, novelId, selectedIds, hasStyleGuide, userId, begin])
+
+  const handleCancel = useCallback(() => {
+    cancel()
+    setRunning(false)
+  }, [cancel])
 
   const handleStatus = useCallback(async (finding, status) => {
     setFindings(prev => prev.map(f => f._id === finding._id ? { ...f, status } : f))
@@ -229,10 +245,18 @@ export default function StyleConsistency({ store, userId }) {
       )}
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        {!aiConfigured && !running && <AiConfigRequiredNotice style={{ marginBottom: 16 }} />}
+
         {running && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 }}>
             <div style={{ width: 28, height: 28, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Analysing writing style…</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              Analysing writing style…{progressChars > 0 ? ` (${progressChars.toLocaleString()} characters received)` : ''}
+            </p>
+            <button
+              onClick={handleCancel}
+              style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            >Cancel</button>
           </div>
         )}
         {error && !running && (
@@ -247,7 +271,7 @@ export default function StyleConsistency({ store, userId }) {
         )}
         {!running && visible.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {visible.map(f => <FindingCard key={f._id} finding={f} onStatusChange={handleStatus} />)}
+            {visible.map(f => <FindingCard key={f._id} finding={f} onStatusChange={handleStatus} resolveRef={resolveRef} onNavigate={onNavigate} />)}
           </div>
         )}
         {!running && result && findings.length === 0 && (

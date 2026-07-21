@@ -88,7 +88,7 @@ function getAuthRouteMode(path) {
   return null
 }
 
-const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'membership'])
+const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
 
 function getLocalModeNoticeKey(userId, membership, storageMode) {
   if (!userId) return null
@@ -122,23 +122,30 @@ function parseRoute() {
 
   const seriesMatch = path.match(/^\/series\/([^/]+)(?:\/([^/]+))?$/)
   if (seriesMatch) {
-    return { novelId: null, seriesId: decodeURIComponent(seriesMatch[1]), section: 'dashboard', layoutViewMode: 'planning', ...overlay, projectSettingsOpen: false }
+    return { novelId: null, seriesId: decodeURIComponent(seriesMatch[1]), section: 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay, projectSettingsOpen: false }
   }
 
   const m = path.match(/^\/project\/([^/]+)(?:\/(.+))?$/)
-  if (!m) return { novelId: null, seriesId: null, section: 'dashboard', layoutViewMode: 'planning', ...overlay, projectSettingsOpen: false }
+  if (!m) return { novelId: null, seriesId: null, section: 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay, projectSettingsOpen: false }
   const novelId = decodeURIComponent(m[1])
   const sub = m[2]
-  if (sub === 'writing') return { novelId, seriesId: null, section: 'dashboard', layoutViewMode: 'writing', ...overlay }
-  return { novelId, seriesId: null, section: sub || 'dashboard', layoutViewMode: 'planning', ...overlay }
+  if (sub === 'writing' || sub?.startsWith('writing/')) {
+    const sceneId = sub.startsWith('writing/') ? decodeURIComponent(sub.slice('writing/'.length)) : null
+    return { novelId, seriesId: null, section: 'dashboard', layoutViewMode: 'writing', sceneId, ...overlay }
+  }
+  return { novelId, seriesId: null, section: sub || 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay }
 }
 
-function buildRoute(viewMode, novelId, seriesId, section, layoutViewMode, overlays = {}) {
+function buildRoute(viewMode, novelId, seriesId, section, layoutViewMode, sceneId, overlays = {}) {
   let path = '/dashboard'
   if (viewMode === 'series' && seriesId) {
     path = `/series/${encodeURIComponent(seriesId)}`
   } else if (viewMode === 'editor' && novelId) {
-    if (layoutViewMode === 'writing') path = `/project/${encodeURIComponent(novelId)}/writing`
+    if (layoutViewMode === 'writing') {
+      path = sceneId
+        ? `/project/${encodeURIComponent(novelId)}/writing/${encodeURIComponent(sceneId)}`
+        : `/project/${encodeURIComponent(novelId)}/writing`
+    }
     else if (!section || section === 'dashboard') path = `/project/${encodeURIComponent(novelId)}`
     else path = `/project/${encodeURIComponent(novelId)}/${section}`
   }
@@ -210,10 +217,10 @@ function AppInner() {
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
   const store = useStore(userId, {
-    readOnly: membership.isReadOnly || (!desktopApp && membership.isLocalMode),
+    readOnly: membership.isReadOnly || (!desktopApp && membership.isLocalMode && !membership.isCloudFreeFallback),
     freeProjectId: membership.freeProjectId,
     storageQuotaBytes: desktopApp ? null : devStorageExceeded ? 1 : membership.storageQuotaBytes,
-    cloudSyncEnabled: membership.canSyncCloud && !userLocalFirstMode,
+    cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode,
   })
   const { importData, finishRemoteLoad, clearData } = store
   const [dataLoading, setDataLoading] = useState(false)
@@ -242,6 +249,7 @@ function AppInner() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [readOnlyNotice, setReadOnlyNotice] = useState(null)
   const [dismissedLocalModeNotices, setDismissedLocalModeNotices] = useState({})
+  const [localStorageWarningDismissed, setLocalStorageWarningDismissed] = useState(false)
   const [emailConfirmed, setEmailConfirmed] = useState(() => {
     const hash = window.location.hash
     const search = window.location.search
@@ -414,7 +422,7 @@ function AppInner() {
     ? {
         label: membership.isLocalMode ? 'Local Mode' : 'Local-first',
         message: membership.isLocalMode
-          ? 'Your lifetime licence is active. Cloud hosting is inactive, so YOW is running in Local Mode on this device.'
+          ? 'Your lifetime licence is active. The desktop app is running in Local Mode; web cloud access uses Free limits unless Cloud Mode is renewed.'
           : 'Local-first mode is active. Your writing is saved on this device and cloud sync is paused.',
         onOpenSettings: openCloudSettings,
       }
@@ -470,8 +478,9 @@ function AppInner() {
 
   // On mount: if URL points to a project or series, activate it
   useEffect(() => {
-    const { novelId, seriesId } = initialRoute.current
+    const { novelId, seriesId, sceneId } = initialRoute.current
     if (novelId && novelId !== store.activeNovelId) store.setActiveNovelId(novelId)
+    if (sceneId) store.setWritingSceneId(sceneId)
     if (seriesId) setActiveSeriesId(seriesId)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -486,14 +495,14 @@ function AppInner() {
       return
     }
     if (!user && authRouteMode) return
-    const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, {
+    const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, {
       accountOpen,
       accountTab,
       projectSettingsOpen,
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
@@ -539,6 +548,7 @@ function AppInner() {
       setProjectSettingsOpen(route.projectSettingsOpen)
       if (route.novelId) {
         store.setActiveNovelId(route.novelId)
+        if (route.sceneId) store.setWritingSceneId(route.sceneId)
         setViewMode('editor')
       } else if (route.seriesId) {
         store.setActiveNovelId(null)
@@ -663,7 +673,9 @@ function AppInner() {
     }
     loadedUid.current = loadKey
 
-    setDataLoading(true)
+    const localResumeData = store.getLocalSnapshot?.()
+    const hasLocalResumeData = Array.isArray(localResumeData?.novels) && localResumeData.novels.length > 0
+    setDataLoading(!hasLocalResumeData)
     loadUserData(userId)
       .then(data => {
         importData(data)
@@ -674,6 +686,7 @@ function AppInner() {
           setViewMode('editor')
           setLayoutViewMode(initialRoute.current.layoutViewMode)
           setProjectSettingsOpen(initialRoute.current.projectSettingsOpen)
+          if (initialRoute.current.sceneId) store.setWritingSceneId(initialRoute.current.sceneId)
         }
       })
       .catch(error => {
@@ -788,6 +801,10 @@ function AppInner() {
   }
 
   if (!user || recoveryMode) {
+    // A logged-out visit to a project/series deep link (e.g. a bookmarked or shared URL)
+    // should land straight on the sign-in form, not the marketing splash — the extra
+    // click cost users their intended destination context.
+    const hasDeepLinkTarget = !!(initialRoute.current.novelId || initialRoute.current.seriesId)
     if (signedOut && !recoveryMode && !desktopApp) return (
       <>
         <SignedOutPage
@@ -800,14 +817,14 @@ function AppInner() {
     return (
       <>
         <LoginPage
-          key={recoveryMode ? 'recovery' : authRouteMode || (openLoginAfterSignOut ? 'login' : 'home')}
+          key={recoveryMode ? 'recovery' : authRouteMode || (openLoginAfterSignOut || hasDeepLinkTarget ? 'login' : 'home')}
           onOpenLegal={setLegalPage}
           onOpenAbout={() => setAboutOpen(true)}
           onNavigateHome={() => navigatePublic('/')}
           onAuthModeChange={(mode) => navigatePublic(mode === 'signup' ? '/signup' : '/login')}
           onSignedUp={() => setEmailConfirmed(true)}
           recoveryMode={recoveryMode}
-          initialScreen={desktopApp || recoveryMode || authRouteMode || openLoginAfterSignOut ? 'auth' : 'home'}
+          initialScreen={desktopApp || recoveryMode || authRouteMode || openLoginAfterSignOut || hasDeepLinkTarget ? 'auth' : 'home'}
           initialMode={authRouteMode || 'login'}
           variant={desktopApp ? 'desktop' : 'web'}
         />
@@ -831,6 +848,7 @@ function AppInner() {
     try {
       setFreeProjectBusy(true)
       await updateProfile({ ...(user.user_metadata || {}), free_project_id: projectId })
+      store.setActiveNovelId(projectId)
     } catch {
       // non-fatal — user can retry on next load
     } finally {
@@ -885,6 +903,25 @@ function AppInner() {
               Storage settings
             </button>
           )}
+        </div>
+      )}
+      {store.localStorageWarning && !localStorageWarningDismissed && (
+        <div role="alert" className="membership-toast">
+          <span>
+            Your browser's local storage is full, so this device may not be keeping a reliable local copy of recent edits.
+            {membership.canSyncCloud ? ' Your work is still syncing to your account. ' : ' '}
+            Close unused browser tabs or clear old site data to free up space.
+          </span>
+          <button
+            type="button"
+            className="membership-toast-link"
+            onClick={() => { setAccountTab('membership'); setAccountOpen(true) }}
+          >
+            Storage settings
+          </button>
+          <button type="button" className="membership-toast-link" onClick={() => setLocalStorageWarningDismissed(true)}>
+            Dismiss
+          </button>
         </div>
       )}
       {effectiveLocalMode && !localModeNoticeDismissed && (

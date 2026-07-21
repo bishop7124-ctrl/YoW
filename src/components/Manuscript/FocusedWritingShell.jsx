@@ -5,7 +5,7 @@ const CONTROLS = [
   ['notes', 'Notes'],
   ['format', 'Format'],
   ['ai', 'AI'],
-  ['goals', 'Goals'],
+  ['status', 'Status'],
 ]
 
 export function ManuscriptZoomControl({ pageZoom, onPageZoomChange }) {
@@ -38,8 +38,9 @@ export default function FocusedWritingShell({
   onExit,
   pageZoom,
   onPageZoomChange,
-}) {
-  return (
+	}) {
+	  const visiblePanelId = activePanelId === 'goals' || activePanelId === 'progress' ? 'status' : activePanelId
+	  return (
     <>
       <header className="ms-focus-topbar font-sans">
         <strong className="ms-focus-project-title">{projectTitle || 'Untitled project'}</strong>
@@ -59,9 +60,9 @@ export default function FocusedWritingShell({
           <button
             type="button"
             key={id}
-            className={activePanelId === id ? 'is-active' : ''}
-            onClick={() => onSetPanel(activePanelId === id ? null : id)}
-            aria-pressed={activePanelId === id}
+	            className={visiblePanelId === id ? 'is-active' : ''}
+	            onClick={() => onSetPanel(visiblePanelId === id ? null : id)}
+	            aria-pressed={visiblePanelId === id}
           >
             {label}
           </button>

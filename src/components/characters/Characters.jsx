@@ -5,6 +5,7 @@ import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } 
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { allRefsFor } from '../../utils/worldLinks'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
+import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
 
 // The Fix: uses theme variables so all 4 themes apply correctly
@@ -84,6 +85,27 @@ function CharacterPortrait({ src, position, zoom, className = '' }) {
         }}
       />
     </div>
+  )
+}
+
+function FactionLogoBadge({ faction, size = 40, className = '' }) {
+  if (!faction) return null
+
+  const legacyIcon = FACTION_ICONS.find(icon => icon.id === faction.iconId)
+
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-main)] shadow-sm overflow-hidden ${className}`}
+      title={faction.name ? `${faction.name} logo` : 'Faction logo'}
+      aria-label={faction.name ? `${faction.name} logo` : 'Faction logo'}
+      style={{ width: size, height: size }}
+    >
+      {legacyIcon ? (
+        <img src={legacyIcon.url} alt="" className="w-[70%] h-[70%] object-contain opacity-70" />
+      ) : (
+        <FactionLogo shapes={faction.logo} size={Math.max(18, size - 8)} />
+      )}
+    </span>
   )
 }
 
@@ -309,7 +331,7 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
   )
 }
 
-function CharacterForm({ initial, onSave, onCancel, factions, characters, currentYear }) {
+function CharacterForm({ initial, onSave, onCancel, factions, characters, currentYear, initialTab = 'overview' }) {
   const initialChildIds = getChildIds(initial, characters)
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -350,7 +372,9 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     imagePosition: initial?.imagePosition || '50% 50%',
     imageZoom: initial?.imageZoom || 1,
   })
-  const [editorTab, setEditorTab] = useState('overview')
+  const [editorTab, setEditorTab] = useState(
+    CHARACTER_FORM_TABS.some(([id]) => id === initialTab) ? initialTab : 'overview'
+  )
   const [keywordInput, setKeywordInput] = useState('')
   const [showPhotoEditor, setShowPhotoEditor] = useState(false)
 
@@ -437,7 +461,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     const birthDate = form.age === '' ? '' : getBirthDateFromAge(form.age, currentYear, form.deathDate)
     const rest = { ...form }
     delete rest.age
-    onSave({ ...rest, birthDate, relationships: validRelationships, extraAbilities: validAbilities })
+    onSave({ ...rest, birthDate, relationships: validRelationships, extraAbilities: validAbilities }, editorTab)
   }
 
   return (
@@ -860,22 +884,19 @@ export default function Characters({ store }) {
   const profileTabs = CHARACTER_TABS
   const activeProfileTab = profileTabs.some(([id]) => id === profileTab) ? profileTab : 'overview'
 
-  const handleSave = (formData) => {
+  const handleSave = (formData, savedEditorTab) => {
     const savedId = saveCharacter(formData, editTarget?.id || null)
     setShowForm(false)
     setEditTarget(null)
     if (savedId) {
       setSelectedCharacterId(savedId)
-      setProfileTab('overview')
+      if (!editTarget) setProfileTab('overview')
+      else if (profileTabs.some(([id]) => id === savedEditorTab)) setProfileTab(savedEditorTab)
     }
   }
 
-  const getFactionIconUrl = (char) => {
-    if (!char || !char.factionId) return null;
-    const faction = factions.find(f => f.id === char.factionId);
-    if (!faction) return null;
-    return FACTION_ICONS.find(i => i.id === faction.iconId)?.url || null;
-  }
+  const getCharacterFaction = (char) => char?.factionId ? factions.find(f => f.id === char.factionId) : null
+  const selectedFaction = getCharacterFaction(selected)
 
   const activeFilters = (filterFamily ? 1 : 0) + (filterFaction ? 1 : 0)
 
@@ -946,7 +967,7 @@ export default function Characters({ store }) {
         {filtered.map(c => (
           <StudioRecord
             key={c.id}
-            onClick={() => { setSelectedCharacterId(c.id); setProfileTab('overview') }}
+            onClick={() => setSelectedCharacterId(c.id)}
             active={selectedCharacterId === c.id}
           >
             <div className="flex items-center gap-2.5">
@@ -1005,15 +1026,13 @@ export default function Characters({ store }) {
                     className="w-24 h-24 rounded-xl border border-[var(--border)] flex-shrink-0"
                   />
                 )}
-                {getFactionIconUrl(selected) && (
-                  <img src={getFactionIconUrl(selected)} alt="Faction Icon" className="w-10 h-10 opacity-60 flex-shrink-0" />
-                )}
+                <FactionLogoBadge faction={selectedFaction} size={44} className="flex-shrink-0" />
                 {selected.familyGroup && (
                   <span className="chip">House {selected.familyGroup}</span>
                 )}
-                {selected.factionId && factions.find(f => f.id === selected.factionId) && (
+                {selectedFaction && (
                   <span className="chip chip-accent">
-                    {factions.find(f => f.id === selected.factionId).name}
+                    {selectedFaction.name}
                   </span>
                 )}
                 {selected.species && <span className="chip">{selected.species}</span>}
@@ -1157,6 +1176,7 @@ export default function Characters({ store }) {
             factions={factions}
             characters={characters}
             currentYear={currentYear}
+            initialTab={editTarget ? activeProfileTab : 'overview'}
           />
         </Modal>
       )}

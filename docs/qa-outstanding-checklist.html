@@ -1,0 +1,2004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOW Outstanding QA Checklist</title>
+<style>
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a22;
+    --surface2: #22222e;
+    --border: #2e2e3e;
+    --accent: #a78bfa;
+    --accent2: #7c3aed;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --text: #e2e2f0;
+    --muted: #7a7a9a;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    flex: 1;
+    min-width: 200px;
+  }
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .progress-bar {
+    width: 180px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 999px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    transition: opacity 0.15s, background 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent2); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: #3d1f1f; color: var(--red); border: 1px solid #5a2a2a; }
+
+  /* Search / Filter bar */
+  .toolbar {
+    padding: 10px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .search-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 7px 12px;
+    font-size: 13px;
+    width: 260px;
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .filter-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .filter-btn.active { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+
+  /* Main layout */
+  .main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: #2a2a38; }
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+  .section-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    background: var(--border);
+    padding: 2px 8px;
+    border-radius: 999px;
+    min-width: 36px;
+    text-align: center;
+  }
+  .section-num.all-done { background: #1a3d2e; color: var(--green); }
+  .collapse-icon {
+    color: var(--muted);
+    font-size: 12px;
+    transition: transform 0.2s;
+  }
+  .section.collapsed .collapse-icon { transform: rotate(-90deg); }
+  .section-body { padding: 6px 0; }
+  .section.collapsed .section-body { display: none; }
+
+  /* Subsection label */
+  .subsection-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 10px 18px 4px;
+  }
+
+  /* Checklist item */
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    margin: 0 6px;
+    transition: background 0.1s;
+  }
+  .item:hover { background: var(--surface2); }
+  .item.hidden { display: none; }
+  .item.checked { opacity: 0.5; }
+  .item.checked .item-label { text-decoration: line-through; color: var(--muted); }
+  .item.failed {
+    background: #261111;
+    border: 1px solid #5a2a2a;
+  }
+  .item.failed:hover { background: #321515; }
+  .item.failed .item-label { color: #fecaca; }
+  .item.skipped {
+    background: #171722;
+    border: 1px dashed #3d3d52;
+  }
+
+  .item-right {
+    flex: 1;
+    min-width: 0;
+  }
+  .item-label {
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .item-label .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 5px;
+    vertical-align: middle;
+    text-transform: uppercase;
+  }
+  .tag.blocker { background: #3d1f1f; color: var(--red); }
+  .tag.regression { background: #1f2e1a; color: var(--green); }
+
+  .note-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .note-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 5px 9px;
+    resize: none;
+    overflow: hidden;
+    height: 28px;
+    transition: border-color 0.15s, color 0.15s, height 0.1s;
+    font-family: inherit;
+    outline: none;
+    line-height: 1.4;
+  }
+  .note-input:focus {
+    border-color: var(--accent);
+    color: var(--text);
+    height: 56px;
+  }
+  .note-input::placeholder { color: var(--border); }
+  .note-input.has-note {
+    color: var(--yellow);
+    border-color: #3a3000;
+    background: #1e1b00;
+  }
+
+  .status-checks {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .status-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    padding: 4px 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .status-check:hover { border-color: #4b4b63; }
+  .status-check input {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--accent2);
+    cursor: pointer;
+  }
+  .status-check.pass.active {
+    background: #123326;
+    border-color: #1f6b4d;
+    color: var(--green);
+  }
+  .status-check.fail.active {
+    background: #3d1f1f;
+    border-color: #7f1d1d;
+    color: var(--red);
+  }
+  .status-check.skip.active {
+    background: #2e2e3e;
+    border-color: #55556d;
+    color: #c7c7da;
+  }
+  .status-bucket-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    padding: 14px 18px 5px;
+    margin-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .status-bucket-label.second-pass { color: var(--yellow); }
+  .status-bucket-label.passed { color: var(--green); }
+
+  /* Export modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .modal-header h2 { font-size: 15px; flex: 1; }
+  .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .export-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .export-option:hover { border-color: var(--accent); }
+  .export-option input[type=radio] { accent-color: var(--accent2); }
+  .export-option label { cursor: pointer; }
+  .export-option label strong { display: block; color: var(--text); font-size: 13px; }
+  .export-option label span { font-size: 12px; color: var(--muted); }
+  .export-scope {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .export-scope label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .export-scope input[type=checkbox] { accent-color: var(--accent2); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 600px) {
+    .header { padding: 10px 14px; }
+    .main { padding: 14px; }
+    .progress-bar { width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>YOW Outstanding QA Checklist</h1>
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span id="progressText">0 / 0</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn-secondary" onclick="collapseAll()">Collapse All</button>
+    <button class="btn-secondary" onclick="expandAll()">Expand All</button>
+    <button class="btn-primary" onclick="openExportModal()">Export Notes</button>
+    <button class="btn-danger" onclick="confirmReset()">Reset All</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input class="search-input" type="text" id="searchInput" placeholder="Search outstanding items…" oninput="applyFilters()">
+  <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All</button>
+  <button class="filter-btn" id="filter-unchecked" onclick="setFilter('unchecked')">Unchecked</button>
+  <button class="filter-btn" id="filter-checked" onclick="setFilter('checked')">Checked</button>
+  <button class="filter-btn" id="filter-notes" onclick="setFilter('notes')">Has Notes</button>
+  <button class="filter-btn" id="filter-fail" onclick="setFilter('fail')">Failed</button>
+</div>
+
+<div class="main" id="main"></div>
+
+<!-- Export Modal -->
+<div class="modal-backdrop" id="exportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Export Notes</h2>
+      <button class="btn-secondary" onclick="closeExportModal()" style="padding:4px 10px;">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="export-options">
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtMarkdown" value="markdown" checked>
+          <label for="fmtMarkdown">
+            <strong>Markdown (.md)</strong>
+            <span>Sections, checkboxes, statuses, and notes in GitHub-flavoured Markdown</span>
+          </label>
+        </div>
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtHtml" value="html">
+          <label for="fmtHtml">
+            <strong>HTML Report</strong>
+            <span>Standalone readable HTML file with full checklist and notes</span>
+          </label>
+        </div>
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtJson" value="json">
+          <label for="fmtJson">
+            <strong>JSON</strong>
+            <span>Raw data — useful for re-importing or further processing</span>
+          </label>
+        </div>
+        <div class="export-option">
+          <input type="radio" name="exportFmt" id="fmtCsv" value="csv">
+          <label for="fmtCsv">
+            <strong>CSV</strong>
+            <span>Spreadsheet-ready: section, item, checked, status, note columns</span>
+          </label>
+        </div>
+      </div>
+      <div class="export-scope">
+        <strong style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Include</strong>
+        <label><input type="checkbox" id="inclChecked" checked> Checked items</label>
+        <label><input type="checkbox" id="inclUnchecked" checked> Unchecked items</label>
+        <label><input type="checkbox" id="inclNoNote"> Only items with notes or non-default status</label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+      <button class="btn-primary" onclick="runExport()">Download</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ──────────────────────────────────────────────────────────────────
+
+const SECTIONS = [
+  {
+    "id": "os1",
+    "title": "1. Authentication & Session",
+    "items": [
+      {
+        "id": "oa1",
+        "label": "Add weak/invalid password validation with clear requirements before account creation",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oa2",
+        "label": "Show a graceful unknown-email sign-in error without exposing account data"
+      },
+      {
+        "id": "oa3",
+        "label": "Improve sign-in/session restore speed after reopening a tab",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oa4",
+        "label": "Retest close-tab/reopen session restore with a live account after speed fixes",
+        "tags": [
+          "blocker"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "os2",
+    "title": "2. Dashboard / Project Library",
+    "items": [
+      {
+        "id": "ob1",
+        "label": "Replace cover-photo sliver/banner preview with a full image preview inside project settings"
+      },
+      {
+        "id": "ob2",
+        "label": "Remove or implement the Series filter expectation for StatusQueue"
+      },
+      {
+        "id": "ob3",
+        "label": "Fix series badge/marker overlap with the project count on series cards"
+      },
+      {
+        "id": "ob4",
+        "label": "Retest project cover upload/preview/edit flow across desktop, tablet, and mobile"
+      }
+    ]
+  },
+  {
+    "id": "os3",
+    "title": "3. Manuscript Structure & Editor",
+    "items": [
+      {
+        "sub": "Structure Controls"
+      },
+      {
+        "id": "oc1",
+        "label": "Add clear chapter and scene rename controls in the manuscript view",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc2",
+        "label": "Fix outline rename so deleted/renamed chapters are not forced back into unwanted numbering"
+      },
+      {
+        "id": "oc3",
+        "label": "Make scene delete warnings match behavior and actually delete scene text when confirmed",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc4",
+        "label": "Make chapter delete warnings match behavior and delete contained scenes when confirmed",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc5",
+        "label": "Enable scene reordering and persist the order after refresh",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc6",
+        "label": "Enable scene moves into empty chapters and persist after refresh",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc7",
+        "label": "Enable chapter moves into empty acts/parts/arcs and persist after refresh",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc8",
+        "label": "Clicking the already-open current scene should not scroll or change the page position"
+      },
+      {
+        "sub": "Project-Type Templates & Campaign Workflow"
+      },
+      {
+        "id": "oc9",
+        "label": "Replace Novel templates in Novella, Short Story, D&D, TTRPG, and Comic projects with project-type-specific templates",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc10",
+        "label": "Surface structured D&D session prep fields: hooks, encounters, NPCs, rewards, and consequences",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc11",
+        "label": "Surface structured D&D session recap fields and persist them",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc12",
+        "label": "Surface system-neutral TTRPG prep/recap fields and persist them",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc13",
+        "label": "Replace novel wording in D&D/TTRPG overview with DM/GM campaign-planning language",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oc14",
+        "label": "Replace D&D/TTRPG word-target progress with campaign-appropriate progress that can exceed 100%"
+      },
+      {
+        "id": "oc15",
+        "label": "Make AI prompt context project-type-specific for every active project type",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "sub": "Writing Surface"
+      },
+      {
+        "id": "oc16",
+        "label": "Keep the formatting panel inside the viewport on desktop and mobile"
+      },
+      {
+        "id": "oc17",
+        "label": "Apply first-line indent correctly at the beginning of a scene"
+      },
+      {
+        "id": "oc18",
+        "label": "Clicking into a scene should place the cursor at the end by default"
+      },
+      {
+        "id": "oc19",
+        "label": "Reduce the writing cursor marker height so it matches text height"
+      },
+      {
+        "id": "oc20",
+        "label": "Make chapter word counts update without waiting for a typing pause"
+      },
+      {
+        "id": "oc21",
+        "label": "Add editable scene status controls and persist status after refresh"
+      },
+      {
+        "id": "oc22",
+        "label": "Redesign the right-hand manuscript tools so status, notes, formatting, and AI are clear without repetition"
+      },
+      {
+        "id": "oc23",
+        "label": "Add collapsible manuscript note blocks inside the manuscript instead of sidebar-only annotations"
+      },
+      {
+        "id": "oc24",
+        "label": "Append AI output at the cursor/end and focus the inserted text after appending"
+      }
+    ]
+  },
+  {
+    "id": "os4",
+    "title": "4. Story Outline",
+    "items": [
+      {
+        "id": "od1",
+        "label": "Persist outline reorder after refresh",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "od2",
+        "label": "Allow scenes/chapters to move to different parent acts/chapters from the outline",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "od3",
+        "label": "Save outline edits synchronously enough that immediate refresh does not lose changes",
+        "tags": [
+          "blocker"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "os5",
+    "title": "5. Worldbuilding Save & Links",
+    "items": [
+      {
+        "sub": "Immediate Save Regression"
+      },
+      {
+        "id": "oe1",
+        "label": "Retest character create immediate-refresh persistence with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oe2",
+        "label": "Retest character edit immediate-refresh persistence with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oe3",
+        "label": "Retest location create immediate-refresh persistence with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oe4",
+        "label": "Retest lore create immediate-refresh persistence with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oe5",
+        "label": "Retest timeline event create immediate-refresh persistence with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oe6",
+        "label": "Retest schedule event edit immediate-refresh persistence with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "sub": "Link Integrity"
+      },
+      {
+        "id": "oe7",
+        "label": "Fix unlink behavior so character/lore/location/timeline/history links are removed from both sides"
+      },
+      {
+        "id": "oe8",
+        "label": "Run an in-depth review of cross-reference creation, unlinking, deletion cleanup, and navigation chips"
+      },
+      {
+        "id": "oe9",
+        "label": "Decide and test orphaned WorldHistory import migration behavior"
+      }
+    ]
+  },
+  {
+    "id": "os6",
+    "title": "6. Map, Family Tree, Factions & Ideas",
+    "items": [
+      {
+        "sub": "Map Builder"
+      },
+      {
+        "id": "of1",
+        "label": "Show Map Builder by default for Novel projects if Map remains part of the Novel promise"
+      },
+      {
+        "id": "of2",
+        "label": "Retest Novel map load once default visibility is fixed"
+      },
+      {
+        "sub": "Family Tree"
+      },
+      {
+        "id": "of3",
+        "label": "Remove free-floating family-member creation; characters should be added through the Characters tab"
+      },
+      {
+        "id": "of4",
+        "label": "Improve family tree generation layout so relationship lines take the shortest sensible path"
+      },
+      {
+        "id": "of5",
+        "label": "Retest relationship rendering across multi-generation families"
+      },
+      {
+        "sub": "Factions"
+      },
+      {
+        "id": "of6",
+        "label": "QA faction logo upload, replace, and remove flows"
+      },
+      {
+        "id": "of7",
+        "label": "QA faction delete cleanup, filters, series sync, and export inclusion"
+      },
+      {
+        "sub": "Ideas"
+      },
+      {
+        "id": "of8",
+        "label": "Remove the list-view expectation from Ideas or implement an actual list view"
+      },
+      {
+        "id": "of9",
+        "label": "Keep “click to add idea” visible in every kanban column even when ideas already exist"
+      },
+      {
+        "id": "of10",
+        "label": "Retest ideas filtering by tag and status after the column add-control fix"
+      }
+    ]
+  },
+  {
+    "id": "os7",
+    "title": "7. Character Builder (D&D / TTRPG)",
+    "items": [
+      {
+        "id": "og1",
+        "label": "Expand class/race/stat wizard detail for class-specific choices such as sorcerer spell selection",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "og2",
+        "label": "Prompt for relevant class-specific choices at each level-up"
+      },
+      {
+        "id": "og3",
+        "label": "Retest Character Builder sheet persistence after refresh with a live account",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "og4",
+        "label": "Retest accidental logout/login from a D&D project preserves active project and recent Character Builder changes",
+        "tags": [
+          "blocker"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "os8",
+    "title": "8. Exports, Backups & Restore",
+    "items": [
+      {
+        "id": "oh1",
+        "label": "Scope backup ZIP contents by project type so non-comic projects do not include comic pages/panels",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oh2",
+        "label": "Clarify backup ZIP copy: JSON files are for YOW restore, not a readable archive"
+      },
+      {
+        "id": "oh3",
+        "label": "Decide whether readable worldbuilding export is DOCX bundle or World Bible PDF/HTML",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oh4",
+        "label": "If readable DOCX bundle is promised, include characters, locations, lore, timeline, outline, and project data"
+      },
+      {
+        "id": "oh5",
+        "label": "If World Bible is the readable path, update checklist/UI copy and QA cover, TOC, dossiers, factions, maps, timeline, and embedded JSON"
+      },
+      {
+        "id": "oh6",
+        "label": "Retest corrupt or malformed ZIP import shows an error and does not corrupt existing data",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oh7",
+        "label": "Retest comic pages/panels ZIP restore with ID remapping"
+      },
+      {
+        "id": "oh8",
+        "label": "Retest campaign party characters and project type match after ZIP restore"
+      },
+      {
+        "id": "oh9",
+        "label": "Retest structured archive import into an account with existing projects"
+      }
+    ]
+  },
+  {
+    "id": "os9",
+    "title": "9. AI Tools & Import",
+    "items": [
+      {
+        "id": "oi1",
+        "label": "Make AI tools visible by default for all supported active project types"
+      },
+      {
+        "id": "oi2",
+        "label": "Add progress/status UI and robust error reporting for long Plot Hole Detector runs"
+      },
+      {
+        "id": "oi3",
+        "label": "Add progress/status UI and robust error reporting for long Lore Conflict Checker runs"
+      },
+      {
+        "id": "oi4",
+        "label": "Add progress/status UI and robust error reporting for long Style Consistency runs"
+      },
+      {
+        "id": "oi5",
+        "label": "Show a clear no-provider-configured state in every AI tool"
+      },
+      {
+        "id": "oi6",
+        "label": "Link AI findings to the exact project area or scene where the fix belongs"
+      },
+      {
+        "id": "oi7",
+        "label": "Investigate why AI Import appears to complete when no AI key is configured"
+      },
+      {
+        "id": "oi8",
+        "label": "Retest AI Import with no provider, invalid provider, and valid provider states"
+      }
+    ]
+  },
+  {
+    "id": "os10",
+    "title": "10. Account Settings & Access Control",
+    "items": [
+      {
+        "id": "oj1",
+        "label": "Resolve default theme naming/copy mismatch: ink-ember vs Tropical"
+      },
+      {
+        "id": "oj2",
+        "label": "Audit app text/background contrast against theme settings conventions"
+      },
+      {
+        "id": "oj3",
+        "label": "Ensure removing an AI key makes all AI tools show the no-provider warning"
+      },
+      {
+        "id": "oj4",
+        "label": "When free-project selection changes, update the active dashboard project accordingly"
+      },
+      {
+        "id": "oj5",
+        "label": "Show an obvious view-only indicator for non-selected free-tier projects"
+      },
+      {
+        "id": "oj6",
+        "label": "Disable or hide mutating controls in view-only projects"
+      }
+    ]
+  },
+  {
+    "id": "os11",
+    "title": "11. Pricing, Stripe, Legal & Plans",
+    "items": [
+      {
+        "id": "ok1",
+        "label": "Restore public pricing to show Free, Monthly, Lifetime, and Founder tiers",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok2",
+        "label": "Restore signed-in pricing to show all active plan options",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok3",
+        "label": "Move Founder slot-count copy so it appears only above the Founder column",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok4",
+        "label": "Update and verify Stripe monthly price details before real checkout",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok5",
+        "label": "Update and verify Stripe lifetime price details before real checkout",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok6",
+        "label": "Verify checkout redirect in Stripe test mode for each paid tier",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok7",
+        "label": "Make Manage subscription and billing link to a working Stripe billing portal or documented cancellation path",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "ok8",
+        "label": "Align paid plan descriptions with implemented features and legal/FAQ copy",
+        "tags": [
+          "blocker"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "os12",
+    "title": "12. URL, Deep Links, Modals & Reader",
+    "items": [
+      {
+        "id": "ol1",
+        "label": "Refreshing a specific scene in writing mode should return to that scene, not the top of the page"
+      },
+      {
+        "id": "ol2",
+        "label": "Logged-out shared URLs should redirect gracefully to auth and then land on the intended section"
+      },
+      {
+        "id": "ol3",
+        "label": "Create a discoverable Series settings/edit path if series cards open dashboards instead of modals"
+      },
+      {
+        "id": "ol4",
+        "label": "Remove or clarify Studio/Presentation checklist scope if the user-facing feature is not part of launch"
+      },
+      {
+        "id": "ol5",
+        "label": "Decode/sanitize finalized draft symbols so apostrophes and similar characters do not render as HTML entities"
+      }
+    ]
+  },
+  {
+    "id": "os13",
+    "title": "13. Responsive Layout",
+    "items": [
+      {
+        "id": "om1",
+        "label": "Fix mobile manuscript width so writing uses the available viewport instead of a narrow column",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "om2",
+        "label": "Allow greater text-size resizing without causing horizontal layout waste"
+      },
+      {
+        "id": "om3",
+        "label": "Make account settings dropdown reachable while inside a project on mobile",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "om4",
+        "label": "Add hamburger/collapsed navigation for mobile marketing pages"
+      },
+      {
+        "id": "om5",
+        "label": "Retest homepage, library, series dashboard, manuscript, schedule, timeline, pricing, FAQ, and info pages at 375px/768px/1280px+"
+      }
+    ]
+  },
+  {
+    "id": "os14",
+    "title": "14. Public / Marketing Pages & SEO",
+    "items": [
+      {
+        "id": "on1",
+        "label": "Fix /pricing so it shows all public plan tiers and correct copy",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "on2",
+        "label": "Add Founders link to the FAQ/header navigation"
+      },
+      {
+        "id": "on3",
+        "label": "Fix /ai-overview route so the page loads"
+      },
+      {
+        "id": "on4",
+        "label": "Add OG and Twitter card metadata"
+      },
+      {
+        "id": "on5",
+        "label": "Verify canonical URLs for all public pages"
+      },
+      {
+        "id": "on6",
+        "label": "Verify robots.txt is present and correct"
+      },
+      {
+        "id": "on7",
+        "label": "Remove blog checks from launch QA unless a blog is reintroduced"
+      },
+      {
+        "id": "on8",
+        "label": "Add real app screenshots to map, timeline, worldbuilding, lore, family tree, story planning, D&D, and novel software pages"
+      },
+      {
+        "id": "on9",
+        "label": "Retest marketing nav across desktop, tablet, and mobile after hamburger/header changes"
+      }
+    ]
+  },
+  {
+    "id": "os15",
+    "title": "15. Large Project Stress Test",
+    "items": [
+      {
+        "id": "oo1",
+        "label": "Create stress project: 5 acts, 20 chapters, 80 scenes, about 80,000 words",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oo2",
+        "label": "Add 50 characters, 30 locations, 40 lore entries, and 25 timeline events"
+      },
+      {
+        "id": "oo3",
+        "label": "Dashboard loads the stress project without visible lag",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oo4",
+        "label": "Manuscript structure sidebar renders all chapters and scenes"
+      },
+      {
+        "id": "oo5",
+        "label": "Switching between scenes feels responsive under stress"
+      },
+      {
+        "id": "oo6",
+        "label": "Word count display remains accurate under stress"
+      },
+      {
+        "id": "oo7",
+        "label": "Search returns results in reasonable time under stress"
+      },
+      {
+        "id": "oo8",
+        "label": "ZIP export completes and is not corrupted under stress",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oo9",
+        "label": "DOCX export completes with correct scene ordering under stress",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "oo10",
+        "label": "PDF export completes without crash under stress"
+      }
+    ]
+  },
+  {
+    "id": "os16",
+    "title": "16. Data Safety / Edge Cases",
+    "items": [
+      {
+        "id": "op1",
+        "label": "Add revision metadata and stale-write detection for two-tab/project edits",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "op2",
+        "label": "Warn before overwriting newer content from another tab and offer a conflict copy/restore path",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "op3",
+        "label": "Retest two browser tabs on the same scene: tab A edit, tab B edit, refresh, no silent overwrite",
+        "tags": [
+          "blocker"
+        ]
+      },
+      {
+        "id": "op4",
+        "label": "Retest rapid project switching after save-flow fixes for no active-project/content bleed",
+        "tags": [
+          "blocker"
+        ]
+      }
+    ]
+  }
+];
+
+// ─── STATE ─────────────────────────────────────────────────────────────────
+
+const STATE_KEY = 'yow_qa_outstanding_v1';
+const COLLAPSED_KEY = 'yow_qa_outstanding_collapsed_v1';
+const DEFAULT_STATE = {
+  oa1: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Signup and reset-password forms now validate password requirements before calling auth.',
+  },
+  oa2: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Login maps invalid credentials, including unknown email, to the same generic incorrect username/password message.',
+  },
+  oa3: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Returning users with local project data no longer see a full-screen blocker while cloud data reloads; cloud sync refreshes in the background.',
+  },
+  ob1: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Project settings now show a compact full cover preview inside the settings field grid using contain-fit instead of cropped sliver/banner previews.',
+  },
+  ob2: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: StatusQueue now includes All projects, Standalone, and per-series filters.',
+  },
+  ob3: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Series cards now keep only the Series badge on the cover and move the project count into the footer to avoid overlap.',
+  },
+  oc14: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: D&D/TTRPG progress now uses campaign session stats and session targets instead of word-target progress.',
+  },
+  og1: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Added a real SRD spell compendium (~290 spells) with a Spells wizard step and subclass picker. Casters choose cantrips/spells known or prepared up to real 5e limits, spell slots are computed from the existing (previously unused) slot table, and Cleric Domains/Paladin Oaths/Warlock Patrons auto-grant always-prepared spells. Sorcerer Metamagic and Warlock Eldritch Invocation picks are included. Browser-verified in offline mode (Sorcerer and Cleric/Life Domain).',
+  },
+  og2: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-19: Level Up modal now prompts ASI (or a feat) at levels 4/8/12/16/19, new cantrip/spell picks when known/prepared counts increase, new Metamagic/Invocation picks on schedule, and recomputes spell slots for the new level. Browser-verified end-to-end (Sorcerer level 3 to 4).',
+  },
+  oh1: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: createProjectZipBlob now only writes data/comic-pages.json and data/comic-panels.json when the project is a comic project. Verified with a script comparing Novel vs Comic zip contents — Novel zip no longer contains either file.',
+  },
+  oh2: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Project Settings export copy updated — "Word document" now reads "Readable export — story, characters, locations, lore, timeline, and more"; "Backup zip" now reads "Restore file for YOW — JSON data, not for reading" (also added as title tooltips since the description span is CSS-hidden on the compact cards). Backups section blurb and NovelManager export-menu tooltips updated to match. Verified live in browser via DOM textContent.',
+  },
+  oh3: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Product decision made — the DOCX ("Word document") export is the promised readable worldbuilding export, not the World Bible PDF/HTML. World Bible remains available as a secondary visual export.',
+  },
+  oh4: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Verified projectExportDocx.js already includes project title/description/summary stats, outline (or comic script/campaign sessions), characters (with journey/beats), locations, factions, lore, notes/ideas, timeline, and world history — no code changes needed.',
+  },
+  oh6: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Fixed a real bug — AIImportModal populated the newly-created project shell inside a useEffect with no error handling, so a structurally-valid ZIP with malformed nested data (e.g. chapters not an array) threw mid-population and left a partially-populated project stuck with no error shown. Now wrapped in try/catch: on failure the shell project is deleted via store.deleteNovel, a clear error is shown ("This archive could not be fully imported..."), and the modal returns to the upload phase. Verified live with a constructed malformed-but-valid YOW zip: error shown, no orphaned project left in nf_novels.',
+  },
+  oh8: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Verified live — exported the D&D campaign project (with a Character Builder party member) to a real zip via createProjectZipBlob, re-imported it. New project correctly typed dnd_campaign, RPG character remapped to the new novelId with full spells/metamagic/slots data intact.',
+  },
+  oh9: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Verified in the same round-trip test — importing while the original "Spell Test Campaign" project already existed created a second independent project (different id) with no collision or data bleed between the two.',
+  },
+  oi1: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Code review confirmed 'aitools' is in defaultSections for all 6 active project types, and getEnabledSections falls back to ALL_SECTION_IDS (includes aitools) for any project without an explicit enabledSections override — no code gap. Live-verified the AI Tools nav item and panel render for a D&D Campaign project.",
+  },
+  oi2: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Plot Hole Detector, Lore Conflict Checker, and Style Consistency already had a spinner + button-label state + red error banner for run/error, but no way to cancel a stuck run and no feedback beyond a static "Analysing…" message. Added a shared useAiRunControls hook: real progress feedback (characters received while streaming), a Cancel button (AbortController threaded through aiApi.js streamMessage and all four provider fetches), and a 90s stall watchdog that aborts and shows a friendly timeout error instead of spinning forever.',
+  },
+  oi3: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Same useAiRunControls fix as oi2, applied to Lore Conflict Checker.',
+  },
+  oi4: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Same useAiRunControls fix as oi2, applied to Style Consistency.',
+  },
+  oi5: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Code review confirmed all three specialist tools already use the shared AiConfigRequiredNotice plus a defensive apiKey check inside run(). Live-verified: with no key configured, all four AI Tools tabs (Plot Holes, Lore Conflicts, Character Interview, Style Analysis) show the "AI settings" notice.',
+  },
+  oi6: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: FindingCard previously rendered finding.location/affectedRefs/sourceA/sourceB as inert text. Added src/utils/aiFindingNav.js (name-matching index + navigator) and wired it into all three tools: matched refs now render as clickable links that jump to the character/location/lore/timeline entry (existing selectedCharacterId/selectedLocationId/selectedLoreEntryId/selectedTimelineEventId + switch-section pattern) or to the specific scene/chapter (added new selectedSceneId store field + switch-writing consumption in Manuscript.jsx, since no scene-level deep link existed before). Unmatched refs (e.g. factions) gracefully stay as plain text. Covered by src/utils/aiFindingNav.test.js and src/components/aitools/FindingCard.test.jsx (12 new tests) since offline dev mode only returns canned prose, not real findings JSON, so this couldn't be eyeballed live.",
+  },
+  oi7: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Investigated — traced the full handleAnalyze call chain in AIImportModal.jsx. getAIConfig() is checked before any AI call and blocks with AI_CONFIG_REQUIRED_TEXT if no key is set; streamMessage itself also refuses with "No API key configured." as defense-in-depth; and finish() refuses to create a project unless structureData?.project is truthy. No reachable code path lets the modal "complete" without real AI-parsed data. Likely explanation for the original report: a YOW-export or structured-archive .zip correctly skips AI by design (already labelled "Native YOW export detected — no AI needed" in the UI) and may have been mistaken for the AI path.',
+  },
+  oi8: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Live-verified all three states. No provider: uploading a .txt and clicking Analyze shows the config-required error and stays on the upload phase. Invalid/fake provider: with a fake key configured, Analyze proceeds but correctly fails with "AI returned invalid data. Try again or switch providers." — no project created (nf_novels count unchanged). Valid provider: not testable in this environment without a real API key or live network access; offline dev mode always returns canned non-JSON text regardless of key validity, so a true success path needs a live-account pass with a real provider key.',
+  },
+  oj1: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: The default theme itself was already correctly named/wired (`tropical`/"Tropical" in theme.js and index.css) — the mismatch was stale `ink-ember` naming left behind in code comments and public/marketing.css from before the theme rename. Renamed both to "Tropical" so comments match the shipped default. No functional change.',
+  },
+  oj2: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Computed WCAG contrast ratios for all 6 built-in themes (src/index.css). Fixed two real, systemic gaps: (1) --accent-contrast (button text on accent background) was white-on-accent at 3.0-4.0:1 on 5 of 6 themes (tropical, sage-modern, caramel-latte, ocean-depth, pearl-minimal) — switched to dark text (#151713), now 4.5-6.0:1, matching industrial-loft's existing convention; (2) --text-muted was below the 4.5:1 body-text threshold against --bg-nav/--bg-main on industrial-loft (3.37-3.70:1), ocean-depth (4.07:1), and caramel-latte (4.48:1) — lightened/darkened each while keeping its hue. Not changed, logged in QA_PLAN.md Priority 4 as a pending design decision: --accent used as small link text (e.g. AiSettingsLink) measures 3.4-3.7:1 on 3 light themes, and --border measures ~1.2-1.6:1 everywhere — both would require reworking each theme's identity accent/border hue, not a targeted code fix.",
+  },
+  oj3: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Code review confirmed every AI entry point already covers this — AIImportModal, AISuggestionPanel, AIAssistant (bottom AI bar), AIPanel, IdeasKanban AI-expand, and all four AI Tools (CharacterInterview, LoreConflictChecker, PlotHoleDetector, StyleConsistency) each check the active provider's apiKey before running and show the shared AiConfigRequiredNotice/AI_CONFIG_REQUIRED_TEXT with an \"Open AI settings\" link when it's missing. No component that calls streamMessage() lacks the check — removing a key surfaces the warning everywhere on next use.",
+  },
+  oj4: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: handleFreeProjectConfirm in App.jsx saved the chosen free_project_id to the user profile but never updated store.activeNovelId, so the dashboard could keep showing a different project as active/focused than the one just chosen as editable. Added store.setActiveNovelId(projectId) after the profile save succeeds.',
+  },
+  oj5: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: NovelManager library cards had no indicator distinguishing the one editable free-tier project from the rest. Added a "View only" badge (with lock icon) to ProjectCard for any project where membership.freeProjectId is set and does not match that card, plus a grayscale cover treatment and updated hover-cue text ("View only — upgrade to edit").',
+  },
+  oj6: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Two-part fix. (1) UI: ProjectCard's settings-gear (edit/delete) and star (set-as-active) buttons are now hidden on view-only cards, replaced by the view-only badge. (2) Data-integrity gap found during the fix: store.readOnly / the guardedApi swap in useStore.js only gate calls while the *currently active* novel is the locked one — but updateNovel(id, ...) and deleteNovel(id) take an arbitrary id, so a free-tier user with their editable project open could still call these against a *different*, non-selected project (e.g. via a card whose UI wasn't gated) and it would silently succeed. Added an isFreeLockedProject(id) check directly inside updateNovel and deleteNovel so edits/deletes are blocked per-target-project regardless of which project is currently active. Covered by two new tests in src/store/useStore.test.js.",
+  },
+  ok1: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Live-verified — PricingPage.jsx already renders all 4 tiers (Free, Monthly, Lifetime, Founder) in order from the PLANS array in membership.js. Confirmed via a real page load at /pricing/ (screenshot + DOM check); no code change needed.',
+  },
+  ok2: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Live-verified — Account Settings → Membership → "Available plans" already renders all 4 plans (Free, Monthly, Lifetime, Founder) via the same PLANS array. Confirmed in-browser with the offline dev account (Founder tier): all 4 cards shown with correct prices and a "Current plan" indicator on the active one.',
+  },
+  ok3: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Fixed a real bug in PricingPage.jsx — the Founder slot-count pill was rendered as a single banner centered above the entire 4-card grid, not tied to the Founder column specifically. Moved it into a wrapper that renders only above the Founder plan’s own card.',
+  },
+  ok4: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Code-reviewed, no bugs found — can't be completed from this environment. billingConfig.js has monthlyPrice: 12 (matches roadmap); supabase/functions/create-checkout-session reads STRIPE_PRICE_ID_PREMIUM_MONTHLY from env at request time (no hardcoded/stale price ID in code). Verifying the actual live Stripe test-mode price object needs the Stripe test dashboard and deployed Supabase secrets, which this environment doesn't have. Per QA_PLAN.md Priority 0: log into Stripe test mode, confirm the Monthly price is £12/month recurring, and confirm STRIPE_PRICE_ID_PREMIUM_MONTHLY in Supabase secrets points at that price id.",
+  },
+  ok5: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Same situation as ok4 for Lifetime — code reads STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME from env with no hardcoded value; billingConfig.js lifetimePrice: 179 matches the roadmap. Needs a human with Stripe test-dashboard access to confirm the live price object is £179 one-time and the env var points at it — not something this environment can verify.",
+  },
+  ok6: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Traced the full checkout code path (PricingPage.jsx handleSelect → VITE_CREATE_CHECKOUT_SESSION_URL → supabase/functions/create-checkout-session → stripe.checkout.sessions.create → redirect to session.url) and it's correctly implemented for all 4 plan keys (premium_monthly, premium_plus_lifetime, founder use mode:'payment' or 'subscription' correctly). Actually clicking through a real Stripe test-mode checkout and confirming the redirect requires live Stripe test secrets deployed to Supabase and a browser session against the real deployed app — out of reach from this sandboxed environment. This is exactly QA_PLAN.md Priority 0's remaining scope; needs a manual pass by someone with the Stripe test dashboard.",
+  },
+  ok7: {
+    checked: true,
+    status: 'pass',
+    note: '2026-07-20: Fixed a real bug in AccountSettings.jsx — the "Manage subscription & billing" button (opens the Stripe customer portal) only rendered when `membership.isPaid && !membership.isLifetime`, so Lifetime and Founder purchasers (one-time payments) had no billing-portal access at all, not even to view receipts. supabase/functions/create-customer-portal itself has no such restriction — it only needs a stripe_customer_id, which one-time purchasers do get (customer_creation: \'always\' in create-checkout-session). Changed the condition to `membership.isPaid` and relabelled the button "Billing history & receipts" for Lifetime/Founder vs "Manage subscription & billing" for Monthly. Live-verified with the offline dev account (Founder tier): button now appears and reads "Billing history & receipts".',
+  },
+  ok8: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Audited PLANS (membership.js), PricingPage.jsx, FAQPage.jsx, and AccountSettings.jsx against actual code behavior; found and fixed two real contradictions (product decisions confirmed with the user before changing): (1) Free tier was marketed as including 'bring-your-own-key AI' in PLANS.free.features, the pricing comparison table, and two FAQ answers, but AIPanel.jsx already blocks Free users from the AI Assistant chat (AIUpgradeWall) — and the separate AI Tools tab (Plot Hole Detector, Lore Conflict Checker, Character Interview, Style Analysis) had no gate at all, so it silently worked on Free. Decision: Free = no AI. Added the same upgrade-wall gate to AITools.jsx (new AIToolsUpgradeWall, passed `membership` through Layout.jsx), removed the AI Tools onboarding tour step for free users, and corrected every 'Free gets AI' claim in PLANS/PricingPage/FAQPage to say paid-only. (2) Pricing page marked 'Premium exports' (DOCX/PDF) as paid-only (Free: '—'), but ProjectExportMenu offers DOCX/PDF/ZIP to every project with zero plan gating in code. Decision: fix copy, not add a paywall — removed the 'Premium exports' comparison row and corrected Free's feature bullet from 'Basic exports' to 'DOCX, PDF & ZIP export'. Live-verified both fixes: AI Tools shows the upgrade wall on a simulated Free account, and the pricing comparison table/FAQ no longer claim Free includes AI.",
+  },
+  ol1: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Writing mode had no scene identifier in the URL at all (/project/:id/writing only), so a refresh always dropped back to whatever rendered first, not the scene the user was writing. Added a new persistent store field (writingSceneId/setWritingSceneId, distinct from the existing one-shot selectedSceneId 'jump to scene' signal) that Manuscript.jsx now uses as its active-scene state instead of local component state. Extended the route to /project/:id/writing/:sceneId, threaded it through parseRoute/buildRoute, the on-mount restore effect, the data-load restore, and the browser back/forward handler, and cleared it on novel switch (inside selectActiveNovel) to avoid leaking a scene id from one project into another. Added a one-time scrollIntoView effect so the restored scene is actually visible, not just selected. Live-verified: hard-navigating straight to a scene's writing URL opens the project with that scene highlighted in the outline sidebar and the editor scrolled to it.",
+  },
+  ol2: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found and fixed a real gap — a logged-out visit to a project/series deep link showed the full marketing homepage splash (LoginPage's initialScreen='home'), requiring an extra manual 'Log in' click before the user could even see the sign-in form, losing the sense that they had a specific destination. Added a hasDeepLinkTarget check (initialRoute.current.novelId || .seriesId) so LoginPage now opens straight to the auth form for deep-link visits. Live-verified by forcing a logged-out initial auth state: hitting a project writing URL now lands directly on the Sign In form instead of the marketing splash. The second half — landing on the intended project after a successful login — is unchanged, pre-existing code (initialRoute.current is a stable ref read after loadUserData resolves, independent of any URL changes during the login flow) and could not be end-to-end verified here because OFFLINE_MODE's loadUserData is a stub that always returns empty data regardless of routing, not representative of real Supabase auth. Recommend one live-account confirmation: log out, visit a bookmarked project URL, log in, confirm it lands on that project.",
+  },
+  ol3: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Investigated — series cards do open a full SeriesDashboard instead of a modal, but a discoverable settings/edit path already exists: a dedicated 'Settings' button next to 'Manage Projects' at the top of the dashboard, plus a 'Settings' tab in the main tab bar (Overview/Projects/Continuity/Settings), leading to a full rename/genre/description/status/word-goal form. No gap found — live-verified by creating a series and opening its Settings tab in browser.",
+  },
+  ol4: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Investigated — 'Studio' and 'presentation' are internal naming only (src/components/presentation/Studio.jsx is a shared design-system component library used throughout the real UI: StudioFrame, StudioTab, StudioSplit, etc.); there is no distinct user-facing 'Presentation Mode' feature anywhere in the app (confirmed via full source search). The full manual checklist's '22. Studio / Presentation' section (docs/qa-checklist.html) was testing a feature that doesn't exist, exactly as ROADMAP.md already flagged ('scope is unclear and should be either documented or removed'). Removed the section.",
+  },
+  ol5: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Root cause: scene/chapter/act titles and content can pick up literal HTML entities (e.g. \"don&apos;t\", \"&quot;\") from sources that escape text without ever decoding it back (the live editor itself renders them as literal text too — confirmed by injecting test content), and the finalized-draft reader/DOCX export just displayed scene.content verbatim with no decode step. Added decodeHtmlEntities() (manuscriptUtils.js, uses a textarea element to decode any named/numeric entity) and applied it in two places: (1) buildFinalizedDraft now decodes titles/content once when a NEW finalized draft snapshot is created, so the stored snapshot is clean; (2) as defense-in-depth for drafts finalized before this fix, also decode at render time in FinalizedReader.jsx (both the scroll and paginated views, cover title, and the DOCX export path in the same file) and in Manuscript.jsx's finalized-draft picker dropdown. Covered by 4 new tests in manuscriptUtils.test.js. Live-verified end-to-end: injected a scene with literal &quot;/&apos;/&amp; sequences, finalized it, and confirmed the reader (cover title, dropdown, and body text) all show real apostrophes/quotes/ampersands instead of the raw entities.",
+  },
+  om1: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Investigated — already fixed. src/index.css already has a `@media (max-width: 640px)` rule that sets `.manuscript-document` to `width: 100%; max-width: none; padding-inline: 14px` (no fixed desktop column). Live-verified at 375px: the manuscript text column renders at 341px of a 375px viewport (91%), not a narrow fixed column. No code change needed.",
+  },
+  om2: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found the real control this refers to — the manuscript Format panel's font-size slider (12px-30px, separate from the page-zoom control). `.manuscript-document`'s reading column was capped at a flat `max-width: 960px` regardless of font size, tuned for the 19px default; at larger sizes the column stayed the same width so lines got shorter without using the extra space the page actually has. Added an inline `maxWidth: min(100%, Math.max(960, 960 * fontSize/19))px` in Manuscript.jsx so the column widens proportionally as text size increases (verified: 30px font -> `min(100%, 1516px)`), wrapped in `min(100%, …)` specifically so it can't win over the mobile full-width override from om1 (inline styles otherwise beat media-query rules). Live-verified via computed style at both a 375px viewport (still 91% width, unaffected) and a wide viewport with font size pushed to 30px (max-width scales to 1516px as expected).",
+  },
+  om3: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found and fixed a real, literal blocker — src/index.css had `.studio-spine > .studio-account-slot { display: none; }` under `@media (max-width: 860px)` with the comment \"hide account avatar on mobile to save space\", and there was no alternative entry point anywhere, so Account Settings (and Help/Legal/About/Sign out) were completely unreachable while inside a project on any viewport ≤860px. Removed the override — the grid already reserved a `max-content` track for it, so no layout changes were needed elsewhere. Live-verified at 375px inside a project: the avatar/dropdown is now visible, opens fully on-screen with all 5 items (Account settings, Help and support, About YOW, Legal and privacy, Sign out), and clicking \"Account settings\" correctly opens the Account Settings modal. Follow-up (user-reported): once visible, the dropdown rendered clipped/behind the page — a separate 'Mobile overlap hardening' pass (added later, `@media (max-width: 860px) { .studio-spine { overflow: hidden; ... } }`) clips any in-flow absolutely-positioned descendant to the 72-96px-tall header. Fixed by portaling `UserMenu.jsx`'s popover to `document.body` with `position: fixed` coords computed from the trigger's rect, matching the standard fix for dropdowns inside `overflow:hidden` ancestors. Also applied the same hamburger-menu pattern to the in-project section tabs (Overview/Characters/AI Tools/etc., user-requested) — added a `.studio-room-hamburger` trigger + portaled `.studio-room-menu-portal` panel to `Studio.jsx` (`StudioFrame`), replacing the old horizontal-scroll icon strip at ≤860px; desktop/tablet layout unchanged. Both live-verified at 375px and 1280px.",
+  },
+  om4: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found and fixed a real blocker — src/index.css hid `.marketing-nav-links` entirely (`display: none`) under `@media (max-width: 900px)` with zero alternative; a separate, narrower `@media (max-width: 420px)` rule brought the links back as a compact two-row strip, meaning the 421-900px band (which includes the QA matrix's own 768px checkpoint) had Features/Pricing/FAQ/Founders completely unreachable from the marketing nav. Added a real hamburger menu to MarketingNav.jsx (open/close state, icon toggle button) with a dropdown panel holding the nav links plus the Log in/Get started (or Go to my workspace) actions, and replaced both old CSS hacks with one unified ≤900px collapsed-nav treatment. Live-verified at 768px (previously fully broken) and 375px: hamburger opens a panel listing Features/Pricing (correctly marked current)/FAQ/Founders plus the CTA, both open and closed states render correctly, and the desktop nav at 1280px is unchanged.",
+  },
+  om5: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Swept homepage/library, series dashboard, manuscript (writing), schedule, timeline, pricing, FAQ, and features at 375px/768px/1280px checking for horizontal overflow (document/body scrollWidth vs. viewport width) plus visual screenshots on the pages touched by this section's fixes. No overflow found on any page/width combination after the om1-om4 fixes landed. This was a DOM-metric sweep (fast, objective signal for broken responsive layout), not a full pixel-by-pixel manual pass of every interactive control on every page.",
+  },
+  on1: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Investigated — already correct. PricingPage.jsx renders all four public tiers (Free, Monthly, Lifetime, Founder) from `PLANS` in utils/membership.js via `displayPlans`, each with correct price labels, feature lists, and an 11-row feature comparison table. No code change needed.",
+  },
+  on2: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: The live React FAQ page (FAQPage.jsx, via MarketingNav) already had a Founders link in its header nav — no change needed there. Found and fixed a real inconsistency: the standalone static public/faq/index.html was the only static marketing page missing the Founders link in its nav (every other static page — about, features, pricing, ai-overview, and the feature-landing pages — already had it). Added it for consistency.",
+  },
+  on3: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found the real bug — vercel.json's rewrites end in a catch-all `/(.*) -> /index.html`, and only /founders/ and /beta-disclaimer/ had explicit rewrite entries (added as fixes in earlier commits, per git history) pointing at their static index.html. Every other static-only marketing page in public/ — including /ai-overview/ — had no explicit entry, so in production the catch-all served the SPA shell instead of the actual static page. Added explicit rewrites for /ai-overview/, /about/, and all 7 feature-landing pages (worldbuilding-software, novel-writing-software, dnd-campaign-manager, story-planning-software, timeline-tool-for-writers, family-tree-builder, map-builder-for-writers, lore-management), matching the existing founders/beta-disclaimer pattern. Verified every new destination path has a matching dist/<path>/index.html after `npm run build`. Could not live-verify against the actual Vercel deployment (no production access from this sandbox) or via the local preview browser (its localhost tunnel was unreachable this session even after restarting the dev server and clearing stale processes — confirmed via curl and multiple fresh-tab retries); worth a spot-check against the live site after deploy. (Blog rewrites were added here too, then removed the same day — see on7.)",
+  },
+  on4: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: index.html already carries full OG/Twitter metadata for the homepage. Found the gap: none of the SPA-rendered public pages (Pricing, Features, FAQ, Founders, Founder profiles) updated og:title/og:description/og:url/twitter:title/twitter:description on mount, so all of those routes silently inherited the homepage's tags. Added a shared `usePageMeta` hook (src/utils/usePageMeta.js) that sets title, description, canonical, and OG/Twitter tags on mount and restores the previous values on unmount, and wired it into PricingPage, FeaturesPage, FAQPage, FoundersPage, and FounderProfilePage (replacing PricingPage's previous ad-hoc title/description-only effect).",
+  },
+  on5: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found a real bug — none of the SPA-rendered public pages updated the `<link rel=canonical>` tag, so Pricing/Features/FAQ/Founders/Founder-profile pages all showed index.html's hardcoded homepage canonical URL, a duplicate-content signal to search engines. Fixed by the same `usePageMeta` hook as on4, which sets canonical to the correct per-route URL and restores it on unmount.",
+  },
+  on6: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: public/robots.txt is present, allows all the public marketing paths (now all actually reachable in production per the on3 fix), disallows /src /api /.vite, and correctly references the sitemap. No change needed.",
+  },
+  on7: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: At the time this section was first worked, the blog was real and live (public/blog/ had a full index plus 7 posts, linked from MarketingFooter) — not absent — so the stale QA_PLAN.md 'Blog absence' check was updated rather than left as-is. Follow-up the same day: the user asked to completely remove the blog and every reference to it. Deleted public/blog/ (index + all 7 posts), removed the blog link from MarketingFooter.jsx and every static marketing page footer, removed the now-dead `.m-blog-*`/`.m-article` CSS from public/marketing.css, removed the /blog/ entries from vercel.json rewrites, sitemap.xml, robots.txt, and llms.txt, and removed the two now-nonexistent blog checks (y4/y5) from docs/qa-checklist.html. QA_PLAN.md's marketing/SEO static-pages line no longer mentions blog. The blog is now fully absent again, satisfying this item's original instruction.",
+  },
+  on8: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Investigated — all 8 feature-landing pages (map, timeline, worldbuilding, lore, family tree, story planning, D&D, novel software) currently use styled CSS mockups (`.m-feature-visual`), not real app screenshots. Producing genuine screenshots needs realistic seeded demo content captured from the actual app UI across 8 pages, then manually cropped/optimized and embedded with alt text — an asset-production task, not a code fix, and out of scope for this automated pass. Left unchecked as a follow-up.",
+  },
+  on9: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Could not live-verify this session — the local preview browser's localhost tunnel was unreachable (connection refused on the reported proxy port even after restarting the dev server and clearing stale orphaned vite processes; external navigation to a real site worked fine, isolating the fault to the local dev-server proxy). Code-level review of MarketingNav.jsx and the om3/om4 hamburger changes shows no regressions, and the new on1-on7 changes don't touch the nav markup. Needs an actual browser retest across 375px/768px/1280px next session.",
+  },
+  oo1: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Wrote scripts/seed-stress-test.mjs — a local-only generator (no Supabase/live-account writes, unlike scripts/seed-test-data.mjs which wipes the shared mbishoptesting test account) that builds a stress project matching this item's exact spec: 5 acts, 20 chapters, 80 scenes, 50 characters, 30 locations, 40 lore entries, 25 timeline events, in the exact nf_* localStorage shape useStore.js expects. Ran it and confirmed the counts and word total precisely: acts 5, chapters 20, scenes 80, characters 50, locations 30, loreEntries 40, timeline 25, totalWords 80000. Output written to the session scratchpad as JSON (510KB, well under localStorage quota). Could not actually load it into the running app or confirm it opens as a project — the local preview browser's localhost tunnel was unreachable all session (same blocker as on9), confirmed via curl and repeated fresh-tab/server-restart attempts. Needs an actual load-and-open pass next session: start the offline dev server, set the nf_* keys from the generated JSON via the page console, reload, and confirm the project appears and opens.",
+  },
+  oo2: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Data generated as part of oo1 (50 characters, 30 locations, 40 lore entries, 25 timeline events, all linked to the stress novel via novelId) but not yet loaded into a running app to confirm the indexes actually render them. Same blocker as oo1.",
+  },
+  oo3: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — requires the stress project to be loaded and the dashboard opened live, blocked by the same browser-tool issue as oo1. Code review found no hardcoded scene/character/location caps in the dashboard or project-loading code that would artificially break at this scale, but that isn't a substitute for measuring actual load time.",
+  },
+  oo4: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — requires opening the manuscript structure sidebar against the loaded stress project. Worth watching specifically for whether StructureSidebar.jsx virtualizes or renders all 20 chapters/80 scenes at once; not confirmed either way from a read-through, and only live rendering with a stress project will show whether that matters in practice.",
+  },
+  oo5: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — needs live interaction (click through several of the 80 scenes and judge responsiveness) once the stress project can actually be opened.",
+  },
+  oo6: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified live, but the generated data is exact: 80 scenes at precisely 1,000 words each (deterministic word-bank generator), totalling exactly 80,000 words end to end — confirmed by the seed script's own word count and independently by summing each scene's `content.split(/\\s+/)` length. Once loaded, the in-app word count display should read 80,000 if it's accurate; any deviation would point at a real counting bug rather than seed-data ambiguity.",
+  },
+  oo7: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — needs a live search against the loaded stress project (80 scenes, 50 characters, 30 locations, 40 lore entries) to measure response time.",
+  },
+  oo8: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — needs a live ZIP export of the loaded stress project followed by extracting and checking the archive isn't corrupted. Code review of projectExport.js found no hardcoded item-count limits that would truncate output at this scale, but that isn't a substitute for actually running the export.",
+  },
+  oo9: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — needs a live DOCX export of the loaded stress project with a check that all 20 chapters/80 scenes appear in the correct order.",
+  },
+  oo10: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not verified — needs a live PDF export of the loaded stress project to confirm it completes without crashing at this scale (80,000 words, 80 scenes).",
+  },
+  op1: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Investigated — already substantially built, for the highest-risk domain (manuscript scene content). useStore.js already has per-scene revision metadata (`lastModified`, set on every content edit) and real stale-write detection: `mergeSceneUpdateWithPersistedCopy` compares the in-memory scene against what's actually persisted in localStorage before writing, and if another tab changed the content more recently, it preserves the incoming edit as a separate scene instead of silently overwriting. This is exercised by an existing unit test (`useStore.test.js`, 'preserves a newer scene edit as a conflict copy when a stale tab writes over it'). Scoped to scene content specifically (the highest-value target, where users spend the most time and would lose the most work); other domains (characters, locations, etc.) still use plain last-write-wins, which is a smaller risk given those are short structured fields typically edited in one sitting, not left open across tabs for hours the way a manuscript scene is.",
+  },
+  op2: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: Found and fixed a real gap in the existing conflict-copy mechanism (see op1). The 'conflict copy' scene it created had zero user-facing surface: no component anywhere read `conflictOf`, so the copy silently appeared as an ordinary duplicate scene mixed into the real chapter — inflating word counts (including on the dashboard for every project, not just the active one), appearing in the structure sidebar, and getting pulled into ZIP/DOCX/PDF exports as real duplicated content. Fixed at the source: `useStore.js`'s `novelScenes` (what `store.scenes` actually returns to every consumer — Manuscript.jsx, the structure sidebar, word counts, AccountSettings backups, exports) now excludes `conflictOf` scenes, and `projectStats.js` does the same for per-project dashboard stats. Conflict copies are now exposed separately via a new `sceneConflicts` array, with new `restoreSceneConflict`/`discardSceneConflict` store actions. Added a warning button in the manuscript toolbar (visible only when conflicts exist) opening a new `SceneConflictReview` modal that lists each conflict with a content preview and lets the user restore it onto the original scene or discard it — the 'warn' and 'conflict copy/restore path' this item asked for. Covered by 3 new tests in useStore.test.js plus a new projectStats.test.js case confirming conflict copies don't double-count words. Could not live-verify the toolbar button/modal visually — the local preview browser's localhost tunnel was unreachable this session (see oo1/on9).",
+  },
+  op3: {
+    checked: true,
+    status: 'pass',
+    note: "2026-07-20: The existing `useStore.test.js` test simulates exactly this scenario at the state-management level — two independent store instances (standing in for two tabs) sharing the same localStorage, tab A edits a scene, tab B edits the same scene with stale data, and the test asserts tab A's edit survives as a conflict copy rather than being silently overwritten. This is arguably a stronger check than manual clicking (it tests the actual race condition deterministically rather than hoping to trigger it by timing), and it passes. What it does NOT cover is the literal browser experience end-to-end (opening two real tabs, watching the UI, hitting refresh) — the local preview browser's localhost tunnel was unreachable all session (confirmed via curl, repeated fresh tabs, and a dev-server restart), so an actual two-tab manual pass is still owed next session, ideally including a check that the new op2 warning banner/modal render correctly when a real conflict happens.",
+  },
+  op4: {
+    checked: false,
+    status: 'none',
+    note: "2026-07-20: Not live-tested — same browser-tool blocker as op3/oo1. Code review gives reasonable confidence but isn't a substitute for actually clicking rapidly between projects: `selectActiveNovel` (the switch handler) synchronously persists `nf_activeNovel` and resets `writingSceneId` to null on every call, so a stale scene editor can't stay open across a switch. More importantly, the app's architecture loads all account data once and derives each project's view by filtering on `novelId` client-side (no per-switch network refetch to race), which structurally rules out the classic 'switched projects before the old one's data finished loading' bleed pattern. Found no local component state elsewhere that caches project-scoped data without re-syncing on ID change. Still needs an actual live pass: rapidly click between several projects and confirm the active project, its manuscript, and its dashboard stats never show a stale mix from the previous selection.",
+  },
+};
+let state = {};
+let collapsedSections = {};
+
+function loadState() {
+  try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch { state = {}; }
+  Object.entries(DEFAULT_STATE).forEach(([id, defaultItem]) => {
+    const existing = state[id];
+    if (!existing || !existing.status || existing.status === 'none') {
+      state[id] = { ...defaultItem, note: existing?.note || defaultItem.note };
+    }
+  });
+  try { collapsedSections = JSON.parse(localStorage.getItem(COLLAPSED_KEY)) || {}; } catch { collapsedSections = {}; }
+}
+function saveState() {
+  localStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+function saveCollapsedSections() {
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsedSections));
+}
+function getItem(id) {
+  const item = state[id] || { checked: false, status: 'none', note: '' };
+  if (item.checked && (!item.status || item.status === 'none')) {
+    return { ...item, status: 'pass' };
+  }
+  return item;
+}
+function setItem(id, patch) {
+  state[id] = { ...getItem(id), ...patch };
+  saveState();
+}
+
+// ─── RENDER ────────────────────────────────────────────────────────────────
+
+function render() {
+  loadState();
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+
+  SECTIONS.forEach(sec => {
+    const div = document.createElement('div');
+    div.className = `section ${collapsedSections[sec.id] ? 'collapsed' : ''}`;
+    div.id = sec.id;
+
+    const realItems = sec.items.filter(i => i.id);
+    const checkedCount = realItems.filter(i => getItem(i.id).checked).length;
+    const allDone = realItems.length > 0 && checkedCount === realItems.length;
+
+    div.innerHTML = `
+      <div class="section-header" onclick="toggleSection('${sec.id}')">
+        <span class="section-title">${sec.title}</span>
+        <span class="section-num ${allDone ? 'all-done' : ''}">${checkedCount}/${realItems.length}</span>
+        <span class="collapse-icon">▾</span>
+      </div>
+      <div class="section-body"></div>
+    `;
+
+    const body = div.querySelector('.section-body');
+
+    appendItemGroup(body, sec.items, item => {
+      const status = getItem(item.id).status || 'none';
+      return status !== 'pass' && status !== 'skip';
+    });
+
+    if (sec.items.some(item => item.id && getItem(item.id).status === 'skip')) {
+      appendBucketLabel(body, 'QA 2nd Pass', 'second-pass');
+      appendItemGroup(body, sec.items, item => (getItem(item.id).status || 'none') === 'skip');
+    }
+
+    if (sec.items.some(item => item.id && getItem(item.id).status === 'pass')) {
+      appendBucketLabel(body, 'Passed / Crossed Off', 'passed');
+      appendItemGroup(body, sec.items, item => (getItem(item.id).status || 'none') === 'pass');
+    }
+
+    main.appendChild(div);
+  });
+
+  updateProgress();
+  applyFilters();
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function appendBucketLabel(body, text, type) {
+  const label = document.createElement('div');
+  label.className = `status-bucket-label ${type}`;
+  label.textContent = text;
+  body.appendChild(label);
+}
+
+function appendItemGroup(body, items, includeItem) {
+  let pendingSub = '';
+
+  items.forEach(item => {
+    if (item.sub) {
+      pendingSub = item.sub;
+      return;
+    }
+    if (!item.id || !includeItem(item)) return;
+
+    if (pendingSub) {
+      const label = document.createElement('div');
+      label.className = 'subsection-label';
+      label.textContent = pendingSub;
+      body.appendChild(label);
+      pendingSub = '';
+    }
+
+    body.appendChild(createItemRow(item));
+  });
+}
+
+function createItemRow(item) {
+  const s = getItem(item.id);
+  const status = s.status || 'none';
+  const row = document.createElement('div');
+  row.className = `item ${s.checked ? 'checked' : ''} ${status === 'fail' ? 'failed' : ''} ${status === 'skip' ? 'skipped' : ''}`;
+  row.dataset.id = item.id;
+  row.dataset.label = item.label.toLowerCase();
+  row.dataset.checked = s.checked ? 'true' : 'false';
+  row.dataset.note = s.note || '';
+  row.dataset.status = status;
+
+  const tagHtml = (item.tags || []).map(t =>
+    `<span class="tag ${t}">${t}</span>`
+  ).join('');
+
+  row.innerHTML = `
+    <div class="item-right">
+      <div class="item-label">${tagHtml}${escHtml(item.label)}</div>
+      <div class="note-row">
+        <div class="status-checks" role="group" aria-label="Current status">
+          ${statusCheckbox(item.id, status, 'pass', 'Pass')}
+          ${statusCheckbox(item.id, status, 'fail', 'Fail')}
+          ${statusCheckbox(item.id, status, 'skip', 'Skip')}
+        </div>
+        <textarea class="note-input ${s.note ? 'has-note' : ''}" placeholder="Add a note..." oninput="updateNote('${item.id}', this)" onblur="shrinkNote(this)">${escHtml(s.note || '')}</textarea>
+      </div>
+    </div>
+  `;
+
+  return row;
+}
+
+function statusCheckbox(id, currentStatus, status, label) {
+  const checked = currentStatus === status;
+  return `
+    <label class="status-check ${status} ${checked ? 'active' : ''}">
+      <input type="checkbox" ${checked ? 'checked' : ''} onchange="changeStatus('${id}', '${status}', this)">
+      <span>${label}</span>
+    </label>
+  `;
+}
+
+// ─── INTERACTIONS ──────────────────────────────────────────────────────────
+
+function toggleSection(id) {
+  const section = document.getElementById(id);
+  const collapsed = section.classList.toggle('collapsed');
+  collapsedSections[id] = collapsed;
+  saveCollapsedSections();
+}
+function collapseAll() {
+  SECTIONS.forEach(s => {
+    collapsedSections[s.id] = true;
+    document.getElementById(s.id).classList.add('collapsed');
+  });
+  saveCollapsedSections();
+}
+function expandAll() {
+  SECTIONS.forEach(s => {
+    collapsedSections[s.id] = false;
+    document.getElementById(s.id).classList.remove('collapsed');
+  });
+  saveCollapsedSections();
+}
+
+function changeStatus(id, status, el) {
+  const nextStatus = el.checked ? status : 'none';
+  setItem(id, {
+    status: nextStatus,
+    checked: nextStatus === 'pass'
+  });
+  render();
+}
+
+function updateNote(id, el) {
+  const val = el.value;
+  setItem(id, { note: val });
+  el.classList.toggle('has-note', !!val.trim());
+  el.closest('.item').dataset.note = val;
+  // auto-grow
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function shrinkNote(el) {
+  if (!el.value.trim()) el.style.height = '';
+}
+
+function updateProgress() {
+  const allItems = document.querySelectorAll('.item');
+  const checkedItems = document.querySelectorAll('.item.checked');
+  const pct = allItems.length ? (checkedItems.length / allItems.length) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${checkedItems.length} / ${allItems.length}`;
+}
+
+// ─── FILTER ────────────────────────────────────────────────────────────────
+
+let currentFilter = 'all';
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('filter-' + f).classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  const query = document.getElementById('searchInput').value.trim().toLowerCase();
+  document.querySelectorAll('.item').forEach(row => {
+    const label = row.dataset.label || '';
+    const checked = row.dataset.checked === 'true';
+    const note = (row.dataset.note || '').toLowerCase();
+    const status = row.dataset.status || 'none';
+
+    let show = true;
+    if (query && !label.includes(query) && !note.includes(query)) show = false;
+    if (currentFilter === 'unchecked' && checked) show = false;
+    if (currentFilter === 'checked' && !checked) show = false;
+    if (currentFilter === 'notes' && !note.trim()) show = false;
+    if (currentFilter === 'fail' && status !== 'fail') show = false;
+
+    row.classList.toggle('hidden', !show);
+  });
+
+  // hide group labels until at least one visible item underneath needs them
+  document.querySelectorAll('.section-body').forEach(body => {
+    const nodes = Array.from(body.children);
+    nodes.forEach(node => {
+      if (node.classList.contains('subsection-label') || node.classList.contains('status-bucket-label')) {
+        node.style.display = 'none';
+      }
+    });
+
+    nodes.forEach((node, i) => {
+      if (!node.classList.contains('item') || node.classList.contains('hidden')) return;
+
+      for (let j = i - 1; j >= 0; j--) {
+        const prev = nodes[j];
+        if (prev.classList.contains('item')) break;
+        if (prev.classList.contains('subsection-label') || prev.classList.contains('status-bucket-label')) {
+          prev.style.display = '';
+        }
+      }
+    });
+  });
+}
+
+// ─── RESET ─────────────────────────────────────────────────────────────────
+
+function confirmReset() {
+  if (confirm('Reset all checkboxes, statuses, and notes? This cannot be undone.')) {
+    state = {};
+    saveState();
+    render();
+  }
+}
+
+// ─── EXPORT ────────────────────────────────────────────────────────────────
+
+function openExportModal()  { document.getElementById('exportModal').classList.add('open'); }
+function closeExportModal() { document.getElementById('exportModal').classList.remove('open'); }
+
+document.getElementById('exportModal').addEventListener('click', function(e) {
+  if (e.target === this) closeExportModal();
+});
+
+function collectData() {
+  const inclChecked   = document.getElementById('inclChecked').checked;
+  const inclUnchecked = document.getElementById('inclUnchecked').checked;
+  const onlyNoted     = document.getElementById('inclNoNote').checked;
+
+  const rows = [];
+  SECTIONS.forEach(sec => {
+    sec.items.forEach(item => {
+      if (!item.id) return;
+      const s = getItem(item.id);
+      if (!inclChecked && s.checked) return;
+      if (!inclUnchecked && !s.checked) return;
+      if (onlyNoted && !s.note.trim() && s.status === 'none') return;
+      rows.push({ section: sec.title, label: item.label, checked: s.checked, status: s.status, note: s.note, tags: item.tags || [] });
+    });
+  });
+  return rows;
+}
+
+function runExport() {
+  const fmt = document.querySelector('input[name=exportFmt]:checked').value;
+  const rows = collectData();
+  const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
+
+  if (fmt === 'json') {
+    download(`yow-qa-${ts}.json`, JSON.stringify(rows, null, 2), 'application/json');
+  } else if (fmt === 'csv') {
+    const header = ['Section','Item','Checked','Status','Note'];
+    const lines = [header.join(','), ...rows.map(r => [
+      csvCell(r.section), csvCell(r.label), r.checked ? 'TRUE' : 'FALSE', r.status, csvCell(r.note)
+    ].join(','))];
+    download(`yow-qa-${ts}.csv`, lines.join('\n'), 'text/csv');
+  } else if (fmt === 'markdown') {
+    let md = `# YOW Outstanding QA Checklist Export\n_Generated: ${new Date().toLocaleString()}_\n\n`;
+    let lastSec = '';
+    rows.forEach(r => {
+      if (r.section !== lastSec) { md += `\n## ${r.section}\n\n`; lastSec = r.section; }
+      const cb = r.checked ? '[x]' : '[ ]';
+      const st = r.status !== 'none' ? ` \`${r.status.toUpperCase()}\`` : '';
+      md += `- ${cb}${st} ${r.label}\n`;
+      if (r.note.trim()) md += `  > **Note:** ${r.note.trim()}\n`;
+    });
+    download(`yow-qa-${ts}.md`, md, 'text/markdown');
+  } else if (fmt === 'html') {
+    let sections = {};
+    rows.forEach(r => {
+      if (!sections[r.section]) sections[r.section] = [];
+      sections[r.section].push(r);
+    });
+    const total = rows.length;
+    const done  = rows.filter(r => r.checked).length;
+    const failed = rows.filter(r => r.status === 'fail').length;
+
+    let body = '';
+    for (const [sec, items] of Object.entries(sections)) {
+      body += `<h2>${esc(sec)}</h2><ul>`;
+      items.forEach(r => {
+        const st = r.status !== 'none' ? ` <span class="st ${r.status}">${r.status.toUpperCase()}</span>` : '';
+        body += `<li class="${r.checked ? 'done' : ''}${r.status === 'fail' ? ' fail' : ''}">
+          <span class="cb">${r.checked ? '✓' : '○'}</span>${st} ${esc(r.label)}
+          ${r.note.trim() ? `<div class="note">${esc(r.note)}</div>` : ''}
+        </li>`;
+      });
+      body += `</ul>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>YOW QA Report</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f0f13;color:#e2e2f0;max-width:860px;margin:0 auto;padding:32px;font-size:14px;}
+h1{color:#a78bfa;margin-bottom:4px;} .meta{color:#7a7a9a;font-size:13px;margin-bottom:32px;}
+h2{color:#c4b5fd;border-bottom:1px solid #2e2e3e;padding-bottom:8px;margin-top:32px;}
+ul{list-style:none;padding:0;} li{padding:7px 10px;border-radius:6px;margin:2px 0;line-height:1.5;}
+li:hover{background:#1a1a22;} li.done{opacity:.55;text-decoration:line-through;}
+li.fail{background:#1f0f0f;} .cb{margin-right:8px;color:#7a7a9a;}
+li.done .cb{color:#34d399;} .note{margin-top:5px;padding:6px 10px;background:#1a1a00;border-left:3px solid #fbbf24;color:#fbbf24;border-radius:4px;font-size:12px;text-decoration:none;}
+.st{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:4px;}
+.st.pass{background:#1a3d2e;color:#34d399;} .st.fail{background:#3d1f1f;color:#f87171;} .st.skip{background:#2e2e3e;color:#7a7a9a;}
+.summary{display:flex;gap:24px;margin-bottom:24px;} .stat{background:#1a1a22;padding:12px 18px;border-radius:8px;border:1px solid #2e2e3e;}
+.stat .n{font-size:28px;font-weight:700;color:#a78bfa;} .stat .l{font-size:12px;color:#7a7a9a;}
+</style></head><body>
+<h1>YOW QA Report</h1><div class="meta">Generated: ${new Date().toLocaleString()}</div>
+<div class="summary">
+  <div class="stat"><div class="n">${done}/${total}</div><div class="l">Checked</div></div>
+  <div class="stat"><div class="n">${Math.round(done/total*100)||0}%</div><div class="l">Complete</div></div>
+  <div class="stat"><div class="n" style="color:#f87171">${failed}</div><div class="l">Failed</div></div>
+</div>
+${body}
+</body></html>`;
+    download(`yow-qa-report-${ts}.html`, html, 'text/html');
+  }
+
+  closeExportModal();
+}
+
+function csvCell(v) { return '"' + String(v||'').replace(/"/g,'""') + '"'; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function download(filename, content, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename;
+  a.click();
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+
+render();
+</script>
+</body>
+</html>

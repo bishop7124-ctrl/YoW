@@ -543,10 +543,11 @@ const MiniBarList = ({ items, max, emptyText }) => (
   </div>
 )
 
-const WritingProgressCard = ({ words, target, progress }) => {
+const WritingProgressCard = ({ words, target, progress, statusLabel }) => {
   const hasTarget = target > 0
   const remaining = hasTarget ? Math.max(0, target - words) : null
-  const progressValue = hasTarget ? Math.min(100, Math.max(0, progress || 0)) : 0
+  const progressValue = hasTarget ? Math.max(0, progress || 0) : 0
+  const meterValue = Math.min(100, progressValue)
   const progressLabel = hasTarget ? formatCompletion(progressValue) : 'No target yet'
   const context = hasTarget
     ? `You're ${formatNumber(words)} words into a ${formatNumber(target)} word novel.`
@@ -586,14 +587,75 @@ const WritingProgressCard = ({ words, target, progress }) => {
       </div>
       <div className="writing-progress-meter-row">
         <div className="writing-progress-meter" aria-hidden="true">
-          <span style={{ width: `${hasTarget ? progressValue : 8}%` }} />
+          <span style={{ width: `${hasTarget ? meterValue : 8}%` }} />
         </div>
         <span>{progressLabel}</span>
       </div>
       <div className="writing-progress-footer">
         <p>{context}</p>
         <small>{remainingText}</small>
-        <span>Early draft in progress</span>
+        <span>{statusLabel || 'Drafting'}</span>
+      </div>
+    </section>
+  )
+}
+
+const CampaignProgressCard = ({ stats }) => {
+  const campaign = stats.campaignStats
+  const sessionLabel = stats.projectType.structure?.level2 || 'Session'
+  const encounterLabel = stats.projectType.structure?.level3 || 'Encounter'
+  const arcLabel = stats.projectType.structure?.level1 || 'Story Arc'
+  const hasSessionTarget = campaign.sessionTarget > 0
+  const progressLabel = hasSessionTarget ? formatCompletion(campaign.sessionProgress) : `${campaign.prepCoverage}%`
+  const meterLabel = hasSessionTarget
+    ? `${formatCompletion(campaign.sessionProgress)} of ${formatNumber(campaign.sessionTarget)}-${sessionLabel.toLowerCase()} target`
+    : 'Add a session target in settings'
+  const meterValue = hasSessionTarget ? Math.min(100, Math.max(0, campaign.sessionProgress || 0)) : 0
+  const projectNoun = stats.project.type === 'dnd_campaign' ? 'DM campaign plan' : 'GM campaign plan'
+  const context = hasSessionTarget
+    ? `${formatNumber(campaign.plannedSessions)} ${sessionLabel.toLowerCase()}${campaign.plannedSessions === 1 ? '' : 's'} planned against a ${formatNumber(campaign.sessionTarget)} session target.`
+    : `${formatNumber(campaign.plannedSessions)} ${sessionLabel.toLowerCase()}${campaign.plannedSessions === 1 ? '' : 's'} and ${formatNumber(campaign.encounterCount)} ${encounterLabel.toLowerCase()}${campaign.encounterCount === 1 ? '' : 's'} planned.`
+  const structureLabel = `${arcLabel} -> ${sessionLabel} -> ${encounterLabel}`
+
+  return (
+    <section className="writing-progress-card writing-progress-card-campaign" aria-label="Campaign planning progress">
+      <div className="writing-progress-card-head">
+        <div className="writing-progress-main">
+          <span className="writing-progress-icon" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+              <path d="M9 7h7" />
+              <path d="M9 11h5" />
+            </svg>
+          </span>
+          <div>
+            <span className="writing-progress-eyebrow">Campaign progress</span>
+            <strong>{formatNumber(campaign.plannedSessions)}</strong>
+            <small>{sessionLabel.toLowerCase()}s planned</small>
+          </div>
+        </div>
+        <div className="writing-progress-details">
+          <div>
+            <strong>{formatNumber(campaign.encounterCount)}</strong>
+            <span>{encounterLabel}s</span>
+          </div>
+          <div>
+            <strong>{progressLabel}</strong>
+            <span>{hasSessionTarget ? 'Target' : 'Prep'}</span>
+          </div>
+        </div>
+      </div>
+      <div className="writing-progress-meter-row">
+        <div className="writing-progress-meter" aria-hidden="true">
+          <span style={{ width: `${meterValue}%` }} />
+        </div>
+        <span>{meterLabel}</span>
+      </div>
+      <div className="writing-progress-footer">
+        <p>{context}</p>
+        <small>{formatNumber(campaign.sessionsWithPrep)} with prep · {formatNumber(campaign.sessionsWithRecap)} with recap</small>
+        <span>{projectNoun} · {structureLabel}</span>
       </div>
     </section>
   )
@@ -629,6 +691,7 @@ export default function ProjectDashboard({ store }) {
   }
 
   const project = stats.project
+  const isCampaign = Boolean(stats.campaignStats)
   const availableSections = new Set(getEnabledSections(project))
   const visibleRooms = NAV_ROOMS.filter(room => room.requires.some(id => availableSections.has(id)))
 
@@ -641,12 +704,14 @@ export default function ProjectDashboard({ store }) {
   const maxLongestSceneWords = Math.max(1, ...(sceneInsights?.longest || []).map(item => item.words))
   const projectWordTarget = Number(project.wordCountTarget || project.wordTarget || project.targetWords || stats.projectType.defaultWordTarget || 0)
   const projectWordProgress = projectWordTarget
-    ? Math.min(100, Math.round((stats.manuscriptWords / projectWordTarget) * 100))
+    ? Math.round((stats.manuscriptWords / projectWordTarget) * 100)
     : null
   const projectStage = getProjectTypeStage(project.type)
   const isBetaType = projectStage.stage === 'beta'
   const workspaceLabel = stats.projectType.workspaceLabel || 'Manuscript'
   const analyticsLabel = stats.projectType.analyticsLabel || 'Writing Analytics'
+  const unitLabel = stats.projectType.structure?.level3 || 'Scene'
+  const unitLabelLower = unitLabel.toLowerCase()
   const projectStatusLabel = formatProjectStatus(project.status)
   const heroBgImage = project.bannerImage || project.coverPhoto
   const overviewHeroStyle = {
@@ -671,7 +736,7 @@ export default function ProjectDashboard({ store }) {
               <span>{projectStatusLabel}</span>
             </div>
             <h1>{project.title}</h1>
-            <p>{project.description || 'Your manuscript is taking shape.'}</p>
+            <p>{project.description || (isCampaign ? 'Your campaign plan is taking shape.' : 'Your manuscript is taking shape.')}</p>
             {isBetaType && (
               <p style={{ marginTop: 8, color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
                 {projectStage.label}: {projectStage.note}
@@ -683,22 +748,26 @@ export default function ProjectDashboard({ store }) {
                   <path d="M12 20h9" />
                   <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
                 </svg>
-                Open manuscript
+                Open {isCampaign ? 'sessions' : 'manuscript'}
               </button>
               <button type="button" onClick={openProjectSettings}>Project settings</button>
             </div>
           </div>
           <div data-tour="dashboard-word-target">
-            <WritingProgressCard
-              words={stats.manuscriptWords}
-              target={projectWordTarget}
-              progress={projectWordProgress}
-            />
+            {isCampaign ? (
+              <CampaignProgressCard stats={stats} />
+            ) : (
+              <WritingProgressCard
+                words={stats.manuscriptWords}
+                target={projectWordTarget}
+                progress={projectWordProgress}
+                statusLabel={projectStatusLabel}
+              />
+            )}
           </div>
           <div className="overview-hero-side">
             <div className="overview-status">
               <span>{`Updated ${stats.updatedLabel}`}</span>
-              <span>Keep writing</span>
             </div>
             <div className="overview-view-switch" aria-label="Dashboard view">
               <button
@@ -743,9 +812,21 @@ export default function ProjectDashboard({ store }) {
                   {stats.projectType.workflowSummary && (
                     <LedgerRow label="Shape" value={stats.projectType.workflowSummary} longValue />
                   )}
+                  {isCampaign && (
+                    <LedgerRow label="Planning structure" value={`${stats.projectType.structure?.level1 || 'Arc'} -> ${stats.projectType.structure?.level2 || 'Session'} -> ${stats.projectType.structure?.level3 || 'Encounter'}`} longValue />
+                  )}
                   <LedgerRow label="Status" value={projectStatusLabel} />
-                  <LedgerRow label="Word count" value={formatNumber(stats.manuscriptWords)} />
-                  {projectWordTarget > 0 && (
+                  {isCampaign ? (
+                    <>
+                      <LedgerRow label="Planned sessions" value={formatNumber(stats.campaignStats.plannedSessions)} />
+                      <LedgerRow label="Encounters" value={formatNumber(stats.campaignStats.encounterCount)} />
+                      <LedgerRow label="Prep coverage" value={`${stats.campaignStats.prepCoverage}%`} />
+                      <LedgerRow label="Recap coverage" value={`${stats.campaignStats.recapCoverage}%`} />
+                    </>
+                  ) : (
+                    <LedgerRow label="Word count" value={formatNumber(stats.manuscriptWords)} />
+                  )}
+                  {!isCampaign && projectWordTarget > 0 && (
                     <LedgerRow label="Word target" value={`${formatNumber(projectWordTarget)} (${projectWordProgress}%)`} />
                   )}
                 </div>
@@ -755,14 +836,14 @@ export default function ProjectDashboard({ store }) {
                 <div className="overview-section-head">
                   <div>
                     <p className="studio-kicker">{workspaceLabel}</p>
-                    <h2>Manuscript Shape</h2>
+                    <h2>{isCampaign ? 'Campaign Shape' : 'Manuscript Shape'}</h2>
                   </div>
                 </div>
                 <div className="overview-list">
                   <LedgerRow label={stats.projectType.structure?.level1 || 'Acts'} value={formatNumber(stats.acts.length)} />
                   <LedgerRow label={`${stats.projectType.structure?.level2 || 'Chapter'}s`} value={formatNumber(stats.chapters.length)} />
                   <LedgerRow label={`${stats.projectType.structure?.level3 || 'Scene'}s`} value={formatNumber(stats.scenes.length)} />
-                  <LedgerRow label="Average scene length" value={`${formatNumber(sceneInsights?.average || 0)} words`} />
+                  <LedgerRow label={`Average ${unitLabelLower} length`} value={`${formatNumber(sceneInsights?.average || 0)} words`} />
                 </div>
               </section>
 
@@ -785,8 +866,8 @@ export default function ProjectDashboard({ store }) {
               <section className="overview-section overview-section-wide panel-soft">
                 <div className="overview-section-head">
                   <div>
-                    <p className="studio-kicker">Manuscript</p>
-                    <h2>Recent Writing</h2>
+                    <p className="studio-kicker">{workspaceLabel}</p>
+                    <h2>{isCampaign ? 'Recent Session Notes' : 'Recent Writing'}</h2>
                   </div>
                 </div>
                 <div className="overview-scene-list">
@@ -799,7 +880,7 @@ export default function ProjectDashboard({ store }) {
                       <small>{pluralize(countWords(scene.content || ''), 'word')}</small>
                     </div>
                   )) : (
-                    <StudioEmpty title={`No ${String(stats.projectType.structure?.level3 || 'scenes').toLowerCase()} yet`} body="Start a scene when you are ready to put words on the page." />
+                    <StudioEmpty title={`No ${unitLabelLower}s yet`} body={isCampaign ? `Add a ${unitLabelLower} when you are ready to plan the table action.` : `Start a ${unitLabelLower} when you are ready to put words on the page.`} />
                   )}
                 </div>
               </section>

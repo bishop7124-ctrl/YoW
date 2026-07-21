@@ -195,15 +195,17 @@
   .item.hidden { display: none; }
   .item.checked { opacity: 0.5; }
   .item.checked .item-label { text-decoration: line-through; color: var(--muted); }
-
-  .item-check {
-    width: 17px;
-    height: 17px;
-    min-width: 17px;
-    accent-color: var(--accent2);
-    margin-top: 2px;
-    cursor: pointer;
+  .item.failed {
+    background: #261111;
+    border: 1px solid #5a2a2a;
   }
+  .item.failed:hover { background: #321515; }
+  .item.failed .item-label { color: #fecaca; }
+  .item.skipped {
+    background: #171722;
+    border: 1px dashed #3d3d52;
+  }
+
   .item-right {
     flex: 1;
     min-width: 0;
@@ -260,31 +262,59 @@
     background: #1e1b00;
   }
 
-  /* Status badge next to item */
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    min-width: 8px;
-    border-radius: 50%;
-    margin-top: 5px;
+  .status-checks {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
   }
-  .status-dot.pass { background: var(--green); }
-  .status-dot.fail { background: var(--red); }
-  .status-dot.skip { background: var(--muted); }
-  .status-dot.none { background: transparent; border: 1px solid var(--border); }
-
-  .status-select {
+  .status-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    padding: 4px 8px;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--muted);
     font-size: 11px;
-    padding: 3px 6px;
     cursor: pointer;
-    outline: none;
+    user-select: none;
   }
-  .status-select:focus { border-color: var(--accent); }
-  .status-select option { background: var(--surface2); }
+  .status-check:hover { border-color: #4b4b63; }
+  .status-check input {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--accent2);
+    cursor: pointer;
+  }
+  .status-check.pass.active {
+    background: #123326;
+    border-color: #1f6b4d;
+    color: var(--green);
+  }
+  .status-check.fail.active {
+    background: #3d1f1f;
+    border-color: #7f1d1d;
+    color: var(--red);
+  }
+  .status-check.skip.active {
+    background: #2e2e3e;
+    border-color: #55556d;
+    color: #c7c7da;
+  }
+  .status-bucket-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    padding: 14px 18px 5px;
+    margin-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .status-bucket-label.second-pass { color: var(--yellow); }
+  .status-bucket-label.passed { color: var(--green); }
 
   /* Export modal */
   .modal-backdrop {
@@ -836,13 +866,6 @@ const SECTIONS = [
   ]
 },
 {
-  id: 's22', title: '22. Studio / Presentation',
-  items: [
-    { id: 'v1', label: 'Studio view loads without errors' },
-    { id: 'v2', label: 'Presentation mode is visually correct and navigable' },
-  ]
-},
-{
   id: 's23', title: '23. Novel Reader / Finalized Draft',
   items: [
     { id: 'w1', label: 'Finalize a novel draft — working manuscript remains editable' },
@@ -882,8 +905,6 @@ const SECTIONS = [
     { id: 'y1', label: '/ — Home page loads; value proposition clear; no false "live" claims for beta features', tags: ['blocker'] },
     { id: 'y2', label: '/pricing — Pricing page loads correctly' },
     { id: 'y3', label: '/features — Features page loads' },
-    { id: 'y4', label: '/blog — Blog index loads; all article links resolve' },
-    { id: 'y5', label: 'Individual blog posts load without 404' },
     { id: 'y6', label: '/about — About page loads' },
     { id: 'y7', label: '/faq — FAQ page loads' },
     { id: 'y8', label: '/beta-disclaimer — Page loads' },
@@ -943,16 +964,26 @@ const SECTIONS = [
 // ─── STATE ─────────────────────────────────────────────────────────────────
 
 const STATE_KEY = 'yow_qa_v1';
+const COLLAPSED_KEY = 'yow_qa_collapsed_v1';
 let state = {};
+let collapsedSections = {};
 
 function loadState() {
   try { state = JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch { state = {}; }
+  try { collapsedSections = JSON.parse(localStorage.getItem(COLLAPSED_KEY)) || {}; } catch { collapsedSections = {}; }
 }
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
 }
+function saveCollapsedSections() {
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsedSections));
+}
 function getItem(id) {
-  return state[id] || { checked: false, status: 'none', note: '' };
+  const item = state[id] || { checked: false, status: 'none', note: '' };
+  if (item.checked && (!item.status || item.status === 'none')) {
+    return { ...item, status: 'pass' };
+  }
+  return item;
 }
 function setItem(id, patch) {
   state[id] = { ...getItem(id), ...patch };
@@ -968,7 +999,7 @@ function render() {
 
   SECTIONS.forEach(sec => {
     const div = document.createElement('div');
-    div.className = 'section';
+    div.className = `section ${collapsedSections[sec.id] ? 'collapsed' : ''}`;
     div.id = sec.id;
 
     const realItems = sec.items.filter(i => i.id);
@@ -986,45 +1017,20 @@ function render() {
 
     const body = div.querySelector('.section-body');
 
-    sec.items.forEach(item => {
-      if (item.sub) {
-        const label = document.createElement('div');
-        label.className = 'subsection-label';
-        label.textContent = item.sub;
-        body.appendChild(label);
-        return;
-      }
-
-      const s = getItem(item.id);
-      const row = document.createElement('div');
-      row.className = `item ${s.checked ? 'checked' : ''}`;
-      row.dataset.id = item.id;
-      row.dataset.label = item.label.toLowerCase();
-      row.dataset.checked = s.checked ? 'true' : 'false';
-      row.dataset.note = s.note || '';
-      row.dataset.status = s.status || 'none';
-
-      const tagHtml = (item.tags || []).map(t =>
-        `<span class="tag ${t}">${t}</span>`
-      ).join('');
-
-      row.innerHTML = `
-        <input type="checkbox" class="item-check" ${s.checked ? 'checked' : ''} onchange="toggleCheck('${item.id}', this)">
-        <div class="item-right">
-          <div class="item-label">${tagHtml}${escHtml(item.label)}</div>
-          <div class="note-row">
-            <select class="status-select" onchange="changeStatus('${item.id}', this)">
-              <option value="none" ${s.status === 'none' ? 'selected' : ''}>— status</option>
-              <option value="pass" ${s.status === 'pass' ? 'selected' : ''}>✓ Pass</option>
-              <option value="fail" ${s.status === 'fail' ? 'selected' : ''}>✗ Fail</option>
-              <option value="skip" ${s.status === 'skip' ? 'selected' : ''}>⊘ Skip</option>
-            </select>
-            <textarea class="note-input ${s.note ? 'has-note' : ''}" placeholder="Add a note…" oninput="updateNote('${item.id}', this)" onblur="shrinkNote(this)">${escHtml(s.note || '')}</textarea>
-          </div>
-        </div>
-      `;
-      body.appendChild(row);
+    appendItemGroup(body, sec.items, item => {
+      const status = getItem(item.id).status || 'none';
+      return status !== 'pass' && status !== 'skip';
     });
+
+    if (sec.items.some(item => item.id && getItem(item.id).status === 'skip')) {
+      appendBucketLabel(body, 'QA 2nd Pass', 'second-pass');
+      appendItemGroup(body, sec.items, item => (getItem(item.id).status || 'none') === 'skip');
+    }
+
+    if (sec.items.some(item => item.id && getItem(item.id).status === 'pass')) {
+      appendBucketLabel(body, 'Passed / Crossed Off', 'passed');
+      appendItemGroup(body, sec.items, item => (getItem(item.id).status || 'none') === 'pass');
+    }
 
     main.appendChild(div);
   });
@@ -1037,28 +1043,107 @@ function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function appendBucketLabel(body, text, type) {
+  const label = document.createElement('div');
+  label.className = `status-bucket-label ${type}`;
+  label.textContent = text;
+  body.appendChild(label);
+}
+
+function appendItemGroup(body, items, includeItem) {
+  let pendingSub = '';
+
+  items.forEach(item => {
+    if (item.sub) {
+      pendingSub = item.sub;
+      return;
+    }
+    if (!item.id || !includeItem(item)) return;
+
+    if (pendingSub) {
+      const label = document.createElement('div');
+      label.className = 'subsection-label';
+      label.textContent = pendingSub;
+      body.appendChild(label);
+      pendingSub = '';
+    }
+
+    body.appendChild(createItemRow(item));
+  });
+}
+
+function createItemRow(item) {
+  const s = getItem(item.id);
+  const status = s.status || 'none';
+  const row = document.createElement('div');
+  row.className = `item ${s.checked ? 'checked' : ''} ${status === 'fail' ? 'failed' : ''} ${status === 'skip' ? 'skipped' : ''}`;
+  row.dataset.id = item.id;
+  row.dataset.label = item.label.toLowerCase();
+  row.dataset.checked = s.checked ? 'true' : 'false';
+  row.dataset.note = s.note || '';
+  row.dataset.status = status;
+
+  const tagHtml = (item.tags || []).map(t =>
+    `<span class="tag ${t}">${t}</span>`
+  ).join('');
+
+  row.innerHTML = `
+    <div class="item-right">
+      <div class="item-label">${tagHtml}${escHtml(item.label)}</div>
+      <div class="note-row">
+        <div class="status-checks" role="group" aria-label="Current status">
+          ${statusCheckbox(item.id, status, 'pass', 'Pass')}
+          ${statusCheckbox(item.id, status, 'fail', 'Fail')}
+          ${statusCheckbox(item.id, status, 'skip', 'Skip')}
+        </div>
+        <textarea class="note-input ${s.note ? 'has-note' : ''}" placeholder="Add a note..." oninput="updateNote('${item.id}', this)" onblur="shrinkNote(this)">${escHtml(s.note || '')}</textarea>
+      </div>
+    </div>
+  `;
+
+  return row;
+}
+
+function statusCheckbox(id, currentStatus, status, label) {
+  const checked = currentStatus === status;
+  return `
+    <label class="status-check ${status} ${checked ? 'active' : ''}">
+      <input type="checkbox" ${checked ? 'checked' : ''} onchange="changeStatus('${id}', '${status}', this)">
+      <span>${label}</span>
+    </label>
+  `;
+}
+
 // ─── INTERACTIONS ──────────────────────────────────────────────────────────
 
 function toggleSection(id) {
-  document.getElementById(id).classList.toggle('collapsed');
+  const section = document.getElementById(id);
+  const collapsed = section.classList.toggle('collapsed');
+  collapsedSections[id] = collapsed;
+  saveCollapsedSections();
 }
-function collapseAll() { SECTIONS.forEach(s => document.getElementById(s.id).classList.add('collapsed')); }
-function expandAll()   { SECTIONS.forEach(s => document.getElementById(s.id).classList.remove('collapsed')); }
-
-function toggleCheck(id, el) {
-  setItem(id, { checked: el.checked });
-  const row = el.closest('.item');
-  row.classList.toggle('checked', el.checked);
-  row.dataset.checked = el.checked ? 'true' : 'false';
-  updateProgress();
-  updateSectionBadge(row);
+function collapseAll() {
+  SECTIONS.forEach(s => {
+    collapsedSections[s.id] = true;
+    document.getElementById(s.id).classList.add('collapsed');
+  });
+  saveCollapsedSections();
+}
+function expandAll() {
+  SECTIONS.forEach(s => {
+    collapsedSections[s.id] = false;
+    document.getElementById(s.id).classList.remove('collapsed');
+  });
+  saveCollapsedSections();
 }
 
-function changeStatus(id, el) {
-  setItem(id, { status: el.value });
-  const row = el.closest('.item');
-  row.dataset.status = el.value;
-  applyFilters();
+function changeStatus(id, status, el) {
+  const nextStatus = el.checked ? status : 'none';
+  setItem(id, {
+    status: nextStatus,
+    checked: nextStatus === 'pass'
+  });
+  render();
 }
 
 function updateNote(id, el) {
@@ -1073,15 +1158,6 @@ function updateNote(id, el) {
 
 function shrinkNote(el) {
   if (!el.value.trim()) el.style.height = '';
-}
-
-function updateSectionBadge(row) {
-  const section = row.closest('.section');
-  const realItems = section.querySelectorAll('.item');
-  const checked = section.querySelectorAll('.item.checked').length;
-  const badge = section.querySelector('.section-num');
-  badge.textContent = `${checked}/${realItems.length}`;
-  badge.classList.toggle('all-done', checked === realItems.length && realItems.length > 0);
 }
 
 function updateProgress() {
@@ -1121,20 +1197,24 @@ function applyFilters() {
     row.classList.toggle('hidden', !show);
   });
 
-  // hide subsection labels if all items below them are hidden
+  // hide group labels until at least one visible item underneath needs them
   document.querySelectorAll('.section-body').forEach(body => {
-    let nodes = Array.from(body.children);
+    const nodes = Array.from(body.children);
+    nodes.forEach(node => {
+      if (node.classList.contains('subsection-label') || node.classList.contains('status-bucket-label')) {
+        node.style.display = 'none';
+      }
+    });
+
     nodes.forEach((node, i) => {
-      if (node.classList.contains('subsection-label')) {
-        // find next subsection or end
-        let hasVisible = false;
-        for (let j = i+1; j < nodes.length; j++) {
-          if (nodes[j].classList.contains('subsection-label')) break;
-          if (nodes[j].classList.contains('item') && !nodes[j].classList.contains('hidden')) {
-            hasVisible = true; break;
-          }
+      if (!node.classList.contains('item') || node.classList.contains('hidden')) return;
+
+      for (let j = i - 1; j >= 0; j--) {
+        const prev = nodes[j];
+        if (prev.classList.contains('item')) break;
+        if (prev.classList.contains('subsection-label') || prev.classList.contains('status-bucket-label')) {
+          prev.style.display = '';
         }
-        node.style.display = hasVisible ? '' : 'none';
       }
     });
   });

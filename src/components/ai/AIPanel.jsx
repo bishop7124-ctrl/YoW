@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiChatSessions } from '../../utils/aiChatHistory'
+import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans } from './AiConfigRequired'
+import AIStar from './AIStar'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
@@ -57,7 +60,7 @@ function ProviderSettings({ settings, onSave, onCancel }) {
         <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Keys are stored locally and sent only to the chosen provider.</p>
         {/* Active model callout */}
         <div className="mt-3 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[var(--accent-fade)] border border-[var(--accent)]/30">
-          <span className="text-[var(--accent)] text-sm flex-shrink-0">✦</span>
+          <AIStar size={14} className="text-[var(--accent)] flex-shrink-0" />
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-0.5">Active model</p>
             <p className="text-xs font-bold text-[var(--text-main)] leading-tight truncate">
@@ -527,6 +530,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const provCfg   = aiSettings[provider]
   const provLabel = PROVIDERS[provider]?.name || provider
   const modelLabel = provCfg.model || PROVIDERS[provider]?.defaultModel
+  const hasKey = !!provCfg.apiKey?.trim()
 
   const promptStore = useMemo(
     () => store.getProjectContextData?.(session.novelId) ?? store,
@@ -541,13 +545,18 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const send = async () => {
     const text = input.trim()
     if (!text || streaming) return
+    if (!hasKey) {
+      const assistantMsg = { id: uid(), role: 'assistant', content: AI_CONFIG_REQUIRED_TEXT, streaming: false, error: true }
+      onUpdate(session.id, { messages: [...session.messages, assistantMsg], updatedAt: Date.now() })
+      return
+    }
     setInput('')
     abortRef.current = false
 
     const userMsg      = { id: uid(), role: 'user',      content: text }
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
     const nextMessages = [...session.messages, userMsg, assistantMsg]
-    onUpdate(session.id, { messages: nextMessages })
+    onUpdate(session.id, { messages: nextMessages, updatedAt: Date.now() })
     setStreaming(true)
 
     let accumulated = ''
@@ -565,18 +574,21 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         accumulated += chunk
         onUpdate(session.id, {
           messages: nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m),
+          updatedAt: Date.now(),
         })
       },
       onDone: () => {
         setStreaming(false)
         onUpdate(session.id, {
           messages: nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated, streaming: false } : m),
+          updatedAt: Date.now(),
         })
       },
       onError: (err) => {
         setStreaming(false)
         onUpdate(session.id, {
           messages: nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: `Error: ${err}`, streaming: false, error: true } : m),
+          updatedAt: Date.now(),
         })
       },
     })
@@ -675,7 +687,8 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
       <div className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
         {session.messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-3">
-            <div className="text-2xl text-[var(--accent)] opacity-70">✦</div>
+            <AIStar size={28} className="text-[var(--accent)] opacity-70" />
+            {!hasKey && <AiConfigRequiredNotice style={{ maxWidth: 320, textAlign: 'left' }} />}
             <p className="text-xs text-[var(--text-muted)]">Ask anything about your project, or start with one of these.</p>
             <div className="grid gap-2 w-full max-w-[320px]">
               {quickPrompts.map(prompt => (
@@ -725,7 +738,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
           )}
           <button
             onClick={send}
-            disabled={!input.trim() || streaming}
+            disabled={!input.trim() || streaming || !hasKey}
             className="h-9 w-9 flex items-center justify-center bg-[var(--accent)] text-[var(--bg-main)] rounded-lg disabled:opacity-40 hover:opacity-90 transition-all flex-shrink-0"
           >
             {streaming
@@ -759,7 +772,7 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
   const sorted = useMemo(() =>
     [...sessions].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-      return (b.createdAt || 0) - (a.createdAt || 0)
+      return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
     }),
     [sessions]
   )
@@ -826,7 +839,7 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
       <div className="flex-1 overflow-y-auto py-2">
         {sessions.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6 opacity-60">
-            <div className="text-3xl">✦</div>
+            <AIStar size={32} />
             <p className="text-sm text-[var(--text-muted)]">Start a new chat to get writing help from AI.</p>
           </div>
         )}
@@ -941,7 +954,7 @@ function AIUpgradeWall({ onClose, docked }) {
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[var(--accent)]">✦</span>
+          <AIStar size={14} className="text-[var(--accent)]" />
           <span className="block text-sm font-bold text-[var(--text-main)] uppercase tracking-wider">AI Chat</span>
         </div>
         {!docked && (
@@ -951,7 +964,7 @@ function AIUpgradeWall({ onClose, docked }) {
         )}
       </div>
       <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-8 py-10">
-        <div className="text-4xl opacity-40">✦</div>
+        <AIStar size={42} className="opacity-40" />
         <div>
           <p className="text-sm font-bold text-[var(--text-main)] mb-2">AI assistant is a paid feature</p>
           <p className="text-xs text-[var(--text-muted)] leading-relaxed">
@@ -960,7 +973,7 @@ function AIUpgradeWall({ onClose, docked }) {
         </div>
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent('open-account-settings'))}
+          onClick={openAiPlans}
           className="mt-2 bg-[var(--accent)] text-[var(--bg-main)] font-bold text-sm px-5 py-2 rounded-lg hover:opacity-90 transition-opacity"
         >
           View plans
@@ -972,9 +985,9 @@ function AIUpgradeWall({ onClose, docked }) {
 
 export default function AIPanel({ store, open, onClose, initialContext, membership, userId = null, docked = false, onPopOut }) {
   const novelId = store.activeNovelId
-  const chatStorageKey = `nf_chats_${novelId ?? 'library'}`
+  const chatStorageKey = getAiChatStorageKey(novelId)
   const [aiSettings, setAiSettings] = useState(() => loadAiSettings(userId, DEFAULT_SETTINGS))
-  const [sessions,   setSessions]   = useState(() => load(chatStorageKey, []))
+  const [sessions,   setSessions]   = useState(() => loadAiChatSessions(novelId))
   const [view,       setView]       = useState('sessions') // 'sessions' | 'settings' | 'context' | 'chat'
   const [activeId,   setActiveId]   = useState(null)
   const [fullscreen, setFullscreen] = useState(() => load('nf_aiFullscreen', false))
@@ -998,13 +1011,21 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
   useEffect(() => {
     if (activeChatStorageKey.current !== chatStorageKey) {
       activeChatStorageKey.current = chatStorageKey
-      setSessions(load(chatStorageKey, []))
+      setSessions(loadAiChatSessions(novelId))
       setActiveId(null)
       setView(current => current === 'settings' ? current : 'sessions')
       return
     }
-    save(chatStorageKey, sessions)
-  }, [sessions, chatStorageKey])
+    saveAiChatSessions(novelId, sessions)
+  }, [sessions, chatStorageKey, novelId])
+  useEffect(() => {
+    const handleChatHistoryUpdate = (event) => {
+      if (event.detail?.storageKey !== chatStorageKey) return
+      setSessions(loadAiChatSessions(novelId))
+    }
+    window.addEventListener(AI_CHAT_HISTORY_EVENT, handleChatHistoryUpdate)
+    return () => window.removeEventListener(AI_CHAT_HISTORY_EVENT, handleChatHistoryUpdate)
+  }, [chatStorageKey, novelId])
   useEffect(() => { save('nf_aiFullscreen', fullscreen) }, [fullscreen])
   useEffect(() => { panelFrameRef.current = panelFrame; save(AI_PANEL_FRAME_KEY, panelFrame) }, [panelFrame])
   useEffect(() => {
@@ -1135,7 +1156,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
         className="ai-tool-launcher"
         aria-label="Restore AI chat"
       >
-        <span className="ai-tool-launcher-mark">✦</span>
+        <span className="ai-tool-launcher-mark"><AIStar size={18} /></span>
         <span className="ai-tool-launcher-copy">
           <strong>AI Chat</strong>
           <span>{latestSession ? latestSession.title : 'Ready when you are'}</span>
@@ -1170,7 +1191,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
           onPointerDown={startMove}
         >
           <div className="flex items-center gap-2">
-            <span className="ai-chat-pulse text-[var(--accent)]">✦</span>
+            <span className="ai-chat-pulse text-[var(--accent)]"><AIStar size={12} /></span>
             <div className="min-w-0">
               <span className="block text-sm font-bold text-[var(--text-main)] uppercase tracking-wider leading-tight">AI Chat</span>
               <span className="ai-chat-mode-label block text-[10px] text-[var(--text-muted)] leading-tight">

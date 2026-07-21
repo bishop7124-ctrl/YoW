@@ -4,7 +4,7 @@ export const FormatContent = ({ settings, onChange }) => {
   const set = (key, value) => onChange({ ...settings, [key]: value })
 
   return (
-    <div className="ms-panel-scroll">
+    <div className="ms-panel-scroll ms-format-scroll">
       <div className="ms-format-section">
         <div className="ms-format-label">Font</div>
         <div className="ms-format-row flex-wrap gap-1">
@@ -53,12 +53,25 @@ export const FormatContent = ({ settings, onChange }) => {
           </button>
         </div>
         {settings.autoIndent && (
-          <div className="ms-format-row gap-1 mt-1">
+          <div className="ms-format-row ms-format-indent-row gap-1 mt-1">
             {INDENT_SIZES.map(n => (
               <button key={n} onClick={() => set('indentSize', n)} className={`ms-format-chip ${settings.indentSize === n ? 'active' : ''}`}>{n} spaces</button>
             ))}
           </div>
         )}
+      </div>
+
+      <div className="ms-format-section">
+        <div className="ms-format-label flex items-center gap-2">
+          <span>Scene details while typing</span>
+          <button
+            onClick={() => set('showSceneMetadata', settings.showSceneMetadata === false)}
+            className={`ms-toggle ${settings.showSceneMetadata !== false ? 'active' : ''}`}
+            title={settings.showSceneMetadata !== false ? 'Hide' : 'Show'}
+          >
+            <span className="ms-toggle-thumb" />
+          </button>
+        </div>
       </div>
 
       <div className="ms-format-section border-t border-[var(--border)] pt-2 mt-1">
@@ -91,13 +104,9 @@ export const AlignIcon = ({ type }) => {
 
 // ─── Notes panel ──────────────────────────────────────────────────────────────
 
-export const NotesPanel = ({ scene, onUpdateScene, onClose, highlightedSeq }) => {
+export const NotesPanel = ({ scene, onUpdateScene, highlightedSeq }) => {
   if (!scene) return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
-        <span className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Notes</span>
-        <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm">✕</button>
-      </div>
       <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] text-xs px-4 text-center">Focus a scene to see its notes</div>
     </div>
   )
@@ -108,14 +117,10 @@ export const NotesPanel = ({ scene, onUpdateScene, onClose, highlightedSeq }) =>
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between flex-shrink-0">
-        <span className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Notes</span>
-        <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm">✕</button>
-      </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {notes.length === 0 && (
           <p className="text-[var(--text-muted)] text-xs text-center py-6">
-            No notes yet.<br />Use <span className="text-[var(--accent)] font-mono">+ Note</span> in the scene toolbar.
+	            No notes yet.<br />Use the <span className="text-[var(--accent)] font-mono">+</span> beside the cursor.
           </p>
         )}
         {notes.map(note => (

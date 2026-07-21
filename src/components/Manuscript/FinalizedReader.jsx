@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import {
   formatFinalizedDate, paginateFinalizedDraft,
-  buildScriptBlocks, SCRIPT_TYPES,
+  buildScriptBlocks, SCRIPT_TYPES, decodeHtmlEntities,
 } from './manuscriptUtils.js'
 import { downloadBlob } from '../../utils/projectExportHelpers.js'
 
@@ -33,8 +33,8 @@ function FinalPage({ page, draft, pageNumber }) {
           if (block.type === 'cover') return (
             <div key={block.id} className="ms-final-page-cover">
               <p className="ms-final-kicker">Finalized draft</p>
-              <h1>{draft.projectTitle || 'Untitled'}</h1>
-              <p>{draft.title}</p>
+              <h1>{decodeHtmlEntities(draft.projectTitle) || 'Untitled'}</h1>
+              <p>{decodeHtmlEntities(draft.title)}</p>
               <span>{formatFinalizedDate(draft.finalizedAt)}</span>
             </div>
           )
@@ -116,8 +116,8 @@ export default function FinalizedReader({ draft, viewMode, pageIndex, onPageInde
       <article className="ms-final-book" aria-label="Finalized manuscript">
         <header className="ms-final-title-page">
           <p className="ms-final-kicker">Finalized draft</p>
-          <h1>{draft.projectTitle || 'Untitled'}</h1>
-          <p>{draft.title}</p>
+          <h1>{decodeHtmlEntities(draft.projectTitle) || 'Untitled'}</h1>
+          <p>{decodeHtmlEntities(draft.title)}</p>
           <span>{formatFinalizedDate(draft.finalizedAt)}</span>
         </header>
 
@@ -127,17 +127,17 @@ export default function FinalizedReader({ draft, viewMode, pageIndex, onPageInde
 
         {visibleActs.map((act, actIndex) => (
           <section key={act.id || actIndex} className="ms-final-act">
-            {visibleActs.length > 1 && <h2>{act.title}</h2>}
+            {visibleActs.length > 1 && <h2>{decodeHtmlEntities(act.title)}</h2>}
             {(act.chapters || []).map((chapter, chapterIndex) => {
               const scenesWithText = (chapter.scenes || []).filter(scene => scene.content?.trim())
               if (!scenesWithText.length) return null
               return (
                 <section key={chapter.id || chapterIndex} className="ms-final-chapter">
-                  <h3>{chapter.title}</h3>
+                  <h3>{decodeHtmlEntities(chapter.title)}</h3>
                   {scenesWithText.map((scene, sceneIndex) => (
                     <div key={scene.id || sceneIndex} className="ms-final-scene">
                       {sceneIndex > 0 && <div className="ms-final-break" aria-hidden="true">* * *</div>}
-                      {scene.content.trim().split(/\n{2,}/).map((block, blockIndex) => {
+                      {decodeHtmlEntities(scene.content).trim().split(/\n{2,}/).map((block, blockIndex) => {
                         const text = block.split('\n').map(line => line.trim()).filter(Boolean).join(' ')
                         if (!text) return null
                         return <p key={blockIndex}>{renderInlineMarkdown(text, `${scene.id}-${blockIndex}`)}</p>
@@ -163,7 +163,7 @@ export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalN
 
   children.push(
     new Paragraph({
-      children: [new TextRun({ text: novel?.title || 'Untitled', bold: true, size: 56, font: 'Times New Roman' })],
+      children: [new TextRun({ text: decodeHtmlEntities(novel?.title) || 'Untitled', bold: true, size: 56, font: 'Times New Roman' })],
       alignment: AlignmentType.CENTER,
       spacing: { after: 600 },
     })
@@ -179,13 +179,13 @@ export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalN
     if (!firstAct) children.push(new Paragraph({ children: [new PageBreak()] }))
     firstAct = false
 
-    children.push(new Paragraph({ text: act.title, heading: HeadingLevel.HEADING_1, spacing: { before: 0, after: 240 } }))
+    children.push(new Paragraph({ text: decodeHtmlEntities(act.title), heading: HeadingLevel.HEADING_1, spacing: { before: 0, after: 240 } }))
 
     actChapters.forEach((chap, chapIndex) => {
       const num = chapterGlobalNumbers[chap.id]
       const l2 = (labels.level2 || 'Chapter').toLowerCase()
       const isDefault = !chap.title || chap.title.toLowerCase().startsWith(l2)
-      const chapTitle = isDefault ? `${labels.level2 || 'Chapter'} ${num}` : `${labels.level2 || 'Chapter'} ${num}: ${chap.title}`
+      const chapTitle = isDefault ? `${labels.level2 || 'Chapter'} ${num}` : `${labels.level2 || 'Chapter'} ${num}: ${decodeHtmlEntities(chap.title)}`
 
       if (chapIndex > 0) children.push(new Paragraph({ children: [new PageBreak()] }))
       children.push(new Paragraph({ text: chapTitle, heading: HeadingLevel.HEADING_2, spacing: { before: 0, after: 360 } }))
@@ -201,7 +201,7 @@ export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalN
           }))
         }
 
-        const content = scene.content?.trim()
+        const content = decodeHtmlEntities(scene.content)?.trim()
         if (!content) return
 
         if (isScriptProject) {

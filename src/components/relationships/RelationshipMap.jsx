@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType, isCharacterLinkRelType } from '../../constants/Constants'
+import { FACTION_ICONS } from '../../constants/factionIcons'
+import FactionLogo from '../Factions/FactionLogo'
 
 const toArray = value => Array.isArray(value) ? value : []
 
@@ -57,8 +59,32 @@ function CharacterAvatar({ character, size = 62 }) {
   )
 }
 
+function CharacterAvatarWithFaction({ character, faction, size = 62, badgeSize = 24 }) {
+  const legacyIcon = faction ? FACTION_ICONS.find(icon => icon.id === faction.iconId) : null
+
+  return (
+    <span className="relative inline-flex flex-shrink-0">
+      <CharacterAvatar character={character} size={size} />
+      {faction && (
+        <span
+          className="absolute -right-1 -bottom-1 grid place-items-center rounded-md border border-[var(--border)] bg-[var(--bg-main)] shadow-sm overflow-hidden"
+          title={faction.name ? `${faction.name} logo` : 'Faction logo'}
+          aria-label={faction.name ? `${faction.name} logo` : 'Faction logo'}
+          style={{ width: badgeSize, height: badgeSize }}
+        >
+          {legacyIcon ? (
+            <img src={legacyIcon.url} alt="" className="w-[70%] h-[70%] object-contain opacity-70" />
+          ) : (
+            <FactionLogo shapes={faction.logo} size={Math.max(14, badgeSize - 5)} />
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
+
 export default function RelationshipMap({ store }) {
-  const { characters, selectedCharacterId, setSelectedCharacterId, saveCharacter } = store
+  const { characters, factions = [], selectedCharacterId, setSelectedCharacterId, saveCharacter } = store
   const [targetId, setTargetId] = useState('')
   const [relationshipType, setRelationshipType] = useState(DEFAULT_CHARACTER_LINK_REL_TYPE)
 
@@ -95,6 +121,7 @@ export default function RelationshipMap({ store }) {
   }, [characters, focalCharacter?.id, networkNodes])
   const connectedIds = new Set(connections.map(connection => connection.character.id))
   const availableTargets = characters.filter(character => character.id !== focalCharacter?.id && !connectedIds.has(character.id))
+  const getCharacterFaction = character => character?.factionId ? factions.find(faction => faction.id === character.factionId) : null
 
   const addConnection = () => {
     if (!focalCharacter || !targetId || targetId === focalCharacter.id) return
@@ -167,7 +194,7 @@ export default function RelationshipMap({ store }) {
                 onClick={() => openProfile(focalCharacter.id)}
                 className="relationship-focus-enter absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-40 min-h-44 rounded-[2rem] border-2 border-[var(--accent)] bg-[var(--bg-main)] shadow-2xl p-4 flex flex-col items-center justify-center text-center hover:-translate-y-[51%] transition-transform"
               >
-                <CharacterAvatar character={focalCharacter} size={76} />
+                <CharacterAvatarWithFaction character={focalCharacter} faction={getCharacterFaction(focalCharacter)} size={76} badgeSize={28} />
                 <strong className="text-sm text-[var(--text-main)] mt-3 leading-tight">{focalCharacter.name || 'Unnamed character'}</strong>
                 <span className="text-[10px] uppercase tracking-wider text-[var(--accent)] mt-1">Focal character</span>
               </button>
@@ -184,7 +211,12 @@ export default function RelationshipMap({ store }) {
                     style={{ left: `${node.x / 10}%`, top: `${node.y / 6.2}%`, borderColor: type.color, animationDelay: `${Math.min(index * 45, 360)}ms` }}
                     title={`Make ${node.character.name} the focal character`}
                   >
-                    <CharacterAvatar character={node.character} size={node.compact ? 40 : 52} />
+                    <CharacterAvatarWithFaction
+                      character={node.character}
+                      faction={getCharacterFaction(node.character)}
+                      size={node.compact ? 40 : 52}
+                      badgeSize={node.compact ? 18 : 22}
+                    />
                     <strong className="text-xs text-[var(--text-main)] mt-2 leading-tight">{node.character.name || 'Unnamed character'}</strong>
                     <span className="text-[10px] mt-1 leading-tight" style={{ color: type.color }}>{type.label}</span>
                     {node.direction === 'incoming' && <span className="text-[9px] text-[var(--text-muted)]">linked to focal</span>}

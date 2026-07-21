@@ -3,6 +3,7 @@ import { streamMessage } from '../../utils/aiApi'
 import { buildInterviewSystemPrompt } from '../../utils/aiToolPrompts'
 import { createInterview, updateInterview, loadInterviews, deleteInterview } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
+import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
 
 const INTERVIEW_MODES = [
   { id: 'general',       label: 'General',        desc: 'Open conversation in character' },
@@ -44,6 +45,7 @@ export default function CharacterInterview({ store, userId }) {
   const [pastSessions,   setPastSessions]  = useState([])
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [deletingId,     setDeletingId]    = useState(null)
+  const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
@@ -104,7 +106,7 @@ export default function CharacterInterview({ store, userId }) {
   const sendMessage = useCallback(async () => {
     if (!input.trim() || streaming || !character) return
     const ai = getActiveAiConfig(userId)
-    if (!ai.apiKey) { setError('No AI API key configured. Add one in AI Settings.'); return }
+    if (!ai.apiKey) { setError(AI_CONFIG_REQUIRED_TEXT); return }
 
     const userMsg = { role: 'user', content: input.trim() }
     const nextMsgs = [...messages, userMsg]
@@ -187,6 +189,8 @@ export default function CharacterInterview({ store, userId }) {
             ⚠️ Interview responses are exploratory and <strong style={{ color: 'var(--text-main)' }}>not automatically canon</strong>. Save useful answers to notes manually.
           </p>
         </div>
+
+        {!aiConfigured && <AiConfigRequiredNotice style={{ marginBottom: 20, maxWidth: 440 }} />}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 440 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -301,6 +305,12 @@ export default function CharacterInterview({ store, userId }) {
         <p style={{ fontSize: 10, color: '#f59e0b', margin: 0 }}>Exploratory mode — responses are not automatically canon. Save useful answers to notes.</p>
       </div>
 
+      {!aiConfigured && (
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <AiConfigRequiredNotice />
+        </div>
+      )}
+
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
         {messages.length === 0 && (
@@ -382,12 +392,12 @@ export default function CharacterInterview({ store, userId }) {
         />
         <button
           onClick={sendMessage}
-          disabled={!input.trim() || streaming}
+          disabled={!input.trim() || streaming || !aiConfigured}
           style={{
             padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 13,
-            background: !input.trim() || streaming ? 'var(--border)' : 'var(--accent)',
-            color: !input.trim() || streaming ? 'var(--text-muted)' : 'var(--bg-main)',
-            border: 'none', cursor: !input.trim() || streaming ? 'default' : 'pointer', flexShrink: 0,
+            background: !input.trim() || streaming || !aiConfigured ? 'var(--border)' : 'var(--accent)',
+            color: !input.trim() || streaming || !aiConfigured ? 'var(--text-muted)' : 'var(--bg-main)',
+            border: 'none', cursor: !input.trim() || streaming || !aiConfigured ? 'default' : 'pointer', flexShrink: 0,
           }}
         >
           {streaming ? '…' : 'Send'}

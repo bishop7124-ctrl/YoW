@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { PASSWORD_REQUIREMENTS_LIST, validatePassword } from '../../utils/passwordValidation'
 import YOWLogo from '../brand/YOWLogo'
 import HomePage from './HomePage'
 
@@ -67,6 +68,31 @@ function HeroIllustration() {
   return (
     <div className="auth-hero-logo" aria-hidden="true">
       <YOWLogo title="" />
+    </div>
+  )
+}
+
+function PasswordRequirements({ id, value }) {
+  const validation = validatePassword(value)
+  const missing = new Set(validation.missing)
+
+  return (
+    <div id={id} className="password-requirements" aria-label="Password requirements" tabIndex={0}>
+      <div className="password-requirements-summary">
+        <span>Password requirements</span>
+        {value && !validation.valid && <small>{validation.missing.length} missing</small>}
+      </div>
+      <ul className="password-requirements-popover">
+        {PASSWORD_REQUIREMENTS_LIST.map(item => {
+          const normalized = item.charAt(0).toLowerCase() + item.slice(1)
+          const isMissing = missing.has(normalized)
+          return (
+            <li key={item} className={isMissing ? 'is-missing' : value ? 'is-met' : ''}>
+              {item}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -139,6 +165,8 @@ export default function LoginPage({
 
   const handleNewPassword = async (e) => {
     e.preventDefault()
+    const validation = validatePassword(newPwd)
+    if (!validation.valid) { setError(''); return }
     if (newPwd !== confirmPwd) { setError('Passwords do not match.'); return }
     setError('')
     setLoading(true)
@@ -177,6 +205,13 @@ export default function LoginPage({
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    if (mode === 'signup') {
+      const validation = validatePassword(password)
+      if (!validation.valid) {
+        setError('')
+        return
+      }
+    }
     setLoading(true)
     try {
       if (mode === 'login') {
@@ -325,8 +360,10 @@ export default function LoginPage({
                       onChange={e => setNewPwd(e.target.value)}
                       required
                       minLength={8}
+                      aria-describedby="new-password-requirements"
                       className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
                     />
+                    <PasswordRequirements id="new-password-requirements" value={newPwd} />
                     <input
                       type="password"
                       placeholder="Confirm new password"
@@ -495,8 +532,13 @@ export default function LoginPage({
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       required
+                      minLength={mode === 'signup' ? 8 : undefined}
+                      aria-describedby={mode === 'signup' ? 'signup-password-requirements' : undefined}
                       className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
                     />
+                    {mode === 'signup' && (
+                      <PasswordRequirements id="signup-password-requirements" value={password} />
+                    )}
 
                     {error && (
                       <p className="text-red-400 text-sm text-center bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">

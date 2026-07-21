@@ -7,6 +7,16 @@
     { "source": "/beta-disclaimer/", "destination": "/beta-disclaimer/index.html" },
     { "source": "/founders/", "destination": "/founders/index.html" },
     { "source": "/founders/:slug/", "destination": "/founders/:slug/index.html" },
+    { "source": "/about/", "destination": "/about/index.html" },
+    { "source": "/ai-overview/", "destination": "/ai-overview/index.html" },
+    { "source": "/worldbuilding-software/", "destination": "/worldbuilding-software/index.html" },
+    { "source": "/novel-writing-software/", "destination": "/novel-writing-software/index.html" },
+    { "source": "/dnd-campaign-manager/", "destination": "/dnd-campaign-manager/index.html" },
+    { "source": "/story-planning-software/", "destination": "/story-planning-software/index.html" },
+    { "source": "/timeline-tool-for-writers/", "destination": "/timeline-tool-for-writers/index.html" },
+    { "source": "/family-tree-builder/", "destination": "/family-tree-builder/index.html" },
+    { "source": "/map-builder-for-writers/", "destination": "/map-builder-for-writers/index.html" },
+    { "source": "/lore-management/", "destination": "/lore-management/index.html" },
     { "source": "/(.*)",       "destination": "/index.html"  }
   ]
 }

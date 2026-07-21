@@ -25,12 +25,11 @@ export const PROJECT_TYPES = {
     defaultWordTarget: 80000,
     defaultSections: [
       'outline','characters','relationships','familytree','factions',
-      'locations','lore','ideas','schedule','timeline','worldhistory','aitools',
+      'locations','lore','ideas','schedule','timeline','worldhistory','map','aitools',
     ],
     starterOutline: [
       { title: 'Act 1', children: [{ title: 'Chapter 1', scenes: ['Opening Scene'] }] },
     ],
-    // map available but not default — enable via project settings
   },
   novella: {
     label: 'Novella',
@@ -52,12 +51,12 @@ export const PROJECT_TYPES = {
     exportLabel: 'Project Encyclopaedia',
     defaultWordTarget: 30000,
     defaultSections: [
-      'outline','characters','relationships','locations','lore','ideas','schedule','timeline','aitools',
+      'outline','characters','relationships','locations','lore','ideas','schedule','timeline','map','aitools',
     ],
     starterOutline: [
       { title: 'Part 1', children: [{ title: 'Chapter 1', scenes: ['Opening Turn'] }] },
     ],
-    // familytree, factions, map, worldhistory available but not default
+    // familytree, factions, worldhistory available but not default
   },
   short_story: {
     label: 'Short Story',
@@ -79,12 +78,12 @@ export const PROJECT_TYPES = {
     exportLabel: 'Story Project Export',
     defaultWordTarget: 5000,
     defaultSections: [
-      'outline','characters','relationships','locations','lore','ideas','schedule','timeline','aitools',
+      'outline','characters','relationships','locations','lore','ideas','schedule','timeline','map','aitools',
     ],
     starterOutline: [
       { title: 'Story Draft', children: [{ title: 'Main Section', scenes: ['Opening Image'] }] },
     ],
-    // heavy sections (factions, map, worldhistory) available but not default
+    // heavy sections (factions, worldhistory) available but not default
   },
   dnd_campaign: {
     label: 'D&D Campaign',

@@ -1,3 +1,5 @@
+import { buildProjectTypePromptContext } from './aiToolPrompts'
+
 export const PROVIDERS = {
   google: {
     name: 'Google AI Studio',
@@ -80,7 +82,7 @@ async function readSSE(body, onEvent) {
 
 // ── Provider implementations ──────────────────────────────────────────────────
 
-async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096 }) {
+async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -91,6 +93,7 @@ async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk,
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: systemPrompt, messages }),
+      signal,
     })
     if (!res.ok) {
       let msg = `HTTP ${res.status}`
@@ -104,10 +107,10 @@ async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk,
       if (parsed.type === 'message_stop') { onceDone(); return true }
     })
     onceDone()
-  } catch (e) { onError(e.message || 'Network error') }
+  } catch (e) { if (e.name !== 'AbortError') onError(e.message || 'Network error') }
 }
 
-async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens = 4096 }) {
+async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens = 4096, signal }) {
   try {
     const contents = messages.map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
@@ -123,6 +126,7 @@ async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, on
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     })
     if (!res.ok) {
       let msg = `HTTP ${res.status}`
@@ -137,10 +141,10 @@ async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, on
       if (parsed.candidates?.[0]?.finishReason === 'STOP') { onceDone(); return true }
     })
     onceDone()
-  } catch (e) { onError(e.message || 'Network error') }
+  } catch (e) { if (e.name !== 'AbortError') onError(e.message || 'Network error') }
 }
 
-async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096 }) {
+async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
   try {
     const url        = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/chat/completions`
     const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages]
@@ -148,6 +152,7 @@ async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
       body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, messages: apiMessages }),
+      signal,
     })
     if (!res.ok) {
       let msg = `HTTP ${res.status}`
@@ -162,31 +167,31 @@ async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt
       if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
     })
     onceDone()
-  } catch (e) { onError(e.message || 'Network error') }
+  } catch (e) { if (e.name !== 'AbortError') onError(e.message || 'Network error') }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 import { OFFLINE_MODE, mockStreamMessage } from './offlineMock'
 
-export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens }) {
+export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens, signal }) {
   if (OFFLINE_MODE)         return mockStreamMessage({ onChunk, onDone, onError })
   if (!apiKey)              return onError('No API key configured.')
-  if (provider === 'anthropic')   return streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens })
-  if (provider === 'google')      return streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens })
+  if (provider === 'anthropic')   return streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
+  if (provider === 'google')      return streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens, signal })
   if (provider === 'openrouter')  return streamOpenAI({
-    apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens,
+    apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal,
     baseUrl: 'https://openrouter.ai/api/v1',
     extraHeaders: { 'HTTP-Referer': 'https://yow.app', 'X-Title': 'Your Own World' },
   })
-  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, maxTokens })
+  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
   onError(`Unknown provider: ${provider}`)
 }
 
 export function buildSystemPrompt(novel, context, store) {
   const lines = [
-    `You are a creative writing assistant for the novel "${novel?.title || 'Untitled'}".`,
-    novel?.description ? `Premise: ${novel.description}` : '',
+    'You are a creative writing assistant embedded in Your Own World.',
+    buildProjectTypePromptContext(novel),
     'Help with writing, plot, character development, world-building, and any creative task.',
   ].filter(Boolean)
 

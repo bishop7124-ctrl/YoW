@@ -2,6 +2,7 @@ import { Component, useCallback, useEffect, useRef, useState, useMemo } from 're
 import UserMenu from './auth/UserMenu'
 import AIPanel from './ai/AIPanel'
 import AIAssistant from './ai/AIAssistant'
+import AIStar from './ai/AIStar'
 import Characters from './characters/Characters'
 import FamilyTree from './familytree/FamilyTree'
 import RelationshipMap from './relationships/RelationshipMap'
@@ -45,10 +46,16 @@ const STATUS_DATA = {
   revision:    { label: 'Editing',      color: '#e3a84f', aliasFor: 'editing' },
 }
 const STATUS_PICKER = ['not_started', 'draft', 'in_progress', 'editing', 'complete', 'paused']
+const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
+const isCampaignProjectType = (type) => CAMPAIGN_PROJECT_TYPES.has(type)
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
 function Icon({ name, size = 16 }) {
+  if (name === 'aitools') {
+    return <AIStar size={size} />
+  }
+
   const common = {
     width: size, height: size, viewBox: '0 0 24 24',
     fill: 'none', stroke: 'currentColor', strokeWidth: 2,
@@ -73,7 +80,6 @@ function Icon({ name, size = 16 }) {
     map: <><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></>,
     note: <><path d="M5 4h14v16H5z" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></>,
     schedule: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M12 18h.01" /></>,
-    aitools:  <><circle cx={12} cy={12} r={9} /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></>,
     characterbuilder: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
   }
   return <svg {...common}>{paths[name] || paths.note}</svg>
@@ -161,6 +167,12 @@ const SETTINGS_GROUPS = [
   { label: 'AI',                sections: ['aitools'] },
 ]
 
+const FREE_LOCKED_SECTIONS = new Set(['map', 'aitools'])
+
+const openUpgradePage = () => {
+  window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))
+}
+
 const BACKUP_DEFAULTS = {
   frequency: 'manual',
   retention: 5,
@@ -211,6 +223,7 @@ function ProjectSettings({ store, onClose }) {
   const novel = store.activeNovel
   const settingsProjectType = getProjectType(novel?.type)
   const settingsProjectStage = getProjectTypeStage(novel?.type)
+  const isCampaign = isCampaignProjectType(novel?.type)
   const initial = getEnabledSections(novel).filter(id => ALL_SECTION_IDS.includes(id))
   const [enabled, setEnabled] = useState(() => new Set(initial))
   const dialogRef = useRef(null)
@@ -228,6 +241,7 @@ function ProjectSettings({ store, onClose }) {
     seriesId: novel?.seriesId || '',
     progress: novel?.progress ?? '',
     wordCountTarget: novel?.wordCountTarget ?? '',
+    sessionTarget: novel?.sessionTarget ?? '',
     status: novel?.status ?? null,
   }))
   const [coverError, setCoverError] = useState('')
@@ -258,6 +272,7 @@ function ProjectSettings({ store, onClose }) {
       seriesId: novel?.seriesId || '',
       progress: novel?.progress ?? '',
       wordCountTarget: novel?.wordCountTarget ?? '',
+      sessionTarget: novel?.sessionTarget ?? '',
       status: novel?.status ?? null,
     })
     setBackupConfig({ ...BACKUP_DEFAULTS, ...(novel?.backupConfig || {}) })
@@ -285,6 +300,11 @@ function ProjectSettings({ store, onClose }) {
     if (field === 'wordCountTarget') {
       const num = value === '' ? null : Math.max(0, Number(value))
       patchProject({ wordCountTarget: num })
+      return
+    }
+    if (field === 'sessionTarget') {
+      const num = value === '' ? null : Math.max(0, Number(value))
+      patchProject({ sessionTarget: num })
       return
     }
     patchProject({ [field]: field === 'seriesId' ? value || null : value })
@@ -538,21 +558,36 @@ function ProjectSettings({ store, onClose }) {
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   />
                 </label>
-                <label>
-                  <span>Word target</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={details.wordCountTarget}
-                    onChange={e => updateDetail('wordCountTarget', e.target.value.replace(/[^\d]/g, ''))}
-                    placeholder="80000"
-                    className="field"
-                    style={{ fontVariantNumeric: 'tabular-nums' }}
-                  />
-                </label>
+                {isCampaign ? (
+                  <label>
+                    <span>Session target</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={details.sessionTarget}
+                      onChange={e => updateDetail('sessionTarget', e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="12"
+                      className="field"
+                      style={{ fontVariantNumeric: 'tabular-nums' }}
+                    />
+                  </label>
+                ) : (
+                  <label>
+                    <span>Word target</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={details.wordCountTarget}
+                      onChange={e => updateDetail('wordCountTarget', e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="80000"
+                      className="field"
+                      style={{ fontVariantNumeric: 'tabular-nums' }}
+                    />
+                  </label>
+                )}
               </div>
 
-              {!details.wordCountTarget && (
+              {!isCampaign && !details.wordCountTarget && (
                 <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Progress (0–100%)</span>
                   <input
@@ -596,13 +631,17 @@ function ProjectSettings({ store, onClose }) {
 
               <div style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Cover Photo</span>
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>Thumbnail shown in the project list and sidebar.</p>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  {novel?.coverPhoto && (
-                    <img src={novel.coverPhoto} alt="" style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }} />
-                  )}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1 }}>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>Shown in the project list and sidebar.</p>
+                <div className="project-cover-preview project-cover-preview-compact">
+                  <div className="project-cover-preview-frame" style={{ background: novel?.coverPhoto ? 'var(--bg-main)' : 'linear-gradient(135deg, var(--bg-main), color-mix(in srgb, var(--accent) 16%, var(--bg-main)))' }}>
+                    {novel?.coverPhoto ? (
+                      <img src={novel.coverPhoto} alt="" />
+                    ) : (
+                      <span>No cover photo</span>
+                    )}
+                  </div>
+                  <div className="project-cover-preview-actions">
+                    <label>
                       <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
                       {novel?.coverPhoto ? 'Change cover' : 'Add cover photo'}
                     </label>
@@ -610,13 +649,12 @@ function ProjectSettings({ store, onClose }) {
                       <button
                         type="button"
                         onClick={() => store.updateNovel(store.activeNovelId, { coverPhoto: null })}
-                        style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}
                       >
                         Remove
                       </button>
                     )}
-                    {coverError && <p style={{ fontSize: 11, color: '#f87171', margin: 0 }}>{coverError}</p>}
                   </div>
+                  {coverError && <p>{coverError}</p>}
                 </div>
               </div>
 
@@ -717,13 +755,13 @@ function ProjectSettings({ store, onClose }) {
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
               <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Export</p>
               <div className="project-settings-action-grid">
-                <button type="button" onClick={() => handleExport('docx')} className="project-settings-action-card" disabled={!!exporting}>
+                <button type="button" onClick={() => handleExport('docx')} className="project-settings-action-card" disabled={!!exporting} title="Readable export — story, characters, locations, lore, timeline, and more">
                   <strong>Word document</strong>
-                  <span>Editable reference export</span>
+                  <span>Readable export — story, characters, locations, lore, timeline, and more</span>
                 </button>
-                <button type="button" onClick={() => handleExport('zip')} className="project-settings-action-card" disabled={!!exporting}>
+                <button type="button" onClick={() => handleExport('zip')} className="project-settings-action-card" disabled={!!exporting} title="Restore file for YOW — JSON data, not for reading">
                   <strong>Backup zip</strong>
-                  <span>Complete raw project data</span>
+                  <span>Restore file for YOW — JSON data, not for reading</span>
                 </button>
               </div>
               <div style={{ marginTop: 12 }}>
@@ -750,7 +788,7 @@ function ProjectSettings({ store, onClose }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Backups</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Configure local customer/project data snapshots and export them as zip files.</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Automatic restore-ready snapshots of this project, saved as zip files. Use Import ZIP to restore one — they aren't meant to be opened and read.</p>
                 </div>
                 <button type="button" onClick={() => createLocalBackup('manual')} className="project-settings-small-button">Create backup</button>
               </div>
@@ -868,6 +906,11 @@ export default function Layout({
     : projectTypeCfg.label
   const enabledSectionIds = new Set(getEnabledSections(store.activeNovel))
   const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || enabledSectionIds.has(s.id))
+  const isFreePlan = membership?.isFree
+  const isSectionLockedForFree = useCallback(
+    (sectionId) => Boolean(isFreePlan && FREE_LOCKED_SECTIONS.has(sectionId)),
+    [isFreePlan]
+  )
 
   const [aiOpen, setAiOpen] = useState(false)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
@@ -890,7 +933,7 @@ export default function Layout({
     factions: FACTIONS_TOUR,
   }), [])
   const activeSectionTourId = viewMode === 'writing' ? 'manuscript' : section
-  const activeSectionTour = activeSectionTourId === 'map' && isMobileViewport
+  const activeSectionTour = (activeSectionTourId === 'map' && isMobileViewport) || (activeSectionTourId === 'aitools' && membership?.isFree)
     ? null
     : sectionTours[activeSectionTourId]
 
@@ -918,6 +961,10 @@ export default function Layout({
   useEffect(() => {
     const handleTeleport = (e) => {
       if (e.detail?.section) {
+        if (isSectionLockedForFree(e.detail.section)) {
+          openUpgradePage()
+          return
+        }
         setSection(e.detail.section)
         if (ALL_SECTIONS.find(s => s.id === e.detail.section)) setViewMode('planning')
       }
@@ -935,7 +982,7 @@ export default function Layout({
       window.removeEventListener('open-project-settings', handleOpenProjectSettings)
       window.removeEventListener('switch-writing', handleOpenWriting)
     }
-  }, [setSection, setViewMode, setProjectSettingsOpen, resetStudioIndex])
+  }, [setSection, setViewMode, setProjectSettingsOpen, resetStudioIndex, isSectionLockedForFree])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 860px)')
@@ -972,12 +1019,12 @@ export default function Layout({
     factions:     <Factions store={store} />,
     locations:    <Locations store={store} />,
     lore:         <Lore store={store} />,
-    ideas:        <IdeasKanban store={store} userId={userId} />,
+    ideas:        <IdeasKanban store={store} userId={userId} membership={membership} />,
     schedule:     <ScheduleCalendar store={store} />,
     timeline:     <Timeline store={store} />,
     worldhistory: <WorldHistory store={store} />,
     map:          <MapBuilder store={store} />,
-    aitools:           <AITools store={store} userId={userId} />,
+    aitools:           <AITools store={store} userId={userId} membership={membership} />,
     characterbuilder:  <CharacterBuilder store={store} />,
   }
 
@@ -998,6 +1045,10 @@ export default function Layout({
     : planningSections.filter(s => activeRoom?.sections.includes(s.id))
 
   const openRoom = (room) => {
+    if (room.locked) {
+      openUpgradePage()
+      return
+    }
     resetStudioIndex()
     setViewMode('planning')
     if (!room.sections.includes(section)) setSection(room.sections[0])
@@ -1005,9 +1056,20 @@ export default function Layout({
 
   const roomNav = visibleRooms.map(room => ({
     ...room,
+    locked: room.sections.length > 0 && room.sections.every(isSectionLockedForFree),
     icon: <Icon name={room.icon} />,
     description: room.sections.map(id => ALL_SECTIONS.find(s => s.id === id)?.label).filter(Boolean).join(' · '),
   }))
+
+  const renderLockedFeature = (featureName, body) => (
+    <div className="workspace-page grid h-full place-items-center p-6">
+      <StudioEmpty
+        title={`${featureName} is included in paid plans`}
+        body={body}
+        action={<StudioButton tone="primary" onClick={openUpgradePage}>View plans</StudioButton>}
+      />
+    </div>
+  )
 
   return (
     <>
@@ -1109,32 +1171,44 @@ export default function Layout({
                 <StudioTab
                   key={s.id}
                   onClick={() => {
+                    if (isSectionLockedForFree(s.id)) {
+                      openUpgradePage()
+                      return
+                    }
                     resetStudioIndex()
                     setSection(s.id)
                   }}
                   active={section === s.id}
-                >
+                  className={isSectionLockedForFree(s.id) ? 'is-locked' : ''}
+                  >
                   <span><Icon name={s.icon} size={14} /></span>
-                  <span>{s.label}</span>
+                  <span>{s.label}{isSectionLockedForFree(s.id) ? ' · Locked' : ''}</span>
                 </StudioTab>
               ))}
             </>
           ) : null}
           footer={
-            <AIAssistant store={store} section={section === 'map' ? 'atlas' : (viewMode === 'writing' ? 'manuscript' : section)} onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} userId={userId} />
+            <AIAssistant store={store} section={section === 'map' ? 'atlas' : (viewMode === 'writing' ? 'manuscript' : section)} onOpenChat={() => setAiOpen(v => !v)} aiOpen={aiOpen} userId={userId} membership={membership} />
           }
         >
           <div className="h-full overflow-hidden" style={{ position: 'relative' }}>
             {/* AI Tools stays mounted so analyses survive navigation */}
             <div style={{ position: 'absolute', inset: 0, display: viewMode === 'planning' && section === 'aitools' ? 'block' : 'none', zIndex: 1 }}>
               <SectionErrorBoundary key="aitools">
-                <AITools store={store} userId={userId} />
+                <AITools store={store} userId={userId} membership={membership} />
               </SectionErrorBoundary>
             </div>
 
             {viewMode === 'planning' && section !== 'aitools' ? (
               <SectionErrorBoundary key={section}>
-                {section === 'map' && isMobileViewport ? (
+                {isSectionLockedForFree(section) ? (
+                  renderLockedFeature(
+                    section === 'map' ? 'Map Builder' : 'AI Tools',
+                    section === 'map'
+                      ? 'Free is a text-first workspace. Upgrade to create and edit maps for your worlds and campaigns.'
+                      : 'Upgrade to unlock project-aware analysis, character interviews, and story consistency tools.'
+                  )
+                ) : section === 'map' && isMobileViewport ? (
                   <div className="workspace-page grid h-full place-items-center p-6">
                     <StudioEmpty
                       title="Map Builder is desktop-only"
@@ -1147,7 +1221,7 @@ export default function Layout({
               </SectionErrorBoundary>
             ) : viewMode === 'writing' ? (
               <SectionErrorBoundary key="manuscript">
-                <Manuscript store={store} userId={userId} />
+                <Manuscript store={store} userId={userId} membership={membership} />
               </SectionErrorBoundary>
             ) : null}
           </div>

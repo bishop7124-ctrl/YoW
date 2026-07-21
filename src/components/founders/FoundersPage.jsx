@@ -1,5 +1,6 @@
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import { usePageMeta } from '../../utils/usePageMeta'
 
 const FOUNDERS = [
   {
@@ -50,6 +51,12 @@ function FounderCard({ founder }) {
 }
 
 export default function FoundersPage({ user, onGetStarted, onLogin }) {
+  usePageMeta({
+    path: '/founders/',
+    title: 'Founders — Your Own World | Worldbuilding & Writing Software',
+    description: 'Meet the Founder members of Your Own World and learn about limited Founder slots — lifetime Cloud Mode, a Founder badge, and priority feature input.',
+  })
+
   return (
     <div className="yow-home min-h-screen" style={{ color: 'var(--text-main)' }}>
       <MarketingNav activePath="/founders/" user={user} onGetStarted={onGetStarted} onLogin={onLogin} />

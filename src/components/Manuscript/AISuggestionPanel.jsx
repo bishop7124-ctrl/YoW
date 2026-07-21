@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback } from 'react'
 import { streamMessage } from '../../utils/aiApi'
 import { getActiveAiConfig } from '../../utils/aiSettings'
+import { getProjectType } from '../../constants/projectTypes'
+import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
+import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 
 const QUICK_PROMPTS = [
   { label: 'Continue', text: "Continue writing this scene naturally from where it ends. Match the author's existing style, voice, tone, and POV. Write 2-3 paragraphs." },
@@ -15,10 +18,12 @@ function loadAIConfig(userId) {
   return cfg
 }
 
-function buildSystemPrompt(activeNovel, activeScene, characters, locations) {
+function buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText = '') {
+  const typeCfg = getProjectType(activeNovel?.type)
+  const itemLabel = typeCfg.structure?.level3 || 'Scene'
   const lines = [
-    `You are a creative writing assistant for "${activeNovel?.title || 'Untitled'}".`,
-    activeNovel?.description ? `Premise: ${activeNovel.description}` : null,
+    'You are a creative writing assistant embedded in Your Own World.',
+    buildProjectTypePromptContext(activeNovel),
     "Help the author with suggestions and continuations. Always match their existing style.",
     "Be concise. Never rewrite existing author content unless explicitly asked.",
   ].filter(Boolean)
@@ -29,19 +34,19 @@ function buildSystemPrompt(activeNovel, activeScene, characters, locations) {
   if (locations?.length) {
     lines.push('Locations: ' + locations.slice(0, 5).map(l => l.name).join(', '))
   }
-  if (activeScene?.content?.trim()) {
-    const text = activeScene.content.trim()
-    const excerpt = text.length > 1800 ? '…' + text.slice(-1800) : text
-    lines.push('\n--- CURRENT SCENE ---')
-    if (activeScene.pov) lines.push(`POV: ${activeScene.pov}`)
-    if (activeScene.locationTag) lines.push(`Location: ${activeScene.locationTag}`)
-    lines.push(excerpt)
-    lines.push('--- END SCENE ---')
+  const highlighted = selectedText.trim()
+  const sceneText = activeScene?.content?.trim() || ''
+  if (highlighted || sceneText) {
+    lines.push(`\n--- ${highlighted ? 'HIGHLIGHTED TEXT' : `CURRENT ${itemLabel.toUpperCase()}`} ---`)
+    if (activeScene?.pov) lines.push(`POV: ${activeScene.pov}`)
+    if (activeScene?.locationTag) lines.push(`Location: ${activeScene.locationTag}`)
+    lines.push(highlighted || sceneText)
+    lines.push(`--- END ${highlighted ? 'HIGHLIGHTED TEXT' : itemLabel.toUpperCase()} ---`)
   }
   return lines.join('\n')
 }
 
-export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, onAppendToScene, userId = null }) {
+export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, selectedText = '', onAppendToScene, userId = null, membership = null }) {
   const [prompt, setPrompt] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -49,10 +54,16 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   const abortRef = useRef(false)
 
   const configured = !!loadAIConfig(userId)
+  const activeType = getProjectType(activeNovel?.type)
+  const itemLabel = activeType.structure?.level3 || 'Scene'
+  const quickPrompts = QUICK_PROMPTS.map(q => ({
+    ...q,
+    text: q.text.replaceAll('scene', itemLabel.toLowerCase()).replaceAll('Scene', itemLabel),
+  }))
 
   const generate = useCallback((overridePrompt) => {
     const config = loadAIConfig(userId)
-    if (!config) { setError('No AI provider configured. Add an API key in AI Settings.'); return }
+    if (!config) { setError(AI_CONFIG_REQUIRED_TEXT); return }
     const userText = (overridePrompt || prompt).trim()
     if (!userText) return
 
@@ -63,15 +74,15 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
 
     let buf = ''
     streamMessage({
-      ...config,
-      systemPrompt: buildSystemPrompt(activeNovel, activeScene, characters, locations),
+	      ...config,
+	      systemPrompt: buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText),
       messages: [{ role: 'user', content: userText }],
       maxTokens: 800,
       onChunk: c => { if (!abortRef.current) { buf += c; setSuggestion(buf) } },
       onDone:  ()  => { if (!abortRef.current) setStreaming(false) },
       onError: e   => { if (!abortRef.current) { setError(e); setStreaming(false) } },
     })
-  }, [prompt, activeScene, activeNovel, characters, locations, userId])
+	  }, [prompt, activeScene, activeNovel, characters, locations, selectedText, userId])
 
   const handleStop = () => { abortRef.current = true; setStreaming(false) }
 
@@ -85,19 +96,26 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     if (suggestion.trim()) navigator.clipboard.writeText(suggestion).catch(() => {})
   }
 
+  if (membership?.isFree) {
+    return (
+      <div className="ms-panel-scroll ai-panel">
+        <AiUpgradeRequiredNotice>
+          Upgrade to access manuscript AI suggestions, continuations, and rewrite help.
+        </AiUpgradeRequiredNotice>
+      </div>
+    )
+  }
+
   return (
     <div className="ms-panel-scroll ai-panel">
       {!configured && (
-        <div className="ai-no-config">
-          No AI provider configured.{' '}
-          Open <strong>AI Settings</strong> to add an API key.
-        </div>
+        <AiConfigRequiredNotice style={{ marginBottom: 12 }} />
       )}
 
       {/* Quick actions */}
       <div className="ms-panel-section-header" style={{ marginTop: 12 }}>Quick actions</div>
       <div className="ai-chips">
-        {QUICK_PROMPTS.map(q => (
+        {quickPrompts.map(q => (
           <button
             key={q.label}
             className="ai-chip"
@@ -109,9 +127,16 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
         ))}
       </div>
 
-      {/* Custom prompt */}
-      <div className="ms-panel-section-header" style={{ marginTop: 14 }}>Custom prompt</div>
-      <div className="ai-prompt-wrap">
+	      {/* Custom prompt */}
+	      <div className="ms-panel-section-header" style={{ marginTop: 14 }}>Custom prompt</div>
+	      {activeScene && (
+	        <div className="ai-context-scope">
+	          {selectedText.trim()
+	            ? `Using highlighted text (${selectedText.trim().split(/\s+/).filter(Boolean).length} words)`
+	            : `Using full ${itemLabel.toLowerCase()} context`}
+	        </div>
+	      )}
+	      <div className="ai-prompt-wrap">
         <textarea
           className="ai-prompt-textarea"
           rows={3}
@@ -154,7 +179,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
                 disabled={!activeScene}
                 title={activeScene ? undefined : 'Focus a scene first'}
               >
-                Append to scene
+	                Insert at cursor
               </button>
               <button className="ai-btn" onClick={handleCopy}>Copy</button>
               <button className="ai-btn ai-btn--muted" onClick={() => setSuggestion('')}>Discard</button>

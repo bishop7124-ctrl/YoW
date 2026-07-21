@@ -5,6 +5,7 @@ import { LIBRARY_TOUR } from './onboarding/tourDefinitions'
 import UserMenu from './auth/UserMenu'
 import YOWLogo from './brand/YOWLogo'
 import AIImportModal from './AIImportModal'
+import AIStar from './ai/AIStar'
 import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../constants/projectTypes'
 import {
   createProjectZipBlob,
@@ -14,9 +15,11 @@ import {
   EXPORT_PDF_THEME_OPTIONS,
   getProjectExportFilename,
 } from '../utils/projectExport'
+import { isCampaignProjectType } from '../utils/projectStats'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
 const isProjectTypeSelectable = (type) => Boolean(PROJECT_TYPES[type])
+const getDefaultSessionTarget = (type) => isCampaignProjectType(type) ? 12 : null
 
 const COVER_GRADIENTS = [
   'linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
@@ -167,9 +170,9 @@ function ProjectExportMenu({ onExport, compact = false }) {
   if (!onExport) return null
 
   const options = [
-    ['docx', 'Word document'],
-    ['pdf', 'Visual PDF'],
-    ['zip', 'Backup zip'],
+    ['docx', 'Word document', 'Readable export — story, characters, locations, lore, timeline, and more'],
+    ['pdf', 'Visual PDF', 'Styled World Bible-style export'],
+    ['zip', 'Backup zip', 'Restore file for YOW — JSON data, not for reading'],
   ]
 
   return (
@@ -191,10 +194,11 @@ function ProjectExportMenu({ onExport, compact = false }) {
       </button>
       {open && (
         <div className="novel-export-menu">
-          {options.filter(([format]) => format !== 'pdf').map(([format, label]) => (
+          {options.filter(([format]) => format !== 'pdf').map(([format, label, description]) => (
             <button
               key={format}
               type="button"
+              title={description}
               onClick={() => {
                 setOpen(false)
                 onExport(format)
@@ -228,12 +232,17 @@ function ProjectExportMenu({ onExport, compact = false }) {
 function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetStatus, onToggleFocus, onEditProject, onExportProject, onCreateProject, onImportProject, checklistSnippet }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const novel = stats?.project ?? null
+  const isCampaign = isCampaignProjectType(novel?.type)
+  const campaignStats = stats?.campaignStats
   const totalWords = allStats.reduce((sum, item) => sum + item.manuscriptWords, 0)
   const currentStatus = STATUS_DATA[novel?.status]?.aliasFor ?? novel?.status
-  const progress = Number.isFinite(Number(novel?.progress)) ? Math.max(0, Math.min(100, Number(novel.progress))) : null
+  const progress = !isCampaign && Number.isFinite(Number(novel?.progress)) ? Math.max(0, Math.min(100, Number(novel.progress))) : null
   const wordCountTarget = novel?.wordCountTarget ? Number(novel.wordCountTarget) : null
-  const completionPct = wordCountTarget && wordCountTarget > 0 && stats
+  const completionPct = !isCampaign && wordCountTarget && wordCountTarget > 0 && stats
     ? Math.min(100, Math.round((stats.manuscriptWords / wordCountTarget) * 100))
+    : null
+  const campaignSessionProgress = isCampaign && campaignStats?.sessionProgress !== null && campaignStats?.sessionProgress !== undefined
+    ? campaignStats.sessionProgress
     : null
   const hasActiveProject = !!novel
   const isFirstRun = !hasActiveProject && allStats.length === 0 && series.length === 0
@@ -275,19 +284,19 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
             </div>
           ) : (
             <div className="active-project-command-stats">
-              {(completionPct !== null || progress !== null) && (
+              {(completionPct !== null || progress !== null || campaignSessionProgress !== null) && (
                 <div className="active-project-command-stat">
-                  <strong>{completionPct !== null ? `${completionPct}%` : `${progress}%`}</strong>
-                  <span>{completionPct !== null ? 'Complete' : 'Progress'}</span>
+                  <strong>{campaignSessionProgress !== null ? `${campaignSessionProgress}%` : completionPct !== null ? `${completionPct}%` : `${progress}%`}</strong>
+                  <span>{campaignSessionProgress !== null ? 'Session target' : completionPct !== null ? 'Complete' : 'Progress'}</span>
                 </div>
               )}
               <div className="active-project-command-stat">
-                <strong>{hasActiveProject ? stats.manuscriptWords.toLocaleString() : allStats.length}</strong>
-                <span>{hasActiveProject ? (wordCountTarget ? `/ ${wordCountTarget.toLocaleString()}` : 'Words') : 'Projects'}</span>
+                <strong>{hasActiveProject ? (isCampaign ? (campaignStats?.plannedSessions ?? 0).toLocaleString() : stats.manuscriptWords.toLocaleString()) : allStats.length}</strong>
+                <span>{hasActiveProject ? (isCampaign ? `${stats.projectType.structure?.level2 || 'Sessions'}` : (wordCountTarget ? `/ ${wordCountTarget.toLocaleString()}` : 'Words')) : 'Projects'}</span>
               </div>
               <div className="active-project-command-stat">
-                <strong>{hasActiveProject ? stats.scenes.length : totalWords.toLocaleString()}</strong>
-                <span>{hasActiveProject ? 'Scenes' : 'Total words'}</span>
+                <strong>{hasActiveProject ? (isCampaign ? (campaignStats?.encounterCount ?? stats.scenes.length) : stats.scenes.length) : totalWords.toLocaleString()}</strong>
+                <span>{hasActiveProject ? (isCampaign ? `${stats.projectType.structure?.level3 || 'Encounters'}` : 'Scenes') : 'Total words'}</span>
               </div>
               {hasActiveProject && <StatusBadge status={novel.status} />}
             </div>
@@ -405,10 +414,16 @@ const STATUS_SORTS = [
   { id: 'title', label: 'Title' },
 ]
 
-function StatusQueue({ stats, onOpenProject }) {
+function StatusQueue({ stats, series = [], onOpenProject }) {
   const [sortBy, setSortBy] = useState('status')
+  const [seriesFilter, setSeriesFilter] = useState('all')
   const statusRank = new Map(STATUS_PICKER.map((status, index) => [status, index]))
-  const sortedStats = [...stats].sort((a, b) => {
+  const filteredStats = stats.filter(item => {
+    if (seriesFilter === 'all') return true
+    if (seriesFilter === 'standalone') return !item.project.seriesId
+    return item.project.seriesId === seriesFilter
+  })
+  const sortedStats = [...filteredStats].sort((a, b) => {
     if (sortBy === 'words') return b.manuscriptWords - a.manuscriptWords || a.project.title.localeCompare(b.project.title)
     if (sortBy === 'updated') {
       const aTime = a.latestTimestamp || Date.parse(a.project.updatedAt || a.project.createdAt || '') || 0
@@ -425,15 +440,25 @@ function StatusQueue({ stats, onOpenProject }) {
     <section>
       <div className="dash-section-title">
         <h2>Status Queue</h2>
-        <label className="status-sort-control">
-          <span>Sort</span>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
-            {STATUS_SORTS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
-        </label>
+        <div className="status-queue-controls">
+          <label className="status-sort-control">
+            <span>Series</span>
+            <select value={seriesFilter} onChange={e => setSeriesFilter(e.target.value)}>
+              <option value="all">All projects</option>
+              <option value="standalone">Standalone</option>
+              {series.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+          <label className="status-sort-control">
+            <span>Sort</span>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              {STATUS_SORTS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
       <div className="project-status-queue">
-        {sortedStats.map(item => {
+        {sortedStats.length ? sortedStats.map(item => {
           const data = STATUS_DATA[item.project.status] ?? STATUS_DATA.not_started
           const cfg = getProjectType(item.project.type)
           return (
@@ -446,12 +471,18 @@ function StatusQueue({ stats, onOpenProject }) {
               <span className="project-status-dot" style={{ '--status-row-color': data.color }} />
               <span className="project-status-copy">
                 <strong>{item.project.title}</strong>
-                <small>{cfg.label} · {item.manuscriptWords.toLocaleString()} words</small>
+                <small>
+                  {cfg.label} · {isCampaignProjectType(item.project.type)
+                    ? `${(item.campaignStats?.plannedSessions ?? 0).toLocaleString()} ${(cfg.structure?.level2 || 'Session').toLowerCase()}s`
+                    : `${item.manuscriptWords.toLocaleString()} words`}
+                </small>
               </span>
               <StatusBadge status={item.project.status} />
             </button>
           )
-        })}
+        }) : (
+          <p className="project-status-empty">No projects match this filter.</p>
+        )}
       </div>
     </section>
   )
@@ -785,6 +816,7 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
 }
 
 function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
+  const isCampaign = isCampaignProjectType(project.type)
   const [form, setForm] = useState({
     title: project.title || '',
     description: project.description || '',
@@ -796,6 +828,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     progress: project.progress ?? '',
     includeLaterWorks: project.includeLaterWorks ?? false,
     wordCountTarget: project.wordCountTarget ?? '',
+    sessionTarget: project.sessionTarget ?? '',
   })
   const [tagInput, setTagInput] = useState('')
   const [coverError, setCoverError] = useState('')
@@ -810,6 +843,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     progress: project.progress ?? '',
     includeLaterWorks: project.includeLaterWorks ?? false,
     wordCountTarget: project.wordCountTarget ?? '',
+    sessionTarget: project.sessionTarget ?? '',
   }))
 
   const requestClose = () => {
@@ -859,8 +893,9 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
       description: form.description.trim(),
       type: project.type || DEFAULT_TYPE,
       seriesId: form.seriesId || null,
-      progress: form.progress === '' ? null : Number(form.progress),
-      wordCountTarget: form.wordCountTarget === '' ? null : Number(form.wordCountTarget),
+      progress: isCampaign || form.progress === '' ? null : Number(form.progress),
+      wordCountTarget: isCampaign || form.wordCountTarget === '' ? null : Number(form.wordCountTarget),
+      sessionTarget: !isCampaign || form.sessionTarget === '' ? null : Number(form.sessionTarget),
       updatedAt: new Date().toISOString(),
     })
   }
@@ -875,23 +910,6 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
         style={{ width: '100%', maxWidth: 560, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ position: 'relative', height: 150, flexShrink: 0, background: form.coverPhoto ? undefined : getCoverGradient(form.title || project.title), overflow: 'hidden' }}>
-          {form.coverPhoto && <img src={form.coverPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'linear-gradient(to bottom, rgba(0,0,0,.1), rgba(0,0,0,.36))' }}>
-            <label style={{ cursor: 'pointer', background: 'rgba(0,0,0,.52)', border: '1px solid rgba(255,255,255,.18)', borderRadius: 7, padding: '6px 14px', fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-              <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
-              {form.coverPhoto ? 'Change Cover' : 'Add Cover'}
-            </label>
-            {form.coverPhoto && (
-              <button type="button" onClick={() => setForm(p => ({ ...p, coverPhoto: null }))}
-                style={{ cursor: 'pointer', background: 'rgba(0,0,0,.52)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 7, padding: '6px 14px', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.65)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                Remove
-              </button>
-            )}
-          </div>
-          {coverError && <p style={{ position: 'absolute', bottom: 6, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: '#f87171', margin: 0 }}>{coverError}</p>}
-        </div>
-
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', flex: 1 }}>
           <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-main)' }}>Project Settings</p>
 
@@ -913,31 +931,89 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
           />
 
           <div className="project-settings-grid">
-            <label>
+            <label className="project-settings-series-field">
               <span>Series</span>
               <select value={form.seriesId} onChange={e => setForm(p => ({ ...p, seriesId: e.target.value }))}>
                 <option value="">Standalone</option>
                 {series.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
-            {!form.wordCountTarget && (
-              <label>
+            {!isCampaign && !form.wordCountTarget && (
+              <label className="project-settings-progress-field">
                 <span>Progress</span>
                 <input value={form.progress} onChange={e => handleProgress(e.target.value)} inputMode="numeric" placeholder="0-100" />
               </label>
             )}
-            <label>
-              <span>Word count target</span>
-              <input
-                value={form.wordCountTarget}
-                onChange={e => {
-                  const cleaned = e.target.value.replace(/[^\d]/g, '')
-                  setForm(p => ({ ...p, wordCountTarget: cleaned }))
-                }}
-                inputMode="numeric"
-                placeholder="e.g. 80000"
-              />
-            </label>
+            {isCampaign ? (
+              <label className="project-settings-target-field">
+                <span>Session target</span>
+                <input
+                  value={form.sessionTarget}
+                  onChange={e => {
+                    const cleaned = e.target.value.replace(/[^\d]/g, '')
+                    setForm(p => ({ ...p, sessionTarget: cleaned }))
+                  }}
+                  inputMode="numeric"
+                  placeholder="e.g. 12"
+                />
+              </label>
+            ) : (
+              <label className="project-settings-target-field">
+                <span>Word count target</span>
+                <input
+                  value={form.wordCountTarget}
+                  onChange={e => {
+                    const cleaned = e.target.value.replace(/[^\d]/g, '')
+                    setForm(p => ({ ...p, wordCountTarget: cleaned }))
+                  }}
+                  inputMode="numeric"
+                  placeholder="e.g. 80000"
+                />
+              </label>
+            )}
+            <div className="project-settings-status-field">
+              <p>Status</p>
+              <div>
+                {STATUS_PICKER.map(key => {
+                  const opt = STATUS_DATA[key]
+                  const current = STATUS_DATA[form.status]?.aliasFor ?? form.status
+                  return (
+                    <button key={key} type="button" onClick={() => setForm(p => ({ ...p, status: current === key ? null : key }))}
+                      style={{
+                        padding: '5px 14px', borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        border: `1px solid ${current === key ? opt.color : 'var(--border)'}`,
+                        background: current === key ? `color-mix(in srgb, ${opt.color} 16%, transparent)` : 'transparent',
+                        color: current === key ? opt.color : 'var(--text-muted)',
+                      }}>
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="project-cover-preview project-cover-preview-field">
+              <span className="project-cover-preview-label">Cover photo</span>
+              <div className="project-cover-preview-row">
+                <label className="project-cover-preview-upload" title={form.coverPhoto ? 'Change cover photo' : 'Add cover photo'}>
+                  <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
+                  <span className="project-cover-preview-frame" style={{ background: form.coverPhoto ? 'var(--bg-main)' : getCoverGradient(form.title || project.title) }}>
+                    {form.coverPhoto ? (
+                      <img src={form.coverPhoto} alt="" />
+                    ) : (
+                      <span>Add cover photo</span>
+                    )}
+                  </span>
+                </label>
+                <div className="project-cover-preview-actions">
+                  {form.coverPhoto && (
+                    <button type="button" onClick={() => setForm(p => ({ ...p, coverPhoto: null }))}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+              {coverError && <p>{coverError}</p>}
+            </div>
           </div>
 
           {form.seriesId && (() => {
@@ -954,27 +1030,6 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
               </label>
             )
           })()}
-
-          <div>
-            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Status</p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {STATUS_PICKER.map(key => {
-                const opt = STATUS_DATA[key]
-                const current = STATUS_DATA[form.status]?.aliasFor ?? form.status
-                return (
-                  <button key={key} type="button" onClick={() => setForm(p => ({ ...p, status: current === key ? null : key }))}
-                    style={{
-                      padding: '5px 14px', borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                      border: `1px solid ${current === key ? opt.color : 'var(--border)'}`,
-                      background: current === key ? `color-mix(in srgb, ${opt.color} 16%, transparent)` : 'transparent',
-                      color: current === key ? opt.color : 'var(--text-muted)',
-                    }}>
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
 
           <div>
             <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Tags</p>
@@ -1031,13 +1086,13 @@ function SeriesCard({ series, seriesStats, onClick, onEdit }) {
           ? <img src={series.coverPhoto} alt="" />
           : <span className="series-dash-card-letter">{series.name[0]?.toUpperCase()}</span>
         }
-        <span className="series-dash-card-count">
-          {seriesStats.length} {seriesStats.length === 1 ? 'project' : 'projects'}
-        </span>
         <span className="series-dash-card-type-badge">Series</span>
       </div>
       <div className="series-dash-card-foot">
         <p className="series-dash-card-name">{series.name}</p>
+        <p className="series-dash-card-count">
+          {seriesStats.length} {seriesStats.length === 1 ? 'project' : 'projects'}
+        </p>
         {totalWords > 0 && <p className="series-dash-card-words">{totalWords.toLocaleString()} words</p>}
       </div>
       <div className="series-dash-card-hover">
@@ -1065,11 +1120,11 @@ function SeriesCard({ series, seriesStats, onClick, onEdit }) {
   )
 }
 
-function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) {
+function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus, viewOnly }) {
   const project = stats.project
   const cfg = getProjectType(project.type)
   return (
-    <div className="series-dash-card project-dash-card" onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}>
+    <div className={`series-dash-card project-dash-card${viewOnly ? ' project-dash-card-viewonly' : ''}`} onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}>
       <div
         className="series-dash-card-cover"
         style={{ background: project.coverPhoto ? undefined : getCoverGradient(project.title) }}
@@ -1078,39 +1133,50 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
           ? <img src={project.coverPhoto} alt="" />
           : <span className="series-dash-card-letter">{project.title[0]?.toUpperCase()}</span>
         }
-        <span className="series-dash-card-count">{cfg.label}</span>
-        <button
-          type="button"
-          style={{
-            position: 'absolute', top: 78, right: 6, zIndex: 5,
-            width: 30, height: 30,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            border: isFocus ? '1px solid rgba(245,158,11,.7)' : '1px solid rgba(255,255,255,.18)',
-            borderRadius: '50%',
-            background: isFocus ? 'rgba(245,158,11,.85)' : 'rgba(0,0,0,.48)',
-            color: isFocus ? '#fff' : 'rgba(255,255,255,.38)',
-            cursor: 'pointer',
-            backdropFilter: 'blur(4px)',
-            transition: 'color .15s, background .15s, border-color .15s',
-          }}
-          onClick={e => { e.stopPropagation(); onSetFocus(project.id) }}
-          title={isFocus ? 'Remove active project' : 'Set as active project'}
-          aria-label={isFocus ? 'Remove active project' : 'Set as active project'}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        </button>
-        <button
-          className="dash-card-settings-button"
-          type="button"
-          onClick={e => { e.stopPropagation(); onEdit() }}
-          title="Project settings"
-          aria-label="Project settings"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V22h-4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H2v-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 0 1 6.1 3.3l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V2h4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1h.2v4h-.2a1.7 1.7 0 0 0-1.4 1Z" />
-          </svg>
-        </button>
+        <span className="project-dash-card-type-badge">{cfg.label}</span>
+        {viewOnly ? (
+          <span className="project-dash-card-viewonly-badge" title="Free plan: this project is view-only. Upgrade to edit it.">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+            </svg>
+            View only
+          </span>
+        ) : (
+          <>
+            <button
+              type="button"
+              style={{
+                position: 'absolute', top: 78, right: 6, zIndex: 5,
+                width: 30, height: 30,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                border: isFocus ? '1px solid rgba(245,158,11,.7)' : '1px solid rgba(255,255,255,.18)',
+                borderRadius: '50%',
+                background: isFocus ? 'rgba(245,158,11,.85)' : 'rgba(0,0,0,.48)',
+                color: isFocus ? '#fff' : 'rgba(255,255,255,.38)',
+                cursor: 'pointer',
+                backdropFilter: 'blur(4px)',
+                transition: 'color .15s, background .15s, border-color .15s',
+              }}
+              onClick={e => { e.stopPropagation(); onSetFocus(project.id) }}
+              title={isFocus ? 'Remove active project' : 'Set as active project'}
+              aria-label={isFocus ? 'Remove active project' : 'Set as active project'}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            </button>
+            <button
+              className="dash-card-settings-button"
+              type="button"
+              onClick={e => { e.stopPropagation(); onEdit() }}
+              title="Project settings"
+              aria-label="Project settings"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+              </svg>
+            </button>
+          </>
+        )}
       </div>
       <div className="dash-card-export-button">
         <ProjectExportMenu onExport={(format, themeId) => onExport?.(project.id, format, themeId)} />
@@ -1125,7 +1191,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus }) 
           <li><span>Characters</span><span>{stats.characters.length}</span></li>
           <li><span>Status</span><StatusBadge status={project.status} small /></li>
         </ul>
-        <span className="project-dash-card-select-cue">Select project</span>
+        <span className="project-dash-card-select-cue">{viewOnly ? 'View only — upgrade to edit' : 'Select project'}</span>
       </div>
     </div>
   )
@@ -1205,10 +1271,13 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     if (!form.title.trim()) return
     const type = isProjectTypeSelectable(form.type) ? form.type : DEFAULT_TYPE
     const typeCfg = getProjectType(type)
+    const sessionTarget = getDefaultSessionTarget(type)
     const novel = store.addNovel({
       ...form,
       type,
-      wordTarget: typeCfg.defaultWordTarget || null,
+      wordTarget: isCampaignProjectType(type) ? null : (typeCfg.defaultWordTarget || null),
+      wordCountTarget: isCampaignProjectType(type) ? null : (typeCfg.defaultWordTarget || null),
+      sessionTarget,
       enabledSections: typeCfg.defaultSections || null,
       seriesId: form.seriesId || null,
     })
@@ -1298,11 +1367,13 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
 
       {/* Top bar */}
       <div className="library-top-bar" data-tour="library-top-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="library-brand-logo"><YOWLogo /></span>
-          <span className="beta-watermark" aria-label="Beta">Beta</span>
+        <div className="library-top-bar-left">
+          <div className="library-brand-cluster">
+            <span className="library-brand-logo"><YOWLogo /></span>
+            <span className="beta-watermark" aria-label="Beta">Beta</span>
+          </div>
           {!store.readOnly && !membership?.freeProjectId && (
-            <>
+            <div className="library-action-cluster">
               <button className="library-new-project-button" type="button" data-tour="new-project-btn" onClick={() => setShowForm(true)}>
                 New Project
               </button>
@@ -1331,10 +1402,10 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="library-top-bar-right">
           {localModeBubble && (
             <button
               type="button"
@@ -1348,7 +1419,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
             </button>
           )}
           <button className="library-chat-button" type="button" onClick={handleOpenLibraryChat} title="Open AI chat" aria-label="Open AI chat">
-            ✦
+            <AIStar size={16} />
           </button>
           {tourStore?.toursEnabled && (
             <button
@@ -1457,6 +1528,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                           onExport={handleExportProject}
                           isFocus={!!item.project.focus}
                           onSetFocus={handleSetFocus}
+                          viewOnly={!!membership?.freeProjectId && membership.freeProjectId !== item.project.id}
                         />
                       ))}
                     </div>
@@ -1479,6 +1551,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                           onExport={handleExportProject}
                           isFocus={!!stats.project.focus}
                           onSetFocus={handleSetFocus}
+                          viewOnly={!!membership?.freeProjectId && membership.freeProjectId !== stats.project.id}
                         />
                       ))}
                     </div>
@@ -1489,7 +1562,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No projects yet.</p>
                 )}
               </div>
-              <StatusQueue stats={store.allProjectStats} onOpenProject={onOpenProject} />
+              <StatusQueue stats={store.allProjectStats} series={store.series} onOpenProject={onOpenProject} />
             </section>
           )
         })()}
@@ -1568,6 +1641,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           onClose={() => setShowAIImport(false)}
           onImportDone={(novelId) => { onOpenProject?.(novelId) }}
           userId={user?.id || user?.uid || null}
+          membership={membership}
         />
       )}
 

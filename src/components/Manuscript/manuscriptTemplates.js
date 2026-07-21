@@ -1,14 +1,14 @@
 // Structural templates for manuscript setup.
 // Each template generates acts/chapters when applied; users can freely edit all content afterward.
 // guidance fields are editable hints shown in the sidebar — not locked content.
-// projectTypes: array of project type keys this template applies to. 'all' means universal.
+// projectTypes: array of project type keys this template applies to.
 
 export const MANUSCRIPT_TEMPLATES = [
   {
     id: 'three-act',
     name: 'Three Act Structure',
     genre: 'General Fiction',
-    projectTypes: ['novel', 'novella', 'short_story'],
+    projectTypes: ['novel'],
     description: 'The classic setup-confrontation-resolution framework. Reliable, battle-tested, and flexible enough for almost any story.',
     targetWords: 90000,
     acts: [
@@ -50,7 +50,7 @@ export const MANUSCRIPT_TEMPLATES = [
     id: 'heros-journey',
     name: "Hero's Journey",
     genre: 'Epic / Adventure / Fantasy',
-    projectTypes: ['novel', 'novella'],
+    projectTypes: ['novel'],
     description: "Joseph Campbell's monomyth — the mythic cycle of departure, initiation, and return. Ideal for epic fantasy, adventure, and coming-of-age stories.",
     targetWords: 110000,
     acts: [
@@ -91,7 +91,7 @@ export const MANUSCRIPT_TEMPLATES = [
     id: 'save-the-cat',
     name: 'Save the Cat',
     genre: 'Commercial Fiction / Screenwriting',
-    projectTypes: ['novel', 'novella', 'screenplay'],
+    projectTypes: ['novel'],
     description: "Blake Snyder's beat sheet adapted for novels. Precise pacing with 15 named beats. Great for commercial fiction that needs to move fast and satisfy completely.",
     targetWords: 85000,
     acts: [
@@ -141,7 +141,7 @@ export const MANUSCRIPT_TEMPLATES = [
     id: 'romantasy',
     name: 'Romantasy Structure',
     genre: 'Romantasy / Fantasy Romance',
-    projectTypes: ['novel', 'novella'],
+    projectTypes: ['novel'],
     description: 'Dual-engine structure: a fantasy quest arc and a romance arc intertwined. Both must resolve satisfyingly — neither can be purely a subplot of the other.',
     targetWords: 120000,
     acts: [
@@ -193,7 +193,7 @@ export const MANUSCRIPT_TEMPLATES = [
     id: 'mystery-thriller',
     name: 'Mystery / Thriller',
     genre: 'Mystery / Thriller / Suspense',
-    projectTypes: ['novel', 'novella', 'short_story'],
+    projectTypes: ['novel'],
     description: 'A case or threat drives relentless forward momentum. Clues, suspects, reversals, and a ticking clock keep tension high. The solution must be both surprising and inevitable.',
     targetWords: 90000,
     acts: [
@@ -233,61 +233,10 @@ export const MANUSCRIPT_TEMPLATES = [
   },
 
   {
-    id: 'episodic-tv',
-    name: 'Episodic TV Structure',
-    genre: 'Serialized / Series / TV Adaptation',
-    projectTypes: ['novel', 'tv_show'],
-    description: 'For novels that think in seasons and episodes — ensemble casts, multiple POVs, parallel plots, and season-long arcs with satisfying episode-level resolution.',
-    targetWords: 100000,
-    acts: [
-      {
-        title: 'Season Premiere (Act I)',
-        guidance: 'Establish your world, ensemble, and the season-long conflict. Deliver a pilot-quality hook that sets up every major thread. End on a cliffhanger that demands the next episode.',
-        chapters: [
-          { title: 'Cold Open', guidance: 'A gripping in-media-res moment that establishes tone and stakes. You can return to this scene later — it doesn\'t have to be chronological.' },
-          { title: 'World & Ensemble', guidance: 'Introduce your world and key characters efficiently. Every major player who will matter this season should appear or be implied.' },
-          { title: 'The Season Threat', guidance: 'Establish the central conflict that will span the season: the enemy, the mystery, the collapse that must be stopped or resolved.' },
-          { title: 'Pilot Cliffhanger', guidance: 'End the first episode/chapter block on a hook that makes it impossible not to continue. A revelation, a death, a betrayal.' },
-        ],
-      },
-      {
-        title: 'Rising Action (Act II-A)',
-        guidance: 'The ensemble pursues their separate threads, each with their own episode-level arcs. Cross-thread connections tighten. A midseason twist reshuffles alliances.',
-        chapters: [
-          { title: 'Episode 2 — Character Depth', guidance: 'Slow down slightly to invest in relationships and backstory. The threat is real, but humans are complicated.' },
-          { title: 'Episode 3 — Complications', guidance: 'Secondary conflicts emerge. Not everything is about the main threat. Let the world feel lived-in and layered.' },
-          { title: 'Episode 4 — Collision', guidance: 'Two major threads intersect unexpectedly. Characters from different storylines are forced together.' },
-          { title: 'Midseason Twist', guidance: 'A revelation that reshuffles the board. An ally becomes an enemy, a hidden truth surfaces, or the nature of the threat changes.' },
-        ],
-      },
-      {
-        title: 'Falling Action (Act II-B)',
-        guidance: 'The ensemble fractures under pressure. Episode-level crises compound. Individual characters face defining choices that will determine their arcs heading into the finale.',
-        chapters: [
-          { title: 'Episode 6 — The Fracture', guidance: 'Alliances strain or break. The ensemble cannot function as a unified force. Personal agendas surface.' },
-          { title: 'Episode 7 — Personal Stakes', guidance: 'Zoom in. What does each major character stand to lose personally? This is the episode that cements emotional investment.' },
-          { title: 'Episode 8 — Crisis Point', guidance: 'The situation reaches a critical mass. Multiple threads converge. The stakes are undeniable. Something must give.' },
-          { title: 'Pre-Finale Setup', guidance: 'Position all pieces for the finale. Establish what each character needs to do — and what stands in their way.' },
-        ],
-      },
-      {
-        title: 'Finale (Act III)',
-        guidance: 'All threads converge in a climactic sequence that resolves the season-long arc while planting seeds for the next. Individual character arcs conclude — some satisfyingly, some as cliffhangers.',
-        chapters: [
-          { title: 'Assembling the Team', guidance: 'Characters who have been separated or at odds must come together for the final push. Each brings what only they can bring.' },
-          { title: 'The Final Gambit', guidance: 'The plan is executed — and begins to fall apart. Improvisation, sacrifice, and unexpected heroism.' },
-          { title: 'Climax', guidance: 'The season threat is resolved. Multiple character arcs pay off simultaneously. The price of victory is real.' },
-          { title: 'Season Coda', guidance: 'The aftermath. Who survived and how have they changed? Plant the hook for next season without undermining this one\'s resolution.' },
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'blank',
-    name: 'Blank / Custom',
-    genre: 'Any',
-    projectTypes: ['all'],
+    id: 'novel-blank',
+    name: 'Blank Novel',
+    genre: 'Novel',
+    projectTypes: ['novel'],
     description: 'Start with a clean slate. One act, one chapter — add and organize everything yourself. For writers who prefer to discover their structure rather than follow one.',
     targetWords: 80000,
     acts: [
@@ -302,6 +251,24 @@ export const MANUSCRIPT_TEMPLATES = [
   },
 
   // ─── Short Story templates ───────────────────────────────────────────────────
+
+  {
+    id: 'short-story-blank',
+    name: 'Blank Short Story',
+    genre: 'Short Story',
+    projectTypes: ['short_story'],
+    description: 'A compact empty structure for short fiction. Start with one part and one section, then add only the beats the story needs.',
+    targetWords: 5000,
+    acts: [
+      {
+        title: 'Part One',
+        guidance: 'This is your starting part. Keep the shape compact and focused on one central turn.',
+        chapters: [
+          { title: 'Section One', guidance: 'Begin the story in the most useful place. Add scenes only where they sharpen the core effect.' },
+        ],
+      },
+    ],
+  },
 
   {
     id: 'freytags-pyramid',
@@ -386,7 +353,7 @@ export const MANUSCRIPT_TEMPLATES = [
     id: 'in-medias-res',
     name: 'In Medias Res',
     genre: 'General Fiction',
-    projectTypes: ['short_story', 'novella'],
+    projectTypes: ['short_story'],
     description: 'Begin in the middle of the action, then layer in context as the story unfolds. Ideal for literary short fiction where tension is established before explanation.',
     targetWords: 5000,
     acts: [
@@ -418,6 +385,24 @@ export const MANUSCRIPT_TEMPLATES = [
   },
 
   // ─── Novella templates ───────────────────────────────────────────────────────
+
+  {
+    id: 'novella-blank',
+    name: 'Blank Novella',
+    genre: 'Novella',
+    projectTypes: ['novella'],
+    description: 'A simple novella starter: one part, one chapter, and room to build a focused 20–40k word story.',
+    targetWords: 30000,
+    acts: [
+      {
+        title: 'Part One',
+        guidance: 'This is your first part. Rename it, adjust the guidance, and build a novella-length structure around one clear story engine.',
+        chapters: [
+          { title: 'Chapter One', guidance: 'Your opening chapter. Establish the central character, situation, and pressure quickly.' },
+        ],
+      },
+    ],
+  },
 
   {
     id: 'compressed-three-act',
@@ -452,6 +437,80 @@ export const MANUSCRIPT_TEMPLATES = [
           { title: 'The Final Approach', guidance: 'The protagonist re-engages with everything they\'ve learned. They move toward the final confrontation.' },
           { title: 'Climax', guidance: 'The central conflict resolves. The transformation is proven through action.' },
           { title: 'Denouement', guidance: 'Brief. Show the new equilibrium. One beat that earns the ending.' },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'novella-mystery',
+    name: 'Novella Mystery',
+    genre: 'Mystery / Thriller / Suspense',
+    projectTypes: ['novella'],
+    description: 'A focused mystery or suspense arc for 25–35k words. One central question, a small suspect pool, and a clean reveal.',
+    targetWords: 30000,
+    acts: [
+      {
+        title: 'Part One — The Question',
+        guidance: 'Open with the mystery, threat, or disappearance and give the protagonist a personal reason to pursue it.',
+        chapters: [
+          { title: 'Opening Disturbance', guidance: 'Start close to the disruption. A missing person, a strange message, a body, or a threat that cannot be ignored.' },
+          { title: 'First Lead', guidance: 'The protagonist follows the clearest lead and discovers the situation is sharper or stranger than expected.' },
+        ],
+      },
+      {
+        title: 'Part Two — Pressure',
+        guidance: 'The investigation tightens. Every clue should either reveal character, change the suspect picture, or increase danger.',
+        chapters: [
+          { title: 'False Answer', guidance: 'The obvious explanation fails. A red herring collapses or points toward a deeper truth.' },
+          { title: 'Personal Stakes', guidance: 'The case touches the protagonist directly. They now have something specific to lose.' },
+          { title: 'Midpoint Reversal', guidance: 'A reveal changes what the protagonist thinks the story is about.' },
+        ],
+      },
+      {
+        title: 'Part Three — The Reveal',
+        guidance: 'Resolve the central question quickly and clearly, then land the emotional consequence.',
+        chapters: [
+          { title: 'Final Clue', guidance: 'The missing piece falls into place. The answer should surprise the reader while making earlier details click.' },
+          { title: 'Confrontation', guidance: 'The protagonist faces the truth, the culprit, or the source of danger.' },
+          { title: 'Aftermath', guidance: 'Show what justice, survival, or failure costs.' },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'novella-romance',
+    name: 'Novella Romance',
+    genre: 'Romance',
+    projectTypes: ['novella'],
+    description: 'A streamlined romance structure for 25–35k words. Two leads, one core obstacle, and a satisfying emotional resolution.',
+    targetWords: 30000,
+    acts: [
+      {
+        title: 'Part One — Spark',
+        guidance: 'Introduce both leads, the attraction or friction between them, and the reason this relationship cannot be simple.',
+        chapters: [
+          { title: 'First Meeting', guidance: 'Bring the leads together in a scene with immediate emotional charge.' },
+          { title: 'The Complication', guidance: 'Define the obstacle: history, duty, distance, secrecy, rivalry, or fear.' },
+        ],
+      },
+      {
+        title: 'Part Two — Pull',
+        guidance: 'Let intimacy build while the obstacle becomes harder to ignore. Keep the emotional focus tight.',
+        chapters: [
+          { title: 'Forced Proximity', guidance: 'Circumstances keep the leads in each other\'s orbit.' },
+          { title: 'Vulnerability', guidance: 'One or both leads reveal something real. The relationship deepens.' },
+          { title: 'The Almost', guidance: 'A near-confession, almost-kiss, or moment of trust shows what is possible.' },
+        ],
+      },
+      {
+        title: 'Part Three — Choice',
+        guidance: 'The obstacle peaks, the leads choose differently than they would have at the start, and the ending feels earned.',
+        chapters: [
+          { title: 'The Break', guidance: 'Fear, duty, or misunderstanding pulls the leads apart.' },
+          { title: 'The Choice', guidance: 'A clear action proves growth and commitment.' },
+          { title: 'Happy Ending', guidance: 'Resolve the central relationship with warmth and specificity.' },
         ],
       },
     ],
@@ -668,94 +727,25 @@ export const MANUSCRIPT_TEMPLATES = [
     ],
   },
 
-  // ─── TV Show templates ───────────────────────────────────────────────────────
-
-  {
-    id: 'pilot-season',
-    name: 'Pilot + Season Arc',
-    genre: 'Drama / Genre TV',
-    projectTypes: ['tv_show'],
-    description: 'Structure your first season as a showrunner would — pilot episode, episode arc, midseason turn, and finale. Designed for serialized drama with season-long storytelling.',
-    targetWords: 0,
-    acts: [
-      {
-        title: 'Pilot',
-        guidance: 'Establish your world, ensemble, and the season-long engine in a single episode. The pilot must function as a standalone story while opening onto a larger world. End on a hook that demands Episode 2.',
-        chapters: [
-          { title: 'Cold Open', guidance: 'A high-tension moment that establishes tone. Can be in-media-res or a tease of the larger threat.' },
-          { title: 'World & Characters', guidance: 'Introduce the ensemble and the world they inhabit. Every recurring character should appear or be implied.' },
-          { title: 'The Season Engine', guidance: 'Establish the central conflict or question that will drive the whole season: the case, the mystery, the war, the conspiracy.' },
-          { title: 'Pilot Climax & Hook', guidance: 'The pilot\'s own story resolves — but a new question or threat opens that makes Episode 2 unmissable.' },
-        ],
-      },
-      {
-        title: 'Early Episodes (Eps. 2–4)',
-        guidance: 'Deepen the ensemble and expand the world. Each episode has its own contained arc while advancing the season story. Establish the show\'s rhythms and tone.',
-        chapters: [
-          { title: 'Episode 2 — Character Depth', guidance: 'Invest in at least one relationship or backstory. Show the world beyond the season threat.' },
-          { title: 'Episode 3 — Complications', guidance: 'Secondary conflicts emerge. The season engine starts to reveal its true shape.' },
-          { title: 'Episode 4 — Ensemble Collision', guidance: 'Two threads intersect unexpectedly. Characters from different storylines are forced together.' },
-        ],
-      },
-      {
-        title: 'Midseason',
-        guidance: 'The midseason turn reshuffles the board. An ally becomes a threat, a hidden truth surfaces, or the nature of the season conflict changes. The back half of the season is now different from the front.',
-        chapters: [
-          { title: 'Episode 5 — Pressure Mounts', guidance: 'The season threat escalates. Characters are tested. Cracks appear in relationships.' },
-          { title: 'Midseason Twist (Ep. 6)', guidance: 'The major midpoint revelation. The audience\'s assumptions about the season are overturned.' },
-          { title: 'Episode 7 — Fracture', guidance: 'The ensemble splinters under pressure. Loyalties shift. Personal stakes overtake the group mission.' },
-        ],
-      },
-      {
-        title: 'Endgame & Finale',
-        guidance: 'All threads converge. Individual character arcs close — some definitively, some as springboards for next season. The finale satisfies the season question while planting the next.',
-        chapters: [
-          { title: 'Episode 8 — Final Push', guidance: 'The team regroups or the conflict forces convergence. Everyone moves toward the final confrontation.' },
-          { title: 'Penultimate Episode (Ep. 9)', guidance: 'The plan begins to execute — and begins to fall apart. A sacrifice or betrayal lands before the finale.' },
-          { title: 'Season Finale (Ep. 10)', guidance: 'The season conflict resolves. Major arcs close. The final scene plants the hook for next season without undermining this one.' },
-        ],
-      },
-    ],
-  },
-
-  {
-    id: 'procedural-season',
-    name: 'Procedural Season',
-    genre: 'Procedural / Crime / Medical',
-    projectTypes: ['tv_show'],
-    description: 'Case-of-the-week structure with a serialized character arc running beneath. Each episode is self-contained; the season arc pays off in the finale.',
-    targetWords: 0,
-    acts: [
-      {
-        title: 'Season Setup',
-        guidance: 'Establish the procedural engine (the case type, the team, the process) and plant the season-long character or mythology arc that will run beneath the episodic cases.',
-        chapters: [
-          { title: 'Pilot Case', guidance: 'The first case establishes the show\'s genre, tone, and team dynamics. The procedural formula is made clear.' },
-          { title: 'Character Arc Seed', guidance: 'Plant the personal story that will develop across the season — a secret, a wound, a relationship, a conspiracy.' },
-        ],
-      },
-      {
-        title: 'Case-of-the-Week Episodes',
-        guidance: 'Each episode follows the procedural formula while advancing the character arc in one or two scenes. The arc should feel organic, not bolted on.',
-        chapters: [
-          { title: 'Early Episodes (Eps. 2–4)', guidance: 'Establish the case formula while developing ensemble relationships. Drop one arc beat per episode.' },
-          { title: 'Middle Episodes (Eps. 5–8)', guidance: 'The arc intensifies alongside increasingly personal or thematically connected cases. Midseason arc revelation.' },
-          { title: 'Late Episodes (Eps. 9–11)', guidance: 'The procedural cases start to intersect with the arc story. The team is tested by the personal stakes.' },
-        ],
-      },
-      {
-        title: 'Season Finale',
-        guidance: 'The character arc and the season\'s biggest case collide in the finale. The procedural formula is stress-tested by personal stakes.',
-        chapters: [
-          { title: 'The Case That Changes Everything', guidance: 'A case that directly engages with the season-long arc. The procedural and personal cannot be separated.' },
-          { title: 'Arc Resolution', guidance: 'The character arc resolves — or takes a dramatic turn. The team is changed by what they\'ve been through.' },
-          { title: 'Next Season Hook', guidance: 'One final scene that opens the next chapter. A new case, a new threat, or a new personal complication.' },
-        ],
-      },
-    ],
-  },
-
   // ─── Comic / Graphic Novel templates ────────────────────────────────────────
+
+  {
+    id: 'comic-blank',
+    name: 'Blank Comic',
+    genre: 'Comic / Graphic Novel',
+    projectTypes: ['comic'],
+    description: 'A clean comic structure with one volume and one issue. Build pages and panels around the visual story you want to tell.',
+    targetWords: 0,
+    acts: [
+      {
+        title: 'Volume 1',
+        guidance: 'This is your first volume. Use it as a container for issues, pages, and panel planning.',
+        chapters: [
+          { title: 'Issue 1', guidance: 'Your opening issue. Establish the visual premise, protagonist, and first dramatic movement.' },
+        ],
+      },
+    ],
+  },
 
   {
     id: 'comic-arc',
@@ -958,6 +948,24 @@ export const MANUSCRIPT_TEMPLATES = [
   // ─── D&D Campaign templates ──────────────────────────────────────────────────
 
   {
+    id: 'dnd-blank',
+    name: 'Blank D&D Campaign',
+    genre: 'D&D Campaign',
+    projectTypes: ['dnd_campaign'],
+    description: 'A clean D&D campaign starter with one story arc and one session. Add encounters, prep notes, maps, NPCs, and rewards as you plan.',
+    targetWords: 0,
+    acts: [
+      {
+        title: 'Story Arc 1',
+        guidance: 'This is your first campaign arc. Rename it for the threat, region, dungeon, or adventure premise you want to run.',
+        chapters: [
+          { title: 'Session 1', guidance: 'Plan the opening session: hook, key scenes, likely encounters, NPCs, treasure, and follow-up threads.' },
+        ],
+      },
+    ],
+  },
+
+  {
     id: 'dnd-three-arc',
     name: 'Three-Arc Campaign',
     genre: 'D&D Campaign',
@@ -1035,6 +1043,24 @@ export const MANUSCRIPT_TEMPLATES = [
   },
 
   // ─── TTRPG Campaign templates ────────────────────────────────────────────────
+
+  {
+    id: 'ttrpg-blank',
+    name: 'Blank TTRPG Campaign',
+    genre: 'TTRPG Campaign',
+    projectTypes: ['tabletop_rpg'],
+    description: 'A system-neutral campaign starter with one arc and one session. Add encounters, NPCs, rules notes, and consequences as the campaign takes shape.',
+    targetWords: 0,
+    acts: [
+      {
+        title: 'Story Arc 1',
+        guidance: 'This is your first campaign arc. Shape it around the conflict, mystery, journey, or situation your system supports.',
+        chapters: [
+          { title: 'Session 1', guidance: 'Plan the opening session: premise, key beats, likely encounters, NPCs, player choices, and next hooks.' },
+        ],
+      },
+    ],
+  },
 
   {
     id: 'ttrpg-three-act',
@@ -1155,7 +1181,5 @@ export function getTemplateById(id) {
 }
 
 export function getTemplatesForProjectType(projectType) {
-  return MANUSCRIPT_TEMPLATES.filter(t =>
-    t.projectTypes?.includes('all') || t.projectTypes?.includes(projectType)
-  )
+  return MANUSCRIPT_TEMPLATES.filter(t => t.projectTypes?.includes(projectType))
 }

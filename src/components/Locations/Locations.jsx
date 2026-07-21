@@ -109,7 +109,7 @@ export default function Locations({ store }) {
     <StudioSplit data-tour="locations-header">
       <StudioIndex
         eyebrow="Atlas wall"
-        title="Field Notes"
+        title="Locations"
         tools={<StudioButton tone="primary" size="sm" onClick={()=>{setEditTarget(null);setShowForm(true)}}>New</StudioButton>}
       >
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." className="field w-full px-2 py-1.5 text-xs placeholder:text-[var(--text-muted)]" />

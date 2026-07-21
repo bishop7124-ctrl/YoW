@@ -9,7 +9,7 @@ const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime',
 // Storage quotas in bytes per plan key.
 // These are the canonical quota values — also used by storageQuota.js.
 export const PLAN_STORAGE_BYTES = {
-  free:                  250  * 1024 * 1024,        //  250 MB
+  free:                  5    * 1024 * 1024,        //   5 MB
   trial:                  1   * 1024 * 1024 * 1024,  //   1 GB
   premium_monthly:        5   * 1024 * 1024 * 1024,  //   5 GB
   premium_plus_lifetime:  8   * 1024 * 1024 * 1024,  //   8 GB
@@ -37,13 +37,14 @@ export const PLANS = [
     interval: null,
     priceLabel: 'Free',
     priceSuffix: null,
-    storageLabelShort: '250 MB',
-    description: 'Start building your world. One active project, community support.',
+    storageLabelShort: '5 MB',
+    description: 'A text-first starter workspace. One active cloud project, community support.',
     features: [
-      '1 active project',
-      '250 MB storage',
-      'Basic exports',
-      'Bring-your-own-key AI',
+      '1 active text-first cloud project',
+      '5 MB cloud storage',
+      'Map Builder visible but locked',
+      'No AI tools',
+      'DOCX, PDF & ZIP export',
       'Community support',
     ],
     badge: null,
@@ -58,12 +59,11 @@ export const PLANS = [
     priceSuffix: 'once',
     storageLabelShort: '8 GB',
     description: 'Own the YOW app outright. Local Mode is permanent; cloud hosting is included for 3 years.',
-    longDescription: `Pay once for permanent app access, unlimited local projects, premium exports, and all current features. Includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for sync, hosted storage, and backups. After that, you can keep using Local Mode forever or renew cloud hosting at £${HOSTING_RENEWAL_FEE_GBP}/year.`,
+    longDescription: `Pay once for permanent app access, unlimited local projects, and all current features. Includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for sync, hosted storage, and backups. After that, the desktop app keeps working in Local Mode forever and web cloud access falls back to Free limits unless you renew Cloud Mode at £${HOSTING_RENEWAL_FEE_GBP}/year.`,
     features: [
       'Unlimited projects',
       'Permanent Local Mode access',
       '8 GB storage',
-      'Premium exports (DOCX, PDF, ZIP)',
       'Bring-your-own-key AI',
       'Priority support',
       `${HOSTING_INCLUDED_YEARS} years of Cloud Mode included`,
@@ -142,7 +142,6 @@ export function getMembership(user) {
 
   // wasMonthly: downgraded from a monthly subscription — active project is locked
   const wasMonthly = isFree && (user?.user_metadata?.was_monthly === true)
-  const freeProjectId = isFree ? (user?.user_metadata?.free_project_id ?? null) : null
 
   // 'plan' is the tier category used for CSS badge classes
   const plan = isPaid ? 'paid' : isTrialActive ? 'trial' : 'free'
@@ -156,8 +155,6 @@ export function getMembership(user) {
   const activePlanDef = PLANS.find(p => p.key === activePlanKey)
     || PLANS.find(p => p.key === 'premium_monthly') // trial fallback for display
 
-  const storageQuotaBytes = PLAN_STORAGE_BYTES[activePlanKey] ?? PLAN_STORAGE_BYTES.free
-
   // ── Cloud hosting renewal logic (lifetime non-founder users only) ──
   // Lifetime purchase includes HOSTING_INCLUDED_YEARS years of cloud hosting.
   // After that, users can renew Cloud Mode or continue in Local Mode.
@@ -166,6 +163,7 @@ export function getMembership(user) {
   //   lifetime_purchased_at  — ISO date of original lifetime purchase
   //   maintenance_expires_at — ISO date cloud hosting is paid until (null = within included period)
   let isMaintenanceLapsed = false
+  let isCloudFreeFallback = false
   let maintenanceExpiresAt = null
   let maintenanceDaysRemaining = null
   let maintenanceWarning = false
@@ -193,8 +191,9 @@ export function getMembership(user) {
     } else {
       // Included period ended, no valid renewal payment
       isMaintenanceLapsed = true
+      isCloudFreeFallback = true
       cloudHostingStatus = 'lapsed'
-      cloudHostingLabel = 'Local Mode'
+      cloudHostingLabel = 'Local Mode + Free Cloud'
     }
   } else if (isFounder) {
     cloudHostingStatus = 'founder'
@@ -206,6 +205,11 @@ export function getMembership(user) {
 
   const isCloudMode = cloudHostingStatus !== 'lapsed'
   const isLocalMode = cloudHostingStatus === 'lapsed'
+  const usesFreeCloudLimits = isFree || isCloudFreeFallback
+  const freeProjectId = usesFreeCloudLimits ? (user?.user_metadata?.free_project_id ?? null) : null
+  const storageQuotaBytes = usesFreeCloudLimits
+    ? PLAN_STORAGE_BYTES.free
+    : PLAN_STORAGE_BYTES[activePlanKey] ?? PLAN_STORAGE_BYTES.free
 
   return {
     plan,
@@ -229,11 +233,13 @@ export function getMembership(user) {
     daysRemaining,
     storageQuotaBytes,
     isMaintenanceLapsed,
+    isCloudFreeFallback,
+    usesFreeCloudLimits,
     cloudHostingStatus,
     cloudHostingLabel,
     isCloudMode,
     isLocalMode,
-    canSyncCloud: isCloudMode,
+    canSyncCloud: isCloudMode || isCloudFreeFallback,
     maintenanceExpiresAt,
     maintenanceDaysRemaining,
     maintenanceWarning,

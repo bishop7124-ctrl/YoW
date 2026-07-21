@@ -6,6 +6,7 @@ import {
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
 } from './manuscriptUtils.js'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
+import { useTextareaCaretRect } from './useTextareaCaretRect.js'
 
 const InlineInput = ({ value, onSave, className, placeholder }) => {
   const [temp, setTemp] = useState(value)
@@ -49,7 +50,17 @@ function renderInlineMarkdown(text, keyPrefix = '') {
 
 // ─── Entity / note parsing ────────────────────────────────────────────────────
 
-function parseSegments(content, entityNames, entityMap) {
+const NOTE_MARKER_RE = /\s?\[\[(\d+)\]\]\s?/g
+
+function stripNoteMarkers(content) {
+  return (content || '').replace(NOTE_MARKER_RE, (match, _seq, offset, text) => {
+    const before = text[offset - 1]
+    const after = text[offset + match.length]
+    return before && after && /\S/.test(before) && /\S/.test(after) ? ' ' : ''
+  })
+}
+
+function parseSegments(content, entityNames, entityMap, notes = []) {
   if (!content) return []
   const tokens = []
 
@@ -63,10 +74,15 @@ function parseSegments(content, entityNames, entityMap) {
     }
   }
 
-  const np = /\[\[(\d+)\]\]/g
+  for (const note of notes) {
+    const start = Math.max(0, Math.min(note.anchorOffset ?? content.length, content.length))
+    tokens.push({ type: 'note', start, end: start, seq: note.seq })
+  }
+
+  NOTE_MARKER_RE.lastIndex = 0
   let m
-  while ((m = np.exec(content)) !== null) {
-    tokens.push({ type: 'note', start: m.index, end: m.index + m[0].length, seq: parseInt(m[1]) })
+  while ((m = NOTE_MARKER_RE.exec(content)) !== null) {
+    tokens.push({ type: 'note', start: m.index, end: m.index + m[0].length, seq: parseInt(m[1], 10) })
   }
 
   tokens.sort((a, b) => a.start - b.start)
@@ -87,9 +103,30 @@ function parseSegments(content, entityNames, entityMap) {
   return segs
 }
 
+function buildWritingBlocks(content, notes) {
+  const length = content.length
+  const blocks = []
+  let pos = 0
+
+  for (const note of notes) {
+    const anchor = Math.max(0, Math.min(note.anchorOffset ?? length, length))
+    if (anchor > pos) {
+      blocks.push({ type: 'text', start: pos, end: anchor, key: `text-${pos}-${anchor}` })
+    }
+    blocks.push({ type: 'note', note, key: `note-${note.id}` })
+    pos = anchor
+  }
+
+  if (pos < length || !blocks.some(block => block.type === 'text') || blocks[blocks.length - 1]?.type === 'note') {
+    blocks.push({ type: 'text', start: pos, end: length, key: `text-${pos}-${length}` })
+  }
+
+  return blocks
+}
+
 // ─── Content preview ──────────────────────────────────────────────────────────
 
-const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMap, onEntityClick, onNoteClick }) => {
+const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMap, notesBySeq, highlightedNoteSeq, onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes }) => {
   const resolvedBlocks = blocks?.length ? blocks : buildScriptBlocks('', elementType)
   if (!resolvedBlocks.length) return <span className="ms-placeholder">Begin writing here…</span>
 
@@ -106,9 +143,21 @@ const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMa
                 if (seg.type === 'entity') return (
                   <span key={i} className="ms-entity" onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
                 )
-                if (seg.type === 'note') return (
-                  <sup key={i} className="ms-note-marker" onClick={e => { e.stopPropagation(); onNoteClick(seg.seq) }} title={`Note ${seg.seq}`}>{seg.seq}</sup>
-                )
+                if (seg.type === 'note') {
+                  const note = notesBySeq.get(seg.seq)
+                  if (!note) return null
+                  return (
+                    <InlineNoteBlock
+                      key={i}
+                      note={note}
+                      embedded
+                      highlighted={highlightedNoteSeq === note.seq}
+                      onUpdate={onUpdateNote}
+                      onDelete={onDeleteNote}
+                      onOpen={seq => { onNoteClick(seq); onOpenNotes() }}
+                    />
+                  )
+                }
                 return <span key={i}>{renderInlineMarkdown(seg.value, `sb${index}-${i}`)}</span>
               })}
             </p>
@@ -119,7 +168,11 @@ const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMa
   )
 }
 
-const ContentPreview = ({ content, entityMap, onEntityClick, onNoteClick, isBullets, isScript, scriptBlocks, scriptElement, projectType }) => {
+const ContentPreview = ({
+  content, entityMap, notesBySeq, highlightedNoteSeq,
+  onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes,
+  isBullets, isScript, scriptBlocks, scriptElement, projectType,
+}) => {
   const entityNames = useMemo(
     () => Object.keys(entityMap).sort((a, b) => b.length - a.length),
     [entityMap]
@@ -137,6 +190,11 @@ const ContentPreview = ({ content, entityMap, onEntityClick, onNoteClick, isBull
         entityMap={entityMap}
         onEntityClick={onEntityClick}
         onNoteClick={onNoteClick}
+        notesBySeq={notesBySeq}
+        highlightedNoteSeq={highlightedNoteSeq}
+        onUpdateNote={onUpdateNote}
+        onDeleteNote={onDeleteNote}
+        onOpenNotes={onOpenNotes}
       />
     )
   }
@@ -151,16 +209,28 @@ const ContentPreview = ({ content, entityMap, onEntityClick, onNoteClick, isBull
     )
   }
 
-  const segs = parseSegments(content, entityNames, entityMap)
+  const segs = parseSegments(content, entityNames, entityMap, [...notesBySeq.values()])
   return (
     <>
       {segs.map((seg, i) => {
         if (seg.type === 'entity') return (
           <span key={i} className="ms-entity" onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
         )
-        if (seg.type === 'note') return (
-          <sup key={i} className="ms-note-marker" onClick={e => { e.stopPropagation(); onNoteClick(seg.seq) }} title={`Note ${seg.seq}`}>{seg.seq}</sup>
-        )
+        if (seg.type === 'note') {
+          const note = notesBySeq.get(seg.seq)
+          if (!note) return null
+          return (
+            <InlineNoteBlock
+              key={i}
+              note={note}
+              embedded
+              highlighted={highlightedNoteSeq === note.seq}
+              onUpdate={onUpdateNote}
+              onDelete={onDeleteNote}
+              onOpen={seq => { onNoteClick(seq); onOpenNotes() }}
+            />
+          )
+        }
         return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`)}</span>
       })}
     </>
@@ -230,6 +300,28 @@ const SceneMetaBar = ({ scene, onUpdate, characterNames, locationNames }) => {
   )
 }
 
+const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDelete, onOpen }) => (
+  <details
+    className={`ms-inline-note${embedded ? ' ms-inline-note--embedded' : ''}${highlighted ? ' is-highlighted' : ''}`}
+    defaultOpen={!note.text}
+    onClick={e => e.stopPropagation()}
+  >
+    <summary>
+      <span>Note {note.seq}</span>
+      <div className="ms-inline-note-actions">
+        <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Panel</button>
+        <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(note.id) }}>Delete</button>
+      </div>
+    </summary>
+    <textarea
+      value={note.text || ''}
+      onChange={e => onUpdate(note.id, e.target.value)}
+      placeholder="Write a manuscript note..."
+      rows={3}
+    />
+  </details>
+)
+
 // ─── Scene editor ─────────────────────────────────────────────────────────────
 
 export const SceneEditor = ({
@@ -238,35 +330,53 @@ export const SceneEditor = ({
   innerRef, onFocus: onFocusExternal,
   entityMap, onEntityClick,
   onOpenNotes, onNoteClick,
+  highlightedNoteSeq = null,
   formatSettings, characterNames, locationNames,
   onPersistDraft,
+  onLiveContentChange = () => {},
+  onSelectionContextChange = () => {},
   onOpenVersionHistory,
   projectType,
   focusedWriting = false,
   scrollContainerRef,
   pageZoom = 1,
+  keepEditingOnExternalBlur = false,
 }) => {
-  const [localContent, setLocalContent] = useState(scene.content || '')
+  const [localContent, setLocalContent] = useState(() => stripNoteMarkers(scene.content || ''))
   const [localScriptBlocks, setLocalScriptBlocks] = useState(() => scene.scriptBlocks?.length
     ? scene.scriptBlocks
-    : buildScriptBlocks(scene.content || '', scene.scriptElement || 'action'))
+    : buildScriptBlocks(stripNoteMarkers(scene.content || ''), scene.scriptElement || 'action'))
   const [activeScriptBlockIndex, setActiveScriptBlockIndex] = useState(0)
   const [focused, setFocused] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
+  const [floatingNotePos, setFloatingNotePos] = useState(null)
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
   const localContentRef = useRef(localContent)
+  const lastSelectionRef = useRef({ start: localContent.length, end: localContent.length })
   const isScript = SCRIPT_TYPES.has(projectType)
   const isBullets = !isScript && scene.textMode === 'bullets'
   const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
   const scriptElements = getScriptElements(projectType)
 
   const hasMetadata = !!(scene.pov || scene.locationTag || (scene.status && scene.status !== 'draft'))
-
+  const showSceneMeta = formatSettings.showSceneMetadata !== false
+  const sortedNotes = useMemo(
+    () => [...(scene.notes || [])].sort((a, b) => (a.anchorOffset ?? 0) - (b.anchorOffset ?? 0) || a.seq - b.seq),
+    [scene.notes]
+  )
+  const notesBySeq = useMemo(
+    () => new Map((scene.notes || []).map(note => [note.seq, note])),
+    [scene.notes]
+  )
+  const writingBlocks = useMemo(
+    () => buildWritingBlocks(localContent, sortedNotes),
+    [localContent, sortedNotes]
+  )
   useEffect(() => {
     if (focused) return undefined
     const sync = window.requestAnimationFrame(() => {
-      const content = scene.content || ''
+      const content = stripNoteMarkers(scene.content || '')
       setLocalContent(content)
       setLocalScriptBlocks(scene.scriptBlocks?.length ? scene.scriptBlocks : buildScriptBlocks(content, scene.scriptElement || 'action'))
       setActiveScriptBlockIndex(0)
@@ -275,12 +385,14 @@ export const SceneEditor = ({
   }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
 
   // Resize before paint so caret measurement always uses the settled textarea height.
-  useLayoutEffect(() => {
-    if (!focused || !textareaRef.current) return
-    const ta = textareaRef.current
-    ta.style.height = 'auto'
-    ta.style.height = ta.scrollHeight + 'px'
-  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom])
+	  useLayoutEffect(() => {
+	    if (!focused) return
+	    const textareas = wrapperRef.current?.querySelectorAll('textarea.ms-textarea') || []
+	    textareas.forEach(ta => {
+	      ta.style.height = 'auto'
+	      ta.style.height = ta.scrollHeight + 'px'
+	    })
+	  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom, writingBlocks])
 
   const scheduleCaretFollow = useCaretComfortScroll({
     textareaRef,
@@ -295,21 +407,109 @@ export const SceneEditor = ({
 
   const debouncedUpdate = useDebouncedCallback(text => onUpdate(scene.id, text), 400)
 
+  const measureCaret = useTextareaCaretRect(textareaRef, pageZoom)
+
+  const rememberSelection = useCallback(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const base = Number(ta.dataset.msStart) || 0
+    const selection = {
+      start: base + (ta.selectionStart ?? localContentRef.current.length),
+      end: base + (ta.selectionEnd ?? ta.selectionStart ?? localContentRef.current.length),
+    }
+    lastSelectionRef.current = selection
+    const start = Math.max(0, Math.min(selection.start, localContentRef.current.length))
+    const end = Math.max(start, Math.min(selection.end, localContentRef.current.length))
+    onSelectionContextChange(start === end ? '' : localContentRef.current.slice(start, end))
+  }, [onSelectionContextChange])
+
+  const syncFloatingNoteButton = useCallback(() => {
+    const ta = textareaRef.current
+    const wrapper = wrapperRef.current
+    if (!ta || !wrapper || document.activeElement !== ta) return
+    const caret = measureCaret()
+    if (!caret) return
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const side = caret.left - wrapperRect.left > wrapperRect.width / 2 ? 'left' : 'right'
+    const top = Math.max(24, Math.min(wrapperRect.height - 34, caret.top - wrapperRect.top - 2))
+    setFloatingNotePos({ top, side })
+  }, [measureCaret])
+
+  const syncCursorTools = useCallback(() => {
+    rememberSelection()
+    syncFloatingNoteButton()
+  }, [rememberSelection, syncFloatingNoteButton])
+
+  const focusRange = useCallback((start, end = start) => {
+    window.setTimeout(() => {
+      const candidates = [...(wrapperRef.current?.querySelectorAll('textarea.ms-textarea[data-ms-start]') || [])]
+      const ta = [...candidates].reverse().find(node => {
+        const base = Number(node.dataset.msStart) || 0
+        const limit = Number(node.dataset.msEnd) || base
+        return start >= base && start <= limit
+      }) || textareaRef.current
+      if (!ta) return
+      setFocused(true)
+      ta.focus()
+      textareaRef.current = ta
+      const base = Number(ta.dataset.msStart) || 0
+      ta.setSelectionRange(Math.max(0, start - base), Math.max(0, end - base))
+      lastSelectionRef.current = { start, end }
+      syncFloatingNoteButton()
+      if (focusedWriting) scheduleCaretFollow()
+    }, 0)
+  }, [focusedWriting, scheduleCaretFollow, syncFloatingNoteButton])
+
   useEffect(() => {
     if (!innerRef) return
     innerRef({
-      focus: () => { setFocused(true); setTimeout(() => textareaRef.current?.focus(), 0) },
-      scrollIntoView: opts => wrapperRef.current?.scrollIntoView(opts),
-      appendContent: (text) => {
-        const cur = localContentRef.current ?? ''
-        const next = cur.trimEnd() + (cur.trim() ? '\n\n' : '') + text
-        localContentRef.current = next
-        persistSceneDraftToLocalStorage(scene, next)
-        setLocalContent(next)
-        debouncedUpdate.schedule(next)
-      },
-    })
-  }, [innerRef, scene, debouncedUpdate])
+      focus: ({ placeCursor = 'end' } = {}) => {
+        setFocused(true)
+        setTimeout(() => {
+          const ta = textareaRef.current
+          if (!ta) return
+          ta.focus()
+	          if (placeCursor === 'end') {
+	            const end = localContentRef.current.length
+	            ta.setSelectionRange(end, end)
+	            lastSelectionRef.current = { start: end, end }
+	          }
+	          syncFloatingNoteButton()
+	        }, 0)
+	      },
+	      scrollIntoView: opts => wrapperRef.current?.scrollIntoView(opts),
+	      appendContent: (text) => {
+	        const cur = localContentRef.current ?? ''
+	        const selection = lastSelectionRef.current || { start: cur.length, end: cur.length }
+	        const rawStart = Number.isFinite(selection.start) ? selection.start : cur.length
+	        const rawEnd = Number.isFinite(selection.end) ? selection.end : rawStart
+	        const selectionStart = Math.max(0, Math.min(rawStart, cur.length))
+	        const selectionEnd = Math.max(selectionStart, Math.min(rawEnd, cur.length))
+	        const insertAt = selectionEnd
+	        const insertion = insertAt === cur.length && cur.trim()
+	          ? `\n\n${text}`
+	          : text
+	        const next = cur.slice(0, insertAt) + insertion + cur.slice(insertAt)
+	        const insertedStart = insertAt + insertion.length - text.length
+	        const insertedEnd = insertedStart + text.length
+	        localContentRef.current = next
+	        persistSceneDraftToLocalStorage(scene, next)
+	        onLiveContentChange(scene.id, next)
+	        if (scene.notes?.length) {
+	          onUpdateScene(scene.id, {
+	            notes: scene.notes.map(note => {
+	              const anchor = note.anchorOffset ?? cur.length
+	              return anchor >= insertAt ? { ...note, anchorOffset: anchor + insertion.length } : note
+	            }),
+	          })
+	        }
+	        setFocused(true)
+	        setLocalContent(next)
+	        debouncedUpdate.schedule(next)
+	        focusRange(insertedStart, insertedEnd)
+	      },
+	    })
+	  }, [innerRef, scene, debouncedUpdate, focusRange, onLiveContentChange, onUpdateScene, syncFloatingNoteButton])
 
   useEffect(() => {
     localContentRef.current = localContent
@@ -335,13 +535,35 @@ export const SceneEditor = ({
     }
   }, [focused, scene, debouncedUpdate, onPersistDraft])
 
-  const handleChange = e => {
-    const nextContent = e.target.value
-    localContentRef.current = nextContent
-    onPersistDraft(scene, nextContent)
-    setLocalContent(nextContent)
-    debouncedUpdate.schedule(nextContent)
-    if (isScript) {
+	  const handleChange = e => {
+	    const base = Number(e.target.dataset.msStart) || 0
+	    const previousEnd = Number(e.target.dataset.msEnd)
+	    const oldEnd = Number.isFinite(previousEnd) ? previousEnd : localContent.length
+	    const nextValue = e.target.value
+	    const nextContent = base === 0 && oldEnd === localContent.length
+	      ? nextValue
+	      : localContent.slice(0, base) + nextValue + localContent.slice(oldEnd)
+	    const delta = nextValue.length - (oldEnd - base)
+	    lastSelectionRef.current = {
+	      start: base + e.target.selectionStart,
+	      end: base + e.target.selectionEnd,
+	    }
+	    localContentRef.current = nextContent
+	    onPersistDraft(scene, nextContent)
+	    onLiveContentChange(scene.id, nextContent)
+	    setLocalContent(nextContent)
+	    debouncedUpdate.schedule(nextContent)
+	    window.requestAnimationFrame(syncFloatingNoteButton)
+	    if (!isScript && delta !== 0 && scene.notes?.length) {
+	      onUpdateScene(scene.id, {
+	        notes: scene.notes.map(note => {
+	          const anchor = note.anchorOffset ?? localContent.length
+	          const shouldShift = anchor >= oldEnd && !(oldEnd === base && anchor === base)
+	          return shouldShift ? { ...note, anchorOffset: Math.max(0, anchor + delta) } : note
+	        }),
+	      })
+	    }
+	    if (isScript) {
       const nextBlocks = syncScriptBlocks(nextContent, localScriptBlocks, scriptElement)
       const nextIndex = getScriptBlockIndexAtOffset(nextContent, e.target.selectionStart)
       setLocalScriptBlocks(nextBlocks)
@@ -354,11 +576,13 @@ export const SceneEditor = ({
     }
   }
 
-  const syncActiveScriptBlock = useCallback(() => {
-    if (!isScript || !textareaRef.current) return
-    const nextIndex = getScriptBlockIndexAtOffset(localContentRef.current, textareaRef.current.selectionStart)
-    setActiveScriptBlockIndex(Math.min(nextIndex, Math.max(0, localScriptBlocks.length - 1)))
-  }, [isScript, localScriptBlocks.length])
+	  const syncActiveScriptBlock = useCallback(() => {
+	    rememberSelection()
+	    syncFloatingNoteButton()
+	    if (!isScript || !textareaRef.current) return
+	    const nextIndex = getScriptBlockIndexAtOffset(localContentRef.current, textareaRef.current.selectionStart)
+	    setActiveScriptBlockIndex(Math.min(nextIndex, Math.max(0, localScriptBlocks.length - 1)))
+	  }, [isScript, localScriptBlocks.length, rememberSelection, syncFloatingNoteButton])
 
   const setActiveScriptElement = useCallback((type) => {
     if (!isScript) return
@@ -398,6 +622,7 @@ export const SceneEditor = ({
 
     localContentRef.current = nextContent
     onPersistDraft(scene, nextContent)
+    onLiveContentChange(scene.id, nextContent)
     setLocalContent(nextContent)
     setLocalScriptBlocks(nextBlocks)
     setActiveScriptBlockIndex(Math.min(newIndex, Math.max(0, nextBlocks.length - 1)))
@@ -407,11 +632,8 @@ export const SceneEditor = ({
       scriptBlocks: nextBlocks,
       textMode: 'script',
     })
-    window.setTimeout(() => {
-      if (!textareaRef.current) return
-      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + insertion.length
-    }, 0)
-  }, [debouncedUpdate, localContent, localScriptBlocks, onPersistDraft, onUpdateScene, scene, scriptElement])
+	    focusRange(start + insertion.length)
+	  }, [debouncedUpdate, focusRange, localContent, localScriptBlocks, onLiveContentChange, onPersistDraft, onUpdateScene, scene, scriptElement])
 
   const wrapSelection = useCallback((syntax) => {
     const ta = textareaRef.current
@@ -423,18 +645,22 @@ export const SceneEditor = ({
     const newContent = localContent.slice(0, start) + wrapped + localContent.slice(end)
     localContentRef.current = newContent
     onPersistDraft(scene, newContent)
+    onLiveContentChange(scene.id, newContent)
     setLocalContent(newContent)
     debouncedUpdate.schedule(newContent)
-    setTimeout(() => {
-      if (!ta) return
-      if (selected) { ta.selectionStart = start + syntax.length; ta.selectionEnd = start + syntax.length + selected.length }
-      else { ta.selectionStart = ta.selectionEnd = start + syntax.length }
-      ta.focus()
-    }, 0)
-  }, [localContent, debouncedUpdate, onPersistDraft, scene])
+	    setTimeout(() => {
+	      if (!ta) return
+	      if (selected) { ta.selectionStart = start + syntax.length; ta.selectionEnd = start + syntax.length + selected.length }
+	      else { ta.selectionStart = ta.selectionEnd = start + syntax.length }
+	      ta.focus()
+	      rememberSelection()
+	      syncFloatingNoteButton()
+	    }, 0)
+	  }, [localContent, debouncedUpdate, onLiveContentChange, onPersistDraft, rememberSelection, scene, syncFloatingNoteButton])
 
-  const handleKeyDown = e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrapSelection('**'); return }
+	  const handleKeyDown = e => {
+	    const base = Number(e.target.dataset.msStart) || 0
+	    if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrapSelection('**'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrapSelection('*'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); wrapSelection('_'); return }
 
@@ -453,14 +679,15 @@ export const SceneEditor = ({
       return
     }
 
-    if (e.key === 'Enter' && localContent.includes('/scene')) {
-      e.preventDefault()
-      debouncedUpdate.cancel()
-      const pos = e.target.selectionStart
-      const before = localContent.slice(0, pos).replace('/scene', '').trim()
+	    if (e.key === 'Enter' && localContent.includes('/scene')) {
+	      e.preventDefault()
+	      debouncedUpdate.cancel()
+	      const pos = base + e.target.selectionStart
+	      const before = localContent.slice(0, pos).replace('/scene', '').trim()
       const after = localContent.slice(pos).replace('/scene', '').trim()
       localContentRef.current = before
       onPersistDraft(scene, before)
+      onLiveContentChange(scene.id, before)
       setLocalContent(before)
       onSplit(scene.id, scene.chapterId, before, after)
       return
@@ -472,58 +699,108 @@ export const SceneEditor = ({
       return
     }
 
-    if (e.key === 'Enter' && formatSettings.autoIndent && !isBullets && !e.shiftKey) {
-      e.preventDefault()
-      const start = e.target.selectionStart
-      const end = e.target.selectionEnd
-      const insertion = '\n' + ' '.repeat(formatSettings.indentSize)
-      const nextContent = localContent.slice(0, start) + insertion + localContent.slice(end)
+	    if (e.key === 'Enter' && formatSettings.autoIndent && !isBullets && !e.shiftKey) {
+	      e.preventDefault()
+	      const start = base + e.target.selectionStart
+	      const end = base + e.target.selectionEnd
+	      const insertion = '\n' + ' '.repeat(formatSettings.indentSize)
+	      const nextContent = localContent.slice(0, start) + insertion + localContent.slice(end)
       localContentRef.current = nextContent
       onPersistDraft(scene, nextContent)
+      onLiveContentChange(scene.id, nextContent)
       setLocalContent(nextContent)
       debouncedUpdate.schedule(nextContent)
-      window.setTimeout(() => {
-        if (!textareaRef.current) return
-        textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + insertion.length
-      }, 0)
-    }
-  }
+	      if (scene.notes?.length) {
+	        onUpdateScene(scene.id, {
+	          notes: scene.notes.map(note => {
+	            const anchor = note.anchorOffset ?? localContent.length
+	            const shouldShift = anchor >= end && !(end === base && anchor === base)
+	            return shouldShift ? { ...note, anchorOffset: Math.max(0, anchor + insertion.length - (end - start)) } : note
+	          }),
+	        })
+	      }
+	      focusRange(start + insertion.length)
+	    }
+	  }
 
-  const handleAddNote = useCallback(() => {
-    const nextSeq = (scene.notes?.length || 0) + 1
-    const marker = `[[${nextSeq}]]`
-    const ta = textareaRef.current
-    if (ta) {
-      const start = ta.selectionStart
-      const end = ta.selectionEnd
-      const newContent = localContent.slice(0, start) + marker + localContent.slice(end)
-      localContentRef.current = newContent
-      onPersistDraft(scene, newContent)
-      setLocalContent(newContent)
-      debouncedUpdate.schedule(newContent)
-      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + marker.length; ta.focus() }, 0)
-    }
-    onUpdateScene(scene.id, { notes: [...(scene.notes || []), { id: uid(), seq: nextSeq, text: '' }] })
-    onOpenNotes()
-  }, [scene, localContent, debouncedUpdate, onPersistDraft, onUpdateScene, onOpenNotes])
+	  const handleAddNote = useCallback(() => {
+	    const nextSeq = (scene.notes?.length || 0) + 1
+	    const selection = lastSelectionRef.current || { start: localContent.length, end: localContent.length }
+	    const start = Math.max(0, Math.min(selection.start, localContent.length))
+	    const nextNote = { id: uid(), seq: nextSeq, text: '', anchorOffset: start }
+	    setFocused(true)
+	    onUpdateScene(scene.id, {
+	      notes: [...(scene.notes || []), nextNote],
+	    })
+	    focusRange(start)
+	  }, [scene, localContent, focusRange, onUpdateScene])
 
-  const activate = () => { setFocused(true); setTimeout(() => textareaRef.current?.focus(), 0) }
+	  const handleUpdateNote = useCallback((noteId, text) => {
+	    onUpdateScene(scene.id, {
+	      notes: (scene.notes || []).map(note => note.id === noteId ? { ...note, text } : note),
+	    })
+	  }, [onUpdateScene, scene.id, scene.notes])
+
+	  const handleDeleteNote = useCallback((noteId) => {
+	    const removed = (scene.notes || []).find(note => note.id === noteId)
+	    if (removed) {
+	      const marker = `[[${removed.seq}]]`
+	      const markerIndex = localContentRef.current.indexOf(marker)
+	      if (markerIndex >= 0) {
+	        const nextContent = localContentRef.current.slice(0, markerIndex) + localContentRef.current.slice(markerIndex + marker.length)
+	        localContentRef.current = nextContent
+	        onPersistDraft(scene, nextContent)
+	        onLiveContentChange(scene.id, nextContent)
+	        setLocalContent(nextContent)
+	        debouncedUpdate.schedule(nextContent)
+	        focusRange(markerIndex)
+	      }
+	    }
+	    onUpdateScene(scene.id, {
+	      notes: (scene.notes || []).filter(note => note.id !== noteId),
+	    })
+	  }, [debouncedUpdate, focusRange, onLiveContentChange, onPersistDraft, onUpdateScene, scene])
+
+	  const activate = () => {
+	    setFocused(true)
+	    setTimeout(() => {
+	      const ta = textareaRef.current
+	      if (!ta) return
+	      ta.focus()
+	      const end = localContentRef.current.length
+	      ta.setSelectionRange(end, end)
+	      lastSelectionRef.current = { start: end, end }
+	      syncFloatingNoteButton()
+	    }, 0)
+	  }
 
   const displayTitle = scene.title && scene.title !== 'Scene'
     ? scene.title
     : `Scene ${sceneIndex + 1}`
 
-  const textStyle = {
-    fontFamily: formatSettings.fontFamily,
-    fontSize: formatSettings.fontSize,
-    lineHeight: formatSettings.lineHeight,
-    textAlign: formatSettings.textAlign,
-  }
+	  const textStyle = {
+	    fontFamily: formatSettings.fontFamily,
+	    fontSize: formatSettings.fontSize,
+	    lineHeight: formatSettings.lineHeight,
+	    textAlign: formatSettings.textAlign,
+	    textIndent: !isScript && !isBullets && formatSettings.autoIndent ? `${formatSettings.indentSize}ch` : undefined,
+	  }
 
-  return (
-    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`} id={`ms-scene-${scene.id}`}>
-      {/* Scene header — title + controls */}
-      <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}`}>
+	  const handleEditorBlur = () => {
+	    onPersistDraft(scene, localContentRef.current)
+	    debouncedUpdate.flush()
+	    window.setTimeout(() => {
+	      if (wrapperRef.current?.contains(document.activeElement)) return
+	      if (keepEditingOnExternalBlur) return
+	      setFocused(false)
+	      setFloatingNotePos(null)
+	    }, 0)
+	  }
+
+	  return (
+	    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`} id={`ms-scene-${scene.id}`}>
+	      {/* Scene header — title + controls */}
+	      <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}`}>
         <div className="ms-scene-header-row">
           {editingTitle ? (
             <InlineInput
@@ -574,13 +851,8 @@ export const SceneEditor = ({
             <button onMouseDown={e => { e.preventDefault(); wrapSelection('_') }} className="px-2 py-0.5 text-[11px] underline text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Underline (Ctrl+U)">U</button>
           </div>
 
-          <button
-            onClick={handleAddNote}
-            className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border border-[var(--border)] rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
-          >+ Note</button>
-
-          {onOpenVersionHistory && (
-            <button
+	          {onOpenVersionHistory && (
+	            <button
               onClick={() => onOpenVersionHistory(scene.id)}
               className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border border-[var(--border)] rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
               title="View and restore previous versions of this scene"
@@ -589,8 +861,8 @@ export const SceneEditor = ({
         </div>
 
         {/* Scene metadata row */}
-        {(focused || hasMetadata) && (
-          <SceneMetaBar
+	        {((showSceneMeta && focused) || hasMetadata) && (
+	          <SceneMetaBar
             scene={scene}
             onUpdate={data => onUpdateScene(scene.id, data)}
             characterNames={characterNames}
@@ -599,41 +871,108 @@ export const SceneEditor = ({
         )}
       </div>
 
-      {focused ? (
-        <textarea
-          ref={textareaRef}
-          value={localContent}
-          onFocus={() => { setFocused(true); onFocusExternal() }}
-          onBlur={() => { onPersistDraft(scene, localContentRef.current); debouncedUpdate.flush(); setFocused(false) }}
-          onChange={handleChange}
-          onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
-          onClick={syncActiveScriptBlock}
-          onKeyUp={syncActiveScriptBlock}
-          onSelect={syncActiveScriptBlock}
-          placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
-          spellCheck
-          rows={1}
-          className="ms-textarea"
-          style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
-          autoFocus
-        />
-      ) : (
+	      {focused ? (
+	        !isScript && sortedNotes.length > 0 ? (
+	          <div className="ms-block-editor">
+	            {writingBlocks.map(block => {
+	              if (block.type === 'note') {
+	                return (
+	                  <InlineNoteBlock
+	                    key={block.key}
+	                    note={block.note}
+	                    highlighted={highlightedNoteSeq === block.note.seq}
+	                    onUpdate={handleUpdateNote}
+	                    onDelete={handleDeleteNote}
+	                    onOpen={seq => { onNoteClick(seq); onOpenNotes() }}
+	                  />
+	                )
+	              }
+	              return (
+	                <textarea
+	                  key={block.key}
+	                  ref={node => {
+	                    if (node && (!textareaRef.current || document.activeElement === node)) textareaRef.current = node
+	                  }}
+	                  value={localContent.slice(block.start, block.end)}
+	                  data-ms-start={block.start}
+	                  data-ms-end={block.end}
+	                  onFocus={e => { textareaRef.current = e.currentTarget; setFocused(true); onFocusExternal(); window.requestAnimationFrame(syncCursorTools) }}
+	                  onBlur={handleEditorBlur}
+	                  onChange={handleChange}
+	                  onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
+	                  onClick={syncActiveScriptBlock}
+	                  onKeyUp={syncActiveScriptBlock}
+	                  onSelect={syncActiveScriptBlock}
+	                  placeholder={isBullets ? 'One item per line...' : 'Begin writing here...'}
+	                  spellCheck
+	                  rows={1}
+	                  className="ms-textarea ms-textarea-block"
+	                  style={textStyle}
+	                  autoFocus={block.start === 0}
+	                />
+	              )
+	            })}
+	          </div>
+	        ) : (
+	          <textarea
+	            ref={textareaRef}
+	            value={localContent}
+	            data-ms-start={0}
+	            data-ms-end={localContent.length}
+	            onFocus={e => { textareaRef.current = e.currentTarget; setFocused(true); onFocusExternal(); window.requestAnimationFrame(syncCursorTools) }}
+	            onBlur={handleEditorBlur}
+	            onChange={handleChange}
+	            onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
+	            onClick={syncActiveScriptBlock}
+	            onKeyUp={syncActiveScriptBlock}
+	            onSelect={syncActiveScriptBlock}
+	            placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
+	            spellCheck
+	            rows={1}
+	            className="ms-textarea"
+	            style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
+	            autoFocus
+	          />
+	        )
+	      ) : (
         <div className={`ms-preview${isScript ? ' ms-script-mode' : ''}`} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle} onClick={activate}>
-          <ContentPreview
-            content={localContent}
-            entityMap={entityMap}
-            onEntityClick={onEntityClick}
-            onNoteClick={seq => { onNoteClick(seq); onOpenNotes() }}
-            isBullets={isBullets}
+	          <ContentPreview
+	            content={localContent}
+	            entityMap={entityMap}
+	            notesBySeq={notesBySeq}
+	            highlightedNoteSeq={highlightedNoteSeq}
+	            onEntityClick={onEntityClick}
+	            onNoteClick={seq => { onNoteClick(seq); onOpenNotes() }}
+	            onUpdateNote={handleUpdateNote}
+	            onDeleteNote={handleDeleteNote}
+	            onOpenNotes={onOpenNotes}
+	            isBullets={isBullets}
             isScript={isScript}
             scriptBlocks={localScriptBlocks.length ? localScriptBlocks : scene.scriptBlocks}
             scriptElement={scriptElement}
             projectType={projectType}
           />
-        </div>
-      )}
+	        </div>
+	      )}
 
-      {!focused && (
+	      {focused && floatingNotePos && (
+	        <button
+	          type="button"
+	          className="ms-floating-note-btn font-sans"
+	          style={{
+	            top: floatingNotePos.top,
+	            [floatingNotePos.side]: -36,
+	          }}
+	          onMouseDown={e => e.preventDefault()}
+	          onClick={handleAddNote}
+	          title="Add note at cursor"
+	          aria-label="Add note at cursor"
+	        >
+	          +
+	        </button>
+	      )}
+
+	      {!focused && (
         <textarea
           ref={textareaRef}
           value={localContent}

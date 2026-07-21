@@ -82,7 +82,6 @@ export default function MarketingFooter() {
         }}>
           <span>© {new Date().getFullYear()} Your Own World. All rights reserved.</span>
           <span style={{ display: 'flex', gap: 12 }}>
-            <a href="/blog/" style={linkStyle}>Blog</a>
             <a href="/faq/" style={linkStyle}>FAQ</a>
             <a href="/beta-disclaimer/" style={linkStyle}>Beta Disclaimer</a>
             <a href="mailto:support@yourownworld.co.uk" style={linkStyle}>Contact</a>

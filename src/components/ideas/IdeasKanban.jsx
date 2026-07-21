@@ -5,6 +5,8 @@ import FiltersBar from './FiltersBar'
 import ConvertModal from './ConvertModal'
 import { streamMessage } from '../../utils/aiApi'
 import { loadAiSettings } from '../../utils/aiSettings'
+import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
+import AIStar from '../ai/AIStar'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -213,7 +215,7 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
                 opacity: isExpanding ? 0.6 : 1,
               }}
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+              <AIStar size={10} />
               {isExpanding ? 'Expanding…' : 'AI expand'}
             </button>
           )}
@@ -478,7 +480,7 @@ function GhostCard({ idea, style }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function IdeasKanban({ store, userId = null }) {
+export default function IdeasKanban({ store, userId = null, membership = null }) {
   const {
     ideaEntries,
     addIdeaEntry,
@@ -499,6 +501,7 @@ export default function IdeasKanban({ store, userId = null }) {
   const [selectedId, setSelectedId] = useState(null)
   const [convertId, setConvertId] = useState(null)
   const [aiExpandId, setAiExpandId] = useState(null)
+  const [aiExpandError, setAiExpandError] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [createStatus, setCreateStatus] = useState(null)
 
@@ -638,15 +641,20 @@ export default function IdeasKanban({ store, userId = null }) {
     if (aiExpandId) return
     const idea = ideas.find(i => i.id === id)
     if (!idea) return
+    if (membership?.isFree) {
+      setAiExpandError(AI_UPGRADE_REQUIRED_TEXT)
+      return
+    }
 
     const aiSettings = loadAiSettings(userId)
     const provider = aiSettings?.activeProvider || 'google'
     const cfg = aiSettings?.[provider] || {}
     if (!cfg.apiKey?.trim()) {
-      alert('Add an AI API key in settings to use AI expand.')
+      setAiExpandError(AI_CONFIG_REQUIRED_TEXT)
       return
     }
 
+    setAiExpandError('')
     setAiExpandId(id)
     let result = ''
 
@@ -666,10 +674,11 @@ export default function IdeasKanban({ store, userId = null }) {
       },
       onError: (err) => {
         console.error('AI expand failed:', err)
+        setAiExpandError(err || 'AI expand failed.')
         setAiExpandId(null)
       },
     })
-  }, [ideas, handleUpdate, aiExpandId, userId])
+  }, [ideas, handleUpdate, aiExpandId, userId, membership?.isFree])
 
   // ── Drag & drop ──────────────────────────────────────────────────────────────
 
@@ -826,6 +835,26 @@ export default function IdeasKanban({ store, userId = null }) {
         setFilterAiExpanded={setFilterAiExpanded}
         totalCount={filteredIdeas.filter(i => showArchived || i.status !== 'archived').length}
       />
+
+      {aiExpandError === AI_CONFIG_REQUIRED_TEXT && (
+        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
+          <AiConfigRequiredNotice />
+        </div>
+      )}
+      {aiExpandError === AI_UPGRADE_REQUIRED_TEXT && (
+        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
+          <AiUpgradeRequiredNotice>
+            Upgrade to use AI expand on idea cards.
+          </AiUpgradeRequiredNotice>
+        </div>
+      )}
+      {aiExpandError && aiExpandError !== AI_CONFIG_REQUIRED_TEXT && aiExpandError !== AI_UPGRADE_REQUIRED_TEXT && (
+        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
+          <div style={{ background: 'color-mix(in srgb, #ef4444 10%, transparent)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', color: '#ef4444', fontSize: 12 }}>
+            {aiExpandError}
+          </div>
+        </div>
+      )}
 
       {/* Board */}
       <div

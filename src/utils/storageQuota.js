@@ -16,6 +16,7 @@ export const MAX_OPTIMISED_BYTES = 5 * 1024 * 1024 // 5 MB
 
 export function getStorageQuota(membership) {
   if (!membership) return PLAN_STORAGE_BYTES.free
+  if (Number.isFinite(membership.storageQuotaBytes)) return membership.storageQuotaBytes
   const key = membership.activePlanKey || 'free'
   return PLAN_STORAGE_BYTES[key] ?? PLAN_STORAGE_BYTES.free
 }

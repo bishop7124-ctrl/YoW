@@ -156,6 +156,40 @@ export default function KanbanColumn({
           }} />
         )}
 
+        {/* Add-idea affordance, always visible below existing cards */}
+        {count > 0 && !readOnly && (
+          <div
+            onClick={onEmptyClick}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 10px',
+              marginTop: 2,
+              borderRadius: 8,
+              border: `1.5px dashed color-mix(in srgb, ${accent} 30%, transparent)`,
+              color: 'var(--faint)',
+              fontSize: 11,
+              cursor: 'pointer',
+              transition: 'background .15s, border-color .15s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = `color-mix(in srgb, ${accent} 5%, transparent)`
+              e.currentTarget.style.borderColor = `color-mix(in srgb, ${accent} 50%, transparent)`
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.borderColor = `color-mix(in srgb, ${accent} 30%, transparent)`
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Click to add an idea
+          </div>
+        )}
+
         {/* Empty state */}
         {count === 0 && !isDropTarget && (
           <div

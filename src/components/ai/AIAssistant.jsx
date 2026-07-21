@@ -1,6 +1,10 @@
 import { useState, useRef } from 'react'
 import { streamMessage, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
+import { appendAiBarExchange } from '../../utils/aiChatHistory'
+import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
+import { AI_CONFIG_REQUIRED_TEXT, AiSettingsLink } from './AiConfigRequired'
+import AIStar from './AIStar'
 
 const uid  = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -47,9 +51,7 @@ function buildSystemPrompt(section, store) {
 
   const lines = [
     'You are an AI assistant embedded in Your Own World, a creative writing platform.',
-    novel?.title
-      ? `Project: "${novel.title}"${novel.description ? ` — ${novel.description}` : ''}.`
-      : '',
+    buildProjectTypePromptContext(novel),
     `Current section: ${cfg.label || section}.`,
     '',
     'CRITICAL RULE: Respond ONLY with a single valid JSON object. No markdown fences, no explanatory text outside the JSON.',
@@ -103,6 +105,26 @@ function buildContext(section, store) {
   return ''
 }
 
+function describeAiBarResult(result, fallback) {
+  if (result?.action === 'answer' && result.message) return result.message
+  if (result?.action === 'create' && result.type && result.data) {
+    const name = result.data.name || result.data.title || 'Untitled'
+    return `Suggested creating ${result.type}: ${name}`
+  }
+  if (result?.action === 'delete') {
+    return `Suggested deleting ${result.name || result.type || 'item'}`
+  }
+  return fallback
+}
+
+function recordAiBarExchange(args) {
+  try {
+    appendAiBarExchange(args)
+  } catch (error) {
+    console.warn('[ai-bar] Unable to save exchange to chat history', error)
+  }
+}
+
 // ── Store action executors ────────────────────────────────────────────────────
 
 function executeCreate(type, data, store) {
@@ -152,7 +174,9 @@ function CreatePreview({ parsed, onConfirm, onCancel }) {
   return (
     <div className="px-3 pt-2.5 pb-2 border-t border-[var(--border)] bg-[var(--bg-nav)]">
       <div className="mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--accent)]">✦ Ready to add {type}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--accent)] inline-flex items-center gap-1">
+          <AIStar size={10} /> Ready to add {type}
+        </span>
         <div className="text-sm font-semibold text-[var(--text-main)] mt-0.5 truncate">{name}</div>
       </div>
       {previewFields.length > 1 && (
@@ -217,7 +241,7 @@ function AnswerDisplay({ message, onDismiss }) {
   return (
     <div className="px-3 pt-2.5 pb-2 border-t border-[var(--border)] bg-[var(--bg-nav)] max-h-48 overflow-y-auto">
       <div className="flex items-start gap-2">
-        <span className="text-[var(--accent)] text-xs mt-0.5 flex-shrink-0 font-bold">✦</span>
+        <AIStar size={12} className="text-[var(--accent)] mt-0.5 flex-shrink-0" />
         <p className="text-sm text-[var(--text-main)] whitespace-pre-wrap leading-relaxed flex-1 min-w-0">{message}</p>
         <button
           onClick={onDismiss}
@@ -235,7 +259,7 @@ function AnswerDisplay({ message, onDismiss }) {
 
 // ── Root component ────────────────────────────────────────────────────────────
 
-export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId = null }) {
+export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId = null, membership = null }) {
   const [input,  setInput]  = useState('')
   const [status, setStatus] = useState('idle')
   const [parsed, setParsed] = useState(null)
@@ -282,6 +306,12 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
             .replace(/\s*```$/, '')
             .trim()
           const result = JSON.parse(cleaned)
+          recordAiBarExchange({
+            novelId: store.activeNovelId,
+            section,
+            userText: text,
+            assistantText: describeAiBarResult(result, cleaned),
+          })
 
           if (result.action === 'create' && result.type && result.data) {
             setParsed(result)
@@ -299,10 +329,16 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
         } catch {
           const trimmed = accumulated.trim()
           if (trimmed) {
+            recordAiBarExchange({
+              novelId: store.activeNovelId,
+              section,
+              userText: text,
+              assistantText: trimmed,
+            })
             setParsed({ message: trimmed })
             setStatus('answer')
           } else {
-            setErrMsg('No response. Check your API key in AI settings.')
+            setErrMsg(`No response. ${AI_CONFIG_REQUIRED_TEXT}`)
             setStatus('error')
           }
         }
@@ -332,6 +368,26 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
 
   const isLoading = status === 'loading'
 
+  if (membership?.isFree) {
+    return (
+      <div className="flex-shrink-0 border-t border-[var(--border)]">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <AIStar size={12} className="text-[var(--accent)] flex-shrink-0 select-none" />
+          <span className="flex-1 min-w-0 truncate text-sm text-[var(--text-muted)]">
+            Upgrade to access AI chat and quick project actions.
+          </span>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))}
+            className="h-7 px-2 flex items-center border border-[var(--border)] rounded flex-shrink-0 text-[10px] font-bold uppercase tracking-wider text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+          >
+            Upgrade
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-shrink-0">
 
@@ -355,21 +411,14 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
       )}
       {status === 'no_key' && (
         <div className="px-3 py-2 border-t border-[var(--border)] flex items-center gap-1.5">
-          <span className="text-[var(--text-muted)] text-xs">No AI key configured.</span>
-          {onOpenChat && (
-            <button
-              onClick={() => { dismiss(); onOpenChat() }}
-              className="text-[var(--accent)] text-xs underline hover:opacity-80"
-            >
-              Open AI settings →
-            </button>
-          )}
+          <span className="text-[var(--text-muted)] text-xs">{AI_CONFIG_REQUIRED_TEXT}</span>
+          <AiSettingsLink className="text-xs hover:opacity-80">Open AI settings</AiSettingsLink>
         </div>
       )}
 
       {/* Input bar */}
       <div className="flex items-center gap-2 px-3 py-2">
-        <span className="text-[var(--accent)] text-xs font-bold flex-shrink-0 select-none">✦</span>
+        <AIStar size={12} className="text-[var(--accent)] flex-shrink-0 select-none" />
         <input
           ref={inputRef}
           value={input}

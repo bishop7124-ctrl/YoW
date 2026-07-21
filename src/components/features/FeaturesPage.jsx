@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import { usePageMeta } from '../../utils/usePageMeta'
 
 // ── Feature presence values ──────────────────────────────────────────────────
 // true = included (default on)
@@ -435,6 +436,12 @@ const UNIQUE_CALLOUTS = [
 ]
 
 export default function FeaturesPage({ onGetStarted, onLogin, user }) {
+  usePageMeta({
+    path: '/features/',
+    title: 'Features — Your Own World | Worldbuilding & Writing Software',
+    description: 'Every tool your story needs: manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and D&D dungeon masters.',
+  })
+
   return (
     <div className="yow-home min-h-screen text-[var(--text-main)]">
       <MarketingNav activePath="/features/" onLogin={onLogin} onGetStarted={onGetStarted} user={user} />

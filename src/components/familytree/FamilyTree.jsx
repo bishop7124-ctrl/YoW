@@ -27,7 +27,7 @@ const extractYear = (value) => {
 };
 
 export default function FamilyTree({ store }) {
-  const { characters, factions, selectedCharacterId, setSelectedCharacterId, saveCharacter, currentYear } = store;
+  const { characters, factions, selectedCharacterId, setSelectedCharacterId, currentYear } = store;
   const [hoveredCharId, setHoveredCharId] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const [treeColumnCount, setTreeColumnCount] = useState(getTreeColumnCount);
@@ -138,26 +138,89 @@ export default function FamilyTree({ store }) {
 
     const sections = Array.from(groups.entries()).map(([familyGroup, members]) => {
       const label = familyGroup === "unassigned" ? "Ungrouped Characters" : familyGroup;
-      const maxGeneration = members.reduce((max, m) => Math.max(max, generations.get(m.id) ?? 0), 0);
+      const hasFamilyLink = (member) => {
+        const parentLinked = (member.parentIds || []).some((pid) => byId.has(pid));
+        const childLinked = characters.some((other) => (other.parentIds || []).includes(member.id));
+        const spouseLinked = (member.spouseIds || []).some((sid) => byId.has(sid))
+          || characters.some((other) => (other.spouseIds || []).includes(member.id));
+        return parentLinked || childLinked || spouseLinked;
+      };
+      const linkedMembers = members.filter(hasFamilyLink);
+      const unlinkedMembers = members.filter((member) => !hasFamilyLink(member));
+      const maxGeneration = linkedMembers.reduce((max, m) => Math.max(max, generations.get(m.id) ?? 0), 0);
       let yCursor = PAD;
-      const generationRows = Array.from({ length: maxGeneration + 1 }, (_, i) => i).map((generation) => {
-        const people = members
-          .filter((m) => (generations.get(m.id) ?? 0) === generation)
-          .slice()
-          .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        const rows = Math.max(1, Math.ceil(people.length / treeColumnCount));
-        const row = { generation, people, y: yCursor, rows };
-        yCursor += rows * NODE_H + Math.max(0, rows - 1) * ROW_GAP + Y_GAP;
-        return row;
-      });
+      const generationRows = [];
+      if (linkedMembers.length > 0) {
+        Array.from({ length: maxGeneration + 1 }, (_, i) => i).forEach((generation) => {
+          const people = linkedMembers
+            .filter((m) => (generations.get(m.id) ?? 0) === generation)
+            .slice()
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          if (people.length === 0) return;
+          const rows = Math.max(1, Math.ceil(people.length / treeColumnCount));
+          const row = { id: `gen-${generation}`, label: `Generation ${generation + 1}`, generation, people, y: yCursor, rows };
+          yCursor += rows * NODE_H + Math.max(0, rows - 1) * ROW_GAP + Y_GAP;
+          generationRows.push(row);
+        });
+      }
+      const unlinkedRows = unlinkedMembers.length > 0
+        ? [{
+            id: "unlinked",
+            label: "Unlinked Characters",
+            people: unlinkedMembers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+            y: yCursor,
+            rows: Math.max(1, Math.ceil(unlinkedMembers.length / treeColumnCount)),
+          }]
+        : [];
+      if (unlinkedRows.length > 0) {
+        yCursor += unlinkedRows[0].rows * NODE_H + Math.max(0, unlinkedRows[0].rows - 1) * ROW_GAP + Y_GAP;
+      }
+      const displayRows = [...generationRows, ...unlinkedRows];
 
       const positions = new Map();
-      generationRows.forEach((row) => {
-        row.people.forEach((person, index) => {
+      displayRows.forEach((row) => {
+        const getParentCenter = (person) => {
+          const parentPositions = (person.parentIds || [])
+            .map((pid) => positions.get(pid))
+            .filter(Boolean);
+          if (parentPositions.length === 0) return null;
+          return parentPositions.reduce((sum, pos) => sum + pos.x + NODE_W / 2, 0) / parentPositions.length;
+        };
+        const getNearestSpouseX = (person) => {
+          const spouseIds = new Set([...(person.spouseIds || [])]);
+          members.forEach((other) => {
+            if ((other.spouseIds || []).includes(person.id)) spouseIds.add(other.id);
+          });
+          const spousePositions = [...spouseIds].map((sid) => positions.get(sid)).filter(Boolean);
+          if (spousePositions.length === 0) return null;
+          return spousePositions.reduce((sum, pos) => sum + pos.x + NODE_W / 2, 0) / spousePositions.length;
+        };
+        const sortedPeople = row.people.slice().sort((a, b) => {
+          const aParent = getParentCenter(a);
+          const bParent = getParentCenter(b);
+          if (aParent != null || bParent != null) return (aParent ?? Number.MAX_SAFE_INTEGER) - (bParent ?? Number.MAX_SAFE_INTEGER);
+          const aSpouse = getNearestSpouseX(a);
+          const bSpouse = getNearestSpouseX(b);
+          if (aSpouse != null || bSpouse != null) return (aSpouse ?? Number.MAX_SAFE_INTEGER) - (bSpouse ?? Number.MAX_SAFE_INTEGER);
+          return (a.name || '').localeCompare(b.name || '');
+        });
+        row.people = sortedPeople;
+        sortedPeople.forEach((person, index) => {
           const wrappedRow = Math.floor(index / treeColumnCount);
           const column = index % treeColumnCount;
+          const desiredCenter = row.id === "unlinked"
+            ? null
+            : getParentCenter(person) ?? getNearestSpouseX(person);
+          const previousPerson = column > 0 ? sortedPeople[index - 1] : null;
+          const previousPosition = previousPerson ? positions.get(previousPerson.id) : null;
+          const baseX = desiredCenter != null
+            ? desiredCenter - NODE_W / 2
+            : PAD + column * (NODE_W + X_GAP);
+          const minX = previousPosition && Math.floor(index / treeColumnCount) === Math.floor((index - 1) / treeColumnCount)
+            ? previousPosition.x + NODE_W + X_GAP
+            : PAD;
           positions.set(person.id, {
-            x: PAD + column * (NODE_W + X_GAP),
+            x: Math.round(Math.max(minX, baseX)),
             y: row.y + wrappedRow * (NODE_H + ROW_GAP),
           });
         });
@@ -182,14 +245,15 @@ export default function FamilyTree({ store }) {
 
       const width = Math.max(
         320,
-        ...generationRows.map((row) => {
+        ...displayRows.map((row) => {
           const columns = Math.min(treeColumnCount, Math.max(1, row.people.length));
           return PAD * 2 + columns * NODE_W + Math.max(0, columns - 1) * X_GAP;
-        })
+        }),
+        ...[...positions.values()].map((position) => position.x + NODE_W + PAD)
       );
       const height = Math.max(PAD * 2 + NODE_H, yCursor - Y_GAP + PAD);
 
-      return { familyGroup, label, memberCount: members.length, members, generationRows, positions, width, height };
+      return { familyGroup, label, memberCount: members.length, members, generationRows, displayRows, positions, width, height };
     });
 
     return sections.sort((a, b) => {
@@ -197,16 +261,11 @@ export default function FamilyTree({ store }) {
       if (b.familyGroup === "unassigned") return -1;
       return a.label.localeCompare(b.label);
     });
-  }, [characters, generations, treeColumnCount]);
+  }, [characters, generations, treeColumnCount, byId]);
 
   const jumpToCharacters = (characterId) => {
-    setSelectedCharacterId(characterId);
+    if (characterId) setSelectedCharacterId(characterId);
     window.dispatchEvent(new CustomEvent("switch-section", { detail: { section: "characters" } }));
-  };
-
-  const addCharacterFromTree = () => {
-    const savedId = saveCharacter({ name: "New Character", role: "Character" });
-    if (savedId) setSelectedCharacterId(savedId);
   };
 
   return (
@@ -225,8 +284,8 @@ export default function FamilyTree({ store }) {
         {characters.length === 0 ? (
           <div className="h-[60vh] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-[var(--border)] rounded-xl px-8">
             <p className="text-[var(--text-muted)] text-sm font-medium">No characters yet</p>
-            <p className="text-[var(--text-muted)] text-xs leading-relaxed max-w-xs">Add someone here, then assign parents, children, spouses, and family groups as the tree grows.</p>
-            <button onClick={addCharacterFromTree} className="bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold px-4 py-2 rounded hover:opacity-90">Add Character</button>
+            <p className="text-[var(--text-muted)] text-xs leading-relaxed max-w-xs">Create characters in the Characters tab, then assign parents, children, spouses, and family groups as the tree grows.</p>
+            <button onClick={() => jumpToCharacters()} className="bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold px-4 py-2 rounded hover:opacity-90">Open Characters</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
@@ -242,9 +301,9 @@ export default function FamilyTree({ store }) {
 
                   <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-main)] tree-container relative" data-tour="familytree-canvas" onScroll={() => setHoveredCharId(null)}>
                     <svg width={section.width} height={section.height} className="block min-w-full">
-                      {section.generationRows.map((row) => (
+                      {section.displayRows.map((row) => (
                         <text
-                          key={`gen-${row.generation}`}
+                          key={`row-${row.id}`}
                           x={12}
                           y={row.y - 8}
                           fill="var(--text-muted)"
@@ -252,7 +311,7 @@ export default function FamilyTree({ store }) {
                           fontWeight="700"
                           style={{ letterSpacing: "0.12em", textTransform: "uppercase" }}
                         >
-                          Generation {row.generation + 1}
+                          {row.label}
                         </text>
                       ))}
 
@@ -269,6 +328,10 @@ export default function FamilyTree({ store }) {
 
                         const lines = [];
                         const sw = { stroke: "var(--border)", strokeWidth: "1.7" };
+                        const connectorPath = (from, to, bendY) => {
+                          if (Math.abs(from.x - to.x) < 1) return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+                          return `M ${from.x} ${from.y} L ${from.x} ${bendY} L ${to.x} ${bendY} L ${to.x} ${to.y}`;
+                        };
 
                         groups.forEach(({ parentIds, childIds }, key) => {
                           const pAnchors = parentIds.map((pid) => {
@@ -293,11 +356,12 @@ export default function FamilyTree({ store }) {
 
                           // junctionY: where parent legs meet; splitY: where trunk fans to children
                           const junctionY = parentIds.length > 1 ? parentBottomY + Math.round(gap * 0.42) : parentBottomY;
-                          const splitY = childIds.length > 1 ? childTopY - Math.round(gap * 0.42) : childTopY;
+                          const splitY = childIds.length > 1 ? childTopY - Math.round(gap * 0.42) : junctionY;
 
-                          // 1-to-1: straight vertical line
+                          // 1-to-1: choose the shortest tidy orthogonal route rather than a long diagonal.
                           if (parentIds.length === 1 && childIds.length === 1) {
-                            lines.push(<line key={key} x1={pAnchors[0].x} y1={pAnchors[0].y} x2={cAnchors[0].x} y2={cAnchors[0].y} {...sw} />);
+                            const bendY = parentBottomY + Math.max(14, Math.round(gap / 2));
+                            lines.push(<path key={key} d={connectorPath(pAnchors[0], cAnchors[0], bendY)} fill="none" {...sw} />);
                             return;
                           }
 
@@ -320,6 +384,8 @@ export default function FamilyTree({ store }) {
                             cAnchors.forEach((a, i) => {
                               lines.push(<line key={`${key}-cl${i}`} x1={a.x} y1={splitY} x2={a.x} y2={a.y} {...sw} />);
                             });
+                          } else {
+                            lines.push(<path key={`${key}-single-child`} d={connectorPath({ x: trunkX, y: splitY }, cAnchors[0], parentBottomY + Math.max(14, Math.round(gap / 2)))} fill="none" {...sw} />);
                           }
                         });
 
@@ -401,8 +467,8 @@ export default function FamilyTree({ store }) {
               <h3 className="text-sm font-bold text-[var(--text-main)] mb-2">Family Details</h3>
               {!selectedCharacter ? (
                 <div className="space-y-3">
-                  <p className="text-xs text-[var(--text-muted)]">Select a character node to review their family links or add someone new.</p>
-                  <button onClick={addCharacterFromTree} className="w-full bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold py-1.5 rounded hover:opacity-90">Add Character</button>
+                  <p className="text-xs text-[var(--text-muted)]">Select a character node to review their family links, or open Characters to add someone new.</p>
+                  <button onClick={() => jumpToCharacters()} className="w-full bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold py-1.5 rounded hover:opacity-90">Open Characters</button>
                 </div>
               ) : (
                 <div className="space-y-3">

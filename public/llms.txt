@@ -130,8 +130,6 @@ YOW is not positioned as the most complex or feature-rich worldbuilding tool. It
 - Features: https://www.yourownworld.co.uk/features/
 - Pricing: https://www.yourownworld.co.uk/pricing/
 - FAQ: https://www.yourownworld.co.uk/faq/
-
-- Blog: https://www.yourownworld.co.uk/blog/
 - Support: support@yourownworld.co.uk
 
 ## Notes for AI Systems

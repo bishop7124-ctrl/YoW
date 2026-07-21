@@ -3,7 +3,19 @@ import {
   RACES, CLASSES, BACKGROUNDS, ABILITY_KEYS, ABILITY_LABELS, ABILITY_SHORT,
   SKILLS, CONDITIONS, NPC_RELATIONSHIP_TYPES, CHARACTER_STATUSES, SPELL_SCHOOLS,
   getModifier, formatMod, getProficiencyBonus, xpForNextLevel, XP_THRESHOLDS,
+  isSpellcaster, isKnownCaster, isPreparedCaster, getSpellcastingAbility,
+  getCantripsKnown, getKnownSpellCount, getPreparedSpellCount, getSpellSlots, getAlwaysPreparedSpells,
+  ASI_LEVELS, METAMAGIC_OPTIONS, getMetamagicKnownCount, INVOCATIONS, getInvocationsKnownCount,
 } from './rpgData'
+import { cantripsForClass, spellsForClassAtLevel, findSpellByName } from './spellData'
+
+const toSpellEntry = (spell) => ({
+  id: `spell-${spell.name.replace(/\s+/g, '-').toLowerCase()}`,
+  name: spell.name,
+  level: spell.level,
+  school: spell.school,
+  description: spell.desc || '',
+})
 
 const SHEET_TABS = [
   { id: 'overview',  label: 'Overview' },
@@ -452,14 +464,51 @@ function TabEquipment({ character, onChange }) {
 function TabSpells({ character, onChange }) {
   const spells = character.spells || {}
   const slots = spells.slots || {}
-  const known = spells.known || []
   const cantrips = spells.cantrips || []
+  const classId = character.class
+  const level = character.level
   const [newSpell, setNewSpell] = useState({ name: '', level: 0, school: 'Evocation', description: '' })
-  const profBonus = getProficiencyBonus(character.level)
+  const [showCustom, setShowCustom] = useState(false)
+  const [pickCantrip, setPickCantrip] = useState('')
+  const [pickSpell, setPickSpell] = useState('')
+  const profBonus = getProficiencyBonus(level)
 
-  const spellcastingAbility = spells.spellcastingAbility || 'int'
+  const known = isKnownCaster(classId)
+  const preparedCaster = isPreparedCaster(classId)
+  const spellKey = known ? 'known' : (preparedCaster ? 'prepared' : 'known')
+  const spellList = spells[spellKey] || []
+
+  const spellcastingAbility = spells.spellcastingAbility || getSpellcastingAbility(classId) || 'int'
   const spellMod = getModifier(character.abilityScores[spellcastingAbility]) + profBonus
   const spellSaveDC = 8 + spellMod
+
+  const cantripLimit = getCantripsKnown(classId, level)
+  const abilityModOnly = getModifier(character.abilityScores[spellcastingAbility])
+  const spellLimit = known ? getKnownSpellCount(classId, level) : preparedCaster ? getPreparedSpellCount(classId, level, abilityModOnly) : null
+
+  const alwaysPrepared = getAlwaysPreparedSpells(classId, character.subclassId, level).map(findSpellByName).filter(Boolean)
+
+  const slotLevels = Object.keys(slots).map(Number)
+  const maxSpellLevel = slotLevels.length ? Math.max(...slotLevels) : 9
+
+  const knownCantripNames = cantrips.map(c => c.name)
+  const knownSpellNames = spellList.map(s => s.name)
+  const cantripOptions = isSpellcaster(classId) ? cantripsForClass(classId).filter(s => !knownCantripNames.includes(s.name)) : []
+  const spellOptions = isSpellcaster(classId) ? spellsForClassAtLevel(classId, maxSpellLevel).filter(s => !knownSpellNames.includes(s.name)) : []
+
+  const addCantripFromCompendium = () => {
+    const spell = cantripOptions.find(s => s.name === pickCantrip)
+    if (!spell) return
+    onChange({ spells: { ...spells, cantrips: [...cantrips, toSpellEntry(spell)] } })
+    setPickCantrip('')
+  }
+
+  const addSpellFromCompendium = () => {
+    const spell = spellOptions.find(s => s.name === pickSpell)
+    if (!spell) return
+    onChange({ spells: { ...spells, [spellKey]: [...spellList, toSpellEntry(spell)] } })
+    setPickSpell('')
+  }
 
   const addSpell = () => {
     if (!newSpell.name.trim()) return
@@ -467,14 +516,14 @@ function TabSpells({ character, onChange }) {
     if (newSpell.level === 0) {
       onChange({ spells: { ...spells, cantrips: [...cantrips, spell] } })
     } else {
-      onChange({ spells: { ...spells, known: [...known, spell] } })
+      onChange({ spells: { ...spells, [spellKey]: [...spellList, spell] } })
     }
     setNewSpell(p => ({ ...p, name: '', description: '' }))
   }
 
   const removeSpell = (id, isCantrip) => {
     if (isCantrip) onChange({ spells: { ...spells, cantrips: cantrips.filter(s => s.id !== id) } })
-    else onChange({ spells: { ...spells, known: known.filter(s => s.id !== id) } })
+    else onChange({ spells: { ...spells, [spellKey]: spellList.filter(s => s.id !== id) } })
   }
 
   const setSlotUsed = (level, used) => {
@@ -500,6 +549,28 @@ function TabSpells({ character, onChange }) {
           <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-main)' }}>{spellSaveDC}</p>
         </div>
       </div>
+
+      {/* Known/prepared limits */}
+      {isSpellcaster(classId) && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cantrips: <strong style={{ color: cantrips.length >= cantripLimit ? 'var(--accent)' : 'var(--text-main)' }}>{cantrips.length} / {cantripLimit}</strong></span>
+          {spellLimit !== null && (
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{known ? 'Spells Known' : 'Spells Prepared'}: <strong style={{ color: spellList.length >= spellLimit ? 'var(--accent)' : 'var(--text-main)' }}>{spellList.length} / {spellLimit}</strong></span>
+          )}
+        </div>
+      )}
+
+      {/* Always-prepared domain/oath/patron spells */}
+      {alwaysPrepared.length > 0 && (
+        <div style={{ padding: '12px 16px', borderRadius: 12, background: 'color-mix(in srgb, #8b5cf6 8%, transparent)', border: '1px solid color-mix(in srgb, #8b5cf6 25%, transparent)' }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: '#8b5cf6', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>Always Prepared{character.subclass ? ` (${character.subclass})` : ''}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {alwaysPrepared.map(s => (
+              <span key={s.name} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'color-mix(in srgb, #8b5cf6 15%, transparent)', color: 'var(--text-main)' }}>{s.name}</span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Spell Slots */}
       {Object.keys(slots).length > 0 && (
@@ -537,18 +608,47 @@ function TabSpells({ character, onChange }) {
         </div>
       )}
 
-      {/* Add spell */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <input className="field" placeholder="Spell name…" value={newSpell.name} onChange={e => setNewSpell(p => ({ ...p, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addSpell()} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 13 }} />
-        <select className="field" value={newSpell.level} onChange={e => setNewSpell(p => ({ ...p, level: Number(e.target.value) }))} style={{ padding: '7px 10px', fontSize: 12 }}>
-          <option value={0}>Cantrip</option>
-          {[1,2,3,4,5,6,7,8,9].map(l => <option key={l} value={l}>Level {l}</option>)}
-        </select>
-        <select className="field" value={newSpell.school} onChange={e => setNewSpell(p => ({ ...p, school: e.target.value }))} style={{ padding: '7px 10px', fontSize: 12 }}>
-          {SPELL_SCHOOLS.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <button onClick={addSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
-      </div>
+      {/* Add from compendium */}
+      {isSpellcaster(classId) && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {cantripOptions.length > 0 && cantrips.length < cantripLimit && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select className="field" value={pickCantrip} onChange={e => setPickCantrip(e.target.value)} style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13 }}>
+                <option value="">Add a cantrip…</option>
+                {cantripOptions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+              </select>
+              <button onClick={addCantripFromCompendium} disabled={!pickCantrip} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: pickCantrip ? 'pointer' : 'default', opacity: pickCantrip ? 1 : 0.5, flexShrink: 0 }}>Add</button>
+            </div>
+          )}
+          {spellOptions.length > 0 && (spellLimit === null || spellList.length < spellLimit) && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select className="field" value={pickSpell} onChange={e => setPickSpell(e.target.value)} style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13 }}>
+                <option value="">Add a spell…</option>
+                {spellOptions.map(s => <option key={s.name} value={s.name}>Lvl {s.level} · {s.name}</option>)}
+              </select>
+              <button onClick={addSpellFromCompendium} disabled={!pickSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: pickSpell ? 'pointer' : 'default', opacity: pickSpell ? 1 : 0.5, flexShrink: 0 }}>Add</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Custom / homebrew spell fallback */}
+      <button onClick={() => setShowCustom(v => !v)} style={{ alignSelf: 'start', background: 'none', border: 'none', color: 'var(--accent)', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+        {showCustom ? '− Hide custom spell entry' : '+ Add a custom / homebrew spell'}
+      </button>
+      {showCustom && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input className="field" placeholder="Spell name…" value={newSpell.name} onChange={e => setNewSpell(p => ({ ...p, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addSpell()} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 13 }} />
+          <select className="field" value={newSpell.level} onChange={e => setNewSpell(p => ({ ...p, level: Number(e.target.value) }))} style={{ padding: '7px 10px', fontSize: 12 }}>
+            <option value={0}>Cantrip</option>
+            {[1,2,3,4,5,6,7,8,9].map(l => <option key={l} value={l}>Level {l}</option>)}
+          </select>
+          <select className="field" value={newSpell.school} onChange={e => setNewSpell(p => ({ ...p, school: e.target.value }))} style={{ padding: '7px 10px', fontSize: 12 }}>
+            {SPELL_SCHOOLS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={addSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
+        </div>
+      )}
 
       {/* Cantrips */}
       {cantrips.length > 0 && (
@@ -565,12 +665,12 @@ function TabSpells({ character, onChange }) {
         </div>
       )}
 
-      {/* Known spells by level */}
-      {known.length > 0 && (
+      {/* Known / prepared spells by level */}
+      {spellList.length > 0 && (
         <div>
-          <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>Known Spells</p>
+          <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>{known ? 'Known Spells' : 'Prepared Spells'}</p>
           {[1,2,3,4,5,6,7,8,9].map(lvl => {
-            const spellsAtLevel = known.filter(s => s.level === lvl)
+            const spellsAtLevel = spellList.filter(s => s.level === lvl)
             if (!spellsAtLevel.length) return null
             return (
               <div key={lvl} style={{ marginBottom: 8 }}>
@@ -795,18 +895,115 @@ function TabCampaign({ character, onChange, store }) {
 
 // ─── Level Up Modal ──────────────────────────────────────────────────────────
 
+function LevelUpPickList({ title, limit, chosen, options, onToggle }) {
+  return (
+    <div style={{ textAlign: 'left' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{title}</p>
+        <span style={{ fontSize: 11, fontWeight: 700, color: chosen.length >= limit ? 'var(--accent)' : 'var(--text-muted)' }}>{chosen.length} / {limit}</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {options.map(opt => {
+          const isChosen = chosen.some(c => (c.name || c) === (opt.name || opt.id))
+          const disabled = !isChosen && chosen.length >= limit
+          return (
+            <button
+              key={opt.id || opt.name}
+              onClick={() => onToggle(opt)}
+              disabled={disabled}
+              title={opt.desc}
+              style={{
+                padding: '4px 10px', borderRadius: 7, fontSize: 12, cursor: disabled ? 'default' : 'pointer',
+                border: `1px solid ${isChosen ? 'var(--accent)' : 'color-mix(in srgb, var(--border) 60%, transparent)'}`,
+                background: isChosen ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'transparent',
+                color: isChosen ? 'var(--accent)' : disabled ? 'var(--text-muted)' : 'var(--text-main)',
+                opacity: disabled ? 0.5 : 1,
+              }}
+            >{opt.name || opt.label}</button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function LevelUpModal({ character, onConfirm, onClose }) {
   const newLevel = Math.min(20, character.level + 1)
-  const cls = CLASSES.find(c => c.id === character.class)
+  const classId = character.class
+  const cls = CLASSES.find(c => c.id === classId)
   const hitDieMax = parseInt(cls?.hitDie?.replace('d', '') || '8')
   const conMod = getModifier(character.abilityScores.con)
-  const hpGain = Math.floor(hitDieMax / 2) + 1 + conMod
+  const hpGain = Math.max(1, Math.floor(hitDieMax / 2) + 1 + conMod)
   const newProf = getProficiencyBonus(newLevel)
+
+  const isASI = ASI_LEVELS.includes(newLevel)
+  const [asiChoice, setAsiChoice] = useState('none')
+  const [asiPrimary, setAsiPrimary] = useState('str')
+  const [asiSecondary, setAsiSecondary] = useState('dex')
+  const [featText, setFeatText] = useState('')
+
+  const spells = character.spells || {}
+  const abilityKey = spells.spellcastingAbility || getSpellcastingAbility(classId) || 'int'
+  const abilityMod = getModifier(character.abilityScores[abilityKey])
+  const known = isKnownCaster(classId)
+  const preparedCaster = isPreparedCaster(classId)
+  const spellKey = known ? 'known' : (preparedCaster ? 'prepared' : 'known')
+
+  const cantripDelta = Math.max(0, getCantripsKnown(classId, newLevel) - getCantripsKnown(classId, character.level))
+  const oldSpellLimit = known ? getKnownSpellCount(classId, character.level) : preparedCaster ? getPreparedSpellCount(classId, character.level, abilityMod) : 0
+  const newSpellLimit = known ? getKnownSpellCount(classId, newLevel) : preparedCaster ? getPreparedSpellCount(classId, newLevel, abilityMod) : 0
+  const spellDelta = Math.max(0, newSpellLimit - oldSpellLimit)
+
+  const slots = getSpellSlots(classId, newLevel) || {}
+  const slotLevels = Object.keys(slots).map(Number)
+  const maxSpellLevel = slotLevels.length ? Math.max(...slotLevels) : 0
+
+  const existingCantripNames = (spells.cantrips || []).map(c => c.name)
+  const existingSpellNames = (spells[spellKey] || []).map(s => s.name)
+
+  const [newCantrips, setNewCantrips] = useState([])
+  const [newSpells, setNewSpells] = useState([])
+  const [newMetamagic, setNewMetamagic] = useState([])
+  const [newInvocations, setNewInvocations] = useState([])
+
+  const cantripOptions = cantripsForClass(classId).filter(s => !existingCantripNames.includes(s.name))
+  const spellOptions = maxSpellLevel > 0 ? spellsForClassAtLevel(classId, maxSpellLevel).filter(s => !existingSpellNames.includes(s.name)) : []
+
+  const toggleFrom = (list, setList, limit, item, key) => {
+    const exists = list.some(x => x[key] === item[key])
+    if (exists) setList(list.filter(x => x[key] !== item[key]))
+    else if (list.length < limit) setList([...list, item])
+  }
+
+  const metamagicDelta = classId === 'sorcerer' ? Math.max(0, getMetamagicKnownCount(newLevel) - getMetamagicKnownCount(character.level)) : 0
+  const metamagicOptions = METAMAGIC_OPTIONS.filter(o => !(spells.metamagic || []).includes(o.id))
+
+  const invocationDelta = classId === 'warlock' ? Math.max(0, getInvocationsKnownCount(newLevel) - getInvocationsKnownCount(character.level)) : 0
+  const invocationOptions = INVOCATIONS.filter(o => !(spells.invocations || []).includes(o.id))
+
+  const canConfirm = isASI ? asiChoice !== 'none' : true
+  const spellChoicesComplete = newCantrips.length >= cantripDelta && newSpells.length >= spellDelta
+    && newMetamagic.length >= metamagicDelta && newInvocations.length >= invocationDelta
+
+  const handleConfirm = () => {
+    let asi = null
+    if (asiChoice === 'two') asi = { abilities: [{ key: asiPrimary, amount: 2 }] }
+    else if (asiChoice === 'one') asi = { abilities: [{ key: asiPrimary, amount: 1 }, { key: asiSecondary, amount: 1 }] }
+    else if (asiChoice === 'feat' && featText.trim()) asi = { feat: featText.trim() }
+
+    onConfirm({
+      newLevel, hpGain, asi,
+      newSlots: slots,
+      newCantrips, newSpells,
+      newMetamagic: newMetamagic.map(o => o.id),
+      newInvocations: newInvocations.map(o => o.id),
+    })
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--bg-nav)', border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', borderRadius: 18, width: 'min(440px, 100%)', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.4)', textAlign: 'center' }}>
+      <div style={{ background: 'var(--bg-nav)', border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', borderRadius: 18, width: 'min(520px, 100%)', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.4)', textAlign: 'center' }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>✨</div>
         <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-main)', margin: '0 0 6px' }}>Level {newLevel}!</h2>
         <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>{character.name} has grown in power.</p>
@@ -814,7 +1011,7 @@ function LevelUpModal({ character, onConfirm, onClose }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
           <div style={{ padding: '12px', borderRadius: 10, background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-main))', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
             <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.08em' }}>HP Gain</p>
-            <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>+{Math.max(1, hpGain)}</p>
+            <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>+{hpGain}</p>
           </div>
           <div style={{ padding: '12px', borderRadius: 10, background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-main))', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
             <p style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.08em' }}>Prof Bonus</p>
@@ -822,9 +1019,56 @@ function LevelUpModal({ character, onConfirm, onClose }) {
           </div>
         </div>
 
+        {isASI && (
+          <div style={{ marginBottom: 18, textAlign: 'left' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, textAlign: 'center' }}>Ability Score Improvement</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+              {[['two', '+2 one ability'], ['one', '+1 / +1 two abilities'], ['feat', 'Take a feat instead']].map(([id, label]) => (
+                <button key={id} onClick={() => setAsiChoice(id)} style={{
+                  padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: `1px solid ${asiChoice === id ? 'var(--accent)' : 'color-mix(in srgb, var(--border) 60%, transparent)'}`,
+                  background: asiChoice === id ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent',
+                  color: asiChoice === id ? 'var(--accent)' : 'var(--text-muted)',
+                }}>{label}</button>
+              ))}
+            </div>
+            {asiChoice === 'two' && (
+              <select className="field" value={asiPrimary} onChange={e => setAsiPrimary(e.target.value)} style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}>
+                {ABILITY_KEYS.map(k => <option key={k} value={k}>+2 {ABILITY_LABELS[k]}</option>)}
+              </select>
+            )}
+            {asiChoice === 'one' && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select className="field" value={asiPrimary} onChange={e => setAsiPrimary(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 13 }}>
+                  {ABILITY_KEYS.map(k => <option key={k} value={k}>+1 {ABILITY_LABELS[k]}</option>)}
+                </select>
+                <select className="field" value={asiSecondary} onChange={e => setAsiSecondary(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 13 }}>
+                  {ABILITY_KEYS.map(k => <option key={k} value={k}>+1 {ABILITY_LABELS[k]}</option>)}
+                </select>
+              </div>
+            )}
+            {asiChoice === 'feat' && (
+              <input className="field" value={featText} onChange={e => setFeatText(e.target.value)} placeholder="Feat name…" style={{ width: '100%', padding: '6px 8px', fontSize: 13 }} />
+            )}
+          </div>
+        )}
+
+        {(cantripDelta > 0 || spellDelta > 0 || metamagicDelta > 0 || invocationDelta > 0) && (
+          <div style={{ display: 'grid', gap: 14, marginBottom: 18 }}>
+            {cantripDelta > 0 && <LevelUpPickList title="New Cantrips" limit={cantripDelta} chosen={newCantrips} options={cantripOptions} onToggle={o => toggleFrom(newCantrips, setNewCantrips, cantripDelta, toSpellEntry(o), 'name')} />}
+            {spellDelta > 0 && <LevelUpPickList title={known ? 'New Spells Known' : 'New Spells Prepared'} limit={spellDelta} chosen={newSpells} options={spellOptions} onToggle={o => toggleFrom(newSpells, setNewSpells, spellDelta, toSpellEntry(o), 'name')} />}
+            {metamagicDelta > 0 && <LevelUpPickList title="New Metamagic" limit={metamagicDelta} chosen={newMetamagic} options={metamagicOptions} onToggle={o => toggleFrom(newMetamagic, setNewMetamagic, metamagicDelta, o, 'id')} />}
+            {invocationDelta > 0 && <LevelUpPickList title="New Eldritch Invocations" limit={invocationDelta} chosen={newInvocations} options={invocationOptions} onToggle={o => toggleFrom(newInvocations, setNewInvocations, invocationDelta, o, 'id')} />}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
           <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={() => onConfirm(newLevel, Math.max(1, hpGain))} style={{ padding: '8px 22px', borderRadius: 9, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Confirm Level Up</button>
+          <button
+            onClick={handleConfirm}
+            disabled={!canConfirm || !spellChoicesComplete}
+            style={{ padding: '8px 22px', borderRadius: 9, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 13, fontWeight: 800, cursor: (canConfirm && spellChoicesComplete) ? 'pointer' : 'default', opacity: (canConfirm && spellChoicesComplete) ? 1 : 0.5 }}
+          >Confirm Level Up</button>
         </div>
       </div>
     </div>
@@ -846,13 +1090,52 @@ export default function CharacterSheet({ character, onUpdate, onBack, store }) {
     onUpdate({ ...character, ...patch, updatedAt: new Date().toISOString() })
   }
 
-  const handleLevelUp = (newLevel, hpGain) => {
+  const handleLevelUp = ({ newLevel, hpGain, asi, newSlots, newCantrips, newSpells, newMetamagic, newInvocations }) => {
+    let abilityScores = character.abilityScores
+    const features = [...(character.features || [])]
+
+    if (asi?.abilities) {
+      abilityScores = { ...abilityScores }
+      asi.abilities.forEach(({ key, amount }) => { abilityScores[key] = Math.min(20, (abilityScores[key] || 10) + amount) })
+      features.push({
+        id: `asi-${newLevel}`, source: 'Level Up',
+        name: `Ability Score Improvement (Level ${newLevel})`,
+        description: asi.abilities.map(a => `+${a.amount} ${ABILITY_LABELS[a.key]}`).join(', '),
+      })
+    } else if (asi?.feat) {
+      features.push({ id: `feat-${newLevel}`, name: asi.feat, source: `Feat (Level ${newLevel})`, description: '' })
+    }
+
+    const spells = character.spells || {}
+    const known = isKnownCaster(character.class)
+    const preparedCaster = isPreparedCaster(character.class)
+    const spellKey = known ? 'known' : (preparedCaster ? 'prepared' : 'known')
+
+    newMetamagic.forEach(id => {
+      const opt = METAMAGIC_OPTIONS.find(o => o.id === id)
+      if (opt) features.push({ id: `metamagic-${id}`, name: opt.name, source: 'Metamagic', description: opt.desc })
+    })
+    newInvocations.forEach(id => {
+      const opt = INVOCATIONS.find(o => o.id === id)
+      if (opt) features.push({ id: `invocation-${id}`, name: opt.name, source: 'Eldritch Invocation', description: opt.desc })
+    })
+
     handleChange({
       level: newLevel,
+      abilityScores,
+      features,
       hp: {
         ...character.hp,
         max: character.hp.max + hpGain,
         current: character.hp.current + hpGain,
+      },
+      spells: {
+        ...spells,
+        slots: newSlots,
+        cantrips: [...(spells.cantrips || []), ...newCantrips],
+        [spellKey]: [...(spells[spellKey] || []), ...newSpells],
+        metamagic: [...(spells.metamagic || []), ...newMetamagic],
+        invocations: [...(spells.invocations || []), ...newInvocations],
       },
     })
     setLevelUpOpen(false)

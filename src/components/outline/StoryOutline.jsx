@@ -25,6 +25,20 @@ const MoveBtn = ({ onClick, title, disabled, children }) => (
   </button>
 )
 
+const ParentSelect = ({ value, options, label, onChange }) => (
+  <select
+    value={value}
+    onChange={e => onChange(e.target.value)}
+    title={label}
+    aria-label={label}
+    className="max-w-36 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] opacity-0 outline-none transition-all hover:border-[var(--border)] hover:bg-[var(--bg-main)] hover:text-[var(--accent)] focus:border-[var(--accent)] focus:bg-[var(--bg-main)] focus:opacity-100 group-hover:opacity-100"
+  >
+    {options.map(option => (
+      <option key={option.id} value={option.id}>{option.label}</option>
+    ))}
+  </select>
+)
+
 const DeleteBtn = ({ onClick, title = 'Delete' }) => (
   <button
     onClick={onClick}
@@ -216,10 +230,16 @@ const InlineTitle = ({ value, onSave, className }) => {
   )
 }
 
-const SceneRow = ({ scene, sceneIdx, isFirst, isLast, updateScene, reorderScene, deleteScene, labels, indicators }) => {
+const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScene, reorderScene, moveScene, deleteScene, labels, indicators }) => {
   const wordCount = useMemo(() => {
     return scene.content?.trim().split(/\s+/).filter(Boolean).length || 0
   }, [scene.content])
+
+  const moveToChapter = (chapterId) => {
+    if (!chapterId || chapterId === scene.chapterId) return
+    const destCount = chapterOptions.find(option => option.id === chapterId)?.sceneCount ?? 0
+    moveScene(scene.id, chapterId, destCount)
+  }
 
   return (
     <div className="group flex gap-2 px-3 py-2 rounded hover:bg-[var(--bg-hover)] transition-colors">
@@ -242,6 +262,12 @@ const SceneRow = ({ scene, sceneIdx, isFirst, isLast, updateScene, reorderScene,
             value={scene.storyEvent}
             indicators={indicators}
             onChange={storyEvent => updateScene(scene.id, { storyEvent })}
+          />
+          <ParentSelect
+            value={scene.chapterId}
+            options={chapterOptions}
+            label={`Move ${labels.level3.toLowerCase()} to ${labels.level2.toLowerCase()}`}
+            onChange={moveToChapter}
           />
           {wordCount > 0 && (
             <span className="text-[10px] font-mono text-[var(--accent)] opacity-60 flex-shrink-0">{wordCount.toLocaleString()}w</span>
@@ -266,15 +292,21 @@ const SceneRow = ({ scene, sceneIdx, isFirst, isLast, updateScene, reorderScene,
   )
 }
 
-const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapter, reorderChapter, deleteChapter, addScene, updateScene, reorderScene, deleteScene, labels, indicators, isCampaign }) => {
+const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, isFirst, isLast, updateChapter, reorderChapter, moveChapter, deleteChapter, addScene, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, isCampaign }) => {
   const [open, setOpen] = useState(true)
-  const chapterScenes = useMemo(() => scenes.filter(s => s.chapterId === chapter.id), [scenes, chapter.id])
+  const chapterScenes = useMemo(() => scenes.filter(s => s.chapterId === chapter.id).sort((a, b) => a.order - b.order), [scenes, chapter.id])
   const wordCount = useMemo(() => chapterScenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [chapterScenes])
 
   const l2lower = labels.level2.toLowerCase()
   const title = !chapter.title || chapter.title.toLowerCase().startsWith(l2lower)
     ? `${labels.level2} ${chapterNum}`
     : `${labels.level2} ${chapterNum}: ${chapter.title}`
+
+  const moveToAct = (actId) => {
+    if (!actId || actId === chapter.actId) return
+    const destCount = actOptions.find(option => option.id === actId)?.chapterCount ?? 0
+    moveChapter(chapter.id, actId, destCount)
+  }
 
   return (
     <div className="ml-6 border-l border-[var(--border)] pl-4">
@@ -300,6 +332,12 @@ const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapt
               value={chapter.storyEvent}
               indicators={indicators}
               onChange={storyEvent => updateChapter(chapter.id, { storyEvent })}
+            />
+            <ParentSelect
+              value={chapter.actId}
+              options={actOptions}
+              label={`Move ${labels.level2.toLowerCase()} to ${labels.level1.toLowerCase()}`}
+              onChange={moveToAct}
             />
             {wordCount > 0 && <span className="text-[10px] font-mono text-[var(--accent)] opacity-60">{wordCount.toLocaleString()}w</span>}
           </div>
@@ -337,10 +375,12 @@ const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapt
               key={scene.id}
               scene={scene}
               sceneIdx={idx}
+              chapterOptions={chapterOptions}
               isFirst={idx === 0}
               isLast={idx === chapterScenes.length - 1}
               updateScene={updateScene}
               reorderScene={reorderScene}
+              moveScene={moveScene}
               deleteScene={deleteScene}
               labels={labels}
               indicators={indicators}
@@ -358,9 +398,9 @@ const ChapterCard = ({ chapter, chapterNum, scenes, isFirst, isLast, updateChapt
   )
 }
 
-const ActCard = ({ act, chapterGlobalNums, chapters, scenes, isFirst, isLast, updateAct, reorderAct, deleteAct, addChapter, updateChapter, reorderChapter, deleteChapter, addScene, updateScene, reorderScene, deleteScene, labels, indicators, isCampaign }) => {
+const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters, scenes, isFirst, isLast, updateAct, reorderAct, deleteAct, addChapter, updateChapter, reorderChapter, moveChapter, deleteChapter, addScene, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, isCampaign }) => {
   const [open, setOpen] = useState(true)
-  const actChapters = useMemo(() => chapters.filter(c => c.actId === act.id), [chapters, act.id])
+  const actChapters = useMemo(() => chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order), [chapters, act.id])
   const wordCount = useMemo(() => {
     const sceneIds = actChapters.flatMap(c => scenes.filter(s => s.chapterId === c.id))
     return sceneIds.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0)
@@ -421,15 +461,19 @@ const ActCard = ({ act, chapterGlobalNums, chapters, scenes, isFirst, isLast, up
               key={chap.id}
               chapter={chap}
               chapterNum={chapterGlobalNums[chap.id]}
+              actOptions={actOptions}
+              chapterOptions={chapterOptions}
               scenes={scenes}
               isFirst={idx === 0}
               isLast={idx === actChapters.length - 1}
               updateChapter={updateChapter}
               reorderChapter={reorderChapter}
+              moveChapter={moveChapter}
               deleteChapter={deleteChapter}
               addScene={addScene}
               updateScene={updateScene}
               reorderScene={reorderScene}
+              moveScene={moveScene}
               deleteScene={deleteScene}
               labels={labels}
               indicators={indicators}
@@ -451,8 +495,8 @@ const ActCard = ({ act, chapterGlobalNums, chapters, scenes, isFirst, isLast, up
 export default function StoryOutline({ store }) {
   const {
     acts, addAct, updateAct, deleteAct, reorderAct,
-    chapters, addChapter, updateChapter, deleteChapter, reorderChapter,
-    scenes, addScene, updateScene, deleteScene, reorderScene,
+    chapters, addChapter, updateChapter, deleteChapter, reorderChapter, moveChapter,
+    scenes, addScene, updateScene, deleteScene, reorderScene, moveScene,
     activeNovel,
   } = store
 
@@ -467,11 +511,38 @@ export default function StoryOutline({ store }) {
   const chapterGlobalNums = useMemo(() => {
     const map = {}
     let count = 1
-    acts.forEach(act => {
-      chapters.filter(c => c.actId === act.id).forEach(chap => { map[chap.id] = count++ })
+    acts.slice().sort((a, b) => a.order - b.order).forEach(act => {
+      chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order).forEach(chap => { map[chap.id] = count++ })
     })
     return map
   }, [acts, chapters])
+
+  const actOptions = useMemo(() => (
+    acts
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((act, idx) => ({
+        id: act.id,
+        label: act.title || `${labels.level1} ${idx + 1}`,
+        chapterCount: chapters.filter(chap => chap.actId === act.id).length,
+      }))
+  ), [acts, chapters, labels.level1])
+
+  const chapterOptions = useMemo(() => (
+    acts
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .flatMap(act => chapters
+        .filter(chap => chap.actId === act.id)
+        .sort((a, b) => a.order - b.order)
+        .map(chap => ({
+          id: chap.id,
+          label: chapterGlobalNums[chap.id]
+            ? `${labels.level2} ${chapterGlobalNums[chap.id]}${chap.title && !chap.title.toLowerCase().startsWith(labels.level2.toLowerCase()) ? `: ${chap.title}` : ''}`
+            : chap.title || labels.level2,
+          sceneCount: scenes.filter(scene => scene.chapterId === chap.id).length,
+        })))
+  ), [acts, chapters, scenes, labels.level2, chapterGlobalNums])
 
   return (
     <div className="h-full flex flex-col bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden">
@@ -513,10 +584,12 @@ export default function StoryOutline({ store }) {
           </div>
         ) : (
           <div className="max-w-3xl mx-auto space-y-4">
-            {acts.map((act, idx) => (
+            {acts.slice().sort((a, b) => a.order - b.order).map((act, idx) => (
               <ActCard
                 key={act.id}
                 act={act}
+                actOptions={actOptions}
+                chapterOptions={chapterOptions}
                 chapterGlobalNums={chapterGlobalNums}
                 chapters={chapters}
                 scenes={scenes}
@@ -528,10 +601,12 @@ export default function StoryOutline({ store }) {
                 addChapter={addChapter}
                 updateChapter={updateChapter}
                 reorderChapter={reorderChapter}
+                moveChapter={moveChapter}
                 deleteChapter={deleteChapter}
                 addScene={addScene}
                 updateScene={updateScene}
                 reorderScene={reorderScene}
+                moveScene={moveScene}
                 deleteScene={deleteScene}
                 labels={labels}
                 indicators={indicators}

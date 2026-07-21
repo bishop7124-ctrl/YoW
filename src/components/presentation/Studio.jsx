@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import YOWLogo from '../brand/YOWLogo'
 
 const cx = (...classes) => classes.filter(Boolean).join(' ')
+
+function RoomMenuIcon({ open }) {
+  return open ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="3" y1="7" x2="21" y2="7" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="17" x2="21" y2="17" /></svg>
+  )
+}
 
 export function StudioFrame({
   projectTitle,
@@ -20,6 +29,44 @@ export function StudioFrame({
   onGoHome,
   children,
 }) {
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false)
+  const [roomMenuCoords, setRoomMenuCoords] = useState(null)
+  const hamburgerRef = useRef(null)
+  const roomMenuRef = useRef(null)
+  const activeRoom = rooms.find(room => room.id === activeRoomId) || rooms[0]
+
+  // Portaled to <body> (coords set inline from the hamburger's rect) for the same
+  // reason as the account menu: .studio-spine clips overflow on mobile to keep the
+  // app chrome compact, so an in-place dropdown would get clipped to the header.
+  const updateRoomMenuCoords = () => {
+    const rect = hamburgerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setRoomMenuCoords({ top: rect.bottom + 6, left: 8, right: 8 })
+  }
+
+  useEffect(() => {
+    if (!roomMenuOpen) return undefined
+    updateRoomMenuCoords()
+    window.addEventListener('resize', updateRoomMenuCoords)
+    window.addEventListener('scroll', updateRoomMenuCoords, true)
+    return () => {
+      window.removeEventListener('resize', updateRoomMenuCoords)
+      window.removeEventListener('scroll', updateRoomMenuCoords, true)
+    }
+  }, [roomMenuOpen])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (hamburgerRef.current?.contains(e.target)) return
+      if (roomMenuRef.current?.contains(e.target)) return
+      setRoomMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => { setRoomMenuOpen(false) }, [activeRoomId])
+
   return (
     <div className={cx('studio-shell', topBar && 'has-top-bar', !contextRail && 'has-no-context', contextRail && !contextRailOpen && 'is-context-collapsed')}>
       {topBar && <div className="studio-top-bar">{topBar}</div>}
@@ -72,19 +119,58 @@ export function StudioFrame({
               key={room.id}
               type="button"
               onClick={() => onOpenRoom(room)}
-              className={cx('studio-room', activeRoomId === room.id && 'is-current')}
+              className={cx('studio-room', activeRoomId === room.id && 'is-current', room.locked && 'is-locked')}
               aria-label={`Open ${room.label}`}
               aria-current={activeRoomId === room.id ? true : undefined}
-              title={room.description ? `${room.label}: ${room.description}` : room.label}
+              title={room.locked ? `${room.label}: paid feature` : room.description ? `${room.label}: ${room.description}` : room.label}
             >
               <span className="studio-room-tab">{room.icon}</span>
               <span className="studio-room-copy">
-                <strong>{room.label}</strong>
-                <small>{room.description}</small>
+                <strong>{room.label}{room.locked ? <span className="studio-lock-label">Locked</span> : null}</strong>
+                <small>{room.locked ? 'Paid feature' : room.description}</small>
               </span>
             </button>
           ))}
         </nav>
+
+        <button
+          type="button"
+          ref={hamburgerRef}
+          className="studio-room-hamburger"
+          aria-label={roomMenuOpen ? 'Close section menu' : 'Open section menu'}
+          aria-haspopup="menu"
+          aria-expanded={roomMenuOpen}
+          onClick={() => setRoomMenuOpen(v => !v)}
+        >
+          <RoomMenuIcon open={roomMenuOpen} />
+          {activeRoom && <span className="studio-room-hamburger-label">{activeRoom.label}</span>}
+        </button>
+
+        {roomMenuOpen && roomMenuCoords && createPortal(
+          <nav
+            ref={roomMenuRef}
+            className="studio-room-menu-portal"
+            aria-label="Workspace"
+            style={{ top: roomMenuCoords.top, left: roomMenuCoords.left, right: roomMenuCoords.right }}
+          >
+            {rooms.map(room => (
+              <button
+                key={room.id}
+                type="button"
+                onClick={() => { onOpenRoom(room); setRoomMenuOpen(false) }}
+                className={cx('studio-room-menu-item', activeRoomId === room.id && 'is-current', room.locked && 'is-locked')}
+                aria-current={activeRoomId === room.id ? true : undefined}
+              >
+                <span className="studio-room-tab">{room.icon}</span>
+                <span className="studio-room-copy">
+                  <strong>{room.label}{room.locked ? <span className="studio-lock-label">Locked</span> : null}</strong>
+                  <small>{room.locked ? 'Paid feature' : room.description}</small>
+                </span>
+              </button>
+            ))}
+          </nav>,
+          document.body
+        )}
 
         <div className="studio-utility">
           {themeTray && (
@@ -145,9 +231,9 @@ export function StudioWorkspace({
   )
 }
 
-export function StudioTab({ active, children, ...props }) {
+export function StudioTab({ active, className = '', children, ...props }) {
   return (
-    <button type="button" className={cx('studio-tab', active && 'is-current')} aria-current={active ? true : undefined} {...props}>
+    <button type="button" className={cx('studio-tab', active && 'is-current', className)} aria-current={active ? true : undefined} {...props}>
       {children}
     </button>
   )

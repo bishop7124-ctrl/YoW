@@ -3,6 +3,7 @@ import { HOSTING_INCLUDED_YEARS, HOSTING_RENEWAL_FEE_GBP, PLANS, FOUNDER_SLOTS_T
 import { supabase } from '../../supabase'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import { usePageMeta } from '../../utils/usePageMeta'
 
 // --------------------------------------------------------------------------
 // Structured data helpers (injected into <head> while the page is mounted)
@@ -27,15 +28,15 @@ function removeSchema(id) {
 // --------------------------------------------------------------------------
 const FEATURE_ROWS = [
   { label: 'Active projects',         free: '1',         lifetime: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
-  { label: 'Storage',                 free: '250 MB',    lifetime: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
-  { label: 'All studio rooms',        free: '✓',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
-  { label: 'Premium exports',         free: '—',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
-  { label: 'Bring-your-own-key AI',   free: '✓',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
+  { label: 'Storage',                 free: '5 MB',      lifetime: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
+  { label: 'All studio rooms',        free: 'Text-first rooms only', lifetime: '✓', founder: '✓',      monthly: '✓'         },
+  { label: 'Map Builder',             free: 'View-only / locked', lifetime: '✓', founder: '✓',         monthly: '✓'         },
+  { label: 'Bring-your-own-key AI',   free: '—',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
   { label: 'Founder badge',           free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
   { label: 'Feature your debut work', free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
   { label: 'Priority feature input',  free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Mode after hosting ends',  free: 'Local + free cloud limits', lifetime: 'Local Mode forever', founder: 'Cloud Mode', monthly: 'Local after cancellation' },
-  { label: 'Cloud hosting included',   free: 'Free limits', lifetime: `${HOSTING_INCLUDED_YEARS} years, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime fair-use', monthly: 'While subscribed' },
+  { label: 'Mode after hosting ends',  free: 'Free cloud limits', lifetime: 'Local forever + free cloud limits', founder: 'Cloud Mode', monthly: 'Free cloud limits after cancellation' },
+  { label: 'Cloud hosting included',   free: 'Starter limits', lifetime: `${HOSTING_INCLUDED_YEARS} years, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime fair-use', monthly: 'While subscribed' },
   { label: 'Support tier',            free: 'Community', lifetime: 'Priority',  founder: 'Priority',  monthly: 'Priority'  },
 ]
 
@@ -45,15 +46,15 @@ const FEATURE_ROWS = [
 const FAQ_ITEMS = [
   {
     q: 'What does Lifetime actually cover?',
-    a: `Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for hosted sync, storage, and backups. After that, you can keep using Local Mode forever or renew cloud hosting for £${HOSTING_RENEWAL_FEE_GBP}/year.`,
+    a: `Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for hosted sync, storage, and backups. After that, the desktop app keeps working in Local Mode forever, and web cloud access falls back to Free limits unless you renew Cloud Mode for £${HOSTING_RENEWAL_FEE_GBP}/year.`,
   },
   {
     q: 'What is the cloud hosting renewal?',
-    a: `The cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year, due only after the included ${HOSTING_INCLUDED_YEARS}-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups. If you choose not to renew, your lifetime app licence remains active and YOW switches to Local Mode.`,
+    a: `The cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year, due only after the included ${HOSTING_INCLUDED_YEARS}-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups above the Free allowance. If you choose not to renew, your lifetime desktop app licence remains active and web cloud access falls back to Free limits.`,
   },
   {
     q: 'What happens if I don\'t renew cloud hosting?',
-    a: 'You keep access to the app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Cloud sync, hosted backups, and Supabase uploads pause until you renew Cloud Mode.',
+    a: 'You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 5 MB allowance unless you renew Cloud Mode.',
   },
   {
     q: 'How many Founder slots are there?',
@@ -65,7 +66,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What happens to my data if I downgrade to Free?',
-    a: 'Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable. You\'ll just designate one active project to edit — everything else becomes view-only until you upgrade again.',
+    a: 'Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable/exportable. You\'ll designate one active text-first project to edit. Everything else becomes view-only, and premium rooms such as Map Builder and AI Tools stay locked until you upgrade again.',
   },
   {
     q: 'Can I cancel my Monthly subscription?',
@@ -73,7 +74,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What is bring-your-own-key AI?',
-    a: 'Your Own World supports connecting your own API keys from providers like OpenRouter, Google AI, or Anthropic. This means you pay your AI provider directly — YOW never marks up AI usage. All plans include this.',
+    a: 'Your Own World supports connecting your own API keys from providers like OpenRouter, Google AI, or Anthropic. This means you pay your AI provider directly — YOW never marks up AI usage. All paid plans include this; the Free plan does not include AI features.',
   },
   {
     q: 'Is my storage quota shared across projects?',
@@ -315,6 +316,14 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const [busy, setBusy]         = useState('')
   const [billingError, setBillingError] = useState('')
 
+  const monthlyPlan = PLANS.find(p => p.key === 'premium_monthly')
+  const lifetimePlan = PLANS.find(p => p.key === 'premium_plus_lifetime')
+  usePageMeta({
+    path: '/pricing/',
+    title: 'Pricing — Your Own World | Worldbuilding & Writing Software',
+    description: `Simple, honest pricing for Your Own World — Free, Monthly at ${monthlyPlan?.priceLabel}/month, Lifetime at ${lifetimePlan?.priceLabel}, and Founder.`,
+  })
+
   // Inject / remove JSON-LD schemas while this page is mounted.
   useEffect(() => {
     injectSchema('ld-pricing-page', {
@@ -367,21 +376,10 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
       })),
     })
 
-    // Update page title and meta description for this route.
-    const prevTitle = document.title
-    const prevDesc  = document.querySelector('meta[name="description"]')?.content
-    document.title  = 'Pricing — Your Own World | Worldbuilding & Writing Software'
-    const descEl = document.querySelector('meta[name="description"]')
-    const monthly = PLANS.find(p => p.key === 'premium_monthly')
-    const lifetime = PLANS.find(p => p.key === 'premium_plus_lifetime')
-    if (descEl) descEl.setAttribute('content', `Simple, honest pricing for Your Own World — Free, Monthly at ${monthly?.priceLabel}/month, Lifetime at ${lifetime?.priceLabel}, and Founder.`)
-
     return () => {
       removeSchema('ld-pricing-page')
       removeSchema('ld-pricing-product')
       removeSchema('ld-pricing-faq')
-      document.title = prevTitle
-      if (descEl && prevDesc) descEl.setAttribute('content', prevDesc)
     }
   }, [])
 
@@ -471,8 +469,9 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             color: 'var(--text-muted)', lineHeight: 1.7,
             maxWidth: 560, margin: '0 auto 32px',
           }}>
-            Start free. Subscribe monthly if you need flexibility, or choose Lifetime if you want
-            permanent app access with Local Mode forever and Cloud Mode included for three years.
+            Start with a text-first Free plan. Subscribe monthly if you need flexibility, or choose
+            Lifetime if you want permanent app access with Local Mode forever and Cloud Mode included
+            for three years.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
@@ -504,13 +503,6 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           </p>
         </section>
 
-        {/* ── Founder counter (above cards) ── */}
-        {founderSlots !== null && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32, padding: '0 24px' }}>
-            <FounderSlotsCounter slots={founderSlots} />
-          </div>
-        )}
-
         {/* ── Plan cards ── */}
         <section
           aria-label="Pricing plans"
@@ -520,16 +512,33 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
             gap: 16,
+            alignItems: 'start',
           }}
         >
           {displayPlans.map(plan => (
-            <PricingCard
-              key={plan.key}
-              plan={plan}
-              onSelect={handleSelect}
-              busy={busy === plan.key}
-              founderSlots={founderSlots}
-            />
+            plan.isFounder ? (
+              <div key={plan.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {founderSlots !== null && (
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <FounderSlotsCounter slots={founderSlots} />
+                  </div>
+                )}
+                <PricingCard
+                  plan={plan}
+                  onSelect={handleSelect}
+                  busy={busy === plan.key}
+                  founderSlots={founderSlots}
+                />
+              </div>
+            ) : (
+              <PricingCard
+                key={plan.key}
+                plan={plan}
+                onSelect={handleSelect}
+                busy={busy === plan.key}
+                founderSlots={founderSlots}
+              />
+            )
           ))}
         </section>
 

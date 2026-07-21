@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
+import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -816,7 +817,7 @@ function TypeSelect({ value, onChange }) {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-export default function AIImportModal({ store, onClose, onImportDone, userId = null }) {
+export default function AIImportModal({ store, onClose, onImportDone, userId = null, membership = null }) {
   const [phase, setPhase] = useState('upload') // upload | analyzing | preview | creating | done
   const [files, setFiles] = useState([])
   const [dragging, setDragging] = useState(false)
@@ -837,12 +838,20 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   useEffect(() => {
     if (!pendingImport) return
     if (store.activeNovelId !== pendingImport.novelId) return
-    if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
-    else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
-    setPendingImport(null)
-    setPhase('done')
     const id = pendingImport.novelId
-    setTimeout(() => { onImportDone?.(id); onClose() }, 1100)
+    try {
+      if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
+      else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
+      setPendingImport(null)
+      setPhase('done')
+      setTimeout(() => { onImportDone?.(id); onClose() }, 1100)
+    } catch (err) {
+      console.error('Import population failed:', err)
+      setPendingImport(null)
+      store.deleteNovel(id)
+      setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+      setPhase('upload')
+    }
   }, [store.activeNovelId, pendingImport]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getAIConfig = () => {
@@ -852,6 +861,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (!provCfg.apiKey?.trim()) return null
     return { provider, apiKey: provCfg.apiKey, model: provCfg.model || PROVIDERS[provider]?.defaultModel, baseUrl: provCfg.baseUrl }
   }
+  const aiConfigured = !!getAIConfig()
+  const aiLockedForFree = !!membership?.isFree
 
   const handleFiles = async (fileList) => {
     setFileError('')
@@ -919,8 +930,9 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   }, [])
 
   const handleAnalyze = () => {
+    if (aiLockedForFree) { setAiError(AI_UPGRADE_REQUIRED_TEXT); return }
     const config = getAIConfig()
-    if (!config) { setAiError('No AI API key configured. Set up your provider in AI Settings first.'); return }
+    if (!config) { setAiError(AI_CONFIG_REQUIRED_TEXT); return }
     setPhase('analyzing'); setStreamedText(''); setAiError('')
     abortRef.current = false
 
@@ -1110,10 +1122,30 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               )}
 
               {fileError && <p style={{ margin: 0, fontSize: 12, color: '#f87171', padding: '8px 12px', background: 'rgba(248,113,113,.08)', borderRadius: 6 }}>{fileError}</p>}
-              {aiError   && <p style={{ margin: 0, fontSize: 12, color: '#f87171', padding: '8px 12px', background: 'rgba(248,113,113,.08)', borderRadius: 6 }}>{aiError}</p>}
+              {aiError === AI_UPGRADE_REQUIRED_TEXT && (
+                <AiUpgradeRequiredNotice>
+                  Upgrade to use AI Import for writing files. YOW backup ZIP restore remains available on the Free plan.
+                </AiUpgradeRequiredNotice>
+              )}
+              {aiError && aiError !== AI_UPGRADE_REQUIRED_TEXT && (
+                <p style={{ margin: 0, fontSize: 12, color: '#f87171', padding: '8px 12px', background: 'rgba(248,113,113,.08)', borderRadius: 6 }}>
+                  {aiError === AI_CONFIG_REQUIRED_TEXT ? (
+                    <>
+                      {AI_CONFIG_REQUIRED_TEXT}{' '}
+                      Open <AiSettingsLink style={{ color: '#f87171' }}>AI settings</AiSettingsLink>.
+                    </>
+                  ) : aiError}
+                </p>
+              )}
+
+              {aiLockedForFree && aiError !== AI_UPGRADE_REQUIRED_TEXT ? (
+                <AiUpgradeRequiredNotice>
+                  Upgrade to use AI Import for writing files. YOW backup ZIP restore remains available on the Free plan.
+                </AiUpgradeRequiredNotice>
+              ) : !aiConfigured && <AiConfigRequiredNotice />}
 
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                AI reads your files, suggests the best project type — novel, novella, short story, D&D or tabletop campaign, or comic — and extracts characters, locations, lore, and structure. You can change the type before the project is created. Requires an AI provider configured in your settings.
+                AI reads your files, suggests the best project type — novel, novella, short story, D&D or tabletop campaign, or comic — and extracts characters, locations, lore, and structure. You can change the type before the project is created.
               </p>
             </div>
           )}
@@ -1269,7 +1301,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
             {phase === 'upload' && (
               <button type="button" onClick={handleAnalyze} disabled={!files.length}
                 style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: files.length ? 'var(--accent)' : 'var(--border)', color: files.length ? 'var(--bg-main)' : 'var(--text-muted)', fontSize: 13, fontWeight: 800, cursor: files.length ? 'pointer' : 'not-allowed' }}>
-                Analyze with AI
+                {aiLockedForFree ? 'Upgrade for AI Import' : 'Analyze with AI'}
               </button>
             )}
             {phase === 'preview' && (

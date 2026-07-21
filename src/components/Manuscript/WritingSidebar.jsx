@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import StructureSidebar from './StructureSidebar'
+import AIStar from '../ai/AIStar'
 
 // ─── Word / date helpers ──────────────────────────────────────────────────────
 
@@ -80,14 +81,6 @@ const StructureIcon = () => (
   </svg>
 )
 
-const GoalsIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-    <circle cx="7.5" cy="7.5" r="6" />
-    <circle cx="7.5" cy="7.5" r="3" />
-    <circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
-  </svg>
-)
-
 const ProgressIcon = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="1.5,12.5 4.5,8 7.5,10 11,4.5 13.5,6.5" />
@@ -104,10 +97,7 @@ const NotesIcon = () => (
 )
 
 const AIIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M7.5 1v2M7.5 12v2M1 7.5h2M12 7.5h2M3.05 3.05l1.42 1.42M10.53 10.53l1.42 1.42M10.53 4.47 9.11 5.89M4.47 10.53 3.05 11.95" />
-    <circle cx="7.5" cy="7.5" r="2.2" />
-  </svg>
+  <AIStar size={15} />
 )
 
 const FormatIcon = () => (
@@ -117,12 +107,11 @@ const FormatIcon = () => (
 )
 
 const TABS = [
-  { id: 'structure', label: 'Structure', Icon: StructureIcon },
-  { id: 'goals',     label: 'Goals',     Icon: GoalsIcon },
-  { id: 'progress',  label: 'Progress',  Icon: ProgressIcon },
-  { id: 'notes',     label: 'Notes',     Icon: NotesIcon },
-  { id: 'ai',        label: 'AI',        Icon: AIIcon },
-  { id: 'format',    label: 'Format',    Icon: FormatIcon },
+  { id: 'structure', label: 'Outline', subtitle: 'Acts, chapters, scenes', Icon: StructureIcon },
+  { id: 'status',    label: 'Status',  subtitle: 'Progress and targets', Icon: ProgressIcon },
+  { id: 'notes',     label: 'Notes',   subtitle: 'Scene note blocks', Icon: NotesIcon },
+  { id: 'format',    label: 'Format',  subtitle: 'Page and typing style', Icon: FormatIcon },
+  { id: 'ai',        label: 'AI',      subtitle: 'Context-aware drafting', Icon: AIIcon },
 ]
 
 // ─── Goal row ─────────────────────────────────────────────────────────────────
@@ -277,7 +266,7 @@ function GoalsPanel({ writingGoals, onUpdateGoals, scenes, acts, chapters }) {
 
   return (
     <div className="ms-panel-scroll">
-      <div className="ms-panel-section-header">Word count goals</div>
+      <div className="ms-panel-section-header">Targets</div>
 
       <GoalRow
         label="Manuscript"
@@ -490,6 +479,21 @@ function ProgressPanel({ scenes, chapters, writingGoals }) {
   )
 }
 
+function StatusPanel({ writingGoals, onUpdateGoals, scenes, acts, chapters }) {
+  return (
+    <div className="ms-status-panel">
+      <ProgressPanel scenes={scenes} chapters={chapters} writingGoals={writingGoals} />
+      <GoalsPanel
+        writingGoals={writingGoals}
+        onUpdateGoals={onUpdateGoals}
+        scenes={scenes}
+        acts={acts}
+        chapters={chapters}
+      />
+    </div>
+  )
+}
+
 // ─── Root component ───────────────────────────────────────────────────────────
 
 export default function WritingSidebar({
@@ -516,11 +520,13 @@ export default function WritingSidebar({
   notesSlot,
   aiSlot,
 }) {
-  const isOpen = activePanelId !== null
+  const visiblePanelId = activePanelId === 'goals' || activePanelId === 'progress' ? 'status' : activePanelId
+  const isOpen = visiblePanelId !== null
+  const activeTab = TABS.find(t => t.id === visiblePanelId)
 
   const toggleTab = useCallback((id) => {
-    onSetPanel(activePanelId === id ? null : id)
-  }, [activePanelId, onSetPanel])
+    onSetPanel(visiblePanelId === id ? null : id)
+  }, [visiblePanelId, onSetPanel])
 
   return (
     <aside className={`ms-writing-sidebar${isOpen ? ' is-open' : ''}${focusedMode ? ' is-focused-mode' : ''} font-sans`}>
@@ -530,13 +536,14 @@ export default function WritingSidebar({
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
-            className={`ms-writing-tab-btn${activePanelId === id ? ' is-active' : ''}`}
+            className={`ms-writing-tab-btn${visiblePanelId === id ? ' is-active' : ''}`}
             onClick={() => toggleTab(id)}
             title={label}
             aria-label={label}
-            aria-pressed={activePanelId === id}
+            aria-pressed={visiblePanelId === id}
           >
             <Icon />
+            <span className="ms-writing-tab-label">{label}</span>
           </button>
         ))}
       </div>
@@ -546,8 +553,14 @@ export default function WritingSidebar({
         <div className="ms-writing-panel">
           {/* Panel header */}
           <div className="ms-panel-topbar">
-            <span className="ms-panel-title">
-              {TABS.find(t => t.id === activePanelId)?.label}
+            <span className="ms-panel-heading">
+              <span className="ms-panel-title">
+                {visiblePanelId === 'ai' && <AIStar size={13} />}
+                {activeTab?.label}
+              </span>
+              <span className="ms-panel-subtitle">
+                {activeTab?.subtitle}
+              </span>
             </span>
             <button
               className="ms-panel-close-btn"
@@ -559,7 +572,7 @@ export default function WritingSidebar({
           </div>
 
           {/* Structure */}
-          {activePanelId === 'structure' && (
+          {visiblePanelId === 'structure' && (
             <div className="ms-writing-structure-wrap">
               <StructureSidebar
                 acts={acts}
@@ -586,9 +599,9 @@ export default function WritingSidebar({
             </div>
           )}
 
-          {/* Goals */}
-          {activePanelId === 'goals' && (
-            <GoalsPanel
+          {/* Status */}
+          {visiblePanelId === 'status' && (
+            <StatusPanel
               writingGoals={writingGoals}
               onUpdateGoals={onUpdateGoals}
               scenes={scenes}
@@ -597,31 +610,22 @@ export default function WritingSidebar({
             />
           )}
 
-          {/* Progress */}
-          {activePanelId === 'progress' && (
-            <ProgressPanel
-              scenes={scenes}
-              chapters={chapters}
-              writingGoals={writingGoals}
-            />
-          )}
-
           {/* Notes */}
-          {activePanelId === 'notes' && (
+          {visiblePanelId === 'notes' && (
             <div className="flex flex-col flex-1 overflow-hidden">
               {notesSlot}
             </div>
           )}
 
           {/* AI */}
-          {activePanelId === 'ai' && (
+          {visiblePanelId === 'ai' && (
             <div className="flex flex-col flex-1 overflow-hidden">
               {aiSlot}
             </div>
           )}
 
           {/* Format */}
-          {activePanelId === 'format' && (
+          {visiblePanelId === 'format' && (
             <div className="flex flex-col flex-1 overflow-hidden">
               {formatSlot}
             </div>

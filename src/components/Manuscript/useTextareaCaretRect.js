@@ -42,8 +42,17 @@ export function useTextareaCaretRect(textareaRef, scale = 1) {
 
     const before = textarea.value.slice(0, textarea.selectionEnd)
     mirror.replaceChildren(document.createTextNode(before))
+    const fontSize = Number.parseFloat(computed.fontSize) || 16
+    const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.2
+    const markerHeight = Math.max(6, fontSize * 0.75)
     const marker = document.createElement('span')
     marker.textContent = '\u200b'
+    Object.assign(marker.style, {
+      display: 'inline-block',
+      width: '1px',
+      height: `${markerHeight}px`,
+      verticalAlign: 'baseline',
+    })
     mirror.appendChild(marker)
 
     const textareaRect = textarea.getBoundingClientRect()
@@ -55,7 +64,7 @@ export function useTextareaCaretRect(textareaRef, scale = 1) {
     const result = {
       top: textareaRect.top + markerRect.top - mirrorRect.top - textarea.scrollTop + borderTop,
       left: textareaRect.left + markerRect.left - mirrorRect.left - textarea.scrollLeft + borderLeft,
-      height: markerRect.height || Number.parseFloat(computed.lineHeight) || 20,
+      height: Math.min(markerRect.height || markerHeight, markerHeight, lineHeight),
     }
     mirror.remove()
     return result

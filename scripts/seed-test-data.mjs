@@ -1,13 +1,76 @@
 /**
  * Seed script for mbishoptesting@gmail.com
  * Wipes all existing user data then writes a fresh Testing Series
- * with one fully-populated project for each of the 10 project types.
+ * with one populated project for each active launch project type.
  */
 import { createClient } from '/Users/bishop/Desktop/Claude/yow/node_modules/@supabase/supabase-js/dist/index.mjs'
 
 const SUPABASE_URL = 'https://cwifaklpjqutlcwvkxpp.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3aWZha2xwanF1dGxjd3ZreHBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NTcwODEsImV4cCI6MjA5MzAzMzA4MX0.Nia6Zuypi91kr1CwloAZq0hUMQ_dUboqLEH4cQKVbBk'
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+const USER_TABLES = ['novels', 'series_items']
+const NOVEL_TABLES = [
+  'characters',
+  'factions',
+  'locations',
+  'timeline_events',
+  'world_history',
+  'acts',
+  'chapters',
+  'scenes',
+  'lore_entries',
+  'idea_entries',
+  'maps_data',
+  'whiteboards_data',
+  'story_schedule',
+  'rpg_characters',
+  'comic_pages',
+  'comic_panels',
+  'eras',
+]
+const APP_DATA_TABLES = [...USER_TABLES, ...NOVEL_TABLES]
+
+const TABLE_TO_KEY = {
+  novels:           'novels',
+  series_items:     'series',
+  characters:       'characters',
+  factions:         'factions',
+  locations:        'locations',
+  timeline_events:  'timeline',
+  world_history:    'worldHistory',
+  acts:             'acts',
+  chapters:         'chapters',
+  scenes:           'scenes',
+  lore_entries:     'loreEntries',
+  idea_entries:     'ideaEntries',
+  maps_data:        'maps',
+  whiteboards_data: 'whiteboards',
+  story_schedule:   'storySchedule',
+  rpg_characters:   'rpgCharacters',
+  comic_pages:      'comicPages',
+  comic_panels:     'comicPanels',
+  eras:             'eras',
+}
+
+function getTableRows(table, userId, items = []) {
+  if (!items?.length) return []
+  if (table === 'scenes') return items.map(item => ({ user_id: userId, scene_id: item.id, data: item }))
+
+  const isUserLevel = USER_TABLES.includes(table)
+  return items.map(item => ({
+    id: item.id,
+    user_id: userId,
+    ...(isUserLevel ? {} : { novel_id: item.novelId ?? null }),
+    data: item,
+    updated_at: new Date().toISOString(),
+  }))
+}
+
+async function throwIfError(promise, label) {
+  const { error } = await promise
+  if (error) throw new Error(`${label}: ${error.message}`)
+}
 
 let _counter = 0
 const uid = () => (++_counter).toString(36) + Math.random().toString(36).slice(2, 8) + Date.now().toString(36)
@@ -1340,6 +1403,106 @@ function buildSchedule(novelId) {
   ]
 }
 
+function buildEras(novelId) {
+  return [
+    { id: uid(), novelId, name: 'Founding Age', startYear: -420, endYear: -1, order: 0, createdAt: Date.now() },
+    { id: uid(), novelId, name: 'Present Crisis', startYear: 0, endYear: 12, order: 1, createdAt: Date.now() },
+  ]
+}
+
+function buildRpgCharacters(novelId) {
+  return [
+    {
+      id: uid(),
+      novelId,
+      name: 'Mira Thornhand',
+      playerName: 'QA Tester',
+      ancestry: 'Human',
+      className: 'Ranger',
+      level: 5,
+      background: 'Boundary scout',
+      alignment: 'Neutral Good',
+      abilityScores: { str: 12, dex: 17, con: 14, int: 11, wis: 15, cha: 10 },
+      notes: 'Seeded party member for Character Builder QA.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: uid(),
+      novelId,
+      name: 'Orren Vale',
+      playerName: 'QA Tester',
+      ancestry: 'Dwarf',
+      className: 'Cleric',
+      level: 5,
+      background: 'Archive keeper',
+      alignment: 'Lawful Good',
+      abilityScores: { str: 14, dex: 10, con: 16, int: 12, wis: 17, cha: 13 },
+      notes: 'Seeded healer/support character for sheet and dice roller QA.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ]
+}
+
+function buildComicData(novelId, chapters, characters = [], locations = []) {
+  const pages = []
+  const panels = []
+  const firstIssue = chapters[0]
+  if (!firstIssue) return { comicPages: pages, comicPanels: panels }
+
+  for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
+    const pageId = uid()
+    pages.push({
+      id: pageId,
+      novelId,
+      issueId: firstIssue.id,
+      order: pageIndex,
+      title: `Page ${pageIndex + 1}`,
+      summary: [
+        'The city wakes under a sky full of impossible lights.',
+        'The protagonist crosses the market while rumors ripple around them.',
+        'A silent figure appears on the bridge and points toward the old gate.',
+        'Page turn reveal: the gate is already open.',
+      ][pageIndex],
+      pageType: pageIndex === 0 ? 'splash' : 'standard',
+      status: pageIndex < 2 ? 'draft' : 'outline',
+      pageTurn: pageIndex === 3 ? 'reveal' : 'none',
+      characterIds: characters.slice(0, 2).map(c => c.id),
+      locationIds: locations.slice(0, 1).map(l => l.id),
+      timeOfDay: 'Dawn',
+      visualDirection: 'Muted blues with one warm lantern path through the crowd.',
+      productionNotes: 'Seed page for comic QA: page metadata, panel list, dialogue, captions, and SFX.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+
+    for (let panelIndex = 0; panelIndex < 3; panelIndex += 1) {
+      panels.push({
+        id: uid(),
+        novelId,
+        pageId,
+        order: panelIndex,
+        layoutHint: panelIndex === 0 ? 'wide' : 'standard',
+        shotType: ['wide', 'medium', 'close'][panelIndex],
+        description: `Panel ${panelIndex + 1}: seeded comic action beat for QA.`,
+        artNotes: 'Check panel editing, ordering, status, and export inclusion.',
+        dialogue: panelIndex === 1 ? [{ id: uid(), speaker: characters[0]?.name || 'Lead', text: 'Something is wrong with the old road.' }] : [],
+        captions: panelIndex === 0 ? [{ id: uid(), type: 'narration', text: 'Ashenveil, before the bells.' }] : [],
+        sfx: panelIndex === 2 ? [{ id: uid(), text: 'KRAK' }] : [],
+        characterIds: characters.slice(0, 2).map(c => c.id),
+        locationIds: locations.slice(0, 1).map(l => l.id),
+        continuityNotes: 'Seeded continuity note.',
+        status: pageIndex < 2 ? 'draft' : 'outline',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    }
+  }
+
+  return { comicPages: pages, comicPanels: panels }
+}
+
 function buildStructure(novelId, type, contentFn) {
   const configs = {
     novel:        { l1: ['Act 1: Arrival', 'Act 2: The Wood', 'Act 3: Resolution'], l2: ['Chapter 1','Chapter 2','Chapter 3','Chapter 4'], scenes: ['Opening','Development','Turn'] },
@@ -1392,50 +1555,78 @@ async function main() {
   const userId = authData.user.id
   console.log('Authenticated:', userId)
 
-  // Wipe existing data completely
+  // Wipe existing data completely, including legacy tables retained for safety.
   console.log('Wiping existing data...')
   await Promise.all([
+    ...APP_DATA_TABLES.map(table => throwIfError(supabase.from(table).delete().eq('user_id', userId), `${table} delete`)),
+    throwIfError(supabase.from('user_settings').delete().eq('user_id', userId), 'user_settings delete'),
     supabase.from('user_data').delete().eq('user_id', userId),
     supabase.from('project_data').delete().eq('user_id', userId),
-    supabase.from('scenes').delete().eq('user_id', userId),
   ])
   console.log('Wiped.')
 
   // Build series
   const seriesId = uid()
-  const series = [{ id: seriesId, name: 'Testing Series', createdAt: new Date().toISOString() }]
+  const series = [{
+    id: seriesId,
+    name: 'Testing Series',
+    description: 'Seeded QA series containing one active launch project of each type.',
+    genre: 'QA',
+    status: 'drafting',
+    createdAt: new Date().toISOString(),
+  }]
 
   // Content map
   const contentFns = {
     novel: (si, ci, ai) => buildNovelContent(si, ci, ai),
     novella: () => NOVELLA_CONTENT,
     short_story: () => SHORT_STORY_CONTENT,
-    play: () => PLAY_CONTENT,
-    screenplay: () => SCREENPLAY_CONTENT,
-    tv_show: () => TV_CONTENT,
     dnd_campaign: () => DND_CONTENT,
     tabletop_rpg: () => TTRPG_CONTENT,
     comic: () => COMIC_CONTENT,
-    video_game: () => VIDEOGAME_CONTENT,
   }
 
   const wordTargets = {
-    novel: 90000, novella: 30000, short_story: 5000, play: 20000,
-    screenplay: 25000, tv_show: 25000, dnd_campaign: 30000,
-    tabletop_rpg: 30000, comic: 15000, video_game: 30000,
+    novel: 90000,
+    novella: 30000,
+    short_story: 5000,
+    dnd_campaign: 30000,
+    tabletop_rpg: 30000,
+    comic: 15000,
   }
 
-  const PROJECT_TYPES = ['novel','novella','short_story','play','screenplay','tv_show','dnd_campaign','tabletop_rpg','comic','video_game']
+  const PROJECT_TYPES = ['novel','novella','short_story','dnd_campaign','tabletop_rpg','comic']
   const typeLabels = {
     novel:'Novel', novella:'Novella', short_story:'Short Story',
-    play:'Play', screenplay:'Screenplay', tv_show:'TV Show',
     dnd_campaign:'D&D Campaign', tabletop_rpg:'TTRPG Campaign',
-    comic:'Comic', video_game:'Video Game',
+    comic:'Comic / Graphic Novel',
   }
 
-  const novels = []
-  const allScenes = []
-  const projectDataRows = []
+  const data = {
+    _savedAt: Date.now(),
+    novels: [],
+    series,
+    characters: [],
+    factions: [],
+    locations: [],
+    timeline: [],
+    worldHistory: [],
+    acts: [],
+    chapters: [],
+    scenes: [],
+    loreEntries: [],
+    ideaEntries: [],
+    maps: [],
+    whiteboards: [],
+    storySchedule: [],
+    rpgCharacters: [],
+    comicPages: [],
+    comicPanels: [],
+    eras: [],
+    activeMapByNovel: {},
+    currentYear: 0,
+    activeNovelId: null,
+  }
 
   for (const type of PROJECT_TYPES) {
     const novelId = uid()
@@ -1447,78 +1638,91 @@ async function main() {
       createdAt: new Date().toISOString(),
       synopsis: `A fully populated ${typeLabels[type]} project for testing all features of the YOW platform. Contains complete characters, locations, timeline, lore, world history, and manuscript content.`,
       wordTarget: wordTargets[type],
-      genre: ['dnd_campaign','tabletop_rpg'].includes(type) ? 'Fantasy' : type === 'video_game' ? 'Science Fiction' : 'Literary Fiction',
+      enabledSections: ['dashboard','manuscript','outline','characters','locations','lore','ideas','schedule','timeline','worldhistory','map','factions','familytree','studio','reader'],
+      genre: ['dnd_campaign','tabletop_rpg'].includes(type) ? 'Fantasy' : 'Literary Fiction',
     }
-    novels.push(novel)
+    data.novels.push(novel)
     console.log(`Building ${novel.title}...`)
 
     const { acts, chapters, scenes } = buildStructure(novelId, type, contentFns[type])
-    allScenes.push(...scenes)
+    const characters = buildCharacters(novelId, type)
+    const locations = buildLocations(novelId)
 
     const totalWords = scenes.reduce((s, sc) => s + (sc.content?.split(/\s+/).filter(Boolean).length || 0), 0)
     console.log(`  ${acts.length} acts, ${chapters.length} chapters, ${scenes.length} scenes, ${totalWords.toLocaleString()} words`)
 
-    projectDataRows.push({
-      projectId: novelId,
-      data: {
-        acts, chapters,
-        characters: buildCharacters(novelId, type),
-        locations: buildLocations(novelId),
-        factions: buildFactions(novelId),
-        loreEntries: buildLore(novelId),
-        ideaEntries: buildIdeas(novelId),
-        timeline: buildTimeline(novelId),
-        worldHistory: buildWorldHistory(novelId),
-        storySchedule: buildSchedule(novelId),
-        maps: [], whiteboards: [],
-      }
-    })
+    data.acts.push(...acts)
+    data.chapters.push(...chapters)
+    data.scenes.push(...scenes)
+    data.characters.push(...characters)
+    data.locations.push(...locations)
+    data.factions.push(...buildFactions(novelId))
+    data.loreEntries.push(...buildLore(novelId))
+    data.ideaEntries.push(...buildIdeas(novelId))
+    data.timeline.push(...buildTimeline(novelId))
+    data.worldHistory.push(...buildWorldHistory(novelId))
+    data.storySchedule.push(...buildSchedule(novelId))
+    data.eras.push(...buildEras(novelId))
+
+    if (['dnd_campaign', 'tabletop_rpg'].includes(type)) {
+      data.rpgCharacters.push(...buildRpgCharacters(novelId))
+      novel.enabledSections = [...new Set([...novel.enabledSections, 'characterbuilder'])]
+    }
+
+    if (type === 'comic') {
+      const comicData = buildComicData(novelId, chapters, characters, locations)
+      data.comicPages.push(...comicData.comicPages)
+      data.comicPanels.push(...comicData.comicPanels)
+      novel.enabledSections = [...new Set([...novel.enabledSections, 'comic'])]
+    }
   }
 
-  // Write user_data
-  const userData = {
-    _savedAt: Date.now(),
-    novels,
-    series,
-    activeNovelId: novels[0].id,
-  }
-  console.log(`\nWriting user_data (${novels.length} novels, ${series.length} series)...`)
-  const { error: udErr } = await supabase.from('user_data').upsert({ user_id: userId, data: userData })
-  if (udErr) { console.error('user_data error:', udErr.message); process.exit(1) }
-  console.log('user_data OK')
+  series[0].projectOrder = data.novels.map(novel => novel.id)
+  data.activeNovelId = data.novels[0]?.id ?? null
 
-  // Write project_data
-  console.log('Writing project_data...')
-  for (const { projectId, data } of projectDataRows) {
-    const { error } = await supabase.from('project_data').upsert({ user_id: userId, project_id: projectId, data })
-    if (error) console.error(`project_data error (${projectId}):`, error.message)
-    else process.stdout.write('.')
-  }
-  console.log(' OK')
+  console.log(`\nWriting normalized data (${data.novels.length} projects, ${data.scenes.length} scenes)...`)
+  await throwIfError(supabase.from('user_settings').upsert({
+    user_id: userId,
+    data: {
+      activeNovelId: data.activeNovelId,
+      currentYear: data.currentYear,
+      activeMapByNovel: data.activeMapByNovel,
+    },
+    updated_at: new Date().toISOString(),
+  }), 'user_settings upsert')
 
-  // Write scenes
-  console.log(`Writing ${allScenes.length} scenes...`)
-  for (const scene of allScenes) {
-    const { error } = await supabase.from('scenes').upsert({ user_id: userId, scene_id: scene.id, data: scene })
-    if (error) console.error(`scene error (${scene.id}):`, error.message)
-    else process.stdout.write('.')
+  for (const table of APP_DATA_TABLES) {
+    const key = TABLE_TO_KEY[table]
+    const rows = getTableRows(table, userId, data[key] ?? [])
+    if (!rows.length) continue
+    const { error } = await supabase.from(table).upsert(rows)
+    if (error) throw new Error(`${table} upsert: ${error.message}`)
+    console.log(`  ${table}: ${rows.length}`)
   }
-  console.log(' OK')
 
   // Verify
-  const { data: check } = await supabase.from('user_data').select('data').eq('user_id', userId).maybeSingle()
-  const { data: pdCheck } = await supabase.from('project_data').select('project_id').eq('user_id', userId)
-  const { data: scCheck } = await supabase.from('scenes').select('scene_id').eq('user_id', userId)
+  const counts = {}
+  for (const table of APP_DATA_TABLES) {
+    const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true }).eq('user_id', userId)
+    if (error) throw new Error(`${table} verify: ${error.message}`)
+    counts[table] = count ?? 0
+  }
+  const { data: settingsCheck, error: settingsError } = await supabase.from('user_settings').select('data').eq('user_id', userId).maybeSingle()
+  if (settingsError) throw new Error(`user_settings verify: ${settingsError.message}`)
 
   console.log('\n─── VERIFICATION ───────────────────────────')
-  console.log(`novels in user_data: ${check?.data?.novels?.length}`)
-  console.log(`series in user_data: ${check?.data?.series?.map(s=>s.name).join(', ')}`)
-  console.log(`project_data rows:   ${pdCheck?.length}`)
-  console.log(`scenes rows:         ${scCheck?.length}`)
-  const totalWords = allScenes.reduce((s,sc) => s+(sc.content?.split(/\s+/).filter(Boolean).length||0), 0)
+  console.log(`projects:            ${counts.novels}`)
+  console.log(`series:              ${counts.series_items}`)
+  console.log(`characters:          ${counts.characters}`)
+  console.log(`locations:           ${counts.locations}`)
+  console.log(`scenes:              ${counts.scenes}`)
+  console.log(`rpg characters:      ${counts.rpg_characters}`)
+  console.log(`comic pages/panels:  ${counts.comic_pages}/${counts.comic_panels}`)
+  console.log(`active project:      ${settingsCheck?.data?.activeNovelId}`)
+  const totalWords = data.scenes.reduce((s,sc) => s+(sc.content?.split(/\s+/).filter(Boolean).length||0), 0)
   console.log(`total words written: ${totalWords.toLocaleString()}`)
   console.log('────────────────────────────────────────────')
-  console.log('\n✓ Done! Reload the app and clear browser localStorage to see fresh data.')
+  console.log('\nDone. Reload the app and clear browser localStorage for this account if stale local data appears.')
 }
 
 main().catch(console.error)

@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../../constants/projectTypes'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
+const CAMPAIGN_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
+const isCampaignType = (projectType) => CAMPAIGN_TYPES.has(projectType)
+const DEFAULT_SESSION_TARGET = 12
 
 const TYPE_ICONS = {
   novel:        { emoji: '📖', color: '#a78bfa' },
@@ -29,6 +32,7 @@ export default function WelcomeWizard({ store, onOpenProject, onSkip }) {
   const [busy, setBusy] = useState(false)
 
   const typeCfg = getProjectType(type)
+  const isCampaign = isCampaignType(type)
   const typeIcon = TYPE_ICONS[type] || { emoji: '📖', color: '#a78bfa' }
   const highlights = WORKSPACE_HIGHLIGHTS[type] || WORKSPACE_HIGHLIGHTS.novel
 
@@ -38,8 +42,9 @@ export default function WelcomeWizard({ store, onOpenProject, onSkip }) {
     const novel = store.addNovel({
       title: title.trim(),
       type,
-      wordTarget: wordTarget ? Number(wordTarget) : (typeCfg.defaultWordTarget || null),
-      wordCountTarget: wordTarget ? Number(wordTarget) : (typeCfg.defaultWordTarget || null),
+      wordTarget: isCampaign ? null : (wordTarget ? Number(wordTarget) : (typeCfg.defaultWordTarget || null)),
+      wordCountTarget: isCampaign ? null : (wordTarget ? Number(wordTarget) : (typeCfg.defaultWordTarget || null)),
+      sessionTarget: isCampaign ? (wordTarget ? Number(wordTarget) : DEFAULT_SESSION_TARGET) : null,
       enabledSections: typeCfg.defaultSections || null,
       seriesId: null,
     })
@@ -119,15 +124,17 @@ export default function WelcomeWizard({ store, onOpenProject, onSkip }) {
                 />
               </label>
               <label className="wizard-label">
-                Word count target
+                {isCampaign ? 'Session target' : 'Word count target'}
                 <input
                   className="wizard-input"
-                  placeholder={typeCfg.defaultWordTarget ? typeCfg.defaultWordTarget.toLocaleString() : 'Optional'}
+                  placeholder={isCampaign ? String(DEFAULT_SESSION_TARGET) : typeCfg.defaultWordTarget ? typeCfg.defaultWordTarget.toLocaleString() : 'Optional'}
                   value={wordTarget}
                   onChange={e => setWordTarget(e.target.value.replace(/\D/g, ''))}
                   inputMode="numeric"
                 />
-                {typeCfg.defaultWordTarget && (
+                {isCampaign ? (
+                  <span className="wizard-field-hint">Default for {typeCfg.label}: {DEFAULT_SESSION_TARGET} sessions</span>
+                ) : typeCfg.defaultWordTarget && (
                   <span className="wizard-field-hint">Default for {typeCfg.label}: {typeCfg.defaultWordTarget.toLocaleString()} words</span>
                 )}
               </label>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import { usePageMeta } from '../../utils/usePageMeta'
 
 const FAQ_SECTIONS = [
   {
@@ -8,15 +9,15 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What does Lifetime actually cover?',
-        a: "Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes 3 years of Cloud Mode for hosted sync, storage, and backups. After that, you can keep using Local Mode forever or renew cloud hosting for £6/year.",
+        a: "Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes 3 years of Cloud Mode for hosted sync, storage, and backups. After that, the desktop app keeps working in Local Mode forever, and web cloud access falls back to Free limits unless you renew Cloud Mode for £6/year.",
       },
       {
         q: 'What is the cloud hosting renewal?',
-        a: "The cloud hosting renewal is £6/year, due only after the included 3-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups. If you choose not to renew, your lifetime app licence remains active and YOW switches to Local Mode.",
+        a: "The cloud hosting renewal is £6/year, due only after the included 3-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups above the Free allowance. If you choose not to renew, your lifetime desktop app licence remains active and web cloud access falls back to Free limits.",
       },
       {
         q: 'What happens if I don\'t renew cloud hosting?',
-        a: "You keep access to the app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Cloud sync, hosted backups, and Supabase uploads pause until you renew Cloud Mode.",
+        a: "You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 5 MB allowance unless you renew Cloud Mode.",
       },
       {
         q: 'Do monthly subscribers pay a cloud hosting renewal?',
@@ -28,7 +29,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What happens to my data if I downgrade to Free?',
-        a: "Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable. You'll just designate one active project to edit — everything else becomes view-only until you upgrade again.",
+        a: "Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable/exportable. You'll designate one active text-first project to edit. Everything else becomes view-only, and premium rooms such as Map Builder and AI Tools stay locked until you upgrade again.",
       },
       {
         q: 'Can I cancel my Monthly subscription?',
@@ -45,7 +46,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What is bring-your-own-key AI?',
-        a: 'Your Own World supports connecting your own API keys from providers like OpenRouter, Google AI, or Anthropic. This means you pay your AI provider directly — YOW never marks up AI usage. All plans include this.',
+        a: 'Your Own World supports connecting your own API keys from providers like OpenRouter, Google AI, or Anthropic. This means you pay your AI provider directly — YOW never marks up AI usage. All paid plans include this; the Free plan does not include AI features.',
       },
       {
         q: 'Do the AI tools know about my specific world?',
@@ -100,7 +101,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'Is there a free plan?',
-        a: "Yes. The Free plan lets you run one active project with all studio rooms and bring-your-own-key AI included. No credit card required to start.",
+        a: "Yes. The Free plan lets you run one active text-first cloud project with 5 MB storage. Map Builder and AI Tools stay visible but locked, and no credit card is required to start.",
       },
       {
         q: 'Does YOW work on mobile?',
@@ -156,6 +157,12 @@ function FAQItem({ q, a }) {
 }
 
 export default function FAQPage({ onGetStarted, onLogin, user }) {
+  usePageMeta({
+    path: '/faq/',
+    title: 'FAQ — Your Own World | Worldbuilding & Writing Software',
+    description: 'Answers to common questions about Your Own World: plans and pricing, storage, Cloud Mode, Founder slots, AI features, exports, and data ownership.',
+  })
+
   return (
     <div className="yow-home min-h-screen text-[var(--text-main)]">
       <MarketingNav activePath="/faq/" onLogin={onLogin} onGetStarted={onGetStarted} user={user} />

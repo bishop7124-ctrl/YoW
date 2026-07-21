@@ -64,6 +64,58 @@ const TrashIcon = () => (
   </svg>
 )
 
+const PencilIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7.6 2.2 9.8 4.4M1.8 8.2 7.8 2.2a1.4 1.4 0 0 1 2 2l-6 6-2.4.5.4-2.5Z" />
+  </svg>
+)
+
+const isGeneratedTitle = (title, label) => {
+  const clean = (title || '').trim()
+  if (!clean) return true
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^${escaped}(\\s+\\d+)?$`, 'i').test(clean)
+}
+
+const displayNumberedTitle = (title, label, num) =>
+  isGeneratedTitle(title, label) ? `${label} ${num}` : `${label} ${num}: ${title}`
+
+function InlineRename({ value, fallback, generatedLabel, onSave, className = '' }) {
+  const [draft, setDraft] = useState(isGeneratedTitle(value, generatedLabel || fallback) ? '' : (value || ''))
+  const saved = useRef(false)
+
+  const commit = useCallback((nextValue) => {
+    if (saved.current) return
+    saved.current = true
+    const trimmed = (nextValue ?? draft).trim()
+    onSave(trimmed || fallback)
+  }, [draft, fallback, onSave])
+
+  return (
+    <input
+      autoFocus
+      className={`ms-sidebar-rename-input ${className}`}
+      value={draft}
+      placeholder={fallback}
+      draggable={false}
+      onClick={e => e.stopPropagation()}
+      onMouseDown={e => e.stopPropagation()}
+      onChange={e => setDraft(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit()
+        }
+        if (e.key === 'Escape') {
+          saved.current = true
+          onSave(value || fallback)
+        }
+      }}
+      onBlur={() => commit()}
+    />
+  )
+}
+
 // ─── Scene row ────────────────────────────────────────────────────────────────
 
 function SceneRow({
@@ -71,6 +123,7 @@ function SceneRow({
   onSelect, onUpdateScene, onDeleteScene,
   dragRef, dragOver, setDragOver, onDropScene,
 }) {
+  const [editingTitle, setEditingTitle] = useState(false)
   const words = useMemo(() => countWords(scene.content), [scene.content])
   const isDragging = dragRef.current?.id === scene.id
   const isDropTarget = dragOver?.id === scene.id && dragOver?.type === 'scene'
@@ -107,7 +160,7 @@ function SceneRow({
         borderTop: isDropTarget && dragOver.position === 'before' ? '2px solid var(--accent)' : undefined,
         borderBottom: isDropTarget && dragOver.position === 'after' ? '2px solid var(--accent)' : undefined,
       }}
-      draggable
+      draggable={!editingTitle}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragLeave={() => setDragOver(null)}
@@ -116,27 +169,45 @@ function SceneRow({
     >
       <span className="ms-sidebar-grip" aria-hidden="true"><GripIcon /></span>
 
-      <button
-        className="ms-sidebar-scene-btn"
-        onClick={() => onSelect(scene.id)}
-        title={displayTitle}
-      >
-        <span
-          className="ms-sidebar-status-dot"
-          style={{ background: statusColor(scene.status) }}
-          title={STATUSES.find(s => s.value === (scene.status || 'draft'))?.label}
-          onClick={e => {
-            e.stopPropagation()
-            onUpdateScene(scene.id, { status: nextStatus(scene.status || 'draft') })
-          }}
+      {editingTitle ? (
+        <InlineRename
+          value={scene.title}
+          fallback={`Scene ${index + 1}`}
+          generatedLabel="Scene"
+          onSave={title => { onUpdateScene(scene.id, { title }); setEditingTitle(false) }}
         />
-        <span className="ms-sidebar-scene-title">{displayTitle}</span>
-        {scene.pov && (
-          <span className="ms-sidebar-scene-pov" title={`POV: ${scene.pov}`}>{scene.pov}</span>
-        )}
-        {words > 0 && (
-          <span className="ms-sidebar-wordcount">{fmtWords(words)}</span>
-        )}
+      ) : (
+        <button
+          className="ms-sidebar-scene-btn"
+          onClick={() => onSelect(scene.id)}
+          title={displayTitle}
+        >
+          <span
+            className="ms-sidebar-status-dot"
+            style={{ background: statusColor(scene.status) }}
+            title={STATUSES.find(s => s.value === (scene.status || 'draft'))?.label}
+            onClick={e => {
+              e.stopPropagation()
+              onUpdateScene(scene.id, { status: nextStatus(scene.status || 'draft') })
+            }}
+          />
+          <span className="ms-sidebar-scene-title">{displayTitle}</span>
+          {scene.pov && (
+            <span className="ms-sidebar-scene-pov" title={`POV: ${scene.pov}`}>{scene.pov}</span>
+          )}
+          {words > 0 && (
+            <span className="ms-sidebar-wordcount">{fmtWords(words)}</span>
+          )}
+        </button>
+      )}
+
+      <button
+        className="ms-sidebar-icon-btn"
+        onClick={() => setEditingTitle(true)}
+        title="Rename scene"
+        aria-label="Rename scene"
+      >
+        <PencilIcon />
       </button>
 
       <button
@@ -160,12 +231,13 @@ function SceneRow({
 function ChapterRow({
   chap, chapNum, scenes,
   onAddScene, onSelectChapter,
-  onDeleteChapter,
+  onUpdateChapter, onDeleteChapter,
   activeSceneId, onSelectScene, onUpdateScene, onDeleteScene,
-  labels,
+  labels, onMoveScene,
   dragRef, dragOver, setDragOver, onDropChapter, onDropScene,
 }) {
   const [open, setOpen] = useState(true)
+  const [editingTitle, setEditingTitle] = useState(false)
   const chapScenes = useMemo(
     () => scenes.filter(s => s.chapterId === chap.id).sort((a, b) => a.order - b.order),
     [scenes, chap.id]
@@ -175,11 +247,7 @@ function ChapterRow({
   const isDragging = dragRef.current?.id === chap.id
   const isDropTarget = dragOver?.id === chap.id && dragOver?.type === 'chapter'
 
-  const displayTitle = (() => {
-    const l2lower = labels.level2.toLowerCase()
-    const isDefault = !chap.title || chap.title.toLowerCase().startsWith(l2lower)
-    return isDefault ? `${labels.level2} ${chapNum}` : `${labels.level2} ${chapNum}: ${chap.title}`
-  })()
+  const displayTitle = displayNumberedTitle(chap.title, labels.level2, chapNum)
 
   const handleDragStart = (e) => {
     dragRef.current = { type: 'chapter', id: chap.id, actId: chap.actId }
@@ -213,7 +281,7 @@ function ChapterRow({
           borderTop: isDropTarget && dragOver.position === 'before' ? '2px solid var(--accent)' : undefined,
           borderBottom: isDropTarget && dragOver.position === 'after' ? '2px solid var(--accent)' : undefined,
         }}
-        draggable
+        draggable={!editingTitle}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={() => setDragOver(null)}
@@ -226,15 +294,33 @@ function ChapterRow({
           {open ? <ChevronDown /> : <ChevronRight />}
         </button>
 
+        {editingTitle ? (
+          <InlineRename
+            value={chap.title}
+            fallback={`${labels.level2} ${chapNum}`}
+            generatedLabel={labels.level2}
+            onSave={title => { onUpdateChapter(chap.id, { title }); setEditingTitle(false) }}
+          />
+        ) : (
+          <button
+            className="ms-sidebar-chapter-btn"
+            onClick={() => onSelectChapter(chap.id)}
+            title={displayTitle}
+          >
+            <span className="ms-sidebar-chapter-title">{displayTitle}</span>
+            {totalWords > 0 && (
+              <span className="ms-sidebar-wordcount">{fmtWords(totalWords)}</span>
+            )}
+          </button>
+        )}
+
         <button
-          className="ms-sidebar-chapter-btn"
-          onClick={() => onSelectChapter(chap.id)}
-          title={displayTitle}
+          className="ms-sidebar-icon-btn"
+          onClick={() => setEditingTitle(true)}
+          title={`Rename ${labels.level2}`}
+          aria-label={`Rename ${labels.level2}`}
         >
-          <span className="ms-sidebar-chapter-title">{displayTitle}</span>
-          {totalWords > 0 && (
-            <span className="ms-sidebar-wordcount">{fmtWords(totalWords)}</span>
-          )}
+          <PencilIcon />
         </button>
 
         <button
@@ -252,7 +338,21 @@ function ChapterRow({
       </div>
 
       {open && (
-        <div className="ms-sidebar-chapter-children">
+        <div
+          className={`ms-sidebar-chapter-children${dragOver?.id === chap.id && dragOver?.type === 'chapter-empty' ? ' is-drop-target' : ''}`}
+          onDragOver={e => {
+            if (!dragRef.current || dragRef.current.type !== 'scene') return
+            e.preventDefault()
+            setDragOver({ id: chap.id, position: 'inside', type: 'chapter-empty' })
+          }}
+          onDrop={e => {
+            if (!dragRef.current || dragRef.current.type !== 'scene') return
+            e.preventDefault()
+            onMoveScene(dragRef.current.id, chap.id)
+            dragRef.current = null
+            setDragOver(null)
+          }}
+        >
           {chapScenes.map((scene, i) => (
             <SceneRow
               key={scene.id}
@@ -268,6 +368,11 @@ function ChapterRow({
               onDropScene={onDropScene}
             />
           ))}
+          {chapScenes.length === 0 && (
+            <div className="ms-sidebar-dropzone">
+              Drop {labels.level3.toLowerCase()} here
+            </div>
+          )}
           <button
             className="ms-sidebar-add-btn"
             onClick={() => onAddScene(chap.id)}
@@ -286,13 +391,14 @@ function ChapterRow({
 export default function StructureSidebar({
   acts, chapters, scenes,
   addAct, addChapter, addScene,
-  updateChapter, updateScene,
+  updateAct, updateChapter, updateScene,
   deleteAct, deleteChapter, deleteScene,
   moveAct, moveChapter, moveScene,
   activeSceneId, onSelectScene, onSelectChapter,
   labels, totalWordCount,
 }) {
   const [collapsedActs, setCollapsedActs] = useState(new Set())
+  const [renamingActId, setRenamingActId] = useState(null)
   const [dragOver, setDragOver] = useState(null)
   const dragRef = useRef(null)
 
@@ -316,6 +422,11 @@ export default function StructureSidebar({
   const handleAddChapter = useCallback((actId) => {
     addChapter(actId, labels.level2)
   }, [addChapter, labels.level2])
+
+  const handleMoveSceneToChapter = useCallback((sceneId, chapterId) => {
+    const destCount = scenes.filter(s => s.chapterId === chapterId && s.id !== sceneId).length
+    moveScene(sceneId, chapterId, destCount)
+  }, [scenes, moveScene])
 
   const handleDropChapter = useCallback((dragged, toActId, targetChapId, position) => {
     if (!dragged || dragged.type !== 'chapter') return
@@ -403,7 +514,7 @@ export default function StructureSidebar({
                   borderTop: isActDropTarget && dragOver.position === 'before' ? '2px solid var(--accent)' : undefined,
                   borderBottom: isActDropTarget && dragOver.position === 'after' ? '2px solid var(--accent)' : undefined,
                 }}
-                draggable
+                draggable={renamingActId !== act.id}
                 onDragStart={handleActDragStart}
                 onDragOver={handleActDragOver}
                 onDragLeave={() => setDragOver(null)}
@@ -420,16 +531,34 @@ export default function StructureSidebar({
                   {open ? <ChevronDown /> : <ChevronRight />}
                 </button>
 
+                {renamingActId === act.id ? (
+                  <InlineRename
+                    value={act.title}
+                    fallback={`${labels.level1} ${acts.findIndex(a => a.id === act.id) + 1}`}
+                    generatedLabel={labels.level1}
+                    onSave={title => { updateAct(act.id, { title }); setRenamingActId(null) }}
+                  />
+                ) : (
+                  <button
+                    className="ms-sidebar-act-btn"
+                    onClick={() => {
+                      const firstChap = actChapters[0]
+                      if (firstChap) onSelectChapter(firstChap.id)
+                    }}
+                    title={act.title}
+                  >
+                    <span className="ms-sidebar-act-title">{act.title}</span>
+                    {words > 0 && <span className="ms-sidebar-wordcount">{fmtWords(words)}</span>}
+                  </button>
+                )}
+
                 <button
-                  className="ms-sidebar-act-btn"
-                  onClick={() => {
-                    const firstChap = actChapters[0]
-                    if (firstChap) onSelectChapter(firstChap.id)
-                  }}
-                  title={act.title}
+                  className="ms-sidebar-icon-btn"
+                  onClick={() => setRenamingActId(act.id)}
+                  title={`Rename ${labels.level1}`}
+                  aria-label={`Rename ${labels.level1}`}
                 >
-                  <span className="ms-sidebar-act-title">{act.title}</span>
-                  {words > 0 && <span className="ms-sidebar-wordcount">{fmtWords(words)}</span>}
+                  <PencilIcon />
                 </button>
 
                 <button
@@ -448,7 +577,21 @@ export default function StructureSidebar({
 
               {/* Act children */}
               {open && (
-                <div className="ms-sidebar-act-children">
+                <div
+                  className={`ms-sidebar-act-children${dragOver?.id === act.id && dragOver?.type === 'act-empty' ? ' is-drop-target' : ''}`}
+                  onDragOver={e => {
+                    if (!dragRef.current || dragRef.current.type !== 'chapter') return
+                    e.preventDefault()
+                    setDragOver({ id: act.id, position: 'inside', type: 'act-empty' })
+                  }}
+                  onDrop={e => {
+                    if (!dragRef.current || dragRef.current.type !== 'chapter') return
+                    e.preventDefault()
+                    moveChapter(dragRef.current.id, act.id, actChapters.length)
+                    dragRef.current = null
+                    setDragOver(null)
+                  }}
+                >
                   {actChapters.map((chap) => (
                     <ChapterRow
                       key={chap.id}
@@ -464,6 +607,7 @@ export default function StructureSidebar({
                       onUpdateScene={updateScene}
                       onDeleteScene={deleteScene}
                       labels={labels}
+                      onMoveScene={handleMoveSceneToChapter}
                       dragRef={dragRef}
                       dragOver={dragOver}
                       setDragOver={setDragOver}
@@ -471,6 +615,11 @@ export default function StructureSidebar({
                       onDropScene={handleDropScene}
                     />
                   ))}
+                  {actChapters.length === 0 && (
+                    <div className="ms-sidebar-dropzone">
+                      Drop {labels.level2.toLowerCase()} here
+                    </div>
+                  )}
                   <button
                     className="ms-sidebar-add-btn ms-sidebar-add-chapter"
                     onClick={() => handleAddChapter(act.id)}

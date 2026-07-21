@@ -21,49 +21,61 @@ function novelHeader(novel) {
   return lines.join('\n')
 }
 
-function projectTypeGuidance(novel) {
+export function projectTypeGuidance(novel) {
   const type = novel?.type || 'novel'
   const cfg = getProjectType(type)
   const structure = cfg.structure || {}
 
   if (type === 'dnd_campaign') {
     return `Project-type guidance:
-- Treat this as a D&D campaign bible, not only a prose manuscript.
+- Treat this as DM-side D&D campaign planning, not only a prose manuscript.
 - Use D&D-flavoured language where helpful: party, DM, quest hooks, NPCs, factions, locations, sessions, encounters, dungeons, rewards, and fallout.
-- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.`
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.
+- When drafting or advising sessions, think in prep and recap terms: hooks, encounter flow, NPCs, rewards, consequences, player choices, fallout, and next hooks.
+- Do not imply live play, a shared player portal, collaboration, or virtual tabletop features.`
   }
 
   if (type === 'tabletop_rpg') {
     return `Project-type guidance:
-- Treat this as a system-neutral tabletop campaign bible, not only a prose manuscript.
+- Treat this as GM-side system-neutral tabletop campaign planning, not only a prose manuscript.
 - Use ruleset-neutral language: players, facilitator/GM, adventure hooks, NPCs, factions, locations, sessions, encounters, consequences, and campaign continuity.
-- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.`
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.
+- When drafting or advising sessions, think in prep and recap terms: hooks, encounter flow, NPCs, rewards, consequences, player choices, fallout, and next hooks.
+- Stay system-neutral unless the user's project data names a specific ruleset. Do not imply live play, a shared player portal, collaboration, or virtual tabletop features.`
   }
 
   if (type === 'novella') {
     return `Project-type guidance:
 - Treat this as a novella with tighter scope than a full novel.
 - Flag subplots, cast sprawl, or pacing detours that may be too large for roughly ${cfg.defaultWordTarget?.toLocaleString?.() || '30,000'} words.
-- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.`
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.
+- Favour focused escalation, concentrated character work, and a smaller promise than a novel-scale three-act sprawl.`
   }
 
   if (type === 'short_story') {
     return `Project-type guidance:
 - Treat this as a short story with a compact cast, narrow scope, and strong economy.
 - Flag unresolved setup, extra subplots, or worldbuilding load that may be too large for roughly ${cfg.defaultWordTarget?.toLocaleString?.() || '5,000'} words.
-- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.`
+- Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3}.
+- Favour implication, compression, one dominant dramatic movement, and a clear final turn or image.`
   }
 
   if (type === 'comic') {
     return `Project-type guidance:
-- Treat this as a comic or graphic novel in beta workflow.
-- Use sequential-art language: volumes, issues, pages, panels, captions, dialogue, page turns, reveals, and visual clarity.
-- Do not assume panel tooling is available yet; focus on page-level pacing, visual storytelling, and scene-to-page fit.`
+- Treat this as a comic or graphic novel with sequential-art planning.
+- Use comic structure and language: ${structure.level1 || 'Volume'}, ${structure.level2 || 'Issue'}, ${structure.level3 || 'Page'}, panels, captions, speech balloons, SFX, lettering notes, page turns, reveals, and visual clarity.
+- When drafting or advising, think in page/panel beats, visual composition, dialogue density, captions, and page-turn purpose rather than prose-scene expansion.`
   }
 
   return `Project-type guidance:
 - Treat this as long-form prose fiction.
-- Prefer structure references like ${structure.level1 || 'Act'}, ${structure.level2 || 'Chapter'}, and ${structure.level3 || 'Scene'}.`
+- Prefer structure references like ${structure.level1 || 'Act'}, ${structure.level2 || 'Chapter'}, and ${structure.level3 || 'Scene'}.
+- Support novel-scale arcs, subplots, character growth, pacing, manuscript drafting, and worldbuilding continuity.`
+}
+
+export function buildProjectTypePromptContext(novel) {
+  return `${novelHeader(novel)}
+${projectTypeGuidance(novel)}`.trim()
 }
 
 function summariseCharacters(characters) {

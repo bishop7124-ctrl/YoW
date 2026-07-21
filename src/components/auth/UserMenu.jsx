@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '../../context/AuthContext'
 
 function MenuIcon({ name }) {
@@ -28,10 +29,37 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
   const { user, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState('main')
-  const ref = useRef(null)
+  const [coords, setCoords] = useState(null)
+  const rootRef = useRef(null)
+  const popoverRef = useRef(null)
+
+  // Popover is portaled to <body> and positioned via fixed coords, because the
+  // in-project header (.studio-spine) clips overflow to keep the app chrome
+  // compact on mobile — an absolutely-positioned descendant would get clipped
+  // to that 72-96px-tall header instead of floating above the page.
+  const updateCoords = () => {
+    const rect = rootRef.current?.querySelector('.user-menu-trigger')?.getBoundingClientRect()
+    if (!rect) return
+    setCoords({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) })
+  }
 
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    if (!open) return undefined
+    updateCoords()
+    window.addEventListener('resize', updateCoords)
+    window.addEventListener('scroll', updateCoords, true)
+    return () => {
+      window.removeEventListener('resize', updateCoords)
+      window.removeEventListener('scroll', updateCoords, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (rootRef.current?.contains(e.target)) return
+      if (popoverRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
@@ -62,7 +90,7 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
   ]
 
   return (
-    <div className="user-menu-root" ref={ref}>
+    <div className="user-menu-root" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -84,8 +112,14 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
         <span className="user-menu-trigger-caret" aria-hidden="true" />
       </button>
 
-      {open && (
-        <div className="user-menu-popover" role="menu" aria-label="Account menu">
+      {open && coords && createPortal(
+        <div
+          className="user-menu-popover user-menu-popover-portal"
+          ref={popoverRef}
+          role="menu"
+          aria-label="Account menu"
+          style={{ top: coords.top, right: coords.right }}
+        >
           {panel === 'main' ? (
             <>
               <div className="user-menu-profile">
@@ -150,7 +184,8 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
               </div>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
