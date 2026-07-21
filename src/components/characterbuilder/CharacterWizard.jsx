@@ -3,16 +3,29 @@ import {
   RACES, CLASSES, BACKGROUNDS, ALIGNMENTS, ABILITY_KEYS, ABILITY_SHORT,
   STANDARD_ARRAY, POINT_BUY_COSTS, POINT_BUY_BUDGET, STARTING_EQUIPMENT,
   getModifier, formatMod, getProficiencyBonus, makeNewCharacter,
+  getSubclassOptions, getAlwaysPreparedSpells, isSpellcaster, isKnownCaster, isPreparedCaster,
+  getSpellcastingAbility, getCantripsKnown, getKnownSpellCount, getPreparedSpellCount, getSpellSlots,
+  METAMAGIC_OPTIONS, getMetamagicKnownCount, INVOCATIONS, getInvocationsKnownCount,
 } from './rpgData'
+import { cantripsForClass, spellsForClassAtLevel, findSpellByName } from './spellData'
 
 const STEPS = [
   { id: 'basics',   label: 'Basics',        icon: '✦' },
   { id: 'race',     label: 'Race',          icon: '⬡' },
   { id: 'class',    label: 'Class',         icon: '⚔' },
   { id: 'scores',   label: 'Ability Scores', icon: '⬡' },
+  { id: 'spells',   label: 'Spells',        icon: '✨' },
   { id: 'equip',    label: 'Equipment',     icon: '⚒' },
   { id: 'review',   label: 'Review',        icon: '✓' },
 ]
+
+const toSpellEntry = (spell) => ({
+  id: `spell-${spell.name.replace(/\s+/g, '-').toLowerCase()}`,
+  name: spell.name,
+  level: spell.level,
+  school: spell.school,
+  description: spell.desc || '',
+})
 
 const resizePortrait = (file) => new Promise((resolve, reject) => {
   const img = new Image()
@@ -176,13 +189,17 @@ function StepRace({ data, onChange }) {
 
 function StepClass({ data, onChange }) {
   const selected = CLASSES.find(c => c.id === data.class) || CLASSES[0]
+  const subclassOptions = getSubclassOptions(data.class)
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
         {CLASSES.map(cls => (
           <button
             key={cls.id}
-            onClick={() => onChange({ class: cls.id, customClass: '', subclass: '' })}
+            onClick={() => onChange({
+              class: cls.id, customClass: '', subclass: '', subclassId: '',
+              spells: { ...data.spells, spellcastingAbility: getSpellcastingAbility(cls.id) || data.spells.spellcastingAbility },
+            })}
             style={{
               padding: '14px 12px', borderRadius: 12, cursor: 'pointer', textAlign: 'left',
               border: `2px solid ${data.class === cls.id ? 'var(--accent)' : 'color-mix(in srgb, var(--border) 60%, transparent)'}`,
@@ -222,9 +239,35 @@ function StepClass({ data, onChange }) {
           <input type="number" min={1} max={20} className="field" value={data.level} onChange={e => onChange({ level: Math.max(1, Math.min(20, Number(e.target.value))) })} style={{ padding: '8px 10px', fontSize: 13 }} />
         </Field>
         <Field label="Subclass / Archetype">
-          <input className="field" value={data.subclass || ''} onChange={e => onChange({ subclass: e.target.value })} placeholder="e.g. Champion, Thief…" style={{ padding: '8px 10px', fontSize: 13 }} />
+          {subclassOptions.length > 0 ? (
+            <select
+              className="field"
+              value={data.subclassId || ''}
+              onChange={e => {
+                const opt = subclassOptions.find(o => o.id === e.target.value)
+                onChange({ subclassId: opt?.id || '', subclass: opt?.label || '' })
+              }}
+              style={{ padding: '8px 10px', fontSize: 13 }}
+            >
+              <option value="">Choose later…</option>
+              {subclassOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          ) : (
+            <input className="field" value={data.subclass || ''} onChange={e => onChange({ subclass: e.target.value, subclassId: '' })} placeholder="e.g. Champion, Thief…" style={{ padding: '8px 10px', fontSize: 13 }} />
+          )}
         </Field>
       </div>
+
+      {data.subclassId && getAlwaysPreparedSpells(data.class, data.subclassId, data.level).length > 0 && (
+        <div style={{ padding: '12px 16px', borderRadius: 12, background: 'color-mix(in srgb, #8b5cf6 8%, transparent)', border: '1px solid color-mix(in srgb, #8b5cf6 25%, transparent)' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#8b5cf6', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>Always-Prepared Spells (from {data.subclass})</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {getAlwaysPreparedSpells(data.class, data.subclassId, data.level).map(name => (
+              <span key={name} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'color-mix(in srgb, #8b5cf6 15%, transparent)', color: 'var(--text-main)' }}>{name}</span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -365,6 +408,165 @@ function StepScores({ data, onChange }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ─── Step 5: Spells (spellcasting classes only) ──────────────────────────────
+
+function PickList({ title, limit, chosen, options, onToggle, emptyHint }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{title}</p>
+        <span style={{ fontSize: 11, fontWeight: 700, color: chosen.length >= limit ? 'var(--accent)' : 'var(--text-muted)' }}>{chosen.length} / {limit}</span>
+      </div>
+      {options.length === 0
+        ? <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{emptyHint}</p>
+        : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {options.map(opt => {
+              const isChosen = chosen.some(c => (c.name || c) === (opt.name || opt.id))
+              const disabled = !isChosen && chosen.length >= limit
+              return (
+                <button
+                  key={opt.id || opt.name}
+                  onClick={() => onToggle(opt)}
+                  disabled={disabled}
+                  title={opt.desc}
+                  style={{
+                    padding: '5px 11px', borderRadius: 7, fontSize: 12, cursor: disabled ? 'default' : 'pointer',
+                    border: `1px solid ${isChosen ? 'var(--accent)' : 'color-mix(in srgb, var(--border) 60%, transparent)'}`,
+                    background: isChosen ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'transparent',
+                    color: isChosen ? 'var(--accent)' : disabled ? 'var(--text-muted)' : 'var(--text-main)',
+                    opacity: disabled ? 0.5 : 1,
+                  }}
+                >{opt.name || opt.label}</button>
+              )
+            })}
+          </div>
+        )
+      }
+    </div>
+  )
+}
+
+function StepSpells({ data, onChange }) {
+  const classId = data.class
+  const level = data.level
+  const spells = data.spells || {}
+  const defaultAbility = getSpellcastingAbility(classId) || 'int'
+  const abilityKey = spells.spellcastingAbility || defaultAbility
+  const abilityMod = getModifier(data.abilityScores[abilityKey])
+
+  const known = isKnownCaster(classId)
+  const prepared = isPreparedCaster(classId)
+  const spellKey = known ? 'known' : 'prepared'
+
+  const cantripLimit = getCantripsKnown(classId, level)
+  const spellLimit = known ? getKnownSpellCount(classId, level) : prepared ? getPreparedSpellCount(classId, level, abilityMod) : 0
+
+  const slots = getSpellSlots(classId, level) || {}
+  const slotLevels = Object.keys(slots).map(Number)
+  const maxSpellLevel = slotLevels.length ? Math.max(...slotLevels) : 0
+
+  const cantrips = spells.cantrips || []
+  const spellList = spells[spellKey] || []
+  const alwaysPrepared = getAlwaysPreparedSpells(classId, data.subclassId, level).map(findSpellByName).filter(Boolean)
+
+  const toggleCantrip = (spell) => {
+    const exists = cantrips.some(c => c.name === spell.name)
+    const next = exists ? cantrips.filter(c => c.name !== spell.name) : [...cantrips, toSpellEntry(spell)]
+    onChange({ spells: { ...spells, cantrips: next } })
+  }
+
+  const toggleSpell = (spell) => {
+    const list = spells[spellKey] || []
+    const exists = list.some(s => s.name === spell.name)
+    const next = exists ? list.filter(s => s.name !== spell.name) : [...list, toSpellEntry(spell)]
+    onChange({ spells: { ...spells, [spellKey]: next } })
+  }
+
+  const metamagicCount = classId === 'sorcerer' ? getMetamagicKnownCount(level) : 0
+  const metamagicChosen = spells.metamagic || []
+  const toggleMetamagic = (opt) => {
+    const exists = metamagicChosen.includes(opt.id)
+    const next = exists ? metamagicChosen.filter(id => id !== opt.id) : [...metamagicChosen, opt.id]
+    onChange({ spells: { ...spells, metamagic: next } })
+  }
+
+  const invocationCount = classId === 'warlock' ? getInvocationsKnownCount(level) : 0
+  const invocationsChosen = spells.invocations || []
+  const toggleInvocation = (opt) => {
+    const exists = invocationsChosen.includes(opt.id)
+    const next = exists ? invocationsChosen.filter(id => id !== opt.id) : [...invocationsChosen, opt.id]
+    onChange({ spells: { ...spells, invocations: next } })
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Spellcasting Ability</p>
+        <select
+          className="field"
+          value={abilityKey}
+          onChange={e => onChange({ spells: { ...spells, spellcastingAbility: e.target.value } })}
+          style={{ padding: '4px 8px', fontSize: 12 }}
+        >
+          {ABILITY_KEYS.map(k => <option key={k} value={k}>{ABILITY_SHORT[k]}</option>)}
+        </select>
+      </div>
+
+      {alwaysPrepared.length > 0 && (
+        <div style={{ padding: '12px 16px', borderRadius: 12, background: 'color-mix(in srgb, #8b5cf6 8%, transparent)', border: '1px solid color-mix(in srgb, #8b5cf6 25%, transparent)' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#8b5cf6', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>Always Prepared ({data.subclass})</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {alwaysPrepared.map(s => (
+              <span key={s.name} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: 'color-mix(in srgb, #8b5cf6 15%, transparent)', color: 'var(--text-main)' }}>{s.name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <PickList
+        title="Cantrips"
+        limit={cantripLimit}
+        chosen={cantrips}
+        options={cantripsForClass(classId)}
+        onToggle={toggleCantrip}
+        emptyHint="This class doesn't get cantrips yet."
+      />
+
+      <PickList
+        title={known ? 'Spells Known' : 'Spells Prepared'}
+        limit={spellLimit}
+        chosen={spellList}
+        options={maxSpellLevel > 0 ? spellsForClassAtLevel(classId, maxSpellLevel) : []}
+        onToggle={toggleSpell}
+        emptyHint="No spell slots at this level yet — spells unlock at a higher level."
+      />
+
+      {classId === 'sorcerer' && metamagicCount > 0 && (
+        <PickList
+          title="Metamagic"
+          limit={metamagicCount}
+          chosen={metamagicChosen.map(id => METAMAGIC_OPTIONS.find(o => o.id === id)).filter(Boolean)}
+          options={METAMAGIC_OPTIONS}
+          onToggle={toggleMetamagic}
+          emptyHint="Metamagic unlocks at level 3."
+        />
+      )}
+
+      {classId === 'warlock' && invocationCount > 0 && (
+        <PickList
+          title="Eldritch Invocations"
+          limit={invocationCount}
+          chosen={invocationsChosen.map(id => INVOCATIONS.find(o => o.id === id)).filter(Boolean)}
+          options={INVOCATIONS}
+          onToggle={toggleInvocation}
+          emptyHint="Invocations unlock at level 2."
+        />
+      )}
     </div>
   )
 }
@@ -534,11 +736,21 @@ function Field({ label, children }) {
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
 
 export default function CharacterWizard({ novelId, onSave, onCancel }) {
-  const [step, setStep] = useState(0)
-  const [draft, setDraft] = useState(() => makeNewCharacter(novelId))
+  const [rawStep, setStep] = useState(0)
+  // Empty, not the shared 'New Adventurer' fallback name: the field shows it
+  // as literal pre-filled text (no auto-select-on-focus), so a user who
+  // clicks in and starts typing without clearing it first ends up with
+  // "New AdventurerAragorn" instead of "Aragorn". Blank plus the existing
+  // Next-button name requirement (below) means the wizard always collects a
+  // real name; 'New Adventurer' remains the fallback for other creation
+  // paths (e.g. AI import) that don't go through this form.
+  const [draft, setDraft] = useState(() => makeNewCharacter(novelId, { name: '' }))
   const [saving, setSaving] = useState(false)
 
   const patch = (updates) => setDraft(prev => ({ ...prev, ...updates }))
+
+  const visibleSteps = STEPS.filter(s => s.id !== 'spells' || isSpellcaster(draft.class))
+  const step = Math.min(rawStep, visibleSteps.length - 1)
 
   const canProceed = () => {
     if (step === 0) return draft.name?.trim().length > 0
@@ -578,6 +790,29 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
     const bg = BACKGROUNDS.find(b => b.id === draft.background)
     if (bg?.feature) features.push({ id: 'bg-feat', name: bg.feature, source: bg.label, description: '' })
 
+    if (draft.subclass) features.push({ id: 'subclass-feat', name: draft.subclass, source: 'Subclass', description: '' })
+
+    // Finalize spellcasting: real slot table, always-prepared domain/oath/patron spells,
+    // and Metamagic/Invocation picks recorded as features for visibility.
+    let finalSpells = draft.spells
+    if (isSpellcaster(draft.class)) {
+      const alwaysPreparedNames = getAlwaysPreparedSpells(draft.class, draft.subclassId, draft.level)
+      finalSpells = {
+        ...draft.spells,
+        slots: getSpellSlots(draft.class, draft.level) || {},
+        alwaysPrepared: alwaysPreparedNames,
+        known: draft.class === 'wizard' ? (draft.spells.prepared || []) : (draft.spells.known || []),
+      }
+      ;(draft.spells.metamagic || []).forEach(id => {
+        const opt = METAMAGIC_OPTIONS.find(o => o.id === id)
+        if (opt) features.push({ id: `metamagic-${id}`, name: opt.name, source: 'Metamagic', description: opt.desc })
+      })
+      ;(draft.spells.invocations || []).forEach(id => {
+        const opt = INVOCATIONS.find(o => o.id === id)
+        if (opt) features.push({ id: `invocation-${id}`, name: opt.name, source: 'Eldritch Invocation', description: opt.desc })
+      })
+    }
+
     const finalChar = {
       ...draft,
       abilityScores: finalScores,
@@ -585,6 +820,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
       ac: 10 + dexMod,
       speed: race?.speed || 30,
       features,
+      spells: finalSpells,
       updatedAt: new Date().toISOString(),
     }
 
@@ -595,14 +831,16 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
     }
   }
 
-  const stepComponents = [
-    <StepBasics data={draft} onChange={patch} />,
-    <StepRace data={draft} onChange={patch} />,
-    <StepClass data={draft} onChange={patch} />,
-    <StepScores data={draft} onChange={patch} />,
-    <StepEquipment data={draft} onChange={patch} />,
-    <StepReview data={draft} />,
-  ]
+  const stepComponentMap = {
+    basics: <StepBasics data={draft} onChange={patch} />,
+    race: <StepRace data={draft} onChange={patch} />,
+    class: <StepClass data={draft} onChange={patch} />,
+    scores: <StepScores data={draft} onChange={patch} />,
+    spells: <StepSpells data={draft} onChange={patch} />,
+    equip: <StepEquipment data={draft} onChange={patch} />,
+    review: <StepReview data={draft} />,
+  }
+  const currentStepId = visibleSteps[step]?.id || 'basics'
 
   return (
     <div style={{
@@ -636,7 +874,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
           </div>
           {/* Step indicators */}
           <div style={{ display: 'flex', gap: 0 }}>
-            {STEPS.map((s, i) => (
+            {visibleSteps.map((s, i) => (
               <button
                 key={s.id}
                 onClick={() => i < step && setStep(i)}
@@ -656,7 +894,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-          {stepComponents[step]}
+          {stepComponentMap[currentStepId]}
         </div>
 
         {/* Footer */}
@@ -679,8 +917,8 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
             >Cancel</button>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Step {step + 1} of {STEPS.length}</span>
-            {step < STEPS.length - 1 ? (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Step {step + 1} of {visibleSteps.length}</span>
+            {step < visibleSteps.length - 1 ? (
               <button
                 onClick={() => canProceed() && setStep(s => s + 1)}
                 disabled={!canProceed()}

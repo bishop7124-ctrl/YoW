@@ -6,10 +6,14 @@ import { estimateStoreSize } from '../utils/storageQuota'
 import { clearJourneyLinks } from '../utils/characterJourney'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
+import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
+import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
 
 const load = (key, def) => loadValue(key, def)
 const LOCAL_WRITE_AT_KEY = 'nf_localWriteAt'
 const LOCAL_OWNER_KEY = 'nf_localOwner'
+const LOCAL_WRITE_FAILED_KEY = 'nf_localWriteFailed'
+const lastActiveProjectKey = (ownerId) => ownerId ? `nf_lastActiveProject:${ownerId}` : null
 const PROJECT_STORAGE_KEYS = [
   'nf_novels',
   'nf_characters',
@@ -35,6 +39,7 @@ const PROJECT_STORAGE_KEYS = [
   'nf_eras',
   LOCAL_WRITE_AT_KEY,
   LOCAL_OWNER_KEY,
+  LOCAL_WRITE_FAILED_KEY,
 ]
 const loadLocalWriteAt = () => {
   try { return Number(readItem(LOCAL_WRITE_AT_KEY) || 0) || 0 }
@@ -55,12 +60,34 @@ const markLocalWrite = (ownerId) => {
   catch { /* Ignore metadata writes; the actual content save is handled separately. */ }
   markLocalOwner(ownerId)
 }
+const saveLastActiveProject = (ownerId, projectId) => {
+  const key = lastActiveProjectKey(ownerId)
+  if (!key) return
+  try {
+    writeItem(key, JSON.stringify({ projectId: projectId ?? null, savedAt: Date.now() }))
+  } catch { /* Best effort only; cloud settings remain the canonical account copy. */ }
+}
+const loadLastActiveProject = (ownerId) => {
+  const key = lastActiveProjectKey(ownerId)
+  if (!key) return null
+  try {
+    const parsed = JSON.parse(readItem(key) || 'null')
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      projectId: parsed.projectId ?? null,
+      savedAt: Number(parsed.savedAt || 0) || 0,
+    }
+  } catch {
+    return null
+  }
+}
 const clearProjectLocalStorage = () => {
   try {
     PROJECT_STORAGE_KEYS.forEach(key => removeItem(key))
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {
+  refs.novelsRef.current = []
   refs.charactersRef.current = []
   refs.factionsRef.current = []
   refs.locationsRef.current = []
@@ -71,25 +98,58 @@ const clearProjectRefs = (refs) => {
   refs.scenesRef.current = []
   refs.loreEntriesRef.current = []
   refs.ideaEntriesRef.current = []
+  refs.mapsRef.current = []
+  refs.whiteboardsRef.current = []
   refs.storyScheduleRef.current = []
   refs.rpgCharactersRef.current = []
   refs.comicPagesRef.current = []
   refs.comicPanelsRef.current = []
+  refs.activeNovelIdRef.current = null
+  refs.activeMapByNovelRef.current = {}
+  refs.currentYearRef.current = 0
 }
+// Tracks which storage keys most recently failed to persist (e.g. quota
+// exceeded). A stale key on disk must never be treated as "fresher than the
+// cloud" during import reconciliation just because *some* other key's write
+// happened to succeed and bumped nf_localWriteAt.
+const readFailedWriteKeys = () => {
+  try { return new Set(JSON.parse(readItem(LOCAL_WRITE_FAILED_KEY) || '[]')) }
+  catch { return new Set() }
+}
+const markLocalWriteFailed = (key) => {
+  try {
+    const failed = readFailedWriteKeys()
+    if (failed.has(key)) return
+    failed.add(key)
+    writeItem(LOCAL_WRITE_FAILED_KEY, JSON.stringify([...failed]))
+  } catch { /* best effort */ }
+}
+const clearLocalWriteFailed = (key) => {
+  try {
+    const failed = readFailedWriteKeys()
+    if (!failed.has(key)) return
+    failed.delete(key)
+    writeItem(LOCAL_WRITE_FAILED_KEY, JSON.stringify([...failed]))
+  } catch { /* best effort */ }
+}
+const hasLocalWriteFailed = () => readFailedWriteKeys().size > 0
 const save = (key, val) => {
   try {
     writeItem(key, JSON.stringify(val))
+    clearLocalWriteFailed(key)
   } catch (error) {
     if (key === 'nf_novels' && Array.isArray(val)) {
       try {
         const withoutCovers = val.map(item => ({ ...item, coverPhoto: null }))
         writeItem(key, JSON.stringify(withoutCovers))
+        clearLocalWriteFailed(key)
         console.warn('Project data was saved without cover photos because browser storage is full.', error)
         return
       } catch {
         // Fall through to the shared warning below.
       }
     }
+    markLocalWriteFailed(key)
     console.warn(`Could not save ${key} to browser storage.`, error)
   }
 }
@@ -190,6 +250,46 @@ const withSceneContentHistory = (scene, content, now = Date.now()) => {
   return { ...scene, content, lastModified: now, wordHistory }
 }
 
+const createSceneConflictCopy = (scene, now = Date.now()) => ({
+  ...scene,
+  id: uid(),
+  title: `${scene.title || 'Scene'} (conflict copy)`,
+  conflictOf: scene.id,
+  conflictCreatedAt: now,
+  lastModified: now,
+})
+
+const mergeSceneUpdateWithPersistedCopy = (prev, sceneId, updateScene) => {
+  // Only used to detect a stale-tab conflict for this one scene — never as the
+  // base for the rebuilt array. Falling back to a persisted snapshot for the
+  // whole array would silently discard live edits to every other scene (e.g.
+  // after a localStorage write failure left `nf_scenes` stale).
+  const persisted = load('nf_scenes', [])
+  const stateScene = prev.find(s => s.id === sceneId)
+  const persistedScene = (Array.isArray(persisted) ? persisted : []).find(s => s.id === sceneId)
+  if (!stateScene && !persistedScene) return prev
+
+  const sourceScene = persistedScene || stateScene
+  const updated = updateScene(sourceScene)
+  const persistedChangedOutsideThisTab = Boolean(
+    persistedScene &&
+    stateScene &&
+    (
+      persistedScene.content !== stateScene.content ||
+      Number(persistedScene.lastModified || 0) > Number(stateScene.lastModified || 0)
+    )
+  )
+  const contentChanged = Object.prototype.hasOwnProperty.call(updated, 'content') && updated.content !== persistedScene?.content
+  const shouldPreserveConflict = persistedChangedOutsideThisTab && contentChanged
+  const hasConflictCopy = shouldPreserveConflict && prev.some(scene =>
+    scene.conflictOf === sceneId && scene.content === persistedScene.content
+  )
+  const next = stateScene ? prev.map(s => s.id === sceneId ? updated : s) : [...prev, updated]
+  return shouldPreserveConflict && !hasConflictCopy
+    ? [...next, createSceneConflictCopy(persistedScene)]
+    : next
+}
+
 const getLocalSnapshot = () => ({
   novels: load('nf_novels', []),
   characters: load('nf_characters', []),
@@ -237,18 +337,46 @@ const _buildAppDataPayload = (data) => ({
   comicPanels: data.comicPanels ?? [],
 })
 
+const resolveActiveNovelId = (data, ownerId, remoteSavedAt = 0) => {
+  const novels = data.novels ?? []
+  const projectIds = new Set(novels.map(novel => novel.id))
+  const marker = loadLastActiveProject(ownerId)
+  if (marker?.savedAt > remoteSavedAt && projectIds.has(marker.projectId)) return marker.projectId
+  if (projectIds.has(data.activeNovelId)) return data.activeNovelId
+  return novels[0]?.id ?? null
+}
+
 // Simple debounce helper: returns a function that delays calling fn by ms
 function debounce(fn, ms) {
   let timer
-  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms) }
+  let pendingArgs = null
+  const debounced = (...args) => {
+    pendingArgs = args
+    clearTimeout(timer)
+    timer = setTimeout(() => { pendingArgs = null; fn(...args) }, ms)
+  }
+  // Immediately runs any pending call instead of waiting out the delay, so a
+  // caller (e.g. sign-out) can await the in-flight write before it's too late
+  // to send it with a still-valid auth session.
+  debounced.flush = () => {
+    if (!pendingArgs) return null
+    clearTimeout(timer)
+    const args = pendingArgs
+    pendingArgs = null
+    return fn(...args)
+  }
+  return debounced
 }
 
 function createKeyedDebounce(fn, ms) {
   const timers = new Map()
+  const pending = new Map()
   const debounced = (key, ...args) => {
     if (timers.has(key)) clearTimeout(timers.get(key))
+    pending.set(key, args)
     timers.set(key, setTimeout(() => {
       timers.delete(key)
+      pending.delete(key)
       fn(key, ...args)
     }, ms))
   }
@@ -256,6 +384,20 @@ function createKeyedDebounce(fn, ms) {
     if (!timers.has(key)) return
     clearTimeout(timers.get(key))
     timers.delete(key)
+    pending.delete(key)
+  }
+  // Immediately runs every pending call instead of waiting out the delay, so
+  // a caller (e.g. sign-out) can await in-flight writes before it's too late
+  // to send them with a still-valid auth session.
+  debounced.flushAll = () => {
+    const results = []
+    for (const [key, args] of pending) {
+      clearTimeout(timers.get(key))
+      timers.delete(key)
+      pending.delete(key)
+      results.push(fn(key, ...args))
+    }
+    return results
   }
   return debounced
 }
@@ -291,6 +433,7 @@ export function useStore(userId = null, options = {}) {
   const [comicPanels, setComicPanels] = useState(() => loadInitial('nf_comicPanels', []))
   const [eras, setEras] = useState(() => loadInitial('nf_eras', []))
 
+  const novelsRef = useRef(novels)
   const charactersRef = useRef(characters)
   const factionsRef = useRef(factions)
   const locationsRef = useRef(locations)
@@ -301,16 +444,25 @@ export function useStore(userId = null, options = {}) {
   const scenesRef = useRef(scenes)
   const loreEntriesRef = useRef(loreEntries)
   const ideaEntriesRef = useRef(ideaEntries)
+  const mapsRef = useRef(maps)
+  const whiteboardsRef = useRef(whiteboards)
   const storyScheduleRef = useRef(storySchedule)
   const rpgCharactersRef = useRef(rpgCharacters)
   const comicPagesRef = useRef(comicPages)
   const comicPanelsRef = useRef(comicPanels)
+  const activeNovelIdRef = useRef(activeNovelId)
+  const activeMapByNovelRef = useRef(activeMapByNovel)
+  const currentYearRef = useRef(currentYear)
 
   const [selectedCharacterId, setSelectedCharacterId] = useState(null)
   const [selectedLocationId, setSelectedLocationId] = useState(null)
   const [selectedLoreEntryId, setSelectedLoreEntryId] = useState(null)
   const [selectedIdeaEntryId, setSelectedIdeaEntryId] = useState(null)
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState(null)
+  const [selectedSceneId, setSelectedSceneId] = useState(null)
+  // Which scene is open in writing mode — mirrored into the URL so a refresh
+  // returns to the same scene instead of the top of the manuscript.
+  const [writingSceneId, setWritingSceneId] = useState(null)
 
   // Track whether we're mid-import to suppress Firestore saves during bulk load
   const importing = useRef(false)
@@ -322,6 +474,16 @@ export function useStore(userId = null, options = {}) {
   // 'syncing' → 'synced' transition instead of flickering per-entity.
   const syncPendingRef = useRef(0)
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', lastSyncedAt: null, lastError: null })
+
+  // Surfaces a UI warning when browser storage (localStorage) can't keep up —
+  // e.g. quota exceeded from many populated projects. save() flags failing
+  // keys as it goes; poll rather than thread a setter through every call site.
+  const [localStorageWarning, setLocalStorageWarning] = useState(() => hasLocalWriteFailed())
+  useEffect(() => {
+    const check = () => setLocalStorageWarning(hasLocalWriteFailed())
+    const interval = setInterval(check, 4000)
+    return () => clearInterval(interval)
+  }, [])
   const trackSync = useCallback((promise) => {
     syncPendingRef.current += 1
     setSyncStatus(s => ({ ...s, state: 'syncing' }))
@@ -407,6 +569,7 @@ export function useStore(userId = null, options = {}) {
     setSyncStatus({ state: 'idle', lastSyncedAt: null, lastError: null })
     clearProjectLocalStorage()
     clearProjectRefs({
+      novelsRef,
       charactersRef,
       factionsRef,
       locationsRef,
@@ -417,10 +580,15 @@ export function useStore(userId = null, options = {}) {
       scenesRef,
       loreEntriesRef,
       ideaEntriesRef,
+      mapsRef,
+      whiteboardsRef,
       storyScheduleRef,
       rpgCharactersRef,
       comicPagesRef,
       comicPanelsRef,
+      activeNovelIdRef,
+      activeMapByNovelRef,
+      currentYearRef,
     })
     setNovels([])
     setCharacters([])
@@ -462,24 +630,58 @@ export function useStore(userId = null, options = {}) {
     return next
   }, [userId])
 
+  const saveSettingsNow = useCallback((patch = {}) => {
+    const settings = {
+      activeNovelId: activeNovelIdRef.current,
+      currentYear: currentYearRef.current,
+      activeMapByNovel: activeMapByNovelRef.current,
+      ...patch,
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'activeNovelId')) {
+      activeNovelIdRef.current = patch.activeNovelId ?? null
+      markLocalWrite(userId)
+      save('nf_activeNovel', activeNovelIdRef.current)
+      saveLastActiveProject(userId, activeNovelIdRef.current)
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'currentYear')) {
+      currentYearRef.current = patch.currentYear ?? 0
+      markLocalWrite(userId)
+      save('nf_currentYear', currentYearRef.current)
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'activeMapByNovel')) {
+      activeMapByNovelRef.current = patch.activeMapByNovel ?? {}
+      markLocalWrite(userId)
+      save('nf_activeMapByNovel', activeMapByNovelRef.current)
+    }
+    if (canSyncCloud) trackSync(saveUserSettings(userId, settings)).catch(() => {})
+    return settings
+  }, [userId, canSyncCloud, trackSync])
+
+  const selectActiveNovel = useCallback((id) => {
+    const nextId = id ?? null
+    saveSettingsNow({ activeNovelId: nextId })
+    setActiveNovelId(nextId)
+    setWritingSceneId(null)
+  }, [saveSettingsNow])
+
   // localStorage persistence
-  useEffect(() => save('nf_novels', novels), [novels])
-  useEffect(() => save('nf_activeNovel', activeNovelId), [activeNovelId])
+  useEffect(() => { novelsRef.current = novels; save('nf_novels', novels) }, [novels])
+  useEffect(() => { activeNovelIdRef.current = activeNovelId; save('nf_activeNovel', activeNovelId) }, [activeNovelId])
   useEffect(() => { charactersRef.current = characters; save('nf_characters', characters) }, [characters])
   useEffect(() => { factionsRef.current = factions; save('nf_factions', factions) }, [factions])
   useEffect(() => { locationsRef.current = locations; save('nf_locations', locations) }, [locations])
   useEffect(() => { timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
   useEffect(() => { worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
   useEffect(() => { save('nf_eras', eras) }, [eras])
-  useEffect(() => save('nf_currentYear', currentYear), [currentYear])
+  useEffect(() => { currentYearRef.current = currentYear; save('nf_currentYear', currentYear) }, [currentYear])
   useEffect(() => { actsRef.current = acts; save('nf_acts', acts) }, [acts])
   useEffect(() => { chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
   useEffect(() => { scenesRef.current = scenes; save('nf_scenes', scenes) }, [scenes])
   useEffect(() => { loreEntriesRef.current = loreEntries; save('nf_loreEntries', loreEntries) }, [loreEntries])
   useEffect(() => { ideaEntriesRef.current = ideaEntries; save('nf_ideaEntries', ideaEntries) }, [ideaEntries])
-  useEffect(() => save('nf_maps', maps), [maps])
-  useEffect(() => save('nf_activeMapByNovel', activeMapByNovel), [activeMapByNovel])
-  useEffect(() => save('nf_whiteboards', whiteboards), [whiteboards])
+  useEffect(() => { mapsRef.current = maps; save('nf_maps', maps) }, [maps])
+  useEffect(() => { activeMapByNovelRef.current = activeMapByNovel; save('nf_activeMapByNovel', activeMapByNovel) }, [activeMapByNovel])
+  useEffect(() => { whiteboardsRef.current = whiteboards; save('nf_whiteboards', whiteboards) }, [whiteboards])
   useEffect(() => save('nf_series', series), [series])
   useEffect(() => { storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
   useEffect(() => { rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
@@ -503,6 +705,28 @@ export function useStore(userId = null, options = {}) {
     () => createKeyedDebounce((sceneId, uid, scene) => trackSync(saveSceneDoc(uid, scene)).catch(() => {}), 1000),
     [trackSync]
   )
+
+  // Immediately sends any debounced cloud writes that are still waiting out
+  // their delay. Must be awaited before sign-out: once the Supabase session
+  // is revoked, these same requests would go out unauthenticated and be
+  // silently rejected by RLS, permanently losing whatever was edited in the
+  // last couple of seconds (e.g. a Party character created right before
+  // logging out).
+  const flushPendingSync = useCallback(() => {
+    const results = [
+      ...debouncedSaveItems.flushAll(),
+      ...debouncedSaveScene.flushAll(),
+    ]
+    const settingsFlush = debouncedSaveSettings.flush()
+    if (settingsFlush) results.push(settingsFlush)
+    return Promise.allSettled(results)
+  }, [debouncedSaveItems, debouncedSaveScene, debouncedSaveSettings])
+
+  useEffect(() => {
+    if (!canSyncCloud) return undefined
+    registerSyncFlush(flushPendingSync)
+    return () => unregisterSyncFlush(flushPendingSync)
+  }, [canSyncCloud, flushPendingSync])
 
   // Per-entity cloud sync effects — each only fires when its own collection changes
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -535,8 +759,16 @@ export function useStore(userId = null, options = {}) {
     const localOwner = loadLocalOwner()
     const remoteSavedAt = Number(data?._savedAt || 0) || 0
     const ownerMatchesCurrentUser = Boolean(userId && localOwner === userId)
-    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt
+    // nf_localWriteAt advances on every commitLocal call regardless of which
+    // key it was for, so a healthy small write (e.g. acts) can make a stale,
+    // quota-failed nf_scenes snapshot look "fresher than the cloud." If any
+    // key is known to have failed to persist, the on-disk snapshot cannot be
+    // trusted as authoritative — always prefer the cloud copy instead.
+    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && !hasLocalWriteFailed()
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
+    const resolvedActiveNovelId = shouldPreferLocal
+      ? sourceData.activeNovelId ?? null
+      : resolveActiveNovelId(sourceData, userId, remoteSavedAt)
 
     if (shouldPreferLocal && canSyncCloud) {
       const snapshot = getLocalSnapshot()
@@ -605,15 +837,40 @@ export function useStore(userId = null, options = {}) {
     setWhiteboards(sourceData.whiteboards ?? [])
     setSeries(sourceData.series ?? [])
     setStorySchedule(sourceData.storySchedule ?? [])
+    // Normalizing here (not just at the read boundary — see rpgCharacters in
+    // the API below) means a healed character (e.g. backfilled hp) is part
+    // of state from the start, not just papered over on render. The regular
+    // debounced cloud-sync effect for 'rpg_characters' won't push it, though
+    // — it's suppressed by `importing.current` for the whole import (see the
+    // trailing setTimeout below), and nothing changes rpgCharacters again
+    // afterward to re-trigger it. So any records that actually needed
+    // healing are pushed explicitly once import settles, to fix the bad row
+    // in Supabase itself rather than re-healing it in memory on every login.
+    const rawRpgCharacters = sourceData.rpgCharacters ?? []
+    const healedRpgCharacters = rawRpgCharacters.map(normalizeRpgCharacter)
+    const healedRpgCharacterChanges = healedRpgCharacters.filter((healed, i) =>
+      JSON.stringify(healed) !== JSON.stringify(rawRpgCharacters[i])
+    )
+    setRpgCharacters(healedRpgCharacters)
     setCurrentYear(sourceData.currentYear ?? 0)
-    setActiveNovelId(sourceData.activeNovelId ?? null)
+    setActiveNovelId(resolvedActiveNovelId)
     setComicPages(sourceData.comicPages ?? [])
     setComicPanels(sourceData.comicPanels ?? [])
     setEras(sourceData.eras ?? [])
+    if (!shouldPreferLocal && canSyncCloud && resolvedActiveNovelId !== (data.activeNovelId ?? null)) {
+      trackSync(saveUserSettings(userId, {
+        activeNovelId: resolvedActiveNovelId,
+        currentYear: sourceData.currentYear ?? 0,
+        activeMapByNovel: sourceData.activeMapByNovel ?? {},
+      })).catch(() => {})
+    }
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
       importing.current = false
       remoteReady.current = true
+      if (canSyncCloud && healedRpgCharacterChanges.length) {
+        trackSync(upsertItems('rpg_characters', userId, healedRpgCharacterChanges)).catch(() => {})
+      }
     }, 500)
   }, [userId, canSyncCloud, trackSync])
 
@@ -657,6 +914,7 @@ export function useStore(userId = null, options = {}) {
     remoteReady.current = false
     clearProjectLocalStorage()
     clearProjectRefs({
+      novelsRef,
       charactersRef,
       factionsRef,
       locationsRef,
@@ -667,10 +925,15 @@ export function useStore(userId = null, options = {}) {
       scenesRef,
       loreEntriesRef,
       ideaEntriesRef,
+      mapsRef,
+      whiteboardsRef,
       storyScheduleRef,
       rpgCharactersRef,
       comicPagesRef,
       comicPanelsRef,
+      activeNovelIdRef,
+      activeMapByNovelRef,
+      currentYearRef,
     })
     setNovels([]); setCharacters([]); setFactions([]); setLocations([])
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
@@ -905,7 +1168,12 @@ export function useStore(userId = null, options = {}) {
   // Manuscripts (acts/chapters/scenes) are NEVER synced — always project-only
   const novelActs = acts.filter(a => a.novelId === activeNovelId).sort((a, b) => a.order - b.order)
   const novelChapters = chapters.filter(c => c.novelId === activeNovelId).sort((a, b) => a.order - b.order)
-  const novelScenes = scenes.filter(s => s.novelId === activeNovelId).sort((a, b) => a.order - b.order)
+  // Conflict copies (see mergeSceneUpdateWithPersistedCopy) are excluded from the
+  // normal scene list — they'd otherwise appear as phantom duplicate scenes in the
+  // sidebar, word counts, and exports. They're surfaced separately via sceneConflicts
+  // so the app can warn about them and offer a restore/discard path instead.
+  const novelScenes = scenes.filter(s => s.novelId === activeNovelId && !s.conflictOf).sort((a, b) => a.order - b.order)
+  const novelSceneConflicts = scenes.filter(s => s.novelId === activeNovelId && s.conflictOf).sort((a, b) => (b.conflictCreatedAt || 0) - (a.conflictCreatedAt || 0))
   const novelTimeline = seriesScope(timeline, 'timeline')
   const novelWorldHistory = seriesScope(worldHistory, 'worldhistory')
   const novelFactions = seriesScope(factions, 'factions')
@@ -1127,14 +1395,18 @@ export function useStore(userId = null, options = {}) {
   }, [commitLocal])
 
   const updateSceneContent = useCallback((sceneId, content) => {
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
-      return prev.map(s => {
-        if (s.id !== sceneId) return s
+    const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
+      return mergeSceneUpdateWithPersistedCopy(prev, sceneId, s => {
         const updated = withSceneContentHistory(s, content)
         if (canSyncCloud) debouncedSaveScene(sceneId, userId, updated)
         return updated
       })
     })
+    if (canSyncCloud) {
+      nextScenes
+        .filter(scene => scene.conflictOf === sceneId)
+        .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+    }
   }, [userId, canSyncCloud, debouncedSaveScene, commitLocal])
 
   const deleteAct = (id) => {
@@ -1188,9 +1460,8 @@ export function useStore(userId = null, options = {}) {
   const updateAct = (id, data) => commitLocal(actsRef, setActs, 'nf_acts', prev => prev.map(a => a.id === id ? { ...a, ...data } : a))
   const updateChapter = (id, data) => commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
   const updateScene = (id, data) => {
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
-      return prev.map(s => {
-        if (s.id !== id) return s
+    const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
+      return mergeSceneUpdateWithPersistedCopy(prev, id, s => {
         const hasContent = Object.prototype.hasOwnProperty.call(data, 'content')
         const updated = hasContent && data.content !== s.content
           ? withSceneContentHistory({ ...s, ...data }, data.content)
@@ -1199,6 +1470,28 @@ export function useStore(userId = null, options = {}) {
         return updated
       })
     })
+    if (canSyncCloud && Object.prototype.hasOwnProperty.call(data, 'content')) {
+      nextScenes
+        .filter(scene => scene.conflictOf === id)
+        .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+    }
+  }
+
+  // Replaces the original scene's content with a conflict copy's content (see
+  // mergeSceneUpdateWithPersistedCopy), then removes the copy — the "restore" side
+  // of the conflict-copy safety net.
+  const restoreSceneConflict = (conflictId) => {
+    const conflict = scenesRef.current.find(s => s.id === conflictId)
+    if (!conflict || !conflict.conflictOf) return
+    updateScene(conflict.conflictOf, { content: conflict.content, title: conflict.title.replace(/ \(conflict copy\)$/, '') })
+    discardSceneConflict(conflictId)
+  }
+
+  // Discards a conflict copy without touching the original scene.
+  const discardSceneConflict = (conflictId) => {
+    debouncedSaveScene.cancel(conflictId)
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== conflictId))
+    if (canSyncCloud) deleteSceneDoc(userId, conflictId).catch(console.error)
   }
 
   const saveCharacter = (data, id) => {
@@ -1309,7 +1602,7 @@ export function useStore(userId = null, options = {}) {
     const characterId = id || uid()
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => {
       if (id) return prev.map(c => c.id === id ? { ...c, ...data, updatedAt: new Date().toISOString() } : c)
-      return [...prev, { ...data, id: characterId, novelId: activeNovelId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]
+      return [...prev, normalizeRpgCharacter({ ...data, id: characterId, novelId: activeNovelId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })]
     })
     return characterId
   }
@@ -1791,9 +2084,18 @@ export function useStore(userId = null, options = {}) {
     if (canSyncCloud) {
       starter.scenes.forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
-    setNovels(prev => [...prev, novel]); setActiveNovelId(novel.id); return novel
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, novel])
+    selectActiveNovel(novel.id)
+    return novel
   }
-  const updateNovel = (id, data) => setNovels(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))
+  // Per-project read-only also applies when editing/deleting a project by id directly
+  // (e.g. from a library card) even while a different, editable project is active.
+  const isFreeLockedProject = (id) => freeProjectId !== null && id !== freeProjectId
+
+  const updateNovel = (id, data) => {
+    if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return }
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(n => n.id === id ? { ...n, ...data } : n))
+  }
 
   const getProjectExportData = (id) => {
     const project = novels.find(n => n.id === id) ?? null
@@ -1819,7 +2121,7 @@ export function useStore(userId = null, options = {}) {
       maps: maps.filter(m => m.novelId === id),
       whiteboards: whiteboards.filter(w => w.novelId === id),
       storySchedule: storySchedule.filter(e => e.novelId === id),
-      rpgCharacters: rpgCharacters.filter(c => c.novelId === id),
+      rpgCharacters: rpgCharacters.filter(c => c.novelId === id).map(normalizeRpgCharacter),
       comicPages: comicPages.filter(p => p.novelId === id),
       comicPanels: comicPanels.filter(p => p.novelId === id),
     }
@@ -1870,42 +2172,45 @@ export function useStore(userId = null, options = {}) {
     return orderedIds.map(id => map.get(id)).filter(Boolean)
   })
   const deleteNovel = (id) => {
-    const updatedNovels = novels.filter(n => n.id !== id)
-    setNovels(updatedNovels)
-    setCharacters(prev => prev.filter(c => c.novelId !== id))
-    setFactions(prev => prev.filter(f => f.novelId !== id))
-    setLocations(prev => prev.filter(l => l.novelId !== id))
-    setTimeline(prev => prev.filter(e => e.novelId !== id))
-    setWorldHistory(prev => prev.filter(h => h.novelId !== id))
-    setActs(prev => prev.filter(a => a.novelId !== id))
-    setChapters(prev => prev.filter(c => c.novelId !== id))
-    setScenes(prev => {
+    if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return }
+    const updatedNovels = novelsRef.current.filter(n => n.id !== id)
+    commitLocal(novelsRef, setNovels, 'nf_novels', updatedNovels)
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.filter(c => c.novelId !== id))
+    commitLocal(factionsRef, setFactions, 'nf_factions', prev => prev.filter(f => f.novelId !== id))
+    commitLocal(locationsRef, setLocations, 'nf_locations', prev => prev.filter(l => l.novelId !== id))
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.filter(e => e.novelId !== id))
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.filter(h => h.novelId !== id))
+    commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => a.novelId !== id))
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.novelId !== id))
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       const toDelete = prev.filter(s => s.novelId === id)
       if (canSyncCloud) toDelete.forEach(s => deleteSceneDoc(userId, s.id).catch(console.error))
       return prev.filter(s => s.novelId !== id)
     })
-    setLoreEntries(prev => prev.filter(e => e.novelId !== id))
-    setIdeaEntries(prev => prev.filter(e => e.novelId !== id))
-    setMaps(prev => prev.filter(m => m.novelId !== id))
-    setWhiteboards(prev => prev.filter(w => w.novelId !== id))
-    setStorySchedule(prev => prev.filter(e => e.novelId !== id))
-    setRpgCharacters(prev => prev.filter(c => c.novelId !== id))
-    setComicPages(prev => prev.filter(p => p.novelId !== id))
-    setComicPanels(prev => prev.filter(p => p.novelId !== id))
-    setActiveMapByNovel(prev => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
+    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.filter(e => e.novelId !== id))
+    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.filter(e => e.novelId !== id))
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.filter(m => m.novelId !== id))
+    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => prev.filter(w => w.novelId !== id))
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.novelId !== id))
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.novelId !== id))
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.novelId !== id))
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.novelId !== id))
+    const nextActiveMapByNovel = { ...activeMapByNovelRef.current }
+    if (Object.prototype.hasOwnProperty.call(nextActiveMapByNovel, id)) {
+      delete nextActiveMapByNovel[id]
+      setActiveMapByNovel(nextActiveMapByNovel)
+      saveSettingsNow({ activeMapByNovel: nextActiveMapByNovel })
+    }
     if (canSyncCloud) {
       deleteItemsByNovel(userId, id).catch(console.error)
       deleteItem('novels', userId, id).catch(console.error)
     }
-    if (activeNovelId === id) setActiveNovelId(null)
+    if (activeNovelIdRef.current === id) selectActiveNovel(null)
     setSelectedCharacterId(null)
     setSelectedLocationId(null)
     setSelectedLoreEntryId(null)
     setSelectedIdeaEntryId(null)
+    setSelectedSceneId(null)
   }
 
   const importProjectFromData = (data) => {
@@ -1918,24 +2223,24 @@ export function useStore(userId = null, options = {}) {
     const newId = uid()
     const remap = (item) => item?.novelId === oldId ? { ...item, novelId: newId } : item
     const project = { ...data.project, id: newId, importedAt: new Date().toISOString(), focus: false }
-    setNovels(prev => [...prev, project])
-    setCharacters(prev => [...prev, ...(data.characters ?? []).map(remap)])
-    setFactions(prev => [...prev, ...(data.factions ?? []).map(remap)])
-    setLocations(prev => [...prev, ...(data.locations ?? []).map(remap)])
-    setTimeline(prev => [...prev, ...(data.timeline ?? []).map(remap)])
-    setWorldHistory(prev => [...prev, ...(data.worldHistory ?? []).map(remap)])
-    setActs(prev => [...prev, ...(data.acts ?? []).map(remap)])
-    setChapters(prev => [...prev, ...(data.chapters ?? []).map(remap)])
-    setScenes(prev => [...prev, ...(data.scenes ?? []).map(remap)])
-    setLoreEntries(prev => [...prev, ...(data.loreEntries ?? []).map(remap)])
-    setIdeaEntries(prev => [...prev, ...(data.ideaEntries ?? []).map(remap)])
-    setMaps(prev => [...prev, ...(data.maps ?? []).map(remap)])
-    setWhiteboards(prev => [...prev, ...(data.whiteboards ?? []).map(remap)])
-    setStorySchedule(prev => [...prev, ...(data.storySchedule ?? []).map(remap)])
-    setRpgCharacters(prev => [...prev, ...(data.rpgCharacters ?? []).map(remap)])
-    setComicPages(prev => [...prev, ...(data.comicPages ?? []).map(remap)])
-    setComicPanels(prev => [...prev, ...(data.comicPanels ?? []).map(remap)])
-    setActiveNovelId(newId)
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, project])
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => [...prev, ...(data.characters ?? []).map(remap)])
+    commitLocal(factionsRef, setFactions, 'nf_factions', prev => [...prev, ...(data.factions ?? []).map(remap)])
+    commitLocal(locationsRef, setLocations, 'nf_locations', prev => [...prev, ...(data.locations ?? []).map(remap)])
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, ...(data.timeline ?? []).map(remap)])
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, ...(data.worldHistory ?? []).map(remap)])
+    commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...(data.acts ?? []).map(remap)])
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...(data.chapters ?? []).map(remap)])
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...(data.scenes ?? []).map(remap)])
+    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, ...(data.loreEntries ?? []).map(remap)])
+    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, ...(data.ideaEntries ?? []).map(remap)])
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => [...prev, ...(data.maps ?? []).map(remap)])
+    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => [...prev, ...(data.whiteboards ?? []).map(remap)])
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, ...(data.storySchedule ?? []).map(remap)])
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => [...prev, ...(data.rpgCharacters ?? []).map(remap).map(normalizeRpgCharacter)])
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, ...(data.comicPages ?? []).map(remap)])
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, ...(data.comicPanels ?? []).map(remap)])
+    selectActiveNovel(newId)
     return project
   }
 
@@ -1974,7 +2279,7 @@ export function useStore(userId = null, options = {}) {
   const api = {
     readOnly,
     freeProjectId,
-    novels, activeNovelId, activeNovel, setActiveNovelId, addNovel, updateNovel, deleteNovel, importProjectFromData, getProjectExportData, getProjectContextData,
+    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, addNovel, updateNovel, deleteNovel, importProjectFromData, getProjectExportData, getProjectContextData,
     series, addSeries, deleteSeries, updateSeries, updateSeriesContinuity, reorderSeries, reorderNovels,
     continuityRecords: {
       characters,
@@ -2014,13 +2319,16 @@ export function useStore(userId = null, options = {}) {
     chapters: novelChapters, addChapter, deleteChapter, updateChapter, reorderChapter, moveChapter,
     scenes: novelScenes, addScene, deleteScene, updateScene, reorderScene, moveScene,
     updateSceneContent,
+    sceneConflicts: novelSceneConflicts, restoreSceneConflict, discardSceneConflict,
     selectedCharacterId, setSelectedCharacterId,
     selectedLocationId, setSelectedLocationId,
     selectedLoreEntryId, setSelectedLoreEntryId,
     selectedIdeaEntryId, setSelectedIdeaEntryId,
     selectedTimelineEventId, setSelectedTimelineEventId,
+    selectedSceneId, setSelectedSceneId,
+    writingSceneId, setWritingSceneId,
     storySchedule: novelStorySchedule, addScheduleEvent, updateScheduleEvent, deleteScheduleEvent,
-    rpgCharacters: rpgCharacters.filter(c => c.novelId === activeNovelId),
+    rpgCharacters: rpgCharacters.filter(c => c.novelId === activeNovelId).map(normalizeRpgCharacter),
     saveRpgCharacter, deleteRpgCharacter,
     comicPages: novelComicPages,
     comicPanels: novelComicPanels,
@@ -2028,7 +2336,8 @@ export function useStore(userId = null, options = {}) {
     addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
     importData, replaceData, clearData, finishRemoteLoad,
     getLocalSnapshot: getCurrentSnapshot,
-    syncStatus, trackSync,
+    syncStatus, trackSync, flushPendingSync,
+    localStorageWarning,
   }
 
   if (!readOnly) return api
@@ -2044,6 +2353,7 @@ export function useStore(userId = null, options = {}) {
     'addAct', 'deleteAct', 'updateAct', 'reorderAct', 'moveAct',
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',
+    'restoreSceneConflict', 'discardSceneConflict',
     'addScheduleEvent', 'updateScheduleEvent', 'deleteScheduleEvent', 'replaceData',
     'saveRpgCharacter', 'deleteRpgCharacter',
     'addComicPage', 'updateComicPage', 'deleteComicPage', 'reorderComicPage', 'duplicateComicPage',
