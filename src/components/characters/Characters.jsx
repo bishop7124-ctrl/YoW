@@ -5,6 +5,7 @@ import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } 
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { allRefsFor } from '../../utils/worldLinks'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
+import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
 
@@ -377,13 +378,19 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   )
   const [keywordInput, setKeywordInput] = useState('')
   const [showPhotoEditor, setShowPhotoEditor] = useState(false)
+  const [imageError, setImageError] = useState('')
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0]
+    e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => setForm(prev => ({ ...prev, image: ev.target.result, imagePosition: '50% 50%', imageZoom: 1 }))
-    reader.readAsDataURL(file)
+    try {
+      setImageError('')
+      const image = await optimizeImageToDataUrl(file)
+      setForm(prev => ({ ...prev, image, imagePosition: '50% 50%', imageZoom: 1 }))
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not use that image.')
+    }
   }
 
   const handleChange = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
@@ -589,6 +596,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                   </>
                 )}
               </div>
+              {imageError && <p className="text-xs text-red-400 mb-2">{imageError}</p>}
               {form.image && (
                 <div className="flex gap-4 items-center">
                   <CharacterPortrait

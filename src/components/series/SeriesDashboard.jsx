@@ -3,6 +3,7 @@ import YOWLogo from '../brand/YOWLogo'
 import UserMenu from '../auth/UserMenu'
 import { getProjectType } from '../../constants/projectTypes'
 import { hasJourneyContent, normalizeJourney } from '../../utils/characterJourney'
+import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1305,6 +1306,7 @@ export default function SeriesDashboard({
   const series = store.series?.find(s => s.id === seriesId)
   const [tab, setTab] = useState('overview')
   const [addProjectOpen, setAddProjectOpen] = useState(false)
+  const [coverError, setCoverError] = useState('')
   const coverInputRef = useRef(null)
 
   if (!series) {
@@ -1342,9 +1344,13 @@ export default function SeriesDashboard({
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
-    const reader = new FileReader()
-    reader.onload = (ev) => store.updateSeries(seriesId, { coverPhoto: ev.target.result })
-    reader.readAsDataURL(file)
+    try {
+      setCoverError('')
+      const coverPhoto = await optimizeImageToDataUrl(file)
+      store.updateSeries(seriesId, { coverPhoto })
+    } catch (error) {
+      setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
+    }
   }
 
   return (
@@ -1391,6 +1397,7 @@ export default function SeriesDashboard({
             <div className="series-hero-cover-edit-hint">Change cover</div>
             <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverSelect} />
           </div>
+          {coverError && <p style={{ fontSize: 11, color: '#f87171', margin: '6px 0 0' }}>{coverError}</p>}
 
           <div className="series-hero-meta">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
