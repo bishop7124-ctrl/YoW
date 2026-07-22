@@ -17,6 +17,6 @@
     { "source": "/family-tree-builder/", "destination": "/family-tree-builder/index.html" },
     { "source": "/map-builder-for-writers/", "destination": "/map-builder-for-writers/index.html" },
     { "source": "/lore-management/", "destination": "/lore-management/index.html" },
-    { "source": "/(.*)",       "destination": "/index.html"  }
+    { "source": "/((?!assets/).*)", "destination": "/index.html"  }
   ]
 }
