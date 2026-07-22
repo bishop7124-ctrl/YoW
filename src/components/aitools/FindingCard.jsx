@@ -22,10 +22,24 @@ const STATUS_COLORS = {
   intentional: '#a78bfa',
 }
 
-// Renders `text` as a clickable "open" chip if it resolves against the nav index, plain text otherwise.
+// Renders `text` as a clickable "open" chip if it resolves against the nav
+// index. If it doesn't resolve (the AI's free-text reference didn't match
+// any actual character/location/lore/scene by name), that's shown with a
+// muted dashed underline + tooltip rather than looking identical to a
+// successfully-linked reference — so users know navigation isn't available
+// here specifically, not that the app forgot to try.
 function RefLink({ text, resolveRef, onNavigate }) {
   const match = resolveRef?.(text)
-  if (!match) return <>{text}</>
+  if (!match) {
+    return (
+      <span
+        title="Couldn't match this to a specific item in your project — the reference may be paraphrased or use a different name."
+        style={{ borderBottom: '1px dashed var(--text-muted)', cursor: 'help' }}
+      >
+        {text}
+      </span>
+    )
+  }
   return (
     <button
       onClick={() => onNavigate(match)}

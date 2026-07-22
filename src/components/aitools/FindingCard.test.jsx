@@ -44,4 +44,14 @@ describe('FindingCard', () => {
     expect(screen.queryByRole('button', { name: /Someone Not In The Story/ })).toBeNull()
     expect(screen.getByText('Someone Not In The Story')).toBeTruthy()
   })
+
+  it('shows a "not linked" tooltip on an unresolved reference when a resolver was attempted', () => {
+    const resolveRef = vi.fn(() => null)
+    const onNavigate = vi.fn()
+    render(<FindingCard finding={baseFinding} resolveRef={resolveRef} onNavigate={onNavigate} />)
+
+    const unresolved = screen.getByText(baseFinding.location)
+    expect(unresolved.tagName).toBe('SPAN')
+    expect(unresolved.title).toMatch(/couldn't match this to a specific item/i)
+  })
 })

@@ -56,6 +56,24 @@ export const PROVIDERS = {
   },
 }
 
+// ── Error messages ────────────────────────────────────────────────────────────
+// All providers return an HTTP status plus their own error body; without this,
+// a bad key, a rate limit, and a provider outage all rendered as the same
+// generic red box with whatever raw string the provider happened to send.
+
+export function friendlyErrorMessage(status, rawMessage) {
+  if (status === 401 || status === 403) {
+    return `Your API key looks invalid or doesn't have permission for this model. Check it in AI Settings. (${rawMessage})`
+  }
+  if (status === 429) {
+    return `The AI provider is rate-limiting requests — wait a moment and try again. (${rawMessage})`
+  }
+  if (status >= 500) {
+    return `The AI provider is having issues right now — this isn't something you can fix, try again shortly. (${rawMessage})`
+  }
+  return rawMessage
+}
+
 // ── Shared SSE reader ─────────────────────────────────────────────────────────
 
 async function readSSE(body, onEvent) {
@@ -98,7 +116,7 @@ async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk,
     if (!res.ok) {
       let msg = `HTTP ${res.status}`
       try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(msg)
+      return onError(friendlyErrorMessage(res.status, msg))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
@@ -107,7 +125,7 @@ async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk,
       if (parsed.type === 'message_stop') { onceDone(); return true }
     })
     onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(e.message || 'Network error') }
+  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
 }
 
 async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens = 4096, signal }) {
@@ -131,7 +149,7 @@ async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, on
     if (!res.ok) {
       let msg = `HTTP ${res.status}`
       try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(msg)
+      return onError(friendlyErrorMessage(res.status, msg))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
@@ -141,7 +159,7 @@ async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, on
       if (parsed.candidates?.[0]?.finishReason === 'STOP') { onceDone(); return true }
     })
     onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(e.message || 'Network error') }
+  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
 }
 
 async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
@@ -157,7 +175,7 @@ async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt
     if (!res.ok) {
       let msg = `HTTP ${res.status}`
       try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(msg)
+      return onError(friendlyErrorMessage(res.status, msg))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
@@ -167,7 +185,7 @@ async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt
       if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
     })
     onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(e.message || 'Network error') }
+  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

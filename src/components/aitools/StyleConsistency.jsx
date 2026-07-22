@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { streamMessage } from '../../utils/aiApi'
-import { buildStyleSystemPrompt, buildStyleUserPrompt } from '../../utils/aiToolPrompts'
+import { buildStyleSystemPrompt, buildStyleUserPrompt, getManuscriptCoverageForNovel } from '../../utils/aiToolPrompts'
 import { loadFindings, saveAllFindings, updateFindingStatus, rowToFinding } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
+import { ManuscriptCoverageNotice } from '../ai/ManuscriptCoverageNotice'
 import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
+import { AiRunProgress } from './AiRunProgress'
 import { buildFindingNavIndex, resolveFindingRef, navigateToFindingRef } from '../../utils/aiFindingNav'
 
 function parseResult(raw) {
@@ -46,7 +48,10 @@ function ScoreRing({ score }) {
 export default function StyleConsistency({ store, userId }) {
   const novel   = store.activeNovel
   const novelId = novel?.id
+  const isComic = novel?.type === 'comic'
   const scenes  = (store.scenes || []).filter(s => s.novelId === novelId)
+  const comicPages = (store.comicPages || []).filter(p => p.novelId === novelId)
+  const hasContent = isComic ? comicPages.length > 0 : scenes.length > 0
 
   const [running,     setRunning]    = useState(false)
   const [loading,     setLoading]    = useState(true)
@@ -58,7 +63,12 @@ export default function StyleConsistency({ store, userId }) {
   const [filter,      setFilter]     = useState('all')
   const [selectedIds, setSelectedIds] = useState([])
   const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
-  const { progressChars, begin, cancel } = useAiRunControls()
+  const { progressChars, elapsedMs, begin, cancel } = useAiRunControls()
+  const coverage = useMemo(() => {
+    if (isComic) return getManuscriptCoverageForNovel(store, novelId, novel)
+    const selectedScenes = selectedIds.length ? scenes.filter(s => selectedIds.includes(s.id)) : scenes
+    return getManuscriptCoverageForNovel({ ...store, scenes: selectedScenes }, novelId, novel)
+  }, [store, novelId, novel, isComic, scenes, selectedIds])
   const navIndex = useMemo(() => buildFindingNavIndex(store, novelId), [store, novelId])
   const resolveRef = useCallback(text => resolveFindingRef(navIndex, text), [navIndex])
   const onNavigate = useCallback(match => navigateToFindingRef(store, match), [store])
@@ -162,11 +172,11 @@ export default function StyleConsistency({ store, userId }) {
           </div>
           <button
             onClick={run}
-            disabled={running || loading || !novelId || !scenes.length}
+            disabled={running || loading || !novelId || !hasContent}
             style={{
               flexShrink: 0, padding: '7px 16px', borderRadius: 8, fontWeight: 700, fontSize: 13,
               background: (running || loading) ? 'color-mix(in srgb, var(--accent) 50%, transparent)' : 'var(--accent)',
-              color: 'var(--bg-main)', border: 'none', cursor: (running || loading || !scenes.length) ? 'default' : 'pointer',
+              color: 'var(--bg-main)', border: 'none', cursor: (running || loading || !hasContent) ? 'default' : 'pointer',
             }}
           >
             {running ? 'Analysing…' : loading ? 'Loading…' : result ? 'Re-run' : 'Analyse Style'}
@@ -201,6 +211,7 @@ export default function StyleConsistency({ store, userId }) {
             </p>
           </div>
         )}
+        <ManuscriptCoverageNotice coverage={coverage} style={{ marginTop: 8 }} />
       </div>
 
       {/* Score + filters */}
@@ -248,16 +259,7 @@ export default function StyleConsistency({ store, userId }) {
         {!aiConfigured && !running && <AiConfigRequiredNotice style={{ marginBottom: 16 }} />}
 
         {running && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 }}>
-            <div style={{ width: 28, height: 28, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              Analysing writing style…{progressChars > 0 ? ` (${progressChars.toLocaleString()} characters received)` : ''}
-            </p>
-            <button
-              onClick={handleCancel}
-              style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-            >Cancel</button>
-          </div>
+          <AiRunProgress label="Analysing writing style" elapsedMs={elapsedMs} progressChars={progressChars} onCancel={handleCancel} />
         )}
         {error && !running && (
           <div style={{ background: 'color-mix(in srgb, #ef4444 10%, transparent)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
@@ -278,19 +280,21 @@ export default function StyleConsistency({ store, userId }) {
           <div style={{ textAlign: 'center', padding: 40 }}>
             <p style={{ fontSize: 22, marginBottom: 8 }}>✓</p>
             <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)', marginBottom: 6 }}>Style looks consistent</p>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No significant drift detected across the selected scenes.</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No significant drift detected across the {isComic ? 'analysed pages' : 'selected scenes'}.</p>
           </div>
         )}
         {!running && !result && !error && (
           <div style={{ textAlign: 'center', padding: 40 }}>
             <p style={{ fontSize: 28, marginBottom: 10 }}>✍️</p>
             <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)', marginBottom: 6 }}>
-              {scenes.length ? 'Ready to analyse' : 'No scenes yet'}
+              {hasContent ? 'Ready to analyse' : isComic ? 'No pages yet' : 'No scenes yet'}
             </p>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 300, margin: '0 auto' }}>
-              {scenes.length
-                ? 'Run the analysis to check for voice drift, tonal mismatch, and style inconsistency across your scenes.'
-                : 'Add scenes to your manuscript first, then run style analysis.'}
+              {hasContent
+                ? `Run the analysis to check for voice drift, tonal mismatch, and style inconsistency across your ${isComic ? 'pages' : 'scenes'}.`
+                : isComic
+                  ? 'Add pages to your comic first, then run style analysis.'
+                  : 'Add scenes to your manuscript first, then run style analysis.'}
             </p>
           </div>
         )}

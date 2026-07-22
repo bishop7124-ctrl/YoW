@@ -120,6 +120,79 @@ function summariseScenes(scenes, chapters, acts) {
   }).join('\n\n---\n\n')
 }
 
+function summarisePanel(panel, index) {
+  const parts = [`Panel ${index + 1}${panel.description ? `: ${truncate(panel.description, 300)}` : ''}`]
+  if (panel.artNotes) parts.push(`Art notes: ${truncate(panel.artNotes, 200)}`)
+  if (panel.dialogue?.length) parts.push(panel.dialogue.map(d => `${d.speaker || '?'}: "${d.text}"`).join(' / '))
+  if (panel.captions?.length) parts.push(panel.captions.map(c => `[${c.type || 'caption'}] ${c.text}`).join(' / '))
+  if (panel.sfx?.length) parts.push(`SFX: ${panel.sfx.map(s => s.text).join(', ')}`)
+  if (panel.continuityNotes) parts.push(`Continuity: ${truncate(panel.continuityNotes, 150)}`)
+  return parts.join('\n')
+}
+
+// Comic/Graphic Novel projects store their content as comicPages/comicPanels
+// rather than prose scenes — this mirrors summariseScenes for that model so
+// Plot Hole/Lore Conflict/Style tools can actually read comic content instead
+// of silently analysing an empty manuscript section.
+function summariseComicPages(comicPages, comicPanels, chapters, acts) {
+  const chapMap  = Object.fromEntries((chapters || []).map(c => [c.id, c]))
+  const actMap   = Object.fromEntries((acts || []).map(a => [a.id, a]))
+  const panelsByPage = {}
+  ;(comicPanels || []).forEach(p => {
+    if (!panelsByPage[p.pageId]) panelsByPage[p.pageId] = []
+    panelsByPage[p.pageId].push(p)
+  })
+  const visible = (comicPages || []).slice(0, MAX_SCENES_INLINE)
+  return visible.map(page => {
+    const issue = chapMap[page.issueId]
+    const volume = issue ? actMap[issue.actId] : null
+    const loc = `${volume ? `Volume: ${volume.title} / ` : ''}${issue ? `Issue: ${issue.title} / ` : ''}Page: ${page.title || 'Untitled'} (${page.pageType || 'standard'})`
+    const summaryLine = page.summary ? `Summary: ${truncate(page.summary, 300)}` : ''
+    const turnLine = page.pageTurn && page.pageTurn !== 'none' ? `Page turn: ${page.pageTurn}` : ''
+    const panels = (panelsByPage[page.id] || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    const panelText = panels.map((p, i) => summarisePanel(p, i)).join('\n')
+    return [loc, summaryLine, turnLine, panelText].filter(Boolean).join('\n')
+  }).join('\n\n---\n\n')
+}
+
+// Reports how much of a project's manuscript content an AI tool prompt
+// actually includes, since summariseScenes/summariseComicPages silently cap
+// unit count and per-unit length with no in-prompt signal — callers surface
+// this to the user instead. `units` is scenes for prose projects or comic
+// pages (each optionally carrying a flattened `content` string) for comics.
+const CONTENT_TRUNCATE_CHARS = 600
+
+export function getManuscriptCoverage(units) {
+  const all = units || []
+  const totalScenes = all.length
+  const includedScenes = Math.min(totalScenes, MAX_SCENES_INLINE)
+  const omittedScenes = totalScenes - includedScenes
+  const contentTruncated = all
+    .slice(0, includedScenes)
+    .some(s => (s.content || '').length > CONTENT_TRUNCATE_CHARS)
+  return { totalScenes, includedScenes, omittedScenes, contentTruncated }
+}
+
+// Comic pages don't carry a single `.content` field the way scenes do — this
+// flattens a page + its panels into one string purely so getManuscriptCoverage
+// can apply the same truncation heuristic used for prose scenes.
+export function flattenComicPageForCoverage(page, comicPanels) {
+  const panels = (comicPanels || []).filter(p => p.pageId === page.id)
+  const panelText = panels.map(p => summarisePanel(p, 0)).join(' ')
+  return { ...page, content: `${page.summary || ''} ${panelText}` }
+}
+
+// Convenience wrapper so AI tool components don't need to duplicate the
+// comic-vs-prose branch: reads the right collection off `store` for `novel`.
+export function getManuscriptCoverageForNovel(store, novelId, novel) {
+  if (novel?.type === 'comic') {
+    const comicPages  = (store.comicPages  || []).filter(p => p.novelId === novelId)
+    const comicPanels = (store.comicPanels || []).filter(p => comicPages.some(page => page.id === p.pageId))
+    return getManuscriptCoverage(comicPages.map(page => flattenComicPageForCoverage(page, comicPanels)))
+  }
+  return getManuscriptCoverage((store.scenes || []).filter(s => s.novelId === novelId))
+}
+
 // ── Plot Hole Detector ────────────────────────────────────────────────────────
 
 export function buildPlotHoleSystemPrompt(novel) {
@@ -152,12 +225,28 @@ Rules:
 Return an empty findings array if no significant issues are found. Maximum 12 findings.`
 }
 
+// Builds the manuscript-content section shared by Plot Hole/Lore Conflict/
+// Style prompts, reading comic pages/panels instead of prose scenes for
+// Comic/Graphic Novel projects (which have no scenes at all).
+function buildManuscriptContentSection(store, novelId, novel, { suffix = '' } = {}) {
+  const chapters = (store.chapters || []).filter(c => c.novelId === novelId)
+  const acts     = (store.acts     || []).filter(a => a.novelId === novelId)
+
+  if (novel?.type === 'comic') {
+    const comicPages  = (store.comicPages  || []).filter(p => p.novelId === novelId)
+    const comicPanels = (store.comicPanels || []).filter(p => comicPages.some(page => page.id === p.pageId))
+    if (!comicPages.length) return ''
+    return `## COMIC PAGES${suffix}\n${summariseComicPages(comicPages, comicPanels, chapters, acts)}`
+  }
+
+  const scenes = (store.scenes || []).filter(s => s.novelId === novelId)
+  if (!scenes.length) return ''
+  return `## MANUSCRIPT SCENES${suffix}\n${summariseScenes(scenes, chapters, acts)}`
+}
+
 export function buildPlotHoleUserPrompt(store, novelId) {
   const novel      = store.novels?.find(n => n.id === novelId)
   const characters = (store.characters || []).filter(c => c.novelId === novelId)
-  const scenes     = (store.scenes    || []).filter(s => s.novelId === novelId)
-  const chapters   = (store.chapters  || []).filter(c => c.novelId === novelId)
-  const acts       = (store.acts      || []).filter(a => a.novelId === novelId)
   const lore       = (store.loreEntries || []).filter(e => e.novelId === novelId)
   const timeline   = (store.timeline  || []).filter(e => e.novelId === novelId)
 
@@ -170,8 +259,8 @@ export function buildPlotHoleUserPrompt(store, novelId) {
     sections.push(`## LORE\n${summariseLore(lore)}`)
   if (timeline.length)
     sections.push(`## TIMELINE\n${summariseTimeline(timeline)}`)
-  if (scenes.length)
-    sections.push(`## MANUSCRIPT SCENES\n${summariseScenes(scenes, chapters, acts)}`)
+  const content = buildManuscriptContentSection(store, novelId, novel)
+  if (content) sections.push(content)
 
   return sections.join('\n\n') || 'No project data available yet.'
 }
@@ -217,13 +306,11 @@ Maximum 12 findings. Return empty findings array if no conflicts found.`
 }
 
 export function buildLoreConflictUserPrompt(store, novelId) {
+  const novel      = store.novels?.find(n => n.id === novelId)
   const characters = (store.characters  || []).filter(c => c.novelId === novelId)
   const lore       = (store.loreEntries || []).filter(e => e.novelId === novelId)
   const timeline   = (store.timeline    || []).filter(e => e.novelId === novelId)
   const locations  = (store.locations   || []).filter(l => l.novelId === novelId)
-  const scenes     = (store.scenes      || []).filter(s => s.novelId === novelId)
-  const chapters   = (store.chapters    || []).filter(c => c.novelId === novelId)
-  const acts       = (store.acts        || []).filter(a => a.novelId === novelId)
 
   const sections = []
   if (characters.length)
@@ -234,8 +321,8 @@ export function buildLoreConflictUserPrompt(store, novelId) {
     sections.push(`## LORE ENTRIES\n${summariseLore(lore)}`)
   if (timeline.length)
     sections.push(`## TIMELINE\n${summariseTimeline(timeline)}`)
-  if (scenes.length)
-    sections.push(`## MANUSCRIPT SCENES (sample)\n${summariseScenes(scenes, chapters, acts)}`)
+  const content = buildManuscriptContentSection(store, novelId, novel, { suffix: ' (sample)' })
+  if (content) sections.push(content)
 
   return sections.join('\n\n') || 'No project data available yet.'
 }
@@ -286,19 +373,26 @@ Maximum 10 findings.`
 }
 
 export function buildStyleUserPrompt(store, novelId, sceneIds) {
-  const allScenes  = (store.scenes   || []).filter(s => s.novelId === novelId)
-  const chapters   = (store.chapters || []).filter(c => c.novelId === novelId)
-  const acts       = (store.acts     || []).filter(a => a.novelId === novelId)
-  const selected   = sceneIds?.length
-    ? allScenes.filter(s => sceneIds.includes(s.id))
-    : allScenes
-
   const novel      = store.novels?.find(n => n.id === novelId)
   const styleGuide = novel?.styleGuide || ''
 
   const sections = []
   if (styleGuide)
     sections.push(`## STYLE GUIDE\n${styleGuide}`)
+
+  if (novel?.type === 'comic') {
+    const content = buildManuscriptContentSection(store, novelId, novel, { suffix: ' TO ANALYSE' })
+    sections.push(content || 'No comic pages available.')
+    return sections.join('\n\n')
+  }
+
+  const allScenes = (store.scenes   || []).filter(s => s.novelId === novelId)
+  const chapters  = (store.chapters || []).filter(c => c.novelId === novelId)
+  const acts      = (store.acts     || []).filter(a => a.novelId === novelId)
+  const selected  = sceneIds?.length
+    ? allScenes.filter(s => sceneIds.includes(s.id))
+    : allScenes
+
   if (selected.length)
     sections.push(`## SCENES TO ANALYSE\n${summariseScenes(selected, chapters, acts)}`)
   else

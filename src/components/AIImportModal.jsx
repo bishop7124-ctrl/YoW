@@ -1298,12 +1298,15 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
               Cancel
             </button>
-            {phase === 'upload' && (
-              <button type="button" onClick={handleAnalyze} disabled={!files.length}
-                style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: files.length ? 'var(--accent)' : 'var(--border)', color: files.length ? 'var(--bg-main)' : 'var(--text-muted)', fontSize: 13, fontWeight: 800, cursor: files.length ? 'pointer' : 'not-allowed' }}>
-                {aiLockedForFree ? 'Upgrade for AI Import' : 'Analyze with AI'}
-              </button>
-            )}
+            {phase === 'upload' && (() => {
+              const analyzeDisabled = !files.length || (!aiLockedForFree && !aiConfigured)
+              return (
+                <button type="button" onClick={handleAnalyze} disabled={analyzeDisabled}
+                  style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: analyzeDisabled ? 'var(--border)' : 'var(--accent)', color: analyzeDisabled ? 'var(--text-muted)' : 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: analyzeDisabled ? 'not-allowed' : 'pointer' }}>
+                  {aiLockedForFree ? 'Upgrade for AI Import' : 'Analyze with AI'}
+                </button>
+              )
+            })()}
             {phase === 'preview' && (
               <button type="button" onClick={handleCreate}
                 style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>

@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { streamMessage } from '../../utils/aiApi'
-import { buildPlotHoleSystemPrompt, buildPlotHoleUserPrompt } from '../../utils/aiToolPrompts'
+import { buildPlotHoleSystemPrompt, buildPlotHoleUserPrompt, getManuscriptCoverageForNovel } from '../../utils/aiToolPrompts'
 import { loadFindings, saveAllFindings, updateFindingStatus, rowToFinding } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
+import { ManuscriptCoverageNotice } from '../ai/ManuscriptCoverageNotice'
 import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
+import { AiRunProgress } from './AiRunProgress'
 import { buildFindingNavIndex, resolveFindingRef, navigateToFindingRef } from '../../utils/aiFindingNav'
 
 function parseFindings(raw) {
@@ -32,7 +34,11 @@ export default function PlotHoleDetector({ store, userId }) {
   const [saved,     setSaved]    = useState(false)
   const [filter,    setFilter]   = useState('all')
   const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
-  const { progressChars, begin, cancel } = useAiRunControls()
+  const { progressChars, elapsedMs, begin, cancel } = useAiRunControls()
+  const coverage = useMemo(
+    () => getManuscriptCoverageForNovel(store, novelId, novel),
+    [store, novelId, novel]
+  )
   const navIndex = useMemo(() => buildFindingNavIndex(store, novelId), [store, novelId])
   const resolveRef = useCallback(text => resolveFindingRef(navIndex, text), [navIndex])
   const onNavigate = useCallback(match => navigateToFindingRef(store, match), [store])
@@ -143,6 +149,7 @@ export default function PlotHoleDetector({ store, userId }) {
             AI reviews your outline, characters, lore, and scenes. Results are suggestions only — review each finding carefully before acting.
           </p>
         </div>
+        <ManuscriptCoverageNotice coverage={coverage} style={{ marginTop: 8 }} />
       </div>
 
       {/* Filters + save */}
@@ -182,16 +189,7 @@ export default function PlotHoleDetector({ store, userId }) {
 
         {/* Loading */}
         {running && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 }}>
-            <div style={{ width: 28, height: 28, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              Analysing your manuscript…{progressChars > 0 ? ` (${progressChars.toLocaleString()} characters received)` : ''}
-            </p>
-            <button
-              onClick={handleCancel}
-              style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-            >Cancel</button>
-          </div>
+          <AiRunProgress label="Analysing your manuscript" elapsedMs={elapsedMs} progressChars={progressChars} onCancel={handleCancel} />
         )}
 
         {/* Error */}

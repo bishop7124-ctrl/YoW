@@ -16721,6 +16721,32 @@ body {
   to   { transform: rotate(360deg); }
 }
 
+/* Indeterminate progress bar for long-running AI tool streams — true
+   percentage isn't knowable for LLM streaming without a known expected
+   output length, so this signals "still working" without implying a fake %. */
+@keyframes ai-progress-slide {
+  0%   { left: -35%; width: 35%; }
+  50%  { left: 30%;  width: 45%; }
+  100% { left: 100%; width: 35%; }
+}
+.ai-progress-track {
+  position: relative;
+  width: 100%;
+  max-width: 260px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.ai-progress-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: ai-progress-slide 1.4s ease-in-out infinite;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Series Dashboard
    ═══════════════════════════════════════════════════════════════════════════ */

@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { streamMessage } from '../../utils/aiApi'
-import { buildLoreConflictSystemPrompt, buildLoreConflictUserPrompt } from '../../utils/aiToolPrompts'
+import { buildLoreConflictSystemPrompt, buildLoreConflictUserPrompt, getManuscriptCoverageForNovel } from '../../utils/aiToolPrompts'
 import { loadFindings, saveAllFindings, updateFindingStatus, rowToFinding } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
+import { ManuscriptCoverageNotice } from '../ai/ManuscriptCoverageNotice'
 import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
+import { AiRunProgress } from './AiRunProgress'
 import { buildFindingNavIndex, resolveFindingRef, navigateToFindingRef } from '../../utils/aiFindingNav'
 
 function parseResult(raw) {
@@ -31,7 +33,11 @@ export default function LoreConflictChecker({ store, userId }) {
   const [saved,    setSaved]    = useState(false)
   const [filter,   setFilter]   = useState('all')
   const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
-  const { progressChars, begin, cancel } = useAiRunControls()
+  const { progressChars, elapsedMs, begin, cancel } = useAiRunControls()
+  const coverage = useMemo(
+    () => getManuscriptCoverageForNovel(store, novelId, novel),
+    [store, novelId, novel]
+  )
   const navIndex = useMemo(() => buildFindingNavIndex(store, novelId), [store, novelId])
   const resolveRef = useCallback(text => resolveFindingRef(navIndex, text), [navIndex])
   const onNavigate = useCallback(match => navigateToFindingRef(store, match), [store])
@@ -141,6 +147,7 @@ export default function LoreConflictChecker({ store, userId }) {
             Compares lore entries, world rules, character facts, and manuscript scenes for inconsistencies. Mark deliberate contradictions as "Intentional mystery".
           </p>
         </div>
+        <ManuscriptCoverageNotice coverage={coverage} style={{ marginTop: 8 }} />
       </div>
 
       {findings.length > 0 && (
@@ -164,16 +171,7 @@ export default function LoreConflictChecker({ store, userId }) {
         {!aiConfigured && !running && <AiConfigRequiredNotice style={{ marginBottom: 16 }} />}
 
         {running && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40 }}>
-            <div style={{ width: 28, height: 28, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              Checking lore consistency…{progressChars > 0 ? ` (${progressChars.toLocaleString()} characters received)` : ''}
-            </p>
-            <button
-              onClick={handleCancel}
-              style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-            >Cancel</button>
-          </div>
+          <AiRunProgress label="Checking lore consistency" elapsedMs={elapsedMs} progressChars={progressChars} onCancel={handleCancel} />
         )}
         {error && !running && (
           <div style={{ background: 'color-mix(in srgb, #ef4444 10%, transparent)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>

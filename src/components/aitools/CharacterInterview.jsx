@@ -4,6 +4,7 @@ import { buildInterviewSystemPrompt } from '../../utils/aiToolPrompts'
 import { createInterview, updateInterview, loadInterviews, deleteInterview } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
+import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
 
 const INTERVIEW_MODES = [
   { id: 'general',       label: 'General',        desc: 'Open conversation in character' },
@@ -46,6 +47,7 @@ export default function CharacterInterview({ store, userId }) {
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [deletingId,     setDeletingId]    = useState(null)
   const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
+  const { begin, cancel } = useAiRunControls()
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
@@ -118,14 +120,17 @@ export default function CharacterInterview({ store, userId }) {
     const system = buildInterviewSystemPrompt(character, novel, store, mode, timelinePos)
     let buffer = ''
     const assistantIdx = nextMsgs.length
+    const ctl = begin(() => { setStreaming(false); setError(STALL_ERROR_TEXT) })
 
     streamMessage({
       provider: ai.provider, apiKey: ai.apiKey, model: ai.model, baseUrl: ai.baseUrl,
       systemPrompt: system,
       messages: nextMsgs,
       maxTokens: 2048,
+      signal: ctl.signal,
       onChunk: chunk => {
         buffer += chunk
+        ctl.onChunkLength(buffer.length)
         setMessages(prev => {
           const copy = [...prev]
           if (copy[assistantIdx]) {
@@ -137,6 +142,7 @@ export default function CharacterInterview({ store, userId }) {
         })
       },
       onDone: () => {
+        ctl.finish()
         setStreaming(false)
         const final = [...nextMsgs, { role: 'assistant', content: buffer }]
         setMessages(final)
@@ -144,9 +150,14 @@ export default function CharacterInterview({ store, userId }) {
           updateInterview(interviewId, final, savedNotes).catch(() => {})
         }
       },
-      onError: msg => { setStreaming(false); setError(msg) },
+      onError: msg => { ctl.finish(); setStreaming(false); setError(msg) },
     })
-  }, [input, streaming, character, messages, novel, store, mode, timelinePos, interviewId, savedNotes, userId])
+  }, [input, streaming, character, messages, novel, store, mode, timelinePos, interviewId, savedNotes, userId, begin])
+
+  const handleCancel = useCallback(() => {
+    cancel()
+    setStreaming(false)
+  }, [cancel])
 
   const saveNote = useCallback(async (content, msgIndex) => {
     const note = { content, savedAt: new Date().toISOString(), msgIndex }
@@ -390,6 +401,14 @@ export default function CharacterInterview({ store, userId }) {
             fontFamily: 'inherit',
           }}
         />
+        {streaming && (
+          <button
+            onClick={handleCancel}
+            style={{ padding: '8px 12px', borderRadius: 8, fontWeight: 700, fontSize: 13, border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}
+          >
+            Cancel
+          </button>
+        )}
         <button
           onClick={sendMessage}
           disabled={!input.trim() || streaming || !aiConfigured}
