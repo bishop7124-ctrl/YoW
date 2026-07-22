@@ -148,6 +148,17 @@ p  { color: var(--muted); font-size: 0.975rem; line-height: 1.75; }
 }
 .m-hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
+/* ── Product screenshot ── */
+.m-shot {
+  margin: clamp(32px, 6vw, 56px) auto 0;
+  max-width: 1000px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-l);
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+}
+.m-shot img { display: block; width: 100%; height: auto; }
+
 /* ── Sections ── */
 .m-section { padding: clamp(48px, 8vw, 88px) 0; }
 .m-section + .m-section { border-top: 1px solid var(--border); }
