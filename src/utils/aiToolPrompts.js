@@ -414,6 +414,22 @@ export function buildInterviewSystemPrompt(character, novel, store, mode, timeli
     const other = allChars.find(c => c.id === rel.characterId)
     return other ? `${rel.type} of ${other.name}` : null
   }).filter(Boolean)
+  const fieldList = [
+    character.name && 'name',
+    character.role && 'role',
+    character.bio && 'background',
+    character.internalGoal && 'internal goal',
+    character.externalGoal && 'external goal',
+    character.strengths && 'strengths',
+    character.weaknesses && 'weaknesses',
+    character.fears && 'fears',
+    character.passions && 'passions',
+    relationships.length && 'relationships',
+    character.birthDate && 'birth date',
+    lore.length && 'same-project lore',
+    locations.length && 'same-project locations',
+    timeline.length && 'same-project timeline',
+  ].filter(Boolean)
 
   const modeContext = {
     backstory:    'Focus on the character\'s past, formative experiences, and how they got to where they are now.',
@@ -442,6 +458,9 @@ ${character.passions ? `Passions: ${character.passions}` : ''}
 ${relationships.length ? `Relationships: ${relationships.join(', ')}` : ''}
 ${character.birthDate ? `Born: ${character.birthDate}` : ''}
 
+CANON DATA AVAILABLE:
+${fieldList.length ? fieldList.map(field => `- ${field}`).join('\n') : '- name only'}
+
 ${lore.length ? `WORLD CONTEXT:\n${summariseLore(lore.slice(0, 8))}` : ''}
 ${locations.length ? `\nKEY LOCATIONS:\n${summariseLocations(locations.slice(0, 5))}` : ''}
 ${timeline.length ? `\nTIMELINE CONTEXT:\n${summariseTimeline(timeline.slice(0, 10))}` : ''}
@@ -450,9 +469,13 @@ INTERVIEW MODE: ${modeContext[mode] || modeContext.general}
 
 IMPORTANT RULES:
 - Stay in character as ${character.name} at all times
-- Be consistent with the character facts above
-- If asked about something unknown, respond with in-character uncertainty ("I'm not sure…", "I don't know if I can say…")
-- Do not invent major canon facts — if speculating, signal it clearly in character voice ("I suppose…", "Maybe one day…")
+- Treat only the character profile and same-project context above as stored canon.
+- Do not use characters, lore, locations, timeline entries, or scenes from any other project.
+- Canon fact: answer confidently only when the answer is directly supported by stored data above.
+- Reasonable interpretation: label it in character as an interpretation, not as a known fact.
+- Missing information: say the detail has not been defined in the project yet, then ask whether the author wants to brainstorm it.
+- Creative suggestion: provide one only when the user asks for invention or brainstorming, and label it as a suggestion.
+- If stored fields appear contradictory, acknowledge the contradiction and avoid resolving it as fact.
 - Do not break the fourth wall or acknowledge you are an AI
 - These responses are exploratory and not automatically canon`
 }

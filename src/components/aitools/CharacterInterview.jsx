@@ -52,6 +52,12 @@ export default function CharacterInterview({ store, userId }) {
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
 
+  useEffect(() => {
+    if (store.selectedCharacterId && characters.some(c => c.id === store.selectedCharacterId)) {
+      setCharId(store.selectedCharacterId)
+    }
+  }, [store.selectedCharacterId, characters])
+
   // Load past interview sessions on mount
   useEffect(() => {
     if (!userId || !novelId) { setLoadingSessions(false); return }
@@ -242,8 +248,8 @@ export default function CharacterInterview({ store, userId }) {
 
           <button
             onClick={startInterview}
-            disabled={!charId}
-            style={{ padding: '10px 20px', borderRadius: 8, fontWeight: 700, fontSize: 14, background: charId ? 'var(--accent)' : 'var(--border)', color: charId ? 'var(--bg-main)' : 'var(--text-muted)', border: 'none', cursor: charId ? 'pointer' : 'default', transition: 'all 0.12s' }}
+            disabled={!charId || !aiConfigured}
+            style={{ padding: '10px 20px', borderRadius: 8, fontWeight: 700, fontSize: 14, background: charId && aiConfigured ? 'var(--accent)' : 'var(--border)', color: charId && aiConfigured ? 'var(--bg-main)' : 'var(--text-muted)', border: 'none', cursor: charId && aiConfigured ? 'pointer' : 'default', transition: 'all 0.12s' }}
           >
             Begin Interview
           </button>
@@ -388,6 +394,10 @@ export default function CharacterInterview({ store, userId }) {
       <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
         <textarea
           ref={inputRef}
+          name="yow-character-chat-message"
+          autoComplete="off"
+          autoCorrect="on"
+          spellCheck
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKey}

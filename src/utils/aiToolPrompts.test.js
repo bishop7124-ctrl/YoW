@@ -5,6 +5,7 @@ import {
   getManuscriptCoverageForNovel,
   buildPlotHoleUserPrompt,
   buildStyleUserPrompt,
+  buildInterviewSystemPrompt,
 } from './aiToolPrompts'
 import { buildSystemPrompt } from './aiApi'
 
@@ -41,6 +42,52 @@ describe('buildProjectTypePromptContext', () => {
     expect(prompt).toContain('Project type: Tabletop Campaign')
     expect(prompt).toContain('GM-side system-neutral tabletop campaign planning')
     expect(prompt).toContain('Campaign Arc > Session > Encounter')
+  })
+})
+
+describe('buildInterviewSystemPrompt', () => {
+  it('grounds character interview in the selected character project only', () => {
+    const character = { id: 'char-1', novelId: 'project-1', name: 'Mara Vey', bio: 'Maps changing in Greyharbor.', keywords: ['Mara'] }
+    const prompt = buildInterviewSystemPrompt(
+      character,
+      { id: 'project-1', title: 'The Briar Gate', type: 'novel' },
+      {
+        characters: [
+          character,
+          { id: 'char-2', novelId: 'project-2', name: 'Mara Vey', bio: 'A different project version.' },
+        ],
+        loreEntries: [
+          { id: 'lore-1', novelId: 'project-1', title: 'Living Maps', content: 'Maps revise themselves.' },
+          { id: 'lore-2', novelId: 'project-2', title: 'Forbidden Engine', content: 'Should not leak.' },
+        ],
+        locations: [{ id: 'loc-1', novelId: 'project-1', name: 'Greyharbor', description: 'Canal city.' }],
+        timeline: [{ id: 'event-1', novelId: 'project-1', title: 'Surveyors vanish', description: 'They cross the gate.' }],
+      },
+      'general',
+      ''
+    )
+
+    expect(prompt).toContain('Maps changing in Greyharbor.')
+    expect(prompt).toContain('Living Maps')
+    expect(prompt).toContain('Greyharbor')
+    expect(prompt).not.toContain('A different project version')
+    expect(prompt).not.toContain('Forbidden Engine')
+    expect(prompt).toContain('Missing information: say the detail has not been defined in the project yet')
+    expect(prompt).toContain('Creative suggestion: provide one only when the user asks')
+  })
+
+  it('states when only minimal character canon is available', () => {
+    const prompt = buildInterviewSystemPrompt(
+      { id: 'char-1', novelId: 'project-1', name: 'Unwritten Hero' },
+      { id: 'project-1', title: 'Sparse', type: 'novel' },
+      { characters: [], loreEntries: [], locations: [], timeline: [] },
+      'backstory',
+      ''
+    )
+
+    expect(prompt).toContain('CANON DATA AVAILABLE:')
+    expect(prompt).toContain('- name')
+    expect(prompt).toContain('Missing information')
   })
 })
 
