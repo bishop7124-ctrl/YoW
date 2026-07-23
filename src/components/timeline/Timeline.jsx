@@ -294,7 +294,7 @@ export default function Timeline({ store }) {
                       const c = characters.find(x => x.id === id)
                       return c ? (
                         <button key={id} className="tl2-panel-link"
-                          onClick={() => { setSelectedId(null); setSelectedCharacterId(id) }}>
+                          onClick={() => { setSelectedId(null); setSelectedCharacterId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } })) }}>
                           ⊙ {c.name}
                         </button>
                       ) : null
@@ -310,7 +310,7 @@ export default function Timeline({ store }) {
                       const l = locations.find(x => x.id === id)
                       return l ? (
                         <button key={id} className="tl2-panel-link"
-                          onClick={() => { setSelectedId(null); setSelectedLocationId(id) }}>
+                          onClick={() => { setSelectedId(null); setSelectedLocationId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>
                           ◈ {l.name}
                         </button>
                       ) : null

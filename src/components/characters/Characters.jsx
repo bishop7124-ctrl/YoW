@@ -1105,7 +1105,7 @@ export default function Characters({ store }) {
                           <div className="text-xs text-[var(--text-muted)] mb-1.5">Lore</div>
                           <div className="flex flex-wrap gap-1">
                             {incomingRefs.lore.map(e => (
-                              <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedLoreEntryId(e.id)}>
+                              <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedLoreEntryId(e.id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'lore' } })) }}>
                                 {e.title}
                               </button>
                             ))}

@@ -196,7 +196,7 @@ export default function WorldHistory({ store }) {
                     const c = characters.find(x => x.id === id)
                     if (!c) return null
                     return (
-                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedCharacterId(id)}>
+                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedCharacterId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } })) }}>
                         {c.name}
                       </button>
                     )
@@ -213,7 +213,7 @@ export default function WorldHistory({ store }) {
                     const l = locations.find(x => x.id === id)
                     if (!l) return null
                     return (
-                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => setSelectedLocationId(id)}>
+                      <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedLocationId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>
                         {l.name}
                       </button>
                     )
