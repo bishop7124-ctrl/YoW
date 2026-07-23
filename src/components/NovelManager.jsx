@@ -337,7 +337,12 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
               {!novel?.coverPhoto && <div className="active-project-hero-bg" style={{ background: getCoverGradient(novel?.title || 'Your Own World') }} />}
               {novel?.coverPhoto
                 ? <img src={novel.coverPhoto} alt="" />
-                : <span className="active-project-cover-letter">{hasActiveProject ? novel.title[0]?.toUpperCase() : '?'}</span>
+                : (
+                  <span className="empty-cover-placeholder" aria-label="No project cover photo">
+                    <strong>{hasActiveProject ? novel.title[0]?.toUpperCase() : '?'}</strong>
+                    {hasActiveProject && <small>Add cover photo</small>}
+                  </span>
+                )
               }
             </div>
           )}
@@ -1131,7 +1136,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus, vi
       >
         {project.coverPhoto
           ? <img src={project.coverPhoto} alt="" />
-          : <span className="series-dash-card-letter">{project.title[0]?.toUpperCase()}</span>
+          : <span className="series-dash-card-letter empty-cover-placeholder" aria-label="No project cover photo"><strong>{project.title[0]?.toUpperCase()}</strong><small>Add cover photo</small></span>
         }
         <span className="project-dash-card-type-badge">{cfg.label}</span>
         {viewOnly ? (
@@ -1387,7 +1392,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                 {showImportMenu && (
                   <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.35)', minWidth: 196, overflow: 'hidden' }}>
                     {[
-                      { label: 'AI Import', sublabel: 'Upload any file — AI builds your project', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
+                      { label: 'AI Import', sublabel: 'Analyse notes or drafts and populate connected records to review', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
                       { label: 'Import ZIP', sublabel: 'YOW backup or compatible project archive', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
                     ].map(({ label, sublabel, onClick }, i, arr) => (
                       <button key={label} type="button" onClick={onClick}

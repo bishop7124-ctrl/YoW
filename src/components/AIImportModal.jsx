@@ -1107,6 +1107,13 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 )}
               </div>
 
+              <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--accent-fade)', border: '1px solid color-mix(in srgb, var(--accent) 24%, transparent)' }}>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: 'var(--text-main)' }}>AI Import can fill more than a manuscript.</p>
+                <p style={{ margin: '4px 0 0', fontSize: 11, lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                  Upload notes, drafts, documents, or worldbuilding material. YOW will look for useful characters, locations, factions, lore, timeline items, outline structure, and ideas so you can review the assisted import before saving.
+                </p>
+              </div>
+
               {files.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {files.map((f, i) => (

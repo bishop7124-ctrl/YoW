@@ -439,7 +439,7 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
   usePageMeta({
     path: '/features/',
     title: 'Features — Your Own World | Worldbuilding & Writing Software',
-    description: 'Every tool your story needs: manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and D&D dungeon masters.',
+    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and D&D dungeon masters.',
   })
 
   return (
@@ -455,7 +455,7 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
             Every tool your story needs.<br />Built for the way you write.
           </h1>
           <p style={{ fontSize: 17, color: 'var(--text-muted)', maxWidth: 580, margin: '0 auto 36px', lineHeight: 1.65 }}>
-            YOW is one workspace for six different creative formats. Manuscript, characters, lore, maps, timelines, and AI tools — all connected, all in one place.
+            YOW is one workspace for six different creative formats. AI Import can turn existing notes, drafts, and worldbuilding documents into connected project records for you to review, alongside manuscript, characters, lore, maps, timelines, and AI tools.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-primary btn-lg" onClick={onGetStarted}>

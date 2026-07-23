@@ -2,7 +2,14 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 
 function getRect(selector) {
   if (!selector) return null
-  const el = document.querySelector(`[data-tour="${selector}"]`)
+  const selectors = Array.isArray(selector) ? selector : [selector]
+  const el = selectors
+    .flatMap(item => [...document.querySelectorAll(`[data-tour="${item}"]`)])
+    .find(node => {
+      const style = window.getComputedStyle(node)
+      const r = node.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && r.width > 4 && r.height > 4
+    })
   if (!el) return null
   const r = el.getBoundingClientRect()
   return { top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom, right: r.right }
@@ -12,10 +19,27 @@ const PAD = 14
 const TIP_W = 320
 const TIP_H_EST = 200
 
-function placeTip(vpW, vpH) {
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function placeTip(vpW, vpH, rect) {
+  if (!rect) {
+    return {
+      top: vpH / 2 - TIP_H_EST / 2,
+      left: vpW / 2 - TIP_W / 2,
+    }
+  }
+  const gap = 18
+  const rightSpace = vpW - rect.right
+  const leftSpace = rect.left
+  const belowSpace = vpH - rect.bottom
+  if (rightSpace >= TIP_W + gap) return { top: clamp(rect.top, PAD, vpH - TIP_H_EST - PAD), left: rect.right + gap }
+  if (leftSpace >= TIP_W + gap) return { top: clamp(rect.top, PAD, vpH - TIP_H_EST - PAD), left: rect.left - TIP_W - gap }
+  if (belowSpace >= TIP_H_EST + gap) return { top: rect.bottom + gap, left: clamp(rect.left, PAD, vpW - TIP_W - PAD) }
   return {
-    top: vpH / 2 - TIP_H_EST / 2,
-    left: vpW / 2 - TIP_W / 2,
+    top: clamp(rect.top - TIP_H_EST - gap, PAD, vpH - TIP_H_EST - PAD),
+    left: clamp(rect.left, PAD, vpW - TIP_W - PAD),
   }
 }
 
@@ -45,7 +69,13 @@ export default function OnboardingTour({ steps, onFinish, onSkip, onDisableTours
 
   useEffect(() => {
     if (!step.target) return
-    const el = document.querySelector(`[data-tour="${step.target}"]`)
+    const selectors = Array.isArray(step.target) ? step.target : [step.target]
+    const el = selectors
+      .flatMap(item => [...document.querySelectorAll(`[data-tour="${item}"]`)])
+      .find(node => {
+        const r = node.getBoundingClientRect()
+        return r.width > 4 && r.height > 4
+      })
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [step.target])
 
@@ -59,11 +89,11 @@ export default function OnboardingTour({ steps, onFinish, onSkip, onDisableTours
     return () => window.removeEventListener('keydown', onKey)
   }, [isLast, idx, onSkip])
 
-  const tip = placeTip(vpW, vpH)
+  const tip = placeTip(vpW, vpH, rect)
 
   return (
     <div className="tour-root" role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
-      {/* Dark backdrop — not clickable to dismiss; user must use Skip or Done */}
+      {/* Backdrop stays light enough that users can keep their spatial context. */}
       <div className="tour-backdrop" />
 
       {/* Spotlight cutout with pulsing ring */}

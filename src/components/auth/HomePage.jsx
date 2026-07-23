@@ -400,6 +400,7 @@ const COMPARISON_FEATURES = [
   { feature: 'Interactive Maps',       novel: 'Optional',                novella: 'Optional',                  shortStory: 'Optional',                 tabletop: true },
   { feature: 'Timeline',               novel: true,                      novella: true,                        shortStory: true,                       tabletop: 'Campaign history' },
   { feature: 'Factions',               novel: true,                      novella: 'Optional',                  shortStory: 'Optional',                 tabletop: true },
+  { feature: 'AI Import',              novel: 'Assisted project setup',  novella: 'Assisted project setup',    shortStory: 'Assisted project setup',   tabletop: 'Notes-to-campaign import' },
   { feature: 'AI Tools',               novel: true,                      novella: true,                        shortStory: true,                       tabletop: 'Campaign-aware' },
   { feature: 'Exports',                novel: 'DOCX / PDF / ZIP',        novella: 'DOCX / PDF / ZIP',          shortStory: 'DOCX / PDF / ZIP',         tabletop: 'DOCX / PDF / ZIP' },
 ]
@@ -428,6 +429,10 @@ const PROBLEMS = [
   {
     problem: 'Ideas scattered across 5 apps',
     solution: 'An Ideas Board that lives inside your project and can link any idea directly to any character, scene, or location.',
+  },
+  {
+    problem: 'Existing notes too big to re-enter by hand',
+    solution: 'AI Import can analyse notes, manuscripts, documents, or worldbuilding files, identify useful entities, and populate connected YOW areas for you to review and refine.',
   },
 ]
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import PlotHoleDetector from './PlotHoleDetector'
 import LoreConflictChecker from './LoreConflictChecker'
 import CharacterInterview from './CharacterInterview'
@@ -82,7 +82,22 @@ function AIToolsUpgradeWall() {
 }
 
 export default function AITools({ store, userId, membership }) {
-  const [activeTool, setActiveTool] = useState('plot_hole')
+  const [activeTool, setActiveTool] = useState(() => sessionStorage.getItem('yow_open_ai_character_chat') ? 'interview' : 'plot_hole')
+
+  useEffect(() => {
+    const pendingCharacterId = sessionStorage.getItem('yow_open_ai_character_chat')
+    if (pendingCharacterId) {
+      sessionStorage.removeItem('yow_open_ai_character_chat')
+      store.setSelectedCharacterId?.(pendingCharacterId)
+      setActiveTool('interview')
+    }
+    const handleOpenCharacterChat = (event) => {
+      if (event.detail?.characterId) store.setSelectedCharacterId?.(event.detail.characterId)
+      setActiveTool('interview')
+    }
+    window.addEventListener('open-ai-character-chat', handleOpenCharacterChat)
+    return () => window.removeEventListener('open-ai-character-chat', handleOpenCharacterChat)
+  }, [store])
 
   if (membership?.isFree) return <AIToolsUpgradeWall />
 

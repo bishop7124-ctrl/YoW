@@ -98,10 +98,16 @@ const AutoTextarea = ({ value, onChange, placeholder, className }) => {
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       rows={1}
-      className={`w-full bg-transparent resize-none outline-none text-sm text-[var(--text-main)] placeholder-[var(--text-muted)] placeholder-opacity-50 leading-relaxed overflow-hidden ${className || ''}`}
+      className={`outline-description-field w-full resize-none outline-none text-sm text-[var(--text-main)] placeholder-[var(--text-muted)] placeholder-opacity-50 ${className || ''}`}
     />
   )
 }
+
+const WordCountBadge = ({ words }) => (
+  <span className="outline-word-count">
+    {Number(words || 0).toLocaleString()} words
+  </span>
+)
 
 const CAMPAIGN_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
 
@@ -248,8 +254,9 @@ const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScen
         <MoveBtn onClick={() => reorderScene(scene.id, 'down')} disabled={isLast} title="Move down">▼</MoveBtn>
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex-1 min-w-0">
+        <div className="outline-row-header mb-1">
+          <div className="outline-row-title">
           <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest flex-shrink-0">
             {labels.level3} {sceneIdx + 1}
           </span>
@@ -258,6 +265,8 @@ const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScen
             onSave={t => updateScene(scene.id, { title: t || labels.level3 })}
             className="text-sm text-[var(--text-muted)] italic flex-1"
           />
+          </div>
+          <div className="outline-row-meta">
           <StoryEventSelect
             value={scene.storyEvent}
             indicators={indicators}
@@ -269,15 +278,14 @@ const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScen
             label={`Move ${labels.level3.toLowerCase()} to ${labels.level2.toLowerCase()}`}
             onChange={moveToChapter}
           />
-          {wordCount > 0 && (
-            <span className="text-[10px] font-mono text-[var(--accent)] opacity-60 flex-shrink-0">{wordCount.toLocaleString()}w</span>
-          )}
+          <WordCountBadge words={wordCount} />
+          </div>
         </div>
         <AutoTextarea
           value={scene.synopsis}
           onChange={v => updateScene(scene.id, { synopsis: v })}
           placeholder={`${labels.level3} synopsis — what happens, who's involved, what changes…`}
-          className="text-xs opacity-80 pl-0"
+          className="text-xs opacity-90"
         />
       </div>
 
@@ -321,13 +329,16 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
         </button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="outline-row-header">
+            <div className="outline-row-title">
             <InlineTitle
               value={title}
               onSave={t => updateChapter(chapter.id, { title: t })}
               className="text-sm font-semibold text-[var(--text-main)]"
             />
             <span className="text-[10px] text-[var(--text-muted)] opacity-60">{chapterScenes.length} {labels.level3.toLowerCase()}{chapterScenes.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="outline-row-meta">
             <StoryEventSelect
               value={chapter.storyEvent}
               indicators={indicators}
@@ -339,13 +350,14 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
               label={`Move ${labels.level2.toLowerCase()} to ${labels.level1.toLowerCase()}`}
               onChange={moveToAct}
             />
-            {wordCount > 0 && <span className="text-[10px] font-mono text-[var(--accent)] opacity-60">{wordCount.toLocaleString()}w</span>}
+            <WordCountBadge words={wordCount} />
+            </div>
           </div>
           <AutoTextarea
             value={chapter.synopsis}
             onChange={v => updateChapter(chapter.id, { synopsis: v })}
             placeholder={`${labels.level2} synopsis…`}
-            className="text-xs opacity-70 mt-1"
+            className="text-xs opacity-90 mt-2"
           />
           {isCampaign && (
             <CampaignSessionFields
@@ -419,25 +431,29 @@ const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters,
         </button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
+          <div className="outline-row-header">
+            <div className="outline-row-title">
             <InlineTitle
               value={act.title}
               onSave={t => updateAct(act.id, { title: t })}
               className="text-xs font-black text-[var(--text-main)] uppercase tracking-widest"
             />
             <span className="text-[10px] text-[var(--text-muted)] opacity-60">{actChapters.length} {labels.level2.toLowerCase().slice(0,3)}</span>
+            </div>
+            <div className="outline-row-meta">
             <StoryEventSelect
               value={act.storyEvent}
               indicators={indicators}
               onChange={storyEvent => updateAct(act.id, { storyEvent })}
             />
-            {wordCount > 0 && <span className="text-[10px] font-mono text-[var(--accent)] opacity-60">{wordCount.toLocaleString()}w</span>}
+            <WordCountBadge words={wordCount} />
+            </div>
           </div>
           <AutoTextarea
             value={act.synopsis}
             onChange={v => updateAct(act.id, { synopsis: v })}
             placeholder={`${labels.level1} synopsis — the arc, the stakes, how it ends…`}
-            className="text-xs opacity-70 mt-1"
+            className="text-xs opacity-90 mt-2"
           />
         </div>
 

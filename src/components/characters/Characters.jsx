@@ -903,6 +903,14 @@ export default function Characters({ store }) {
     }
   }
 
+  const openCharacterChat = () => {
+    if (!selected) return
+    setSelectedCharacterId(selected.id)
+    try { sessionStorage.setItem('yow_open_ai_character_chat', selected.id) } catch { /* best effort */ }
+    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'aitools' } }))
+    window.dispatchEvent(new CustomEvent('open-ai-character-chat', { detail: { characterId: selected.id } }))
+  }
+
   const getCharacterFaction = (char) => char?.factionId ? factions.find(f => f.id === char.factionId) : null
   const selectedFaction = getCharacterFaction(selected)
 
@@ -1015,6 +1023,7 @@ export default function Characters({ store }) {
               meta={[selected.role, selectedAge ? `Age ${selectedAge}` : null].filter(Boolean).join(' · ') || 'Character'}
               actions={(
                 <>
+                  <StudioButton tone="primary" size="sm" onClick={openCharacterChat}>Chat with character</StudioButton>
                   <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(selected); setShowForm(true); }}>Edit</StudioButton>
                   <StudioButton tone="secondary" size="sm" onClick={() => {
                     if (!confirm('Delete this character?')) return
@@ -1033,6 +1042,17 @@ export default function Characters({ store }) {
                     zoom={selected.imageZoom}
                     className="w-24 h-24 rounded-xl border border-[var(--border)] flex-shrink-0"
                   />
+                )}
+                {!selected.image && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditTarget(selected); setShowForm(true) }}
+                    className="character-cover-placeholder"
+                    aria-label={`Add cover photo for ${selected.name}`}
+                  >
+                    <span>{selected.name?.[0]?.toUpperCase() || '?'}</span>
+                    <small>Add cover photo</small>
+                  </button>
                 )}
                 <FactionLogoBadge faction={selectedFaction} size={44} className="flex-shrink-0" />
                 {selected.familyGroup && (

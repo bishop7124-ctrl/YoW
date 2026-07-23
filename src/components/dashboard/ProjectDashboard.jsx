@@ -53,6 +53,20 @@ const shiftDate = (base, offset) => {
 const formatShortDate = key => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${key}T00:00:00`))
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+function InfoTip({ title, children }) {
+  return (
+    <details className="insight-info-tip">
+      <summary aria-label={`About ${title}`}>
+        <span aria-hidden="true">i</span>
+      </summary>
+      <div role="note">
+        <strong>{title}</strong>
+        <p>{children}</p>
+      </div>
+    </details>
+  )
+}
+
 const getSceneTimestamp = scene => {
   const raw = scene.lastModified || scene.updatedAt || scene.createdAt || scene.created
   const timestamp = typeof raw === 'number' ? raw : Date.parse(raw)
@@ -160,6 +174,13 @@ const buildReadability = scenes => {
 }
 
 const buildCharacterFocus = stats => {
+  // Character Focus analyses manuscript scene text only. It searches each
+  // scene for saved character names and keywords, counts matching mentions,
+  // counts the scenes containing those terms, then attributes the full word
+  // count of each matching scene to that character for the bar chart. It does
+  // not currently use POV fields, relationship links, direct appearance tags,
+  // timeline entries, lore links, or inferred aliases. With too little drafted
+  // text, the UI shows a low-data/empty state instead of implying coverage.
   const characters = stats.characters.map(character => {
     const terms = [character.name, ...(character.keywords || [])]
       .filter(Boolean)
@@ -665,6 +686,12 @@ export default function ProjectDashboard({ store }) {
   const stats = store.activeProjectStats
   const [dailyGoal, setDailyGoal] = useState(() => localStorage.getItem('nf-daily-word-goal') || '500')
   const [viewMode, setViewMode] = useState('overview')
+  const [insightsCtaSeen, setInsightsCtaSeen] = useState(() => localStorage.getItem('nf-insights-cta-seen') === 'true')
+  const openInsights = () => {
+    localStorage.setItem('nf-insights-cta-seen', 'true')
+    setInsightsCtaSeen(true)
+    setViewMode('insights')
+  }
   const analytics = useMemo(() => stats ? buildWritingAnalytics(stats, dailyGoal) : null, [stats, dailyGoal])
   const readability = useMemo(() => stats ? buildReadability(stats.scenes) : null, [stats])
   const characterFocus = useMemo(() => stats ? buildCharacterFocus(stats) : [], [stats])
@@ -780,7 +807,7 @@ export default function ProjectDashboard({ store }) {
               <button
                 type="button"
                 className={viewMode === 'insights' ? 'is-active' : ''}
-                onClick={() => setViewMode('insights')}
+                onClick={openInsights}
               >
                 Insights
               </button>
@@ -790,6 +817,19 @@ export default function ProjectDashboard({ store }) {
 
         {viewMode === 'overview' ? (
           <>
+            {!insightsCtaSeen && (
+              <section className="overview-insights-cta panel-soft">
+                <div>
+                  <p className="studio-kicker">Project Insights</p>
+                  <h2>See patterns, gaps and opportunities across your world.</h2>
+                  <p>Review writing rhythm, draft balance, worldbuilding coverage, and which characters are most visible in the manuscript.</p>
+                </div>
+                <button type="button" className="btn btn-primary" onClick={openInsights}>
+                  Open Insights
+                </button>
+              </section>
+            )}
+
             {visibleRooms.length > 0 && (
               <nav className="overview-nav" data-tour="dashboard-quick-links" aria-label="Project areas">
                 {visibleRooms.map(room => (
@@ -907,7 +947,7 @@ export default function ProjectDashboard({ store }) {
             <div className="analytics-grid">
               <div className="analytics-card analytics-card-wide">
                 <div className="analytics-card-head">
-                  <span>{workspaceLabel} progression</span>
+                  <span>{workspaceLabel} progression <InfoTip title={`${workspaceLabel} progression`}>Shows total manuscript words over recent scene-history checkpoints. It depends on saved scene text and edit history, so newly imported or sparse drafts may show a flatter line.</InfoTip></span>
                   <strong>{formatNumber(stats.manuscriptWords)}</strong>
                 </div>
                 <Sparkline points={analytics.progression} />
@@ -916,7 +956,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card">
                 <div className="analytics-card-head">
-                  <span>Today</span>
+                  <span>Today <InfoTip title="Today">Counts words added today from scene word history and compares them with your daily goal. If no scene edits were recorded today, this can be zero even when older manuscript text exists.</InfoTip></span>
                   <strong>{formatNumber(analytics.todayWords)}</strong>
                 </div>
                 <div className="analytics-goal-meter">
@@ -927,7 +967,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card">
                 <div className="analytics-card-head">
-                  <span>Activity</span>
+                  <span>Activity <InfoTip title="Activity">Shows which of the last 35 days have recorded positive word additions. It reflects writing history, not time spent planning or editing worldbuilding records.</InfoTip></span>
                   <strong>{analytics.activeDays} days</strong>
                 </div>
                 <ActivityHeatmap dailyWords={analytics.dailyWords} heatmapMax={analytics.heatmapMax} />
@@ -936,7 +976,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card">
                 <div className="analytics-card-head">
-                  <span>Readability</span>
+                  <span>Readability <InfoTip title="Readability">Estimates readability from manuscript sentence length and syllable counts. Treat it as a rough signal, especially for dialogue, invented names, poetry, or script-style projects.</InfoTip></span>
                   <strong>{readability.flesch}</strong>
                 </div>
                 <div className="analytics-readability">
@@ -947,7 +987,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card analytics-card-wide">
                 <div className="analytics-card-head">
-                  <span>Momentum</span>
+                  <span>Momentum <InfoTip title="Momentum">Summarises words added in the last seven days, active writing days, goal hits, and change from the prior week. Low data usually means the project has not built much word-history yet.</InfoTip></span>
                   <strong>{formatNumber(momentumInsights.last7Words)}</strong>
                 </div>
                 <div className="analytics-metric-grid">
@@ -964,7 +1004,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card">
                 <div className="analytics-card-head">
-                  <span>Scene health</span>
+                  <span>Scene health <InfoTip title="Scene health">Groups manuscript scenes by word count so you can spot empty placeholders, very short beats, and unusually long scenes. It does not judge quality or completeness.</InfoTip></span>
                   <strong>{formatNumber(sceneInsights.average)}</strong>
                 </div>
                 <div className="analytics-metric-stack">
@@ -977,7 +1017,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card analytics-card-wide">
                 <div className="analytics-card-head">
-                  <span>Draft balance</span>
+                  <span>Draft balance <InfoTip title="Draft balance">Compares word counts across your top-level structure, such as acts or campaign arcs. Empty structure or unassigned scenes can make the chart sparse.</InfoTip></span>
                   <strong>{structureInsights.length}</strong>
                 </div>
                 <MiniBarList
@@ -989,7 +1029,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card analytics-card-wide">
                 <div className="analytics-card-head">
-                  <span>Longest scenes</span>
+                  <span>Longest scenes <InfoTip title="Longest scenes">Lists the scenes with the highest word counts. Use it to find possible pacing outliers, not as proof a scene is too long.</InfoTip></span>
                   <strong>{sceneInsights.longest.length}</strong>
                 </div>
                 <MiniBarList
@@ -1001,7 +1041,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card analytics-card-wide">
                 <div className="analytics-card-head">
-                  <span>Worldbuilding coverage</span>
+                  <span>Worldbuilding coverage <InfoTip title="Worldbuilding coverage">Checks whether saved characters and locations are mentioned in manuscript text, and whether lore entries have explicit character or location links. It cannot detect unnamed references or implied connections.</InfoTip></span>
                   <strong>{formatNumber(stats.planningItems)}</strong>
                 </div>
                 <div className="analytics-coverage-grid">
@@ -1021,7 +1061,7 @@ export default function ProjectDashboard({ store }) {
 
               <div className="analytics-card analytics-card-wide character-focus-card">
                 <div className="analytics-card-head">
-                  <span>Character focus</span>
+                  <span>Character focus <InfoTip title="Character focus">Searches manuscript scene text for each character’s saved name and keywords. The bar uses the total words in scenes where that character is mentioned; it excludes POV assignments, relationships, timeline entries, lore links, and unstored aliases.</InfoTip></span>
                   <strong>{characterFocus.length || 0}</strong>
                 </div>
                 <div className="character-focus-list">
