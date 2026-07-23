@@ -1423,10 +1423,12 @@ function AppearancePanel({ user, updateProfile }) {
 
 function AISettingsPanel({ userId, membership }) {
   const [settings, setSettings] = useState(() => loadAiSettings(userId, DEFAULT_AI_SETTINGS))
+  const [keyDrafts, setKeyDrafts] = useState({})
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
+    setKeyDrafts({})
   }, [userId])
 
   const active = settings.activeProvider
@@ -1435,9 +1437,18 @@ function AISettingsPanel({ userId, membership }) {
 
   const update = (field, val) =>
     setSettings(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
+  const updateKeyDraft = (val) =>
+    setKeyDrafts(prev => ({ ...prev, [active]: val }))
 
   const handleSave = () => {
-    saveAiSettings(settings, userId)
+    const settingsToSave = { ...settings }
+    Object.entries(keyDrafts).forEach(([provider, value]) => {
+      if (!value?.trim()) return
+      settingsToSave[provider] = { ...settingsToSave[provider], apiKey: value.trim() }
+    })
+    saveAiSettings(settingsToSave, userId)
+    setSettings(settingsToSave)
+    setKeyDrafts({})
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -1599,13 +1610,26 @@ function AISettingsPanel({ userId, membership }) {
         </p>
         <input
           type="password"
-          value={cfg.apiKey || ''}
-          onChange={e => update('apiKey', e.target.value)}
-          placeholder={prov?.keyPlaceholder}
+          name={`yow-${active}-api-token`}
+          autoComplete="new-password"
+          value={keyDrafts[active] || ''}
+          onChange={e => updateKeyDraft(e.target.value)}
+          placeholder={cfg.apiKey?.trim() ? 'Saved key hidden. Paste a new key to replace it.' : prov?.keyPlaceholder}
           className="account-appearance-input"
           style={{ width: '100%' }}
         />
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Keys are stored locally in your browser and sent only to the chosen provider.</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 4 }}>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Keys are stored locally for this account, hidden after saving, and sent only to the chosen provider.</p>
+          {cfg.apiKey?.trim() && (
+            <button
+              type="button"
+              onClick={() => setSettings(prev => ({ ...prev, [active]: { ...prev[active], apiKey: '' } }))}
+              style={{ flexShrink: 0, border: 'none', background: 'none', color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Remove key
+            </button>
+          )}
+        </div>
       </div>
     </section>
   )

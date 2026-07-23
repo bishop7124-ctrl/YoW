@@ -3,6 +3,7 @@ import { supabase } from '../supabase'
 import { OFFLINE_MODE, OFFLINE_USER } from '../utils/offlineMock'
 import { deleteAllUserData } from '../utils/firestoreSync'
 import { runSyncFlush } from '../store/syncFlushRegistry'
+import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSettings'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -37,6 +38,7 @@ export function AuthProvider({ children }) {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearAiSettingsForOtherUser(session?.user?.id || null)
       setUser(session?.user ?? null)
     }).catch(console.warn)
 
@@ -46,9 +48,11 @@ export function AuthProvider({ children }) {
         setUser(session?.user ?? null)
       } else if (event === 'SIGNED_OUT') {
         setRecoveryMode(false)
+        clearAiSettings()
         setUser(null)
       } else {
         // Don't clear recoveryMode here — SIGNED_IN fires right after PASSWORD_RECOVERY
+        clearAiSettingsForOtherUser(session?.user?.id || null)
         setUser(session?.user ?? null)
         // Fire welcome email after email confirmation is complete (PKCE flow)
         if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at && session.user.id) {
@@ -98,13 +102,14 @@ export function AuthProvider({ children }) {
     : () => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
 
   const signOut = OFFLINE_MODE
-    ? () => { setUser(null); return Promise.resolve() }
+    ? () => { clearAiSettings(); setUser(null); return Promise.resolve() }
     : async () => {
         // Send any still-debounced cloud writes (e.g. a character created a
         // moment ago) while the session is still valid — once signed out,
         // the store wipes its local cache and the same writes would go out
         // unauthenticated and be silently dropped, losing the edit for good.
         await runSyncFlush()
+        clearAiSettings()
         const { error } = await supabase.auth.signOut().catch(() => ({ error: true }))
         if (error) {
           // Network timeout or error — clear session locally so the UI still signs out

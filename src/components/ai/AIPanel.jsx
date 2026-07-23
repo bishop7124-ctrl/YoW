@@ -44,12 +44,25 @@ const DEFAULT_SETTINGS = DEFAULT_AI_SETTINGS
 
 function ProviderSettings({ settings, onSave, onCancel }) {
   const [local, setLocal] = useState(settings)
+  const [keyDrafts, setKeyDrafts] = useState({})
   const active = local.activeProvider
   const prov = PROVIDERS[active]
   const cfg = local[active]
 
   const update = (field, val) =>
     setLocal(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
+  const updateKeyDraft = (val) =>
+    setKeyDrafts(prev => ({ ...prev, [active]: val }))
+
+  const saveLocal = () => {
+    const next = { ...local }
+    Object.entries(keyDrafts).forEach(([provider, value]) => {
+      if (!value?.trim()) return
+      next[provider] = { ...next[provider], apiKey: value.trim() }
+    })
+    setKeyDrafts({})
+    onSave(next)
+  }
 
   const hasKey = !!cfg.apiKey.trim()
 
@@ -144,17 +157,28 @@ function ProviderSettings({ settings, onSave, onCancel }) {
           </label>
           <input
             type="password"
-            value={cfg.apiKey}
-            onChange={e => update('apiKey', e.target.value)}
-            placeholder={prov.keyPlaceholder}
+            name={`yow-chat-${active}-api-token`}
+            autoComplete="new-password"
+            value={keyDrafts[active] || ''}
+            onChange={e => updateKeyDraft(e.target.value)}
+            placeholder={hasKey ? 'Saved key hidden. Paste a new key to replace it.' : prov.keyPlaceholder}
             className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)]"
           />
+          {hasKey && (
+            <button
+              type="button"
+              onClick={() => setLocal(prev => ({ ...prev, [active]: { ...prev[active], apiKey: '' } }))}
+              className="mt-1 text-[11px] font-bold text-red-400 hover:text-red-300"
+            >
+              Remove saved key
+            </button>
+          )}
         </div>
       </div>
 
       <div className="px-4 py-3 border-t border-[var(--border)] flex gap-2 flex-shrink-0">
         <button
-          onClick={() => onSave(local)}
+          onClick={saveLocal}
           className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded text-sm hover:opacity-90"
         >
           Save
@@ -715,6 +739,10 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         <div className="flex gap-2 items-end">
           <textarea
             ref={inputRef}
+            name="yow-ai-chat-message"
+            autoComplete="off"
+            autoCorrect="on"
+            spellCheck
             value={input}
             onChange={e => {
               setInput(e.target.value)

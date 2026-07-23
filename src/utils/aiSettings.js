@@ -4,6 +4,7 @@ export const AI_SETTINGS_KEY = 'nf_aiSettings'
 export const AI_SETTINGS_OWNER_KEY = 'nf_aiSettingsOwner'
 export const LEGACY_AI_SETTINGS_KEY = 'nf-ai-settings'
 export const LOCAL_OWNER_KEY = 'nf_localOwner'
+const PROVIDER_IDS = ['google', 'anthropic', 'openrouter', 'openai']
 
 export const DEFAULT_AI_SETTINGS = {
   activeProvider: 'openrouter',
@@ -19,10 +20,18 @@ const readJson = (key, def) => {
 
 export function mergeAiSettings(settings = {}, defaults = DEFAULT_AI_SETTINGS) {
   const merged = { ...defaults, ...settings }
-  for (const provider of ['google', 'anthropic', 'openrouter', 'openai']) {
+  for (const provider of PROVIDER_IDS) {
     merged[provider] = { ...(defaults[provider] || {}), ...(settings[provider] || {}) }
   }
   return merged
+}
+
+export function stripAiSecrets(settings = {}) {
+  const cleaned = mergeAiSettings(settings)
+  for (const provider of PROVIDER_IDS) {
+    cleaned[provider] = { ...cleaned[provider], apiKey: '' }
+  }
+  return cleaned
 }
 
 export function loadAiSettings(userId = null, defaults = DEFAULT_AI_SETTINGS) {
@@ -52,6 +61,21 @@ export function saveAiSettings(settings, userId = null) {
   localStorage.removeItem(LEGACY_AI_SETTINGS_KEY)
   if (userId) localStorage.setItem(AI_SETTINGS_OWNER_KEY, userId)
   else localStorage.removeItem(AI_SETTINGS_OWNER_KEY)
+}
+
+export function clearAiSettings() {
+  localStorage.removeItem(AI_SETTINGS_KEY)
+  localStorage.removeItem(AI_SETTINGS_OWNER_KEY)
+  localStorage.removeItem(LEGACY_AI_SETTINGS_KEY)
+}
+
+export function clearAiSettingsForOtherUser(userId = null) {
+  if (!userId) {
+    clearAiSettings()
+    return
+  }
+  const settingsOwner = localStorage.getItem(AI_SETTINGS_OWNER_KEY)
+  if (settingsOwner && settingsOwner !== userId) clearAiSettings()
 }
 
 export function getActiveAiConfig(userId = null, defaults = DEFAULT_AI_SETTINGS) {
