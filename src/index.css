@@ -16776,22 +16776,6 @@ body {
   color: var(--accent);
   margin: 0 0 8px;
 }
-.series-dash-card-edit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 10px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,.07);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.series-dash-card-edit-btn:hover { background: rgba(255,255,255,.13); color: var(--text-main); }
-
 /* ── Top bar breadcrumb ── */
 .series-back-btn {
   display: inline-flex;
