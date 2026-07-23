@@ -411,7 +411,7 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
   }
 
   return (
-    <div className={cx('studio-sheet-backdrop', centered && 'is-centered')}>
+    <div className={cx('studio-sheet-backdrop', centered && 'is-centered')} onClick={requestClose}>
       <section
         ref={dialogRef}
         role="dialog"
