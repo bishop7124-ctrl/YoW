@@ -897,6 +897,7 @@ export default function Layout({
   onOpenSeries,
   onGoHome,
   tourStore,
+  suppressAutoTour = false,
   localModeBubble,
 }) {
   const projectTypeCfg = getProjectType(store.activeNovel?.type)
@@ -939,12 +940,13 @@ export default function Layout({
 
   // Auto-show tour on first visit to each section
   useEffect(() => {
+    if (suppressAutoTour) return
     if (!tourStore || !tourStore.toursEnabled || !activeSectionTour) return
     if (tourStore.isTourComplete(activeSectionTourId)) return
     // Small delay so the section content can mount and data-tour elements can appear
     const t = setTimeout(() => setOpenSectionTourId(activeSectionTourId), 400)
     return () => clearTimeout(t)
-  }, [activeSectionTourId, tourStore?.toursEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSectionTourId, tourStore?.toursEnabled, suppressAutoTour]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetStudioIndex = useCallback(() => {
     window.dispatchEvent(new Event('studio-index-reset'))
@@ -1237,7 +1239,7 @@ export default function Layout({
 
       <AIPanel store={store} open={aiOpen} onClose={() => setAiOpen(false)} initialContext={initialContext} membership={membership} userId={userId} />
 
-      {tourStore?.toursEnabled && openSectionTourId === activeSectionTourId && activeSectionTour && (
+      {!suppressAutoTour && tourStore?.toursEnabled && openSectionTourId === activeSectionTourId && activeSectionTour && (
         <OnboardingTour
           key={activeSectionTourId}
           steps={activeSectionTour}

@@ -91,7 +91,6 @@ function getAuthRouteMode(path) {
 
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
 const aiSetupPromptKey = (userId) => userId ? `nf_aiSetupPrompt:${userId}` : null
-const aiSetupAfterOwnProjectKey = (userId) => userId ? `nf_aiSetupAfterOwnProject:${userId}` : null
 
 function getLocalModeNoticeKey(userId, membership, storageMode) {
   if (!userId) return null
@@ -727,14 +726,6 @@ function AppInner() {
   }
 
   const userProjects = store.novels.filter(project => !project.isSampleProject)
-  useEffect(() => {
-    if (!userId || dataLoading || userProjects.length === 0) return
-    const pendingKey = aiSetupAfterOwnProjectKey(userId)
-    if (!pendingKey || localStorage.getItem(pendingKey) !== 'pending') return
-    localStorage.removeItem(pendingKey)
-    const t = window.setTimeout(maybeOpenAiSetupPrompt, 0)
-    return () => window.clearTimeout(t)
-  }, [userId, dataLoading, userProjects.length, maybeOpenAiSetupPrompt])
 
   // Pricing page is accessible regardless of auth state
   if (showPricing) {
@@ -1063,6 +1054,24 @@ function AppInner() {
     store.setActiveNovelId(null)
   }
 
+  const firstRunChoiceOpen = userProjects.length === 0 && !tourStore.wizardShown(userId) && !dataLoading
+  const showWelcomeTour = user && tourStore.toursEnabled && !firstRunChoiceOpen && !tourStore.welcomeShown(userId) && !dataLoading
+  const closeWelcomeTour = () => tourStore.markWelcomeShown(userId)
+  const disableWelcomeTours = () => {
+    tourStore.setToursEnabled(false)
+    tourStore.markWelcomeShown(userId)
+  }
+  const onboardingPromptsOpen = firstRunChoiceOpen || aiSetupPromptOpen || accountOpen
+  const isFirstRun = firstRunChoiceOpen && !showWelcomeTour
+  const startSampleTour = () => {
+    const existingSample = store.novels.find(project => project.isSampleProject)
+    const sample = existingSample || ensureSampleProject?.()
+    tourStore.markWizardShown(userId)
+    tourStore.markWelcomeShown(userId)
+    if (sample?.id) handleOpenProject(sample.id)
+    window.setTimeout(maybeOpenAiSetupPrompt, 0)
+  }
+
   const applyProjectEntryTarget = (target = {}) => {
     if (!target?.type || !target?.itemId) return
     if (target.type === 'character') store.setSelectedCharacterId?.(target.itemId)
@@ -1088,6 +1097,28 @@ function AppInner() {
     setViewMode('series')
     setSeriesEntryNovelId(null)
   }
+
+  const aiSetupPromptOverlay = aiSetupPromptOpen ? (
+    <div className="modal-overlay" onClick={closeAiSetupPrompt}>
+      <div className="modal-content max-w-md" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ai-setup-title">
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Optional setup</p>
+            <h2 id="ai-setup-title">Set up AI when you are ready</h2>
+          </div>
+        </div>
+        <div className="modal-body">
+          <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+            AI can help import existing notes, explore characters, review plot and lore, and reduce repetitive setup. YOW uses your own provider API key where required.
+          </p>
+          <div className="flex gap-2 justify-end mt-5">
+            <button type="button" className="btn btn-secondary" onClick={closeAiSetupPrompt}>Maybe later</button>
+            <button type="button" className="btn btn-primary" onClick={openAiSetupFromPrompt}>Set up AI</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   const globalOverlays = (
     <>
@@ -1124,9 +1155,11 @@ function AppInner() {
           onOpenSeries={seriesContext ? handleBackToSeries : null}
           onGoHome={() => { store.setActiveNovelId(null); setViewMode('manager') }}
           tourStore={tourStore}
+          suppressAutoTour={onboardingPromptsOpen}
           localModeBubble={localModeNoticeDismissed ? localModeNotice : null}
         />
         {accountPage}
+        {aiSetupPromptOverlay}
         {globalOverlays}
       </>
     )
@@ -1152,27 +1185,9 @@ function AppInner() {
     )
   }
 
-  const firstRunChoiceOpen = userProjects.length === 0 && !tourStore.wizardShown(userId) && !dataLoading
-  const showWelcomeTour = user && tourStore.toursEnabled && !firstRunChoiceOpen && !tourStore.welcomeShown(userId) && !dataLoading
-  const closeWelcomeTour = () => tourStore.markWelcomeShown(userId)
-  const disableWelcomeTours = () => {
-    tourStore.setToursEnabled(false)
-    tourStore.markWelcomeShown(userId)
-  }
-  const isFirstRun = firstRunChoiceOpen && !showWelcomeTour
-  const startSampleTour = () => {
-    const existingSample = store.novels.find(project => project.isSampleProject)
-    const sample = existingSample || ensureSampleProject?.()
-    tourStore.markWizardShown(userId)
-    tourStore.markWelcomeShown(userId)
-    const pendingKey = aiSetupAfterOwnProjectKey(userId)
-    if (pendingKey) localStorage.setItem(pendingKey, 'pending')
-    if (sample?.id) handleOpenProject(sample.id)
-  }
-
   return (
     <>
-      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} suppressAutoTour={showWelcomeTour} localModeBubble={localModeNoticeDismissed ? localModeNotice : null} />
+      <NovelManager store={store} user={user} onOpenProject={handleOpenProject} onOpenSeries={handleOpenSeries} onOpenChat={() => setLibraryAiOpen(true)} onOpenAccount={() => setAccountOpen(true)} onOpenHelp={() => setHelpOpen(true)} onOpenLegal={setLegalPage} onOpenAbout={() => setAboutOpen(true)} membership={membership} tourStore={tourStore} suppressAutoTour={showWelcomeTour || onboardingPromptsOpen} localModeBubble={localModeNoticeDismissed ? localModeNotice : null} />
       {showWelcomeTour && (
         <OnboardingTour
           steps={WELCOME_TOUR}
@@ -1189,27 +1204,7 @@ function AppInner() {
           onSkip={() => tourStore.markWizardShown(userId)}
         />
       )}
-      {aiSetupPromptOpen && (
-        <div className="modal-overlay" onClick={closeAiSetupPrompt}>
-          <div className="modal-content max-w-md" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ai-setup-title">
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Optional setup</p>
-                <h2 id="ai-setup-title">Set up AI when you are ready</h2>
-              </div>
-            </div>
-            <div className="modal-body">
-              <p className="text-sm text-[var(--text-muted)] leading-relaxed">
-                AI can help import existing notes, explore characters, review plot and lore, and reduce repetitive setup. YOW uses your own provider API key where required.
-              </p>
-              <div className="flex gap-2 justify-end mt-5">
-                <button type="button" className="btn btn-secondary" onClick={closeAiSetupPrompt}>Maybe later</button>
-                <button type="button" className="btn btn-primary" onClick={openAiSetupFromPrompt}>Set up AI</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {aiSetupPromptOverlay}
       <AIPanel
         store={store}
         open={libraryAiOpen}
