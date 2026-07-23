@@ -238,6 +238,105 @@ const buildStarterStructure = (novelId, type) => {
   return { acts: starterActs, chapters: starterChapters, scenes: starterScenes }
 }
 
+const sampleProjectSeedKey = (ownerId) => ownerId ? `nf_sampleProjectSeeded:${ownerId}` : null
+
+const buildSampleProjectData = () => {
+  const now = new Date().toISOString()
+  const projectId = uid()
+  const actId = uid()
+  const chapterId = uid()
+  const sceneId = uid()
+  const mapId = uid()
+  const whiteboardId = uid()
+  const scheduleId = uid()
+  const characters = [
+    { id: uid(), novelId: projectId, name: 'Mara Vey', role: 'Cartographer protagonist', keywords: ['Mara'], bio: 'A reluctant mapmaker tracing the border between the city and the old forest.', externalGoal: 'Find the missing survey team.', internalGoal: 'Trust her own judgement after a public failure.', factionId: '', locationIds: [], relationships: [] },
+    { id: uid(), novelId: projectId, name: 'Edrin Sol', role: 'Archivist ally', keywords: ['Edrin'], bio: 'Keeper of the Lantern Archive and the first person to notice the maps changing overnight.', factionId: '', locationIds: [], relationships: [] },
+  ]
+  const factions = [
+    { id: uid(), novelId: projectId, name: 'The Lantern Archive', description: 'A civic order that preserves maps, witness accounts, and forbidden expedition records.', motto: 'Nothing lost stays silent.' },
+  ]
+  const locations = [
+    { id: uid(), novelId: projectId, name: 'Greyharbor', category: 'City', description: 'A canal city built around old sea walls and newer secrets.', characterIds: [characters[0].id, characters[1].id] },
+    { id: uid(), novelId: projectId, name: 'The Briar Gate', category: 'Threshold', description: 'A sealed forest road that appears on maps only after sunset.', characterIds: [characters[0].id] },
+  ]
+  characters[0].factionId = factions[0].id
+  characters[0].locationIds = [locations[0].id, locations[1].id]
+  characters[0].relationships = [{ characterId: characters[1].id, type: 'ally', note: 'Edrin supplies records Mara cannot access alone.' }]
+  characters[1].factionId = factions[0].id
+  characters[1].locationIds = [locations[0].id]
+  characters[1].relationships = [{ characterId: characters[0].id, type: 'ally', note: 'Trusts Mara with the archive most dangerous map.' }]
+  const loreEntries = [
+    { id: uid(), novelId: projectId, title: 'Living Maps', category: 'Magic system', content: 'Some maps revise themselves when a place changes its allegiance, name, or memory.', characterIds: [characters[1].id], locationIds: [locations[1].id] },
+    { id: uid(), novelId: projectId, title: 'Surveyor Bells', category: 'Artifact', content: 'Small brass bells used to mark safe paths through the old forest.', characterIds: [characters[0].id], locationIds: [locations[1].id] },
+  ]
+  const timeline = [
+    { id: uid(), novelId: projectId, title: 'The Survey Team Vanishes', date: 'Year 312, Frostwane', description: 'Three surveyors cross the Briar Gate and do not return.', linkedCharacters: [characters[0].id], linkedLocations: [locations[1].id], category: 'inciting incident', tags: ['sample'] },
+  ]
+  const worldHistory = [
+    { id: uid(), novelId: projectId, title: 'The First Closing of the Gate', era: 'Founding', dateRange: 'Year 201', content: 'Greyharbor sealed the Briar Gate after maps began contradicting eyewitnesses.', category: 'city history', tags: ['sample'] },
+  ]
+  return {
+    project: { id: projectId, title: 'Sample Project: The Briar Gate', description: 'A small editable demo project showing how manuscript, characters, places, lore, factions, and history can connect.', type: 'novel', status: 'draft', isSampleProject: true, createdAt: now },
+    acts: [{ id: actId, novelId: projectId, title: 'Act 1: The Map Changes', synopsis: 'Mara discovers that the official map no longer matches Greyharbor.', order: 0 }],
+    chapters: [{ id: chapterId, novelId: projectId, actId, title: 'Chapter 1: Ink After Midnight', synopsis: 'Edrin brings Mara a map that redrew itself while locked in the archive.', order: 0 }],
+    scenes: [{ id: sceneId, novelId: projectId, chapterId, title: 'The archive wakes', synopsis: 'Mara and Edrin compare the altered map against the old city records.', content: 'Mara Vey found the new road in ink that was still wet. Edrin Sol insisted the map had been sealed since dusk, but the line now ran from Greyharbor to the Briar Gate as if someone had drawn a path through memory itself.', order: 0, lastModified: Date.now() }],
+    characters,
+    factions,
+    locations,
+    loreEntries,
+    timeline,
+    worldHistory,
+    maps: [{
+      id: mapId,
+      novelId: projectId,
+      name: 'Greyharbor and the Briar Road',
+      mapType: 'region',
+      mapPins: [],
+      mapRegions: [],
+      mapObjects: [
+        { id: uid(), type: 'label', x: 420, y: 580, width: 120, height: 40, properties: { text: 'Greyharbor', locationId: locations[0].id }, geometry: null },
+        { id: uid(), type: 'label', x: 660, y: 340, width: 140, height: 40, properties: { text: 'The Briar Gate', locationId: locations[1].id }, geometry: null },
+      ],
+      mapLayers: [],
+      notes: 'Sample map showing how places can be pinned to the project atlas.',
+      metadata: { baseLayer: 'land' },
+      created: Date.now(),
+      updatedAt: now,
+    }],
+    whiteboards: [{
+      id: whiteboardId,
+      novelId: projectId,
+      whiteboard: {
+        notes: [
+          { id: uid(), title: 'Open question', text: 'Who benefits if the maps keep changing?', x: 120, y: 100 },
+          { id: uid(), title: 'Connected clue', text: 'Surveyor Bells + Living Maps', x: 360, y: 180, loreEntryIds: loreEntries.map(entry => entry.id) },
+        ],
+        groups: [],
+      },
+      createdAt: now,
+      updatedAt: now,
+    }],
+    storySchedule: [{
+      id: scheduleId,
+      novelId: projectId,
+      title: 'Review the sample project',
+      year: 1,
+      month: 1,
+      day: 1,
+      duration: 1,
+      category: 'planning',
+      description: 'Try editing a character, location, lore entry, and outline scene.',
+      linkedCharacters: [characters[0].id],
+      linkedLocations: [locations[0].id],
+      tags: ['sample'],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }],
+    ideaEntries: [{ id: uid(), novelId: projectId, title: 'Review the map rules', description: 'Decide what causes a living map to update and what it refuses to show.', body: 'Decide what causes a living map to update and what it refuses to show.', group: 'Worldbuilding', tags: ['sample'], status: 'raw', order: 0, createdAt: Date.now(), updatedAt: Date.now() }],
+  }
+}
+
 const withSceneContentHistory = (scene, content, now = Date.now()) => {
   const today = dateKey(now)
   const wordCount = countWords(content)
@@ -2266,6 +2365,31 @@ export function useStore(userId = null, options = {}) {
     return project
   }
 
+  const ensureSampleProject = useCallback(() => {
+    const key = sampleProjectSeedKey(userId)
+    if (!key || novelsRef.current.length > 0 || readItem(key) === '1') return null
+    const sample = buildSampleProjectData()
+    writeItem(key, '1')
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, sample.project])
+    commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...sample.acts])
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...sample.chapters])
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...sample.scenes])
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => [...prev, ...sample.characters])
+    commitLocal(factionsRef, setFactions, 'nf_factions', prev => [...prev, ...sample.factions])
+    commitLocal(locationsRef, setLocations, 'nf_locations', prev => [...prev, ...sample.locations])
+    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, ...sample.loreEntries])
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, ...sample.timeline])
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, ...sample.worldHistory])
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => [...prev, ...sample.maps])
+    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => [...prev, ...sample.whiteboards])
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, ...sample.storySchedule])
+    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, ...sample.ideaEntries])
+    if (canSyncCloud) {
+      saveSceneDoc(userId, sample.scenes[0]).catch(console.error)
+    }
+    return sample.project
+  }, [userId, canSyncCloud, commitLocal])
+
   // Per-project read-only: free tier users can only edit their chosen project
   const readOnly = globalReadOnly || (
     freeProjectId !== null && activeNovelId !== null && activeNovelId !== freeProjectId
@@ -2301,7 +2425,7 @@ export function useStore(userId = null, options = {}) {
   const api = {
     readOnly,
     freeProjectId,
-    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, addNovel, updateNovel, deleteNovel, importProjectFromData, getProjectExportData, getProjectContextData,
+    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, addNovel, updateNovel, deleteNovel, importProjectFromData, ensureSampleProject, getProjectExportData, getProjectContextData,
     series, addSeries, deleteSeries, updateSeries, updateSeriesContinuity, reorderSeries, reorderNovels,
     continuityRecords: {
       characters,
@@ -2365,7 +2489,7 @@ export function useStore(userId = null, options = {}) {
   if (!readOnly) return api
 
   const guardedMethods = [
-    'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
+    'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'ensureSampleProject', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
     'saveCharacter', 'saveCharacterJourney', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
     'addEvent', 'updateEvent', 'deleteEvent', 'linkTimelineHistory', 'unlinkTimelineHistory', 'addHistoryEntry', 'updateHistoryEntry', 'deleteHistoryEntry',
     'addEra', 'updateEra', 'deleteEra',

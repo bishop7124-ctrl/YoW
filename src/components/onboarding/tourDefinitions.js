@@ -22,7 +22,7 @@ export const WELCOME_TOUR = [
 
 export const LIBRARY_TOUR = [
   {
-    target: 'library-top-bar',
+    target: ['library-top-bar', 'library-content'],
     title: 'Your library',
     body: 'This is your command centre. Create projects, start a new series, or import existing work from here.',
   },
@@ -37,7 +37,7 @@ export const LIBRARY_TOUR = [
     body: 'Already have writing? Use AI Import to upload any file, or Import ZIP to restore a YOW backup or compatible project archive.',
   },
   {
-    target: 'active-project-hero',
+    target: ['active-project-hero', 'library-content'],
     title: 'Active project',
     body: 'Star any project to pin it here as your active focus. Click the hero panel to open it directly.',
   },

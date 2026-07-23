@@ -1,4 +1,4 @@
-import { Component, useMemo, useState, useEffect, useRef } from 'react'
+import { Component, useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
 import { loadUserData, replaceUserData } from './utils/firestoreSync'
@@ -35,6 +35,7 @@ import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
+import { loadAiSettings } from './utils/aiSettings'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
@@ -89,6 +90,8 @@ function getAuthRouteMode(path) {
 }
 
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
+const aiSetupPromptKey = (userId) => userId ? `nf_aiSetupPrompt:${userId}` : null
+const aiSetupAfterOwnProjectKey = (userId) => userId ? `nf_aiSetupAfterOwnProject:${userId}` : null
 
 function getLocalModeNoticeKey(userId, membership, storageMode) {
   if (!userId) return null
@@ -222,7 +225,7 @@ function AppInner() {
     storageQuotaBytes: desktopApp ? null : devStorageExceeded ? 1 : membership.storageQuotaBytes,
     cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode,
   })
-  const { importData, finishRemoteLoad, clearData } = store
+  const { importData, finishRemoteLoad, clearData, ensureSampleProject } = store
   const [dataLoading, setDataLoading] = useState(false)
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
@@ -263,6 +266,7 @@ function AppInner() {
   const [freeProjectBusy, setFreeProjectBusy] = useState(false)
   const [legalPage, setLegalPage] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [aiSetupPromptOpen, setAiSetupPromptOpen] = useState(false)
   const tourStore = useTourStore()
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
@@ -697,6 +701,41 @@ function AppInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userId, userLocalFirstMode, importData, finishRemoteLoad, clearData])
 
+  const maybeOpenAiSetupPrompt = useCallback(() => {
+    if (!userId) return
+    const key = aiSetupPromptKey(userId)
+    if (!key || localStorage.getItem(key) === 'done') return
+    const settings = loadAiSettings(userId)
+    const provider = settings.activeProvider || 'openrouter'
+    if (settings[provider]?.apiKey?.trim()) {
+      localStorage.setItem(key, 'done')
+      return
+    }
+    setAiSetupPromptOpen(true)
+  }, [userId])
+
+  const closeAiSetupPrompt = () => {
+    const key = aiSetupPromptKey(userId)
+    if (key) localStorage.setItem(key, 'done')
+    setAiSetupPromptOpen(false)
+  }
+
+  const openAiSetupFromPrompt = () => {
+    closeAiSetupPrompt()
+    setAccountTab('ai')
+    setAccountOpen(true)
+  }
+
+  const userProjects = store.novels.filter(project => !project.isSampleProject)
+  useEffect(() => {
+    if (!userId || dataLoading || userProjects.length === 0) return
+    const pendingKey = aiSetupAfterOwnProjectKey(userId)
+    if (!pendingKey || localStorage.getItem(pendingKey) !== 'pending') return
+    localStorage.removeItem(pendingKey)
+    const t = window.setTimeout(maybeOpenAiSetupPrompt, 0)
+    return () => window.clearTimeout(t)
+  }, [userId, dataLoading, userProjects.length, maybeOpenAiSetupPrompt])
+
   // Pricing page is accessible regardless of auth state
   if (showPricing) {
     return (
@@ -1113,13 +1152,23 @@ function AppInner() {
     )
   }
 
-  const showWelcomeTour = user && tourStore.toursEnabled && !tourStore.welcomeShown(userId) && !dataLoading
+  const firstRunChoiceOpen = userProjects.length === 0 && !tourStore.wizardShown(userId) && !dataLoading
+  const showWelcomeTour = user && tourStore.toursEnabled && !firstRunChoiceOpen && !tourStore.welcomeShown(userId) && !dataLoading
   const closeWelcomeTour = () => tourStore.markWelcomeShown(userId)
   const disableWelcomeTours = () => {
     tourStore.setToursEnabled(false)
     tourStore.markWelcomeShown(userId)
   }
-  const isFirstRun = !showWelcomeTour && !tourStore.wizardShown && store.novels.length === 0 && !dataLoading
+  const isFirstRun = firstRunChoiceOpen && !showWelcomeTour
+  const startSampleTour = () => {
+    const existingSample = store.novels.find(project => project.isSampleProject)
+    const sample = existingSample || ensureSampleProject?.()
+    tourStore.markWizardShown(userId)
+    tourStore.markWelcomeShown(userId)
+    const pendingKey = aiSetupAfterOwnProjectKey(userId)
+    if (pendingKey) localStorage.setItem(pendingKey, 'pending')
+    if (sample?.id) handleOpenProject(sample.id)
+  }
 
   return (
     <>
@@ -1135,9 +1184,31 @@ function AppInner() {
       {isFirstRun && (
         <WelcomeWizard
           store={store}
-          onOpenProject={(id) => { tourStore.markWizardShown(); handleOpenProject(id) }}
-          onSkip={() => tourStore.markWizardShown()}
+          onStartSample={startSampleTour}
+          onOpenProject={(id) => { tourStore.markWizardShown(userId); handleOpenProject(id); maybeOpenAiSetupPrompt() }}
+          onSkip={() => tourStore.markWizardShown(userId)}
         />
+      )}
+      {aiSetupPromptOpen && (
+        <div className="modal-overlay" onClick={closeAiSetupPrompt}>
+          <div className="modal-content max-w-md" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ai-setup-title">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Optional setup</p>
+                <h2 id="ai-setup-title">Set up AI when you are ready</h2>
+              </div>
+            </div>
+            <div className="modal-body">
+              <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                AI can help import existing notes, explore characters, review plot and lore, and reduce repetitive setup. YOW uses your own provider API key where required.
+              </p>
+              <div className="flex gap-2 justify-end mt-5">
+                <button type="button" className="btn btn-secondary" onClick={closeAiSetupPrompt}>Maybe later</button>
+                <button type="button" className="btn btn-primary" onClick={openAiSetupFromPrompt}>Set up AI</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
       <AIPanel
         store={store}

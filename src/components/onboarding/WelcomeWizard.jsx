@@ -24,8 +24,8 @@ const WORKSPACE_HIGHLIGHTS = {
   comic:        ['Volume & issue structure planner', 'Page & panel scripting tools', 'Characters, locations & ideas board'],
 }
 
-export default function WelcomeWizard({ store, onOpenProject, onSkip }) {
-  const [step, setStep] = useState(0)
+export default function WelcomeWizard({ store, onOpenProject, onStartSample, onSkip }) {
+  const [step, setStep] = useState('choice')
   const [type, setType] = useState(DEFAULT_TYPE)
   const [title, setTitle] = useState('')
   const [wordTarget, setWordTarget] = useState('')
@@ -55,12 +55,40 @@ export default function WelcomeWizard({ store, onOpenProject, onSkip }) {
     <div className="wizard-backdrop" onClick={onSkip}>
       <div className="wizard-modal" onClick={e => e.stopPropagation()}>
 
-        {/* Progress bar */}
-        <div className="wizard-progress">
-          {[0, 1, 2].map(i => (
-            <div key={i} className={`wizard-progress-step${i <= step ? ' wizard-progress-step--done' : ''}`} />
-          ))}
-        </div>
+        {step !== 'choice' && (
+          <div className="wizard-progress">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={`wizard-progress-step${i <= step ? ' wizard-progress-step--done' : ''}`} />
+            ))}
+          </div>
+        )}
+
+        {step === 'choice' && (
+          <div className="wizard-step">
+            <div className="wizard-header">
+              <p className="wizard-eyebrow">Welcome to Your Own World</p>
+              <h2 className="wizard-title">How would you like to begin?</h2>
+              <p className="wizard-subtitle">
+                Explore a finished sample first, or jump straight into setting up your own project.
+              </p>
+            </div>
+            <div className="wizard-path-grid">
+              <button type="button" className="wizard-path-card wizard-path-card--sample" onClick={onStartSample}>
+                <span className="wizard-path-kicker">Guided</span>
+                <strong>Tour with a sample</strong>
+                <span>Open an editable demo world with characters, places, lore, history, outline content, and connected records already filled in.</span>
+              </button>
+              <button type="button" className="wizard-path-card" onClick={() => setStep(0)}>
+                <span className="wizard-path-kicker">Blank slate</span>
+                <strong>Start my own project</strong>
+                <span>Choose your format, name the project, and begin building your own world from scratch.</span>
+              </button>
+            </div>
+            <div className="wizard-footer">
+              <button className="wizard-skip-link" onClick={onSkip}>Skip for now</button>
+            </div>
+          </div>
+        )}
 
         {/* Step 0 — Choose format */}
         {step === 0 && (
@@ -92,7 +120,7 @@ export default function WelcomeWizard({ store, onOpenProject, onSkip }) {
               })}
             </div>
             <div className="wizard-footer">
-              <button className="wizard-skip-link" onClick={onSkip}>Skip for now</button>
+              <button className="wizard-skip-link" onClick={() => setStep('choice')}>Back to choices</button>
               <button className="wizard-btn wizard-btn--primary" onClick={() => setStep(1)}>
                 Continue →
               </button>
