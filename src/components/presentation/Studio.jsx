@@ -353,7 +353,27 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
   const pendingSubmitRef = useRef(false)
   const [dirty, setDirty] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
-  useEffect(() => { dialogRef.current?.focus() }, [])
+  useEffect(() => { dialogRef.current?.focus({ preventScroll: true }) }, [])
+
+  // Lock body scroll while the sheet is open. iOS Safari can otherwise scroll/repaint
+  // the page behind this fixed-position overlay (e.g. when an input inside the sheet
+  // is focused), visually cutting off the top of the sheet. Using position:fixed with
+  // the saved offset (rather than overflow:hidden alone) is required for this to hold
+  // reliably on iOS Safari.
+  useEffect(() => {
+    const scrollY = window.scrollY
+    const { body } = document
+    const prev = { position: body.style.position, top: body.style.top, width: body.style.width }
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.width = '100%'
+    return () => {
+      body.style.position = prev.position
+      body.style.top = prev.top
+      body.style.width = prev.width
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
 
   const requestClose = () => {
     if (dirty) {

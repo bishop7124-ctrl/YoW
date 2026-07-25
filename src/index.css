@@ -1672,8 +1672,6 @@ textarea:focus {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  height: 100vh;
-  height: 100dvh;
   z-index: 70;
   display: flex;
   justify-content: flex-end;
@@ -1697,8 +1695,7 @@ textarea:focus {
 .modal {
   position: relative;
   width: min(780px, calc(100vw - 26px));
-  max-height: calc(100vh - 26px);
-  max-height: calc(100dvh - 26px);
+  max-height: calc(100% - 26px);
   margin: 13px;
   display: flex;
   flex-direction: column;
@@ -1788,8 +1785,7 @@ textarea:focus {
 @media (max-width: 640px) {
   .studio-sheet {
     width: calc(100vw - 20px);
-    max-height: calc(100vh - 20px);
-    max-height: calc(100dvh - 20px);
+    max-height: calc(100% - 20px);
     margin: 10px;
   }
 

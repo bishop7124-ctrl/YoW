@@ -121,9 +121,11 @@ function FounderSlotsCounter({ slots }) {
 
   return (
     <div style={{
+      position: 'absolute', bottom: '100%', left: '50%',
+      transform: 'translateX(-50%)', marginBottom: 12,
       display: 'inline-flex', alignItems: 'center', gap: 8,
       background: 'var(--accent-fade)', border: '1px solid var(--accent)',
-      borderRadius: 99, padding: '6px 14px',
+      borderRadius: 99, padding: '6px 14px', whiteSpace: 'nowrap',
       fontSize: 12, fontWeight: 700, color: 'var(--text-main)',
     }} role="status" aria-live="polite">
       <span style={{
@@ -149,6 +151,7 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
     <article
       style={{
         position: 'relative',
+        height: '100%',
         borderRadius: 14,
         border: '1.5px solid var(--border)',
         background: 'var(--bg-nav)',
@@ -159,6 +162,8 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
       }}
       aria-label={`${plan.label} plan — ${plan.priceLabel}`}
     >
+      {isFounder && <FounderSlotsCounter slots={founderSlots} />}
+
       {/* Badge */}
       {plan.badge && (
         <div style={{
@@ -508,37 +513,20 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           aria-label="Pricing plans"
           style={{
             maxWidth: 1160, margin: '0 auto',
-            padding: '0 24px 80px',
+            padding: 'clamp(40px, 6vw, 56px) 24px 80px',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
             gap: 16,
-            alignItems: 'start',
           }}
         >
           {displayPlans.map(plan => (
-            plan.isFounder ? (
-              <div key={plan.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {founderSlots !== null && (
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <FounderSlotsCounter slots={founderSlots} />
-                  </div>
-                )}
-                <PricingCard
-                  plan={plan}
-                  onSelect={handleSelect}
-                  busy={busy === plan.key}
-                  founderSlots={founderSlots}
-                />
-              </div>
-            ) : (
-              <PricingCard
-                key={plan.key}
-                plan={plan}
-                onSelect={handleSelect}
-                busy={busy === plan.key}
-                founderSlots={founderSlots}
-              />
-            )
+            <PricingCard
+              key={plan.key}
+              plan={plan}
+              onSelect={handleSelect}
+              busy={busy === plan.key}
+              founderSlots={founderSlots}
+            />
           ))}
         </section>
 

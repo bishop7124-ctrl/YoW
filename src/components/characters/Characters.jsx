@@ -121,13 +121,13 @@ function TextField({ label, value, onChange, placeholder, className = '' }) {
 
 function TabStrip({ tabs, activeTab, onChange }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex gap-2 overflow-x-auto -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
       {tabs.map(([id, label]) => (
         <button
           key={id}
           type="button"
           onClick={() => onChange(id)}
-          className={`px-3 py-1.5 rounded border text-xs font-bold transition-colors ${activeTab === id ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-fade)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+          className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded border text-xs font-bold transition-colors ${activeTab === id ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-fade)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
         >
           {label}
         </button>

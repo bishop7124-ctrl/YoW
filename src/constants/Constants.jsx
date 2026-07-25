@@ -71,6 +71,12 @@ export const REL_TYPES = [
     color: "#f472b6",
     dash: "3 4",
   },
+  {
+    id: "relative",
+    label: "Relative",
+    color: "#c084fc",
+    dash: "5 3",
+  },
 ];
 
 export const FAMILY_RELATIONSHIP_TYPE_IDS = new Set([
