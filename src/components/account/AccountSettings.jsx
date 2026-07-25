@@ -9,7 +9,7 @@ import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
-import { PROVIDERS } from '../../utils/aiApi'
+import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import AIStar from '../ai/AIStar'
 import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
@@ -1425,6 +1425,8 @@ function AISettingsPanel({ userId, membership }) {
   const [settings, setSettings] = useState(() => loadAiSettings(userId, DEFAULT_AI_SETTINGS))
   const [keyDrafts, setKeyDrafts] = useState({})
   const [saved, setSaved] = useState(false)
+  const [openRouterModels, setOpenRouterModels] = useState(null) // null until loaded
+  const [openRouterModelsFailed, setOpenRouterModelsFailed] = useState(false)
 
   useEffect(() => {
     setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
@@ -1434,6 +1436,18 @@ function AISettingsPanel({ userId, membership }) {
   const active = settings.activeProvider
   const prov = PROVIDERS[active]
   const cfg = settings[active] || {}
+
+  // OpenRouter's hardcoded starter list above doesn't reflect the 300+
+  // models actually on the platform (or which ones a given account can use)
+  // — fetch the live, current catalog instead once the provider is selected.
+  useEffect(() => {
+    if (active !== 'openrouter' || openRouterModels || openRouterModelsFailed) return
+    let cancelled = false
+    fetchOpenRouterModels()
+      .then(list => { if (!cancelled) setOpenRouterModels(list) })
+      .catch(() => { if (!cancelled) setOpenRouterModelsFailed(true) })
+    return () => { cancelled = true }
+  }, [active, openRouterModels, openRouterModelsFailed])
 
   const update = (field, val) =>
     setSettings(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
@@ -1455,7 +1469,8 @@ function AISettingsPanel({ userId, membership }) {
 
   const activeModelLabel = (() => {
     const model = cfg.model || prov?.defaultModel || ''
-    const found = prov?.models?.find(m => m.id === model)
+    const catalog = active === 'openrouter' && openRouterModels ? openRouterModels : prov?.models
+    const found = catalog?.find(m => m.id === model)
     return found ? found.label : model || 'Not set'
   })()
 
@@ -1566,24 +1581,51 @@ function AISettingsPanel({ userId, membership }) {
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
           Model — {prov?.name}
         </p>
-        <select
-          value={cfg.model || prov?.defaultModel || ''}
-          onChange={e => update('model', e.target.value)}
-          className="account-appearance-input"
-          style={{ width: '100%' }}
-        >
-          {prov?.models?.map(m => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-        {prov?.models?.length === 0 && (
-          <input
-            value={cfg.model || ''}
-            onChange={e => update('model', e.target.value)}
-            placeholder={`e.g. ${prov?.defaultModel}`}
-            className="account-appearance-input"
-            style={{ width: '100%', marginTop: 4 }}
-          />
+        {active === 'openrouter' ? (
+          <>
+            <input
+              list="openrouter-model-options"
+              value={cfg.model || prov?.defaultModel || ''}
+              onChange={e => update('model', e.target.value)}
+              placeholder="Search OpenRouter models, or paste any model id…"
+              className="account-appearance-input"
+              style={{ width: '100%' }}
+            />
+            <datalist id="openrouter-model-options">
+              {(openRouterModels || prov.models).map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </datalist>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {openRouterModels
+                ? `Live catalog — ${openRouterModels.length} models currently on OpenRouter. Type to search, or paste any model id directly.`
+                : openRouterModelsFailed
+                  ? "Couldn't load OpenRouter's live model list — type or paste any model id from your account directly."
+                  : 'Loading the current model list from OpenRouter…'}
+            </p>
+          </>
+        ) : (
+          <>
+            <select
+              value={cfg.model || prov?.defaultModel || ''}
+              onChange={e => update('model', e.target.value)}
+              className="account-appearance-input"
+              style={{ width: '100%' }}
+            >
+              {prov?.models?.map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+            {prov?.models?.length === 0 && (
+              <input
+                value={cfg.model || ''}
+                onChange={e => update('model', e.target.value)}
+                placeholder={`e.g. ${prov?.defaultModel}`}
+                className="account-appearance-input"
+                style={{ width: '100%', marginTop: 4 }}
+              />
+            )}
+          </>
         )}
       </div>
 

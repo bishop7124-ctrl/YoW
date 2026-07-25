@@ -258,13 +258,23 @@ const setThemeVars = (root, colors) => {
   Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value))
 }
 
+// Keeps the browser's own chrome (iOS Safari status bar / toolbar tint) in sync with
+// the active theme, so it never falls back to a default white bar above/below the app.
+const syncThemeColorMeta = (bgMain) => {
+  if (!bgMain) return
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', bgMain)
+}
+
 export const applyThemeToDocument = (theme, customColors = {}) => {
   const root = document.documentElement
   const normalized = normalizeThemeChoice(theme)
 
   if (normalized === 'custom') {
     root.setAttribute('data-theme', 'custom')
-    setThemeVars(root, { ...DEFAULT_CUSTOM_COLORS, ...customColors })
+    const colors = { ...DEFAULT_CUSTOM_COLORS, ...customColors }
+    setThemeVars(root, colors)
+    syncThemeColorMeta(colors.bgMain)
     return normalized
   }
 
@@ -272,12 +282,14 @@ export const applyThemeToDocument = (theme, customColors = {}) => {
   if (quickPalette) {
     root.setAttribute('data-theme', normalized)
     setThemeVars(root, quickPalette.swatches)
+    syncThemeColorMeta(quickPalette.swatches.bgMain)
     return normalized
   }
 
   // Built-in theme — remove any inline overrides and let the CSS block handle everything
   ALL_CSS_VARS.forEach(variable => root.style.removeProperty(variable))
   root.setAttribute('data-theme', normalized)
+  syncThemeColorMeta(getThemeOption(normalized)?.swatches?.bgMain)
   return normalized
 }
 

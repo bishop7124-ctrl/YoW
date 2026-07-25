@@ -125,7 +125,12 @@ export default function Manuscript({ store, userId, membership = null }) {
   // mode returns to this scene instead of the top of the manuscript.
   const activeSceneId = writingSceneId
   const setActiveSceneId = setWritingSceneId
-  const [activeSidebarTab, setActiveSidebarTab] = useState('structure') // null | 'structure' | 'goals' | 'progress' | 'notes'
+  // On mobile the sidebar becomes a bottom-sheet overlay instead of a persistent side
+  // panel, so defaulting it open (as desktop does) buries the manuscript behind it the
+  // moment a scene opens. Land on the manuscript there and let the tab strip open it.
+  const [activeSidebarTab, setActiveSidebarTab] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth <= 640 ? null : 'structure'
+  )) // null | 'structure' | 'goals' | 'progress' | 'notes'
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [formatSettings, setFormatSettings] = useState(loadFormat)
@@ -661,22 +666,22 @@ export default function Manuscript({ store, userId, membership = null }) {
           </button>
         )}
 
-        {/* Notes toggle */}
+        {/* Notes toggle — duplicates the mobile bottom tab bar's Notes tab, so it's hidden there */}
         {!activeFinalizedDraft && (
           <button
             onClick={() => setActiveSidebarTab(v => v === 'notes' ? null : 'notes')}
-            className={`ms-toolbar-btn${activeSidebarTab === 'notes' ? ' is-active' : ''}`}
+            className={`ms-toolbar-btn ms-toolbar-btn-notes${activeSidebarTab === 'notes' ? ' is-active' : ''}`}
             title="Scene notes"
           >
             Notes{activeScene?.notes?.length ? ` (${activeScene.notes.length})` : ''}
           </button>
         )}
 
-        {/* AI assistant */}
+        {/* AI assistant — duplicates the mobile bottom tab bar's AI tab, so it's hidden there */}
         {!activeFinalizedDraft && (
           <button
             onClick={() => setActiveSidebarTab(v => v === 'ai' ? null : 'ai')}
-            className={`ms-toolbar-btn${activeSidebarTab === 'ai' ? ' is-active' : ''}`}
+            className={`ms-toolbar-btn ms-toolbar-btn-ai${activeSidebarTab === 'ai' ? ' is-active' : ''}`}
             title="AI writing assistant"
           >
             <AIStar size={11} />

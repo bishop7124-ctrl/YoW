@@ -144,7 +144,7 @@ Return ONLY a valid JSON object (no markdown fences, no explanation) with this s
   "characters": [{ "name": "string", "role": "string (e.g. protagonist, antagonist, supporting)", "bio": "string (1-2 sentences)" }],
   "locations": [{ "name": "string", "category": "string (e.g. City, Dungeon, Forest, Planet)", "description": "string (1-2 sentences)" }],
   "factions": [{ "name": "string", "description": "string (1-2 sentences)" }],
-  "lore": [{ "title": "string", "category": "string (e.g. Magic, History, Technology, Religion)", "content": "string (2-4 sentences)" }],
+  "lore": [{ "title": "string", "category": "string (e.g. Magic, History, Technology, Religion, Custom, Object, Rule of the World)", "content": "string (2-4 sentences)" }],
   "worldHistory": [{ "title": "string", "era": "string", "dateRange": "string", "content": "string" }],
   "timeline": [{ "title": "string", "date": "string", "description": "string" }],
   "acts": [{ "title": "string", "synopsis": "string (1-2 sentences)", "chapters": [{ "title": "string", "synopsis": "string (1-2 sentences)", "scenes": [{ "title": "string", "synopsis": "string (1-2 sentences)", "content": "" }] }] }]
@@ -155,19 +155,74 @@ Rules:
 - The "acts" hierarchy is a generic three-level structure. For campaign types treat level 1 as story arcs, level 2 as sessions, and level 3 as encounters. For comic treat level 1 as volumes, level 2 as issues, and level 3 as pages. For prose use acts/parts, chapters/sections, and scenes.
 - Only include arrays that have actual content — omit empty ones entirely
 - ALWAYS extract characters, locations, lore, and world-building elements regardless of content type
-- If the files contain ANY narrative prose, chapters, scenes, or story text — you MUST include an "acts" array. Even a single act with a single chapter is required.
+- Be exhaustive, not selective, with "characters": include every distinctly named or titled individual who appears on the page — not only protagonists/antagonists. Minor, background, and single-scene characters count too (e.g. a servant, a court official, a named animal, "the Executioner", "the Cook") as long as they're identified by a proper name or a distinct role/title. Do not cap the list to a handful of the most prominent figures.
+- Be exhaustive, not selective, with "locations" too: include every distinct named or clearly delineated setting the story visits, not just the one or two most prominent ones.
+- Be exhaustive, not selective, with "lore" too — and don't limit it to formal magic systems or religions. Capture any distinct world-rule, custom, recurring or plot-significant object, game, procedure, or bit of setting logic the text explains or relies on (e.g. an item that changes the protagonist, a court's unusual customs, a game played with unusual rules, a recurring refrain or law of the world). Whimsical or absurdist settings still have lore — it just isn't epic-fantasy shaped.
+- If the files contain ANY narrative prose, chapters, scenes, or story text — you MUST include an "acts" array, UNLESS told below that chapter structure was already detected automatically. Even a single act with a single chapter is required.
 - For "acts": provide titles and synopses ONLY. Always set scene.content to "" — the actual prose is handled separately and does not need to be reproduced here.
 - Use chapter headings found in the text as chapter titles. If no headings are present, create one chapter per major story section you can identify.
 - Keep all synopses and descriptions faithful to the source
 - Return ONLY the raw JSON object, nothing else`
 
-const MAX_CONTENT_CHARS = 48000
+// Upper bound tried first — covers most full novels without sampling, so
+// characters/locations introduced late in a book are reliably caught rather
+// than depending on an excerpt. Actual usable limits vary a lot by provider
+// and account tier (e.g. a free OpenRouter key caps far below its models'
+// real context windows) and aren't knowable up front, so handleAnalyze
+// retries at progressively smaller caps — see CONTENT_CHAR_CAPS below —
+// instead of trusting a single guessed constant.
+const MAX_CONTENT_CHARS = 300000
 
-function buildUserMessage(files) {
+// Retry ladder used when a provider rejects the prompt as too large. Each
+// step re-samples the manuscript to fit a smaller budget instead of just
+// truncating further from where the last attempt left off.
+export const CONTENT_CHAR_CAPS = [300000, 90000, 45000, 20000]
+
+// True for provider errors that mean "the prompt itself was too big" (vs. a
+// bad key, rate limit, or outage) — those are worth retrying at a smaller
+// content budget; the rest are not.
+export function isPromptTooLargeError(message) {
+  if (!message) return false
+  const m = message.toLowerCase()
+  if (m.includes('too long') || m.includes('too large') || m.includes('maximum context')) return true
+  return m.includes('token') && (m.includes('limit') || m.includes('exceed'))
+}
+
+export function buildUserMessage(files, sections = [], maxChars = MAX_CONTENT_CHARS) {
   let combined = ''
   for (const { name, content } of files) combined += `\n\n=== ${name} ===\n${content}`
-  if (combined.length > MAX_CONTENT_CHARS) combined = combined.slice(0, MAX_CONTENT_CHARS) + '\n\n[Content truncated]'
-  return `Analyze these writing files and extract structured project data:\n${combined}`
+  if (combined.length <= maxChars)
+    return `Analyze these writing files and extract structured project data:\n${combined}`
+
+  // Too long to send in full. Sample evenly across the manuscript instead of
+  // truncating at the head — otherwise characters, locations, and lore that
+  // first appear in later chapters are never seen by the AI.
+  if (sections.length > 1) {
+    const per = Math.max(500, Math.floor(maxChars / sections.length))
+    // Take a slice from the start, middle, and end of each chapter — minor
+    // characters and late reveals are just as likely to land in a chapter's
+    // closing paragraphs as its opening ones.
+    const excerpt = (c) => {
+      if (c.length <= per) return c
+      const third = Math.floor(per / 3)
+      const mid = Math.floor(c.length / 2) - Math.floor(third / 2)
+      return [
+        c.slice(0, third),
+        c.slice(mid, mid + third),
+        c.slice(-third),
+      ].join('\n[…]\n')
+    }
+    let body = sections
+      .map((s, i) => `=== ${s.title || `Section ${i + 1}`} ===\n${excerpt(s.content)}`)
+      .join('\n\n')
+    if (body.length > maxChars) body = body.slice(0, maxChars)
+    return `Analyze these chapter excerpts (sampled evenly from the full manuscript) and extract structured project data:\n\n${body}`
+  }
+  const step = Math.ceil(combined.length / 8)
+  const per = Math.floor(maxChars / 8)
+  const parts = []
+  for (let i = 0; i < combined.length; i += step) parts.push(combined.slice(i, i + per))
+  return `Analyze these excerpts (sampled evenly from the full text) and extract structured project data:\n${parts.join('\n\n[…]\n\n')}`
 }
 
 // ── Client-side manuscript parser ─────────────────────────────────────────────
@@ -178,13 +233,36 @@ const TARGET_WORDS_PER_CHUNK = 2500
 
 // Returns true if a trimmed line looks like a chapter/section heading.
 // NOTE: patterns tagged [ambiguous] also need blank-line context — see isHeadingAt().
-function isChapterHeading(line) {
-  const t = line.trim()
-  if (!t) return false
-  // "Chapter X", "Part X", etc. with optional subtitle
+// Strips a decorative wrapper like "— … —", "* … *", "~ … ~" that some books
+// use to set off chapter headings (e.g. "— CHAPTER ONE —"). Only strips when
+// both a leading and trailing run of separator characters are present, so it
+// won't eat an em dash that's just part of ordinary prose.
+function stripHeadingDecoration(t) {
+  const m = /^[-–—*~=]{1,3}\s*(.+?)\s*[-–—*~=]{1,3}$/.exec(t)
+  return m ? m[1] : t
+}
+
+// "Chapter X" / "Part X" / etc. (with optional decorative wrapping) and
+// markdown headings are unambiguous — no real book uses that phrasing for
+// anything but a structural heading. Numbered lines, ALL-CAPS lines, bare
+// numbers, and roman numerals are much weaker signals: a novel can easily
+// contain an in-story letter, newspaper clipping, or list that incidentally
+// looks like one of those (a letterhead, a numbered packing list, a
+// headline) without being a real chapter break.
+function isStrongChapterHeading(t) {
   if (/^(chapter|part|scene|act|prologue|epilogue|interlude|preface|foreword|afterword|appendix)\s+\S+(\s*[:\-–—]\s*.+)?$/i.test(t)) return true
-  // Markdown headings: # Title
   if (/^#{1,3}\s+\S/.test(t)) return true
+  return false
+}
+
+// `allowWeak` should be false once a document has already shown clear,
+// unambiguous chapter markers elsewhere — see parseManuscriptSections, which
+// pre-scans for that before deciding whether to trust the weaker patterns.
+function isChapterHeading(line, allowWeak = true) {
+  const t = stripHeadingDecoration(line.trim())
+  if (!t) return false
+  if (isStrongChapterHeading(t)) return true
+  if (!allowWeak) return false
   // Numbered headings: "1. Title" or "1) Title" (must have text after)
   if (/^\d+[.)]\s+\S/.test(t)) return true
   // ALL CAPS title line: 2–7 words, no lowercase (e.g. "THE FIRST BETRAYAL")
@@ -212,8 +290,55 @@ function chunkByParagraphs(text) {
   return chunks.map((content, i) => ({ title: `Chapter ${i + 1}`, content }))
 }
 
-function parseManuscriptSections(text) {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+// Remove import junk that would otherwise become chapters: Project Gutenberg
+// header/license boilerplate and table-of-contents listings.
+export function stripFrontBackMatter(text) {
+  let t = text
+  const start = /^ *\*{3} ?START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*$/im.exec(t)
+  if (start) t = t.slice(start.index + start[0].length)
+  const end = /^ *\*{3} ?END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*$/im.exec(t)
+  if (end) t = t.slice(0, end.index)
+
+  // Table of contents: a "Contents" line followed by 3+ heading-like entries.
+  const lines = t.split('\n')
+  const tocEntry = /^(chapter|part|act|book|section|prologue|epilogue|\d+[.)]?|[IVXLCDM]+\.?)\b/i
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^(table of )?contents:?$/i.test(lines[i].trim())) continue
+    let j = i + 1, entries = 0, blanks = 0
+    while (j < lines.length) {
+      const s = lines[j].trim()
+      if (!s) { if (++blanks >= 2) break; j++; continue }
+      const nxt = (lines[j + 1] ?? '').trim()
+      // An entry only counts when followed by another entry or a blank line —
+      // this stops the scan before a real chapter heading followed by prose.
+      if (!tocEntry.test(s) || (nxt && !tocEntry.test(nxt))) break
+      blanks = 0; entries++; j++
+    }
+    if (entries >= 3) { lines.splice(i, j - i); break }
+  }
+  return lines.join('\n')
+}
+
+// "CHAPTER I." / "Part 2" / "III." — a structural heading with no title text.
+// The real title often sits on the following line and gets merged in.
+const isBareHeading = (t) =>
+  /^(chapter|part|scene|act|book|volume)\s+\S+$/i.test(t) ||
+  /^\d{1,3}\.?$/.test(t) ||
+  (/^[IVXLCDM]{1,10}\.?$/.test(t) && /[IVX]/.test(t))
+
+export function parseManuscriptSections(text) {
+  const lines = stripFrontBackMatter(text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')).split('\n')
+
+  // If the document already uses clear, unambiguous chapter markers ("Chapter
+  // One", markdown headings) in at least two places, trust those exclusively
+  // and stop applying the weaker fallback patterns (ALL-CAPS lines, numbered
+  // lists, bare numbers/roman numerals) for the rest of the document. Those
+  // patterns exist for books that *lack* explicit markers — once explicit
+  // markers are established, an ALL-CAPS or numbered line elsewhere is far
+  // more likely to be in-story text (a letterhead, a headline, a packing
+  // list) than a second, redundant heading convention.
+  const strongHeadingCount = lines.filter(l => isStrongChapterHeading(stripHeadingDecoration(l.trim()))).length
+  const allowWeak = strongHeadingCount < 2
 
   // Ambiguous patterns (bare numbers, Roman numerals) require at least one
   // adjacent blank line — this rules out page numbers, date components, etc.
@@ -224,7 +349,7 @@ function parseManuscriptSections(text) {
   const isHeadingAt = (i) => {
     const raw = lines[i] ?? ''
     const t = raw.trim()
-    if (!t || !isChapterHeading(raw)) return false
+    if (!t || !isChapterHeading(raw, allowWeak)) return false
     if (isAmbiguous(t)) {
       const prevBlank = i === 0 || !(lines[i - 1] ?? '').trim()
       const nextBlank = i >= lines.length - 1 || !(lines[i + 1] ?? '').trim()
@@ -247,7 +372,21 @@ function parseManuscriptSections(text) {
   for (let i = 0; i < lines.length; i++) {
     if (isHeadingAt(i)) {
       flush()
-      curTitle = lines[i].trim().replace(/^#{1,3}\s+/, '').trim()
+      let title = stripHeadingDecoration(lines[i].trim().replace(/^#{1,3}\s+/, '').trim())
+      // "CHAPTER I." on its own line usually has the real title either right
+      // after ("Down the Rabbit-Hole") or after a single blank line — merge
+      // it in either way, but require a blank (or EOF) after it so we don't
+      // grab the start of a paragraph that happens to be short.
+      let j = i + 1
+      if (!(lines[j] ?? '').trim()) j++
+      const next = (lines[j] ?? '').trim()
+      const after = (lines[j + 1] ?? '').trim()
+      if (isBareHeading(title) && next && !after && !isChapterHeading(next, allowWeak) &&
+          next.length <= 60 && next.split(/\s+/).length <= 10) {
+        title = `${title} ${next}`
+        i = j
+      }
+      curTitle = title
       hadHeading = true
     } else {
       curLines.push(lines[i])
@@ -769,7 +908,7 @@ const SECTIONS = [
   { key: 'acts',         label: 'Manuscript structure' },
 ]
 
-function countLabel(parsed, key, typeKey = DEFAULT_TYPE) {
+export function countLabel(parsed, key, typeKey = DEFAULT_TYPE) {
   if (key === 'acts') {
     const lc = (s) => s.toLowerCase()
     const { level1, level2, level3 } = getProjectType(typeKey).structure
@@ -781,7 +920,13 @@ function countLabel(parsed, key, typeKey = DEFAULT_TYPE) {
     return `${acts.length} ${lc(level1)}${acts.length !== 1 ? 's' : ''}, ${chapters.length} ${lc(level2)}${chapters.length !== 1 ? 's' : ''}, ${scenes.length} ${lc(level3)}${scenes.length !== 1 ? 's' : ''}${textNote}`
   }
   const n = (parsed[key] || []).length
-  return `${n} ${key === 'lore' ? 'entr' + (n === 1 ? 'y' : 'ies') : key.replace(/([A-Z])/g, ' $1').toLowerCase().trim() + (n !== 1 ? 's' : '')}`
+  if (key === 'lore')         return `${n} ${n === 1 ? 'entry' : 'entries'}`
+  if (key === 'worldHistory') return `${n} world history ${n !== 1 ? 'entries' : 'entry'}`
+  if (key === 'timeline')     return `${n} timeline event${n !== 1 ? 's' : ''}`
+  // characters/locations/factions are already plural nouns — pluralize the
+  // singular form instead of blindly appending "s" to an already-plural key.
+  const singular = { characters: 'character', locations: 'location', factions: 'faction' }[key] || key
+  return `${n} ${singular}${n !== 1 ? 's' : ''}`
 }
 
 function hasContent(parsed, key) {
@@ -948,13 +1093,22 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     let pending       = hasSections ? 2 : 1
     let structureData = null
     let synopsisItems = null  // [{index, synopsis}] once call B completes
+    let rawStructureResponse = ''  // kept for diagnosing a parse failure below
 
     const finish = () => {
       if (abortRef.current) return
       if (--pending > 0) return  // wait for both calls
 
       if (!structureData?.project) {
-        setAiError('AI returned invalid data. Try again or switch providers.')
+        // A response that starts like JSON but never reaches a closing brace
+        // most likely got cut off by the model's output length limit, not
+        // malformed by the model itself — worth telling apart since the fix
+        // differs (raise the model's max output / switch models vs. retry).
+        const trimmed = rawStructureResponse.trim()
+        const looksTruncated = trimmed.startsWith('{') && !trimmed.endsWith('}')
+        setAiError(looksTruncated
+          ? "The AI's response was cut off before it finished (likely an output length limit on this model). Try a model with a larger output limit, or try again."
+          : 'AI returned invalid data. Try again or switch providers.')
         setPhase('upload')
         return
       }
@@ -965,7 +1119,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
         for (const item of synopsisItems || [])
           if (typeof item.index === 'number' && item.synopsis) idxMap[item.index] = item.synopsis
 
-        // Title-based synopses from call A (first ~48k chars only, used as fallback)
+        // Title-based synopses from call A, used only as a fallback — call A
+        // now omits "acts" entirely when hasSections, so this is normally empty.
         const titleMap = {}
         for (const act of structureData.acts || [])
           for (const chap of act.chapters || [])
@@ -983,17 +1138,43 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     }
 
     // ── Call A: structure extraction ───────────────────────────────────────────
-    let bufA = ''
-    streamMessage({
-      ...config,
-      systemPrompt: IMPORT_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserMessage(files) }],
-      jsonMode: config.provider === 'google',
-      maxTokens: 8192,
-      onChunk: (c) => { if (!abortRef.current) { bufA += c; setStreamedText(bufA) } },
-      onDone:  ()  => { if (!abortRef.current) { structureData = tryParseJSON(bufA); finish() } },
-      onError: (err) => { if (!abortRef.current) { setAiError(err); setPhase('upload') } },
-    })
+    // The largest cap (full manuscript) is tried first for the best possible
+    // extraction. If the provider rejects the prompt as too large — actual
+    // limits vary by provider and account tier and aren't knowable up front —
+    // retry at each smaller cap in turn, re-sampling the manuscript to fit,
+    // rather than failing on the first cap that happens to not fit.
+    // When the manuscript already parsed into chapters client-side, whatever
+    // "acts" the AI returns gets thrown away below in favor of buildActs()
+    // over the real chapter list — the AI's version was only ever a fallback
+    // synopsis source. Asking for it anyway burns a large share of the output
+    // token budget on data we discard, which starves the (now much larger,
+    // since extraction was made exhaustive) characters/locations/lore lists
+    // and risks the response getting cut off mid-JSON. Skip it entirely here.
+    const structureSystemPrompt = hasSections
+      ? `${IMPORT_SYSTEM_PROMPT}\n\nChapter structure has already been detected automatically from the manuscript — do NOT include an "acts" array in your response; omit that key entirely. Put your full output budget toward characters, locations, factions, lore, worldHistory, timeline, and project metadata instead.`
+      : IMPORT_SYSTEM_PROMPT
+
+    let capIndex = 0
+    const runStructureCall = () => {
+      let bufA = ''
+      streamMessage({
+        ...config,
+        systemPrompt: structureSystemPrompt,
+        messages: [{ role: 'user', content: buildUserMessage(files, allSections, CONTENT_CHAR_CAPS[capIndex]) }],
+        jsonMode: config.provider === 'google',
+        maxTokens: 8192,
+        onChunk: (c) => { if (!abortRef.current) { bufA += c; setStreamedText(bufA) } },
+        onDone:  ()  => { if (!abortRef.current) { rawStructureResponse = bufA; structureData = tryParseJSON(bufA); finish() } },
+        onError: (err) => {
+          if (abortRef.current) return
+          if (isPromptTooLargeError(err) && capIndex < CONTENT_CHAR_CAPS.length - 1) {
+            capIndex++; setStreamedText(''); runStructureCall(); return
+          }
+          setAiError(err); setPhase('upload')
+        },
+      })
+    }
+    runStructureCall()
 
     // ── Call B: chapter synopses (parallel, only when prose sections found) ───
     if (hasSections) {
@@ -1154,6 +1335,9 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
                 AI reads your files, suggests the best project type — novel, novella, short story, D&D or tabletop campaign, or comic — and extracts characters, locations, lore, and structure. You can change the type before the project is created.
               </p>
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                This is the AI's best attempt at reading your files — quality and results vary by model and provider, and it won't always be perfect. Review everything on the next screen before creating the project.
+              </p>
             </div>
           )}
 
@@ -1254,6 +1438,10 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 {parsed.project?.description && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{parsed.project.description}</p>}
                 <TypeSelect value={targetType} onChange={setTargetType} />
               </div>
+
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                This is the AI's best attempt at reading your files — results vary by model and provider and won't always be perfect. Review the counts below and uncheck anything you don't want before creating the project.
+              </p>
 
               <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>

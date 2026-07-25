@@ -494,7 +494,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
         <div className="yow-hero-inner">
           <div className="yow-home-copy">
             <p className="eyebrow mb-3">Your Own World</p>
-            <h1>One world.<br />Every story<br />you'll ever tell.</h1>
+            <h1>One workspace.<br />Every world<br />you'll ever build.</h1>
             <p>
               YOW is the all-in-one creative workspace for writers, worldbuilders, and dungeon masters — manuscript, characters, lore, maps, and timelines, all connected in one focused studio.
             </p>

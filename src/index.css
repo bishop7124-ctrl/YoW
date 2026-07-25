@@ -383,6 +383,7 @@
 /* Base application styling */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
+html { height: 100dvh; }
 body {
   font-family: var(--font);
   background-color: var(--bg-main);
@@ -393,6 +394,10 @@ body {
     linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px);
   background-size: 32px 32px, 32px 32px;
+  /* Extend the themed background under the iOS notch/status bar and home-indicator
+     strip (requires viewport-fit=cover) instead of leaving a default white gap there. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .beta-watermark {
@@ -1667,6 +1672,8 @@ textarea:focus {
 .modal-overlay {
   position: fixed;
   inset: 0;
+  height: 100vh;
+  height: 100dvh;
   z-index: 70;
   display: flex;
   justify-content: flex-end;
@@ -1674,7 +1681,8 @@ textarea:focus {
   backdrop-filter: blur(5px);
 }
 
-.studio-sheet-backdrop.is-centered {
+.studio-sheet-backdrop.is-centered,
+.modal-overlay.is-centered {
   justify-content: center;
   align-items: center;
   padding: clamp(10px, 3vw, 24px);
@@ -1690,6 +1698,7 @@ textarea:focus {
   position: relative;
   width: min(780px, calc(100vw - 26px));
   max-height: calc(100vh - 26px);
+  max-height: calc(100dvh - 26px);
   margin: 13px;
   display: flex;
   flex-direction: column;
@@ -1780,6 +1789,7 @@ textarea:focus {
   .studio-sheet {
     width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
     margin: 10px;
   }
 
@@ -6770,6 +6780,11 @@ body {
     border-left: 0;
     border-right: 0;
     box-shadow: none;
+    /* A page-zoom preference set on desktop (up to 150%) persists per-account and
+       would otherwise carry straight onto phones, overflowing the narrow column
+       and making the manuscript look broken rather than full-width. Mobile has
+       its own font-size control (Format panel), so zoom is a desktop-only feature. */
+    zoom: 1 !important;
   }
 
   .manuscript-document.mx-auto.py-16.px-6.md\:px-12 {
@@ -6779,8 +6794,42 @@ body {
 
   .manuscript-processor .ms-preview,
   .manuscript-processor .ms-textarea {
-    font-size: 18px;
-    line-height: 1.72;
+    /* SceneEditor applies lineHeight from the Format panel as an inline style
+       (`textStyle`), which beats plain CSS regardless of selector specificity —
+       !important is the only way to override it here. The Format default (line-
+       height 2, i.e. double-spaced) is a reasonable desktop reading choice but
+       wastes a phone screen, so mobile gets its own fixed, tighter value instead
+       of inheriting whatever's set for desktop. Also strips the 34/42/36/66px
+       padding meant for a different (lined-paper) editor that was leaking in here
+       unstyled — the page margin already comes from `.manuscript-document`'s own
+       14px inset. */
+    line-height: 1.45 !important;
+    padding: 6px 0 !important;
+  }
+
+  .ms-focus-zoom {
+    display: none;
+  }
+
+  /* The Notes/AI toolbar buttons open the exact same panel as the Notes/AI tabs in
+     the bottom tab strip below — keeping both was pure clutter on a small screen.
+     !important because the unconditional `.ms-toolbar-btn { display: inline-flex }`
+     base rule sits later in this file and would otherwise win on source order alone. */
+  .ms-toolbar-btn-notes,
+  .ms-toolbar-btn-ai {
+    display: none !important;
+  }
+
+  /* Act/chapter dividers use desktop-scale spacing (mt-16/pt-14/pb-8 ≈ 56-64px each)
+     designed to read as a printed-page break. On a phone that's dead space you have
+     to scroll past before reaching the actual text every time you open a scene. */
+  .manuscript-document .mt-16.mb-2 {
+    margin-top: 28px;
+  }
+
+  .manuscript-document .pt-14.pb-8 {
+    padding-top: 24px;
+    padding-bottom: 12px;
   }
 }
 
@@ -10549,8 +10598,13 @@ body {
 .membership-toast {
   position: fixed;
   right: 18px;
-  bottom: 18px;
-  z-index: 100;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  /* Mobile screens have several fixed bottom bars (manuscript tab strip, focused-
+     writing controls, etc.) at z-index up to 250 — at 100 this toast rendered
+     underneath them, permanently hiding its own Dismiss button. 9000 matches this
+     codebase's existing convention for must-see overlays (cookie banner, global
+     search, version history). */
+  z-index: 9000;
   max-width: min(360px, calc(100vw - 36px));
   border: 1px solid rgba(248,113,113,.32);
   border-radius: var(--r-md);
@@ -11219,8 +11273,13 @@ body {
   }
 }
 
-/* Collapse utility button labels to icon-only whenever the nav is space-constrained */
-@media (max-width: 1400px) and (min-width: 861px) {
+/* Collapse utility button labels to icon-only whenever the nav is space-constrained.
+   Deliberately has no lower bound: the ≤420px block below re-narrows the icon box
+   further, but everything from there up to 1400px needs this collapsed first — the
+   previous `min-width: 861px` floor left 421–860px (most phones, including any
+   iPhone at 428–430px width) falling through to the full desktop text buttons,
+   which is what overlapped in the header on real/simulated phones. */
+@media (max-width: 1400px) {
   .studio-utility-btn {
     width: 34px;
     justify-content: center;
@@ -13173,8 +13232,8 @@ body {
 
   .library-action-cluster {
     grid-column: 1 / -1;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
   }
 
   .library-top-bar-right {
@@ -13186,9 +13245,12 @@ body {
   .library-new-project-button,
   .library-new-series-button {
     min-height: 30px;
-    padding-inline: 10px;
-    font-size: 10px;
-    letter-spacing: .05em;
+    padding-inline: 7px;
+    font-size: 9px;
+    letter-spacing: .02em;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
   }
 
   .library-top-bar .user-menu-trigger-name {
@@ -13279,8 +13341,12 @@ body {
 
   .active-project-command-stats,
   .active-project-command-stats--compact {
+    /* Was a flat single column regardless of how many stats there were — 3 small
+       stat tiles (e.g. Library Snapshot's Projects/Series/Total words) each got a
+       full-width row for no reason, roughly tripling the section's height. Let
+       tiles share a row until they'd genuinely get too cramped, only then wrap. */
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
   }
 
   .active-project-command-stat {
@@ -13640,6 +13706,12 @@ body {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: var(--bg-main);
   gap: 6px;
+  /* Below 640px this row wraps (see the mobile block further down). Between that
+     and the desktop width, nothing constrained it, so a full toolbar's worth of
+     buttons overflowed silently behind the right-hand sidebar rail on tablet-portrait
+     widths (~641-860px) instead of wrapping or scrolling. Scroll is the safe fallback. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .ms-toolbar-btn {
@@ -16755,7 +16827,7 @@ body {
 .series-dash-card-type-badge {
   position: absolute;
   top: 8px;
-  right: 8px;
+  left: 8px;
   max-width: calc(100% - 16px);
   overflow: hidden;
   font-size: 9px;
@@ -21649,6 +21721,10 @@ body {
     padding: 4px 8px;
   }
 
+  .ms-focus-zoom {
+    display: none;
+  }
+
   .ms-focus-breadcrumb,
   .ms-focus-status .ms-save-label,
   .ms-focus-status .ms-toolbar-wordcount {
@@ -21824,4 +21900,59 @@ body {
 .studio-tab.is-locked:not(.is-current),
 .studio-room-menu-item.is-locked:not(.is-current) {
   opacity: .82;
+}
+
+/* ── Mobile safe-area hardening ──────────────────────────────────────────
+   iOS Safari's address/tab bar makes 100vh taller than the visible viewport,
+   leaving a blank strip (the body's background, not the app's) at the bottom
+   as the toolbar shows/hides. 100dvh tracks the real visible viewport instead. */
+.studio-shell {
+  height: 100dvh;
+}
+
+@media (max-width: 860px) {
+  .studio-shell {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Focused writing mode is meant to be distraction-free, but on mobile the outer
+   app header (logo/Write/settings/exit/account + the room hamburger) still rendered
+   above it unconditionally — the one thing a phone-sized focused session needs most
+   is vertical space for the keyboard and the text, not ~90px of duplicate chrome
+   that FocusedWritingShell's own compact topbar (title + Exit focus) already covers. */
+@media (max-width: 780px) {
+  .studio-shell:has(.manuscript-processor.is-focused-writing) {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .studio-shell:has(.manuscript-processor.is-focused-writing) .studio-spine {
+    display: none;
+  }
+}
+
+/* ── Mobile: trim oversized decorative spacing that was sized for desktop ──
+   Appended last so it reliably wins the cascade against this file's many earlier,
+   equal-specificity rules for the same classes (several sections here are defined
+   more than once at different points in the file). Each block below was measured
+   against live computed styles, not guessed from source order. */
+@media (max-width: 640px) {
+  /* Writing Progress card (project overview): a fixed 292px min-height and a
+     58px "0" left a huge empty card for a single stat, regardless of content. */
+  .writing-progress-card {
+    min-height: 0;
+    gap: 14px;
+  }
+
+  .writing-progress-card-head strong {
+    font-size: 40px;
+    margin-top: 0;
+  }
+
+  /* The 80,000/0% pair was rendering at its clamp() max (40px) in a two-column
+     139px-wide layout — tight enough that "80,000" pressed right up against "0%"
+     with no breathing room. */
+  .writing-progress-details strong {
+    font-size: 26px;
+  }
 }

@@ -658,24 +658,6 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
         style={{ width: '100%', maxWidth: 540, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Cover banner */}
-        <div style={{ position: 'relative', height: 140, flexShrink: 0, background: form.coverPhoto ? undefined : 'linear-gradient(135deg, var(--bg-main) 0%, color-mix(in srgb, var(--accent) 18%, var(--bg-main)) 100%)', overflow: 'hidden' }}>
-          {form.coverPhoto && <img src={form.coverPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <label style={{ cursor: 'pointer', background: 'rgba(0,0,0,.52)', border: '1px solid rgba(255,255,255,.18)', borderRadius: 7, padding: '6px 14px', fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-              <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
-              {form.coverPhoto ? 'Change Cover' : 'Add Cover'}
-            </label>
-            {form.coverPhoto && (
-              <button type="button" onClick={() => setForm(p => ({ ...p, coverPhoto: null }))}
-                style={{ cursor: 'pointer', background: 'rgba(0,0,0,.52)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 7, padding: '6px 14px', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.65)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                Remove
-              </button>
-            )}
-          </div>
-          {coverError && <p style={{ position: 'absolute', bottom: 6, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: '#f87171', margin: 0 }}>{coverError}</p>}
-        </div>
-
         {/* Scrollable body */}
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', flex: 1 }}>
           <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-main)' }}>Edit Series</p>
@@ -712,6 +694,28 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="project-cover-preview">
+            <span className="project-cover-preview-label">Cover photo</span>
+            <label className="project-cover-preview-upload" title={form.coverPhoto ? 'Change cover photo' : 'Add cover photo'}>
+              <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
+              <span className="project-cover-preview-frame" style={{ background: form.coverPhoto ? 'var(--bg-main)' : getCoverGradient(form.name || series.name) }}>
+                {form.coverPhoto ? (
+                  <img src={form.coverPhoto} alt="" />
+                ) : (
+                  <span>Add cover photo</span>
+                )}
+              </span>
+            </label>
+            <div className="project-cover-preview-actions">
+              {form.coverPhoto && (
+                <button type="button" onClick={() => setForm(p => ({ ...p, coverPhoto: null }))}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {coverError && <p>{coverError}</p>}
           </div>
 
           <div>

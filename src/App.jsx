@@ -1099,8 +1099,8 @@ function AppInner() {
   }
 
   const aiSetupPromptOverlay = aiSetupPromptOpen ? (
-    <div className="modal-overlay" onClick={closeAiSetupPrompt}>
-      <div className="modal-content max-w-md" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ai-setup-title">
+    <div className="modal-overlay is-centered" onClick={closeAiSetupPrompt}>
+      <div className="modal max-w-md" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="ai-setup-title">
         <div className="modal-header">
           <div>
             <p className="eyebrow">Optional setup</p>

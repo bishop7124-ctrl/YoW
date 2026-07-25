@@ -56,6 +56,35 @@ export const PROVIDERS = {
   },
 }
 
+// ── OpenRouter live model catalog ───────────────────────────────────────────
+// OpenRouter hosts 300+ models and adds/retires them continuously — the
+// hardcoded PROVIDERS.openrouter.models list above is just a curated starter
+// set, not a reflection of any given account. This fetches the real, current
+// catalog from OpenRouter's public models endpoint (no API key required,
+// CORS-enabled) so the settings UI can show what's actually available.
+let openRouterModelsCache = null
+let openRouterModelsPromise = null
+
+export function fetchOpenRouterModels() {
+  if (openRouterModelsCache) return Promise.resolve(openRouterModelsCache)
+  if (openRouterModelsPromise) return openRouterModelsPromise
+  openRouterModelsPromise = fetch('https://openrouter.ai/api/v1/models')
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.json()
+    })
+    .then(data => {
+      const list = (data?.data || [])
+        .map(m => ({ id: m.id, label: m.name || m.id, contextLength: m.context_length }))
+        .filter(m => m.id)
+        .sort((a, b) => a.label.localeCompare(b.label))
+      openRouterModelsCache = list
+      return list
+    })
+    .catch(err => { openRouterModelsPromise = null; throw err })
+  return openRouterModelsPromise
+}
+
 // ── Error messages ────────────────────────────────────────────────────────────
 // All providers return an HTTP status plus their own error body; without this,
 // a bad key, a rate limit, and a provider outage all rendered as the same
