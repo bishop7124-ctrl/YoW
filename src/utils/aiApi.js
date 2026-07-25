@@ -250,6 +250,7 @@ export function buildSystemPrompt(novel, context, store) {
       lines.push('\n--- CHARACTERS ---')
       chars.forEach(c => {
         lines.push(`\n${c.name}${c.role ? ` — ${c.role}` : ''}`)
+        if (c.pronouns) lines.push(`Pronouns: ${c.pronouns}`)
         if (c.familyGroup) lines.push(`Family: ${c.familyGroup}`)
         if (c.bio) lines.push(c.bio)
         if (c.keywords?.length) lines.push(`Also known as: ${c.keywords.join(', ')}`)

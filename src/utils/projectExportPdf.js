@@ -816,6 +816,7 @@ const characterFieldValue = (character, key) =>
 const characterTextBlocks = (character, relationships) => [
   ['Overview', character.bio || character.description || character.notes || 'No dossier notes recorded.'],
   ['Role', character.role],
+  ['Pronouns', character.pronouns],
   ['Family', character.familyGroup],
   ['Species', character.species],
   ['Title / Job', character.titleJob || character.title],
@@ -967,7 +968,7 @@ const createCharacterPages = (character, projectData, theme, index) => {
   const lineWidth = 500
   const items = makeCharacterLineItems(character, relationships, lineWidth)
   const pages = []
-  const contentStartY = pdf.pageBase('Character Dossier', title, valueList(character.role, character.familyGroup, character.keywords?.join(', ')).join(' - '))
+  const contentStartY = pdf.pageBase('Character Dossier', title, valueList(character.role, character.pronouns, character.familyGroup, character.keywords?.join(', ')).join(' - '))
   const panelTop = Math.min(488, contentStartY - 18)
   const panelBottom = 58
   const panelHeight = panelTop - panelBottom

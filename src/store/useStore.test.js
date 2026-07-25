@@ -4,6 +4,7 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
 import { upsertItems, saveSceneDoc } from '../utils/firestoreSync.js'
+import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -320,6 +321,98 @@ describe('novel CRUD', () => {
 })
 
 describe('getProjectExportData', () => {
+  it('seeds The Last Ember as a full connected sample project', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+
+    let sample
+    act(() => {
+      sample = result.current.ensureSampleProject()
+    })
+
+    const data = result.current.getProjectExportData(sample.id)
+    expect(data.project.title).toBe('The Last Ember')
+    expect(data.project.wordCountTarget).toBe(97500)
+    expect(data.project.scheduleCalendar.months.map(month => month.name)).toEqual([
+      'Kindling',
+      'Highflame',
+      'Ashwane',
+      'Riverturn',
+      'Glassfall',
+      'Emberdeep',
+      'Frostbell',
+      'Dawnreturn',
+    ])
+    expect(data.project.scheduleCalendar.weekLength).toBe(6)
+    expect(data.project.categoryOptions.schedule).toEqual([
+      'Story Event',
+      'Travel',
+      'Council',
+      'Ritual',
+      'Battle',
+      'Discovery',
+      'World Event',
+      'Revelation',
+    ])
+    expect(data.characters).toHaveLength(12)
+    expect(data.factions).toHaveLength(6)
+    expect(data.locations).toHaveLength(18)
+    expect(data.loreEntries).toHaveLength(42)
+    expect(data.timeline).toHaveLength(40)
+    expect(data.timeline.every(event => event.date && event.startYear != null && event.eraId)).toBe(true)
+    expect(data.eras).toHaveLength(3)
+    expect(data.acts).toHaveLength(3)
+    expect(data.chapters).toHaveLength(15)
+    expect(data.storySchedule).toHaveLength(30)
+    expect(data.storySchedule.every(event => event.year === 1 && event.month >= 1 && event.month <= 3)).toBe(true)
+    expect(data.storySchedule.some(event => event.title === 'Escape through Kestrel Market')).toBe(true)
+    expect(data.storySchedule.some(event => event.category === 'ritual')).toBe(true)
+    expect(data.storySchedule.some(event => event.category === 'council')).toBe(true)
+    expect(data.storySchedule.every(event => !/draft|revise|review|research|writing|editing/i.test(event.title))).toBe(true)
+    expect(data.maps[0].mapObjects).toHaveLength(18)
+    expect(data.ideaEntries.filter(entry => entry.tags?.includes('note'))).toHaveLength(20)
+    expect(data.ideaEntries.filter(entry => entry.tags?.includes('idea-card'))).toHaveLength(25)
+    expect(data.ideaEntries.filter(entry => entry.tags?.includes('ai-result'))).toHaveLength(12)
+
+    const rowan = data.characters.find(character => character.name === 'Rowan Vale')
+    const elia = data.characters.find(character => character.name === 'Princess Elia Marent')
+    const oren = data.characters.find(character => character.name === 'Oren Vale')
+    const garrick = data.characters.find(character => character.name === 'Captain Garrick Thorn')
+    const sera = data.characters.find(character => character.name === 'Sera Thorn')
+    const cassian = data.characters.find(character => character.name === 'Lord Cassian Vey')
+    const validRelationshipMapTypes = new Set(['ally', 'enemy', 'friend', 'romantic', 'partner'])
+    const socialRelationships = data.characters.flatMap(character => character.relationships || [])
+    expect(socialRelationships.length).toBeGreaterThanOrEqual(25)
+    expect(socialRelationships.every(relationship => validRelationshipMapTypes.has(relationship.type))).toBe(true)
+    expect(rowan.relationships.some(relationship => relationship.targetId === elia.id && relationship.type === 'ally')).toBe(true)
+    expect(data.characters.flatMap(character => character.familyLinks || [])).toHaveLength(5)
+    expect(oren.familyLinks.some(link => link.targetCharacterId === rowan.id && link.kind === 'parent_child')).toBe(true)
+    expect(garrick.familyLinks.some(link => link.targetCharacterId === sera.id && link.kind === 'sibling')).toBe(true)
+    expect(cassian.familyLinks.some(link => link.targetCharacterId === elia.id && link.kind === 'guardian')).toBe(true)
+    const rowanFamilyMapTargets = familyRelationshipMapEdges(data.characters, rowan.id).map(edge => edge.targetId)
+    expect(rowanFamilyMapTargets).toContain(oren.id)
+    expect(data.locations.find(location => location.name === 'Glassmere Observatory').characterIds).toContain(rowan.id)
+  })
+
+  it('restores exported project eras and remaps timeline era links', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+
+    let sample
+    act(() => {
+      sample = result.current.ensureSampleProject()
+    })
+    const exported = result.current.getProjectExportData(sample.id)
+
+    let imported
+    act(() => {
+      imported = result.current.importProjectFromData(exported)
+    })
+
+    const importedData = result.current.getProjectExportData(imported.id)
+    expect(importedData.eras).toHaveLength(3)
+    expect(importedData.eras.map(era => era.name)).toContain('The Ember Crisis')
+    expect(importedData.timeline.every(event => event.eraId && importedData.eras.some(era => era.id === event.eraId))).toBe(true)
+  })
+
   it('omits comicPages/comicPanels for a non-comic project even if stray comic records share its novelId', () => {
     const { result } = renderHook(() => useStore(null))
 
@@ -366,13 +459,14 @@ describe('character CRUD', () => {
     const { result } = renderHook(() => useStore(null))
 
     act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
-    act(() => { result.current.saveCharacter({ name: 'Gandalf', role: 'wizard' }) })
+    act(() => { result.current.saveCharacter({ name: 'Gandalf', role: 'wizard', pronouns: 'he/him' }) })
     const id = result.current.characters[0].id
 
-    act(() => { result.current.saveCharacter({ name: 'Gandalf', role: 'guide' }, id) })
+    act(() => { result.current.saveCharacter({ name: 'Gandalf', role: 'guide', pronouns: 'they/them' }, id) })
 
     expect(result.current.characters).toHaveLength(1)
     expect(result.current.characters[0].role).toBe('guide')
+    expect(result.current.characters[0].pronouns).toBe('they/them')
   })
 
   it('deleteCharacter strips the deleted character out of other characters\' relationships', () => {

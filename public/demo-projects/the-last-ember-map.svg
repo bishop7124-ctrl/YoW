@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title desc">
+  <title id="title">The Last Ember world map</title>
+  <desc id="desc">A simple fantasy map with linked location markers matching the demo project seed data.</desc>
+  <defs>
+    <linearGradient id="sea" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#8fb6bd"/>
+      <stop offset="1" stop-color="#5f8794"/>
+    </linearGradient>
+    <linearGradient id="land" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#d8c58f"/>
+      <stop offset="0.52" stop-color="#b9b777"/>
+      <stop offset="1" stop-color="#8fac75"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#28302c" flood-opacity="0.35"/>
+    </filter>
+    <style>
+      .label { font: 16px Georgia, serif; fill: #2f2b22; paint-order: stroke; stroke: #f4ecd6; stroke-width: 4px; stroke-linejoin: round; }
+      .small { font-size: 13px; }
+      .pin { fill: #9d3f2f; stroke: #f9e7ba; stroke-width: 3; filter: url(#shadow); }
+      .capital { fill: #3f4f66; }
+      .route { fill: none; stroke: #6f5536; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 12 12; opacity: 0.65; }
+      .river { fill: none; stroke: #4f8ea0; stroke-width: 10; stroke-linecap: round; opacity: 0.75; }
+      .mountain { fill: #6f7568; stroke: #455047; stroke-width: 2; }
+      .forest { fill: #477653; opacity: 0.85; }
+    </style>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sea)"/>
+  <path d="M157 391 C130 274 220 150 347 112 C480 72 579 125 667 88 C788 38 962 98 1013 230 C1062 356 958 444 988 552 C1018 660 879 743 732 714 C595 687 512 733 390 686 C278 642 185 520 157 391 Z" fill="url(#land)" stroke="#5e6f58" stroke-width="6"/>
+  <path class="river" d="M442 118 C475 210 565 275 620 350 C681 432 659 532 738 705"/>
+  <path class="route" d="M648 336 C610 448 602 566 504 584 C430 598 370 558 252 384"/>
+  <path class="route" d="M650 336 C758 400 858 460 970 416"/>
+  <g opacity="0.9">
+    <path class="mountain" d="M415 140 l38 -76 l40 76 Z"/>
+    <path class="mountain" d="M480 128 l34 -68 l38 68 Z"/>
+    <path class="mountain" d="M535 150 l44 -88 l44 88 Z"/>
+    <path class="mountain" d="M300 210 l32 -64 l35 64 Z"/>
+    <path class="mountain" d="M348 202 l30 -60 l34 60 Z"/>
+  </g>
+  <g>
+    <ellipse class="forest" cx="345" cy="455" rx="145" ry="105"/>
+    <ellipse class="forest" cx="275" cy="505" rx="83" ry="67"/>
+    <ellipse class="forest" cx="411" cy="515" rx="68" ry="55"/>
+  </g>
+  <g>
+    <circle id="loc-ashen-citadel" class="pin capital" cx="648" cy="336" r="12"/>
+    <text class="label" x="666" y="326">Ashen Citadel</text>
+    <circle id="loc-kestrel-market" class="pin" cx="684" cy="368" r="9"/>
+    <text class="label small" x="699" y="390">Kestrel Market</text>
+    <circle id="loc-ancient-library" class="pin" cx="588" cy="312" r="9"/>
+    <text class="label small" x="446" y="308">Archive of Saint Oris</text>
+    <circle id="loc-glassmere-observatory" class="pin" cx="432" cy="200" r="9"/>
+    <text class="label small" x="450" y="196">Glassmere Observatory</text>
+    <circle id="loc-dragon-graveyard" class="pin" cx="288" cy="168" r="9"/>
+    <text class="label small" x="214" y="148">Dragon Graveyard</text>
+    <circle id="loc-whispering-wood" class="pin" cx="360" cy="464" r="9"/>
+    <text class="label small" x="226" y="452">Whispering Wood</text>
+    <circle id="loc-red-pine-gate" class="pin" cx="408" cy="440" r="9"/>
+    <text class="label small" x="421" y="432">Red Pine Gate</text>
+    <circle id="loc-rivergate" class="pin" cx="744" cy="488" r="9"/>
+    <text class="label small" x="760" y="490">Rivergate Locks</text>
+    <circle id="loc-emberfall-harbor" class="pin" cx="888" cy="560" r="9"/>
+    <text class="label small" x="904" y="564">Emberfall Harbor</text>
+    <circle id="loc-sable-hall" class="pin" cx="660" cy="320" r="8"/>
+    <text class="label small" x="676" y="310">Sable Hall</text>
+    <circle id="loc-catacombs" class="pin" cx="636" cy="392" r="8"/>
+    <text class="label small" x="652" y="414">Old City Catacombs</text>
+    <circle id="loc-sunspire-temple" class="pin" cx="792" cy="264" r="9"/>
+    <text class="label small" x="808" y="262">Sunspire Temple</text>
+    <circle id="loc-northwatch" class="pin" cx="540" cy="136" r="9"/>
+    <text class="label small" x="555" y="132">Northwatch Keep</text>
+    <circle id="loc-hollow-vale" class="pin" cx="876" cy="192" r="9"/>
+    <text class="label small" x="892" y="192">Hollow Vale</text>
+    <circle id="loc-mournstone-mine" class="pin" cx="504" cy="584" r="9"/>
+    <text class="label small" x="520" y="584">Mournstone Mine</text>
+    <circle id="loc-windmere-village" class="pin" cx="252" cy="384" r="9"/>
+    <text class="label small" x="156" y="377">Windmere Village</text>
+    <circle id="loc-cinder-road" class="pin" cx="600" cy="512" r="8"/>
+    <text class="label small" x="616" y="516">Cinder Road</text>
+    <circle id="loc-saltbell-tower" class="pin" cx="972" cy="416" r="9"/>
+    <text class="label small" x="990" y="420">Saltbell Tower</text>
+  </g>
+  <text x="52" y="724" font-family="Georgia, serif" font-size="42" fill="#2f2b22" stroke="#f4ecd6" stroke-width="5" paint-order="stroke">Eldermere</text>
+  <text x="55" y="755" font-family="Georgia, serif" font-size="16" fill="#3f3a2e">Demo map markers use matching JSON location ids.</text>
+</svg>

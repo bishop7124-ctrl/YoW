@@ -427,7 +427,8 @@ export function groupFamilyRelationships(characters = [], focusId, filters = FAM
     derived.filter(relationship => {
       if (key === 'parents') return relationship.category === 'ancestor' && relationship.distance === 1
       if (key === 'children') return relationship.category === 'descendant' && relationship.distance === 1
-      if (key === 'extended') return relationship.distance > 1 || categories.includes(relationship.category)
+      if (key === 'siblings') return relationship.distance === 1 && relationship.label.toLowerCase().includes('sibling')
+      if (key === 'extended') return !relationship.label.toLowerCase().includes('sibling') && (relationship.distance > 1 || categories.includes(relationship.category))
       return categories.includes(relationship.category)
     }),
   ]))
@@ -477,7 +478,7 @@ export function validateFamilyLink(characters = [], newLink) {
   if (normalized.kind === 'sibling') {
     if ((lookups.parentsByChild.get(sourceId) || []).some(parent => parent.id === targetId)
       || (lookups.parentsByChild.get(targetId) || []).some(parent => parent.id === sourceId)) {
-      warnings.push('One character is already marked as the other character’s parent.')
+      warnings.push("One character is already marked as the other character's parent.")
     }
   }
 

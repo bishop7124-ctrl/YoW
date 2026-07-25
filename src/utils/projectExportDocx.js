@@ -155,6 +155,7 @@ export const createProjectDocxBlob = async (projectData) => {
       addDocHeading(children, docx, character.name || 'Unnamed Character', HeadingLevel.HEADING_2)
       addDocFields(children, docx, [
         ['Role', character.role],
+        ['Pronouns', character.pronouns],
         ['Alias', character.keywords?.join(', ')],
         ['Age', character.age],
         ['Birth', character.birthDate],

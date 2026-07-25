@@ -6,6 +6,7 @@ import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, Stu
 import { allRefsFor } from '../../utils/worldLinks'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
 import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import { groupFamilyRelationships } from '../../utils/familyRelationships'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
 
@@ -339,6 +340,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     familyGroup: initial?.familyGroup || '',
     factionId: initial?.factionId || '',
     role: initial?.role || '',
+    pronouns: initial?.pronouns || '',
     species: initial?.species || '',
     titleJob: initial?.titleJob || initial?.title || '',
     bio: initial?.bio || '',
@@ -498,10 +500,17 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                   />
                 </div>
                 <TextField
+                  label="Pronouns"
+                  value={form.pronouns}
+                  onChange={handleChange('pronouns')}
+                  placeholder="she/her, he/him, they/them..."
+                />
+                <TextField
                   label="Species"
                   value={form.species}
                   onChange={handleChange('species')}
                   placeholder="Human, elf, android..."
+                  className="col-span-2 sm:col-span-1"
                 />
                 <TextField
                   label="Title / Job"
@@ -829,17 +838,26 @@ function DetailBlock({ label, value }) {
   )
 }
 
-function LinkedNames({ label, items }) {
+function FamilyRelationshipNames({ label, items, characters }) {
+  const byId = new Map(characters.map(character => [character.id, character]))
   return (
-    <div className="border border-[var(--border)] rounded-lg bg-[var(--bg-main)] p-3">
-      <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">{label}</div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {items.length === 0 ? (
-          <span className="text-sm text-[var(--text-muted)]">None linked</span>
-        ) : (
-          items.map(item => <span key={item.id} className="chip">{item.name}</span>)
-        )}
-      </div>
+    <div>
+      <div className="text-xs text-[var(--text-muted)] mb-1.5">{label}</div>
+      {items.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)]">None</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map(item => {
+            const character = byId.get(item.toCharacterId)
+            if (!character) return null
+            return (
+              <span key={`${label}-${item.toCharacterId}-${item.label}`} className="chip" title={item.label}>
+                {character.name} - {item.label}
+              </span>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -876,6 +894,10 @@ export default function Characters({ store }) {
   const selectedChildren = selected ? getChildIds(selected, characters).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
   const selectedParents = selected ? (selected.parentIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
   const selectedSpouses = selected ? (selected.spouseIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
+  const selectedFamilyGroups = useMemo(
+    () => selected ? groupFamilyRelationships(characters, selected.id, { showHidden: true }) : null,
+    [characters, selected],
+  )
   const selectedRelationships = selected
     ? (Array.isArray(selected.relationships) ? selected.relationships : []).map(rel => ({
       ...rel,
@@ -1020,7 +1042,7 @@ export default function Characters({ store }) {
             <StudioPageHeader
               eyebrow="Character dossier"
               title={selected.name}
-              meta={[selected.role, selectedAge ? `Age ${selectedAge}` : null].filter(Boolean).join(' · ') || 'Character'}
+              meta={[selected.role, selected.pronouns, selectedAge ? `Age ${selectedAge}` : null].filter(Boolean).join(' · ') || 'Character'}
               actions={(
                 <>
                   <StudioButton tone="primary" size="sm" onClick={openCharacterChat}>Chat with character</StudioButton>
@@ -1063,6 +1085,7 @@ export default function Characters({ store }) {
                     {selectedFaction.name}
                   </span>
                 )}
+                {selected.pronouns && <span className="chip">{selected.pronouns}</span>}
                 {selected.species && <span className="chip">{selected.species}</span>}
                 {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
               </div>
@@ -1080,6 +1103,7 @@ export default function Characters({ store }) {
                       <DetailLine label="Name" value={selected.name} />
                       <DetailLine label="Alias" value={selected.keywords?.join(', ')} />
                       <DetailLine label="Role" value={selected.role} />
+                      <DetailLine label="Pronouns" value={selected.pronouns} />
                       <DetailLine label="Species" value={selected.species} />
                       <DetailLine label="Title / Job" value={selected.titleJob} />
                       <DetailLine label="Family Group" value={selected.familyGroup} />
@@ -1099,11 +1123,17 @@ export default function Characters({ store }) {
                 <>
                   <StudioNote className="lg:col-span-2">
                     <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Family Links</h3>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <LinkedNames label="Parents" items={selectedParents} />
-                      <LinkedNames label="Children" items={selectedChildren} />
-                      <LinkedNames label="Spouses / Partners" items={selectedSpouses} />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <FamilyRelationshipNames label="Parents" items={selectedFamilyGroups?.parents || []} characters={characters} />
+                      <FamilyRelationshipNames label="Partners" items={selectedFamilyGroups?.partners || []} characters={characters} />
+                      <FamilyRelationshipNames label="Children" items={selectedFamilyGroups?.children || []} characters={characters} />
+                      <FamilyRelationshipNames label="Siblings" items={selectedFamilyGroups?.siblings || []} characters={characters} />
+                      <FamilyRelationshipNames label="Extended family" items={selectedFamilyGroups?.extended || []} characters={characters} />
+                      <FamilyRelationshipNames label="Guardians and wards" items={selectedFamilyGroups?.guardians || []} characters={characters} />
                     </div>
+                    {(selectedParents.length > 0 || selectedChildren.length > 0 || selectedSpouses.length > 0) && (
+                      <p className="text-[10px] text-[var(--text-muted)] mt-3">Legacy parent, child, and spouse fields are included in the calculated family groups.</p>
+                    )}
                   </StudioNote>
                   <StudioNote className="lg:col-span-2">
                     <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Relationship Links</h3>
@@ -1196,7 +1226,13 @@ export default function Characters({ store }) {
       </StudioDetail>
 
       {showForm && (
-        <Modal title={editTarget ? `Edit ${editTarget.name}` : "Create Character"} onClose={() => setShowForm(false)} wide centered>
+        <Modal
+          title={editTarget ? `Edit ${editTarget.name}` : "Create Character"}
+          onClose={() => setShowForm(false)}
+          wide
+          centered
+          closeOnBackdrop={false}
+        >
           <CharacterForm
             initial={editTarget}
             onSave={handleSave}

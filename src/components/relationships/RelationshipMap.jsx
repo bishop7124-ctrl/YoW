@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType, isCharacterLinkRelType } from '../../constants/Constants'
 import { FACTION_ICONS } from '../../constants/factionIcons'
+import { familyRelationshipMapEdges } from '../../utils/familyRelationships'
 import FactionLogo from '../Factions/FactionLogo'
 
 const toArray = value => Array.isArray(value) ? value : []
@@ -11,6 +12,8 @@ const isSocialRelationship = relationship => (
 )
 
 const getFocalConnections = (characters, focalId) => {
+  if (!focalId) return []
+
   const byId = new Map(characters.map(character => [character.id, character]))
   const outgoingByCharacter = new Map()
   const incomingByCharacter = new Map()
@@ -33,13 +36,27 @@ const getFocalConnections = (characters, focalId) => {
     })
   })
 
-  const connections = [...new Set([...outgoingByCharacter.keys(), ...incomingByCharacter.keys()])]
-    .map(characterId => outgoingByCharacter.get(characterId) || incomingByCharacter.get(characterId))
-  return connections.sort((a, b) => (
+  const connectionIds = [...new Set([...outgoingByCharacter.keys(), ...incomingByCharacter.keys()])]
+  familyRelationshipMapEdges(characters, focalId).forEach(edge => {
+    if (!byId.has(edge.targetId) || edge.targetId === focalId) return
+    if (outgoingByCharacter.has(edge.targetId) || incomingByCharacter.has(edge.targetId)) return
+    connectionIds.push(edge.targetId)
+    outgoingByCharacter.set(edge.targetId, {
+      character: byId.get(edge.targetId),
+      type: edge.type,
+      label: edge.label,
+      direction: 'family',
+      family: true,
+    })
+  })
+
+  return uniq(connectionIds).map(characterId => outgoingByCharacter.get(characterId) || incomingByCharacter.get(characterId)).filter(Boolean).sort((a, b) => (
     getRelType(a.type).label.localeCompare(getRelType(b.type).label)
     || (a.character.name || '').localeCompare(b.character.name || '')
   ))
 }
+
+const uniq = values => [...new Set(values)]
 
 const initials = name => (name || '?')
   .split(/\s+/)
@@ -218,8 +235,9 @@ export default function RelationshipMap({ store }) {
                       badgeSize={node.compact ? 18 : 22}
                     />
                     <strong className="text-xs text-[var(--text-main)] mt-2 leading-tight">{node.character.name || 'Unnamed character'}</strong>
-                    <span className="text-[10px] mt-1 leading-tight" style={{ color: type.color }}>{type.label}</span>
+                    <span className="text-[10px] mt-1 leading-tight" style={{ color: type.color }}>{node.label || type.label}</span>
                     {node.direction === 'incoming' && <span className="text-[9px] text-[var(--text-muted)]">linked to focal</span>}
+                    {node.family && <span className="text-[9px] text-[var(--text-muted)]">from family tree</span>}
                     {extended.length > 0 && (
                       <span
                         className="absolute -right-2 -bottom-2 w-7 h-7 rounded-md grid place-items-center border border-[var(--border)] bg-[var(--surface2)] text-[9px] font-bold text-[var(--text-muted)] shadow-md"
@@ -269,9 +287,13 @@ export default function RelationshipMap({ store }) {
                       <div key={`list-${connection.character.id}-${connection.type}`} className="flex items-center justify-between gap-2 bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2">
                         <button onClick={() => setSelectedCharacterId(connection.character.id)} className="min-w-0 text-left">
                           <span className="block text-xs font-semibold text-[var(--text-main)] truncate">{connection.character.name}</span>
-                          <span className="block text-[10px]" style={{ color: type.color }}>{type.label}</span>
+                          <span className="block text-[10px]" style={{ color: type.color }}>{connection.label || type.label}</span>
                         </button>
-                        <button onClick={() => removeConnection(connection)} className="text-xs text-red-400 px-1" aria-label={`Remove ${type.label} connection to ${connection.character.name}`}>✕</button>
+                        {connection.family ? (
+                          <span className="text-[10px] text-[var(--text-muted)] px-1">Family</span>
+                        ) : (
+                          <button onClick={() => removeConnection(connection)} className="text-xs text-red-400 px-1" aria-label={`Remove ${type.label} connection to ${connection.character.name}`}>✕</button>
+                        )}
                       </div>
                     )
                   })}

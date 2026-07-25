@@ -82,6 +82,7 @@ function summariseCharacters(characters) {
   if (!characters?.length) return ''
   return characters.map(c => {
     const parts = [`${c.name}${c.role ? ` (${c.role})` : ''}`]
+    if (c.pronouns)       parts.push(`Pronouns: ${c.pronouns}`)
     if (c.bio)            parts.push(truncate(c.bio, 300))
     if (c.internalGoal)   parts.push(`Internal goal: ${c.internalGoal}`)
     if (c.externalGoal)   parts.push(`External goal: ${c.externalGoal}`)
@@ -417,6 +418,7 @@ export function buildInterviewSystemPrompt(character, novel, store, mode, timeli
   const fieldList = [
     character.name && 'name',
     character.role && 'role',
+    character.pronouns && 'pronouns',
     character.bio && 'background',
     character.internalGoal && 'internal goal',
     character.externalGoal && 'external goal',
@@ -448,6 +450,7 @@ ${projectTypeGuidance(novel)}
 CHARACTER PROFILE:
 Name: ${character.name}
 Role: ${character.role || 'Unknown'}
+${character.pronouns ? `Pronouns: ${character.pronouns}` : ''}
 ${character.bio ? `Background: ${character.bio}` : ''}
 ${character.internalGoal ? `Internal goal: ${character.internalGoal}` : ''}
 ${character.externalGoal ? `External goal: ${character.externalGoal}` : ''}

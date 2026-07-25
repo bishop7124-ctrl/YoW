@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { FACTION_ICONS } from "../../constants/factionIcons";
+import {
+  FAMILY_FILTER_DEFAULTS,
+  buildFamilyLookups,
+  deriveFamilyRelationships,
+  groupFamilyRelationships,
+  makeFamilyLink,
+  validateFamilyLink,
+} from "../../utils/familyRelationships";
 
 const NODE_W = 190;
 const NODE_H = 78;
@@ -26,11 +34,64 @@ const extractYear = (value) => {
   return Number.isFinite(year) ? year : null;
 };
 
+const FAMILY_KIND_OPTIONS = [
+  ["parent_child", "Parent / child"],
+  ["sibling", "Sibling"],
+  ["partner", "Partner / spouse"],
+  ["guardian", "Guardian / ward"],
+];
+
+const FAMILY_TYPE_OPTIONS = ["biological", "adoptive", "step", "chosen", "legal", "magical", "unknown"];
+const FAMILY_STATUS_OPTIONS = ["active", "former", "secret", "disputed", "hidden"];
+
+const newConnectionForm = (sourceCharacterId = "", targetCharacterId = "") => ({
+  sourceCharacterId,
+  targetCharacterId,
+  kind: "parent_child",
+  type: "biological",
+  status: "active",
+  direction: "source_is_parent",
+  knownPublicly: true,
+  startDate: "",
+  endDate: "",
+  notes: "",
+  allowUnusual: false,
+});
+
+function RelationshipList({ title, items, byId, onSelectCharacter }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1.5">{title}</div>
+      <div className="space-y-1.5">
+        {items.length === 0 ? (
+          <p className="text-xs text-[var(--text-muted)]">None set</p>
+        ) : items.map((relationship) => {
+          const character = byId.get(relationship.toCharacterId);
+          if (!character) return null;
+          return (
+            <button
+              key={`${title}-${relationship.toCharacterId}-${relationship.label}`}
+              onClick={() => onSelectCharacter(relationship.toCharacterId)}
+              className="w-full text-left rounded-md border border-[var(--border)] bg-[var(--bg-main)] px-2 py-1.5 hover:border-[var(--accent)]"
+            >
+              <span className="block text-xs font-semibold text-[var(--text-main)] truncate">{character.name || "Unnamed character"}</span>
+              <span className="block text-[10px] text-[var(--text-muted)]">{relationship.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function FamilyTree({ store }) {
-  const { characters, factions, selectedCharacterId, setSelectedCharacterId, currentYear } = store;
+  const { characters, factions, selectedCharacterId, setSelectedCharacterId, currentYear, saveCharacter } = store;
   const [hoveredCharId, setHoveredCharId] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const [treeColumnCount, setTreeColumnCount] = useState(getTreeColumnCount);
+  const [filters, setFilters] = useState(FAMILY_FILTER_DEFAULTS);
+  const [connectionForm, setConnectionForm] = useState(() => newConnectionForm(selectedCharacterId || ""));
+  const [connectionWarnings, setConnectionWarnings] = useState([]);
   const parsedCurrentYear = Number.isFinite(Number(currentYear)) ? Number(currentYear) : 0;
 
   const getAgeLabel = (char) => {
@@ -51,6 +112,22 @@ export default function FamilyTree({ store }) {
 
   const selectedCharacter = characters.find((c) => c.id === selectedCharacterId) || null;
   const hoveredCharacter = hoveredCharId ? characters.find((c) => c.id === hoveredCharId) : null;
+  const familyLookups = useMemo(() => buildFamilyLookups(characters, filters), [characters, filters]);
+  const derivedBySelected = useMemo(
+    () => selectedCharacterId ? deriveFamilyRelationships(characters, selectedCharacterId, filters) : [],
+    [characters, selectedCharacterId, filters],
+  );
+  const groupedSelectedFamily = useMemo(
+    () => selectedCharacterId ? groupFamilyRelationships(characters, selectedCharacterId, filters) : null,
+    [characters, selectedCharacterId, filters],
+  );
+  const selectedRelationshipLabels = useMemo(() => new Map(
+    derivedBySelected.map(relationship => [relationship.toCharacterId, relationship]),
+  ), [derivedBySelected]);
+
+  const getParentIds = useCallback((characterId) => (familyLookups.parentsByChild.get(characterId) || []).map(parent => parent.id), [familyLookups]);
+  const getChildIds = useCallback((characterId) => (familyLookups.childrenByParent.get(characterId) || []).map(child => child.id), [familyLookups]);
+  const getPartnerIds = useCallback((characterId) => (familyLookups.partnersByCharacter.get(characterId) || []).map(partner => partner.id), [familyLookups]);
 
   useEffect(() => {
     const updateColumns = () => setTreeColumnCount(getTreeColumnCount());
@@ -81,7 +158,7 @@ export default function FamilyTree({ store }) {
 
     const queue = [];
     characters.forEach((c) => {
-      const validParents = (c.parentIds || []).filter((pid) => byId.has(pid));
+      const validParents = getParentIds(c.id).filter((pid) => byId.has(pid));
       if (validParents.length === 0) {
         gen.set(c.id, 0);
         queue.push(c.id);
@@ -108,12 +185,9 @@ export default function FamilyTree({ store }) {
     for (let pass = 0; pass < characters.length; pass++) {
       let changed = false;
       characters.forEach((char) => {
-        const hasParents = (char.parentIds || []).some((pid) => byId.has(pid));
+        const hasParents = getParentIds(char.id).some((pid) => byId.has(pid));
         if (hasParents) return;
-        const spouseIds = new Set([...(char.spouseIds || [])]);
-        characters.forEach((other) => {
-          if ((other.spouseIds || []).includes(char.id)) spouseIds.add(other.id);
-        });
+        const spouseIds = new Set(getPartnerIds(char.id));
         const spouseGenerations = [...spouseIds].map((sid) => gen.get(sid)).filter((g) => g != null);
         if (spouseGenerations.length === 0) return;
         const nextGen = Math.min(...spouseGenerations);
@@ -126,7 +200,7 @@ export default function FamilyTree({ store }) {
     }
 
     return gen;
-  }, [characters, byId]);
+  }, [characters, byId, getParentIds, getPartnerIds]);
 
   const familySections = useMemo(() => {
     const groups = new Map();
@@ -139,10 +213,9 @@ export default function FamilyTree({ store }) {
     const sections = Array.from(groups.entries()).map(([familyGroup, members]) => {
       const label = familyGroup === "unassigned" ? "Ungrouped Characters" : familyGroup;
       const hasFamilyLink = (member) => {
-        const parentLinked = (member.parentIds || []).some((pid) => byId.has(pid));
-        const childLinked = characters.some((other) => (other.parentIds || []).includes(member.id));
-        const spouseLinked = (member.spouseIds || []).some((sid) => byId.has(sid))
-          || characters.some((other) => (other.spouseIds || []).includes(member.id));
+        const parentLinked = getParentIds(member.id).some((pid) => byId.has(pid));
+        const childLinked = getChildIds(member.id).some((cid) => byId.has(cid));
+        const spouseLinked = getPartnerIds(member.id).some((sid) => byId.has(sid));
         return parentLinked || childLinked || spouseLinked;
       };
       const linkedMembers = members.filter(hasFamilyLink);
@@ -180,17 +253,14 @@ export default function FamilyTree({ store }) {
       const positions = new Map();
       displayRows.forEach((row) => {
         const getParentCenter = (person) => {
-          const parentPositions = (person.parentIds || [])
+          const parentPositions = getParentIds(person.id)
             .map((pid) => positions.get(pid))
             .filter(Boolean);
           if (parentPositions.length === 0) return null;
           return parentPositions.reduce((sum, pos) => sum + pos.x + NODE_W / 2, 0) / parentPositions.length;
         };
         const getNearestSpouseX = (person) => {
-          const spouseIds = new Set([...(person.spouseIds || [])]);
-          members.forEach((other) => {
-            if ((other.spouseIds || []).includes(person.id)) spouseIds.add(other.id);
-          });
+          const spouseIds = new Set(getPartnerIds(person.id));
           const spousePositions = [...spouseIds].map((sid) => positions.get(sid)).filter(Boolean);
           if (spousePositions.length === 0) return null;
           return spousePositions.reduce((sum, pos) => sum + pos.x + NODE_W / 2, 0) / spousePositions.length;
@@ -229,7 +299,7 @@ export default function FamilyTree({ store }) {
       // Center a single child directly under the midpoint of its parents' trunk
       const parentGroupsSeen = new Map();
       members.forEach((child) => {
-        const pIds = (child.parentIds || []).filter((pid) => positions.has(pid));
+        const pIds = getParentIds(child.id).filter((pid) => positions.has(pid));
         if (pIds.length < 2) return;
         const key = [...pIds].sort().join(",");
         if (!parentGroupsSeen.has(key)) parentGroupsSeen.set(key, { parentIds: pIds, childIds: [] });
@@ -261,11 +331,32 @@ export default function FamilyTree({ store }) {
       if (b.familyGroup === "unassigned") return -1;
       return a.label.localeCompare(b.label);
     });
-  }, [characters, generations, treeColumnCount, byId]);
+  }, [characters, generations, treeColumnCount, byId, getChildIds, getParentIds, getPartnerIds]);
 
   const jumpToCharacters = (characterId) => {
     if (characterId) setSelectedCharacterId(characterId);
     window.dispatchEvent(new CustomEvent("switch-section", { detail: { section: "characters" } }));
+  };
+
+  const updateFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
+  const updateConnectionForm = (key, value) => {
+    setConnectionWarnings([]);
+    setConnectionForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveFamilyConnection = () => {
+    if (!connectionForm.sourceCharacterId || !connectionForm.targetCharacterId) return;
+    const link = makeFamilyLink(connectionForm);
+    const warnings = validateFamilyLink(characters, link);
+    if (warnings.length > 0 && !connectionForm.allowUnusual) {
+      setConnectionWarnings(warnings);
+      return;
+    }
+    const source = byId.get(link.sourceCharacterId);
+    if (!source) return;
+    saveCharacter({ familyLinks: [...(source.familyLinks || []), link] }, source.id);
+    setConnectionForm(newConnectionForm(link.sourceCharacterId, ""));
+    setConnectionWarnings([]);
   };
 
   return (
@@ -274,12 +365,113 @@ export default function FamilyTree({ store }) {
         <div className="flex items-end justify-between" data-tour="familytree-header">
           <div>
             <h1 className="text-2xl font-bold text-[var(--text-main)]">Family Tree</h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">Genealogy by family group and generation. Social connections live in the Relationship Map.</p>
+            <p className="text-sm text-[var(--text-muted)] mt-1">Structured genealogy by direct facts, with extended relationships calculated around the focal character.</p>
           </div>
           <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-nav)] border border-[var(--border)] rounded px-3 py-2">
             Current Year: <span className="text-[var(--accent)] font-bold">{parsedCurrentYear}</span>
           </div>
         </div>
+
+        {characters.length > 0 && (
+          <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+            <div className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 space-y-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                <label className="text-xs text-[var(--text-muted)] md:min-w-60">
+                  Focus character
+                  <select
+                    value={selectedCharacterId || characters[0]?.id || ""}
+                    onChange={(event) => setSelectedCharacterId(event.target.value)}
+                    className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
+                  >
+                    {characters.map(character => <option key={character.id} value={character.id}>{character.name || "Unnamed character"}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs text-[var(--text-muted)] md:min-w-52">
+                  View
+                  <select
+                    value={filters.scope}
+                    onChange={(event) => updateFilter("scope", event.target.value)}
+                    className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
+                  >
+                    <option value="direct">Direct lineage</option>
+                    <option value="immediate">Immediate family</option>
+                    <option value="extended">Extended family</option>
+                    <option value="full">Full dynasty</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                {[
+                  ["bloodOnly", "Blood only"],
+                  ["includePartners", "Partners"],
+                  ["includeAdoption", "Adoption"],
+                  ["includeStep", "Step-family"],
+                  ["includeGuardians", "Guardians"],
+                  ["includeDeceased", "Deceased"],
+                  ["showHidden", "Hidden / secret"],
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-[var(--text-main)]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(filters[key])}
+                      onChange={(event) => updateFilter(key, event.target.checked)}
+                      className="accent-[var(--accent)]"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 space-y-2">
+              <h2 className="text-sm font-bold text-[var(--text-main)]">Add Family Connection</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <select value={connectionForm.sourceCharacterId} onChange={(event) => updateConnectionForm("sourceCharacterId", event.target.value)} className="field text-xs">
+                  <option value="">Person</option>
+                  {characters.map(character => <option key={character.id} value={character.id}>{character.name || "Unnamed character"}</option>)}
+                </select>
+                <select value={connectionForm.targetCharacterId} onChange={(event) => updateConnectionForm("targetCharacterId", event.target.value)} className="field text-xs">
+                  <option value="">Related to</option>
+                  {characters.filter(character => character.id !== connectionForm.sourceCharacterId).map(character => <option key={character.id} value={character.id}>{character.name || "Unnamed character"}</option>)}
+                </select>
+                <select value={connectionForm.kind} onChange={(event) => updateConnectionForm("kind", event.target.value)} className="field text-xs">
+                  {FAMILY_KIND_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <select value={connectionForm.type} onChange={(event) => updateConnectionForm("type", event.target.value)} className="field text-xs">
+                  {FAMILY_TYPE_OPTIONS.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
+                </select>
+                {(connectionForm.kind === "parent_child" || connectionForm.kind === "guardian") && (
+                  <select value={connectionForm.direction} onChange={(event) => updateConnectionForm("direction", event.target.value)} className="field text-xs col-span-2">
+                    <option value="source_is_parent">First person is parent / guardian</option>
+                    <option value="target_is_parent">Second person is parent / guardian</option>
+                  </select>
+                )}
+                <select value={connectionForm.status} onChange={(event) => updateConnectionForm("status", event.target.value)} className="field text-xs">
+                  {FAMILY_STATUS_OPTIONS.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
+                </select>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-main)] border border-[var(--border)] rounded-lg px-2 bg-[var(--bg-main)]">
+                  <input type="checkbox" checked={connectionForm.knownPublicly} onChange={(event) => updateConnectionForm("knownPublicly", event.target.checked)} className="accent-[var(--accent)]" />
+                  Publicly known
+                </label>
+                <input value={connectionForm.startDate} onChange={(event) => updateConnectionForm("startDate", event.target.value)} className="field text-xs" placeholder="Start date" />
+                <input value={connectionForm.endDate} onChange={(event) => updateConnectionForm("endDate", event.target.value)} className="field text-xs" placeholder="End date" />
+                <textarea value={connectionForm.notes} onChange={(event) => updateConnectionForm("notes", event.target.value)} className="field text-xs col-span-2 min-h-16 resize-y" placeholder="Notes" />
+              </div>
+              {connectionWarnings.length > 0 && (
+                <div className="rounded-lg border border-amber-400/50 bg-amber-500/10 p-2 text-xs text-amber-200 space-y-2">
+                  {connectionWarnings.map(warning => <p key={warning}>{warning}</p>)}
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={connectionForm.allowUnusual} onChange={(event) => updateConnectionForm("allowUnusual", event.target.checked)} className="accent-[var(--accent)]" />
+                    Allow unusual family structure
+                  </label>
+                </div>
+              )}
+              <button onClick={saveFamilyConnection} disabled={!connectionForm.sourceCharacterId || !connectionForm.targetCharacterId} className="w-full bg-[var(--accent)] disabled:opacity-40 text-[var(--bg-main)] text-xs font-bold py-2 rounded-lg">
+                Save Family Fact
+              </button>
+            </div>
+          </section>
+        )}
 
         {characters.length === 0 ? (
           <div className="h-[60vh] flex flex-col items-center justify-center gap-3 text-center border border-dashed border-[var(--border)] rounded-xl px-8">
@@ -319,7 +511,7 @@ export default function FamilyTree({ store }) {
                         // Group children by their sorted parent set so siblings share a trunk
                         const groups = new Map();
                         section.members.forEach((child) => {
-                          const pIds = (child.parentIds || []).filter((pid) => section.positions.has(pid));
+                          const pIds = getParentIds(child.id).filter((pid) => section.positions.has(pid));
                           if (pIds.length === 0) return;
                           const key = [...pIds].sort().join(",");
                           if (!groups.has(key)) groups.set(key, { parentIds: pIds, childIds: [] });
@@ -361,7 +553,7 @@ export default function FamilyTree({ store }) {
                           // 1-to-1: choose the shortest tidy orthogonal route rather than a long diagonal.
                           if (parentIds.length === 1 && childIds.length === 1) {
                             const bendY = parentBottomY + Math.max(14, Math.round(gap / 2));
-                            lines.push(<path key={key} d={connectorPath(pAnchors[0], cAnchors[0], bendY)} fill="none" {...sw} />);
+                            lines.push(<path key={key} d={connectorPath(pAnchors[0], cAnchors[0], bendY)} fill="none" strokeDasharray={parentIds.length === 1 ? (familyLookups.parentsByChild.get(childIds[0]) || []).find(parent => parent.id === parentIds[0])?.link.type === "adoptive" ? "7 4" : (familyLookups.parentsByChild.get(childIds[0]) || []).find(parent => parent.id === parentIds[0])?.link.type === "step" ? "2 4" : undefined : undefined} {...sw} />);
                             return;
                           }
 
@@ -403,7 +595,8 @@ export default function FamilyTree({ store }) {
                           .filter((sid) => sid > char.id && section.positions.has(sid))
                           .map((sid) => {
                             const p2 = section.positions.get(sid);
-                            return <line key={`spouse-${char.id}-${sid}`} x1={p1.x + NODE_W} y1={p1.y + NODE_H / 2} x2={p2.x} y2={p2.y + NODE_H / 2} stroke="var(--accent)" strokeWidth="2.2" />;
+                            const partnerLink = (familyLookups.partnersByCharacter.get(char.id) || []).find(partner => partner.id === sid)?.link;
+                            return <line key={`spouse-${char.id}-${sid}`} x1={p1.x + NODE_W} y1={p1.y + NODE_H / 2} x2={p2.x} y2={p2.y + NODE_H / 2} stroke="var(--accent)" strokeWidth="2.2" strokeDasharray={partnerLink?.status === "former" ? "7 4" : undefined} />;
                           });
                       })}
 
@@ -418,6 +611,13 @@ export default function FamilyTree({ store }) {
                         const photoY = p.y + (NODE_H - photoSize) / 2;
                         const textX = hasPhoto ? p.x + photoSize + 14 : p.x + 10;
                         const clipId = `clip-${char.id}`;
+                        const relativeLabel = selectedRelationshipLabels.get(char.id)?.label;
+                        const relationshipMeta = selectedRelationshipLabels.get(char.id);
+                        const isSecret = relationshipMeta?.sourceLinkIds?.some(linkId => {
+                          const link = familyLookups.links.find(item => item.id === linkId);
+                          return link?.status === "secret" || link?.status === "hidden" || link?.knownPublicly === false;
+                        });
+                        const isDisputed = relationshipMeta?.sourceLinkIds?.some(linkId => familyLookups.links.find(item => item.id === linkId)?.status === "disputed");
                         return (
                           <g
                             key={`node-${char.id}`}
@@ -453,7 +653,9 @@ export default function FamilyTree({ store }) {
                             )}
                             <text x={textX} y={p.y + 22} fill={isDeceased ? "var(--text-muted)" : "var(--text-main)"} fontSize="12" fontWeight="700">{char.name}{isDeceased ? " †" : ""}</text>
                             <text x={textX} y={p.y + 38} fill="var(--text-muted)" fontSize="10">{char.role || "Character"}</text>
-                            {ageLabel && <text x={textX} y={p.y + 54} fill={isDeceased ? "color-mix(in srgb, var(--text-muted) 80%, #888 20%)" : "var(--accent)"} fontSize="10" fontWeight="600">{isDeceased ? "Died:" : "Age:"} {ageLabel}</text>}
+                            {relativeLabel ? (
+                              <text x={textX} y={p.y + 54} fill="var(--accent)" fontSize="10" fontWeight="600">{isSecret ? "Locked " : ""}{isDisputed ? "? " : ""}{relativeLabel}</text>
+                            ) : ageLabel && <text x={textX} y={p.y + 54} fill={isDeceased ? "color-mix(in srgb, var(--text-muted) 80%, #888 20%)" : "var(--accent)"} fontSize="10" fontWeight="600">{isDeceased ? "Died:" : "Age:"} {ageLabel}</text>}
                           </g>
                         );
                       })}
@@ -486,9 +688,12 @@ export default function FamilyTree({ store }) {
                     </div>
                   </div>
                   <div className="border-t border-[var(--border)] pt-3 space-y-2 text-xs">
-                    <div><span className="text-[var(--text-muted)]">Parents: </span><span className="text-[var(--text-main)]">{(selectedCharacter.parentIds || []).map(id => byId.get(id)?.name).filter(Boolean).join(', ') || 'None set'}</span></div>
-                    <div><span className="text-[var(--text-muted)]">Children: </span><span className="text-[var(--text-main)]">{characters.filter(character => (character.parentIds || []).includes(selectedCharacter.id)).map(character => character.name).join(', ') || 'None set'}</span></div>
-                    <div><span className="text-[var(--text-muted)]">Spouses / partners: </span><span className="text-[var(--text-main)]">{(selectedCharacter.spouseIds || []).map(id => byId.get(id)?.name).filter(Boolean).join(', ') || 'None set'}</span></div>
+                    <RelationshipList title="Parents" items={groupedSelectedFamily?.parents || []} byId={byId} onSelectCharacter={setSelectedCharacterId} />
+                    <RelationshipList title="Partners" items={groupedSelectedFamily?.partners || []} byId={byId} onSelectCharacter={setSelectedCharacterId} />
+                    <RelationshipList title="Children" items={groupedSelectedFamily?.children || []} byId={byId} onSelectCharacter={setSelectedCharacterId} />
+                    <RelationshipList title="Siblings" items={groupedSelectedFamily?.siblings || []} byId={byId} onSelectCharacter={setSelectedCharacterId} />
+                    <RelationshipList title="Extended Family" items={groupedSelectedFamily?.extended || []} byId={byId} onSelectCharacter={setSelectedCharacterId} />
+                    <RelationshipList title="Guardians and Wards" items={groupedSelectedFamily?.guardians || []} byId={byId} onSelectCharacter={setSelectedCharacterId} />
                   </div>
 
                   <button onClick={() => jumpToCharacters(selectedCharacter.id)} className="w-full border border-[var(--border)] text-[var(--text-main)] text-xs py-1.5 rounded hover:border-[var(--accent)]">
