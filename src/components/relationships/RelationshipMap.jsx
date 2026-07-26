@@ -110,13 +110,17 @@ export default function RelationshipMap({ store }) {
     () => getFocalConnections(characters, focalCharacter?.id),
     [characters, focalCharacter?.id],
   )
+  const safeConnections = useMemo(
+    () => connections.filter(connection => connection?.character?.id),
+    [connections],
+  )
   const networkNodes = useMemo(() => {
-    const compact = connections.length > 8
-    const innerCount = compact ? Math.min(6, Math.ceil(connections.length * 0.4)) : connections.length
-    return connections.map((connection, index) => {
+    const compact = safeConnections.length > 8
+    const innerCount = compact ? Math.min(6, Math.ceil(safeConnections.length * 0.4)) : safeConnections.length
+    return safeConnections.map((connection, index) => {
       const outer = compact && index >= innerCount
       const ringIndex = outer ? index - innerCount : index
-      const ringCount = outer ? connections.length - innerCount : innerCount
+      const ringCount = outer ? safeConnections.length - innerCount : innerCount
       const angle = (Math.PI * 2 * ringIndex / Math.max(ringCount, 1)) - Math.PI / 2 + (outer ? Math.PI / Math.max(ringCount, 1) : 0)
       const radiusX = outer ? 375 : compact ? 225 : 315
       const radiusY = outer ? 235 : compact ? 145 : 205
@@ -128,7 +132,7 @@ export default function RelationshipMap({ store }) {
         y: 310 + Math.sin(angle) * radiusY,
       }
     })
-  }, [connections])
+  }, [safeConnections])
   const extendedByDirectId = useMemo(() => {
     return new Map(networkNodes.map(node => [
       node.character.id,
@@ -136,7 +140,7 @@ export default function RelationshipMap({ store }) {
         .filter(connection => connection.character.id !== focalCharacter?.id),
     ]))
   }, [characters, focalCharacter?.id, networkNodes])
-  const connectedIds = new Set(connections.map(connection => connection.character.id))
+  const connectedIds = new Set(safeConnections.map(connection => connection.character.id))
   const availableTargets = characters.filter(character => character.id !== focalCharacter?.id && !connectedIds.has(character.id))
   const getCharacterFaction = character => character?.factionId ? factions.find(faction => faction.id === character.factionId) : null
 
@@ -251,7 +255,7 @@ export default function RelationshipMap({ store }) {
                 )
               })}
 
-              {connections.length === 0 && (
+              {safeConnections.length === 0 && (
                 <div className="absolute left-1/2 top-[76%] -translate-x-1/2 text-center w-72">
                   <p className="text-xs text-[var(--text-muted)]">No non-family connections yet. Add a friend, ally, enemy, partner, or romantic interest.</p>
                 </div>
@@ -280,8 +284,8 @@ export default function RelationshipMap({ store }) {
               <div className="border-t border-[var(--border)] pt-4">
                 <h3 className="text-xs font-bold text-[var(--text-main)] mb-2">Connections</h3>
                 <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {connections.length === 0 && <p className="text-xs italic text-[var(--text-muted)]">Nothing mapped yet.</p>}
-                  {connections.map(connection => {
+                  {safeConnections.length === 0 && <p className="text-xs italic text-[var(--text-muted)]">Nothing mapped yet.</p>}
+                  {safeConnections.map(connection => {
                     const type = getRelType(connection.type)
                     return (
                       <div key={`list-${connection.character.id}-${connection.type}`} className="flex items-center justify-between gap-2 bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2">

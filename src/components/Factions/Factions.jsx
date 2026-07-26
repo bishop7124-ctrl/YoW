@@ -7,6 +7,7 @@ const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded 
 const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-1.5'
 
 const emptyForm = () => ({ name: '', logo: [], description: '' })
+const getMemberRoles = (faction) => faction?.memberRoles && typeof faction.memberRoles === 'object' ? faction.memberRoles : {}
 
 export default function Factions({ store }) {
   const { factions, saveFaction, deleteFaction, characters, setSelectedCharacterId } = store
@@ -51,6 +52,15 @@ export default function Factions({ store }) {
   const teleportToCharacter = (id) => {
     setSelectedCharacterId(id)
     window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } }))
+  }
+
+  const updateMemberRole = (memberId, value) => {
+    if (!activeFaction) return
+    const nextRoles = { ...getMemberRoles(activeFaction) }
+    const role = value.trim()
+    if (role) nextRoles[memberId] = role
+    else delete nextRoles[memberId]
+    saveFaction({ memberRoles: nextRoles }, activeFaction.id)
   }
 
   return (
@@ -171,19 +181,44 @@ export default function Factions({ store }) {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {factionMembers.map(member => (
-                    <button
-                      key={member.id}
-                      onClick={() => teleportToCharacter(member.id)}
-                      className="panel-soft flex items-center justify-between p-4 hover:border-[var(--accent)]/50 hover:bg-[var(--bg-hover)] transition-all text-left group"
-                    >
-                      <div>
-                        <div className="text-sm font-bold text-[var(--text-main)] group-hover:text-[var(--accent)]">{member.name}</div>
-                        <div className="text-[10px] text-[var(--text-muted)] uppercase mt-0.5">{member.role || 'Member'}</div>
+                  {factionMembers.map(member => {
+                    const memberRole = getMemberRoles(activeFaction)[member.id] || ''
+                    return (
+                      <div
+                        key={member.id}
+                        className="panel-soft p-4 hover:border-[var(--accent)]/50 hover:bg-[var(--bg-hover)] transition-all text-left group"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => teleportToCharacter(member.id)}
+                          className="w-full flex items-start justify-between gap-3 text-left"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-[var(--text-main)] group-hover:text-[var(--accent)] truncate">{member.name}</div>
+                            <div className="text-[10px] text-[var(--text-muted)] uppercase mt-0.5">
+                              Story role: {member.role || 'Unassigned'}
+                            </div>
+                          </div>
+                          <span className="text-[var(--text-muted)] group-hover:text-[var(--accent)]">→</span>
+                        </button>
+                        <label className="block mt-3">
+                          <span className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-1">
+                            Faction role
+                          </span>
+                          <input
+                            key={`${activeFaction.id}:${member.id}:${memberRole}`}
+                            className={INPUT}
+                            defaultValue={memberRole}
+                            placeholder="Member, captain, spy..."
+                            onBlur={e => updateMemberRole(member.id, e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') e.currentTarget.blur()
+                            }}
+                          />
+                        </label>
                       </div>
-                      <span className="text-[var(--text-muted)] group-hover:text-[var(--accent)]">→</span>
-                    </button>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

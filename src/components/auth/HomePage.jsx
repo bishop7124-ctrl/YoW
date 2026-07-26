@@ -92,6 +92,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Your project command center — see word counts, chapter progress, recent activity, and quick access to every tool in one view.',
+    shot: { src: '/screenshots/project-dashboard.jpg', alt: 'Your Own World project dashboard showing writing progress and quick links to every project section', width: 1600, height: 723 },
     why: 'Writers lose momentum switching between tools. The dashboard keeps your entire project\'s health visible at a glance so you can focus on writing, not on managing files.',
     useCases: [
       { type: 'Novel', text: 'Track daily word count targets, see which chapters are drafted vs. revised, and monitor overall manuscript progress at a glance.' },
@@ -117,6 +118,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'A distraction-free editor organized by acts, chapters, and scenes. Write your story in the structure that makes sense for your format.',
+    shot: { src: '/screenshots/manuscript-editor.jpg', alt: 'Your Own World manuscript editor showing a chapter draft with writing status and targets', width: 1600, height: 733 },
     why: 'Generic word processors don\'t understand story structure. YOW\'s manuscript editor knows what an act break is, what a scene does, and how chapters build into a book.',
     useCases: [
       { type: 'Novel', text: 'Draft chapters with nested scenes, add notes and chapter summaries, and track revision status so you always know what\'s done.' },
@@ -141,6 +143,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Character dossiers with personality profiles, physical descriptions, backstory, motivations, and story links in one place.',
+    shot: { src: '/screenshots/character-dossier.jpg', alt: 'A character dossier in Your Own World showing profile details, faction, and biography', width: 1600, height: 613 },
     why: 'Characters are the heart of any story, but their details scatter across notebooks and documents. YOW centralizes every character so you never contradict yourself two hundred pages later.',
     useCases: [
       { type: 'Novel', text: 'Build full protagonist profiles, track character arc milestones, and see exactly which scenes each character appears in.' },
@@ -166,6 +169,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'A searchable archive for every rule, history, magic system, religion, and world fact — always at your fingertips when you\'re writing.',
+    shot: { src: '/screenshots/lore-firekeeper-blood.png', alt: 'A lore entry in Your Own World showing a tagged worldbuilding note linked to characters and related lore', width: 1600, height: 590 },
     why: 'World logic is the invisible scaffolding of every great story. When lore lives in your head or scattered notes, contradictions creep in. YOW makes lore searchable, cross-linked, and consistent.',
     useCases: [
       { type: 'Novel', text: 'Document your magic system rules, historical events, and cultural traditions so every scene stays internally consistent.' },
@@ -191,6 +195,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Document every place in your world — from kingdoms to tavern back rooms — with descriptions, history, inhabitants, and connections to your story.',
+    shot: { src: '/screenshots/locations-atlas.png', alt: 'Your Own World locations atlas showing a location field note with tags and cross-references', width: 1600, height: 650 },
     why: 'A rich sense of place makes a world feel real. Disconnected location notes lose the relationships between places. YOW links locations to characters, events, and maps.',
     useCases: [
       { type: 'Novel', text: 'Track which chapters are set where, link key plot events to their locations, and maintain consistent atmospheric descriptions.' },
@@ -216,6 +221,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Upload and annotate world maps with pinned locations, region boundaries, and custom notes — all connected to your location database.',
+    shot: { src: '/screenshots/map-terrain-editor.jpg', alt: 'Your Own World map builder showing terrain editing tools and a linked location pin on an interactive map', width: 1600, height: 971 },
     why: 'A map is worth a thousand words of description. YOW connects your visual geography to your written world so pins link directly to location pages, lore, and associated characters.',
     useCases: [
       { type: 'Novel', text: 'Pin every city, keep, and landmark your characters visit, with plot-relevant notes visible only as your story reaches those places.' },
@@ -242,6 +248,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'A chronological view of your story\'s events — plot moments, character beats, world history, and in-story dates — on one visual timeline.',
+    shot: { src: '/screenshots/timeline-calendar.png', alt: 'Your Own World timeline calendar view showing story events plotted across a custom in-world calendar', width: 1600, height: 541 },
     why: 'Chronology errors are among the most common story problems. A visual timeline lets you see the full shape of your story\'s time and catch contradictions before readers do.',
     useCases: [
       { type: 'Novel', text: 'Track the exact in-story date of every chapter event, see flashback vs. present-day threads, and verify timeline consistency.' },
@@ -270,6 +277,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Visual genealogy charts that map bloodlines, marriages, adoptions, and family connections — essential for complex casts and epic stories.',
+    shot: { src: '/screenshots/family-tree-thorn.png', alt: 'A family tree in Your Own World showing generations of a character\'s bloodline with relationship details', width: 1600, height: 508 },
     why: 'Epic stories have complex family histories. Tracking dynasties and bloodlines in prose is error-prone. Visual family trees make hereditary relationships instantly clear.',
     useCases: [
       { type: 'Novel', text: 'Map royal succession lines, track which characters share blood, and keep dynastic histories accurate across a long series.' },
@@ -296,6 +304,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Track organizations, guilds, governments, and power groups — their goals, members, rivalries, and shifting political relationships.',
+    shot: { src: '/screenshots/factions-guild.jpg', alt: 'A faction profile in Your Own World showing organization details and active membership', width: 1600, height: 873 },
     why: 'Political complexity and factional conflict drive the most compelling stories. YOW makes organizational relationships as manageable as character relationships.',
     useCases: [
       { type: 'Novel', text: 'Map competing guilds, political parties, or cults — track their agendas, leadership, and how they evolve across the story.' },
@@ -323,6 +332,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'A freeform board for capturing stray ideas, plot possibilities, dialogue snippets, research notes, and anything that doesn\'t fit neatly elsewhere yet.',
+    shot: { src: '/screenshots/ideas-board.jpg', alt: 'Your Own World ideas board showing idea cards moving from raw capture through developing to in story', width: 1600, height: 700 },
     why: 'Inspiration doesn\'t arrive in organized categories. The Ideas Board is a safe place for the messy, half-formed thoughts that eventually become the best moments in your story.',
     useCases: [
       { type: 'Novel', text: 'Capture chapter ideas before they\'re ready, park alternative plot threads, and collect dialogue that might appear later.' },
@@ -348,6 +358,7 @@ const FEATURE_TABS = [
       </svg>
     ),
     overview: 'Context-aware AI that knows your characters, lore, and plot — ready to answer questions, detect problems, and help you move forward when you\'re stuck.',
+    shot: { src: '/screenshots/ai-plot-hole-detector.jpg', alt: 'Your Own World AI plot hole detector flagging a character motivation gap with a suggested fix', width: 1600, height: 652 },
     why: 'Generic AI has no idea who your characters are. YOW\'s AI is briefed on your specific world so it gives help that actually fits your story — not suggestions for someone else\'s.',
     useCases: [
       { type: 'Novel', text: 'Ask "how would Elena react to this betrayal?" and get an answer grounded in her established personality, history, and motivations.' },
@@ -771,6 +782,18 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
               <div className="yow-feature-content" key={activeFeatureTab}>
                 <h3 className="yow-feature-title">{currentFeature.label}</h3>
                 <p className="yow-feature-overview">{currentFeature.overview}</p>
+
+                {currentFeature.shot && (
+                  <div className="yow-feature-shot">
+                    <img
+                      src={currentFeature.shot.src}
+                      alt={currentFeature.shot.alt}
+                      width={currentFeature.shot.width}
+                      height={currentFeature.shot.height}
+                      loading="lazy"
+                    />
+                  </div>
+                )}
 
                 <div className="yow-feature-block">
                   <p className="yow-feature-block-label">Why it matters</p>

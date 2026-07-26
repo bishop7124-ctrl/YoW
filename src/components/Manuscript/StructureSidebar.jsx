@@ -64,6 +64,18 @@ const TrashIcon = () => (
   </svg>
 )
 
+const ArrowUpIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.5 7.5v-6M2 4 4.5 1.5 7 4" />
+  </svg>
+)
+
+const ArrowDownIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.5 1.5v6M2 5 4.5 7.5 7 5" />
+  </svg>
+)
+
 const PencilIcon = () => (
   <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7.6 2.2 9.8 4.4M1.8 8.2 7.8 2.2a1.4 1.4 0 0 1 2 2l-6 6-2.4.5.4-2.5Z" />
@@ -79,6 +91,35 @@ const isGeneratedTitle = (title, label) => {
 
 const displayNumberedTitle = (title, label, num) =>
   isGeneratedTitle(title, label) ? `${label} ${num}` : `${label} ${num}: ${title}`
+
+// Touch-safe alternative to the drag handle — native HTML5 drag-and-drop
+// (used everywhere else in this sidebar) doesn't work on touch browsers.
+function ReorderButtons({ label, index, count, onMove }) {
+  return (
+    <span className="ms-sidebar-reorder-group">
+      <button
+        type="button"
+        className="ms-sidebar-icon-btn ms-sidebar-reorder-btn"
+        onClick={() => onMove(index - 1)}
+        disabled={index <= 0}
+        title={`Move ${label} up`}
+        aria-label={`Move ${label} up`}
+      >
+        <ArrowUpIcon />
+      </button>
+      <button
+        type="button"
+        className="ms-sidebar-icon-btn ms-sidebar-reorder-btn"
+        onClick={() => onMove(index + 1)}
+        disabled={index >= count - 1}
+        title={`Move ${label} down`}
+        aria-label={`Move ${label} down`}
+      >
+        <ArrowDownIcon />
+      </button>
+    </span>
+  )
+}
 
 function InlineRename({ value, fallback, generatedLabel, onSave, className = '' }) {
   const [draft, setDraft] = useState(isGeneratedTitle(value, generatedLabel || fallback) ? '' : (value || ''))
@@ -119,8 +160,8 @@ function InlineRename({ value, fallback, generatedLabel, onSave, className = '' 
 // ─── Scene row ────────────────────────────────────────────────────────────────
 
 function SceneRow({
-  scene, index, isActive,
-  onSelect, onUpdateScene, onDeleteScene,
+  scene, index, sceneCount, isActive,
+  onSelect, onUpdateScene, onDeleteScene, onReorderScene,
   dragRef, dragOver, setDragOver, onDropScene,
 }) {
   const [editingTitle, setEditingTitle] = useState(false)
@@ -168,6 +209,7 @@ function SceneRow({
       onDragEnd={() => { dragRef.current = null; setDragOver(null) }}
     >
       <span className="ms-sidebar-grip" aria-hidden="true"><GripIcon /></span>
+      <ReorderButtons label="scene" index={index} count={sceneCount} onMove={onReorderScene} />
 
       {editingTitle ? (
         <InlineRename
@@ -229,11 +271,11 @@ function SceneRow({
 // ─── Chapter row ──────────────────────────────────────────────────────────────
 
 function ChapterRow({
-  chap, chapNum, scenes,
+  chap, chapNum, chapIndex, chapCount, scenes,
   onAddScene, onSelectChapter,
   onUpdateChapter, onDeleteChapter,
-  activeSceneId, onSelectScene, onUpdateScene, onDeleteScene,
-  labels, onMoveScene,
+  activeSceneId, onSelectScene, onUpdateScene, onDeleteScene, moveScene,
+  labels, onMoveScene, onReorderChapter,
   dragRef, dragOver, setDragOver, onDropChapter, onDropScene,
 }) {
   const [open, setOpen] = useState(true)
@@ -289,6 +331,7 @@ function ChapterRow({
         onDragEnd={() => { dragRef.current = null; setDragOver(null) }}
       >
         <span className="ms-sidebar-grip" aria-hidden="true"><GripIcon /></span>
+        <ReorderButtons label={labels.level2.toLowerCase()} index={chapIndex} count={chapCount} onMove={onReorderChapter} />
 
         <button className="ms-sidebar-chevron" onClick={() => setOpen(v => !v)} aria-label={open ? 'Collapse' : 'Expand'}>
           {open ? <ChevronDown /> : <ChevronRight />}
@@ -358,10 +401,12 @@ function ChapterRow({
               key={scene.id}
               scene={scene}
               index={i}
+              sceneCount={chapScenes.length}
               isActive={scene.id === activeSceneId}
               onSelect={onSelectScene}
               onUpdateScene={onUpdateScene}
               onDeleteScene={onDeleteScene}
+              onReorderScene={toIndex => moveScene(scene.id, chap.id, toIndex)}
               dragRef={dragRef}
               dragOver={dragOver}
               setDragOver={setDragOver}
@@ -473,7 +518,7 @@ export default function StructureSidebar({
 
       {/* Tree */}
       <div className="ms-sidebar-tree">
-        {acts.map((act) => {
+        {acts.map((act, actIndex) => {
           const open = !collapsedActs.has(act.id)
           const actChapters = chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order)
           const words = actWords(act)
@@ -522,6 +567,7 @@ export default function StructureSidebar({
                 onDragEnd={() => { dragRef.current = null; setDragOver(null) }}
               >
                 <span className="ms-sidebar-grip" aria-hidden="true"><GripIcon /></span>
+                <ReorderButtons label={labels.level1.toLowerCase()} index={actIndex} count={acts.length} onMove={toIndex => moveAct(act.id, toIndex)} />
 
                 <button
                   className="ms-sidebar-chevron"
@@ -592,11 +638,13 @@ export default function StructureSidebar({
                     setDragOver(null)
                   }}
                 >
-                  {actChapters.map((chap) => (
+                  {actChapters.map((chap, chapIndex) => (
                     <ChapterRow
                       key={chap.id}
                       chap={chap}
                       chapNum={chapterNumbers[chap.id]}
+                      chapIndex={chapIndex}
+                      chapCount={actChapters.length}
                       scenes={scenes}
                       onAddScene={handleAddScene}
                       onSelectChapter={onSelectChapter}
@@ -606,8 +654,10 @@ export default function StructureSidebar({
                       onSelectScene={onSelectScene}
                       onUpdateScene={updateScene}
                       onDeleteScene={deleteScene}
+                      moveScene={moveScene}
                       labels={labels}
                       onMoveScene={handleMoveSceneToChapter}
+                      onReorderChapter={toIndex => moveChapter(chap.id, act.id, toIndex)}
                       dragRef={dragRef}
                       dragOver={dragOver}
                       setDragOver={setDragOver}

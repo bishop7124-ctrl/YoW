@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { getShapeElement } from './FactionLogo'
 import { DEFAULT_LOGO_BACKGROUND, normalizeFactionLogo } from './logoData'
 import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import SegmentedControl from '../shared/SegmentedControl'
 
 const uid = () => Math.random().toString(36).slice(2)
 
@@ -119,21 +120,17 @@ export default function LogoBuilder({ logo, onChange }) {
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-1 p-1 mb-4 rounded-lg bg-[var(--bg-main)] border border-[var(--border)]" role="group" aria-label="Faction logo source">
-        <button
-          type="button"
-          onClick={() => updateLogo({ source: 'builder' })}
-          className={`px-3 py-2 rounded-md text-xs font-bold transition-colors ${source === 'builder' ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-        >
-          Build an Emblem
-        </button>
-        <button
-          type="button"
-          onClick={() => image ? updateLogo({ source: 'image' }) : uploadInputRef.current?.click()}
-          className={`px-3 py-2 rounded-md text-xs font-bold transition-colors ${source === 'image' ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-        >
-          Upload an Image
-        </button>
+      <div className="mb-4">
+        <SegmentedControl
+          variant="segmented"
+          ariaLabel="Faction logo source"
+          value={source}
+          onChange={id => (id === 'image' && !image ? uploadInputRef.current?.click() : updateLogo({ source: id }))}
+          options={[
+            { id: 'builder', label: 'Build an Emblem' },
+            { id: 'image', label: 'Upload an Image' },
+          ]}
+        />
         <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isUploading} />
       </div>
 

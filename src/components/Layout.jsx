@@ -32,6 +32,7 @@ import {
   getProjectExportFilename,
 } from '../utils/projectExport'
 import { readItem, writeItem } from '../storage/projectStorage'
+import { useIsMobile } from '../utils/useMediaQuery'
 
 // ─── Project status ──────────────────────────────────────────────────────────
 
@@ -914,7 +915,7 @@ export default function Layout({
   )
 
   const [aiOpen, setAiOpen] = useState(false)
-  const [isMobileViewport, setIsMobileViewport] = useState(false)
+  const isMobileViewport = useIsMobile()
   const [openSectionTourId, setOpenSectionTourId] = useState(null)
 
   const sectionTours = useMemo(() => ({
@@ -985,14 +986,6 @@ export default function Layout({
       window.removeEventListener('switch-writing', handleOpenWriting)
     }
   }, [setSection, setViewMode, setProjectSettingsOpen, resetStudioIndex, isSectionLockedForFree])
-
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 860px)')
-    const handleChange = () => setIsMobileViewport(media.matches)
-    handleChange()
-    media.addEventListener('change', handleChange)
-    return () => media.removeEventListener('change', handleChange)
-  }, [])
 
   // iOS Safari requires a passive touchstart listener on scroll containers
   // to properly recognise them as touch-scroll targets.

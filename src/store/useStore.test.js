@@ -332,6 +332,8 @@ describe('getProjectExportData', () => {
     const data = result.current.getProjectExportData(sample.id)
     expect(data.project.title).toBe('The Last Ember')
     expect(data.project.wordCountTarget).toBe(97500)
+    expect(data.project.coverPhoto).toBe('/demo-projects/the-last-ember/cover.jpg')
+    expect(data.project.bannerImage).toBe('/demo-projects/the-last-ember/banner.jpg')
     expect(data.project.scheduleCalendar.months.map(month => month.name)).toEqual([
       'Kindling',
       'Highflame',
@@ -354,14 +356,21 @@ describe('getProjectExportData', () => {
       'Revelation',
     ])
     expect(data.characters).toHaveLength(12)
+    expect(data.characters.filter(character => character.image).length).toBe(12)
     expect(data.factions).toHaveLength(6)
     expect(data.locations).toHaveLength(18)
     expect(data.loreEntries).toHaveLength(42)
-    expect(data.timeline).toHaveLength(40)
-    expect(data.timeline.every(event => event.date && event.startYear != null && event.eraId)).toBe(true)
+    expect(data.timeline).toHaveLength(47)
+    expect(data.timeline.every(event => event.date)).toBe(true)
+    expect(data.worldHistory).toHaveLength(7)
     expect(data.eras).toHaveLength(3)
     expect(data.acts).toHaveLength(3)
     expect(data.chapters).toHaveLength(15)
+    expect(data.scenes).toHaveLength(1)
+    expect(data.scenes.reduce((sum, scene) => sum + (scene.content?.trim().match(/\S+/g)?.length || 0), 0)).toBeGreaterThan(700)
+    const populatedSceneHistories = data.scenes.filter(scene => scene.content && scene.wordHistory?.length)
+    expect(populatedSceneHistories).toHaveLength(1)
+    expect(populatedSceneHistories[0].wordHistory.length).toBeGreaterThanOrEqual(14)
     expect(data.storySchedule).toHaveLength(30)
     expect(data.storySchedule.every(event => event.year === 1 && event.month >= 1 && event.month <= 3)).toBe(true)
     expect(data.storySchedule.some(event => event.title === 'Escape through Kestrel Market')).toBe(true)
@@ -372,6 +381,7 @@ describe('getProjectExportData', () => {
     expect(data.ideaEntries.filter(entry => entry.tags?.includes('note'))).toHaveLength(20)
     expect(data.ideaEntries.filter(entry => entry.tags?.includes('idea-card'))).toHaveLength(25)
     expect(data.ideaEntries.filter(entry => entry.tags?.includes('ai-result'))).toHaveLength(12)
+    expect(data.ideaEntries).toHaveLength(57)
 
     const rowan = data.characters.find(character => character.name === 'Rowan Vale')
     const elia = data.characters.find(character => character.name === 'Princess Elia Marent')
@@ -379,18 +389,89 @@ describe('getProjectExportData', () => {
     const garrick = data.characters.find(character => character.name === 'Captain Garrick Thorn')
     const sera = data.characters.find(character => character.name === 'Sera Thorn')
     const cassian = data.characters.find(character => character.name === 'Lord Cassian Vey')
-    const validRelationshipMapTypes = new Set(['ally', 'enemy', 'friend', 'romantic', 'partner'])
+    const validRelationshipMapTypes = new Set(['ally', 'enemy', 'friend', 'romantic', 'partner', 'relative'])
     const socialRelationships = data.characters.flatMap(character => character.relationships || [])
-    expect(socialRelationships.length).toBeGreaterThanOrEqual(25)
+    expect(socialRelationships).toHaveLength(62)
     expect(socialRelationships.every(relationship => validRelationshipMapTypes.has(relationship.type))).toBe(true)
+    expect(data.characters.every(character => (character.relationships || []).length >= 3)).toBe(true)
     expect(rowan.relationships.some(relationship => relationship.targetId === elia.id && relationship.type === 'ally')).toBe(true)
-    expect(data.characters.flatMap(character => character.familyLinks || [])).toHaveLength(5)
+    const familyLinks = data.characters.flatMap(character => character.familyLinks || [])
+    expect(familyLinks).toHaveLength(16)
+    expect(new Set(familyLinks.map(link => link.kind))).toEqual(new Set(['parent_child', 'sibling', 'guardian', 'partner']))
+    expect(new Set(familyLinks.map(link => link.status))).toEqual(new Set(['active', 'former', 'secret', 'disputed', 'hidden']))
     expect(oren.familyLinks.some(link => link.targetCharacterId === rowan.id && link.kind === 'parent_child')).toBe(true)
     expect(garrick.familyLinks.some(link => link.targetCharacterId === sera.id && link.kind === 'sibling')).toBe(true)
     expect(cassian.familyLinks.some(link => link.targetCharacterId === elia.id && link.kind === 'guardian')).toBe(true)
     const rowanFamilyMapTargets = familyRelationshipMapEdges(data.characters, rowan.id).map(edge => edge.targetId)
     expect(rowanFamilyMapTargets).toContain(oren.id)
     expect(data.locations.find(location => location.name === 'Glassmere Observatory').characterIds).toContain(rowan.id)
+  })
+
+  it('enriches an existing sparse Last Ember sample with relationship and family links', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+    const project = { id: 'last-ember-old', title: 'The Last Ember', type: 'novel', isSampleProject: true, sampleSource: 'the-last-ember' }
+    const names = [
+      'Rowan Vale',
+      'Princess Elia Marent',
+      'Lord Cassian Vey',
+      'Sister Maeve Orin',
+      'Captain Garrick Thorn',
+      'Nox',
+      'Tamsin Reed',
+      'Oren Vale',
+      'Sera Thorn',
+      'Brannic Sol',
+      'Iyra of the Red Pines',
+      'Master Vellum',
+    ]
+
+    act(() => {
+      result.current.importData({
+        novels: [project],
+        activeNovelId: project.id,
+        chapters: [
+          { id: 'old-ch-1', novelId: project.id, title: 'The Impossible Map' },
+          { id: 'old-ch-2', novelId: project.id, title: 'Ash in the Margins' },
+          { id: 'old-ch-3', novelId: project.id, title: 'River Debts' },
+          { id: 'old-ch-4', novelId: project.id, title: 'The Trees Remember' },
+        ],
+        scenes: [
+          { id: 'old-sc-1', novelId: project.id, chapterId: 'old-ch-1', title: 'Sparse scene', content: 'Short old text.' },
+          { id: 'old-sc-2', novelId: project.id, chapterId: 'old-ch-2', title: 'Sparse scene', content: '' },
+          { id: 'old-sc-3', novelId: project.id, chapterId: 'old-ch-3', title: 'Sparse scene', content: '' },
+          { id: 'old-sc-4', novelId: project.id, chapterId: 'old-ch-4', title: 'Sparse scene', content: '' },
+        ],
+        characters: names.map((name, index) => ({
+          id: `old-char-${index}`,
+          novelId: project.id,
+          name,
+          relationships: [],
+          familyLinks: [],
+        })),
+      })
+    })
+    act(() => {
+      result.current.enrichSampleProject(project.id)
+    })
+
+    const characters = result.current.characters
+    const rowan = characters.find(character => character.name === 'Rowan Vale')
+    const elia = characters.find(character => character.name === 'Princess Elia Marent')
+    const oren = characters.find(character => character.name === 'Oren Vale')
+    const socialRelationships = characters.flatMap(character => character.relationships || [])
+    const familyLinks = characters.flatMap(character => character.familyLinks || [])
+    expect(socialRelationships.length).toBeGreaterThanOrEqual(55)
+    expect(characters.every(character => (character.relationships || []).length >= 3)).toBe(true)
+    expect(rowan.relationships.some(relationship => relationship.targetId === elia.id && relationship.type === 'ally')).toBe(true)
+    expect(familyLinks).toHaveLength(16)
+    expect(oren.familyLinks.some(link => link.targetCharacterId === rowan.id && link.kind === 'parent_child')).toBe(true)
+    const enrichedProject = result.current.novels.find(novel => novel.id === project.id)
+    const manuscriptWords = result.current.scenes.reduce((sum, scene) => sum + (scene.content?.trim().match(/\S+/g)?.length || 0), 0)
+    expect(enrichedProject.coverPhoto).toBe('/demo-projects/the-last-ember/cover.jpg')
+    expect(enrichedProject.bannerImage).toBe('/demo-projects/the-last-ember/banner.jpg')
+    expect(manuscriptWords).toBeGreaterThan(700)
+    expect(result.current.scenes.filter(scene => scene.wordHistory?.length >= 8)).toHaveLength(1)
+    expect(localStorage.getItem('nf_sampleProjectSeeded:the-last-ember-v3:sample-user')).toBe('1')
   })
 
   it('restores exported project eras and remaps timeline era links', () => {
@@ -410,7 +491,7 @@ describe('getProjectExportData', () => {
     const importedData = result.current.getProjectExportData(imported.id)
     expect(importedData.eras).toHaveLength(3)
     expect(importedData.eras.map(era => era.name)).toContain('The Ember Crisis')
-    expect(importedData.timeline.every(event => event.eraId && importedData.eras.some(era => era.id === event.eraId))).toBe(true)
+    expect(importedData.timeline.filter(event => event.eraId).every(event => importedData.eras.some(era => era.id === event.eraId))).toBe(true)
   })
 
   it('omits comicPages/comicPanels for a non-comic project even if stray comic records share its novelId', () => {

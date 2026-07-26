@@ -3,6 +3,7 @@ import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans } from './AiConfigRequired'
+import SegmentedControl from '../shared/SegmentedControl'
 import AIStar from './AIStar'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -91,28 +92,26 @@ function ProviderSettings({ settings, onSave, onCancel }) {
         {/* Provider tabs */}
         <div>
           <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Provider</label>
-          <div className="flex gap-1 p-1 bg-[var(--bg-main)] rounded-lg border border-[var(--border)]">
-            {Object.entries(PROVIDERS).map(([id, p]) => {
+          <SegmentedControl
+            variant="segmented"
+            ariaLabel="Provider"
+            value={active}
+            onChange={id => setLocal(prev => ({ ...prev, activeProvider: id }))}
+            options={Object.entries(PROVIDERS).map(([id, p]) => {
               const connected = !!local[id]?.apiKey?.trim()
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setLocal(prev => ({ ...prev, activeProvider: id }))}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all relative ${
-                    active === id
-                      ? 'bg-[var(--accent)] text-[var(--bg-main)]'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                  }`}
-                >
-                  {p.name.split(' ')[0]}
-                  {connected && (
-                    <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${active === id ? 'bg-[var(--bg-main)]/60' : 'bg-[var(--accent)]'}`} />
-                  )}
-                </button>
-              )
+              return {
+                id,
+                label: (
+                  <>
+                    {p.name.split(' ')[0]}
+                    {connected && (
+                      <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${active === id ? 'bg-[var(--bg-main)]/60' : 'bg-[var(--accent)]'}`} />
+                    )}
+                  </>
+                ),
+              }
             })}
-          </div>
+          />
         </div>
 
         {/* Model */}

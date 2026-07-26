@@ -726,6 +726,12 @@ function AppInner() {
   }
 
   const userProjects = store.novels.filter(project => !project.isSampleProject)
+  useEffect(() => {
+    if (!userId || dataLoading || store.readOnly) return
+    const existingSample = store.novels.find(project => project.isSampleProject && project.sampleSource === 'the-last-ember')
+    if (!existingSample || readItem(`nf_sampleProjectSeeded:the-last-ember-v3:${userId}`) === '1') return
+    store.enrichSampleProject?.(existingSample.id)
+  }, [userId, dataLoading, store.readOnly, store.novels, store.enrichSampleProject])
 
   // Pricing page is accessible regardless of auth state
   if (showPricing) {
@@ -1065,7 +1071,9 @@ function AppInner() {
   const isFirstRun = firstRunChoiceOpen && !showWelcomeTour
   const startSampleTour = () => {
     const existingSample = store.novels.find(project => project.isSampleProject)
-    const sample = existingSample || ensureSampleProject?.()
+    const sample = existingSample
+      ? store.enrichSampleProject?.(existingSample.id) || existingSample
+      : ensureSampleProject?.()
     tourStore.markWizardShown(userId)
     tourStore.markWelcomeShown(userId)
     if (sample?.id) handleOpenProject(sample.id)

@@ -6,6 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0d282e" />
 
+    <!-- Applies the saved theme to <html> before first paint, so the page never
+         flashes the default (Tropical) theme before switching to the user's
+         actual choice. Mirrors applyThemeToDocument in src/utils/theme.js, but
+         must run synchronously here since that module only executes after
+         React mounts. -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement
+          var theme = localStorage.getItem('nf-theme')
+          var builtIn = ['tropical', 'sage-modern', 'industrial-loft', 'caramel-latte', 'ocean-depth', 'pearl-minimal']
+          if (theme === 'custom') {
+            root.setAttribute('data-theme', 'custom')
+            var tokens = JSON.parse(localStorage.getItem('nf-custom-computed') || 'null')
+            if (tokens) {
+              for (var prop in tokens) root.style.setProperty(prop, tokens[prop])
+            }
+          } else if (builtIn.indexOf(theme) !== -1) {
+            root.setAttribute('data-theme', theme)
+          }
+        } catch (e) { /* localStorage unavailable — fall back to default theme */ }
+      })()
+    </script>
+
     <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-L1BT87PKXV"></script>
   <script>

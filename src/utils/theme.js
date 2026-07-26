@@ -273,7 +273,11 @@ export const applyThemeToDocument = (theme, customColors = {}) => {
   if (normalized === 'custom') {
     root.setAttribute('data-theme', 'custom')
     const colors = { ...DEFAULT_CUSTOM_COLORS, ...customColors }
-    setThemeVars(root, colors)
+    const tokens = deriveCustomThemeTokens(colors, loadThemeTuning())
+    Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value))
+    // Cached so the pre-paint boot script in index.html can replay these vars
+    // synchronously on the next load, before React mounts — avoids a theme flash.
+    try { localStorage.setItem('nf-custom-computed', JSON.stringify(tokens)) } catch { /* storage unavailable */ }
     syncThemeColorMeta(colors.bgMain)
     return normalized
   }

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { getProjectType, getStoryEventIndicators } from '../../constants/projectTypes'
+import { useIsMobile } from '../../utils/useMediaQuery'
 
 const ChevronIcon = ({ open }) => (
   <svg
@@ -14,44 +15,54 @@ const ChevronIcon = ({ open }) => (
   </svg>
 )
 
-const MoveBtn = ({ onClick, title, disabled, children }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled}
-    title={title}
-    className="opacity-0 group-hover:opacity-100 disabled:opacity-0 p-0.5 text-[var(--text-muted)] hover:text-[var(--accent)] disabled:cursor-not-allowed transition-all"
-  >
-    {children}
-  </button>
-)
+const MoveBtn = ({ onClick, title, disabled, children }) => {
+  const isMobile = useIsMobile()
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} disabled:opacity-0 p-0.5 text-[var(--text-muted)] hover:text-[var(--accent)] disabled:cursor-not-allowed transition-all`}
+    >
+      {children}
+    </button>
+  )
+}
 
-const ParentSelect = ({ value, options, label, onChange }) => (
-  <select
-    value={value}
-    onChange={e => onChange(e.target.value)}
-    title={label}
-    aria-label={label}
-    className="max-w-36 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] opacity-0 outline-none transition-all hover:border-[var(--border)] hover:bg-[var(--bg-main)] hover:text-[var(--accent)] focus:border-[var(--accent)] focus:bg-[var(--bg-main)] focus:opacity-100 group-hover:opacity-100"
-  >
-    {options.map(option => (
-      <option key={option.id} value={option.id}>{option.label}</option>
-    ))}
-  </select>
-)
+const ParentSelect = ({ value, options, label, onChange }) => {
+  const isMobile = useIsMobile()
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      title={label}
+      aria-label={label}
+      className={`max-w-36 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] outline-none transition-all hover:border-[var(--border)] hover:bg-[var(--bg-main)] hover:text-[var(--accent)] focus:border-[var(--accent)] focus:bg-[var(--bg-main)] focus:opacity-100 ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+    >
+      {options.map(option => (
+        <option key={option.id} value={option.id}>{option.label}</option>
+      ))}
+    </select>
+  )
+}
 
-const DeleteBtn = ({ onClick, title = 'Delete' }) => (
-  <button
-    onClick={onClick}
-    className="opacity-0 group-hover:opacity-100 p-0.5 text-[var(--text-muted)] hover:text-red-400 transition-all"
-    title={title}
-  >
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
-    </svg>
-  </button>
-)
+const DeleteBtn = ({ onClick, title = 'Delete' }) => {
+  const isMobile = useIsMobile()
+  return (
+    <button
+      onClick={onClick}
+      className={`${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} p-0.5 text-[var(--text-muted)] hover:text-red-400 transition-all`}
+      title={title}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
+      </svg>
+    </button>
+  )
+}
 
 const StoryEventSelect = ({ value, indicators, onChange }) => {
+  const isMobile = useIsMobile()
   const selected = indicators.find(indicator => indicator.id === value)
   const hasUnknownValue = value && !selected
   const color = selected?.color || '#94a3b8'
@@ -69,7 +80,7 @@ const StoryEventSelect = ({ value, indicators, onChange }) => {
       className={`h-6 max-w-40 rounded border px-2 text-[10px] font-bold uppercase tracking-wider outline-none transition-colors ${
         value
           ? ''
-          : 'border-transparent bg-transparent text-[var(--text-muted)] opacity-0 group-hover:opacity-100 hover:border-[var(--border)] hover:bg-[var(--bg-main)] focus:opacity-100 focus:border-[var(--accent)]'
+          : `border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--bg-main)] focus:opacity-100 focus:border-[var(--accent)] ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`
       }`}
     >
       <option value="">Story event</option>

@@ -239,456 +239,61 @@ const buildStarterStructure = (novelId, type) => {
   return { acts: starterActs, chapters: starterChapters, scenes: starterScenes }
 }
 
-const sampleProjectSeedKey = (ownerId) => ownerId ? `nf_sampleProjectSeeded:the-last-ember:${ownerId}` : null
+const sampleProjectSeedKey = (ownerId) => ownerId ? `nf_sampleProjectSeeded:the-last-ember-v3:${ownerId}` : null
 
-const LAST_EMBER_CALENDAR = {
-  months: [
-    { name: 'Kindling', days: 18 },
-    { name: 'Highflame', days: 18 },
-    { name: 'Ashwane', days: 18 },
-    { name: 'Riverturn', days: 18 },
-    { name: 'Glassfall', days: 18 },
-    { name: 'Emberdeep', days: 18 },
-    { name: 'Frostbell', days: 18 },
-    { name: 'Dawnreturn', days: 18 },
-  ],
-  weekLength: 6,
-  dayNames: ['Spark', 'Bell', 'Road', 'Crown', 'Ash', 'Rest'],
+const collectIds = (value, idMap) => {
+  if (!value || typeof value !== 'object') return
+  if (Array.isArray(value)) {
+    value.forEach(item => collectIds(item, idMap))
+    return
+  }
+  if (typeof value.id === 'string' && value.id && !idMap[value.id]) idMap[value.id] = uid()
+  Object.values(value).forEach(item => collectIds(item, idMap))
 }
 
-const LAST_EMBER_SCHEDULE_CATEGORIES = [
-  'Story Event',
-  'Travel',
-  'Council',
-  'Ritual',
-  'Battle',
-  'Discovery',
-  'World Event',
-  'Revelation',
-]
-
-const LAST_EMBER_SCHEDULE_DATES = [
-  [1, 1, 2, 1], [1, 1, 3, 1], [1, 1, 4, 1], [1, 1, 5, 1], [1, 1, 6, 1],
-  [1, 1, 7, 1], [1, 1, 9, 1], [1, 1, 11, 1], [1, 1, 14, 2], [1, 1, 16, 1],
-  [1, 1, 17, 1], [1, 1, 18, 1], [1, 2, 1, 1], [1, 2, 2, 1], [1, 2, 3, 1],
-  [1, 2, 5, 1], [1, 2, 6, 1], [1, 2, 7, 1], [1, 2, 8, 1], [1, 2, 9, 1],
-  [1, 2, 10, 1], [1, 2, 12, 1], [1, 2, 13, 1], [1, 2, 14, 1], [1, 2, 15, 1],
-  [1, 2, 16, 1], [1, 2, 17, 1], [1, 3, 1, 1], [1, 3, 2, 1], [1, 3, 3, 1],
-]
-
-const LAST_EMBER_CHAPTER_DATES = {
-  'ch-01': [1, 1, 1],
-  'ch-02': [1, 1, 4],
-  'ch-03': [1, 1, 8],
-  'ch-04': [1, 1, 14],
-  'ch-05': [1, 2, 1],
-  'ch-06': [1, 2, 4],
-  'ch-07': [1, 2, 7],
-  'ch-08': [1, 2, 10],
-  'ch-09': [1, 2, 13],
-  'ch-10': [1, 2, 16],
-  'ch-11': [1, 3, 1],
-  'ch-12': [1, 3, 5],
-  'ch-13': [1, 3, 9],
-  'ch-14': [1, 3, 13],
-  'ch-15': [1, 3, 17],
+const remapExportValue = (value, idMap) => {
+  if (typeof value === 'string') return idMap[value] || value
+  if (!value || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map(item => remapExportValue(item, idMap))
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remapExportValue(item, idMap)]))
 }
 
-const formatLastEmberDate = (year, month, day) =>
-  `Year ${year}, ${LAST_EMBER_CALENDAR.months[month - 1]?.name || `Month ${month}`} ${day}`
-
-const lastEmberStoryScheduleCategory = (event) => {
-  const value = `${event?.title || ''} ${event?.type || ''}`.toLowerCase()
-  if (/\b(escape|reaches|road|harbor|blockade|convoy|tower|map page)\b/.test(value)) return 'travel'
-  if (/\b(council|law|claim|coronation|crown)\b/.test(value)) return 'council'
-  if (/\b(rite|ember chamber|dead court|oath|flame|ember)\b/.test(value)) return 'ritual'
-  if (/\b(ambush|falls|spares|collapses|battle)\b/.test(value)) return 'battle'
-  if (/\b(discovers|learns|finds|reveals|warning|signals|map)\b/.test(value)) return 'discovery'
-  if (/\b(refuses|lie|vow|memory|father|bloodline)\b/.test(value)) return 'revelation'
-  if (event?.type === 'planned') return 'world_event'
-  return 'story_event'
-}
-
-const LAST_EMBER_FAMILY_LINKS = [
-  { sourceCharacterId: 'char-oren', targetCharacterId: 'char-rowan', kind: 'parent_child', type: 'biological', status: 'active', direction: 'source_is_parent', knownPublicly: true, notes: 'Oren is Rowan\'s missing father and the source of the firekeeper bloodline reveal.' },
-  { sourceCharacterId: 'char-garrick', targetCharacterId: 'char-sera', kind: 'sibling', type: 'biological', status: 'active', knownPublicly: true, notes: 'Garrick believes Sera vanished; her Hollow Court allegiance is one of the story\'s hidden family wounds.' },
-  { sourceCharacterId: 'char-cassian', targetCharacterId: 'char-elia', kind: 'guardian', type: 'legal', status: 'active', direction: 'source_is_parent', knownPublicly: true, notes: 'Cassian acts as Elia\'s political guardian while concealing the scale of the Ember crisis.' },
-  { sourceCharacterId: 'char-maeve', targetCharacterId: 'char-rowan', kind: 'guardian', type: 'chosen', status: 'active', direction: 'source_is_parent', knownPublicly: true, notes: 'Maeve guides Rowan as a chosen guardian of the firekeeper truth.' },
-  { sourceCharacterId: 'char-maeve', targetCharacterId: 'char-oren', kind: 'partner', type: 'chosen', status: 'former', knownPublicly: true, notes: 'Maeve and Oren were once bound by the Circle of Glass and by the secret they kept for Rowan.' },
-]
-
-const socialRelationshipType = (label) => {
-  const value = String(label || '').toLowerCase()
-  if (/\b(father|mother|parent|sibling|brother|sister|family)\b/.test(value)) return null
-  if (/\b(enemy|hunting|distrust|blackmail|manipulat|avoid|traitor)\b/.test(value)) return 'enemy'
-  if (/\b(former friend|trust|friend|owes|favour|ally|aided|protect|mentor|guide|warn|confess|serves|revere|testing|searching|seeking|knows|withholding)\b/.test(value)) return 'ally'
-  if (/\b(guardian|debt|creditor|political)\b/.test(value)) return 'partner'
-  return 'friend'
-}
-
-const remapLinkedIds = (ids, idMap) => (Array.isArray(ids) ? ids.map(id => idMap[id]).filter(Boolean) : [])
+const remapExportItems = (items, idMap) => (Array.isArray(items) ? remapExportValue(items, idMap) : [])
 
 const buildSampleProjectData = () => {
   const now = new Date().toISOString()
   const source = lastEmberDemoProject
-  const idMap = { [source.project.id]: uid() }
-  const projectId = idMap[source.project.id]
-  const mapId = uid()
-  const whiteboardId = uid()
-  const eras = [
-    { id: uid(), novelId: projectId, name: 'Age of First Fire', startYear: -912, endYear: -119, description: 'The first firekeepers, dragon wars, royal founding, and forbidden mapmaking all belong to the deep history of Eldermere.' },
-    { id: uid(), novelId: projectId, name: 'Age of Ash Secrets', startYear: -118, endYear: -1, description: 'The Hollow Court, Black Winter, and missing bloodlines shape the secrets that erupt into the main story.' },
-    { id: uid(), novelId: projectId, name: 'The Ember Crisis', startYear: 1, endYear: 1, description: 'The active story year of The Last Ember, tracked on Eldermere’s custom eight-month calendar.' },
-  ]
-  const [firstFireEra, ashSecretsEra, emberCrisisEra] = eras
-  const sourceCollections = [
-    source.characters,
-    source.factions,
-    source.locations,
-    source.lore,
-    source.timeline,
-    source.notes,
-    source.aiResults,
-    source.familyTrees,
-    source.outline,
-    source.outline.flatMap(act => act.chapters || []),
-  ]
-  sourceCollections.flat().filter(item => item?.id).forEach(item => { idMap[item.id] = uid() })
+  const idMap = {}
+  collectIds(source, idMap)
+  const projectId = idMap[source.project.id] || uid()
+  idMap[source.project.id] = projectId
 
-  const factions = source.factions.map(faction => ({
-    id: idMap[faction.id],
-    novelId: projectId,
-    name: faction.name,
-    description: [
-      faction.goal,
-      faction.leaderId ? `Leader: ${source.characters.find(c => c.id === faction.leaderId)?.name || faction.leaderId}.` : '',
-    ].filter(Boolean).join('\n\n'),
-    leaderId: idMap[faction.leaderId] || null,
-    enemyFactionIds: remapLinkedIds(faction.enemyFactionIds, idMap),
-    tags: ['sample', 'The Last Ember'],
-  }))
-
-  const characterFactionById = new Map()
-  source.factions.forEach(faction => {
-    ;(faction.memberIds || []).forEach(characterId => characterFactionById.set(characterId, idMap[faction.id]))
-  })
-  const relationshipsByCharacter = new Map()
-  ;(source.relationships || []).forEach(link => {
-    const from = idMap[link.from]
-    const to = idMap[link.to]
-    const type = socialRelationshipType(link.type)
-    if (!from || !to) return
-    if (!type) return
-    relationshipsByCharacter.set(from, [
-      ...(relationshipsByCharacter.get(from) || []),
-      { targetId: to, type, note: link.type, originalType: link.type },
-    ])
-  })
-  const familyLinksByCharacter = new Map()
-  LAST_EMBER_FAMILY_LINKS.forEach(link => {
-    const sourceId = idMap[link.sourceCharacterId]
-    const targetId = idMap[link.targetCharacterId]
-    if (!sourceId || !targetId) return
-    familyLinksByCharacter.set(sourceId, [
-      ...(familyLinksByCharacter.get(sourceId) || []),
-      {
-        ...link,
-        id: uid(),
-        sourceCharacterId: sourceId,
-        targetCharacterId: targetId,
-      },
-    ])
-  })
-  const characters = source.characters.map(character => ({
-    id: idMap[character.id],
-    novelId: projectId,
-    name: character.name,
-    role: character.role,
-    age: character.age,
-    occupation: character.occupation,
-    keywords: [character.name, ...(character.tags || [])],
-    bio: character.description,
-    externalGoal: character.goal,
-    internalGoal: character.secret,
-    notes: [
-      character.portraitPrompt ? `Portrait prompt: ${character.portraitPrompt}` : '',
-      character.secret ? `Secret: ${character.secret}` : '',
-    ].filter(Boolean).join('\n\n'),
-    tags: character.tags || [],
-    factionId: characterFactionById.get(character.id) || '',
-    familyGroup: character.id.includes('rowan') || character.id.includes('oren')
-      ? 'Vale Firekeeper Bloodline'
-      : character.id.includes('garrick') || character.id.includes('sera')
-        ? 'Thorn Family'
-        : character.id.includes('elia') || character.id.includes('cassian')
-          ? 'Royal Marent Household'
-          : '',
-    locationIds: remapLinkedIds(character.locationIds, idMap),
-    loreIds: remapLinkedIds(character.loreIds, idMap),
-    familyLinks: familyLinksByCharacter.get(idMap[character.id]) || [],
-    relationships: relationshipsByCharacter.get(idMap[character.id]) || [],
-  }))
-  const rowan = characters.find(c => c.name === 'Rowan Vale')
-  const oren = characters.find(c => c.name === 'Oren Vale')
-  if (rowan && oren) {
-    rowan.parentIds = [oren.id]
-    oren.childIds = [rowan.id]
+  const project = {
+    ...remapExportValue(source.project, idMap),
+    id: projectId,
+    focus: false,
+    isSampleProject: true,
+    sampleSource: 'the-last-ember',
+    updatedAt: now,
   }
 
-  const locations = source.locations.map(location => ({
-    id: idMap[location.id],
-    novelId: projectId,
-    name: location.name,
-    category: location.type,
-    description: location.description,
-    characterIds: remapLinkedIds(location.characterIds, idMap),
-    loreIds: remapLinkedIds(location.loreIds, idMap),
-    timelineEventIds: remapLinkedIds(location.timelineEventIds, idMap),
-    map: location.map,
-    tags: ['sample'],
-  }))
-  const loreEntries = source.lore.map(entry => ({
-    id: idMap[entry.id],
-    novelId: projectId,
-    title: entry.title,
-    category: entry.category,
-    content: entry.summary,
-    characterIds: remapLinkedIds(entry.linkedIds, idMap).filter(id => characters.some(c => c.id === id)),
-    locationIds: remapLinkedIds(entry.linkedIds, idMap).filter(id => locations.some(l => l.id === id)),
-    loreIds: remapLinkedIds(entry.linkedIds, idMap).filter(id => source.lore.some(l => idMap[l.id] === id)),
-    tags: ['sample'],
-  }))
-  const timeline = source.timeline.map((event, index) => {
-    const chapterDate = LAST_EMBER_CHAPTER_DATES[event.chapterId]
-    const storyDate = chapterDate ? formatLastEmberDate(...chapterDate) : null
-    const year = Number.isFinite(Number(event.year)) ? Number(event.year) : (chapterDate ? chapterDate[0] : null)
-    const era = year == null
-      ? null
-      : year <= -119
-        ? firstFireEra
-        : year <= -1
-          ? ashSecretsEra
-          : emberCrisisEra
-    return {
-      id: idMap[event.id],
-      novelId: projectId,
-      title: event.title,
-      date: event.year != null ? `Year ${event.year}` : (storyDate || 'Year 1, date TBD'),
-      startYear: year,
-      eraId: era?.id || null,
-      era: era?.name || '',
-      description: event.description || `${event.title} is a ${event.type || 'story'} event in The Last Ember timeline.`,
-      category: event.type || 'story',
-      linkedCharacters: remapLinkedIds(event.linkedIds, idMap).filter(id => characters.some(c => c.id === id)),
-      linkedLocations: remapLinkedIds(event.linkedIds, idMap).filter(id => locations.some(l => l.id === id)),
-      tags: ['sample', event.type || 'story'].filter(Boolean),
-      order: index,
-    }
-  })
-  const worldHistory = source.timeline.filter(event => event.type === 'historical').map((event, index) => ({
-    id: uid(),
-    novelId: projectId,
-    title: event.title,
-    era: Number(event.year) <= -119 ? firstFireEra.name : ashSecretsEra.name,
-    eraId: Number(event.year) <= -119 ? firstFireEra.id : ashSecretsEra.id,
-    startYear: Number(event.year),
-    dateRange: `Year ${event.year}`,
-    content: event.description || `${event.title} shaped the history behind The Last Ember.`,
-    category: event.type,
-    tags: ['sample'],
-    order: index,
-  }))
-
-  const manuscriptByChapter = new Map((source.sampleManuscript || []).map(item => [item.chapterId, item]))
-  const acts = []
-  const chapters = []
-  const scenes = []
-  source.outline.forEach((act, actIndex) => {
-    acts.push({ id: idMap[act.id], novelId: projectId, title: act.title, synopsis: '', order: actIndex })
-    ;(act.chapters || []).forEach((chapter) => {
-      chapters.push({
-        id: idMap[chapter.id],
-        novelId: projectId,
-        actId: idMap[act.id],
-        title: chapter.title,
-        synopsis: chapter.summary,
-        status: chapter.status,
-        targetWords: chapter.targetWords,
-        povCharacterId: idMap[chapter.povCharacterId] || '',
-        order: chapters.length,
-      })
-      const manuscript = manuscriptByChapter.get(chapter.id)
-      const sourceSceneIds = chapter.sceneIds?.length ? chapter.sceneIds : [`${chapter.id}-scene`]
-      sourceSceneIds.forEach((sceneSourceId, sceneIndex) => {
-        scenes.push({
-          id: uid(),
-          novelId: projectId,
-          chapterId: idMap[chapter.id],
-          title: sourceSceneIds.length === 1 ? chapter.title : `${chapter.title} ${sceneIndex + 1}`,
-          synopsis: sceneIndex === 0 ? chapter.summary : '',
-          content: sceneIndex === 0 ? (manuscript?.excerpt || '') : '',
-          sourceId: sceneSourceId,
-          status: chapter.status,
-          order: scenes.length,
-          lastModified: Date.now(),
-        })
-      })
-    })
-  })
-
-  const noteIdeas = source.notes.map((note, index) => ({
-    id: idMap[note.id],
-    novelId: projectId,
-    title: note.title,
-    description: note.body,
-    body: note.body,
-    group: note.folder || 'Notes',
-    tags: ['sample', 'note'],
-    status: 'raw',
-    order: index,
-    linkedEntities: remapLinkedIds(note.linkedIds, idMap),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }))
-  const boardIdeas = (source.ideasBoard?.columns || []).flatMap((column, columnIndex) =>
-    (column.cards || []).map((card, cardIndex) => ({
-      id: uid(),
-      novelId: projectId,
-      title: card,
-      description: card,
-      body: card,
-      group: column.name,
-      tags: ['sample', 'idea-card'],
-      status: column.name.toLowerCase().replace(/\s+/g, '_'),
-      order: noteIdeas.length + columnIndex * 100 + cardIndex,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }))
-  )
-  const aiIdeas = source.aiResults.map((result, index) => ({
-    id: idMap[result.id],
-    novelId: projectId,
-    title: result.title,
-    description: `${result.tool}: ${result.output}`,
-    body: `Input: ${result.input}\n\nOutput: ${result.output}`,
-    group: 'Saved AI Examples',
-    tags: ['sample', 'ai-result', result.tool],
-    status: 'approved',
-    order: noteIdeas.length + boardIdeas.length + index,
-    linkedEntities: remapLinkedIds(result.linkedIds, idMap),
-    aiExpanded: true,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }))
-  const ideaEntries = [...noteIdeas, ...boardIdeas, ...aiIdeas]
-
-  const storyScheduleEvents = source.timeline.filter(event => ['story', 'planned'].includes(event.type))
-  const storySchedule = storyScheduleEvents.map((item, index) => {
-    const [year, month, day, duration] = LAST_EMBER_SCHEDULE_DATES[index] || [1, 1, Math.min(index + 1, 18), 1]
-    return {
-      id: uid(),
-      novelId: projectId,
-      title: item.title,
-      year,
-      month,
-      day,
-      duration,
-      category: lastEmberStoryScheduleCategory(item),
-      description: item.description || `${item.title} takes place on ${formatLastEmberDate(year, month, day)}.`,
-      linkedCharacters: remapLinkedIds(item.linkedIds, idMap).filter(id => characters.some(c => c.id === id)),
-      linkedLocations: remapLinkedIds(item.linkedIds, idMap).filter(id => locations.some(l => l.id === id)),
-      linkedEntities: remapLinkedIds(item.linkedIds, idMap),
-      tags: ['sample', 'last-ember-calendar', item.type || 'story'],
-      order: index,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-  })
-
-  const mapObjects = locations.map(location => ({
-    id: uid(),
-    type: 'label',
-    x: Math.round((location.map?.x ?? 0.5) * 1100),
-    y: Math.round((location.map?.y ?? 0.5) * 760),
-    width: 160,
-    height: 42,
-    properties: { text: location.name, locationId: location.id },
-    geometry: null,
-  }))
-
   return {
-    project: {
-      id: projectId,
-      title: source.project.title,
-      description: source.project.tagline,
-      genre: source.project.genre,
-      type: 'novel',
-      status: 'draft',
-      progress: source.project.progressPercent,
-      wordCountTarget: source.project.wordGoal,
-      currentYear: 1,
-      scheduleCalendar: LAST_EMBER_CALENDAR,
-      categoryOptions: {
-        schedule: LAST_EMBER_SCHEDULE_CATEGORIES,
-      },
-      isSampleProject: true,
-      sampleSource: 'the-last-ember',
-      createdAt: source.project.createdAt || now,
-      updatedAt: now,
-    },
-    acts,
-    chapters,
-    scenes,
-    characters,
-    factions,
-    locations,
-    loreEntries,
-    timeline,
-    worldHistory,
-    eras,
-    maps: [{
-      id: mapId,
-      novelId: projectId,
-      name: 'Eldermere and the Ember Road',
-      mapType: 'region',
-      mapPins: [],
-      mapRegions: [],
-      mapObjects,
-      mapLayers: [],
-      notes: 'Sample atlas for The Last Ember. The premade SVG companion map lives at /demo-projects/the-last-ember-map.svg.',
-      metadata: { baseLayer: 'land' },
-      created: Date.now(),
-      updatedAt: now,
-    }],
-    whiteboards: [{
-      id: whiteboardId,
-      novelId: projectId,
-      whiteboard: {
-        notes: [
-          ...source.notes.slice(0, 10).map((note, index) => ({
-            id: uid(),
-            title: note.title,
-            text: note.body,
-            x: 90 + (index % 5) * 210,
-            y: 90 + Math.floor(index / 5) * 150,
-            linkedIds: remapLinkedIds(note.linkedIds, idMap),
-          })),
-          ...source.familyTrees.map((tree, index) => ({
-            id: uid(),
-            title: tree.title,
-            text: `Family tree seed: ${tree.placeholderNodes.join(', ')}`,
-            x: 130 + index * 280,
-            y: 430,
-            characterIds: remapLinkedIds(tree.nodes, idMap),
-          })),
-        ],
-        groups: [],
-      },
-      createdAt: now,
-      updatedAt: now,
-    }],
-    storySchedule,
-    ideaEntries,
+    project,
+    acts: remapExportItems(source.acts, idMap),
+    chapters: remapExportItems(source.chapters, idMap),
+    scenes: remapExportItems(source.scenes, idMap),
+    characters: remapExportItems(source.characters, idMap),
+    factions: remapExportItems(source.factions, idMap),
+    locations: remapExportItems(source.locations, idMap),
+    loreEntries: remapExportItems(source.loreEntries, idMap),
+    timeline: remapExportItems(source.timeline, idMap),
+    worldHistory: remapExportItems(source.worldHistory, idMap),
+    eras: remapExportItems(source.eras, idMap),
+    maps: remapExportItems(source.maps, idMap),
+    whiteboards: remapExportItems(source.whiteboards, idMap),
+    storySchedule: remapExportItems(source.storySchedule, idMap),
+    ideaEntries: remapExportItems(source.ideaEntries, idMap),
+    rpgCharacters: remapExportItems(source.rpgCharacters, idMap),
   }
 }
 
@@ -2729,6 +2334,117 @@ export function useStore(userId = null, options = {}) {
     return project
   }
 
+  const enrichSampleProject = useCallback((projectId) => {
+    const project = novelsRef.current.find(novel => novel.id === projectId)
+      || novelsRef.current.find(novel => novel.isSampleProject && novel.sampleSource === 'the-last-ember')
+    if (!project?.id || project.sampleSource !== 'the-last-ember') return project || null
+
+    const projectCharacters = charactersRef.current.filter(character => character.novelId === project.id)
+    const existingIdBySourceId = new Map()
+    const byName = new Map(projectCharacters.map(character => [character.name, character]))
+    ;(lastEmberDemoProject.characters || []).forEach(sourceCharacter => {
+      const existing = byName.get(sourceCharacter.name)
+      if (existing?.id) existingIdBySourceId.set(sourceCharacter.id, existing.id)
+    })
+    if (existingIdBySourceId.size < 6) return project
+
+    const idMap = { [lastEmberDemoProject.project.id]: project.id }
+    existingIdBySourceId.forEach((existingId, sourceId) => { idMap[sourceId] = existingId })
+    const relationshipsByCharacter = new Map()
+    const familyLinksByCharacter = new Map()
+    ;(lastEmberDemoProject.characters || []).forEach(sourceCharacter => {
+      const existingId = idMap[sourceCharacter.id]
+      if (!existingId) return
+      relationshipsByCharacter.set(existingId, remapExportValue(sourceCharacter.relationships || [], idMap))
+      familyLinksByCharacter.set(existingId, remapExportValue(sourceCharacter.familyLinks || [], idMap))
+    })
+    const lastEmberCharacterIds = new Set(existingIdBySourceId.values())
+    const sourceChapterByTitle = new Map(
+      (lastEmberDemoProject.chapters || [])
+        .map(chapter => [chapter.title, chapter])
+    )
+    const sourceChapterIdByProjectChapterId = new Map(
+      chaptersRef.current
+        .filter(chapter => chapter.novelId === project.id)
+        .map(chapter => [chapter.id, sourceChapterByTitle.get(chapter.title)?.id])
+        .filter(([, sourceChapterId]) => sourceChapterId)
+    )
+    const sourceSceneByChapterId = new Map(
+      (lastEmberDemoProject.scenes || [])
+        .filter(scene => scene.chapterId)
+        .map(scene => [scene.chapterId, scene])
+    )
+    const mergeRelationships = (existing = [], generated = []) => {
+      const seen = new Set()
+      return [...existing, ...generated].filter(relationship => {
+        if (!relationship?.targetId || !relationship.type) return false
+        const key = `${relationship.targetId}:${relationship.type}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }
+    const mergeFamilyLinks = (existing = [], generated = []) => {
+      const seen = new Set()
+      return [...existing, ...generated].filter(link => {
+        if (!link?.sourceCharacterId || !link?.targetCharacterId || !link.kind) return false
+        const key = [
+          link.sourceCharacterId,
+          link.targetCharacterId,
+          link.kind,
+          link.type || '',
+          link.status || '',
+          link.direction || '',
+        ].join(':')
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }
+
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(novel => (
+      novel.id === project.id
+        ? {
+            ...novel,
+            coverPhoto: novel.coverPhoto || lastEmberDemoProject.project.coverPhoto,
+            bannerImage: novel.bannerImage || lastEmberDemoProject.project.bannerImage,
+          }
+        : novel
+    )))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => {
+      if (character.novelId !== project.id || !lastEmberCharacterIds.has(character.id)) return character
+      return {
+        ...character,
+        relationships: mergeRelationships(character.relationships, relationshipsByCharacter.get(character.id) || []),
+        familyLinks: mergeFamilyLinks(character.familyLinks, familyLinksByCharacter.get(character.id) || []),
+      }
+    }))
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.map(scene => {
+      if (scene.novelId !== project.id) return scene
+      const sourceChapterId = sourceChapterIdByProjectChapterId.get(scene.chapterId)
+      const sourceScene = sourceSceneByChapterId.get(sourceChapterId)
+      if (!sourceScene?.content) return scene
+      const content = countWords(scene.content || '') < 500 ? sourceScene.content : scene.content
+      const wordHistory = Array.isArray(scene.wordHistory) && scene.wordHistory.length >= 8
+        ? scene.wordHistory
+        : remapExportValue(sourceScene.wordHistory || [], idMap)
+      const lastHistoryEntry = wordHistory[wordHistory.length - 1]
+      return {
+        ...scene,
+        content,
+        wordHistory,
+        lastModified: lastHistoryEntry?.timestamp || scene.lastModified || Date.now(),
+      }
+    }))
+    const key = sampleProjectSeedKey(userId)
+    if (key) writeItem(key, '1')
+    return {
+      ...project,
+      coverPhoto: project.coverPhoto || lastEmberDemoProject.project.coverPhoto,
+      bannerImage: project.bannerImage || lastEmberDemoProject.project.bannerImage,
+    }
+  }, [userId, commitLocal])
+
   const ensureSampleProject = useCallback(() => {
     const key = sampleProjectSeedKey(userId)
     if (!key || novelsRef.current.length > 0 || readItem(key) === '1') return null
@@ -2749,6 +2465,7 @@ export function useStore(userId = null, options = {}) {
     commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => [...prev, ...sample.whiteboards])
     commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, ...sample.storySchedule])
     commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, ...sample.ideaEntries])
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => [...prev, ...sample.rpgCharacters])
     if (canSyncCloud) {
       saveSceneDoc(userId, sample.scenes[0]).catch(console.error)
     }
@@ -2790,7 +2507,7 @@ export function useStore(userId = null, options = {}) {
   const api = {
     readOnly,
     freeProjectId,
-    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, addNovel, updateNovel, deleteNovel, importProjectFromData, ensureSampleProject, getProjectExportData, getProjectContextData,
+    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, addNovel, updateNovel, deleteNovel, importProjectFromData, ensureSampleProject, enrichSampleProject, getProjectExportData, getProjectContextData,
     series, addSeries, deleteSeries, updateSeries, updateSeriesContinuity, reorderSeries, reorderNovels,
     continuityRecords: {
       characters,
@@ -2854,7 +2571,7 @@ export function useStore(userId = null, options = {}) {
   if (!readOnly) return api
 
   const guardedMethods = [
-    'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'ensureSampleProject', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
+    'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'ensureSampleProject', 'enrichSampleProject', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
     'saveCharacter', 'saveCharacterJourney', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
     'addEvent', 'updateEvent', 'deleteEvent', 'linkTimelineHistory', 'unlinkTimelineHistory', 'addHistoryEntry', 'updateHistoryEntry', 'deleteHistoryEntry',
     'addEra', 'updateEra', 'deleteEra',

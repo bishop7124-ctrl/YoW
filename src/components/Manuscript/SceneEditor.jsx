@@ -31,21 +31,91 @@ const InlineInput = ({ value, onSave, className, placeholder }) => {
 
 // ─── Inline markdown renderer ─────────────────────────────────────────────────
 
-function renderInlineMarkdown(text, keyPrefix = '') {
+// `baseOffset` is this text's start position within the scene's raw content, so every
+// rendered piece can carry a data-raw-start/end pair. Clicking the preview uses those
+// attributes to map a pixel position back to a raw content offset (see resolveRawOffsetFromRange).
+function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
   if (!text) return []
   const parts = []
   const re = /(\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_)/g
   let last = 0, m, idx = 0
   while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index))
-    if (m[0].startsWith('**')) parts.push(<strong key={`${keyPrefix}-b${idx}`}>{m[2]}</strong>)
-    else if (m[0].startsWith('*')) parts.push(<em key={`${keyPrefix}-i${idx}`}>{m[3]}</em>)
-    else parts.push(<u key={`${keyPrefix}-u${idx}`}>{m[4]}</u>)
+    if (m.index > last) {
+      parts.push(
+        <span key={`${keyPrefix}-t${idx}`} data-raw-start={baseOffset + last} data-raw-end={baseOffset + m.index}>
+          {text.slice(last, m.index)}
+        </span>
+      )
+    }
+    if (m[0].startsWith('**')) {
+      const innerStart = baseOffset + m.index + 2
+      parts.push(<strong key={`${keyPrefix}-b${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[2].length}>{m[2]}</strong>)
+    } else if (m[0].startsWith('*')) {
+      const innerStart = baseOffset + m.index + 1
+      parts.push(<em key={`${keyPrefix}-i${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[3].length}>{m[3]}</em>)
+    } else {
+      const innerStart = baseOffset + m.index + 1
+      parts.push(<u key={`${keyPrefix}-u${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[4].length}>{m[4]}</u>)
+    }
     last = m.index + m[0].length
     idx++
   }
-  if (last < text.length) parts.push(text.slice(last))
+  if (last < text.length) {
+    parts.push(
+      <span key={`${keyPrefix}-t${idx}`} data-raw-start={baseOffset + last} data-raw-end={baseOffset + text.length}>
+        {text.slice(last)}
+      </span>
+    )
+  }
   return parts
+}
+
+// ─── Preview click → caret offset mapping ─────────────────────────────────────
+// Every rendered leaf in the preview carries data-raw-start/data-raw-end (see
+// renderInlineMarkdown and the entity/line offsets below). To place the caret exactly
+// where the user clicked, we resolve the browser's caret hit-test to one of those leaves
+// and translate the in-node offset back to a raw content offset.
+
+function resolveRawOffsetFromRange(range, container) {
+  if (!range || !container) return null
+  const { startContainer, startOffset } = range
+  if (!container.contains(startContainer)) return null
+
+  const findTagged = node => {
+    let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node
+    while (el && el !== container) {
+      if (el.hasAttribute?.('data-raw-start')) return el
+      el = el.parentElement
+    }
+    return null
+  }
+
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const el = findTagged(startContainer)
+    if (!el) return null
+    return Number(el.getAttribute('data-raw-start')) + startOffset
+  }
+
+  const children = startContainer.childNodes
+  const after = children[startOffset]
+  const before = children[startOffset - 1]
+  const target = after || before
+  if (!target) return null
+  const el = findTagged(target)
+  if (!el) return null
+  return Number(el.getAttribute(after ? 'data-raw-start' : 'data-raw-end'))
+}
+
+function caretRangeFromPoint(x, y) {
+  if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y)
+  if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y)
+    if (!pos) return null
+    const range = document.createRange()
+    range.setStart(pos.offsetNode, pos.offset)
+    return range
+  }
+  return null
 }
 
 // ─── Entity / note parsing ────────────────────────────────────────────────────
@@ -95,11 +165,11 @@ function parseSegments(content, entityNames, entityMap, notes = []) {
   const segs = []
   let pos = 0
   for (const t of filtered) {
-    if (t.start > pos) segs.push({ type: 'text', value: content.slice(pos, t.start) })
+    if (t.start > pos) segs.push({ type: 'text', value: content.slice(pos, t.start), start: pos, end: t.start })
     segs.push(t)
     pos = t.end
   }
-  if (pos < content.length) segs.push({ type: 'text', value: content.slice(pos) })
+  if (pos < content.length) segs.push({ type: 'text', value: content.slice(pos), start: pos, end: content.length })
   return segs
 }
 
@@ -126,14 +196,30 @@ function buildWritingBlocks(content, notes) {
 
 // ─── Content preview ──────────────────────────────────────────────────────────
 
-const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMap, notesBySeq, highlightedNoteSeq, onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes }) => {
+// Script blocks are rebuilt from `content` by trimming around blank-line separators, so
+// their exact raw offsets aren't kept on the block objects. Recover them here by locating
+// each block's text in order — good enough for mapping a click back to a raw offset.
+function locateScriptBlockOffsets(content, blocks) {
+  let cursor = 0
+  return blocks.map(block => {
+    const text = block.text || ''
+    const idx = content.indexOf(text, cursor)
+    const start = idx >= 0 ? idx : cursor
+    cursor = start + text.length
+    return { start, end: cursor }
+  })
+}
+
+const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames, entityMap, notesBySeq, highlightedNoteSeq, onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes }) => {
   const resolvedBlocks = blocks?.length ? blocks : buildScriptBlocks('', elementType)
   if (!resolvedBlocks.length) return <span className="ms-placeholder">Begin writing here…</span>
+  const blockOffsets = locateScriptBlockOffsets(content || '', resolvedBlocks)
 
   return (
     <div className="ms-script-preview">
       {resolvedBlocks.map((block, index) => {
         const type = block.type || elementType || 'action'
+        const blockStart = blockOffsets[index]?.start || 0
         const segs = parseSegments(block.text || '', entityNames, entityMap)
         return (
           <div key={block.id || index} className={`ms-script-block ms-script-${type}`}>
@@ -141,7 +227,7 @@ const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMa
             <p>
               {segs.map((seg, i) => {
                 if (seg.type === 'entity') return (
-                  <span key={i} className="ms-entity" onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
+                  <span key={i} className="ms-entity" data-raw-start={blockStart + seg.start} data-raw-end={blockStart + seg.end} onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
                 )
                 if (seg.type === 'note') {
                   const note = notesBySeq.get(seg.seq)
@@ -158,7 +244,7 @@ const ScriptPreview = ({ blocks, elementType, projectType, entityNames, entityMa
                     />
                   )
                 }
-                return <span key={i}>{renderInlineMarkdown(seg.value, `sb${index}-${i}`)}</span>
+                return <span key={i}>{renderInlineMarkdown(seg.value, `sb${index}-${i}`, blockStart + seg.start)}</span>
               })}
             </p>
           </div>
@@ -183,6 +269,7 @@ const ContentPreview = ({
   if (isScript) {
     return (
       <ScriptPreview
+        content={content}
         blocks={scriptBlocks?.length ? scriptBlocks : buildScriptBlocks(content, scriptElement)}
         elementType={scriptElement}
         projectType={projectType}
@@ -200,11 +287,15 @@ const ContentPreview = ({
   }
 
   if (isBullets) {
-    const lines = content.split('\n').filter(l => l.trim())
-    if (!lines.length) return <span className="ms-placeholder">One item per line…</span>
+    const lineInfos = content.split('\n').reduce((acc, line) => {
+      const start = acc.length ? acc[acc.length - 1].end : 0
+      acc.push({ line, start, end: start + line.length + 1 })
+      return acc
+    }, []).filter(info => info.line.trim())
+    if (!lineInfos.length) return <span className="ms-placeholder">One item per line…</span>
     return (
       <ul className="ms-bullets">
-        {lines.map((line, i) => <li key={i}>{renderInlineMarkdown(line, `bl${i}`)}</li>)}
+        {lineInfos.map((info, i) => <li key={i}>{renderInlineMarkdown(info.line, `bl${i}`, info.start)}</li>)}
       </ul>
     )
   }
@@ -214,7 +305,7 @@ const ContentPreview = ({
     <>
       {segs.map((seg, i) => {
         if (seg.type === 'entity') return (
-          <span key={i} className="ms-entity" onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
+          <span key={i} className="ms-entity" data-raw-start={seg.start} data-raw-end={seg.end} onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
         )
         if (seg.type === 'note') {
           const note = notesBySeq.get(seg.seq)
@@ -231,7 +322,7 @@ const ContentPreview = ({
             />
           )
         }
-        return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`)}</span>
+        return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`, seg.start)}</span>
       })}
     </>
   )
@@ -354,6 +445,12 @@ export const SceneEditor = ({
   const wrapperRef = useRef(null)
   const localContentRef = useRef(localContent)
   const lastSelectionRef = useRef({ start: localContent.length, end: localContent.length })
+  const undoStackRef = useRef([])
+  const redoStackRef = useRef([])
+  const burstActiveRef = useRef(false)
+  const burstTimeoutRef = useRef(null)
+  const [undoCount, setUndoCount] = useState(0)
+  const [redoCount, setRedoCount] = useState(0)
   const isScript = SCRIPT_TYPES.has(projectType)
   const isBullets = !isScript && scene.textMode === 'bullets'
   const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
@@ -383,6 +480,7 @@ export const SceneEditor = ({
     })
     return () => window.cancelAnimationFrame(sync)
   }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
+
 
   // Resize before paint so caret measurement always uses the settled textarea height.
 	  useLayoutEffect(() => {
@@ -460,6 +558,74 @@ export const SceneEditor = ({
     }, 0)
   }, [focusedWriting, scheduleCaretFollow, syncFloatingNoteButton])
 
+  // ─── Undo / redo ─────────────────────────────────────────────────────────
+  // Snapshots cover raw content (+ script blocks, for script projects) and the caret
+  // position to restore. Rapid keystrokes are grouped into one undo step via a short
+  // pause-based "burst" window; discrete actions (formatting, Enter, AI inserts, note
+  // deletion) always start a new step regardless of timing.
+
+  const snapshotNow = useCallback(() => ({
+    content: localContentRef.current,
+    scriptBlocks: localScriptBlocks,
+    scriptElement,
+    selection: lastSelectionRef.current,
+  }), [localScriptBlocks, scriptElement])
+
+  const recordBeforeEdit = useCallback((forceNewEntry = false) => {
+    clearTimeout(burstTimeoutRef.current)
+    if (!forceNewEntry && burstActiveRef.current) {
+      burstTimeoutRef.current = setTimeout(() => { burstActiveRef.current = false }, 600)
+      return
+    }
+    undoStackRef.current.push(snapshotNow())
+    if (undoStackRef.current.length > 200) undoStackRef.current.shift()
+    redoStackRef.current = []
+    burstActiveRef.current = true
+    burstTimeoutRef.current = setTimeout(() => { burstActiveRef.current = false }, 600)
+    setUndoCount(undoStackRef.current.length)
+    setRedoCount(0)
+  }, [snapshotNow])
+
+  const applySnapshot = useCallback(snap => {
+    localContentRef.current = snap.content
+    onPersistDraft(scene, snap.content)
+    onLiveContentChange(scene.id, snap.content)
+    setLocalContent(snap.content)
+    debouncedUpdate.schedule(snap.content)
+    if (isScript) {
+      setLocalScriptBlocks(snap.scriptBlocks)
+      onUpdateScene(scene.id, { scriptBlocks: snap.scriptBlocks, scriptElement: snap.scriptElement, textMode: 'script' })
+    }
+    setFocused(true)
+    const end = snap.selection?.end ?? snap.content.length
+    const start = snap.selection?.start ?? end
+    focusRange(start, end)
+  }, [debouncedUpdate, focusRange, isScript, onLiveContentChange, onPersistDraft, onUpdateScene, scene])
+
+  const handleUndo = useCallback(() => {
+    if (!undoStackRef.current.length) return
+    const current = snapshotNow()
+    const prev = undoStackRef.current.pop()
+    redoStackRef.current.push(current)
+    burstActiveRef.current = false
+    clearTimeout(burstTimeoutRef.current)
+    applySnapshot(prev)
+    setUndoCount(undoStackRef.current.length)
+    setRedoCount(redoStackRef.current.length)
+  }, [applySnapshot, snapshotNow])
+
+  const handleRedo = useCallback(() => {
+    if (!redoStackRef.current.length) return
+    const current = snapshotNow()
+    const next = redoStackRef.current.pop()
+    undoStackRef.current.push(current)
+    burstActiveRef.current = false
+    clearTimeout(burstTimeoutRef.current)
+    applySnapshot(next)
+    setUndoCount(undoStackRef.current.length)
+    setRedoCount(redoStackRef.current.length)
+  }, [applySnapshot, snapshotNow])
+
   useEffect(() => {
     if (!innerRef) return
     innerRef({
@@ -479,6 +645,7 @@ export const SceneEditor = ({
 	      },
 	      scrollIntoView: opts => wrapperRef.current?.scrollIntoView(opts),
 	      appendContent: (text) => {
+        recordBeforeEdit(true)
 	        const cur = localContentRef.current ?? ''
 	        const selection = lastSelectionRef.current || { start: cur.length, end: cur.length }
 	        const rawStart = Number.isFinite(selection.start) ? selection.start : cur.length
@@ -509,7 +676,7 @@ export const SceneEditor = ({
 	        focusRange(insertedStart, insertedEnd)
 	      },
 	    })
-	  }, [innerRef, scene, debouncedUpdate, focusRange, onLiveContentChange, onUpdateScene, syncFloatingNoteButton])
+	  }, [innerRef, scene, debouncedUpdate, focusRange, onLiveContentChange, onUpdateScene, syncFloatingNoteButton, recordBeforeEdit])
 
   useEffect(() => {
     localContentRef.current = localContent
@@ -536,6 +703,7 @@ export const SceneEditor = ({
   }, [focused, scene, debouncedUpdate, onPersistDraft])
 
 	  const handleChange = e => {
+	    recordBeforeEdit()
 	    const base = Number(e.target.dataset.msStart) || 0
 	    const previousEnd = Number(e.target.dataset.msEnd)
 	    const oldEnd = Number.isFinite(previousEnd) ? previousEnd : localContent.length
@@ -608,6 +776,7 @@ export const SceneEditor = ({
   const insertScriptParagraph = useCallback((nextType) => {
     const ta = textareaRef.current
     if (!ta) return
+    recordBeforeEdit(true)
     const start = ta.selectionStart
     const end = ta.selectionEnd
     const insertion = '\n\n'
@@ -633,11 +802,12 @@ export const SceneEditor = ({
       textMode: 'script',
     })
 	    focusRange(start + insertion.length)
-	  }, [debouncedUpdate, focusRange, localContent, localScriptBlocks, onLiveContentChange, onPersistDraft, onUpdateScene, scene, scriptElement])
+	  }, [debouncedUpdate, focusRange, localContent, localScriptBlocks, onLiveContentChange, onPersistDraft, onUpdateScene, recordBeforeEdit, scene, scriptElement])
 
   const wrapSelection = useCallback((syntax) => {
     const ta = textareaRef.current
     if (!ta) return
+    recordBeforeEdit(true)
     const start = ta.selectionStart
     const end = ta.selectionEnd
     const selected = localContent.slice(start, end)
@@ -656,10 +826,16 @@ export const SceneEditor = ({
 	      rememberSelection()
 	      syncFloatingNoteButton()
 	    }, 0)
-	  }, [localContent, debouncedUpdate, onLiveContentChange, onPersistDraft, rememberSelection, scene, syncFloatingNoteButton])
+	  }, [localContent, debouncedUpdate, onLiveContentChange, onPersistDraft, recordBeforeEdit, rememberSelection, scene, syncFloatingNoteButton])
 
 	  const handleKeyDown = e => {
 	    const base = Number(e.target.dataset.msStart) || 0
+	    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z') {
+	      e.preventDefault()
+	      if (e.shiftKey) handleRedo(); else handleUndo()
+	      return
+	    }
+	    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'y') { e.preventDefault(); handleRedo(); return }
 	    if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrapSelection('**'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrapSelection('*'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); wrapSelection('_'); return }
@@ -701,6 +877,7 @@ export const SceneEditor = ({
 
 	    if (e.key === 'Enter' && formatSettings.autoIndent && !isBullets && !e.shiftKey) {
 	      e.preventDefault()
+	      recordBeforeEdit(true)
 	      const start = base + e.target.selectionStart
 	      const end = base + e.target.selectionEnd
 	      const insertion = '\n' + ' '.repeat(formatSettings.indentSize)
@@ -747,6 +924,7 @@ export const SceneEditor = ({
 	      const marker = `[[${removed.seq}]]`
 	      const markerIndex = localContentRef.current.indexOf(marker)
 	      if (markerIndex >= 0) {
+	        recordBeforeEdit(true)
 	        const nextContent = localContentRef.current.slice(0, markerIndex) + localContentRef.current.slice(markerIndex + marker.length)
 	        localContentRef.current = nextContent
 	        onPersistDraft(scene, nextContent)
@@ -759,19 +937,21 @@ export const SceneEditor = ({
 	    onUpdateScene(scene.id, {
 	      notes: (scene.notes || []).filter(note => note.id !== noteId),
 	    })
-	  }, [debouncedUpdate, focusRange, onLiveContentChange, onPersistDraft, onUpdateScene, scene])
+	  }, [debouncedUpdate, focusRange, onLiveContentChange, onPersistDraft, onUpdateScene, recordBeforeEdit, scene])
 
-	  const activate = () => {
+	  // Clicking the preview should drop the caret exactly where the mouse landed, not at
+	  // the end of the scene. The preview's rendered spans carry data-raw-start/end (see
+	  // renderInlineMarkdown / ScriptPreview / the bullets and prose branches above), so we
+	  // hit-test the click point against the DOM and translate that back to a raw offset.
+	  const activateAt = e => {
+	    const container = e.currentTarget
+	    const range = caretRangeFromPoint(e.clientX, e.clientY)
+	    const resolved = range ? resolveRawOffsetFromRange(range, container) : null
+	    const target = resolved == null
+	      ? localContentRef.current.length
+	      : Math.max(0, Math.min(resolved, localContentRef.current.length))
 	    setFocused(true)
-	    setTimeout(() => {
-	      const ta = textareaRef.current
-	      if (!ta) return
-	      ta.focus()
-	      const end = localContentRef.current.length
-	      ta.setSelectionRange(end, end)
-	      lastSelectionRef.current = { start: end, end }
-	      syncFloatingNoteButton()
-	    }, 0)
+	    focusRange(target, target)
 	  }
 
   const displayTitle = scene.title && scene.title !== 'Scene'
@@ -787,6 +967,7 @@ export const SceneEditor = ({
 	  }
 
 	  const handleEditorBlur = () => {
+	    burstActiveRef.current = false
 	    onPersistDraft(scene, localContentRef.current)
 	    debouncedUpdate.flush()
 	    window.setTimeout(() => {
@@ -843,6 +1024,11 @@ export const SceneEditor = ({
                 >Bullets</button>
               </>
             )}
+          </div>
+
+          <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
+            <button onMouseDown={e => e.preventDefault()} onClick={handleUndo} disabled={!undoCount} className="px-2 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors disabled:opacity-30 disabled:pointer-events-none" title="Undo (Ctrl+Z)">↶</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={handleRedo} disabled={!redoCount} className="px-2 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors disabled:opacity-30 disabled:pointer-events-none" title="Redo (Ctrl+Shift+Z)">↷</button>
           </div>
 
           <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
@@ -935,7 +1121,7 @@ export const SceneEditor = ({
 	          />
 	        )
 	      ) : (
-        <div className={`ms-preview${isScript ? ' ms-script-mode' : ''}`} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle} onClick={activate}>
+        <div className={`ms-preview${isScript ? ' ms-script-mode' : ''}`} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle} onClick={activateAt}>
 	          <ContentPreview
 	            content={localContent}
 	            entityMap={entityMap}

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
+import { isPhoneViewport } from '../../utils/useMediaQuery'
 import WritingSidebar from './WritingSidebar'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
@@ -129,7 +130,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   // panel, so defaulting it open (as desktop does) buries the manuscript behind it the
   // moment a scene opens. Land on the manuscript there and let the tab strip open it.
   const [activeSidebarTab, setActiveSidebarTab] = useState(() => (
-    typeof window !== 'undefined' && window.innerWidth <= 640 ? null : 'structure'
+    isPhoneViewport() ? null : 'structure'
   )) // null | 'structure' | 'goals' | 'progress' | 'notes'
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)

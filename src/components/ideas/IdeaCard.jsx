@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import AIStar from '../ai/AIStar'
+import { useIsMobile } from '../../utils/useMediaQuery'
 
 export default function IdeaCard({
   idea,
@@ -20,6 +21,8 @@ export default function IdeaCard({
   readOnly,
 }) {
   const [hovered, setHovered] = useState(false)
+  const isMobile = useIsMobile()
+  const showHoverUi = hovered || isMobile
   const [expanded, setExpanded] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(idea.title)
@@ -99,7 +102,7 @@ export default function IdeaCard({
               flexShrink: 0,
               marginTop: 2,
               color: 'var(--faint)',
-              opacity: hovered ? 1 : 0,
+              opacity: showHoverUi ? 1 : 0,
               transition: 'opacity .15s',
               cursor: 'grab',
             }}
@@ -170,7 +173,7 @@ export default function IdeaCard({
               padding: '2px',
               cursor: 'pointer',
               color: idea.isFavourite ? '#f59e0b' : 'var(--faint)',
-              opacity: idea.isFavourite || hovered ? 1 : 0,
+              opacity: idea.isFavourite || showHoverUi ? 1 : 0,
               transition: 'opacity .15s, color .15s',
               flexShrink: 0,
               fontSize: 14,
@@ -251,8 +254,8 @@ export default function IdeaCard({
           </div>
         )}
 
-        {/* Hover action bar */}
-        {hovered && !editingTitle && (
+        {/* Hover action bar — also always shown on touch, since there's no hover state there */}
+        {showHoverUi && !editingTitle && (
           <div
             style={{
               position: 'absolute',

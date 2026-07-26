@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Modal from '../shared/Modal'
+import SegmentedControl from '../shared/SegmentedControl'
 import { FACTION_ICONS } from '../../constants/factionIcons'
 import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } from '../../constants/Constants'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
@@ -122,18 +123,12 @@ function TextField({ label, value, onChange, placeholder, className = '' }) {
 
 function TabStrip({ tabs, activeTab, onChange }) {
   return (
-    <div className="flex gap-2 overflow-x-auto -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-      {tabs.map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onChange(id)}
-          className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded border text-xs font-bold transition-colors ${activeTab === id ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-fade)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      variant="tabs"
+      options={tabs.map(([id, label]) => ({ id, label }))}
+      value={activeTab}
+      onChange={onChange}
+    />
   )
 }
 
@@ -459,6 +454,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     }
   }
   const removeKeyword = (kw) => setForm(prev => ({ ...prev, keywords: prev.keywords.filter(k => k !== kw) }))
+  const familyGroupOptions = [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort()
   const relationshipTargets = characters.filter(c => c.id !== initial?.id)
   const validRelationships = [...new Map(
     form.relationships.filter(r => r.targetId && r.type).map(relationship => [relationship.targetId, relationship]),
@@ -528,7 +524,13 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={LABEL}>Family Group</label>
-                  <input className={INPUT} value={form.familyGroup} onChange={handleChange('familyGroup')} placeholder="e.g. Stark, Lannister" />
+                  <ComboSelect
+                    value={form.familyGroup}
+                    onChange={v => setForm(prev => ({ ...prev, familyGroup: v }))}
+                    options={[{ value: '', label: 'No Family Group' }, ...familyGroupOptions.map(fg => ({ value: fg, label: fg }))]}
+                    placeholder="Select or type family group..."
+                    allowCustom
+                  />
                 </div>
                 <div>
                   <label className={LABEL}>Faction / Allegiance</label>
@@ -890,6 +892,15 @@ export default function Characters({ store }) {
       if (sortBy === 'faction') return (a.factionId || '').localeCompare(b.factionId || '')
       return 0
     })
+
+  useEffect(() => {
+    if (!selectedCharacterId) return
+    if (characters.some(c => c.id === selectedCharacterId)) return
+
+    const fallbackId = filtered[0]?.id || characters[0]?.id || null
+    setSelectedCharacterId(fallbackId)
+  }, [characters, filtered, selectedCharacterId, setSelectedCharacterId])
+
   const selected = characters.find(c => c.id === selectedCharacterId)
   const selectedChildren = selected ? getChildIds(selected, characters).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
   const selectedParents = selected ? (selected.parentIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
