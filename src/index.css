@@ -4219,6 +4219,7 @@ textarea:focus {
 
   .yow-home-copy h1 {
     font-size: clamp(42px, 15vw, 62px);
+    line-height: 1.1;
   }
 
   .yow-home-grid {
