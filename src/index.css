@@ -18911,7 +18911,7 @@ body {
 
 /* ── Hero additions ── */
 .yow-hero-sub {
-  margin-top: 12px;
+  margin-top: 20px;
   color: var(--text-muted);
   font-size: 14px;
   line-height: 1.6;
@@ -19782,8 +19782,11 @@ body {
   }
 
   .yow-problem-arrow {
+    display: block;
+    width: fit-content;
+    margin: 0 auto;
     transform: rotate(90deg);
-    text-align: left;
+    text-align: center;
   }
 
   .yow-feature-tab-icon {
