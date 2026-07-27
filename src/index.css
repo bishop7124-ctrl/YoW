@@ -4221,10 +4221,6 @@ textarea:focus {
     font-size: clamp(42px, 15vw, 62px);
   }
 
-  .yow-home-copy > p:not(.eyebrow) {
-    margin-top: 32px;
-  }
-
   .yow-home-grid {
     grid-template-columns: 1fr;
   }
