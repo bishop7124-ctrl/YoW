@@ -33,7 +33,7 @@ import DesktopUpgradeWall from './components/desktop/DesktopUpgradeWall'
 import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
-import { estimateStoreSize, formatBytes, formatQuotaLabel } from './utils/storageQuota'
+import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import { loadAiSettings } from './utils/aiSettings'
 import {
@@ -441,12 +441,6 @@ function AppInner() {
     setFounderProfileSlug(getFounderProfileSlug(path))
     setAuthRouteMode(getAuthRouteMode(path))
   }
-
-  // Estimate store size for storage quota display (recalculated when account opens).
-  const storageUsedBytes = useMemo(() => {
-    if (!accountOpen) return 0
-    return estimateStoreSize(store)
-  }, [accountOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const savedTheme = loadThemeChoice()
@@ -897,7 +891,7 @@ function AppInner() {
       <AccountSettings
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
-        storageUsedBytes={storageUsedBytes}
+        storageUsedBytes={store.storageUsedBytes}
         activeTab={accountTab}
         onTabChange={setAccountTab}
         store={store}

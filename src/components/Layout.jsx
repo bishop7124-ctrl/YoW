@@ -33,6 +33,7 @@ import {
 } from '../utils/projectExport'
 import { readItem, writeItem } from '../storage/projectStorage'
 import { useIsMobile } from '../utils/useMediaQuery'
+import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
 
 // ─── Project status ──────────────────────────────────────────────────────────
 
@@ -102,32 +103,6 @@ class SectionErrorBoundary extends Component {
     return this.props.children
   }
 }
-
-// ─── Cover photo resize (mirrors NovelManager.jsx) ───────────────────────────
-
-const resizeCoverPhoto = (file) => new Promise((resolve, reject) => {
-  const image = new Image()
-  const objectUrl = URL.createObjectURL(file)
-  image.onload = () => {
-    URL.revokeObjectURL(objectUrl)
-    const maxWidth = 900, maxHeight = 1200
-    const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height)
-    const width = Math.max(1, Math.round(image.width * scale))
-    const height = Math.max(1, Math.round(image.height * scale))
-    const canvas = document.createElement('canvas')
-    canvas.width = width; canvas.height = height
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#111814'
-    ctx.fillRect(0, 0, width, height)
-    ctx.drawImage(image, 0, 0, width, height)
-    let quality = 0.82
-    let dataUrl = canvas.toDataURL('image/jpeg', quality)
-    while (dataUrl.length > 900000 && quality > 0.48) { quality -= 0.08; dataUrl = canvas.toDataURL('image/jpeg', quality) }
-    resolve(dataUrl)
-  }
-  image.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Could not read that image.')) }
-  image.src = objectUrl
-})
 
 // ─── Navigation config ────────────────────────────────────────────────────────
 
@@ -396,12 +371,20 @@ function ProjectSettings({ store, onClose }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
+    const previousCoverPhoto = novel?.coverPhoto
     try {
       setCoverError('')
-      const photo = await resizeCoverPhoto(file)
+      const photo = await uploadUserMedia(file, {
+        userId: store.userId,
+        category: 'covers',
+        currentUsedBytes: store.storageUsedBytes,
+        quotaBytes: store.storageQuotaBytes,
+      })
       store.updateNovel(store.activeNovelId, { coverPhoto: photo })
-    } catch {
-      setCoverError('Could not use that image.')
+      store.refreshStorageUsedBytes().catch(console.error)
+      deleteUserMedia(previousCoverPhoto).catch(console.error)
+    } catch (error) {
+      setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }
   }
 
@@ -409,12 +392,20 @@ function ProjectSettings({ store, onClose }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
+    const previousBannerImage = novel?.bannerImage
     try {
       setBannerError('')
-      const photo = await resizeCoverPhoto(file)
+      const photo = await uploadUserMedia(file, {
+        userId: store.userId,
+        category: 'banners',
+        currentUsedBytes: store.storageUsedBytes,
+        quotaBytes: store.storageQuotaBytes,
+      })
       store.updateNovel(store.activeNovelId, { bannerImage: photo })
-    } catch {
-      setBannerError('Could not use that image.')
+      store.refreshStorageUsedBytes().catch(console.error)
+      deleteUserMedia(previousBannerImage).catch(console.error)
+    } catch (error) {
+      setBannerError(error instanceof Error ? error.message : 'Could not use that image.')
     }
   }
 

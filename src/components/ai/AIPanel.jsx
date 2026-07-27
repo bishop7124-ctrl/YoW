@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
-import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiChatSessions } from '../../utils/aiChatHistory'
-import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans } from './AiConfigRequired'
-import SegmentedControl from '../shared/SegmentedControl'
+import { AI_AGENTS, DEFAULT_AGENT_ID, getAgent } from '../../utils/aiAgents'
+import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -40,157 +40,6 @@ const clampPanelFrame = (frame) => {
 }
 
 const DEFAULT_SETTINGS = DEFAULT_AI_SETTINGS
-
-// ── Provider Settings ─────────────────────────────────────────────────────────
-
-function ProviderSettings({ settings, onSave, onCancel }) {
-  const [local, setLocal] = useState(settings)
-  const [keyDrafts, setKeyDrafts] = useState({})
-  const active = local.activeProvider
-  const prov = PROVIDERS[active]
-  const cfg = local[active]
-
-  const update = (field, val) =>
-    setLocal(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
-  const updateKeyDraft = (val) =>
-    setKeyDrafts(prev => ({ ...prev, [active]: val }))
-
-  const saveLocal = () => {
-    const next = { ...local }
-    Object.entries(keyDrafts).forEach(([provider, value]) => {
-      if (!value?.trim()) return
-      next[provider] = { ...next[provider], apiKey: value.trim() }
-    })
-    setKeyDrafts({})
-    onSave(next)
-  }
-
-  const hasKey = !!cfg.apiKey.trim()
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="ai-panel-subheader px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
-        <h3 className="font-bold text-[var(--text-main)] text-sm">AI Settings</h3>
-        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Keys are stored locally and sent only to the chosen provider.</p>
-        {/* Active model callout */}
-        <div className="mt-3 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[var(--accent-fade)] border border-[var(--accent)]/30">
-          <AIStar size={14} className="text-[var(--accent)] flex-shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-0.5">Active model</p>
-            <p className="text-xs font-bold text-[var(--text-main)] leading-tight truncate">
-              {(() => {
-                const model = local[active]?.model || prov?.defaultModel || ''
-                return prov?.models?.find(m => m.id === model)?.label || model || 'Not set'
-              })()}
-            </p>
-            <p className="text-[10px] text-[var(--text-muted)] leading-tight">{prov?.name}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        {/* Provider tabs */}
-        <div>
-          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Provider</label>
-          <SegmentedControl
-            variant="segmented"
-            ariaLabel="Provider"
-            value={active}
-            onChange={id => setLocal(prev => ({ ...prev, activeProvider: id }))}
-            options={Object.entries(PROVIDERS).map(([id, p]) => {
-              const connected = !!local[id]?.apiKey?.trim()
-              return {
-                id,
-                label: (
-                  <>
-                    {p.name.split(' ')[0]}
-                    {connected && (
-                      <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${active === id ? 'bg-[var(--bg-main)]/60' : 'bg-[var(--accent)]'}`} />
-                    )}
-                  </>
-                ),
-              }
-            })}
-          />
-        </div>
-
-        {/* Model */}
-        <div>
-          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Model</label>
-          {prov.models.length > 0 ? (
-            <select
-              value={cfg.model || prov.defaultModel}
-              onChange={e => update('model', e.target.value)}
-              className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)]"
-            >
-              {prov.models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
-          ) : (
-            <input
-              value={cfg.model}
-              onChange={e => update('model', e.target.value)}
-              placeholder={`e.g. ${prov.defaultModel}`}
-              className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)]"
-            />
-          )}
-        </div>
-
-        {/* Base URL (OpenAI-compatible only) */}
-        {prov.hasBaseUrl && (
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Base URL</label>
-            <input
-              value={cfg.baseUrl || ''}
-              onChange={e => update('baseUrl', e.target.value)}
-              placeholder={PROVIDERS.openai.defaultBaseUrl}
-              className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)]"
-            />
-            <p className="text-[10px] text-[var(--text-muted)] mt-1">Works with Groq, Together, Mistral, Ollama, and any OpenAI-compatible endpoint.</p>
-          </div>
-        )}
-
-        {/* API Key */}
-        <div>
-          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">
-            API Key {hasKey && <span className="text-[var(--accent)] normal-case font-normal">· saved</span>}
-          </label>
-          <input
-            type="password"
-            name={`yow-chat-${active}-api-token`}
-            autoComplete="new-password"
-            value={keyDrafts[active] || ''}
-            onChange={e => updateKeyDraft(e.target.value)}
-            placeholder={hasKey ? 'Saved key hidden. Paste a new key to replace it.' : prov.keyPlaceholder}
-            className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)]"
-          />
-          {hasKey && (
-            <button
-              type="button"
-              onClick={() => setLocal(prev => ({ ...prev, [active]: { ...prev[active], apiKey: '' } }))}
-              className="mt-1 text-[11px] font-bold text-red-400 hover:text-red-300"
-            >
-              Remove saved key
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="px-4 py-3 border-t border-[var(--border)] flex gap-2 flex-shrink-0">
-        <button
-          onClick={saveLocal}
-          className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded text-sm hover:opacity-90"
-        >
-          Save
-        </button>
-        {onCancel && (
-          <button onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)] text-sm hover:text-[var(--text-main)]">
-            Cancel
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ── Context Selector ──────────────────────────────────────────────────────────
 
@@ -230,11 +79,30 @@ function CheckItem({ label, sub, checked, onChange, image }) {
   )
 }
 
-function ContextSelector({ store, onStart, onCancel, initialContext }) {
+function AgentCard({ agent, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+        selected
+          ? 'border-[var(--accent)] bg-[var(--accent-fade)]'
+          : 'border-[var(--border)] bg-[var(--bg-nav)] hover:border-[var(--accent)]/50'
+      }`}
+    >
+      <div className={`text-xs font-bold ${selected ? 'text-[var(--accent)]' : 'text-[var(--text-main)]'}`}>{agent.label}</div>
+      <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{agent.blurb}</div>
+    </button>
+  )
+}
+
+function ContextSelector({ store, onStart, onCancel, initialContext, initialAgentId }) {
   const defaultContext = {
     characterIds: [], locationIds: [], loreEntryIds: [], worldHistoryIds: [], chapterIds: [], customInstruction: '',
   }
   const [ctx, setCtx] = useState({ ...defaultContext, ...(initialContext || {}) })
+  const [agentId, setAgentId] = useState(initialAgentId || DEFAULT_AGENT_ID)
 
   const toggle = (field, id) => setCtx(prev => {
     const arr = prev[field] || []
@@ -301,11 +169,20 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
   return (
     <div className="flex flex-col h-full">
       <div className="ai-panel-subheader px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
-        <h3 className="font-bold text-[var(--text-main)] text-sm">Configure context for this chat</h3>
-        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Choose what the AI knows about your novel.</p>
+        <h3 className="font-bold text-[var(--text-main)] text-sm">Start a new chat</h3>
+        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Pick a support style and what the AI should know.</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div>
+          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Support style</label>
+          <div className="grid grid-cols-2 gap-2">
+            {AI_AGENTS.map(agent => (
+              <AgentCard key={agent.id} agent={agent} selected={agentId === agent.id} onSelect={() => setAgentId(agent.id)} />
+            ))}
+          </div>
+        </div>
+
         {availableTotal > 0 && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-nav)] px-3 py-2">
             <div className="min-w-0">
@@ -408,7 +285,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext }) {
 
       <div className="px-4 py-3 border-t border-[var(--border)] flex gap-2 flex-shrink-0">
         <button
-          onClick={() => onStart(ctx)}
+          onClick={() => onStart(ctx, agentId)}
           className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded text-sm hover:opacity-90"
         >
           Start Chat{total > 0 ? ` · ${total} item${total !== 1 ? 's' : ''}` : ''}
@@ -551,8 +428,6 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
   const provider  = aiSettings.activeProvider
   const provCfg   = aiSettings[provider]
-  const provLabel = PROVIDERS[provider]?.name || provider
-  const modelLabel = provCfg.model || PROVIDERS[provider]?.defaultModel
   const hasKey = !!provCfg.apiKey?.trim()
 
   const promptStore = useMemo(
@@ -560,9 +435,11 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     [store, session.novelId]
   )
 
+  const agent = getAgent(session.agentId)
+
   const systemPrompt = useMemo(
-    () => buildSystemPrompt(promptStore.activeNovel, session.context, promptStore),
-    [promptStore, session.context]
+    () => buildSystemPrompt(promptStore.activeNovel, session.context, promptStore, agent.directive),
+    [promptStore, session.context, agent.directive]
   )
 
   const send = async () => {
@@ -665,9 +542,17 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-[var(--text-main)] truncate">{session.title}</div>
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
-            <div className="text-[10px] text-[var(--text-muted)]">
-              {provLabel} · {modelLabel}{contextCount > 0 ? ` · ${contextCount} context item${contextCount !== 1 ? 's' : ''}` : ''}
-            </div>
+            <select
+              value={session.agentId || DEFAULT_AGENT_ID}
+              onChange={e => onUpdate(session.id, { agentId: e.target.value })}
+              title="Support style"
+              className="text-[10px] bg-transparent border border-[var(--border)] rounded px-1.5 py-0.5 text-[var(--text-muted)] outline-none focus:border-[var(--accent)] hover:text-[var(--text-main)] transition-colors"
+            >
+              {AI_AGENTS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+            {contextCount > 0 && (
+              <span className="text-[10px] text-[var(--accent)]">{contextCount} context item{contextCount !== 1 ? 's' : ''}</span>
+            )}
             {editingCategory ? (
               <input
                 ref={categoryInputRef}
@@ -785,6 +670,7 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
   const provider  = aiSettings.activeProvider
   const provLabel = PROVIDERS[provider]?.name || provider
   const model     = aiSettings[provider]?.model || PROVIDERS[provider]?.defaultModel
+  const hasKey    = !!aiSettings[provider]?.apiKey?.trim()
 
   const [categoryFilter, setCategoryFilter]     = useState('')
   const [editingCategoryFor, setEditingCategoryFor] = useState(null)
@@ -832,6 +718,12 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
           + New chat
         </button>
       </div>
+
+      {!hasKey && (
+        <div className="px-3 pt-3">
+          <AiConfigRequiredNotice style={{ textAlign: 'left' }} />
+        </div>
+      )}
 
       {categories.length > 0 && (
         <div className="ai-chat-filter-bar px-3 py-2 border-b border-[var(--border)] flex gap-1.5 flex-wrap">
@@ -901,6 +793,9 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
                   </div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-0.5 truncate">{preview}</div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {s.agentId && s.agentId !== DEFAULT_AGENT_ID && (
+                      <div className="text-[10px] text-[var(--text-muted)]">{getAgent(s.agentId).label}</div>
+                    )}
                     {total > 0 && <div className="text-[10px] text-[var(--accent)]">{total} context item{total !== 1 ? 's' : ''}</div>}
                     {isEditingCat ? (
                       <input
@@ -1015,34 +910,22 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
   const chatStorageKey = getAiChatStorageKey(novelId)
   const [aiSettings, setAiSettings] = useState(() => loadAiSettings(userId, DEFAULT_SETTINGS))
   const [sessions,   setSessions]   = useState(() => loadAiChatSessions(novelId))
-  const [view,       setView]       = useState('sessions') // 'sessions' | 'settings' | 'context' | 'chat'
+  const [view,       setView]       = useState('sessions') // 'sessions' | 'context' | 'chat'
   const [activeId,   setActiveId]   = useState(null)
   const [fullscreen, setFullscreen] = useState(() => load('nf_aiFullscreen', false))
   const [minimized,  setMinimized]  = useState(false)
   const [panelFrame, setPanelFrame] = useState(() => clampPanelFrame(load(AI_PANEL_FRAME_KEY, getDefaultPanelFrame())))
   const activeChatStorageKey = useRef(chatStorageKey)
   const panelFrameRef = useRef(panelFrame)
-  const skipAiSettingsSave = useRef(false)
 
+  // AI provider/model settings are read-only here — they're only ever
+  // edited in Account Settings. Reload whenever that page saves a change,
+  // so this panel never sends to a provider/model cached from panel-open.
   useEffect(() => {
-    skipAiSettingsSave.current = true
     setAiSettings(loadAiSettings(userId, DEFAULT_SETTINGS))
   }, [userId])
   useEffect(() => {
-    if (skipAiSettingsSave.current) {
-      skipAiSettingsSave.current = false
-      return
-    }
-    saveAiSettings(aiSettings, userId)
-  }, [aiSettings, userId])
-  useEffect(() => {
-    // AI settings can also be changed from the account settings page while
-    // this panel stays mounted — reload so the chat doesn't keep sending to
-    // whatever provider/model was cached at panel-open time.
-    const handleAiSettingsUpdate = () => {
-      skipAiSettingsSave.current = true
-      setAiSettings(loadAiSettings(userId, DEFAULT_SETTINGS))
-    }
+    const handleAiSettingsUpdate = () => setAiSettings(loadAiSettings(userId, DEFAULT_SETTINGS))
     window.addEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
     return () => window.removeEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
   }, [userId])
@@ -1051,7 +934,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
       activeChatStorageKey.current = chatStorageKey
       setSessions(loadAiChatSessions(novelId))
       setActiveId(null)
-      setView(current => current === 'settings' ? current : 'sessions')
+      setView('sessions')
       return
     }
     saveAiChatSessions(novelId, sessions)
@@ -1087,26 +970,13 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
   )
 
   const activeProvider = aiSettings.activeProvider
-  const hasKey = !!aiSettings[activeProvider]?.apiKey?.trim()
-
-  // Auto-show settings if active provider has no key
-  useEffect(() => {
-    if (open && !hasKey && view === 'sessions') {
-      queueMicrotask(() => setView('settings'))
-    }
-  }, [open, hasKey, view])
-
-  const handleSaveSettings = (newSettings) => {
-    setAiSettings(newSettings)
-    setView('sessions')
-  }
 
   const handleNewChat = () => setView('context')
 
-  const handleContextConfirm = (ctx) => {
+  const handleContextConfirm = (ctx, agentId) => {
     const session = {
       id: uid(), novelId, title: `Chat ${sessions.length + 1}`,
-      context: ctx, messages: [], createdAt: Date.now(),
+      context: ctx, agentId: agentId || DEFAULT_AGENT_ID, messages: [], createdAt: Date.now(),
       pinned: false, category: '',
     }
     setSessions(prev => [...prev, session])
@@ -1259,18 +1129,16 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
               </button>
             )}
             <button
-              onClick={() => setView(v => v === 'settings' ? (hasKey ? 'sessions' : 'settings') : 'settings')}
-              className={`text-[10px] font-bold border px-2 py-0.5 rounded transition-colors ${
-                view === 'settings'
-                  ? 'text-[var(--accent)] border-[var(--accent)]/40'
-                  : 'text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--text-main)]'
-              }`}
+              type="button"
+              onClick={openAiSettings}
+              title="Change model in Account Settings"
+              className="text-[10px] font-bold border px-2 py-0.5 rounded transition-colors text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--text-main)]"
             >
               {(() => {
               const p = PROVIDERS[activeProvider]
               const model = aiSettings[activeProvider]?.model || p?.defaultModel || ''
               const modelLabel = p?.models?.find(m => m.id === model)?.label || model
-              return modelLabel ? `${p?.name?.split(' ')[0] || 'AI'} · ${modelLabel}` : (p?.name?.split(' ')[0] || 'Settings')
+              return modelLabel ? `${p?.name?.split(' ')[0] || 'AI'} · ${modelLabel}` : (p?.name?.split(' ')[0] || 'Not configured')
             })()}
             </button>
             <button
@@ -1295,13 +1163,6 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
 
         {/* Body */}
         <div className="flex-1 overflow-hidden">
-          {view === 'settings' && (
-            <ProviderSettings
-              settings={aiSettings}
-              onSave={handleSaveSettings}
-              onCancel={hasKey ? () => setView('sessions') : null}
-            />
-          )}
           {view === 'context' && (
             <ContextSelector
               store={projectStore}

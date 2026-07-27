@@ -5,6 +5,7 @@ import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
 import { upsertItems, saveSceneDoc } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
+import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -14,12 +15,16 @@ vi.mock('../utils/firestoreSync', () => ({
   saveUserSettings:   vi.fn().mockResolvedValue({}),
   saveSceneDoc:       vi.fn().mockResolvedValue({}),
   deleteSceneDoc:     vi.fn().mockResolvedValue({}),
+  getUserStorageUsage: vi.fn().mockResolvedValue(0),
 }))
 vi.mock('../utils/projectStats', () => ({
   buildProjectStats: vi.fn().mockReturnValue({}),
 }))
 vi.mock('../utils/storageQuota', () => ({
   estimateStoreSize: vi.fn().mockReturnValue(0),
+}))
+vi.mock('../utils/uploadUserMedia', () => ({
+  deleteUserMedia: vi.fn().mockResolvedValue(undefined),
 }))
 
 beforeEach(() => {
@@ -305,6 +310,26 @@ describe('novel CRUD', () => {
     expect(stored.find(n => n.id === 'other-2').title).toBe('Other Project')
   })
 
+  it('deleteNovel cleans up uploaded Storage images for the novel and its characters/factions', () => {
+    vi.mocked(deleteUserMedia).mockClear()
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'To Delete', type: 'novel', coverPhoto: 'https://x/storage/v1/object/public/user-media/u1/covers/a.webp', bannerImage: 'https://x/storage/v1/object/public/user-media/u1/banners/b.webp' }) })
+    const id = result.current.novels[0].id
+    act(() => { result.current.saveCharacter({ name: 'Frodo', novelId: id, image: 'https://x/storage/v1/object/public/user-media/u1/characters/c.webp' }) })
+    act(() => { result.current.saveFaction({ name: 'Fellowship', novelId: id, logo: { source: 'image', image: 'https://x/storage/v1/object/public/user-media/u1/factions/f.webp' } }) })
+
+    act(() => { result.current.deleteNovel(id) })
+
+    const deletedUrls = vi.mocked(deleteUserMedia).mock.calls.map(call => call[0])
+    expect(deletedUrls).toEqual(expect.arrayContaining([
+      'https://x/storage/v1/object/public/user-media/u1/covers/a.webp',
+      'https://x/storage/v1/object/public/user-media/u1/banners/b.webp',
+      'https://x/storage/v1/object/public/user-media/u1/characters/c.webp',
+      'https://x/storage/v1/object/public/user-media/u1/factions/f.webp',
+    ]))
+  })
+
   it('deleteNovel blocks deleting a non-active project on the free tier', () => {
     localStorage.setItem('nf_novels', JSON.stringify([
       { id: 'free-1', title: 'Locked Free Project', type: 'novel' },
@@ -562,6 +587,19 @@ describe('character CRUD', () => {
 
     const sam = result.current.characters.find(c => c.name === 'Sam')
     expect(sam.relationships).toEqual([])
+  })
+
+  it('deleteCharacter cleans up the character\'s uploaded Storage portrait', () => {
+    vi.mocked(deleteUserMedia).mockClear()
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo', image: 'https://x/storage/v1/object/public/user-media/u1/characters/frodo.webp' }) })
+    const frodoId = result.current.characters[0].id
+
+    act(() => { result.current.deleteCharacter(frodoId) })
+
+    expect(deleteUserMedia).toHaveBeenCalledWith('https://x/storage/v1/object/public/user-media/u1/characters/frodo.webp')
   })
 })
 

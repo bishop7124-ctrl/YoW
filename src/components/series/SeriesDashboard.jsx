@@ -3,7 +3,7 @@ import YOWLogo from '../brand/YOWLogo'
 import UserMenu from '../auth/UserMenu'
 import { getProjectType } from '../../constants/projectTypes'
 import { hasJourneyContent, normalizeJourney } from '../../utils/characterJourney'
-import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1344,10 +1344,18 @@ export default function SeriesDashboard({
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
+    const previousCoverPhoto = series.coverPhoto
     try {
       setCoverError('')
-      const coverPhoto = await optimizeImageToDataUrl(file)
+      const coverPhoto = await uploadUserMedia(file, {
+        userId: store.userId,
+        category: 'series',
+        currentUsedBytes: store.storageUsedBytes,
+        quotaBytes: store.storageQuotaBytes,
+      })
       store.updateSeries(seriesId, { coverPhoto })
+      store.refreshStorageUsedBytes().catch(console.error)
+      deleteUserMedia(previousCoverPhoto).catch(console.error)
     } catch (error) {
       setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }

@@ -175,6 +175,21 @@ export async function deleteItemsByNovel(userId, novelId) {
   }))
 }
 
+// Reads the authoritative storage-usage counter for a user, maintained by a DB
+// trigger on the user-media Storage bucket (see
+// supabase/migrations/20260727_user_media_storage.sql). Returns 0 if the
+// profile row doesn't exist yet (no uploads made) or in offline mode.
+export async function getUserStorageUsage(userId) {
+  if (OFFLINE_MODE || !userId) return 0
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('storage_used_bytes')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) { console.warn('[sync] load error for user_profiles storage usage:', error); return 0 }
+  return data?.storage_used_bytes ?? 0
+}
+
 // Save user-level scalars (activeNovelId, currentYear, activeMapByNovel)
 export async function saveUserSettings(userId, settings) {
   if (OFFLINE_MODE) return

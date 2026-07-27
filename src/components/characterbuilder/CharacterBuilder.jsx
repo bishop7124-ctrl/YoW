@@ -243,6 +243,7 @@ export default function CharacterBuilder({ store }) {
 
   const handleWizardSave = (charData) => {
     const id = store.saveRpgCharacter(charData)
+    store.refreshStorageUsedBytes?.().catch(console.error)
     setWizardOpen(false)
     setSelectedId(id)
     setView('detail')
@@ -330,6 +331,7 @@ export default function CharacterBuilder({ store }) {
           novelId={store.activeNovelId}
           onSave={handleWizardSave}
           onCancel={() => setWizardOpen(false)}
+          store={store}
         />
       )}
 

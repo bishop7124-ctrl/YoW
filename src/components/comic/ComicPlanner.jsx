@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import './ComicPlanner.css'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ const CAPTION_TYPES = ['narration', 'location', 'time', 'thought', 'editorial']
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,application/pdf'
 const MAX_PDF_BYTES = 8 * 1024 * 1024 // 8 MB — warn beyond this
 
-function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, onRemove }) {
+function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, onRemove, store, category = 'comic' }) {
   const inputRef = useRef(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -47,8 +47,18 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
         }
         onPdf(file)
       } else if (file.type.startsWith('image/')) {
-        const dataUrl = await optimizeImageToDataUrl(file, { maxDimension: 1200, maxOutputBytes: 2 * 1024 * 1024 })
-        onImage(dataUrl)
+        const previous = value
+        const url = await uploadUserMedia(file, {
+          userId: store?.userId,
+          category,
+          currentUsedBytes: store?.storageUsedBytes,
+          quotaBytes: store?.storageQuotaBytes,
+          maxDimension: 1200,
+          maxOutputBytes: 2 * 1024 * 1024,
+        })
+        onImage(url)
+        store?.refreshStorageUsedBytes().catch(console.error)
+        if (previous) deleteUserMedia(previous).catch(console.error)
       } else {
         setError('Please upload an image (PNG, JPG, WebP, GIF) or a PDF.')
       }
@@ -57,7 +67,7 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
     } finally {
       setLoading(false)
     }
-  }, [onImage, onPdf])
+  }, [onImage, onPdf, store, category, value])
 
   const handleChange = (e) => {
     handleFile(e.target.files?.[0])
@@ -67,6 +77,12 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
   const handleDrop = (e) => {
     e.preventDefault()
     handleFile(e.dataTransfer.files?.[0])
+  }
+
+  const handleRemove = () => {
+    if (value) deleteUserMedia(value).catch(console.error)
+    onRemove()
+    store?.refreshStorageUsedBytes().catch(console.error)
   }
 
   const hasContent = value || sessionPdfUrl
@@ -91,7 +107,7 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
               Replace
               <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} onChange={handleChange} style={{ display: 'none' }} />
             </label>
-            <button className="cp-btn-ghost cp-btn-xs cp-danger" onClick={onRemove}>Remove</button>
+            <button className="cp-btn-ghost cp-btn-xs cp-danger" onClick={handleRemove}>Remove</button>
           </div>
         </div>
       ) : (
@@ -175,7 +191,7 @@ function SFXLine({ line, onChange, onDelete }) {
   )
 }
 
-function PanelEditor({ panel, characters, onUpdate, onDelete }) {
+function PanelEditor({ panel, characters, onUpdate, onDelete, store }) {
   const [open, setOpen] = useState(true)
   const [sessionPdf, setSessionPdf] = useState(null)
 
@@ -308,9 +324,10 @@ function PanelEditor({ panel, characters, onUpdate, onDelete }) {
             label="Panel reference"
             value={panel.referenceImage || null}
             sessionPdf={sessionPdf}
-            onImage={dataUrl => update({ referenceImage: dataUrl })}
+            onImage={url => update({ referenceImage: url })}
             onPdf={file => setSessionPdf(file)}
             onRemove={() => { update({ referenceImage: null }); setSessionPdf(null) }}
+            store={store}
           />
         </div>
       )}
@@ -320,7 +337,7 @@ function PanelEditor({ panel, characters, onUpdate, onDelete }) {
 
 // ─── Page editor ──────────────────────────────────────────────────────────────
 
-function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDeletePage, onAddPanel, onUpdatePanel, onDeletePanel, onDuplicatePage }) {
+function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDeletePage, onAddPanel, onUpdatePanel, onDeletePanel, onDuplicatePage, store }) {
   const sortedPanels = sortByOrder(panels)
   const [pageSessionPdf, setPageSessionPdf] = useState(null)
 
@@ -420,9 +437,10 @@ function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDele
           label="Page reference"
           value={page.referenceImage || null}
           sessionPdf={pageSessionPdf}
-          onImage={dataUrl => onUpdatePage(page.id, { referenceImage: dataUrl })}
+          onImage={url => onUpdatePage(page.id, { referenceImage: url })}
           onPdf={file => setPageSessionPdf(file)}
           onRemove={() => { onUpdatePage(page.id, { referenceImage: null }); setPageSessionPdf(null) }}
+          store={store}
         />
       </div>
 
@@ -446,6 +464,7 @@ function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDele
             characters={characters}
             onUpdate={(updated) => onUpdatePanel(panel.id, updated)}
             onDelete={(id) => onDeletePanel(id)}
+            store={store}
           />
         ))}
       </div>
@@ -736,6 +755,7 @@ export default function ComicPlanner({ store }) {
                   onUpdatePanel={(panelId, data) => updateComicPanel(panelId, data)}
                   onDeletePanel={deleteComicPanel}
                   onDuplicatePage={handleDuplicatePage}
+                  store={store}
                 />
               )}
             </div>

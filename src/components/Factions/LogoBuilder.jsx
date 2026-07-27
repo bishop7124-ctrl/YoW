@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { getShapeElement } from './FactionLogo'
 import { DEFAULT_LOGO_BACKGROUND, normalizeFactionLogo } from './logoData'
-import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import SegmentedControl from '../shared/SegmentedControl'
 
 const uid = () => Math.random().toString(36).slice(2)
@@ -60,13 +60,16 @@ const checkerboard = {
   backgroundSize: '16px 16px',
 }
 
-export default function LogoBuilder({ logo, onChange, canvasSize = 176 }) {
+export default function LogoBuilder({ logo, onChange, canvasSize = 176, store }) {
   const uploadInputRef = useRef(null)
   const svgRef = useRef(null)
   const dragRef = useRef(null)
   const [selectedIdx, setSelectedIdx] = useState(null)
   const [uploadError, setUploadError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  // Tracks a freshly uploaded-but-unsaved logo image so it can be cleaned up
+  // from Storage if it's replaced again or the faction form is never saved.
+  const pendingUploadRef = useRef(null)
   const logoData = normalizeFactionLogo(logo)
   const { source, image, shapes, backgroundColor, backgroundTransparent } = logoData
   const selected = selectedIdx !== null && selectedIdx < shapes.length ? shapes[selectedIdx] : null
@@ -168,16 +171,32 @@ export default function LogoBuilder({ logo, onChange, canvasSize = 176 }) {
     setUploadError('')
     setIsUploading(true)
     try {
-      const dataUrl = await optimizeImageToDataUrl(file, {
+      const uploadedUrl = await uploadUserMedia(file, {
+        userId: store?.userId,
+        category: 'factions',
+        currentUsedBytes: store?.storageUsedBytes,
+        quotaBytes: store?.storageQuotaBytes,
         maxDimension: 800,
         maxOutputBytes: 1024 * 1024,
       })
-      updateLogo({ source: 'image', image: dataUrl })
+      if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = uploadedUrl
+      store?.refreshStorageUsedBytes().catch(console.error)
+      updateLogo({ source: 'image', image: uploadedUrl })
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Could not process that image.')
     } finally {
       setIsUploading(false)
     }
+  }
+
+  const handleRemoveImage = () => {
+    if (pendingUploadRef.current) {
+      deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = null
+      store?.refreshStorageUsedBytes().catch(console.error)
+    }
+    updateLogo({ source: 'builder', image: '' })
   }
 
   return (
@@ -206,7 +225,7 @@ export default function LogoBuilder({ logo, onChange, canvasSize = 176 }) {
               Replace Image
               <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isUploading} />
             </label>
-            <button type="button" onClick={() => updateLogo({ source: 'builder', image: '' })} className="btn btn-secondary btn-sm text-red-500">
+            <button type="button" onClick={handleRemoveImage} className="btn btn-secondary btn-sm text-red-500">
               Remove Image
             </button>
           </div>

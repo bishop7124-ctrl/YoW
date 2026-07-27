@@ -235,11 +235,11 @@ export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, 
   onError(`Unknown provider: ${provider}`)
 }
 
-export function buildSystemPrompt(novel, context, store) {
+export function buildSystemPrompt(novel, context, store, agentDirective) {
   const lines = [
     'You are a creative writing assistant embedded in Your Own World.',
     buildProjectTypePromptContext(novel),
-    'Help with writing, plot, character development, world-building, and any creative task.',
+    agentDirective?.trim() || 'Help with writing, plot, character development, world-building, and any creative task.',
   ].filter(Boolean)
 
   const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, customInstruction } = context

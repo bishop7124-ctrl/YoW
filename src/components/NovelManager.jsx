@@ -16,6 +16,7 @@ import {
   getProjectExportFilename,
 } from '../utils/projectExport'
 import { isCampaignProjectType } from '../utils/projectStats'
+import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
 const isProjectTypeSelectable = (type) => Boolean(PROJECT_TYPES[type])
@@ -36,43 +37,6 @@ const getCoverGradient = (title) => {
   const n = (title || '?').split('').reduce((a, c) => a + c.charCodeAt(0), 0)
   return COVER_GRADIENTS[n % COVER_GRADIENTS.length]
 }
-
-const resizeCoverPhoto = (file) => new Promise((resolve, reject) => {
-  const image = new Image()
-  const objectUrl = URL.createObjectURL(file)
-
-  image.onload = () => {
-    URL.revokeObjectURL(objectUrl)
-    const maxWidth = 900
-    const maxHeight = 1200
-    const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height)
-    const width = Math.max(1, Math.round(image.width * scale))
-    const height = Math.max(1, Math.round(image.height * scale))
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-
-    canvas.width = width
-    canvas.height = height
-    ctx.fillStyle = '#111814'
-    ctx.fillRect(0, 0, width, height)
-    ctx.drawImage(image, 0, 0, width, height)
-
-    let quality = 0.82
-    let dataUrl = canvas.toDataURL('image/jpeg', quality)
-    while (dataUrl.length > 900000 && quality > 0.48) {
-      quality -= 0.08
-      dataUrl = canvas.toDataURL('image/jpeg', quality)
-    }
-    resolve(dataUrl)
-  }
-
-  image.onerror = () => {
-    URL.revokeObjectURL(objectUrl)
-    reject(new Error('Could not read that image.'))
-  }
-
-  image.src = objectUrl
-})
 
 function ProjectTypeImage({ type, label, size = 34 }) {
   const id = type || DEFAULT_TYPE
@@ -518,7 +482,7 @@ function useEscapeKey(handler) {
   })
 }
 
-function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
+function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose }) {
   const seriesProjects = allStats.filter(s => s.project.seriesId === series.id)
   const initialOrder = series.projectOrder
     ? series.projectOrder.filter(id => seriesProjects.some(s => s.project.id === id))
@@ -543,6 +507,9 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
   const [projectOrder, setProjectOrder] = useState(() => [...initialOrder, ...unordered])
   const dragIdx = useRef(null)
   const dragOverIdx = useRef(null)
+  // Tracks a freshly uploaded-but-unsaved cover so it can be cleaned up from
+  // Storage if the user replaces it again or cancels without saving.
+  const pendingUploadRef = useRef(null)
 
   const initialFormRef = useRef(JSON.stringify({
     name: series.name || '',
@@ -569,6 +536,7 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
     const formDirty = JSON.stringify(form) !== initialFormRef.current
     const assignedDirty = JSON.stringify([...assignedIds].sort()) !== initialAssignedRef.current
     if ((formDirty || assignedDirty) && !confirm('Discard changes?')) return
+    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
     onClose()
   }
   useEscapeKey(requestClose)
@@ -579,11 +547,28 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
     if (!file || !file.type.startsWith('image/')) return
     try {
       setCoverError('')
-      const photo = await resizeCoverPhoto(file)
+      const photo = await uploadUserMedia(file, {
+        userId: store.userId,
+        category: 'series',
+        currentUsedBytes: store.storageUsedBytes,
+        quotaBytes: store.storageQuotaBytes,
+      })
+      if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = photo
+      store.refreshStorageUsedBytes().catch(console.error)
       setForm(p => ({ ...p, coverPhoto: photo }))
-    } catch {
-      setCoverError('Could not use that image.')
+    } catch (error) {
+      setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }
+  }
+
+  const handleRemoveCover = () => {
+    if (pendingUploadRef.current) {
+      deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = null
+      store.refreshStorageUsedBytes().catch(console.error)
+    }
+    setForm(p => ({ ...p, coverPhoto: null }))
   }
 
   const commitTag = () => {
@@ -710,7 +695,7 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
             </label>
             <div className="project-cover-preview-actions">
               {form.coverPhoto && (
-                <button type="button" onClick={() => setForm(p => ({ ...p, coverPhoto: null }))}>
+                <button type="button" onClick={handleRemoveCover}>
                   Remove
                 </button>
               )}
@@ -824,7 +809,7 @@ function EditSeriesModal({ series, allStats, onSave, onDelete, onClose }) {
   )
 }
 
-function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
+function EditProjectModal({ project, series, store, onSave, onDelete, onClose }) {
   const isCampaign = isCampaignProjectType(project.type)
   const [form, setForm] = useState({
     title: project.title || '',
@@ -841,6 +826,9 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
   })
   const [tagInput, setTagInput] = useState('')
   const [coverError, setCoverError] = useState('')
+  // Tracks a freshly uploaded-but-unsaved cover so it can be cleaned up from
+  // Storage if the user replaces it again or cancels without saving.
+  const pendingUploadRef = useRef(null)
   const initialFormRef = useRef(JSON.stringify({
     title: project.title || '',
     description: project.description || '',
@@ -857,6 +845,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
 
   const requestClose = () => {
     if (JSON.stringify(form) !== initialFormRef.current && !confirm('Discard changes?')) return
+    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
     onClose()
   }
   useEscapeKey(requestClose)
@@ -867,11 +856,28 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
     if (!file || !file.type.startsWith('image/')) return
     try {
       setCoverError('')
-      const photo = await resizeCoverPhoto(file)
+      const photo = await uploadUserMedia(file, {
+        userId: store.userId,
+        category: 'covers',
+        currentUsedBytes: store.storageUsedBytes,
+        quotaBytes: store.storageQuotaBytes,
+      })
+      if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = photo
+      store.refreshStorageUsedBytes().catch(console.error)
       setForm(p => ({ ...p, coverPhoto: photo }))
-    } catch {
-      setCoverError('Could not use that image.')
+    } catch (error) {
+      setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }
+  }
+
+  const handleRemoveCover = () => {
+    if (pendingUploadRef.current) {
+      deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = null
+      store.refreshStorageUsedBytes().catch(console.error)
+    }
+    setForm(p => ({ ...p, coverPhoto: null }))
   }
 
   const commitTag = () => {
@@ -1015,7 +1021,7 @@ function EditProjectModal({ project, series, onSave, onDelete, onClose }) {
                 </label>
                 <div className="project-cover-preview-actions">
                   {form.coverPhoto && (
-                    <button type="button" onClick={() => setForm(p => ({ ...p, coverPhoto: null }))}>
+                    <button type="button" onClick={handleRemoveCover}>
                       Remove
                     </button>
                   )}
@@ -1237,6 +1243,8 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   }, [showImportMenu])
 
   const handleSaveSeries = (id, data, assignedProjectIds) => {
+    const previousCoverPhoto = editingSeries?.coverPhoto
+    if (previousCoverPhoto && previousCoverPhoto !== data.coverPhoto) deleteUserMedia(previousCoverPhoto).catch(console.error)
     store.updateSeries(id, data)
     store.allProjectStats.forEach(s => {
       const inSeries = s.project.seriesId === id
@@ -1244,6 +1252,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
       if (shouldBe && !inSeries) store.updateNovel(s.project.id, { seriesId: id })
       else if (!shouldBe && inSeries) store.updateNovel(s.project.id, { seriesId: null })
     })
+    store.refreshStorageUsedBytes().catch(console.error)
     setEditingSeries(null)
   }
 
@@ -1255,7 +1264,10 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   }
 
   const handleSaveProject = (id, data) => {
+    const previousCoverPhoto = editingProject?.coverPhoto
+    if (previousCoverPhoto && previousCoverPhoto !== data.coverPhoto) deleteUserMedia(previousCoverPhoto).catch(console.error)
     store.updateNovel(id, data)
+    store.refreshStorageUsedBytes().catch(console.error)
     setEditingProject(null)
   }
 
@@ -1584,6 +1596,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
         <EditSeriesModal
           series={editingSeries}
           allStats={store.allProjectStats}
+          store={store}
           onSave={handleSaveSeries}
           onDelete={handleDeleteSeries}
           onClose={() => setEditingSeries(null)}
@@ -1595,6 +1608,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
         <EditProjectModal
           project={editingProject}
           series={store.series}
+          store={store}
           onSave={handleSaveProject}
           onDelete={handleDelete}
           onClose={() => setEditingProject(null)}

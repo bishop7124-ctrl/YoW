@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from '../shared/Modal'
 import FactionLogo from './FactionLogo'
 import LogoEditorModal from './LogoEditorModal'
+import { deleteUserMedia } from '../../utils/uploadUserMedia'
 
 const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] focus:border-[var(--accent)] outline-none transition-colors'
 const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-1.5'
@@ -44,8 +45,11 @@ export default function Factions({ store }) {
 
   const handleSave = (e) => {
     e.preventDefault()
+    const previousLogoImage = editTarget?.logo?.image
+    if (previousLogoImage && previousLogoImage !== form.logo?.image) deleteUserMedia(previousLogoImage).catch(console.error)
     const faction = saveFaction(form, editTarget?.id)
     if (faction?.id && selectedFactionId) setSelectedFactionId(faction.id)
+    store.refreshStorageUsedBytes?.().catch(console.error)
     setShowForm(false)
     setEditTarget(null)
   }
@@ -261,6 +265,7 @@ export default function Factions({ store }) {
           logo={form.logo}
           onChange={logo => setForm(f => ({ ...f, logo }))}
           onClose={() => setShowLogoEditor(false)}
+          store={store}
         />
       )}
     </div>

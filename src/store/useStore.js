@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, deleteItem, deleteItemsByNovel, saveUserSettings, saveSceneDoc, deleteSceneDoc } from '../utils/firestoreSync'
+import { upsertItems, deleteItem, deleteItemsByNovel, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -8,6 +8,7 @@ import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
+import { deleteUserMedia } from '../utils/uploadUserMedia'
 import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
 
 const load = (key, def) => loadValue(key, def)
@@ -155,6 +156,18 @@ const save = (key, val) => {
   }
 }
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
+// Best-effort Storage cleanup for uploaded images (cover photos, portraits,
+// faction logos) belonging to a record that's being deleted. A failed delete
+// here must never block the record's own deletion — just log and continue,
+// matching this file's other best-effort local-storage patterns.
+const deleteMediaUrls = (urls) => {
+  const seen = new Set()
+  urls.forEach(url => {
+    if (!url || seen.has(url)) return
+    seen.add(url)
+    deleteUserMedia(url).catch(() => {})
+  })
+}
 const countWords = value => {
   if (!value || typeof value !== 'string') return 0
   return value.trim().match(/\S+/g)?.length || 0
@@ -533,6 +546,28 @@ export function useStore(userId = null, options = {}) {
   // 'syncing' → 'synced' transition instead of flickering per-entity.
   const syncPendingRef = useRef(0)
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', lastSyncedAt: null, lastError: null })
+
+  // Total storage usage = uploaded media (DB-authoritative counter, maintained
+  // by a trigger on the user-media Storage bucket) + text/JSON content (still
+  // estimated client-side, same as before images moved out of the JSON blob).
+  // Refetching the media half on login and after any upload/delete keeps the
+  // Storage settings UI and upload-time/creation-time quota checks accurate.
+  const [storageMediaBytes, setStorageMediaBytes] = useState(0)
+  const refreshStorageUsedBytes = useCallback(async () => {
+    if (!canSyncCloud) { setStorageMediaBytes(0); return 0 }
+    const used = await getUserStorageUsage(userId)
+    setStorageMediaBytes(used)
+    return used
+  }, [canSyncCloud, userId])
+  useEffect(() => { refreshStorageUsedBytes().catch(console.error) }, [refreshStorageUsedBytes])
+  const storageUsedBytes = useMemo(() => storageMediaBytes + estimateStoreSize({
+    novels, characters, factions, locations, timeline, worldHistory,
+    acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards,
+    series, storySchedule,
+  }), [
+    storageMediaBytes, novels, characters, factions, locations, timeline, worldHistory,
+    acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards, series, storySchedule,
+  ])
 
   // Surfaces a UI warning when browser storage (localStorage) can't keep up —
   // e.g. quota exceeded from many populated projects. save() flags failing
@@ -1642,8 +1677,10 @@ export function useStore(userId = null, options = {}) {
     )))
   }
   const deleteCharacter = (id, options = {}) => {
+    const beforeDelete = charactersRef.current
     const deletedIds = deleteSeriesSyncedItem(charactersRef, setCharacters, 'characters', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    deleteMediaUrls(beforeDelete.filter(c => deletedSet.has(c.id)).map(c => c.image))
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('characters', userId, dId).catch(console.error))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => {
       return prev
@@ -1698,8 +1735,10 @@ export function useStore(userId = null, options = {}) {
   }
 
   const deleteFaction = (id, options = {}) => {
+    const beforeDelete = factionsRef.current
     const deletedIds = deleteSeriesSyncedItem(factionsRef, setFactions, 'factions', id, options)
     const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    deleteMediaUrls(beforeDelete.filter(f => deletedSet.has(f.id)).map(f => f.logo?.image))
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('factions', userId, dId).catch(console.error))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
       deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
@@ -2232,6 +2271,7 @@ export function useStore(userId = null, options = {}) {
     return s
   }
   const deleteSeries = (id) => {
+    deleteMediaUrls([series.find(s => s.id === id)?.coverPhoto])
     if (canSyncCloud) deleteItem('series_items', userId, id).catch(console.error)
     setSeries(prev => prev.filter(s => s.id !== id))
     setNovels(prev => prev.map(n => n.seriesId === id ? { ...n, seriesId: null } : n))
@@ -2255,6 +2295,13 @@ export function useStore(userId = null, options = {}) {
   })
   const deleteNovel = (id) => {
     if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return }
+    const deletedNovel = novelsRef.current.find(n => n.id === id)
+    deleteMediaUrls([
+      deletedNovel?.coverPhoto,
+      deletedNovel?.bannerImage,
+      ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
+      ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
+    ])
     const updatedNovels = novelsRef.current.filter(n => n.id !== id)
     commitLocal(novelsRef, setNovels, 'nf_novels', updatedNovels)
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.filter(c => c.novelId !== id))
@@ -2485,11 +2532,7 @@ export function useStore(userId = null, options = {}) {
 
   const storageExceededCheck = () => {
     if (!storageQuotaBytes) return false
-    const used = estimateStoreSize({
-      novels, characters, factions, locations, timeline, worldHistory,
-      acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards,
-      series, storySchedule,
-    })
+    const used = storageUsedBytes
     if (used >= storageQuotaBytes) {
       notifyReadOnly('storage-exceeded', { usedBytes: used, quotaBytes: storageQuotaBytes })
       return true
@@ -2566,6 +2609,7 @@ export function useStore(userId = null, options = {}) {
     getLocalSnapshot: getCurrentSnapshot,
     syncStatus, trackSync, flushPendingSync,
     localStorageWarning,
+    userId, storageQuotaBytes, storageUsedBytes, refreshStorageUsedBytes,
   }
 
   if (!readOnly) return api

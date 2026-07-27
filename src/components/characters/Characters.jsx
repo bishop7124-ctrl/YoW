@@ -6,7 +6,7 @@ import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } 
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { allRefsFor } from '../../utils/worldLinks'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
-import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { groupFamilyRelationships } from '../../utils/familyRelationships'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
@@ -328,7 +328,7 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
   )
 }
 
-function CharacterForm({ initial, onSave, onCancel, factions, characters, currentYear, initialTab = 'overview' }) {
+function CharacterForm({ initial, onSave, onCancel, factions, characters, currentYear, initialTab = 'overview', store }) {
   const initialChildIds = getChildIds(initial, characters)
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -376,6 +376,9 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   const [keywordInput, setKeywordInput] = useState('')
   const [showPhotoEditor, setShowPhotoEditor] = useState(false)
   const [imageError, setImageError] = useState('')
+  // Tracks a freshly uploaded-but-unsaved portrait so it can be cleaned up
+  // from Storage if it's replaced again or the form is cancelled.
+  const pendingUploadRef = useRef(null)
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0]
@@ -383,11 +386,33 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     if (!file) return
     try {
       setImageError('')
-      const image = await optimizeImageToDataUrl(file)
+      const image = await uploadUserMedia(file, {
+        userId: store?.userId,
+        category: 'characters',
+        currentUsedBytes: store?.storageUsedBytes,
+        quotaBytes: store?.storageQuotaBytes,
+      })
+      if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = image
+      store?.refreshStorageUsedBytes().catch(console.error)
       setForm(prev => ({ ...prev, image, imagePosition: '50% 50%', imageZoom: 1 }))
     } catch (error) {
       setImageError(error instanceof Error ? error.message : 'Could not use that image.')
     }
+  }
+
+  const handleRemoveImage = () => {
+    if (pendingUploadRef.current) {
+      deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = null
+      store?.refreshStorageUsedBytes().catch(console.error)
+    }
+    setForm(prev => ({ ...prev, image: '', imagePosition: '50% 50%', imageZoom: 1 }))
+  }
+
+  const handleCancel = () => {
+    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+    onCancel()
   }
 
   const handleChange = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
@@ -599,7 +624,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                     </button>
                     <button
                       type="button"
-                      onClick={() => setForm(prev => ({ ...prev, image: '', imagePosition: '50% 50%', imageZoom: 1 }))}
+                      onClick={handleRemoveImage}
                       className="text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors"
                     >
                       Remove
@@ -800,7 +825,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
           <button type="submit" className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded hover:opacity-90">
             Save Character
           </button>
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)]">
+          <button type="button" onClick={handleCancel} className="px-4 py-2 text-[var(--text-muted)]">
             Cancel
           </button>
         </div>
@@ -926,7 +951,10 @@ export default function Characters({ store }) {
   const activeProfileTab = profileTabs.some(([id]) => id === profileTab) ? profileTab : 'overview'
 
   const handleSave = (formData, savedEditorTab) => {
+    const previousImage = editTarget?.image
+    if (previousImage && previousImage !== formData.image) deleteUserMedia(previousImage).catch(console.error)
     const savedId = saveCharacter(formData, editTarget?.id || null)
+    store.refreshStorageUsedBytes?.().catch(console.error)
     setShowForm(false)
     setEditTarget(null)
     if (savedId) {
@@ -1252,6 +1280,7 @@ export default function Characters({ store }) {
             characters={characters}
             currentYear={currentYear}
             initialTab={editTarget ? activeProfileTab : 'overview'}
+            store={store}
           />
         </Modal>
       )}

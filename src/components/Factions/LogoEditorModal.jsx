@@ -6,7 +6,7 @@ import LogoBuilder from './LogoBuilder'
 // and so it isn't wired into StudioSheet's form-submit/dirty-tracking, which
 // doesn't apply here since every edit already writes straight through to the
 // caller's state via onChange.
-export default function LogoEditorModal({ logo, onChange, onClose }) {
+export default function LogoEditorModal({ logo, onChange, onClose, store }) {
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -31,7 +31,7 @@ export default function LogoEditorModal({ logo, onChange, onClose }) {
           <button type="button" onClick={onClose} aria-label="Close">×</button>
         </header>
         <div className="studio-sheet-body">
-          <LogoBuilder logo={logo} onChange={onChange} canvasSize={320} />
+          <LogoBuilder logo={logo} onChange={onChange} canvasSize={320} store={store} />
         </div>
       </section>
     </div>

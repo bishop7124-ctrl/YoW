@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import {
   RACES, CLASSES, BACKGROUNDS, ALIGNMENTS, ABILITY_KEYS, ABILITY_SHORT,
   STANDARD_ARRAY, POINT_BUY_COSTS, POINT_BUY_BUDGET, STARTING_EQUIPMENT,
@@ -27,24 +28,6 @@ const toSpellEntry = (spell) => ({
   description: spell.desc || '',
 })
 
-const resizePortrait = (file) => new Promise((resolve, reject) => {
-  const img = new Image()
-  const url = URL.createObjectURL(file)
-  img.onload = () => {
-    URL.revokeObjectURL(url)
-    const size = 400
-    const scale = Math.min(size / img.width, size / img.height)
-    const w = Math.round(img.width * scale)
-    const h = Math.round(img.height * scale)
-    const canvas = document.createElement('canvas')
-    canvas.width = w; canvas.height = h
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-    resolve(canvas.toDataURL('image/jpeg', 0.82))
-  }
-  img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not load image')) }
-  img.src = url
-})
-
 function rollAbilityScore() {
   const rolls = [1,2,3,4].map(() => Math.floor(Math.random() * 6) + 1).sort((a, b) => a - b)
   return rolls.slice(1).reduce((a, b) => a + b, 0)
@@ -52,7 +35,7 @@ function rollAbilityScore() {
 
 // ─── Step 1: Basics ──────────────────────────────────────────────────────────
 
-function StepBasics({ data, onChange }) {
+function StepBasics({ data, onChange, store, pendingUploadRef }) {
   const [portraitError, setPortraitError] = useState('')
 
   const handlePortrait = async (e) => {
@@ -62,9 +45,18 @@ function StepBasics({ data, onChange }) {
     if (!file.type.startsWith('image/')) { setPortraitError('Please select an image file.'); return }
     try {
       setPortraitError('')
-      const portrait = await resizePortrait(file)
+      const portrait = await uploadUserMedia(file, {
+        userId: store?.userId,
+        category: 'characters',
+        currentUsedBytes: store?.storageUsedBytes,
+        quotaBytes: store?.storageQuotaBytes,
+        maxDimension: 400,
+      })
+      if (pendingUploadRef?.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      if (pendingUploadRef) pendingUploadRef.current = portrait
+      store?.refreshStorageUsedBytes().catch(console.error)
       onChange({ portrait })
-    } catch { setPortraitError('Could not load that image.') }
+    } catch (error) { setPortraitError(error instanceof Error ? error.message : 'Could not load that image.') }
   }
 
   return (
@@ -735,8 +727,15 @@ function Field({ label, children }) {
 
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
 
-export default function CharacterWizard({ novelId, onSave, onCancel }) {
+export default function CharacterWizard({ novelId, onSave, onCancel, store }) {
   const [rawStep, setStep] = useState(0)
+  // Tracks a freshly uploaded-but-unsaved portrait so it can be cleaned up
+  // from Storage if it's replaced again or the wizard is cancelled.
+  const pendingUploadRef = useRef(null)
+  const handleCancel = () => {
+    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+    onCancel()
+  }
   // Empty, not the shared 'New Adventurer' fallback name: the field shows it
   // as literal pre-filled text (no auto-select-on-focus), so a user who
   // clicks in and starts typing without clearing it first ends up with
@@ -832,7 +831,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
   }
 
   const stepComponentMap = {
-    basics: <StepBasics data={draft} onChange={patch} />,
+    basics: <StepBasics data={draft} onChange={patch} store={store} pendingUploadRef={pendingUploadRef} />,
     race: <StepRace data={draft} onChange={patch} />,
     class: <StepClass data={draft} onChange={patch} />,
     scores: <StepScores data={draft} onChange={patch} />,
@@ -848,7 +847,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
       background: 'rgba(0,0,0,0.65)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24,
-    }} onClick={e => e.target === e.currentTarget && onCancel()}>
+    }} onClick={e => e.target === e.currentTarget && handleCancel()}>
       <div style={{
         background: 'var(--bg-nav)',
         border: '1px solid color-mix(in srgb, var(--border) 70%, transparent)',
@@ -870,7 +869,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
               <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Character Builder</p>
               <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>Create New Character</p>
             </div>
-            <button onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+            <button onClick={handleCancel} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}>✕</button>
           </div>
           {/* Step indicators */}
           <div style={{ display: 'flex', gap: 0 }}>
@@ -912,7 +911,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel }) {
               >← Back</button>
             )}
             <button
-              onClick={onCancel}
+              onClick={handleCancel}
               style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
             >Cancel</button>
           </div>
