@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
-import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans } from './AiConfigRequired'
 import SegmentedControl from '../shared/SegmentedControl'
@@ -1035,6 +1035,17 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     }
     saveAiSettings(aiSettings, userId)
   }, [aiSettings, userId])
+  useEffect(() => {
+    // AI settings can also be changed from the account settings page while
+    // this panel stays mounted — reload so the chat doesn't keep sending to
+    // whatever provider/model was cached at panel-open time.
+    const handleAiSettingsUpdate = () => {
+      skipAiSettingsSave.current = true
+      setAiSettings(loadAiSettings(userId, DEFAULT_SETTINGS))
+    }
+    window.addEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
+    return () => window.removeEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
+  }, [userId])
   useEffect(() => {
     if (activeChatStorageKey.current !== chatStorageKey) {
       activeChatStorageKey.current = chatStorageKey

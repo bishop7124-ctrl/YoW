@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Modal from '../shared/Modal'
 import FactionLogo from './FactionLogo'
-import LogoBuilder from './LogoBuilder'
+import LogoEditorModal from './LogoEditorModal'
 
 const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] focus:border-[var(--accent)] outline-none transition-colors'
 const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-1.5'
@@ -12,6 +12,7 @@ const getMemberRoles = (faction) => faction?.memberRoles && typeof faction.membe
 export default function Factions({ store }) {
   const { factions, saveFaction, deleteFaction, characters, setSelectedCharacterId } = store
   const [showForm, setShowForm] = useState(false)
+  const [showLogoEditor, setShowLogoEditor] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [selectedFactionId, setSelectedFactionId] = useState(null)
   const [form, setForm] = useState(emptyForm())
@@ -231,10 +232,14 @@ export default function Factions({ store }) {
           <form onSubmit={handleSave} className="space-y-5 text-left">
             <div>
               <label className={LABEL}>Faction Logo</label>
-              <LogoBuilder
-                logo={form.logo}
-                onChange={logo => setForm(f => ({ ...f, logo }))}
-              />
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 flex items-center justify-center rounded-lg border border-[var(--border)] flex-shrink-0">
+                  <FactionLogo shapes={form.logo} size={52} />
+                </div>
+                <button type="button" onClick={() => setShowLogoEditor(true)} className="btn btn-secondary btn-sm">
+                  Edit Logo
+                </button>
+              </div>
             </div>
             <div>
               <label className={LABEL}>Faction Name</label>
@@ -249,6 +254,14 @@ export default function Factions({ store }) {
             </button>
           </form>
         </Modal>
+      )}
+
+      {showLogoEditor && (
+        <LogoEditorModal
+          logo={form.logo}
+          onChange={logo => setForm(f => ({ ...f, logo }))}
+          onClose={() => setShowLogoEditor(false)}
+        />
       )}
     </div>
   )

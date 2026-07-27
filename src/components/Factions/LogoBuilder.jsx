@@ -5,6 +5,10 @@ import { optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import SegmentedControl from '../shared/SegmentedControl'
 
 const uid = () => Math.random().toString(36).slice(2)
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+
+const MIN_SIZE = 6
+const MAX_SIZE = 46
 
 const SHAPES = [
   { type: 'circle',    label: 'Circle'    },
@@ -23,6 +27,16 @@ const SHAPES = [
   { type: 'lightning', label: 'Lightning' },
   { type: 'flame',     label: 'Flame'     },
   { type: 'teardrop',  label: 'Teardrop'  },
+  { type: 'heart',     label: 'Heart'     },
+  { type: 'crown',     label: 'Crown'     },
+  { type: 'sword',     label: 'Sword'     },
+  { type: 'axe',       label: 'Axe'       },
+  { type: 'tree',      label: 'Tree'      },
+  { type: 'banner',    label: 'Banner'    },
+  { type: 'leaf',      label: 'Leaf'      },
+  { type: 'key',       label: 'Key'       },
+  { type: 'gear',      label: 'Gear'      },
+  { type: 'sunburst',  label: 'Sunburst'  },
 ]
 
 const COLORS = [
@@ -46,8 +60,10 @@ const checkerboard = {
   backgroundSize: '16px 16px',
 }
 
-export default function LogoBuilder({ logo, onChange }) {
+export default function LogoBuilder({ logo, onChange, canvasSize = 176 }) {
   const uploadInputRef = useRef(null)
+  const svgRef = useRef(null)
+  const dragRef = useRef(null)
   const [selectedIdx, setSelectedIdx] = useState(null)
   const [uploadError, setUploadError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
@@ -58,7 +74,7 @@ export default function LogoBuilder({ logo, onChange }) {
   const updateLogo = (updates) => onChange({ ...logoData, ...updates })
 
   const addShape = (type) => {
-    const newShape = { id: uid(), type, cx: 50, cy: 50, size: 30, color: '#ffffff' }
+    const newShape = { id: uid(), type, cx: 50, cy: 50, size: 30, color: '#ffffff', opacity: 1 }
     const next = [...shapes, newShape]
     updateLogo({ shapes: next })
     setSelectedIdx(next.length - 1)
@@ -68,6 +84,52 @@ export default function LogoBuilder({ logo, onChange }) {
     if (selectedIdx === null) return
     updateLogo({ shapes: shapes.map((s, i) => i === selectedIdx ? { ...s, ...updates } : s) })
   }
+
+  // Converts a pointer event's screen coordinates into the SVG's 0-100 viewBox
+  // space, so drag math works regardless of how large the canvas is rendered.
+  const clientToSvgPoint = (clientX, clientY) => {
+    const svg = svgRef.current
+    const ctm = svg?.getScreenCTM()
+    if (!svg || !ctm) return { x: 0, y: 0 }
+    const pt = svg.createSVGPoint()
+    pt.x = clientX
+    pt.y = clientY
+    const transformed = pt.matrixTransform(ctm.inverse())
+    return { x: transformed.x, y: transformed.y }
+  }
+
+  const startMove = (e, idx) => {
+    e.stopPropagation()
+    setSelectedIdx(idx)
+    const shape = shapes[idx]
+    const p = clientToSvgPoint(e.clientX, e.clientY)
+    dragRef.current = { mode: 'move', idx, offsetX: p.x - shape.cx, offsetY: p.y - shape.cy }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const startResize = (e, idx) => {
+    e.stopPropagation()
+    const shape = shapes[idx]
+    dragRef.current = { mode: 'resize', idx, cx: shape.cx, cy: shape.cy }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const handleDragMove = (e) => {
+    const drag = dragRef.current
+    if (!drag) return
+    const p = clientToSvgPoint(e.clientX, e.clientY)
+    if (drag.mode === 'move') {
+      const cx = clamp(p.x - drag.offsetX, 5, 95)
+      const cy = clamp(p.y - drag.offsetY, 5, 95)
+      updateLogo({ shapes: shapes.map((s, i) => i === drag.idx ? { ...s, cx, cy } : s) })
+    } else if (drag.mode === 'resize') {
+      const dist = Math.hypot(p.x - drag.cx, p.y - drag.cy)
+      const size = clamp(dist / Math.SQRT2, MIN_SIZE, MAX_SIZE)
+      updateLogo({ shapes: shapes.map((s, i) => i === drag.idx ? { ...s, size } : s) })
+    }
+  }
+
+  const endDrag = () => { dragRef.current = null }
 
   const removeAtIdx = (idx) => {
     updateLogo({ shapes: shapes.filter((_, i) => i !== idx) })
@@ -170,28 +232,53 @@ export default function LogoBuilder({ logo, onChange }) {
       {/* Canvas */}
       <div className="flex flex-col items-center gap-2 flex-shrink-0">
         <div
-          className="w-44 h-44 rounded-xl border-2 border-[var(--border)] relative overflow-hidden cursor-default select-none"
+          className="rounded-xl border-2 border-[var(--border)] relative overflow-hidden cursor-default select-none"
           onClick={() => setSelectedIdx(null)}
-          style={backgroundTransparent ? checkerboard : { backgroundColor }}
+          style={{ width: canvasSize, height: canvasSize, ...(backgroundTransparent ? checkerboard : { backgroundColor }) }}
         >
-          <svg viewBox="0 0 100 100" width="176" height="176">
+          <svg ref={svgRef} viewBox="0 0 100 100" width={canvasSize} height={canvasSize} style={{ touchAction: 'none' }}>
             {!backgroundTransparent && <rect width="100" height="100" fill={backgroundColor} />}
             {shapes.map((shape, i) => {
               const isSelected = i === selectedIdx
               return (
                 <g
                   key={shape.id || i}
-                  onClick={(e) => { e.stopPropagation(); setSelectedIdx(i) }}
-                  style={{ cursor: 'pointer' }}
+                  onPointerDown={(e) => startMove(e, i)}
+                  onPointerMove={handleDragMove}
+                  onPointerUp={endDrag}
+                  onPointerCancel={endDrag}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ cursor: 'move' }}
                 >
                   {getShapeElement(shape, {
                     stroke: isSelected ? '#ffffff' : 'none',
                     strokeWidth: isSelected ? 1.5 : 0,
-                    opacity: isSelected ? 1 : 0.9,
+                    opacity: (shape.opacity ?? 1) * (isSelected ? 1 : 0.9),
                   })}
                 </g>
               )
             })}
+            {selected && (
+              <g>
+                {[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => (
+                  <circle
+                    key={`${sx}-${sy}`}
+                    cx={selected.cx + sx * selected.size}
+                    cy={selected.cy + sy * selected.size}
+                    r={3.5}
+                    fill="#ffffff"
+                    stroke="#000000"
+                    strokeWidth={0.75}
+                    onPointerDown={(e) => startResize(e, selectedIdx)}
+                    onPointerMove={handleDragMove}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ cursor: sx * sy > 0 ? 'nwse-resize' : 'nesw-resize' }}
+                  />
+                ))}
+              </g>
+            )}
           </svg>
           {shapes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-white/20 text-xs pointer-events-none">
@@ -199,7 +286,7 @@ export default function LogoBuilder({ logo, onChange }) {
             </div>
           )}
         </div>
-        <span className="text-[10px] text-[var(--text-muted)] text-center">Click a shape to select it</span>
+        <span className="text-[10px] text-[var(--text-muted)] text-center">Drag a shape to move it, drag a corner to resize</span>
         {shapes.length > 0 && (
           <button type="button" onClick={clearAll} className="text-[10px] text-red-500/50 hover:text-red-500 transition-colors">
             Clear all
@@ -355,44 +442,22 @@ export default function LogoBuilder({ logo, onChange }) {
               </div>
             </div>
 
-            {/* Size */}
+            {/* Opacity */}
             <div>
               <div className="flex justify-between mb-1">
-                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Size</p>
-                <span className="text-[10px] text-[var(--text-muted)]">{selected.size}</span>
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Transparency</p>
+                <span className="text-[10px] text-[var(--text-muted)]">{Math.round((selected.opacity ?? 1) * 100)}%</span>
               </div>
               <input
-                type="range" min="6" max="46" value={selected.size}
-                onChange={e => update({ size: Number(e.target.value) })}
+                type="range" min="10" max="100" value={Math.round((selected.opacity ?? 1) * 100)}
+                onChange={e => update({ opacity: Number(e.target.value) / 100 })}
                 className="w-full h-1 accent-[var(--accent)]"
               />
             </div>
 
-            {/* Position */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="flex justify-between mb-1">
-                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">X</p>
-                  <span className="text-[10px] text-[var(--text-muted)]">{selected.cx}</span>
-                </div>
-                <input
-                  type="range" min="5" max="95" value={selected.cx}
-                  onChange={e => update({ cx: Number(e.target.value) })}
-                  className="w-full h-1 accent-[var(--accent)]"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between mb-1">
-                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Y</p>
-                  <span className="text-[10px] text-[var(--text-muted)]">{selected.cy}</span>
-                </div>
-                <input
-                  type="range" min="5" max="95" value={selected.cy}
-                  onChange={e => update({ cy: Number(e.target.value) })}
-                  className="w-full h-1 accent-[var(--accent)]"
-                />
-              </div>
-            </div>
+            <p className="text-[10px] text-[var(--text-muted)]">
+              Size {Math.round(selected.size)} · X {Math.round(selected.cx)} · Y {Math.round(selected.cy)}
+            </p>
 
             {/* Remove */}
             <div className="flex justify-end">

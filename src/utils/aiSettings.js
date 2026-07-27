@@ -4,6 +4,10 @@ export const AI_SETTINGS_KEY = 'nf_aiSettings'
 export const AI_SETTINGS_OWNER_KEY = 'nf_aiSettingsOwner'
 export const LEGACY_AI_SETTINGS_KEY = 'nf-ai-settings'
 export const LOCAL_OWNER_KEY = 'nf_localOwner'
+// Fired whenever AI settings are saved, so any other mounted component
+// holding its own copy (the chat panel, account settings) can reload it
+// instead of continuing to act on a stale in-memory snapshot.
+export const AI_SETTINGS_EVENT = 'nf-ai-settings-updated'
 const PROVIDER_IDS = ['google', 'anthropic', 'openrouter', 'openai']
 
 export const DEFAULT_AI_SETTINGS = {
@@ -61,6 +65,7 @@ export function saveAiSettings(settings, userId = null) {
   localStorage.removeItem(LEGACY_AI_SETTINGS_KEY)
   if (userId) localStorage.setItem(AI_SETTINGS_OWNER_KEY, userId)
   else localStorage.removeItem(AI_SETTINGS_OWNER_KEY)
+  window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT))
 }
 
 export function clearAiSettings() {

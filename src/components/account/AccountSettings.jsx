@@ -10,7 +10,7 @@ import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
-import { DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import AIStar from '../ai/AIStar'
 import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 import { isDesktopAppRuntime } from '../../utils/runtime'
@@ -1431,6 +1431,15 @@ function AISettingsPanel({ userId, membership }) {
   useEffect(() => {
     setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
     setKeyDrafts({})
+  }, [userId])
+
+  useEffect(() => {
+    // The chat panel (AIPanel) has its own copy of these settings and can
+    // save changes while this page is also open — reload so this page
+    // doesn't show/overwrite with a stale snapshot.
+    const handleAiSettingsUpdate = () => setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
+    window.addEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
+    return () => window.removeEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
   }, [userId])
 
   const active = settings.activeProvider
