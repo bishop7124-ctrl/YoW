@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkRateLimit, validateFeedbackBody } from './submit-feedback.js'
+import { checkRateLimit, validateFeedbackBody } from '../../api/submit-feedback.js'
 
 const validBody = { type: 'support', title: 'Hello', message: 'Something broke.' }
 

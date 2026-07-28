@@ -10,6 +10,9 @@ import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { groupFamilyRelationships } from '../../utils/familyRelationships'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
+import CharacterInterview from '../aitools/CharacterInterview'
+import { AIToolsUpgradeWall } from '../aitools/AITools'
+import AIStar from '../ai/AIStar'
 
 // The Fix: uses theme variables so all 4 themes apply correctly
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
@@ -889,7 +892,7 @@ function FamilyRelationshipNames({ label, items, characters }) {
   )
 }
 
-export default function Characters({ store }) {
+export default function Characters({ store, userId, membership }) {
   const { characters, saveCharacter, saveCharacterJourney, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions, currentYear, loreEntries = [], timeline = [], chapters = [], scenes = [], setSelectedLoreEntryId } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name-asc')
@@ -898,6 +901,7 @@ export default function Characters({ store }) {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [profileTab, setProfileTab] = useState('overview')
+  const [showChatModal, setShowChatModal] = useState(false)
 
   // Unique family groups for the filter dropdown
   const familyGroups = [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort()
@@ -964,13 +968,12 @@ export default function Characters({ store }) {
     }
   }
 
-  const openCharacterChat = () => {
-    if (!selected) return
-    setSelectedCharacterId(selected.id)
-    try { sessionStorage.setItem('yow_open_ai_character_chat', selected.id) } catch { /* best effort */ }
-    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'aitools' } }))
-    window.dispatchEvent(new CustomEvent('open-ai-character-chat', { detail: { characterId: selected.id } }))
-  }
+  useEffect(() => {
+    if (!showChatModal) return
+    const handler = e => { if (e.key === 'Escape') setShowChatModal(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [showChatModal])
 
   const getCharacterFaction = (char) => char?.factionId ? factions.find(f => f.id === char.factionId) : null
   const selectedFaction = getCharacterFaction(selected)
@@ -1084,7 +1087,6 @@ export default function Characters({ store }) {
               meta={[selected.role, selected.pronouns, selectedAge ? `Age ${selectedAge}` : null].filter(Boolean).join(' · ') || 'Character'}
               actions={(
                 <>
-                  <StudioButton tone="primary" size="sm" onClick={openCharacterChat}>Chat with character</StudioButton>
                   <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(selected); setShowForm(true); }}>Edit</StudioButton>
                   <StudioButton tone="secondary" size="sm" onClick={() => {
                     if (!confirm('Delete this character?')) return
@@ -1129,8 +1131,12 @@ export default function Characters({ store }) {
                 {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
               </div>
             </StudioPageHeader>
-            <div className="mb-5">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <TabStrip tabs={profileTabs} activeTab={activeProfileTab} onChange={setProfileTab} />
+              <StudioButton tone="primary" size="sm" className="flex items-center gap-1.5" onClick={() => setShowChatModal(true)}>
+                <AIStar size={13} />
+                Chat with character
+              </StudioButton>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -1283,6 +1289,37 @@ export default function Characters({ store }) {
             store={store}
           />
         </Modal>
+      )}
+
+      {showChatModal && selected && (
+        <div className="studio-sheet-backdrop is-centered" onClick={() => setShowChatModal(false)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Chat with ${selected.name}`}
+            className="studio-sheet is-centered"
+            style={{ height: 'min(680px, calc(100vh - 52px))' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <header>
+              <div className="flex items-center gap-2">
+                <AIStar size={16} className="text-[var(--accent)]" />
+                <div>
+                  <p className="studio-kicker">AI character chat</p>
+                  <h2>{selected.name}</h2>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowChatModal(false)} aria-label="Close">×</button>
+            </header>
+            <div className="studio-sheet-body" style={{ padding: 0 }}>
+              {membership?.isFree ? (
+                <AIToolsUpgradeWall />
+              ) : (
+                <CharacterInterview store={store} userId={userId} />
+              )}
+            </div>
+          </section>
+        </div>
       )}
     </StudioSplit>
   )

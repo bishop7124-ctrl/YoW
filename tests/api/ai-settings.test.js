@@ -53,7 +53,7 @@ describe('ai-settings handler', () => {
     from.mockClear()
     tableResults.length = 0
     vi.resetModules()
-    const mod = await import('./ai-settings.js')
+    const mod = await import('../../api/ai-settings.js')
     handler = mod.default
     encryptSettings = mod.encryptSettings
     decryptSettings = mod.decryptSettings

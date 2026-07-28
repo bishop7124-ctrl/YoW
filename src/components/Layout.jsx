@@ -999,7 +999,7 @@ export default function Layout({
   const databaseContent = {
     dashboard:    <ProjectDashboard store={store} />,
     outline:      <StoryOutline store={store} />,
-    characters:   <Characters store={store} />,
+    characters:   <Characters store={store} userId={userId} membership={membership} />,
     relationships: <RelationshipMap store={store} />,
     familytree:   <FamilyTree store={store} />,
     factions:     <Factions store={store} />,

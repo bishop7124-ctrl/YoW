@@ -34,7 +34,7 @@ function staticHtmlMiddleware() {
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.{js,jsx}', 'api/**/*.test.js'],
+    include: ['src/**/*.test.{js,jsx}', 'tests/api/**/*.test.js'],
   },
   plugins: [react(), staticHtmlMiddleware()],
   build: {

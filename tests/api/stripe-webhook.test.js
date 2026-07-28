@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getCurrentPeriodEnd } from './stripe-webhook.js'
+import { getCurrentPeriodEnd } from '../../api/stripe-webhook.js'
 
 // ─── getCurrentPeriodEnd ─────────────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ describe('handler — early rejection', () => {
 
     // Re-import fresh each test (vi.resetModules clears the module registry)
     vi.resetModules()
-    const mod = await import('./stripe-webhook.js')
+    const mod = await import('../../api/stripe-webhook.js')
     handler = mod.default
   })
 

@@ -50,7 +50,7 @@ describe('desktop-devices handler', () => {
     from.mockClear()
     tableResults.length = 0
     vi.resetModules()
-    const mod = await import('./desktop-devices.js')
+    const mod = await import('../../api/desktop-devices.js')
     handler = mod.default
     buildEntitlementRecord = mod.buildEntitlementRecord
     signEntitlementRecord = mod.signEntitlementRecord

@@ -58,7 +58,7 @@ const TOOLS = [
   },
 ]
 
-function AIToolsUpgradeWall() {
+export function AIToolsUpgradeWall() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 12, padding: 40, textAlign: 'center' }}>
       <AIStar size={36} style={{ opacity: 0.4 }} />

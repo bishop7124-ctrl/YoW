@@ -30,7 +30,7 @@ describe('get-download-links handler', () => {
     process.env.DESKTOP_APP_VERSION = '0.1.0'
     getUser.mockReset()
     vi.resetModules()
-    const mod = await import('./get-download-links.js')
+    const mod = await import('../../api/get-download-links.js')
     handler = mod.default
   })
 
@@ -84,7 +84,7 @@ describe('get-download-links handler', () => {
   it('omits platforms whose download URL is not configured', async () => {
     delete process.env.DESKTOP_DOWNLOAD_URL_WINDOWS
     vi.resetModules()
-    handler = (await import('./get-download-links.js')).default
+    handler = (await import('../../api/get-download-links.js')).default
     getUser.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'founder' } } }, error: null })
     const res = makeRes()
     await handler(makeReq(), res)
