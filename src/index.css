@@ -19213,9 +19213,7 @@ body {
 
 /* ── Feature section / tabbed interface ── */
 .yow-feature-section {
-  background:
-    radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 40%),
-    color-mix(in srgb, var(--bg-nav) 15%, transparent);
+  background: transparent;
 }
 
 .yow-feature-interface {

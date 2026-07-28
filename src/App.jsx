@@ -29,6 +29,7 @@ import FounderProfilePage from './components/founders/FounderProfilePage'
 import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
+import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
 import DesktopUpgradeWall from './components/desktop/DesktopUpgradeWall'
 import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
@@ -391,6 +392,29 @@ function AppInner() {
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desktopApp, userId, membership.isDesktopEntitled])
+
+  // Desktop local vault (Storage layer): main.jsx attempts to connect the
+  // local SQLite vault before this component ever mounts, so by render time
+  // we already know whether it succeeded. A failed connection silently falls
+  // back to the browser's small localStorage cap, which is what actually
+  // trips the generic "storage is full" warning below — this banner tells
+  // the user the real cause and offers a one-click reconnect that migrates
+  // anything written to the fallback in the meantime.
+  const [desktopVaultError, setDesktopVaultError] = useState(() => (desktopApp ? getDesktopVaultInitError() : null))
+  const [desktopVaultRetryBusy, setDesktopVaultRetryBusy] = useState(false)
+  const handleRetryDesktopVault = async () => {
+    setDesktopVaultRetryBusy(true)
+    try {
+      await retryDesktopVaultStorage({
+        onWriteError: error => console.error('[YOW] Desktop vault write failed', error),
+      })
+    } catch (error) {
+      console.error('[YOW] Desktop vault reconnect failed', error)
+    } finally {
+      setDesktopVaultError(getDesktopVaultInitError())
+      setDesktopVaultRetryBusy(false)
+    }
+  }
 
   // Desktop auto-update (Phase 6): opportunistic check on startup. Never
   // blocks the app — offline or no release published yet both resolve to
@@ -972,7 +996,7 @@ function AppInner() {
           )}
         </div>
       )}
-      {store.localStorageWarning && !localStorageWarningDismissed && (
+      {store.localStorageWarning && !localStorageWarningDismissed && !(desktopApp && desktopVaultError) && (
         <div role="alert" className="membership-toast">
           <span>
             Your browser's local storage is full, so this device may not be keeping a reliable local copy of recent edits.
@@ -1003,6 +1027,29 @@ function AppInner() {
           </button>
           <button type="button" className="membership-toast-link" onClick={dismissLocalModeNotice}>
             Dismiss
+          </button>
+        </div>
+      )}
+      {desktopApp && desktopVaultError && (
+        <div role="alert" className="membership-toast">
+          <span>
+            Your local vault couldn't be reached, so recent edits are being kept in a small temporary space on this device instead.
+            {' '}Reconnect to move them into your vault.
+          </span>
+          <button
+            type="button"
+            className="membership-toast-link"
+            disabled={desktopVaultRetryBusy}
+            onClick={handleRetryDesktopVault}
+          >
+            {desktopVaultRetryBusy ? 'Reconnecting…' : 'Reconnect vault'}
+          </button>
+          <button
+            type="button"
+            className="membership-toast-link"
+            onClick={() => { setAccountTab('membership'); setAccountOpen(true) }}
+          >
+            Storage settings
           </button>
         </div>
       )}
