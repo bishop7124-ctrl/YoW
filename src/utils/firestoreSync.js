@@ -127,15 +127,26 @@ export async function loadUserData(userId) {
     eras:            [],
   }
 
+  // A partial failure here must never be treated as "this project has no
+  // data" — a project with real content whose characters query happened to
+  // fail would otherwise render as silently empty, indistinguishable from an
+  // actually-empty account. Collect failures and throw once every table has
+  // been checked, so the caller can show a retry prompt instead of hydrating
+  // the store with zeroed-out categories.
+  const failedTables = []
   APP_DATA_TABLES.forEach((table, i) => {
     const { data, error } = entityResults[i]
-    if (error) { console.warn(`[sync] load error for ${table}:`, error); return }
+    if (error) { console.warn(`[sync] load error for ${table}:`, error); failedTables.push(table); return }
     const key = TABLE_TO_KEY[table]
     result[key] = (data ?? []).map(row => row.data).filter(Boolean)
     ;(data ?? []).forEach(row => {
       remoteSavedAt = Math.max(remoteSavedAt, timestampMs(row.updated_at))
     })
   })
+
+  if (failedTables.length) {
+    throw new Error(`[sync] failed to load: ${failedTables.join(', ')}`)
+  }
 
   result._savedAt = remoteSavedAt
 
@@ -252,6 +263,7 @@ export async function deleteAllUserData(userId) {
     ...NOVEL_TABLES,
     'user_settings',
     'user_profiles',
+    'synced_ai_settings',
     'ai_findings',
     'character_interviews',
     'feedback',

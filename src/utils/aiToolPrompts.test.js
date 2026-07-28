@@ -8,6 +8,7 @@ import {
   buildInterviewSystemPrompt,
 } from './aiToolPrompts'
 import { buildSystemPrompt } from './aiApi'
+import { buildAiBehaviorDirective, getAgent, getFreedomLevel } from './aiAgents'
 
 describe('buildProjectTypePromptContext', () => {
   it('builds type-specific context for every active project type', () => {
@@ -42,6 +43,40 @@ describe('buildProjectTypePromptContext', () => {
     expect(prompt).toContain('Project type: Tabletop Campaign')
     expect(prompt).toContain('GM-side system-neutral tabletop campaign planning')
     expect(prompt).toContain('Campaign Arc > Session > Encounter')
+  })
+
+  it('sets a conversational quality bar for default creative chat', () => {
+    const prompt = buildSystemPrompt(
+      { title: 'Portal Sisters', type: 'novel' },
+      {},
+      {}
+    )
+
+    expect(prompt).toContain('collaborative story-room partner')
+    expect(prompt).toContain('ask one focused follow-up question')
+    expect(prompt).toContain('avoid large tables')
+    expect(prompt).toContain('Do not output corrupted placeholder text')
+    expect(prompt).toContain('cause/effect chains')
+  })
+
+  it('combines behavior mode and freedom level in AI chat prompts', () => {
+    const prompt = buildSystemPrompt(
+      { title: 'Portal Sisters', type: 'novel' },
+      {},
+      {},
+      buildAiBehaviorDirective('co-writer', 'wild')
+    )
+
+    expect(prompt).toContain('Act as a co-writer')
+    expect(prompt).toContain('Freedom level: Wild')
+    expect(prompt).toContain('alternate-continuity ideas')
+    expect(prompt).toContain('Keep canon, assumptions, and new inventions visibly distinct')
+  })
+
+  it('keeps old chat session agent ids compatible', () => {
+    expect(getAgent('plot-doctor').id).toBe('editor')
+    expect(getAgent('world-keeper').id).toBe('continuity')
+    expect(getFreedomLevel('not-real').id).toBe('balanced')
   })
 })
 

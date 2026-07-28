@@ -819,7 +819,22 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => {
     if (!canSyncCloud) return undefined
     registerSyncFlush(flushPendingSync)
-    return () => unregisterSyncFlush(flushPendingSync)
+    // Debounced cloud writes (2s for most entities) otherwise only flush before
+    // sign-out — a refresh or tab close during that window silently drops the
+    // edit, since the next login re-hydrates from whatever Supabase last had.
+    // Mirrors the local-storage backend's own pagehide/beforeunload/hidden
+    // flush pattern (see browserVaultAdapter.js's installFlushHandlers).
+    const flush = () => { flushPendingSync() }
+    window.addEventListener('pagehide', flush)
+    window.addEventListener('beforeunload', flush)
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      unregisterSyncFlush(flushPendingSync)
+      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('beforeunload', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [canSyncCloud, flushPendingSync])
 
   // Per-entity cloud sync effects — each only fires when its own collection changes

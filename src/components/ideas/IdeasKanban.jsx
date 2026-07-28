@@ -103,6 +103,116 @@ function IdeaCreateModal({ status, onClose, onAdd }) {
   )
 }
 
+// ─── AI expand preview modal ───────────────────────────────────────────────────
+
+function AiExpandPreviewModal({ idea, generated, onReplace, onMerge, onReject }) {
+  const original = (idea.description || idea.body || '').trim()
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1100,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,.6)',
+      }}
+      onClick={onReject}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '90vw',
+          maxWidth: 640,
+          maxHeight: '82vh',
+          background: 'var(--bg-nav)',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          boxShadow: '0 32px 96px rgba(0,0,0,.55)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '14px 20px',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <AIStar size={13} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>AI expand preview</span>
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={onReject}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', alignItems: 'center' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {original && (
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                Current description
+              </label>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+                {original}
+              </p>
+            </div>
+          )}
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+              AI suggestion
+            </label>
+            <p style={{
+              margin: 0, fontSize: 14, color: 'var(--text-main)', lineHeight: 1.7, whiteSpace: 'pre-wrap',
+              background: 'var(--accent-fade)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+              borderRadius: 10, padding: '12px 14px',
+            }}>
+              {generated}
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '14px 20px',
+          borderTop: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <button
+            type="button"
+            onClick={onReject}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit' }}
+          >
+            Reject
+          </button>
+          <div style={{ flex: 1 }} />
+          {original && (
+            <button
+              type="button"
+              onClick={onMerge}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: 'var(--text-main)', fontSize: 12, fontFamily: 'inherit' }}
+            >
+              Merge with current
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onReplace}
+            style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+          >
+            {original ? 'Replace' : 'Use suggestion'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Edit modal ───────────────────────────────────────────────────────────────
 
 function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
@@ -502,6 +612,7 @@ export default function IdeasKanban({ store, userId = null, membership = null })
   const [convertId, setConvertId] = useState(null)
   const [aiExpandId, setAiExpandId] = useState(null)
   const [aiExpandError, setAiExpandError] = useState('')
+  const [aiExpandPreview, setAiExpandPreview] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [createStatus, setCreateStatus] = useState(null)
 
@@ -669,8 +780,8 @@ export default function IdeasKanban({ store, userId = null, membership = null })
       }],
       onChunk: (chunk) => { result += chunk },
       onDone: () => {
-        handleUpdate(id, { description: result.trim(), body: result.trim(), aiExpanded: true })
         setAiExpandId(null)
+        setAiExpandPreview({ id, generated: result.trim() })
       },
       onError: (err) => {
         console.error('AI expand failed:', err)
@@ -678,7 +789,27 @@ export default function IdeasKanban({ store, userId = null, membership = null })
         setAiExpandId(null)
       },
     })
-  }, [ideas, handleUpdate, aiExpandId, userId, membership?.isFree])
+  }, [ideas, aiExpandId, userId, membership?.isFree])
+
+  const handleAiExpandReplace = useCallback(() => {
+    if (!aiExpandPreview) return
+    const text = aiExpandPreview.generated
+    handleUpdate(aiExpandPreview.id, { description: text, body: text, aiExpanded: true })
+    setAiExpandPreview(null)
+  }, [aiExpandPreview, handleUpdate])
+
+  const handleAiExpandMerge = useCallback(() => {
+    if (!aiExpandPreview) return
+    const idea = ideas.find(i => i.id === aiExpandPreview.id)
+    const original = (idea?.description || idea?.body || '').trim()
+    const merged = original ? `${original}\n\n${aiExpandPreview.generated}` : aiExpandPreview.generated
+    handleUpdate(aiExpandPreview.id, { description: merged, body: merged, aiExpanded: true })
+    setAiExpandPreview(null)
+  }, [aiExpandPreview, ideas, handleUpdate])
+
+  const handleAiExpandReject = useCallback(() => {
+    setAiExpandPreview(null)
+  }, [])
 
   // ── Drag & drop ──────────────────────────────────────────────────────────────
 
@@ -917,6 +1048,20 @@ export default function IdeasKanban({ store, userId = null, membership = null })
           readOnly={readOnly}
         />
       )}
+
+      {/* AI expand preview modal */}
+      {aiExpandPreview && (() => {
+        const previewIdea = ideas.find(i => i.id === aiExpandPreview.id)
+        return previewIdea ? (
+          <AiExpandPreviewModal
+            idea={previewIdea}
+            generated={aiExpandPreview.generated}
+            onReplace={handleAiExpandReplace}
+            onMerge={handleAiExpandMerge}
+            onReject={handleAiExpandReject}
+          />
+        ) : null
+      })()}
 
       {/* Create modal */}
       {createStatus && (

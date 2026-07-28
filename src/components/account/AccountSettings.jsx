@@ -11,6 +11,12 @@ import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
+import {
+  deleteSyncedAiSettings,
+  loadAiSettingsSyncEnabled,
+  saveAiSettingsSyncEnabled,
+  saveSyncedAiSettings,
+} from '../../utils/syncedAiSettings'
 import AIStar from '../ai/AIStar'
 import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 import { isDesktopAppRuntime } from '../../utils/runtime'
@@ -386,7 +392,7 @@ function DesktopVaultPanel() {
           : nextSnapshots?.[0]?.name || ''
       ))
     } catch (err) {
-      setError(err.message || 'Could not read local vault details.')
+      setError(typeof err === 'string' ? err : err?.message || 'Could not read local vault details.')
     }
   }
 
@@ -401,7 +407,7 @@ function DesktopVaultPanel() {
       setMessage(nextIntegrity?.ok ? 'Vault integrity check passed.' : 'Vault integrity check found a problem. Choose a snapshot to restore.')
       await refreshInfo()
     } catch (err) {
-      setError(err.message || 'Could not check vault integrity.')
+      setError(typeof err === 'string' ? err : err?.message || 'Could not check vault integrity.')
     } finally {
       setBusy('')
     }
@@ -423,7 +429,7 @@ function DesktopVaultPanel() {
       setMessage(`Snapshot created: ${snapshot?.path || 'Backups folder'}`)
       await refreshInfo()
     } catch (err) {
-      setError(err.message || 'Could not create a vault snapshot.')
+      setError(typeof err === 'string' ? err : err?.message || 'Could not create a vault snapshot.')
     } finally {
       setBusy('')
     }
@@ -436,7 +442,7 @@ function DesktopVaultPanel() {
     try {
       await revealDesktopVaultInFinder()
     } catch (err) {
-      setError(err.message || 'Could not reveal the vault in Finder.')
+      setError(typeof err === 'string' ? err : err?.message || 'Could not reveal the vault in Finder.')
     } finally {
       setBusy('')
     }
@@ -477,7 +483,7 @@ function DesktopVaultPanel() {
       setMessage('Snapshot restored. Reloading YOW...')
       window.setTimeout(() => window.location.reload(), 500)
     } catch (err) {
-      setError(err.message || 'Could not restore the selected snapshot.')
+      setError(typeof err === 'string' ? err : err?.message || 'Could not restore the selected snapshot.')
     } finally {
       setBusy('')
     }
@@ -1425,6 +1431,9 @@ function AISettingsPanel({ userId, membership }) {
   const [settings, setSettings] = useState(() => loadAiSettings(userId, DEFAULT_AI_SETTINGS))
   const [keyDrafts, setKeyDrafts] = useState({})
   const [saved, setSaved] = useState(false)
+  const [syncAcrossDevices, setSyncAcrossDevices] = useState(() => loadAiSettingsSyncEnabled())
+  const [syncError, setSyncError] = useState('')
+  const [saving, setSaving] = useState(false)
   const [openRouterModels, setOpenRouterModels] = useState(null) // null until loaded
   const [openRouterModelsFailed, setOpenRouterModelsFailed] = useState(false)
 
@@ -1463,17 +1472,36 @@ function AISettingsPanel({ userId, membership }) {
   const updateKeyDraft = (val) =>
     setKeyDrafts(prev => ({ ...prev, [active]: val }))
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return
     const settingsToSave = { ...settings }
     Object.entries(keyDrafts).forEach(([provider, value]) => {
       if (!value?.trim()) return
       settingsToSave[provider] = { ...settingsToSave[provider], apiKey: value.trim() }
     })
-    saveAiSettings(settingsToSave, userId)
-    setSettings(settingsToSave)
-    setKeyDrafts({})
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaving(true)
+    setSyncError('')
+    try {
+      if (syncAcrossDevices) {
+        await saveSyncedAiSettings(settingsToSave, userId)
+        saveAiSettingsSyncEnabled(true)
+      }
+      else {
+        await deleteSyncedAiSettings()
+        saveAiSettings(settingsToSave, userId)
+        saveAiSettingsSyncEnabled(false)
+      }
+      setSettings(settingsToSave)
+      setKeyDrafts({})
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (error) {
+      saveAiSettings(settingsToSave, userId)
+      setSettings(settingsToSave)
+      setSyncError(error.message || 'Saved on this device, but could not sync across devices.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const activeModelLabel = (() => {
@@ -1507,8 +1535,8 @@ function AISettingsPanel({ userId, membership }) {
           <h2>Model &amp; API keys</h2>
         </div>
         <div className="account-actions account-heading-actions">
-          <button type="button" onClick={handleSave} className="account-primary-button">
-            Save settings
+          <button type="button" onClick={handleSave} className="account-primary-button" disabled={saving}>
+            {saving ? 'Saving…' : 'Save settings'}
           </button>
           {saved && <span className="account-inline-success">Saved</span>}
         </div>
@@ -1682,6 +1710,33 @@ function AISettingsPanel({ userId, membership }) {
           )}
         </div>
       </div>
+
+      <label style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '12px 14px',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        background: 'var(--bg-main)',
+        cursor: 'pointer',
+      }}>
+        <input
+          type="checkbox"
+          checked={syncAcrossDevices}
+          onChange={e => setSyncAcrossDevices(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <span>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-main)' }}>Sync AI settings across signed-in devices</span>
+          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+            Stores an encrypted copy in your YOW account so web and desktop sessions can use the same provider and key.
+          </span>
+        </span>
+      </label>
+      {syncError && (
+        <p style={{ fontSize: 11, color: '#f87171', marginTop: 8, marginBottom: 0 }}>{syncError}</p>
+      )}
     </section>
   )
 }

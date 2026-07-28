@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiChatSessions } from '../../utils/aiChatHistory'
-import { AI_AGENTS, DEFAULT_AGENT_ID, getAgent } from '../../utils/aiAgents'
+import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
 
@@ -97,12 +97,31 @@ function AgentCard({ agent, selected, onSelect }) {
   )
 }
 
-function ContextSelector({ store, onStart, onCancel, initialContext, initialAgentId }) {
+function FreedomCard({ level, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+        selected
+          ? 'border-[var(--accent)] bg-[var(--accent-fade)]'
+          : 'border-[var(--border)] bg-[var(--bg-nav)] hover:border-[var(--accent)]/50'
+      }`}
+    >
+      <div className={`text-xs font-bold ${selected ? 'text-[var(--accent)]' : 'text-[var(--text-main)]'}`}>{level.label}</div>
+      <div className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{level.blurb}</div>
+    </button>
+  )
+}
+
+function ContextSelector({ store, onStart, onCancel, initialContext, initialAgentId, initialFreedomLevel }) {
   const defaultContext = {
     characterIds: [], locationIds: [], loreEntryIds: [], worldHistoryIds: [], chapterIds: [], customInstruction: '',
   }
   const [ctx, setCtx] = useState({ ...defaultContext, ...(initialContext || {}) })
   const [agentId, setAgentId] = useState(initialAgentId || DEFAULT_AGENT_ID)
+  const [freedomLevel, setFreedomLevel] = useState(initialFreedomLevel || DEFAULT_AI_FREEDOM_LEVEL)
 
   const toggle = (field, id) => setCtx(prev => {
     const arr = prev[field] || []
@@ -175,10 +194,19 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         <div>
-          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Support style</label>
+          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Behavior mode</label>
           <div className="grid grid-cols-2 gap-2">
             {AI_AGENTS.map(agent => (
               <AgentCard key={agent.id} agent={agent} selected={agentId === agent.id} onSelect={() => setAgentId(agent.id)} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Creative freedom</label>
+          <div className="grid grid-cols-2 gap-2">
+            {AI_FREEDOM_LEVELS.map(level => (
+              <FreedomCard key={level.id} level={level} selected={freedomLevel === level.id} onSelect={() => setFreedomLevel(level.id)} />
             ))}
           </div>
         </div>
@@ -285,7 +313,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
 
       <div className="px-4 py-3 border-t border-[var(--border)] flex gap-2 flex-shrink-0">
         <button
-          onClick={() => onStart(ctx, agentId)}
+          onClick={() => onStart(ctx, agentId, freedomLevel)}
           className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded text-sm hover:opacity-90"
         >
           Start Chat{total > 0 ? ` · ${total} item${total !== 1 ? 's' : ''}` : ''}
@@ -435,11 +463,11 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     [store, session.novelId]
   )
 
-  const agent = getAgent(session.agentId)
+  const freedom = getFreedomLevel(session.freedomLevel)
 
   const systemPrompt = useMemo(
-    () => buildSystemPrompt(promptStore.activeNovel, session.context, promptStore, agent.directive),
-    [promptStore, session.context, agent.directive]
+    () => buildSystemPrompt(promptStore.activeNovel, session.context, promptStore, buildAiBehaviorDirective(session.agentId, session.freedomLevel)),
+    [promptStore, session.context, session.agentId, session.freedomLevel]
   )
 
   const send = async () => {
@@ -545,10 +573,18 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             <select
               value={session.agentId || DEFAULT_AGENT_ID}
               onChange={e => onUpdate(session.id, { agentId: e.target.value })}
-              title="Support style"
+              title="Behavior mode"
               className="text-[10px] bg-transparent border border-[var(--border)] rounded px-1.5 py-0.5 text-[var(--text-muted)] outline-none focus:border-[var(--accent)] hover:text-[var(--text-main)] transition-colors"
             >
               {AI_AGENTS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+            <select
+              value={freedom.id}
+              onChange={e => onUpdate(session.id, { freedomLevel: e.target.value })}
+              title="Creative freedom"
+              className="text-[10px] bg-transparent border border-[var(--border)] rounded px-1.5 py-0.5 text-[var(--text-muted)] outline-none focus:border-[var(--accent)] hover:text-[var(--text-main)] transition-colors"
+            >
+              {AI_FREEDOM_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
             </select>
             {contextCount > 0 && (
               <span className="text-[10px] text-[var(--accent)]">{contextCount} context item{contextCount !== 1 ? 's' : ''}</span>
@@ -796,6 +832,9 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
                     {s.agentId && s.agentId !== DEFAULT_AGENT_ID && (
                       <div className="text-[10px] text-[var(--text-muted)]">{getAgent(s.agentId).label}</div>
                     )}
+                    {s.freedomLevel && s.freedomLevel !== DEFAULT_AI_FREEDOM_LEVEL && (
+                      <div className="text-[10px] text-[var(--text-muted)]">{getFreedomLevel(s.freedomLevel).label}</div>
+                    )}
                     {total > 0 && <div className="text-[10px] text-[var(--accent)]">{total} context item{total !== 1 ? 's' : ''}</div>}
                     {isEditingCat ? (
                       <input
@@ -973,10 +1012,10 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
 
   const handleNewChat = () => setView('context')
 
-  const handleContextConfirm = (ctx, agentId) => {
+  const handleContextConfirm = (ctx, agentId, freedomLevel) => {
     const session = {
       id: uid(), novelId, title: `Chat ${sessions.length + 1}`,
-      context: ctx, agentId: agentId || DEFAULT_AGENT_ID, messages: [], createdAt: Date.now(),
+      context: ctx, agentId: agentId || DEFAULT_AGENT_ID, freedomLevel: freedomLevel || DEFAULT_AI_FREEDOM_LEVEL, messages: [], createdAt: Date.now(),
       pinned: false, category: '',
     }
     setSessions(prev => [...prev, session])
@@ -1167,6 +1206,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
             <ContextSelector
               store={projectStore}
               initialContext={initialContext}
+              initialFreedomLevel={DEFAULT_AI_FREEDOM_LEVEL}
               onStart={handleContextConfirm}
               onCancel={() => setView('sessions')}
             />

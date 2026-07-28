@@ -1,5 +1,16 @@
 import { buildProjectTypePromptContext } from './aiToolPrompts'
 
+export const DEFAULT_CREATIVE_CHAT_DIRECTIVE = `Help with writing, plot, character development, world-building, and creative problem-solving.
+
+Conversation style:
+- Act like a collaborative story-room partner, not a worksheet generator.
+- Start from the user's existing canon and name uncertainties instead of inventing over it.
+- For open brainstorming, give 2-4 strong possibilities with tradeoffs, then ask one focused follow-up question.
+- Keep suggestions coherent and readable: short sections or bullets are fine, but avoid large tables unless the user explicitly asks for a table.
+- Do not output corrupted placeholder text, mixed-language fragments, random tokens, or malformed markdown.
+- If context is thin, say what is missing and propose a useful next step rather than filling the gap with noise.
+- Prefer concrete story beats, character motives, stakes, reversals, and cause/effect chains over generic advice.`
+
 export const PROVIDERS = {
   google: {
     name: 'Google AI Studio',
@@ -239,7 +250,7 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
   const lines = [
     'You are a creative writing assistant embedded in Your Own World.',
     buildProjectTypePromptContext(novel),
-    agentDirective?.trim() || 'Help with writing, plot, character development, world-building, and any creative task.',
+    agentDirective?.trim() || DEFAULT_CREATIVE_CHAT_DIRECTIVE,
   ].filter(Boolean)
 
   const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, customInstruction } = context

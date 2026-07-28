@@ -36,6 +36,7 @@ import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import { loadAiSettings } from './utils/aiSettings'
+import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
@@ -226,6 +227,8 @@ function AppInner() {
   })
   const { importData, finishRemoteLoad, clearData, ensureSampleProject } = store
   const [dataLoading, setDataLoading] = useState(false)
+  const [dataLoadError, setDataLoadError] = useState(false)
+  const [dataLoadRetryToken, setDataLoadRetryToken] = useState(0)
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
   const [section, setSection] = useState(() => initialRouteSnapshot.section)
@@ -281,6 +284,13 @@ function AppInner() {
     setStorageModeState(prev => {
       const next = loadStorageModeState(userId)
       return prev.userId === next.userId && prev.mode === next.mode ? prev : next
+    })
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
+    hydrateSyncedAiSettings(userId).catch(error => {
+      console.warn('[YOW] Could not hydrate synced AI settings:', error)
     })
   }, [userId])
 
@@ -648,11 +658,13 @@ function AppInner() {
       loadedUid.current = null
       clearData()
       finishRemoteLoad()
+      setDataLoadError(false)
       return
     }
 
     const loadKey = `${userId}:${userLocalFirstMode ? 'local-first' : 'cloud-sync'}`
     if (loadedUid.current === loadKey) return
+    setDataLoadError(false)
     if (userLocalFirstMode) {
       loadedUid.current = loadKey
       const localFirstSnapshot = loadLocalFirstSnapshot(userId)
@@ -688,11 +700,18 @@ function AppInner() {
       })
       .catch(error => {
         console.error(error)
+        // Never let a failed fetch fall through to rendering the store's
+        // still-default-empty state as if it were a real (possibly genuinely
+        // empty) project — that's indistinguishable from actual data loss to
+        // the user. Surface a retry prompt instead, and allow this effect to
+        // run again for the same user on retry.
+        loadedUid.current = null
         finishRemoteLoad(false)
+        setDataLoadError(true)
       })
       .finally(() => setDataLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userId, userLocalFirstMode, importData, finishRemoteLoad, clearData])
+  }, [user, userId, userLocalFirstMode, importData, finishRemoteLoad, clearData, dataLoadRetryToken])
 
   const maybeOpenAiSetupPrompt = useCallback(() => {
     if (!userId) return
@@ -826,6 +845,24 @@ function AppInner() {
       <div className="min-h-screen bg-[var(--bg-main)] flex flex-col items-center justify-center gap-4">
         <span className="w-12 h-12 text-[var(--accent)]"><YOWLogo /></span>
         <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (dataLoadError && user) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-main)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <span className="w-12 h-12 text-[var(--accent)]"><YOWLogo /></span>
+        <p className="text-[var(--text-main)] font-medium max-w-sm">
+          We couldn't load your projects. Nothing has been deleted — this is just a connection hiccup.
+        </p>
+        <button
+          type="button"
+          onClick={() => { setDataLoadError(false); setDataLoadRetryToken(t => t + 1) }}
+          className="px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-contrast)] font-medium"
+        >
+          Try again
+        </button>
       </div>
     )
   }
