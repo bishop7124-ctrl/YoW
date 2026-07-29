@@ -2481,7 +2481,7 @@ export function useStore(userId = null, options = {}) {
         familyLinks: mergeFamilyLinks(character.familyLinks, familyLinksByCharacter.get(character.id) || []),
       }
     }))
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.map(scene => {
+    const updatedScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.map(scene => {
       if (scene.novelId !== project.id) return scene
       const sourceChapterId = sourceChapterIdByProjectChapterId.get(scene.chapterId)
       const sourceScene = sourceSceneByChapterId.get(sourceChapterId)
@@ -2498,6 +2498,15 @@ export function useStore(userId = null, options = {}) {
         lastModified: lastHistoryEntry?.timestamp || scene.lastModified || Date.now(),
       }
     }))
+    if (canSyncCloud) {
+      // `scenes` isn't covered by the per-collection debounced sync effects
+      // (each scene syncs individually as it's edited in the manuscript UI),
+      // so this bulk content upgrade needs an explicit push or the richer
+      // seeded content stays local-only, same failure mode as the sample
+      // project's initial creation above.
+      const projectScenes = updatedScenes.filter(scene => scene.novelId === project.id)
+      trackSync(upsertItems('scenes', userId, projectScenes)).catch(console.error)
+    }
     const key = sampleProjectSeedKey(userId)
     if (key) writeItem(key, '1')
     return {
@@ -2505,7 +2514,7 @@ export function useStore(userId = null, options = {}) {
       coverPhoto: project.coverPhoto || lastEmberDemoProject.project.coverPhoto,
       bannerImage: project.bannerImage || lastEmberDemoProject.project.bannerImage,
     }
-  }, [userId, commitLocal])
+  }, [userId, commitLocal, canSyncCloud, trackSync])
 
   const ensureSampleProject = useCallback(() => {
     const key = sampleProjectSeedKey(userId)
@@ -2529,10 +2538,34 @@ export function useStore(userId = null, options = {}) {
     commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, ...sample.ideaEntries])
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => [...prev, ...sample.rpgCharacters])
     if (canSyncCloud) {
-      saveSceneDoc(userId, sample.scenes[0]).catch(console.error)
+      // Push the whole seeded world to Supabase immediately rather than
+      // relying on the per-collection debounced sync effects below (which
+      // only fire ~2s after the relevant state changes, and can miss this
+      // write entirely if it lands before the account's initial cloud sync
+      // has finished initializing). Without this, the sample project can
+      // end up existing only in this browser's local storage — invisible,
+      // with no warning, on any other device or after local data is cleared.
+      trackSync(Promise.all([
+        upsertItems('novels', userId, [sample.project]),
+        upsertItems('acts', userId, sample.acts),
+        upsertItems('chapters', userId, sample.chapters),
+        upsertItems('scenes', userId, sample.scenes),
+        upsertItems('characters', userId, sample.characters),
+        upsertItems('factions', userId, sample.factions),
+        upsertItems('locations', userId, sample.locations),
+        upsertItems('lore_entries', userId, sample.loreEntries),
+        upsertItems('timeline_events', userId, sample.timeline),
+        upsertItems('world_history', userId, sample.worldHistory),
+        upsertItems('eras', userId, sample.eras),
+        upsertItems('maps_data', userId, sample.maps),
+        upsertItems('whiteboards_data', userId, sample.whiteboards),
+        upsertItems('story_schedule', userId, sample.storySchedule),
+        upsertItems('idea_entries', userId, sample.ideaEntries),
+        upsertItems('rpg_characters', userId, sample.rpgCharacters),
+      ])).catch(console.error)
     }
     return sample.project
-  }, [userId, canSyncCloud, commitLocal])
+  }, [userId, canSyncCloud, commitLocal, trackSync])
 
   // Per-project read-only: free tier users can only edit their chosen project
   const readOnly = globalReadOnly || (

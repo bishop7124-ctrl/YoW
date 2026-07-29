@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../../constants/projectTypes'
+import { trackEvent } from '../../utils/analytics'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
 const CAMPAIGN_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
@@ -36,9 +37,22 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
   const typeIcon = TYPE_ICONS[type] || { emoji: '📖', color: '#a78bfa' }
   const highlights = WORKSPACE_HIGHLIGHTS[type] || WORKSPACE_HIGHLIGHTS.novel
 
+  useEffect(() => { trackEvent('onboarding_wizard_shown') }, [])
+
+  const handleStartSample = () => {
+    trackEvent('onboarding_path_chosen', { path: 'sample' })
+    onStartSample()
+  }
+
+  const handleChooseBlank = () => {
+    trackEvent('onboarding_path_chosen', { path: 'blank' })
+    setStep(0)
+  }
+
   const handleCreate = () => {
     if (!title.trim() || busy) return
     setBusy(true)
+    trackEvent('onboarding_project_created', { project_type: type })
     const novel = store.addNovel({
       title: title.trim(),
       type,
@@ -73,12 +87,12 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
               </p>
             </div>
             <div className="wizard-path-grid">
-              <button type="button" className="wizard-path-card wizard-path-card--sample" onClick={onStartSample}>
+              <button type="button" className="wizard-path-card wizard-path-card--sample" onClick={handleStartSample}>
                 <span className="wizard-path-kicker">Guided</span>
                 <strong>Tour with a sample</strong>
                 <span>Open an editable demo world with characters, places, lore, history, outline content, and connected records already filled in.</span>
               </button>
-              <button type="button" className="wizard-path-card" onClick={() => setStep(0)}>
+              <button type="button" className="wizard-path-card" onClick={handleChooseBlank}>
                 <span className="wizard-path-kicker">Blank slate</span>
                 <strong>Start my own project</strong>
                 <span>Choose your format, name the project, and begin building your own world from scratch.</span>

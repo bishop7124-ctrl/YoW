@@ -17,6 +17,7 @@ import {
 } from '../utils/projectExport'
 import { isCampaignProjectType } from '../utils/projectStats'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
+import { trackEvent } from '../utils/analytics'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
 const isProjectTypeSelectable = (type) => Boolean(PROJECT_TYPES[type])
@@ -1234,6 +1235,28 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     const t = setTimeout(() => setLibraryTourOpen(true), 500)
     return () => clearTimeout(t)
   }, [suppressAutoTour, tourStore?.toursEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Report each getting-started milestone to GA4 the first time it's reached,
+  // so the real activation funnel (signup -> first project -> first scene ->
+  // first world element -> first export) is visible per-user, not just as an
+  // aggregate signup count.
+  useEffect(() => {
+    if (!tourStore || !user?.id) return
+    const milestones = buildMilestones({
+      allProjectStats: store.allProjectStats,
+      characters: store.characters,
+      loreEntries: store.loreEntries,
+      locations: store.locations,
+      hasExported: tourStore.hasExported,
+      onCreateProject: () => {},
+    })
+    milestones.forEach(m => {
+      if (m.done && !tourStore.isMilestoneTracked(user.id, m.id)) {
+        tourStore.markMilestoneTracked(user.id, m.id)
+        trackEvent('onboarding_milestone', { milestone: m.id })
+      }
+    })
+  }, [store.allProjectStats, store.characters, store.loreEntries, store.locations, tourStore, user?.id])
 
   useEffect(() => {
     if (!showImportMenu) return

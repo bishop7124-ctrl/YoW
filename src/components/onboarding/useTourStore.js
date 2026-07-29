@@ -34,6 +34,8 @@ export function useTourStore() {
     resetTour:        (id) => set(`tour_${id}`, false),
     markExported:     () => set('exported', true),
     hasExported:      !!state.exported,
+    isMilestoneTracked:   (userId, id) => !!state[`ms_${userId || 'local'}_${id}`],
+    markMilestoneTracked: (userId, id) => set(`ms_${userId || 'local'}_${id}`, true),
     reset:            () => { save({}); setState({}) },
   }
 }

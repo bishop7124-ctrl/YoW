@@ -4,6 +4,7 @@ import { OFFLINE_MODE, OFFLINE_USER } from '../utils/offlineMock'
 import { deleteAllUserData } from '../utils/firestoreSync'
 import { runSyncFlush } from '../store/syncFlushRegistry'
 import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSettings'
+import { trackEvent, identifyUser } from '../utils/analytics'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -39,6 +40,7 @@ export function AuthProvider({ children }) {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       clearAiSettingsForOtherUser(session?.user?.id || null)
+      identifyUser(session?.user?.id || null)
       setUser(session?.user ?? null)
     }).catch(console.warn)
 
@@ -53,11 +55,17 @@ export function AuthProvider({ children }) {
       } else {
         // Don't clear recoveryMode here — SIGNED_IN fires right after PASSWORD_RECOVERY
         clearAiSettingsForOtherUser(session?.user?.id || null)
+        identifyUser(session?.user?.id || null)
         setUser(session?.user ?? null)
         // Fire welcome email after email confirmation is complete (PKCE flow)
         if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at && session.user.id) {
           const confirmedJustNow = new Date(session.user.email_confirmed_at) > new Date(Date.now() - 30_000)
           if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email)
+        }
+        // GA4 "returning user" signal — fires on every resumed/sign-in session,
+        // separate from the one-time sign_up event fired at signUp() time.
+        if (event === 'SIGNED_IN' && session?.user?.id) {
+          trackEvent('login', { method: 'password' })
         }
       }
     })
@@ -83,6 +91,7 @@ export function AuthProvider({ children }) {
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
     : async (email, password) => {
         const result = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/` } })
+        if (!result.error) trackEvent('sign_up', { method: 'password' })
         return result
       }
 
