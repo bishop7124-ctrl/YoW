@@ -749,6 +749,19 @@ Integration:
 
 QA deferred: signed-in first-login welcome tour, Turn off all tours persistence, wizard create flow on a real fresh account, checklist milestone accuracy, library and section tour spotlight positioning at mobile/tablet/desktop widths, section tour completion persistence.
 
+### Re-engagement email sequence
+
+Added 2026-07-29 as a direct follow-up to the "30 signups, no returns" investigation: pulled real signup data and found ~70% of real (non-internal) signups created exactly one project, touched one scene, and never opened the app again — activation itself wasn't the problem, nothing was pulling them back afterward. Implemented a day-1/3/7 nudge sequence, gated on people who never really returned (`last_sign_in_at` not meaningfully after `created_at`, 30-minute grace window to ignore the first-session auth refresh).
+
+| Piece | Description | Status |
+| --- | --- | --- |
+| `supabase/migrations/20260729_reengagement_emails.sql` | New `reengagement_emails` table (`user_id`, `stage`, `sent_at`) — dedup log so a stage is never sent twice. RLS enabled, no policies; service-role-only. | Implemented; **user action: apply this migration in Supabase before the cron job runs** |
+| `supabase/functions/send-reengagement-email/index.ts` | New Edge Function, same Resend/branding pattern as `send-welcome-email`. Sends one of 6 short variants (day1/day3/day7 × whether the person ever created a project) via Resend, each with a one-click unsubscribe link. | Implemented; **user action: deploy via `supabase functions deploy send-reengagement-email`** (cannot be run from this environment) |
+| `api/send-reengagement-emails.js` | New Vercel Cron target, runs daily via `vercel.json`'s new `crons` entry (`0 14 * * *`). Lists all users (`auth.admin.listUsers`), filters to people 1–2/3–4/7–8 days post-signup who haven't returned, opted out, or already gotten that stage, checks `novels` to personalize copy, calls the Edge Function, and records the send. | Implemented; **user action: set a `CRON_SECRET` env var in Vercel** (the endpoint rejects any request without `Authorization: Bearer <CRON_SECRET>` once set, matching Vercel's documented cron-auth pattern) |
+| `api/reengagement-unsubscribe.js` | One-click unsubscribe link target (no auth, matches standard email unsubscribe UX) — flags `user_metadata.reengagement_opt_out`, which the cron job checks and skips on every future run. | Implemented |
+
+`npm run build` and a Node import check on both new `api/*.js` files pass clean. Not yet live-verified end-to-end (needs the migration applied, the Edge Function deployed, and `CRON_SECRET` set before the first real cron run can be confirmed) — flag if a real send should be watched for on the next cron tick (`14:00 UTC` daily) once those three steps are done.
+
 ## To Be Implemented
 
 These items are now confirmed final-launch scope and must become either complete or explicitly re-decided before paid/public launch.

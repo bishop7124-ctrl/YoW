@@ -18,5 +18,8 @@
     { "source": "/map-builder-for-writers/", "destination": "/map-builder-for-writers/index.html" },
     { "source": "/lore-management/", "destination": "/lore-management/index.html" },
     { "source": "/((?!assets/).*)", "destination": "/index.html"  }
+  ],
+  "crons": [
+    { "path": "/api/send-reengagement-emails", "schedule": "0 14 * * *" }
   ]
 }
