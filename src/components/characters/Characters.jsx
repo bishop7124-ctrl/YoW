@@ -70,10 +70,30 @@ const CHARACTER_TABS = [
 
 const CHARACTER_FORM_TABS = CHARACTER_TABS.filter(([id]) => id !== 'journey')
 
+const CHAT_TAB = ['chat', (
+  <span className="inline-flex items-center gap-1.5">
+    <AIStar size={11} />
+    Chat
+  </span>
+)]
+
 function getChildIds(character, characters) {
   const explicit = character?.childIds || []
   const derived = characters.filter(c => (c.parentIds || []).includes(character?.id)).map(c => c.id)
   return [...new Set([...explicit, ...derived])]
+}
+
+// Older characters predate the `status` field — infer it from deathDate so
+// they still display and behave sensibly until re-saved.
+function getCharacterStatus(character) {
+  if (character?.status) return character.status
+  return character?.deathDate ? 'dead' : 'alive'
+}
+
+function formatCharacterStatus(status) {
+  if (status === 'alive') return 'Alive'
+  if (status === 'dead') return 'Dead'
+  return status
 }
 
 // Renders a character image respecting focal point and optional zoom level
@@ -343,6 +363,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     titleJob: initial?.titleJob || initial?.title || '',
     bio: initial?.bio || '',
     age: getAgeInputValue(initial, currentYear),
+    status: getCharacterStatus(initial),
     deathDate: initial?.deathDate || '',
     parentIds: initial?.parentIds || [],
     childIds: initialChildIds,
@@ -581,9 +602,21 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                   <input className={INPUT} type="number" min="0" step="1" value={form.age} onChange={handleChange('age')} placeholder="32" />
                 </div>
                 <div>
-                  <label className={LABEL}>Death Date (Optional)</label>
-                  <input className={INPUT} value={form.deathDate} onChange={handleChange('deathDate')} placeholder="Year 98" />
+                  <label className={LABEL}>Status</label>
+                  <ComboSelect
+                    value={form.status}
+                    onChange={v => setForm(prev => ({ ...prev, status: v, deathDate: v === 'alive' ? '' : prev.deathDate }))}
+                    options={[{ value: 'alive', label: 'Alive' }, { value: 'dead', label: 'Dead' }]}
+                    placeholder="Alive, dead, or custom..."
+                    allowCustom
+                  />
                 </div>
+                {form.status !== 'alive' && (
+                  <div className="col-span-2">
+                    <label className={LABEL}>Death Year (Optional)</label>
+                    <input className={INPUT} value={form.deathDate} onChange={handleChange('deathDate')} placeholder="Year 98" />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -901,7 +934,6 @@ export default function Characters({ store, userId, membership }) {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [profileTab, setProfileTab] = useState('overview')
-  const [showChatModal, setShowChatModal] = useState(false)
 
   // Unique family groups for the filter dropdown
   const familyGroups = [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort()
@@ -946,12 +978,13 @@ export default function Characters({ store, userId, membership }) {
     })).filter(rel => rel.target)
     : []
   const selectedAge = getCharacterAge(selected, currentYear)
+  const selectedStatus = getCharacterStatus(selected)
   const incomingRefs = useMemo(() => selected
     ? allRefsFor(selected.id, { loreEntries, timeline, characters })
     : { lore: [], timeline: [], characters: [] },
     [selected, loreEntries, timeline, characters]
   )
-  const profileTabs = CHARACTER_TABS
+  const profileTabs = [...CHARACTER_TABS, CHAT_TAB]
   const activeProfileTab = profileTabs.some(([id]) => id === profileTab) ? profileTab : 'overview'
 
   const handleSave = (formData, savedEditorTab) => {
@@ -967,13 +1000,6 @@ export default function Characters({ store, userId, membership }) {
       else if (profileTabs.some(([id]) => id === savedEditorTab)) setProfileTab(savedEditorTab)
     }
   }
-
-  useEffect(() => {
-    if (!showChatModal) return
-    const handler = e => { if (e.key === 'Escape') setShowChatModal(false) }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [showChatModal])
 
   const getCharacterFaction = (char) => char?.factionId ? factions.find(f => f.id === char.factionId) : null
   const selectedFaction = getCharacterFaction(selected)
@@ -1131,12 +1157,8 @@ export default function Characters({ store, userId, membership }) {
                 {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
               </div>
             </StudioPageHeader>
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-5">
               <TabStrip tabs={profileTabs} activeTab={activeProfileTab} onChange={setProfileTab} />
-              <StudioButton tone="primary" size="sm" className="flex items-center gap-1.5" onClick={() => setShowChatModal(true)}>
-                <AIStar size={13} />
-                Chat with character
-              </StudioButton>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -1153,7 +1175,10 @@ export default function Characters({ store, userId, membership }) {
                       <DetailLine label="Title / Job" value={selected.titleJob} />
                       <DetailLine label="Family Group" value={selected.familyGroup} />
                       <DetailLine label="Birth Year" value={selected.birthDate} />
-                      <DetailLine label="Death Date" value={selected.deathDate} />
+                      <DetailLine label="Status" value={formatCharacterStatus(selectedStatus)} />
+                      {selectedStatus !== 'alive' && (
+                        <DetailLine label="Death Year" value={selected.deathDate} />
+                      )}
                       <DetailLine label="Age" value={selectedAge} />
                     </div>
                   </StudioNote>
@@ -1265,6 +1290,16 @@ export default function Characters({ store, userId, membership }) {
                 </StudioNote>
               )}
 
+              {activeProfileTab === 'chat' && (
+                <div className="lg:col-span-2 studio-note" style={{ padding: 0, height: 600, overflow: 'hidden' }}>
+                  {membership?.isFree ? (
+                    <AIToolsUpgradeWall />
+                  ) : (
+                    <CharacterInterview store={store} userId={userId} />
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
         )}
@@ -1291,36 +1326,6 @@ export default function Characters({ store, userId, membership }) {
         </Modal>
       )}
 
-      {showChatModal && selected && (
-        <div className="studio-sheet-backdrop is-centered" onClick={() => setShowChatModal(false)}>
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Chat with ${selected.name}`}
-            className="studio-sheet is-centered"
-            style={{ height: 'min(680px, calc(100vh - 52px))' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <header>
-              <div className="flex items-center gap-2">
-                <AIStar size={16} className="text-[var(--accent)]" />
-                <div>
-                  <p className="studio-kicker">AI character chat</p>
-                  <h2>{selected.name}</h2>
-                </div>
-              </div>
-              <button type="button" onClick={() => setShowChatModal(false)} aria-label="Close">×</button>
-            </header>
-            <div className="studio-sheet-body" style={{ padding: 0 }}>
-              {membership?.isFree ? (
-                <AIToolsUpgradeWall />
-              ) : (
-                <CharacterInterview store={store} userId={userId} />
-              )}
-            </div>
-          </section>
-        </div>
-      )}
     </StudioSplit>
   )
 }
