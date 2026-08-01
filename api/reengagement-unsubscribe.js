@@ -31,14 +31,14 @@ export default async function handler(req, res) {
 
     const { data: existing, error: fetchError } = await supabase.auth.admin.getUserById(userId)
     if (fetchError || !existing?.user) {
-      return htmlResponse(res, 200, 'That link has already expired — no further action needed.')
+      return htmlResponse(res, 200, 'That link has already expired. No further action needed.')
     }
 
     await supabase.auth.admin.updateUserById(userId, {
       user_metadata: { ...(existing.user.user_metadata || {}), reengagement_opt_out: true },
     })
 
-    return htmlResponse(res, 200, 'Done — you will not receive any more reminder emails. Your account and everything in it are unaffected.')
+    return htmlResponse(res, 200, 'Done. You will not receive any more reminder emails. Your account and everything in it are unaffected.')
   } catch (err) {
     console.error('[reengagement-unsubscribe]', err)
     return htmlResponse(res, 500, 'Something went wrong processing that request. Please try again shortly.')

@@ -11,51 +11,56 @@ type Copy = {
   heading: string
   body: string
   ctaLabel: string
+  secondaryCtaLabel?: string
 }
 
-// One entry per (stage, whether they ever created a project). Kept short —
-// this is a nudge, not the welcome email's full feature tour.
+// One entry per (stage, whether they ever created a project). Each answers
+// one question only: "what's the next smallest action?" Never "you haven't
+// done X yet." Kept short; this is a nudge, not the welcome email's full
+// feature tour.
 const COPY: Record<string, Copy> = {
   day1_new: {
-    subject: 'Pick up where you left off ✍️',
-    eyebrow: 'Still here for you',
-    heading: 'Your account is ready — you just haven’t started yet.',
-    body: 'Starting from a blank page can wait for another day. If you’d rather explore first, open the guided sample world instead — it’s already full of characters, places, and a working draft you can look around in before building your own.',
-    ctaLabel: 'Continue in Your Own World',
+    subject: 'Not sure where to start?',
+    eyebrow: 'Getting started',
+    heading: 'Two easy ways in. Zero Pressure.',
+    body: 'Start a blank project and shape it as you go, or open the sample world first to see how everything fits together. Either way, you can be inside a working writing space in under a minute.',
+    ctaLabel: 'Try the sample project',
+    secondaryCtaLabel: 'Create your own project',
   },
   day1_active: {
-    subject: 'Your world is waiting',
-    eyebrow: 'Still here for you',
-    heading: 'You started something yesterday.',
-    body: 'It’s exactly where you left it. Three things worth five minutes: write a line in your first scene, add a character, or ask the AI assistant for an idea to get unstuck.',
-    ctaLabel: 'Open your project',
+    subject: 'We’ve got your world, you’ve got the ideas',
+    eyebrow: 'Nice start',
+    heading: 'You’ve already started your world.',
+    body: 'Whatever you added first, a scene, a character, or a lore entry, is a start. Add something else small next: a location, a faction, or a quick outline note. Your Own World gets more useful the more it fills in.',
+    ctaLabel: 'Continue your project',
   },
   day3_new: {
-    subject: 'Still deciding what to build?',
-    eyebrow: 'A gentler way in',
-    heading: 'No pressure — but your world is still saved and waiting.',
-    body: 'If a blank page felt like a lot, try the sample world instead. It’s a fully built demo — characters, lore, a map, a working draft — that you can explore, remix, or just borrow ideas from.',
-    ctaLabel: 'Explore the sample world',
+    subject: 'Projects don’t need to be polished',
+    eyebrow: 'Still easy to start',
+    heading: 'A project can start with just a title and an idea.',
+    body: 'You do not need a full plan. A name, a character, a place, or one scene you already have in your head is enough to begin. If you would rather look around first, the sample world is ready to explore.',
+    ctaLabel: 'Create a project',
+    secondaryCtaLabel: 'Explore the sample project',
   },
   day3_active: {
-    subject: 'A few things you might not have tried yet',
-    eyebrow: 'A gentler way in',
-    heading: 'There’s more to your world than the page you left open.',
-    body: 'Characters, locations, lore, and a timeline all live alongside your manuscript and stay connected as you write. Everything you write also exports to a real Word document any time you want a copy.',
-    ctaLabel: 'Open your project',
+    subject: 'Add the next scene, even as a rough note',
+    eyebrow: 'One small move',
+    heading: 'Capture what happens next while it is still close.',
+    body: 'It does not need to be polished. Even a rough note, or a quick lore entry, can hold the idea until you are ready to write it properly. One paragraph about what changes after your last scene is enough to give yourself a clear next step.',
+    ctaLabel: 'Add the next scene',
   },
   day7_new: {
-    subject: 'Before you go — your world is still here',
-    eyebrow: 'One last note',
-    heading: 'It didn’t go anywhere.',
-    body: 'No pressure at all — we just didn’t want you to think your account disappeared. It’s saved and ready whenever you want to look, even if that’s just to poke around the sample world.',
-    ctaLabel: 'Take a look',
+    subject: 'Feeling blocked? We’ve got you',
+    eyebrow: 'No setup, no pressure',
+    heading: 'The fastest way to understand it is to open the sample world.',
+    body: 'The sample world is already built, with characters, places, and a working draft, so you can look through it without starting from a blank page. If it clicks, you can create your own project from there.',
+    ctaLabel: 'Open the sample project',
   },
   day7_active: {
-    subject: 'Before you go — your world is still here',
-    eyebrow: 'One last note',
-    heading: 'It didn’t go anywhere.',
-    body: 'No pressure at all — we just didn’t want you to think your work disappeared. It’s saved exactly as you left it, whenever you’re ready to pick it back up.',
+    subject: 'Make the next step visible',
+    eyebrow: 'Whenever you’re ready',
+    heading: 'Even a fragment keeps a world alive.',
+    body: 'Add whatever feels easiest: the next scene, a character note, a location, a lore entry, or a quick outline beat. Your Own World is useful for connected fragments, not just finished drafts.',
     ctaLabel: 'Open your project',
   },
 }
@@ -108,6 +113,11 @@ function reengagementEmailHtml(copy: Copy, unsubscribeUrl: string) {
                 </tr>
               </table>
 
+              ${copy.secondaryCtaLabel ? `
+              <p style="margin:14px 0 0;font-size:13px;color:#5d9490;">
+                or, <a href="${APP_URL}" style="color:#7ab8b4;text-decoration:underline;">${copy.secondaryCtaLabel}</a>
+              </p>` : ''}
+
             </td>
           </tr>
 
@@ -117,7 +127,7 @@ function reengagementEmailHtml(copy: Copy, unsubscribeUrl: string) {
                 Your Own World &middot; <a href="${APP_URL}" style="color:#7ab8b4;text-decoration:none;">yourownworld.co.uk</a>
               </p>
               <p style="margin:0;font-size:11px;color:#4a8a86;">
-                <a href="${unsubscribeUrl}" style="color:#4a8a86;text-decoration:underline;">Stop these reminder emails</a>
+                <a href="${unsubscribeUrl}" style="color:#4a8a86;text-decoration:underline;">Stop reminder emails</a>
               </p>
             </td>
           </tr>
