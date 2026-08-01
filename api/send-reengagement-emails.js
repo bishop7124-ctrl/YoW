@@ -77,10 +77,15 @@ export default async function handler(req, res) {
 
     const [{ data: alreadySent }, { data: novelRows }] = await Promise.all([
       supabase.from('reengagement_emails').select('user_id, stage').in('user_id', candidateIds),
-      supabase.from('novels').select('user_id').in('user_id', candidateIds),
+      supabase.from('novels').select('user_id, data').in('user_id', candidateIds),
     ])
     const sentSet = new Set((alreadySent || []).map(r => `${r.user_id}:${r.stage}`))
-    const hasProjectSet = new Set((novelRows || []).map(r => r.user_id))
+    // Exclude the seeded "Tour with a sample" demo project — opening it is
+    // exploring, not creating a world, so it must not count as "hasProject"
+    // and push someone into the wrong email bucket.
+    const hasProjectSet = new Set(
+      (novelRows || []).filter(r => !r.data?.isSampleProject).map(r => r.user_id)
+    )
 
     let sentCount = 0
     for (const candidate of candidates) {
