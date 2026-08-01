@@ -96,6 +96,39 @@ function formatCharacterStatus(status) {
   return status
 }
 
+// Full-size click-to-enlarge view of a character portrait
+function ImageLightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const handleKey = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close image preview"
+        className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+      >
+        ✕
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        onClick={e => e.stopPropagation()}
+        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+      />
+    </div>
+  )
+}
+
 // Renders a character image respecting focal point and optional zoom level
 function CharacterPortrait({ src, position, zoom, className = '' }) {
   const z = zoom || 1
@@ -934,6 +967,7 @@ export default function Characters({ store, userId, membership }) {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [profileTab, setProfileTab] = useState('overview')
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
 
   // Unique family groups for the filter dropdown
   const familyGroups = [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort()
@@ -961,6 +995,10 @@ export default function Characters({ store, userId, membership }) {
     const fallbackId = filtered[0]?.id || characters[0]?.id || null
     setSelectedCharacterId(fallbackId)
   }, [characters, filtered, selectedCharacterId, setSelectedCharacterId])
+
+  useEffect(() => {
+    setImagePreviewOpen(false)
+  }, [selectedCharacterId])
 
   const selected = characters.find(c => c.id === selectedCharacterId)
   const selectedChildren = selected ? getChildIds(selected, characters).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
@@ -1125,12 +1163,19 @@ export default function Characters({ store, userId, membership }) {
             >
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 {selected.image && (
-                  <CharacterPortrait
-                    src={selected.image}
-                    position={selected.imagePosition}
-                    zoom={selected.imageZoom}
-                    className="w-24 h-24 rounded-xl border border-[var(--border)] flex-shrink-0"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setImagePreviewOpen(true)}
+                    aria-label={`View full-size photo of ${selected.name}`}
+                    className="flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] cursor-zoom-in"
+                  >
+                    <CharacterPortrait
+                      src={selected.image}
+                      position={selected.imagePosition}
+                      zoom={selected.imageZoom}
+                      className="w-24 h-24 rounded-xl border border-[var(--border)]"
+                    />
+                  </button>
                 )}
                 {!selected.image && (
                   <button
@@ -1324,6 +1369,14 @@ export default function Characters({ store, userId, membership }) {
             store={store}
           />
         </Modal>
+      )}
+
+      {imagePreviewOpen && selected?.image && (
+        <ImageLightbox
+          src={selected.image}
+          alt={selected.name}
+          onClose={() => setImagePreviewOpen(false)}
+        />
       )}
 
     </StudioSplit>
