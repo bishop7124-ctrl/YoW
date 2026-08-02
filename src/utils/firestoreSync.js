@@ -53,7 +53,7 @@ function getTableRows(table, userId, items = []) {
   if (!items?.length) return []
 
   if (table === 'scenes') {
-    return items.map(item => ({ user_id: userId, scene_id: item.id, data: item }))
+    return items.map(item => ({ user_id: userId, scene_id: item.id, novel_id: item.novelId ?? null, data: item }))
   }
 
   const isUserLevel = USER_TABLES.includes(table)
@@ -179,11 +179,9 @@ export async function deleteItem(table, userId, itemId) {
 // Delete all entity rows for a novel (used when deleting a project)
 export async function deleteItemsByNovel(userId, novelId) {
   if (OFFLINE_MODE || !novelId) return
-  await Promise.all(NOVEL_TABLES.map(table => {
-    const col = table === 'scenes' ? 'scene_id' : 'id'
-    void col // unused in delete — we filter by user_id + novel_id
-    return supabase.from(table).delete().eq('user_id', userId).eq('novel_id', novelId)
-  }))
+  await Promise.all(NOVEL_TABLES.map(table =>
+    supabase.from(table).delete().eq('user_id', userId).eq('novel_id', novelId)
+  ))
 }
 
 // Reads the authoritative storage-usage counter for a user, maintained by a DB
@@ -246,7 +244,12 @@ export async function replaceUserData(userId, data = {}) {
 // Per-scene saves (called directly from updateScene / updateSceneContent)
 export async function saveSceneDoc(userId, scene) {
   if (OFFLINE_MODE) return
-  const { error } = await supabase.from('scenes').upsert({ user_id: userId, scene_id: scene.id, data: scene })
+  const { error } = await supabase.from('scenes').upsert({
+    user_id: userId,
+    scene_id: scene.id,
+    novel_id: scene.novelId ?? null,
+    data: scene,
+  })
   throwIfSupabaseError(error, 'scene upsert error')
 }
 

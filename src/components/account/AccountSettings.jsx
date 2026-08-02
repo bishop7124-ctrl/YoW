@@ -7,6 +7,7 @@ import { STORAGE_MODES } from '../../utils/storageMode'
 import { getStorageQuota } from '../../utils/storageQuota'
 import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
@@ -1894,7 +1895,7 @@ function getProfileDraft(user, includeLocalProfile = false) {
   }
 }
 
-function ProfileDetails({ user, updateProfile, localProfileOnly = false }) {
+function ProfileDetails({ user, updateProfile, localProfileOnly = false, storageUsedBytes = 0, storageQuotaBytes, onStorageUsedChange }) {
   const [profileDraft, setProfileDraft] = useState(() => getProfileDraft(user, localProfileOnly))
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
@@ -1924,13 +1925,32 @@ function ProfileDetails({ user, updateProfile, localProfileOnly = false }) {
       if (!canOptimize()) {
         throw new Error('This browser cannot process image uploads here. Use an avatar URL instead.')
       }
-      const avatarUrl = await optimizeImageToDataUrl(file, {
-        maxDimension: 512,
-        quality: 0.82,
-        fallbackQuality: 0.68,
-        maxInputBytes: 8 * 1024 * 1024,
-        maxOutputBytes: 350 * 1024,
-      })
+      // Avatars are stored in Storage (not embedded as base64 in user_metadata):
+      // a raw data URL there gets baked into every access token JWT, which can
+      // push requests over proxy header-size limits and silently break session
+      // refresh — the profile looks "saved" but reverts after the next login.
+      const previousAvatarUrl = profileDraft.avatarUrl
+      const avatarUrl = localProfileOnly
+        ? await optimizeImageToDataUrl(file, {
+            maxDimension: 512,
+            quality: 0.82,
+            fallbackQuality: 0.68,
+            maxInputBytes: 8 * 1024 * 1024,
+            maxOutputBytes: 350 * 1024,
+          })
+        : await uploadUserMedia(file, {
+            userId: user.id,
+            category: 'avatars',
+            currentUsedBytes: storageUsedBytes,
+            quotaBytes: storageQuotaBytes,
+            maxDimension: 512,
+            quality: 0.82,
+            fallbackQuality: 0.68,
+            maxInputBytes: 8 * 1024 * 1024,
+            maxOutputBytes: 350 * 1024,
+          })
+      if (!localProfileOnly && previousAvatarUrl) deleteUserMedia(previousAvatarUrl).catch(() => {})
+      onStorageUsedChange?.()?.catch(() => {})
       setProfileDraft(current => ({ ...current, avatarUrl }))
       setProfileMessage('Avatar ready. Save your profile to keep it.')
     } catch (error) {
@@ -1942,6 +1962,10 @@ function ProfileDetails({ user, updateProfile, localProfileOnly = false }) {
   }
 
   const clearAvatar = () => {
+    if (!localProfileOnly && profileDraft.avatarUrl) {
+      deleteUserMedia(profileDraft.avatarUrl).catch(() => {})
+      onStorageUsedChange?.()?.catch(() => {})
+    }
     setProfileDraft(current => ({ ...current, avatarUrl: '' }))
     setProfileMessage('')
     setProfileError('')
@@ -2421,6 +2445,9 @@ export default function AccountSettings({
                 user={user}
                 updateProfile={updateProfile}
                 localProfileOnly={desktopApp && membership.isLocalMode}
+                storageUsedBytes={storageUsedBytes}
+                storageQuotaBytes={membership.storageQuotaBytes}
+                onStorageUsedChange={store?.refreshStorageUsedBytes}
               />
               <section className="account-settings-panel" style={{ borderTop: '1px solid var(--border)', paddingTop: 28 }}>
                 <div className="account-panel-heading">

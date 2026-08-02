@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { parseTimelineYear } from '../../utils/timelineYear'
 
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
@@ -86,10 +87,12 @@ export default function ChronicleEntryForm({
     const endYear = form.endYear !== '' ? parseInt(form.endYear, 10) : null
     onSave({
       title: form.title.trim(),
-      // worldhistory uses startYear/endYear; timeline uses date
+      // worldhistory uses startYear/endYear; timeline uses free-text date, but we
+      // still derive a numeric startYear from it so sort/display order (which
+      // prioritizes startYear when present) stays in sync with what was typed.
       ...(isWorldHistory
         ? { startYear, endYear, date: startYear != null ? String(startYear) : form.date }
-        : { date: form.date, dateRange: form.date }
+        : { date: form.date, dateRange: form.date, startYear: parseTimelineYear(form.date), endYear: null }
       ),
       era: selectedEra?.name ?? form.era,
       eraId: form.eraId || null,

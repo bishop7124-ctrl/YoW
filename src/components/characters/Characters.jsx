@@ -17,7 +17,6 @@ import AIStar from '../ai/AIStar'
 // The Fix: uses theme variables so all 4 themes apply correctly
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
-const CHECKBOX_LABEL = 'flex items-center gap-2 text-[var(--text-main)]'
 const SECTION_HEAD = 'text-[10px] text-[var(--text-muted)] uppercase tracking-widest pb-2 mb-3 border-b border-[var(--border)]'
 
 const CHARACTER_ROLE_PRESETS = [
@@ -489,16 +488,9 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   const removeAbility = (index) => {
     setForm(prev => ({ ...prev, extraAbilities: prev.extraAbilities.filter((_, i) => i !== index) }))
   }
-  const toggleArrayValue = (field, value) => {
-    setForm(prev => {
-      const values = prev[field] || []
-      return {
-        ...prev,
-        [field]: values.includes(value)
-          ? values.filter(v => v !== value)
-          : [...values, value],
-      }
-    })
+  const openFamilyTree = () => {
+    if (initial?.id) store?.setSelectedCharacterId?.(initial.id)
+    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'familytree' } }))
   }
   const upsertRelationship = (index, patch) => {
     setForm(prev => {
@@ -738,58 +730,18 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
 
         {editorTab === 'relationships' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-[var(--border)] rounded p-3">
+            <div className="border border-[var(--border)] rounded p-4 flex items-center justify-between gap-4">
               <div>
-                <label className={LABEL}>Parents</label>
-                <div className="max-h-28 overflow-y-auto space-y-1 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded p-2">
-                  {relationshipTargets.length === 0 && <p className="text-[var(--text-muted)] text-xs">No other characters yet.</p>}
-                  {relationshipTargets.map(c => (
-                    <label key={`parent-${c.id}`} className={CHECKBOX_LABEL}>
-                      <input
-                        type="checkbox"
-                        checked={form.parentIds.includes(c.id)}
-                        onChange={() => toggleArrayValue('parentIds', c.id)}
-                        className="accent-[var(--accent)]"
-                      />
-                      {c.name}
-                    </label>
-                  ))}
-                </div>
+                <p className="text-sm text-[var(--text-main)] font-medium">Family links live in Family Tree</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">Parents, children, spouses, siblings, and guardians — including step, adoptive, secret, or disputed links — are managed there so this data only lives in one place.</p>
               </div>
-              <div>
-                <label className={LABEL}>Children</label>
-                <div className="max-h-28 overflow-y-auto space-y-1 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded p-2">
-                  {relationshipTargets.length === 0 && <p className="text-[var(--text-muted)] text-xs">No other characters yet.</p>}
-                  {relationshipTargets.map(c => (
-                    <label key={`child-${c.id}`} className={CHECKBOX_LABEL}>
-                      <input
-                        type="checkbox"
-                        checked={form.childIds.includes(c.id)}
-                        onChange={() => toggleArrayValue('childIds', c.id)}
-                        className="accent-[var(--accent)]"
-                      />
-                      {c.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className={LABEL}>Spouses / Partners</label>
-                <div className="max-h-28 overflow-y-auto space-y-1 text-sm bg-[var(--bg-main)] border border-[var(--border)] rounded p-2">
-                  {relationshipTargets.length === 0 && <p className="text-[var(--text-muted)] text-xs">No other characters yet.</p>}
-                  {relationshipTargets.map(c => (
-                    <label key={`spouse-${c.id}`} className={CHECKBOX_LABEL}>
-                      <input
-                        type="checkbox"
-                        checked={form.spouseIds.includes(c.id)}
-                        onChange={() => toggleArrayValue('spouseIds', c.id)}
-                        className="accent-[var(--accent)]"
-                      />
-                      {c.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={openFamilyTree}
+                className="flex-shrink-0 text-xs font-bold text-[var(--accent)] border border-[var(--accent)]/30 hover:border-[var(--accent)] px-3 py-1.5 rounded transition-colors"
+              >
+                Open Family Tree →
+              </button>
             </div>
 
             <div className="border border-[var(--border)] rounded p-3 space-y-2">
@@ -1044,6 +996,36 @@ export default function Characters({ store, userId, membership }) {
 
   const activeFilters = (filterFamily ? 1 : 0) + (filterFaction ? 1 : 0)
 
+  // Editing the currently-open character used to always render below the
+  // read-only Overview/Journey/Relationships/etc. tabs and their content —
+  // on mobile that meant scrolling past a full (sometimes long) dossier to
+  // reach the editor. When the edit target is the character already open,
+  // swap the tabs and their content out for the editor right where they'd
+  // be instead, so it appears immediately after the name/portrait header.
+  // Creating a brand-new character (no dossier open yet, or a different one
+  // than what's showing) still uses the fallback placement below.
+  const isEditingSelected = Boolean(showForm && editTarget && selected && editTarget.id === selected.id)
+  const editorModal = showForm && (
+    <Modal
+      title={editTarget ? `Edit ${editTarget.name}` : "Create Character"}
+      onClose={() => setShowForm(false)}
+      wide
+      centered
+      closeOnBackdrop={false}
+    >
+      <CharacterForm
+        initial={editTarget}
+        onSave={handleSave}
+        onCancel={() => setShowForm(false)}
+        factions={factions}
+        characters={characters}
+        currentYear={currentYear}
+        initialTab={editTarget ? activeProfileTab : 'overview'}
+        store={store}
+      />
+    </Modal>
+  )
+
   return (
     <StudioSplit variant="dossier" data-tour="characters-header">
       <StudioIndex
@@ -1202,11 +1184,13 @@ export default function Characters({ store, userId, membership }) {
                 {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
               </div>
             </StudioPageHeader>
-            <div className="mb-5">
-              <TabStrip tabs={profileTabs} activeTab={activeProfileTab} onChange={setProfileTab} />
-            </div>
+            {isEditingSelected ? editorModal : (
+              <>
+                <div className="mb-5">
+                  <TabStrip tabs={profileTabs} activeTab={activeProfileTab} onChange={setProfileTab} />
+                </div>
 
-            <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+                <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
               {activeProfileTab === 'overview' && (
                 <>
                   <StudioNote>
@@ -1345,31 +1329,14 @@ export default function Characters({ store, userId, membership }) {
                 </div>
               )}
 
-            </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </StudioDetail>
 
-      {showForm && (
-        <Modal
-          title={editTarget ? `Edit ${editTarget.name}` : "Create Character"}
-          onClose={() => setShowForm(false)}
-          wide
-          centered
-          closeOnBackdrop={false}
-        >
-          <CharacterForm
-            initial={editTarget}
-            onSave={handleSave}
-            onCancel={() => setShowForm(false)}
-            factions={factions}
-            characters={characters}
-            currentYear={currentYear}
-            initialTab={editTarget ? activeProfileTab : 'overview'}
-            store={store}
-          />
-        </Modal>
-      )}
+      {showForm && !isEditingSelected && editorModal}
 
       {imagePreviewOpen && selected?.image && (
         <ImageLightbox

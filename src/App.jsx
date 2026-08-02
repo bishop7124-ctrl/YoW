@@ -270,7 +270,15 @@ function AppInner() {
   const [legalPage, setLegalPage] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [aiSetupPromptOpen, setAiSetupPromptOpen] = useState(false)
-  const tourStore = useTourStore()
+  const persistTourProgress = useCallback((nextState) => {
+    if (!user?.id) return
+    const durable = {}
+    for (const key of Object.keys(nextState)) {
+      if (key.startsWith('welcome_') || key.startsWith('wizard_') || key.startsWith('tour_')) durable[key] = nextState[key]
+    }
+    updateProfile({ ...(user.user_metadata || {}), tour_progress: durable }).catch(console.error)
+  }, [user, updateProfile])
+  const tourStore = useTourStore({ remoteFlags: user?.user_metadata?.tour_progress, onPersist: persistTourProgress })
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
   const localModeNoticeKey = useMemo(
@@ -762,7 +770,6 @@ function AppInner() {
     setAccountOpen(true)
   }
 
-  const userProjects = store.novels.filter(project => !project.isSampleProject)
   useEffect(() => {
     if (!userId || dataLoading || store.readOnly) return
     const existingSample = store.novels.find(project => project.isSampleProject && project.sampleSource === 'the-last-ember')
@@ -939,7 +946,15 @@ function AppInner() {
     try {
       setFreeProjectBusy(true)
       await updateProfile({ ...(user.user_metadata || {}), free_project_id: projectId })
-      store.setActiveNovelId(projectId)
+      if (store.setDashboardActiveProject) store.setDashboardActiveProject(projectId)
+      else store.setActiveNovelId(projectId)
+      setActiveSeriesId(null)
+      setSeriesEntryNovelId(null)
+      setSection('dashboard')
+      setLayoutViewMode('planning')
+      setProjectSettingsOpen(false)
+      setAccountOpen(false)
+      setViewMode('manager')
     } catch {
       // non-fatal — user can retry on next load
     } finally {
@@ -1138,7 +1153,9 @@ function AppInner() {
     store.setActiveNovelId(null)
   }
 
-  const firstRunChoiceOpen = userProjects.length === 0 && !tourStore.wizardShown(userId) && !dataLoading
+  // Any synced project — including a previously-created sample — means this
+  // account already went through onboarding, even on a brand-new browser.
+  const firstRunChoiceOpen = store.novels.length === 0 && !tourStore.wizardShown(userId) && !dataLoading
   const showWelcomeTour = user && tourStore.toursEnabled && !firstRunChoiceOpen && !tourStore.welcomeShown(userId) && !dataLoading
   const closeWelcomeTour = () => tourStore.markWelcomeShown(userId)
   const disableWelcomeTours = () => {

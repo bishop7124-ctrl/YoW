@@ -3,6 +3,7 @@ import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
 import EraManager from './EraManager'
+import { parseTimelineYear } from '../../utils/timelineYear'
 
 export default function WorldHistory({ store }) {
   const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId, selectedTimelineEventId, setSelectedTimelineEventId, eras, addEra, updateEra, deleteEra } = store
@@ -27,8 +28,8 @@ export default function WorldHistory({ store }) {
 
   const parseYear = (e) => {
     if (e.startYear != null) return e.startYear
-    const match = (e.date || '').match(/-?\d+/)
-    return match ? parseInt(match[0], 10) : Infinity
+    const year = parseTimelineYear(e.date)
+    return year != null ? year : Infinity
   }
 
   // Sort eras by startYear, then entries within each era by year

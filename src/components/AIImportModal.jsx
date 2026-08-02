@@ -572,8 +572,19 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
 
 export function populateYowProject(store, data, sel) {
   const idMap = {}
+  const eraIdMap = {}
   const ord = (arr) => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   const remap = (oldId) => (oldId && idMap[oldId]) ? idMap[oldId] : oldId
+  const remapEra = (oldEraId) => (oldEraId && eraIdMap[oldEraId]) ? eraIdMap[oldEraId] : null
+
+  // Eras — referenced by both world history entries and timeline events below
+  if ((sel.worldHistory || sel.timeline) && data.eras?.length) {
+    for (const era of data.eras) {
+      const { id: oldId, novelId: _nid, ...rest } = era
+      const created = store.addEra(rest)
+      eraIdMap[oldId] = created.id
+    }
+  }
 
   // Factions first — characters reference them
   if (sel.factions) {
@@ -625,19 +636,19 @@ export function populateYowProject(store, data, sel) {
   // World history first — timeline events link back to it
   if (sel.worldHistory) {
     for (const h of ord(data.worldHistory)) {
-      const { id: oldId, novelId: _nid, timelineEventId: _tid, ...rest } = h
-      const entry = store.addHistoryEntry(rest)
+      const { id: oldId, novelId: _nid, timelineEventId: _tid, eraId, ...rest } = h
+      const entry = store.addHistoryEntry({ ...rest, eraId: remapEra(eraId) })
       idMap[oldId] = entry.id
     }
   }
 
   if (sel.timeline) {
     for (const ev of ord(data.timeline)) {
-      const { id: _id, novelId: _nid, worldHistoryEntryId, ...rest } = ev
+      const { id: _id, novelId: _nid, worldHistoryEntryId, eraId, ...rest } = ev
       // Link to the newly-created world history entry if both were imported
       const linkedHistoryEntryId = (sel.worldHistory && worldHistoryEntryId) ? idMap[worldHistoryEntryId] : undefined
       store.addEvent(
-        { ...rest, ...(linkedHistoryEntryId ? { linkedHistoryEntryId } : {}) },
+        { ...rest, eraId: remapEra(eraId), ...(linkedHistoryEntryId ? { linkedHistoryEntryId } : {}) },
         { createHistory: false },
       )
     }
@@ -709,6 +720,10 @@ export function populateYowProject(store, data, sel) {
       store.addScheduleEvent(rest)
     }
   }
+
+  // Whiteboard — one per project, no separate section toggle
+  const whiteboard = data.whiteboards?.[0]?.whiteboard
+  if (whiteboard) store.updateWhiteboard(whiteboard)
 }
 
 // Compatible structured ZIP import

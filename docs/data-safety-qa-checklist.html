@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOW Data Safety QA Checklist</title>
+<style>
+  :root {
+    --bg: #101114;
+    --panel: #191b20;
+    --panel-2: #22252c;
+    --panel-3: #2c3039;
+    --border: #383d48;
+    --text: #eceff4;
+    --muted: #a6adbb;
+    --subtle: #777f90;
+    --accent: #5cc8a7;
+    --accent-2: #2f9e7e;
+    --pass: #47c878;
+    --fail: #ff6b6b;
+    --blocked: #ffb454;
+    --retest: #6ea8fe;
+    --na: #a9b0bd;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(25, 27, 32, 0.96);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    backdrop-filter: blur(10px);
+  }
+
+  h1 {
+    margin: 0;
+    color: var(--accent);
+    font-size: 20px;
+    line-height: 1.2;
+  }
+
+  .subtitle {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .header-actions,
+  .toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  button {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 7px 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  button:hover { border-color: var(--accent); }
+  .primary { background: var(--accent-2); border-color: var(--accent-2); color: white; }
+  .danger { background: #3b2024; border-color: #6f333c; color: #ffd0d5; }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 20px 24px 48px;
+  }
+
+  .toolbar {
+    position: sticky;
+    top: 78px;
+    z-index: 8;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .search {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    padding: 9px 12px;
+    font: inherit;
+  }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .filter {
+    padding: 6px 10px;
+    border-radius: 999px;
+    color: var(--muted);
+  }
+
+  .filter.active {
+    color: white;
+    background: var(--accent-2);
+    border-color: var(--accent-2);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+    gap: 10px;
+    margin: 18px 0;
+  }
+
+  .stat {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 12px;
+  }
+
+  .stat strong {
+    display: block;
+    font-size: 22px;
+    color: var(--accent);
+  }
+
+  .stat span {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .intro {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 18px;
+  }
+
+  .intro h2,
+  .section h2 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .intro p { margin: 8px 0 0; color: var(--muted); }
+  .intro ol { margin: 12px 0 0 22px; padding: 0; color: var(--text); }
+  .intro li { margin: 5px 0; }
+
+  .section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin: 14px 0;
+    overflow: hidden;
+  }
+
+  .section-header {
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: var(--panel-2);
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    text-align: left;
+  }
+
+  .section-header:hover { background: var(--panel-3); }
+  .section-count { color: var(--muted); font-size: 12px; }
+  .chev { color: var(--muted); }
+  .section.collapsed .chev { transform: rotate(-90deg); }
+  .section.collapsed .items { display: none; }
+
+  .item {
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+
+  .item.hidden { display: none; }
+  .item-main {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(260px, 0.95fr);
+    gap: 16px;
+  }
+
+  .item-title {
+    margin: 0 0 6px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .route,
+  .expected,
+  .evidence {
+    color: var(--muted);
+    margin: 6px 0;
+  }
+
+  .route b,
+  .expected b,
+  .evidence b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .steps {
+    margin: 8px 0 0 20px;
+    padding: 0;
+  }
+
+  .steps li { margin: 4px 0; }
+
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
+  }
+
+  .tag {
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+
+  .controls {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #14161a;
+    padding: 10px;
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .status input { position: absolute; opacity: 0; pointer-events: none; }
+  .status.active { color: #0e1117; }
+  .status.pass.active { background: var(--pass); border-color: var(--pass); }
+  .status.fail.active { background: var(--fail); border-color: var(--fail); }
+  .status.blocked.active { background: var(--blocked); border-color: var(--blocked); }
+  .status.retest.active { background: var(--retest); border-color: var(--retest); }
+  .status.na.active { background: var(--na); border-color: var(--na); }
+  .status.progress.active { background: #d2bdff; border-color: #d2bdff; }
+
+  textarea,
+  .meta-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    padding: 8px;
+    font: inherit;
+    resize: vertical;
+  }
+
+  textarea { min-height: 82px; }
+  .meta-input { min-height: 36px; margin-bottom: 8px; }
+
+  .field-label {
+    display: block;
+    margin: 8px 0 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .export-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.68);
+    z-index: 20;
+    padding: 20px;
+  }
+
+  .export-modal.open { display: flex; }
+  .dialog {
+    width: min(520px, 100%);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+
+  .dialog h2 { margin: 0 0 12px; }
+  .dialog label { display: block; margin: 9px 0; color: var(--text); }
+
+  @media (max-width: 860px) {
+    header,
+    .toolbar,
+    .item-main {
+      grid-template-columns: 1fr;
+    }
+
+    .header-actions,
+    .toolbar-actions {
+      justify-content: flex-start;
+    }
+
+    .toolbar { top: 128px; }
+    .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    .status-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>YOW Data Safety QA Checklist</h1>
+    <div class="subtitle">A focused, evidence-first checklist for proving user data cannot silently disappear, leak, overwrite, or become unrecoverable.</div>
+  </div>
+  <div class="header-actions">
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button class="primary" onclick="openExport()">Export Evidence</button>
+    <button class="danger" onclick="resetAll()">Reset</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="toolbar">
+    <input id="search" class="search" type="search" placeholder="Search items, routes, notes, evidence..." oninput="applyFilters()">
+    <div class="toolbar-actions">
+      <div class="filters">
+        <button id="filter-all" class="filter active" onclick="setFilter('all')">All</button>
+        <button id="filter-open" class="filter" onclick="setFilter('open')">Open</button>
+        <button id="filter-progress" class="filter" onclick="setFilter('progress')">In Progress</button>
+        <button id="filter-fail" class="filter" onclick="setFilter('fail')">Failed</button>
+        <button id="filter-blocked" class="filter" onclick="setFilter('blocked')">Blocked</button>
+        <button id="filter-retest" class="filter" onclick="setFilter('retest')">Retest</button>
+        <button id="filter-notes" class="filter" onclick="setFilter('notes')">Has Notes</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="stats" aria-label="Progress summary">
+    <div class="stat"><strong id="stat-pass">0</strong><span>Passed</span></div>
+    <div class="stat"><strong id="stat-open">0</strong><span>Open</span></div>
+    <div class="stat"><strong id="stat-progress">0</strong><span>In progress</span></div>
+    <div class="stat"><strong id="stat-fail">0</strong><span>Failed</span></div>
+    <div class="stat"><strong id="stat-blocked">0</strong><span>Blocked</span></div>
+    <div class="stat"><strong id="stat-complete">0%</strong><span>Pass rate</span></div>
+  </section>
+
+  <section class="intro">
+    <h2>How To Run This Checklist</h2>
+    <p>Use a throwaway account unless the item explicitly says to verify a production account. Capture the exact date, account, environment, project name, browser/app version, and exported backup file name in notes. A route only passes when the saved data survives refresh, navigation, sign-out/sign-in, device transition where relevant, export, restore, and deletion cleanup expectations.</p>
+    <ol>
+      <li>Create a baseline export before destructive tests. Keep one ZIP plus at least one readable export where available.</li>
+      <li>Run each item exactly as written. Do not mark Pass if you only inspected code or partially tested the route.</li>
+      <li>For every Fail, add reproduction steps, expected result, actual result, affected account/project, screenshots or console details, and whether user data was recoverable from export, cloud, local vault, or browser storage.</li>
+      <li>After a fix, move the item to Retest, rerun the full route, and only then mark Pass.</li>
+      <li>Export this checklist at the end of every session and attach it to the roadmap or QA evidence.</li>
+    </ol>
+  </section>
+
+  <div id="sections"></div>
+</main>
+
+<div id="exportModal" class="export-modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+  <div class="dialog">
+    <h2 id="exportTitle">Export Evidence</h2>
+    <label><input type="radio" name="format" value="markdown" checked> Markdown report</label>
+    <label><input type="radio" name="format" value="html"> HTML report</label>
+    <label><input type="radio" name="format" value="json"> JSON data</label>
+    <label><input type="radio" name="format" value="csv"> CSV spreadsheet</label>
+    <label><input id="exportAll" type="checkbox" checked> Include open items without notes</label>
+    <div class="header-actions" style="margin-top:16px;">
+      <button onclick="closeExport()">Cancel</button>
+      <button class="primary" onclick="runExport()">Download</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORE_KEY = 'yow-data-safety-qa-v1';
+const COLLAPSE_KEY = 'yow-data-safety-qa-collapsed-v1';
+const STATUSES = ['progress', 'pass', 'fail', 'blocked', 'retest', 'na'];
+const STATUS_LABELS = {
+  progress: 'In Progress',
+  pass: 'Pass',
+  fail: 'Fail',
+  blocked: 'Blocked',
+  retest: 'Retest',
+  na: 'N/A'
+};
+
+const SECTIONS = [
+  {
+    id: 'prep',
+    title: '0. Baseline Evidence And Recovery Setup',
+    items: [
+      item('prep-accounts', 'Create the QA accounts and account matrix', 'Production and local/offline environments', [
+        'Create or identify Account A, Account B, a fresh new account, a lapsed/limited entitlement account if available, and a desktop Lifetime account if desktop QA is in scope.',
+        'Record email aliases, plan/entitlement state, whether AI sync is enabled, and which projects each account should contain before testing.',
+        'Confirm Account A and Account B have clearly different project names and at least one unique character/location each.'
+      ], 'Each account starts from a known state, and no account uses the owner/admin account unless explicitly required.', 'Account list, entitlement states, baseline screenshots, and project names.', ['setup', 'auth']),
+      item('prep-backups', 'Create known-good backups before any destructive route', 'Each project type and account used in QA', [
+        'Export ZIP backups for every project that will be edited or deleted during this checklist.',
+        'Export a readable DOCX/PDF/World Bible where the project type promises it.',
+        'Download or copy desktop vault snapshots when testing the local desktop app.',
+        'Record file names, timestamps, project IDs, and where each backup is stored.'
+      ], 'A complete recovery artifact exists before destructive testing starts, and the artifact can be opened or inspected.', 'Backup filenames, export timestamps, file sizes, and a note confirming each archive opens.', ['backup', 'blocker']),
+      item('prep-sentinel-data', 'Seed sentinel records that make silent loss obvious', 'One project for each active project type', [
+        'Create one unique sentinel scene sentence with timestamp text.',
+        'Create one character, location, lore entry, timeline/history entry, idea, schedule event, faction, map item, and RPG/comic-specific record where applicable.',
+        'Use distinct names that include the account and project type, such as QA-A-Novel-Character-2026-08-01.',
+        'Refresh and confirm all sentinel records are visible before moving on.'
+      ], 'Every data domain has a unique marker that can be searched after refresh, re-login, export, restore, account switch, and delete cleanup.', 'Sentinel naming scheme and screenshots or exported list.', ['setup', 'coverage'])
+    ]
+  },
+  {
+    id: 'auth',
+    title: '1. Auth, Session, And Account Isolation',
+    items: [
+      item('auth-fresh-signup', 'Fresh signup preserves first project data', 'Fresh web account', [
+        'Sign up as a genuinely new user.',
+        'Create a project, write one sentinel sentence, create one character, and save one profile/theme preference.',
+        'Refresh immediately, sign out, close the tab, reopen the app, sign back in, and open the same project.',
+        'Search for the sentinel sentence and character.'
+      ], 'The project, manuscript content, worldbuilding record, and profile/theme preference all remain attached to the new account only.', 'Account, project ID, sentinel text, refresh/relogin result.', ['auth', 'save', 'blocker']),
+      item('auth-returning-session', 'Returning signed-in session restores without data replacement', 'Existing account with projects', [
+        'Open the app in a brand-new browser window while already signed in.',
+        'Confirm the library renders without a login loop.',
+        'Edit a scene and a worldbuilding record.',
+        'Refresh immediately and again after at least 30 seconds.'
+      ], 'Existing remote data loads, new edits remain, and no older local cache replaces cloud data.', 'Before/after project counts and edited record names.', ['auth', 'autosave']),
+      item('auth-deep-link', 'Logged-out deep project URL returns to the same project after login', 'Direct URL to /project/:id/:section', [
+        'Copy a deep URL for a project section that contains sentinel data.',
+        'Sign out and verify the signed-out screen appears.',
+        'Paste the deep URL into the address bar.',
+        'Sign in with the owning account.'
+      ], 'The app lands on the intended project/section, not a blank dashboard or a stale active project from another account.', 'URL path, expected project, actual landing project.', ['auth', 'routing']),
+      item('auth-account-switch', 'Account A data never appears in Account B after switch', 'Same browser, two real accounts', [
+        'Sign into Account A and open a project with A-only sentinel records.',
+        'Sign out through the app UI.',
+        'Sign into Account B without clearing browser storage or restarting.',
+        'Search the library and every major section for Account A sentinel names.',
+        'Create/edit B data, refresh, sign out, and return to Account A.'
+      ], 'B never sees A records or AI keys; B writes do not overwrite A cloud rows; A data is intact after switching back.', 'A/B project counts, search terms, any localStorage/sessionStorage observations.', ['auth', 'isolation', 'blocker']),
+      item('auth-theme-settings-isolation', 'Per-account settings do not leak across users', 'Appearance, profile, storage, AI settings', [
+        'Set Account A to a non-default theme/profile preference and save.',
+        'Sign out and sign into Account B in the same browser.',
+        'Check Account Settings, AI configuration, storage display, and workspace theme.',
+        'Return to Account A and verify its settings remain.'
+      ], 'B starts from its own settings/defaults and never inherits A settings, profile fields, entitlement, storage usage, or AI keys.', 'Settings checked and screenshots of both accounts.', ['auth', 'settings', 'isolation'])
+    ]
+  },
+  {
+    id: 'autosave',
+    title: '2. Autosave And Editor Data Loss Routes',
+    items: [
+      item('save-rapid-refresh', 'Rapid typing survives immediate refresh', 'Manuscript editor', [
+        'Open an existing scene and add a timestamped paragraph.',
+        'Continue typing for at least 20 seconds.',
+        'Immediately hard-refresh before any visible comfort pause.',
+        'Return to the same scene and compare the exact text.'
+      ], 'No recently typed text is missing or duplicated; saving indicators do not falsely imply saved content that disappears.', 'Exact text before refresh and exact text after refresh.', ['autosave', 'editor', 'blocker']),
+      item('save-navigation', 'Edits survive navigation between sections and projects', 'Project workspace', [
+        'Edit a scene, then immediately switch to Characters, Map, Schedule, and back to Manuscript.',
+        'Switch to a different project, then switch back.',
+        'Refresh and reopen the edited scene.',
+        'Repeat for at least one worldbuilding record.'
+      ], 'Scene and structured-record edits survive section changes and project switching with no bleed into the wrong project.', 'Edited scene/record IDs and final observed values.', ['autosave', 'routing']),
+      item('save-multi-scene', 'Multi-scene edits do not overwrite each other', 'Manuscript structure', [
+        'Edit Scene 1 with a sentinel paragraph.',
+        'Without refreshing, switch to Scene 2 and add a different sentinel paragraph.',
+        'Switch back and forth several times, then refresh.',
+        'Export DOCX/PDF if available and inspect ordering/content.'
+      ], 'Both scenes retain their own exact content; no scene inherits another scene text; exports include the correct text once.', 'Scene names, sentinel text, export confirmation.', ['autosave', 'export']),
+      item('save-large-paste', 'Large paste survives refresh, export, and restore', 'Long scene content', [
+        'Paste at least 5,000 words into a scene.',
+        'Wait for save, refresh, and confirm word count/content.',
+        'Export the project ZIP and manuscript export.',
+        'Restore into a new project and inspect the pasted scene.'
+      ], 'Large content is not truncated, corrupted, or omitted from backup/restore/readable exports.', 'Word counts before/after, restored project name, export filenames.', ['autosave', 'large-data', 'backup']),
+      item('save-tab-close', 'Immediate tab close/reopen does not lose last edit', 'Browser close route', [
+        'Edit a scene and a worldbuilding record.',
+        'Close the tab immediately after the edit.',
+        'Reopen the app from browser history or a fresh tab.',
+        'Confirm both edits remain after session restore.'
+      ], 'The pagehide/flush route preserves the latest edit or clearly recovers it through local draft/version history.', 'Timestamp of close, records checked, recovery route if needed.', ['autosave', 'browser']),
+      item('save-offline-reconnect', 'Offline edits survive reconnect and do not roll back', 'Network interruption', [
+        'Open a project while online and confirm data is current.',
+        'Disable network or block Supabase requests.',
+        'Edit a scene and at least two structured records.',
+        'Refresh while offline if the environment permits, then reconnect.',
+        'Wait for sync and sign in from a second browser/profile to verify cloud state.'
+      ], 'Offline-capable environments keep local edits and later sync them deliberately; web environments that require cloud show safe warnings and never present false saved state.', 'Network method, local result, cloud verification result.', ['autosave', 'sync', 'offline'])
+    ]
+  },
+  {
+    id: 'conflicts',
+    title: '3. Multi-Tab, Conflict, And Stale Write Safety',
+    items: [
+      item('conflict-same-scene', 'Two tabs editing the same scene preserve both versions', 'Two browser tabs, same account/project/scene', [
+        'Open the same scene in Tab A and Tab B.',
+        'In Tab A, add sentinel text A and wait for it to save.',
+        'In Tab B, without refreshing, add different sentinel text B and save.',
+        'Refresh both tabs and inspect the conflict warning/review UI.',
+        'Restore/discard conflict copies only after exporting evidence.'
+      ], 'Neither edit is silently lost. The app surfaces a user-visible conflict review path and exports do not treat hidden conflict copies as normal duplicate scenes.', 'A/B text, UI warning screenshot, conflict resolution chosen.', ['conflict', 'editor', 'blocker']),
+      item('conflict-project-switch', 'Rapid project switching cannot save edits into the wrong project', 'Two projects with similar structures', [
+        'Open Project A and edit Scene A.',
+        'Immediately switch to Project B before the save indicator settles.',
+        'Edit Scene B with distinct text.',
+        'Refresh, search both projects, and export both if possible.'
+      ], 'Project A text appears only in Project A; Project B text appears only in Project B; active project recovery does not point to a stale project.', 'Project IDs, search results, export notes.', ['conflict', 'routing']),
+      item('conflict-structured-records', 'Structured record concurrent edits do not create unacceptable silent loss', 'Two tabs, character/location/lore/schedule/map records', [
+        'Open the same record in two tabs.',
+        'Make different edits to separate fields in both tabs.',
+        'Save both in close succession.',
+        'Refresh and inspect which value wins.',
+        'Verify there is either a conflict path, clear last-write behavior for low-risk fields, or version/export recovery.'
+      ], 'No high-value manuscript-like content is lost silently; any last-write-wins behavior is understood, documented, and acceptable for that record type.', 'Record type, fields edited, final state, recovery evidence.', ['conflict', 'worldbuilding']),
+      item('conflict-device-cloud', 'Second device sees latest cloud data without overwriting fresher local edits', 'Two browsers/devices, same account', [
+        'Edit a scene on Device A and wait for sync.',
+        'Open Device B and confirm the edit appears.',
+        'Create a fresher local edit on Device B while Device A has older state open.',
+        'Trigger a save from Device A and inspect final state from a fresh Device C/profile.'
+      ], 'Fresher cloud/local edits are not overwritten by an older stale client without a conflict/recovery path.', 'Device labels, edit timestamps, final state from fresh profile.', ['conflict', 'sync', 'cloud'])
+    ]
+  },
+  {
+    id: 'backup',
+    title: '4. Exports, Backups, Restore, And Ownership',
+    items: [
+      item('backup-zip-complete', 'ZIP backup includes every user-created domain', 'Each active project type', [
+        'Create or use a project with sentinel data in manuscript, worldbuilding, map, schedule, factions, character builder, comic panels, and project settings where applicable.',
+        'Export the ZIP backup.',
+        'Extract or inspect the archive and search for every sentinel string.',
+        'Record any intentionally excluded generated/cache data.'
+      ], 'Every user-created record needed to reconstruct the project is present exactly once and in a usable structure.', 'Archive filename, file size, sentinel search result, excluded-data note.', ['backup', 'export', 'blocker']),
+      item('backup-readable', 'Readable exports are complete enough for ownership', 'DOCX, PDF, World Bible, comic/campaign exports', [
+        'Generate each promised readable export for the project type.',
+        'Open each file and inspect table of contents/order where available.',
+        'Search for sentinel scenes, characters, locations, lore, timeline/history, schedule, map plates, comic panels, or campaign prep/recap fields.',
+        'Check that deleted/conflict/internal-only records do not appear as normal live content.'
+      ], 'The user can recover meaningful creative work from readable files even if app restore is unavailable.', 'Export types, page/file counts, missing sections if any.', ['backup', 'export']),
+      item('backup-restore-new', 'Restore into a new project preserves all domains', 'Import ZIP into same account', [
+        'Export a ZIP from a fully populated project.',
+        'Import the ZIP as a new project without deleting the original.',
+        'Compare title/type, structure, scene order, word counts, worldbuilding counts, map state, schedule, images, settings, and type-specific data.',
+        'Refresh and compare again.'
+      ], 'Restored project is independent, complete, same project type, and does not mutate the original.', 'Original/restored project names and count comparison.', ['backup', 'restore', 'blocker']),
+      item('backup-restore-existing-account', 'Restore into an account with many existing projects does not overwrite unrelated data', 'Import ZIP into account containing other projects', [
+        'Record existing project list and counts.',
+        'Import a ZIP from another project/account if permitted.',
+        'Confirm a new project appears rather than replacing an existing one.',
+        'Open unrelated projects and check sentinel records remain untouched.'
+      ], 'Import creates or updates only the intended project path and does not delete, rename, reorder, or overwrite unrelated projects.', 'Before/after project list and affected IDs.', ['backup', 'restore', 'isolation']),
+      item('backup-corrupt-import', 'Corrupt or wrong-format imports fail safely', 'Import ZIP / third-party archive route', [
+        'Try importing a truncated ZIP, a non-YOW ZIP, a renamed text file, and an oversized archive where practical.',
+        'Observe error handling and project list afterward.',
+        'Refresh and confirm no partial project polluted the library unless explicitly labeled as recoverable.',
+        'Confirm existing data remains unchanged.'
+      ], 'Bad imports never damage existing projects and give a clear error or safe partial-recovery state.', 'Files tested, errors shown, project count before/after.', ['backup', 'restore', 'error']),
+      item('backup-delete-after-export', 'Export-before-delete recovery works', 'Project delete route', [
+        'Export a known-good ZIP and readable export.',
+        'Delete the original project through the UI.',
+        'Confirm it disappears from dashboard and cloud/local active-project state.',
+        'Import the ZIP and verify restored content.',
+        'If production DB access is available, verify deleted cloud child rows are cleaned up.'
+      ], 'User can recover from intentional project deletion using backup; delete does not remove unrelated records or leave orphaned live data that returns later.', 'Delete timestamp, restored project result, DB cleanup query if run.', ['delete', 'backup', 'cloud'])
+    ]
+  },
+  {
+    id: 'delete',
+    title: '5. Destructive Actions And Undo/Recovery',
+    items: [
+      item('delete-record', 'Deleting one record never deletes unrelated records', 'Characters, locations, lore, timeline/history, ideas, schedule, factions, map objects', [
+        'Create two records of the same type with linked sentinel names.',
+        'Delete one record using the normal UI.',
+        'Refresh, export ZIP, and restore into a new project.',
+        'Confirm the deleted record is gone and the sibling record remains.'
+      ], 'Delete scope is exact. Linked chips may clear safely, but unrelated content and sibling records remain.', 'Record type, deleted ID/name, sibling verification.', ['delete', 'worldbuilding']),
+      item('delete-linked-records', 'Linked-record deletion clears references without cascading creative loss', 'Characters linked to factions, timelines, journeys, scenes, maps', [
+        'Create a network of linked records.',
+        'Delete one linked record.',
+        'Inspect every place it was referenced.',
+        'Refresh, export, restore, and inspect references again.'
+      ], 'References clear or show safe stale-link fallbacks; no linked manuscript/worldbuilding content is deleted unexpectedly.', 'Link graph, deleted record, final reference behavior.', ['delete', 'links']),
+      item('delete-project-cloud-cleanup', 'Project deletion removes cloud child rows for the deleted project only', 'Supabase-backed account', [
+        'Create a project with multiple scenes and worldbuilding records.',
+        'Record project ID and child row counts if DB access is available.',
+        'Delete the project through the app.',
+        'Query cloud tables for that project ID and for an unrelated project ID.',
+        'Refresh and sign back in.'
+      ], 'No deleted project rows return; unrelated project rows remain; account active-project marker recovers safely.', 'Project ID, table counts before/after, refresh result.', ['delete', 'cloud', 'blocker']),
+      item('delete-account-data-export', 'Account closure or cleanup path preserves export ownership expectations', 'Account/delete or support cleanup flow if available', [
+        'Before account-level destructive action, verify user receives export guidance.',
+        'Export all projects and readable files.',
+        'Complete the account cleanup in a throwaway account only.',
+        'Confirm deleted account data is inaccessible and does not affect other accounts.'
+      ], 'Account-level deletion is deliberate, warned, exportable first, and strictly owner-scoped.', 'Warnings shown, exports captured, post-delete access result.', ['delete', 'account', 'legal'])
+    ]
+  },
+  {
+    id: 'media',
+    title: '6. Media Uploads, Quotas, And Storage Limits',
+    items: [
+      item('media-upload-persist', 'Uploaded images persist without bloating local JSON or disappearing', 'Covers, banners, portraits, faction logos, comic references', [
+        'Upload supported image types in every image-capable surface.',
+        'Refresh, sign out/in, and open from a second browser/profile.',
+        'Inspect Storage usage before and after upload if available.',
+        'Export ZIP/readable files and verify expected image references or embedded images.'
+      ], 'Images render after refresh/relogin, are charged to storage quota correctly, and do not trigger browser localStorage-full warnings from inline base64 growth.', 'Image surfaces, filenames, byte sizes, storage usage deltas.', ['media', 'quota', 'cloud']),
+      item('media-replace-delete-cleanup', 'Replacing and deleting images cleans old storage objects', 'Supabase Storage user-media bucket', [
+        'Upload an image and record storage usage/object path if visible.',
+        'Replace it with a different image and save.',
+        'Delete or remove the image/owning record.',
+        'Confirm old object is removed and storage usage decrements.',
+        'Check the record no longer references the deleted image after refresh.'
+      ], 'Replaced/deleted media does not orphan storage objects or leave broken references that later overwrite good data.', 'Object paths, usage before/after, record after refresh.', ['media', 'delete', 'quota']),
+      item('media-rls-isolation', 'Media storage is owner-scoped', 'Two real accounts', [
+        'Upload a private test image from Account A.',
+        'Sign into Account B and attempt to reference, replace, or delete A media through normal UI routes.',
+        'If direct URL is public by design, verify write/delete/update remains blocked for B.',
+        'Return to A and confirm image remains.'
+      ], 'Public read behavior, if intentional, does not allow cross-account writes, deletes, quota mutation, or record ownership leakage.', 'A object path, B attempted action, final A state.', ['media', 'isolation', 'security'])
+    ]
+  },
+  {
+    id: 'desktop',
+    title: '7. Desktop Local Vault, Snapshots, And Cloud Transition',
+    items: [
+      item('desktop-vault-reopen', 'Desktop vault survives quit, relaunch, and force quit', 'Packaged desktop app', [
+        'Create/edit projects, scenes, worldbuilding, map, schedule, and images in the desktop app.',
+        'Quit normally and relaunch.',
+        'Repeat after force-quitting during active editing.',
+        'Inspect Account Settings -> Storage and local vault diagnostics if available.'
+      ], 'The vault hydrates before the React store initializes, queued writes flush or recover, and no empty vault is shown as if data is gone.', 'Vault path, project counts, edits checked, any warning states.', ['desktop', 'vault', 'blocker']),
+      item('desktop-snapshots', 'Snapshots and restore create a safety copy before replacing data', 'Desktop Storage settings', [
+        'Create a manual snapshot.',
+        'Make visible edits after the snapshot.',
+        'Restore the snapshot.',
+        'Confirm the app creates a before-restore safety copy.',
+        'Verify current state matches the restored snapshot and the safety copy is available.'
+      ], 'Restore is reversible and never replaces a vault without a backup of the pre-restore state.', 'Snapshot filenames, before-restore filename, restored counts.', ['desktop', 'backup']),
+      item('desktop-relocate', 'Moving or locating a vault never presents an empty workspace silently', 'Move vault / Locate vault', [
+        'Move the vault to an empty folder and confirm data remains after reload.',
+        'Locate an existing vault and confirm adoption after reload.',
+        'Cancel the picker and confirm nothing changes.',
+        'Simulate an unreachable removable location and relaunch.'
+      ], 'Move/locate either succeeds with data intact, cancels cleanly, or warns and uses a safe default without implying the real vault was deleted.', 'Source/destination paths and warning text.', ['desktop', 'vault']),
+      item('desktop-local-first', 'Local-first edits pause cloud safely and resume only after confirmation', 'Desktop account with cloud entitlement', [
+        'Enable Local-first mode.',
+        'Edit scenes, worldbuilding, maps, schedule, and media.',
+        'Confirm automatic Supabase writes pause and UI states this clearly.',
+        'Turn Local-first off and inspect the confirmation panel before sync resumes.',
+        'Cancel once, then repeat and confirm deliberately.'
+      ], 'Local edits remain in the vault; cloud sync does not resume or overwrite until an explicit in-app confirmation.', 'Local/cloud counts shown, confirmation choices, final sync state.', ['desktop', 'sync', 'local-first']),
+      item('desktop-manual-sync-conflict', 'Manual upload/download protects divergent local and cloud copies', 'Desktop Local-first with active cloud', [
+        'Create divergent local and cloud data.',
+        'Open manual Upload this device copy and inspect counts/summary.',
+        'Cancel and verify neither side changes.',
+        'Repeat for Download cloud copy.',
+        'Confirm only the chosen project/settings data changes after explicit confirmation.'
+      ], 'Manual sync panels make the destructive direction clear, allow cancel, and never alter profile, billing, membership, or unrelated account data.', 'Local/cloud summaries, chosen action, post-sync comparison.', ['desktop', 'sync', 'conflict'])
+    ]
+  },
+  {
+    id: 'cloud',
+    title: '8. Cloud Hosting, Entitlements, And Expiry Safety',
+    items: [
+      item('cloud-lapse-export', 'Cloud hosting lapse warns before expiry and preserves export access', 'Lifetime or hosted cloud account nearing/lapsed expiry', [
+        'Verify pre-expiry warnings are visible and plain.',
+        'Export all projects before expiry.',
+        'After lapse/grace state, confirm export remains available where promised.',
+        'Verify the browser does not silently continue editing local-only data when cloud is required.'
+      ], 'Users can extract owned data before or during allowed grace behavior and are not misled into unsynced browser editing.', 'Plan state, warning copy, export result, blocked write behavior.', ['cloud', 'entitlement', 'backup']),
+      item('cloud-renewal-resume', 'Renewed hosting resumes cloud safely', 'Lapsed hosting renewal', [
+        'Prepare lapsed account with known local/desktop data if applicable.',
+        'Renew or simulate renewal through the supported flow.',
+        'Confirm entitlement updates and cloud write/sync route resumes.',
+        'Verify no older cloud snapshot overwrites fresher local/desktop work without confirmation.'
+      ], 'Renewal restores access without rollback or unexpected replacement of local work.', 'Before/after entitlement, sync status, data comparison.', ['cloud', 'billing', 'sync']),
+      item('cloud-plan-isolation', 'Plan entitlements do not affect data ownership or isolation', 'Free, Monthly, Lifetime, Founder', [
+        'Sign into accounts on each plan.',
+        'Verify edit, export, storage, AI, cloud sync, and desktop access match the plan.',
+        'Attempt unsupported actions and inspect messages.',
+        'Confirm unsupported actions do not delete, hide, or mutate existing project data.'
+      ], 'Plan walls block features without damaging user content, backups, or unrelated settings.', 'Plan matrix and blocked-action outcomes.', ['cloud', 'entitlement'])
+    ]
+  },
+  {
+    id: 'data-domains',
+    title: '9. User Data Domain Coverage',
+    items: [
+      item('domain-project-types', 'Every active project type passes the same persistence route', 'Novel, Novella, Short Story, D&D, TTRPG, Comic/Graphic Novel', [
+        'For each active type, create a new project with type-specific structure.',
+        'Add sentinel manuscript/session/page-panel content and at least three worldbuilding records.',
+        'Refresh, sign out/in, export ZIP/readable files, restore, and compare.',
+        'Delete the restored copy after verifying cleanup.'
+      ], 'No active project type has a weaker persistence, export, restore, or cleanup path than the others.', 'Per-type table with pass/fail notes and missing sections.', ['coverage', 'project-types', 'blocker']),
+      item('domain-ai-settings', 'AI settings and keys never leak or overwrite between accounts/devices', 'AI setup and synced AI settings', [
+        'Configure Account A provider/key and optional AI settings sync.',
+        'Verify all AI surfaces can use A settings.',
+        'Sign into Account B in the same browser and a fresh profile.',
+        'Confirm B sees no A key/settings and can set/remove its own.',
+        'Disable A sync and verify a fresh device no longer receives the key.'
+      ], 'Keys remain masked, owner-scoped, removable, and never hydrated into another account or stale browser session.', 'Accounts, sync state, surfaces checked, key removal result.', ['ai', 'isolation', 'security']),
+      item('domain-settings', 'User preferences persist without blocking core data recovery', 'Themes, profile, tours, active project, storage settings', [
+        'Change each user preference and refresh/relogin.',
+        'Switch accounts and verify isolation.',
+        'Delete or restore a project and confirm active-project pointers recover safely.',
+        'Confirm preference corruption does not hide library/project data.'
+      ], 'Settings persist per owner, and a bad/stale preference never makes user projects look missing.', 'Preferences changed, account switch result, active project result.', ['settings', 'isolation']),
+      item('domain-large-project', 'Large project remains exportable and restorable', '80k+ word stress project or realistic large project', [
+        'Load or create a realistic large project.',
+        'Edit multiple late-project scenes and records.',
+        'Refresh, search, export ZIP/DOCX/PDF where promised, and restore.',
+        'Compare counts, ordering, and sentinel late-project edits.'
+      ], 'Large size does not cause truncated saves, omitted exports, restore corruption, or unusable recovery time.', 'Counts, file sizes, restore duration, differences found.', ['large-data', 'backup'])
+    ]
+  },
+  {
+    id: 'failure',
+    title: '10. Failure Injection And Recovery Confidence',
+    items: [
+      item('failure-storage-full', 'Storage-full route fails loudly and recoverably', 'Browser quota or dev storage-full flag', [
+        'Fill browser storage or use the storage-full test flag if available.',
+        'Attempt to save text, upload media, and create structured records.',
+        'Inspect warnings, storage usage numbers, and whether edits remain recoverable.',
+        'Free space and retry the same save.'
+      ], 'The app warns before/when writes fail, preserves in-memory work long enough to export/copy, and recovers after space is freed.', 'Method used, warning text, data retained/retried result.', ['failure', 'quota', 'blocker']),
+      item('failure-cloud-write-error', 'Cloud write failures do not erase local working state', 'Blocked network or revoked Supabase permission', [
+        'Start from confirmed cloud data.',
+        'Force cloud writes to fail.',
+        'Edit multiple domains and observe sync status/errors.',
+        'Restore network/permission and confirm recovery or manual resolution path.'
+      ], 'Failed remote writes never clear the local editor/store, and retry/resolution is understandable.', 'Error message, domains edited, recovery path.', ['failure', 'cloud']),
+      item('failure-corrupt-local-cache', 'Corrupt local cache does not overwrite good cloud data', 'Browser storage manipulation in test profile', [
+        'Export a backup first.',
+        'Corrupt or tamper with local app storage for a test account.',
+        'Reload and sign in.',
+        'Confirm owner guards, parsing fallbacks, or cloud hydration recover safely.',
+        'Verify cloud data is not overwritten by corrupt local data.'
+      ], 'Bad local cache is discarded/ignored or safely repaired, never treated as authoritative over good owner-scoped cloud data.', 'Keys touched, errors shown, final cloud comparison.', ['failure', 'cache', 'isolation']),
+      item('failure-back-button-history', 'Browser history cannot expose stale signed-out data', 'Back button after sign-out', [
+        'Open sensitive project data while signed in.',
+        'Sign out through the UI and confirm signed-out page.',
+        'Use browser Back/Forward and direct history entries.',
+        'Attempt refresh on any restored view.'
+      ], 'Signed-out users cannot view or mutate protected account data through browser history or stale in-memory state.', 'Routes tested and final screen behavior.', ['failure', 'auth', 'security'])
+    ]
+  }
+];
+
+function item(id, title, route, steps, expected, evidence, tags) {
+  return { id, title, route, steps, expected, evidence, tags };
+}
+
+let state = loadJson(STORE_KEY, {});
+let collapsed = loadJson(COLLAPSE_KEY, {});
+let currentFilter = 'all';
+
+function loadJson(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+  catch { return fallback; }
+}
+
+function saveState() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+function saveCollapsed() { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); }
+function getEntry(id) { return state[id] || { status: '', note: '', evidence: '' }; }
+
+function render() {
+  const root = document.getElementById('sections');
+  root.innerHTML = SECTIONS.map(section => {
+    const rows = section.items.map(renderItem).join('');
+    const done = section.items.filter(i => getEntry(i.id).status === 'pass' || getEntry(i.id).status === 'na').length;
+    const collapsedClass = collapsed[section.id] ? ' collapsed' : '';
+    return `<section id="${section.id}" class="section${collapsedClass}">
+      <button class="section-header" onclick="toggleSection('${section.id}')">
+        <h2>${esc(section.title)}</h2>
+        <span class="section-count">${done} / ${section.items.length}</span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="items">${rows}</div>
+    </section>`;
+  }).join('');
+  updateStats();
+  applyFilters();
+}
+
+function renderItem(entry) {
+  const saved = getEntry(entry.id);
+  const haystack = [
+    entry.title, entry.route, entry.expected, entry.evidence,
+    entry.steps.join(' '), entry.tags.join(' '), saved.note, saved.evidence
+  ].join(' ').toLowerCase();
+  return `<article class="item" id="item-${entry.id}" data-id="${entry.id}" data-status="${saved.status || 'open'}" data-note="${escAttr(saved.note || '')}" data-search="${escAttr(haystack)}">
+    <div class="item-main">
+      <div>
+        <p class="item-title">${esc(entry.title)}</p>
+        <p class="route"><b>Route:</b> ${esc(entry.route)}</p>
+        <ol class="steps">${entry.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+        <p class="expected"><b>Expected:</b> ${esc(entry.expected)}</p>
+        <p class="evidence"><b>Evidence to capture:</b> ${esc(entry.evidence)}</p>
+        <div class="tag-row">${entry.tags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>
+      </div>
+      <div class="controls">
+        <div class="status-grid">${STATUSES.map(statusButton(entry.id, saved.status)).join('')}</div>
+        <label class="field-label" for="evidence-${entry.id}">Evidence / artifact links</label>
+        <input id="evidence-${entry.id}" class="meta-input" value="${escAttr(saved.evidence || '')}" oninput="updateField('${entry.id}', 'evidence', this.value)" placeholder="File names, screenshots, project IDs, SQL query, export name...">
+        <label class="field-label" for="note-${entry.id}">Notes / reproduction details</label>
+        <textarea id="note-${entry.id}" oninput="updateField('${entry.id}', 'note', this.value)" placeholder="What happened? What data was at risk? How was it recovered?">${esc(saved.note || '')}</textarea>
+      </div>
+    </div>
+  </article>`;
+}
+
+function statusButton(id, current) {
+  return status => `<label class="status ${status} ${current === status ? 'active' : ''}">
+    <input type="checkbox" ${current === status ? 'checked' : ''} onchange="setStatus('${id}', '${status}', this.checked)">
+    ${STATUS_LABELS[status]}
+  </label>`;
+}
+
+function setStatus(id, status, checked) {
+  state[id] = { ...getEntry(id), status: checked ? status : '' };
+  saveState();
+  render();
+}
+
+function updateField(id, field, value) {
+  state[id] = { ...getEntry(id), [field]: value };
+  saveState();
+  const row = document.getElementById(`item-${id}`);
+  if (row) {
+    row.dataset.note = getEntry(id).note || '';
+    row.dataset.search = [
+      row.innerText, getEntry(id).note, getEntry(id).evidence
+    ].join(' ').toLowerCase();
+  }
+  updateStats();
+  applyFilters();
+}
+
+function updateStats() {
+  const items = SECTIONS.flatMap(s => s.items);
+  const counts = { pass: 0, progress: 0, fail: 0, blocked: 0, retest: 0, na: 0, open: 0 };
+  items.forEach(i => {
+    const status = getEntry(i.id).status || 'open';
+    counts[status] = (counts[status] || 0) + 1;
+  });
+  const complete = Math.round(((counts.pass + counts.na) / items.length) * 100) || 0;
+  document.getElementById('stat-pass').textContent = counts.pass;
+  document.getElementById('stat-open').textContent = counts.open;
+  document.getElementById('stat-progress').textContent = counts.progress;
+  document.getElementById('stat-fail').textContent = counts.fail;
+  document.getElementById('stat-blocked').textContent = counts.blocked;
+  document.getElementById('stat-complete').textContent = `${complete}%`;
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter').forEach(btn => btn.classList.remove('active'));
+  document.getElementById(`filter-${filter}`).classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  const query = document.getElementById('search').value.trim().toLowerCase();
+  document.querySelectorAll('.item').forEach(row => {
+    const status = row.dataset.status || 'open';
+    const noted = !!(getEntry(row.dataset.id).note || getEntry(row.dataset.id).evidence || '').trim();
+    let show = true;
+    if (query && !row.dataset.search.includes(query)) show = false;
+    if (currentFilter === 'open' && status !== 'open') show = false;
+    if (['progress', 'fail', 'blocked', 'retest'].includes(currentFilter) && status !== currentFilter) show = false;
+    if (currentFilter === 'notes' && !noted) show = false;
+    row.classList.toggle('hidden', !show);
+  });
+}
+
+function toggleSection(id) {
+  collapsed[id] = !collapsed[id];
+  saveCollapsed();
+  document.getElementById(id).classList.toggle('collapsed', collapsed[id]);
+}
+
+function collapseAll() {
+  SECTIONS.forEach(s => collapsed[s.id] = true);
+  saveCollapsed();
+  render();
+}
+
+function expandAll() {
+  SECTIONS.forEach(s => collapsed[s.id] = false);
+  saveCollapsed();
+  render();
+}
+
+function resetAll() {
+  if (!confirm('Reset all statuses, notes, and evidence for this data safety checklist?')) return;
+  state = {};
+  saveState();
+  render();
+}
+
+function openExport() { document.getElementById('exportModal').classList.add('open'); }
+function closeExport() { document.getElementById('exportModal').classList.remove('open'); }
+document.getElementById('exportModal').addEventListener('click', event => {
+  if (event.target.id === 'exportModal') closeExport();
+});
+
+function collectRows() {
+  const includeOpen = document.getElementById('exportAll').checked;
+  const rows = [];
+  SECTIONS.forEach(section => {
+    section.items.forEach(entry => {
+      const saved = getEntry(entry.id);
+      const hasEvidence = !!(saved.note || saved.evidence || saved.status);
+      if (!includeOpen && !hasEvidence) return;
+      rows.push({
+        section: section.title,
+        id: entry.id,
+        title: entry.title,
+        route: entry.route,
+        steps: entry.steps,
+        expected: entry.expected,
+        evidencePrompt: entry.evidence,
+        tags: entry.tags,
+        status: saved.status || 'open',
+        evidence: saved.evidence || '',
+        note: saved.note || ''
+      });
+    });
+  });
+  return rows;
+}
+
+function runExport() {
+  const rows = collectRows();
+  const format = document.querySelector('input[name="format"]:checked').value;
+  const stamp = new Date().toISOString().slice(0,16).replace('T', '_').replace(':', '-');
+  if (format === 'json') {
+    download(`yow-data-safety-qa-${stamp}.json`, JSON.stringify(rows, null, 2), 'application/json');
+  } else if (format === 'csv') {
+    const cells = ['Section', 'ID', 'Title', 'Status', 'Route', 'Expected', 'Evidence', 'Note'];
+    const lines = [cells.join(',')].concat(rows.map(r => [
+      csv(r.section), csv(r.id), csv(r.title), csv(r.status), csv(r.route), csv(r.expected), csv(r.evidence), csv(r.note)
+    ].join(',')));
+    download(`yow-data-safety-qa-${stamp}.csv`, lines.join('\n'), 'text/csv');
+  } else if (format === 'html') {
+    download(`yow-data-safety-qa-${stamp}.html`, reportHtml(rows), 'text/html');
+  } else {
+    download(`yow-data-safety-qa-${stamp}.md`, reportMarkdown(rows), 'text/markdown');
+  }
+  closeExport();
+}
+
+function reportMarkdown(rows) {
+  let md = `# YOW Data Safety QA Evidence\n\nGenerated: ${new Date().toLocaleString()}\n\n`;
+  let last = '';
+  rows.forEach(row => {
+    if (row.section !== last) {
+      md += `\n## ${row.section}\n\n`;
+      last = row.section;
+    }
+    md += `### ${row.title}\n\n`;
+    md += `- Status: ${STATUS_LABELS[row.status] || 'Open'}\n`;
+    md += `- Route: ${row.route}\n`;
+    md += `- Expected: ${row.expected}\n`;
+    md += `- Evidence Prompt: ${row.evidencePrompt}\n`;
+    if (row.evidence.trim()) md += `- Evidence: ${row.evidence.trim()}\n`;
+    if (row.note.trim()) md += `- Notes: ${row.note.trim()}\n`;
+    md += '\nSteps:\n';
+    row.steps.forEach((step, index) => { md += `${index + 1}. ${step}\n`; });
+    md += '\n';
+  });
+  return md;
+}
+
+function reportHtml(rows) {
+  const body = rows.map(row => `<section>
+    <h2>${esc(row.title)}</h2>
+    <p><b>Status:</b> ${esc(STATUS_LABELS[row.status] || 'Open')}</p>
+    <p><b>Section:</b> ${esc(row.section)}</p>
+    <p><b>Route:</b> ${esc(row.route)}</p>
+    <ol>${row.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+    <p><b>Expected:</b> ${esc(row.expected)}</p>
+    <p><b>Evidence prompt:</b> ${esc(row.evidencePrompt)}</p>
+    ${row.evidence ? `<p><b>Evidence:</b> ${esc(row.evidence)}</p>` : ''}
+    ${row.note ? `<p><b>Notes:</b> ${esc(row.note)}</p>` : ''}
+  </section>`).join('');
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>YOW Data Safety QA Evidence</title><style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:920px;margin:0 auto;padding:32px;color:#1b1f24;line-height:1.5}
+    h1{color:#15765f} section{border-top:1px solid #d0d7de;padding:18px 0} h2{font-size:18px} p{margin:7px 0}
+  </style></head><body><h1>YOW Data Safety QA Evidence</h1><p>Generated: ${new Date().toLocaleString()}</p>${body}</body></html>`;
+}
+
+function csv(value) {
+  return `"${String(value || '').replace(/"/g, '""')}"`;
+}
+
+function download(filename, content, mime) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function esc(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escAttr(value) {
+  return esc(value).replace(/"/g, '&quot;');
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1376,18 +1376,35 @@ textarea:focus {
 }
 
 /* Below the phone breakpoint, every modal (Add Character, New Project, Edit
-   Location, etc.) becomes a full-screen page instead of a shrunk centered
-   dialog. This class is added by JS (StudioSheet, driven by useIsPhone()).
-   The sheet itself is pinned with position:fixed + inset:0 directly —
-   deliberately NOT sized via percentage/flex-stretch relative to the
-   backdrop, since that indirection was unreliable in practice. inset:0 is
-   the same technique already proven to reach the true visible viewport
-   edges (it's what the status-bar-color sampler strips in index.html use). */
+   Location, etc.) opens as an ordinary in-flow, full-height block instead of
+   a fixed-position overlay. This class is added by JS (StudioSheet, driven
+   by useIsPhone()); on open, StudioSheet scrolls the dialog into view, the
+   same way navigating to a new part of the page would.
+   Earlier versions pinned this with `position: fixed; inset: 0`, matching
+   the fixed-overlay pattern used elsewhere in the app. That kept surfacing
+   as real-device reports of the sheet's own header being clipped or
+   missing on phones — consistent with iOS Safari's long-standing fixed-
+   position-plus-viewport-resize bugs (webkit.org/b/236584 among others).
+   Multiple targeted mitigations (skipping the dialog's `.focus()` call,
+   fixing sub-16px input font-sizes that trigger Safari's zoom-on-focus)
+   each fixed a real, separate bug but never fully resolved the report, so
+   the fixed-position overlay itself was dropped rather than patched
+   further: nothing here is `position: fixed` or `position: absolute`
+   any more, so there is no viewport-relative positioning left for WebKit's
+   keyboard/zoom/fixed-position quirks to interact badly with. */
+.studio-sheet-backdrop.is-mobile-sheet {
+  position: static;
+  display: block;
+  background: var(--bg-main);
+  backdrop-filter: none;
+  padding: 0;
+}
+
 .studio-sheet.is-mobile-sheet {
-  position: fixed;
-  inset: 0;
-  width: auto;
+  position: static;
+  width: 100%;
   max-width: none;
+  min-height: 100dvh;
   height: auto;
   max-height: none;
   margin: 0;
@@ -8293,6 +8310,15 @@ body {
   color: var(--accent);
 }
 
+/* Icon shown only at mobile widths (see the ≤640px block near the end of
+   this file) so New Project/New Series/Import can shrink to icon-only
+   buttons and fit in the top bar's single row instead of a second row
+   below it. Hidden here so desktop/tablet keep their existing text-only
+   look unchanged. */
+.library-action-icon {
+  display: none;
+}
+
 .library-chat-button {
   width: 34px;
   height: 34px;
@@ -12386,6 +12412,7 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
 }
 .series-dash-card {
   position: relative;
@@ -12406,16 +12433,16 @@ body {
 }
 .series-dash-card-cover {
   position: relative;
-  height: 132px;
   overflow: hidden;
   border-radius: var(--r-md) var(--r-md) 0 0;
 }
+.series-dash-card-cover:not(.has-photo) {
+  height: 132px;
+}
 .series-dash-card-cover img {
-  position: absolute;
-  inset: 0;
+  display: block;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
 }
 .series-dash-card-letter {
   position: absolute;
@@ -12503,6 +12530,17 @@ body {
 .series-dash-card-foot {
   padding: 12px;
   background: var(--surface);
+}
+.series-dash-card-series {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .series-dash-card-name {
   font-size: 15px;
@@ -12790,10 +12828,27 @@ body {
     flex: 0 1 auto;
     min-width: 0;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .library-top-bar .user-menu-trigger-name {
-    max-width: 118px;
+  /* Wider phones (e.g. Pro Max-class, 421-640px) still have room for the New
+     Project/Series/Import row to shrink, but not while the account trigger is
+     also showing a full name + chevron alongside the AI-chat/tour icon
+     buttons — that combination pushed the button row's shrunk text to
+     overflow its own pill and visually overlap the next button. Collapsing
+     the account trigger to avatar-only for the whole ≤640px phone range
+     (matching the button-shrink range above, not just ≤420px) keeps enough
+     width free for the button row at every phone size. */
+  .library-top-bar .user-menu-trigger {
+    width: 38px;
+    justify-content: center;
+    padding: 3px;
+  }
+
+  .library-top-bar .user-menu-trigger-name,
+  .library-top-bar .user-menu-trigger-caret {
+    display: none;
   }
 
   .active-project-command {
@@ -12888,7 +12943,8 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
   }
 
-  .active-project-command-stat {
+  .active-project-command-stat,
+  .active-project-command-stats--compact .active-project-command-stat {
     min-width: 0;
   }
 
@@ -12988,11 +13044,6 @@ body {
     width: 38px;
     justify-content: center;
     padding: 3px;
-  }
-
-  .library-top-bar .user-menu-trigger-name,
-  .library-top-bar .user-menu-trigger-caret {
-    display: none;
   }
 }
 
@@ -21531,5 +21582,160 @@ body {
      with no breathing room. */
   .writing-progress-details strong {
     font-size: 26px;
+  }
+}
+
+@media (max-width: 860px) {
+  /* Full mobile header redesign, per explicit request (fifth iteration): a
+     plain hamburger glyph triggers the section menu, far left; the YOW
+     brand mark is removed entirely (fourth iteration had it centred — per
+     follow-up request, just drop it, nothing replaces it); Settings/Exit/
+     tour sit next to the account avatar on the far right. Write stays
+     folded into the hamburger dropdown. Appended last so it wins over the
+     file's several earlier (and mutually inconsistent) `.studio-spine`
+     grid definitions at this breakpoint — verified against live computed
+     styles, not guessed from source order. */
+  .studio-spine {
+    grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+    grid-template-rows: auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  .studio-room-hamburger {
+    grid-column: 1;
+    grid-row: 1;
+    width: auto;
+    min-width: 0;
+    padding: 0 8px 0 12px;
+  }
+
+  .studio-room-hamburger-label {
+    max-width: 96px;
+  }
+
+  .studio-utility {
+    grid-column: 3;
+    grid-row: 1;
+    justify-content: flex-end;
+    padding-left: 0;
+  }
+
+  /* No brand mark on mobile — the hamburger (left) already identifies this
+     as YOW's in-project view, and Write moved into its dropdown instead of
+     living in the bar as its own button. */
+  .studio-brand,
+  .studio-mobile-primary-action {
+    display: none;
+  }
+
+  .studio-account-slot {
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  /* The account trigger's name/caret and the gear+chevron+tour utility
+     cluster now sit in adjacent columns, but collapsing the account trigger
+     to avatar-only still keeps the far-right corner compact and consistent
+     with the library header's mobile treatment. */
+  .studio-spine .user-menu-trigger-name,
+  .studio-spine .user-menu-trigger-caret {
+    display: none;
+  }
+
+  .studio-spine .user-menu-trigger {
+    width: 38px;
+    justify-content: center;
+    padding: 3px;
+  }
+
+  .studio-room-menu-item-write {
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    margin-bottom: 2px;
+    padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Library dashboard top bar, per explicit request: shrink New Project/New
+     Series/Import down to icon-only buttons so they fit in the same row as
+     the logo instead of wrapping onto their own row below it. The existing
+     mobile block earlier in this file (`.library-top-bar-left { display:
+     grid; grid-template-columns: minmax(0,1fr) }` plus `.library-action-
+     cluster { grid-column: 1 / -1 }`) stacked brand and actions as two grid
+     rows in one column — switching both to a single flex row here lets them
+     sit side by side instead. Appended last so it wins over that earlier
+     block for the same reason as the other overrides in this file: verified
+     against live computed styles, not guessed from source order. */
+  .library-top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .library-action-cluster {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .library-new-project-button,
+  .library-new-series-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    min-height: 0;
+    padding: 0;
+    font-size: 0;
+    letter-spacing: normal;
+  }
+
+  .library-action-icon {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+  }
+
+  .library-action-label {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* iOS Safari auto-zooms the whole page when a focused text input's
+     font-size is under 16px (its heuristic for keeping text legible), and
+     that zoom/pan can be left "stuck" after the field blurs — including
+     across an in-app navigation that doesn't reset it. This was confirmed
+     as the real cause of the New Series form issue (see the "Modals and
+     overlays" row in ROADMAP.md, 2026-08-01 sixth follow-up) and is almost
+     certainly also why editors like the Character/Location/Lore edit sheets
+     have been reported as visually broken on a real device — every one of
+     them shares the same `.field` class combined with Tailwind's `text-sm`
+     (14px) utility (`Characters.jsx`, `Locations.jsx`, `Lore.jsx`,
+     `EraManager.jsx`, `Factions.jsx`, `ChronicleEntryForm.jsx`,
+     `CharacterJourneyForm.jsx`, `JourneyBeatModal.jsx`, and more — a very
+     widespread pattern, not one form). Rather than hunt down and edit every
+     Tailwind `text-sm` usage individually, force real 16px on any focusable
+     form field at phone widths here — `!important` because the exact
+     cascade order between this stylesheet and Tailwind's generated utility
+     classes isn't guaranteed, and this is a correctness fix (prevents a
+     real bug), not a stylistic one. */
+  .field,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input:not([type]),
+  textarea,
+  select {
+    font-size: 16px !important;
   }
 }

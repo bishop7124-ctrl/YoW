@@ -382,12 +382,15 @@ const STATUS_SORTS = [
   { id: 'words', label: 'Words' },
   { id: 'updated', label: 'Updated' },
   { id: 'title', label: 'Title' },
+  { id: 'series', label: 'Series' },
+  { id: 'type', label: 'Type' },
 ]
 
 function StatusQueue({ stats, series = [], onOpenProject }) {
   const [sortBy, setSortBy] = useState('status')
   const [seriesFilter, setSeriesFilter] = useState('all')
   const statusRank = new Map(STATUS_PICKER.map((status, index) => [status, index]))
+  const seriesNameById = new Map(series.map(s => [s.id, s.name]))
   const filteredStats = stats.filter(item => {
     if (seriesFilter === 'all') return true
     if (seriesFilter === 'standalone') return !item.project.seriesId
@@ -401,6 +404,19 @@ function StatusQueue({ stats, series = [], onOpenProject }) {
       return bTime - aTime || a.project.title.localeCompare(b.project.title)
     }
     if (sortBy === 'title') return a.project.title.localeCompare(b.project.title)
+    if (sortBy === 'series') {
+      const aName = a.project.seriesId ? (seriesNameById.get(a.project.seriesId) || '') : null
+      const bName = b.project.seriesId ? (seriesNameById.get(b.project.seriesId) || '') : null
+      if (aName === null && bName === null) return a.project.title.localeCompare(b.project.title)
+      if (aName === null) return 1
+      if (bName === null) return -1
+      return aName.localeCompare(bName) || a.project.title.localeCompare(b.project.title)
+    }
+    if (sortBy === 'type') {
+      const aLabel = getProjectType(a.project.type).label
+      const bLabel = getProjectType(b.project.type).label
+      return aLabel.localeCompare(bLabel) || a.project.title.localeCompare(b.project.title)
+    }
     const aStatus = STATUS_DATA[a.project.status]?.aliasFor ?? a.project.status ?? 'not_started'
     const bStatus = STATUS_DATA[b.project.status]?.aliasFor ?? b.project.status ?? 'not_started'
     return (statusRank.get(aStatus) ?? 99) - (statusRank.get(bStatus) ?? 99) || a.project.title.localeCompare(b.project.title)
@@ -431,6 +447,7 @@ function StatusQueue({ stats, series = [], onOpenProject }) {
         {sortedStats.length ? sortedStats.map(item => {
           const data = STATUS_DATA[item.project.status] ?? STATUS_DATA.not_started
           const cfg = getProjectType(item.project.type)
+          const seriesName = item.project.seriesId ? seriesNameById.get(item.project.seriesId) : null
           return (
             <button
               key={item.project.id}
@@ -442,7 +459,7 @@ function StatusQueue({ stats, series = [], onOpenProject }) {
               <span className="project-status-copy">
                 <strong>{item.project.title}</strong>
                 <small>
-                  {cfg.label} · {isCampaignProjectType(item.project.type)
+                  {seriesName && `${seriesName} · `}{cfg.label} · {isCampaignProjectType(item.project.type)
                     ? `${(item.campaignStats?.plannedSessions ?? 0).toLocaleString()} ${(cfg.structure?.level2 || 'Session').toLowerCase()}s`
                     : `${item.manuscriptWords.toLocaleString()} words`}
                 </small>
@@ -654,7 +671,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
             value={form.name}
             onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
             required
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
           />
 
           <textarea
@@ -662,7 +679,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
             value={form.summary}
             onChange={e => setForm(p => ({ ...p, summary: e.target.value }))}
             rows={4}
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
           />
 
           <div>
@@ -935,7 +952,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
             value={form.title}
             onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
             required
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
           />
 
           <textarea
@@ -943,7 +960,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
             value={form.description}
             onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
             rows={4}
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
           />
 
           <div className="project-settings-grid">
@@ -1095,7 +1112,7 @@ function SeriesCard({ series, seriesStats, onClick, onEdit }) {
   return (
     <div className="series-dash-card" onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}>
       <div
-        className="series-dash-card-cover"
+        className={`series-dash-card-cover${series.coverPhoto ? ' has-photo' : ''}`}
         style={{ background: series.coverPhoto ? undefined : getCoverGradient(series.name) }}
       >
         {series.coverPhoto
@@ -1137,13 +1154,13 @@ function SeriesCard({ series, seriesStats, onClick, onEdit }) {
   )
 }
 
-function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus, viewOnly }) {
+function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus, viewOnly, seriesName }) {
   const project = stats.project
   const cfg = getProjectType(project.type)
   return (
     <div className={`series-dash-card project-dash-card${viewOnly ? ' project-dash-card-viewonly' : ''}`} onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}>
       <div
-        className="series-dash-card-cover"
+        className={`series-dash-card-cover${project.coverPhoto ? ' has-photo' : ''}`}
         style={{ background: project.coverPhoto ? undefined : getCoverGradient(project.title) }}
       >
         {project.coverPhoto
@@ -1199,6 +1216,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus, vi
         <ProjectExportMenu onExport={(format, themeId) => onExport?.(project.id, format, themeId)} />
       </div>
       <div className="series-dash-card-foot">
+        {seriesName && <p className="series-dash-card-series">{seriesName}</p>}
         <p className="series-dash-card-name">{project.title}</p>
         <p className="series-dash-card-words">{stats.manuscriptWords.toLocaleString()} words</p>
       </div>
@@ -1226,6 +1244,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   const [seriesName, setSeriesName] = useState('')
   const [editingSeries, setEditingSeries] = useState(null)
   const [editingProject, setEditingProject] = useState(null)
+  const [libraryGroupBy, setLibraryGroupBy] = useState('series')
   const userProfile = user?.user_metadata || {}
   const userName = userProfile.full_name || userProfile.name || userProfile.alias || userProfile.writer_alias || user?.displayName || user?.email?.split('@')[0] || 'User'
 
@@ -1419,18 +1438,21 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           </div>
           {!store.readOnly && !membership?.freeProjectId && (
             <div className="library-action-cluster">
-              <button className="library-new-project-button" type="button" data-tour="new-project-btn" onClick={() => setShowForm(true)}>
-                New Project
+              <button className="library-new-project-button" type="button" data-tour="new-project-btn" onClick={() => setShowForm(true)} aria-label="New Project" title="New Project">
+                <svg className="library-action-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /><path d="M12 12v6" /><path d="M9 15h6" /></svg>
+                <span className="library-action-label">New Project</span>
               </button>
-              <button className="library-new-series-button" type="button" onClick={() => setShowSeriesForm(true)}>
-                New Series
+              <button className="library-new-series-button" type="button" onClick={() => setShowSeriesForm(true)} aria-label="New Series" title="New Series">
+                <svg className="library-action-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="18" rx="1" /><rect x="14" y="3" width="7" height="12" rx="1" /></svg>
+                <span className="library-action-label">New Series</span>
               </button>
               <div ref={importMenuRef} style={{ position: 'relative' }}>
-                <button className="library-new-series-button" type="button" data-tour="import-btn" onClick={() => setShowImportMenu(v => !v)}>
-                  Import ▾
+                <button className="library-new-series-button" type="button" data-tour="import-btn" onClick={() => setShowImportMenu(v => !v)} aria-label="Import" title="Import">
+                  <svg className="library-action-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                  <span className="library-action-label">Import ▾</span>
                 </button>
                 {showImportMenu && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.35)', minWidth: 196, overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.35)', minWidth: 196, maxWidth: 'calc(100vw - 32px)', overflow: 'hidden' }}>
                     {[
                       { label: 'AI Import', sublabel: 'Analyse notes or drafts and populate connected records to review', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
                       { label: 'Import ZIP', sublabel: 'YOW backup or compatible project archive', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
@@ -1520,28 +1542,72 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
         {(() => {
           const seriesById = new Map((store.series || []).map(s => [s.id, s]))
           const dashboardStats = store.allProjectStats
-          const seriesWithProjects = store.series || []
-          const projectCards = dashboardStats.filter(s => !s.project.seriesId || !seriesById.has(s.project.seriesId))
-          const seriesProjectGroups = (store.series || [])
-            .map(series => ({
-              series,
-              stats: dashboardStats.filter(st => st.project.seriesId === series.id),
-            }))
-            .filter(group => group.stats.length > 0)
+          const seriesList = store.series || []
 
-          if (seriesWithProjects.length === 0 && projectCards.length === 0 && seriesProjectGroups.length === 0) return null
+          if (seriesList.length === 0 && dashboardStats.length === 0) return null
+
+          const cardProps = (stats, withSeriesLabel) => ({
+            stats,
+            onClick: () => onOpenProject(stats.project.id),
+            onEdit: () => setEditingProject(stats.project),
+            onExport: handleExportProject,
+            isFocus: !!stats.project.focus,
+            onSetFocus: handleSetFocus,
+            viewOnly: !!membership?.freeProjectId && membership.freeProjectId !== stats.project.id,
+            seriesName: withSeriesLabel && stats.project.seriesId ? seriesById.get(stats.project.seriesId)?.name : null,
+          })
+
+          let groupedSections = null
+          if (libraryGroupBy === 'status') {
+            groupedSections = STATUS_PICKER.map(statusKey => ({
+              key: statusKey,
+              title: STATUS_DATA[statusKey].label,
+              stats: dashboardStats.filter(s => (STATUS_DATA[s.project.status]?.aliasFor ?? s.project.status ?? 'not_started') === statusKey),
+            })).filter(g => g.stats.length > 0)
+          } else if (libraryGroupBy === 'type') {
+            const byLabel = new Map()
+            dashboardStats.forEach(s => {
+              const label = getProjectType(s.project.type).label
+              if (!byLabel.has(label)) byLabel.set(label, [])
+              byLabel.get(label).push(s)
+            })
+            groupedSections = [...byLabel.entries()]
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([label, stats]) => ({ key: label, title: label, stats }))
+          } else if (libraryGroupBy === 'none') {
+            groupedSections = [{
+              key: 'all',
+              title: 'All Projects',
+              stats: [...dashboardStats].sort((a, b) => a.project.title.localeCompare(b.project.title)),
+            }]
+          }
 
           return (
             <section className="command-library-grid">
               <div className="library-sections">
-                {seriesWithProjects.length > 0 && (
+                <div className="dash-section-title">
+                  <h2>Library</h2>
+                  <div className="status-queue-controls">
+                    <label className="status-sort-control">
+                      <span>Group by</span>
+                      <select value={libraryGroupBy} onChange={e => setLibraryGroupBy(e.target.value)}>
+                        <option value="series">Series</option>
+                        <option value="status">Status</option>
+                        <option value="type">Type</option>
+                        <option value="none">None</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                {seriesList.length > 0 && (
                   <div className="library-section">
                     <div className="dash-section-title">
                       <h2>Series</h2>
                       <span>Multi-book collections</span>
                     </div>
                     <div className="dash-series-grid">
-                      {seriesWithProjects.map(s => {
+                      {seriesList.map(s => {
                         const sStats = dashboardStats.filter(st => st.project.seriesId === s.id)
                         return (
                           <SeriesCard
@@ -1557,54 +1623,56 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                   </div>
                 )}
 
-                {seriesProjectGroups.map(({ series, stats }) => (
-                  <div key={series.id} className="library-section">
-                    <div className="dash-section-title">
-                      <h2>{series.name}</h2>
-                      <span>Series projects</span>
-                    </div>
-                    <div className="dash-series-grid">
-                      {stats.map(item => (
-                        <ProjectCard
-                          key={item.project.id}
-                          stats={item}
-                          onClick={() => onOpenProject(item.project.id)}
-                          onEdit={() => setEditingProject(item.project)}
-                          onExport={handleExportProject}
-                          isFocus={!!item.project.focus}
-                          onSetFocus={handleSetFocus}
-                          viewOnly={!!membership?.freeProjectId && membership.freeProjectId !== item.project.id}
-                        />
+                {libraryGroupBy === 'series' ? (
+                  <>
+                    {seriesList
+                      .map(series => ({ series, stats: dashboardStats.filter(st => st.project.seriesId === series.id) }))
+                      .filter(group => group.stats.length > 0)
+                      .map(({ series, stats }) => (
+                        <div key={series.id} className="library-section">
+                          <div className="dash-section-title">
+                            <h2>{series.name}</h2>
+                            <span>Series projects</span>
+                          </div>
+                          <div className="dash-series-grid">
+                            {stats.map(item => (
+                              <ProjectCard key={item.project.id} {...cardProps(item, false)} />
+                            ))}
+                          </div>
+                        </div>
                       ))}
-                    </div>
-                  </div>
-                ))}
 
-                {projectCards.length > 0 && (
-                  <div className="library-section">
-                    <div className="dash-section-title">
-                      <h2>Standalone Projects</h2>
-                      <span>Choose the active project</span>
+                    {(() => {
+                      const standalone = dashboardStats.filter(s => !s.project.seriesId || !seriesById.has(s.project.seriesId))
+                      return standalone.length > 0 && (
+                        <div className="library-section">
+                          <div className="dash-section-title">
+                            <h2>Standalone Projects</h2>
+                            <span>Choose the active project</span>
+                          </div>
+                          <div className="dash-series-grid">
+                            {standalone.map(item => (
+                              <ProjectCard key={item.project.id} {...cardProps(item, false)} />
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </>
+                ) : (
+                  groupedSections.map(group => (
+                    <div key={group.key} className="library-section">
+                      <div className="dash-section-title">
+                        <h2>{group.title}</h2>
+                        <span>{group.stats.length} {group.stats.length === 1 ? 'project' : 'projects'}</span>
+                      </div>
+                      <div className="dash-series-grid">
+                        {group.stats.map(item => (
+                          <ProjectCard key={item.project.id} {...cardProps(item, true)} />
+                        ))}
+                      </div>
                     </div>
-                    <div className="dash-series-grid">
-                      {projectCards.map(stats => (
-                        <ProjectCard
-                          key={stats.project.id}
-                          stats={stats}
-                          onClick={() => onOpenProject(stats.project.id)}
-                          onEdit={() => setEditingProject(stats.project)}
-                          onExport={handleExportProject}
-                          isFocus={!!stats.project.focus}
-                          onSetFocus={handleSetFocus}
-                          viewOnly={!!membership?.freeProjectId && membership.freeProjectId !== stats.project.id}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {seriesWithProjects.length === 0 && projectCards.length === 0 && seriesProjectGroups.length === 0 && (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No projects yet.</p>
+                  ))
                 )}
               </div>
               <StatusQueue stats={store.allProjectStats} series={store.series} onOpenProject={onOpenProject} />
@@ -1661,7 +1729,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               value={seriesName}
               onChange={e => setSeriesName(e.target.value)}
               required
-              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, color: 'var(--text-main)', outline: 'none' }}
+              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', outline: 'none' }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <button type="submit"
@@ -1716,7 +1784,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               value={form.title}
               onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
               required
-              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, color: 'var(--text-main)', outline: 'none' }}
+              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', outline: 'none' }}
             />
 
             <textarea
@@ -1724,7 +1792,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               value={form.description}
               onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
               rows={2}
-              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', resize: 'none', outline: 'none' }}
+              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', resize: 'none', outline: 'none' }}
             />
 
             {store.series.length > 0 && (
@@ -1733,7 +1801,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                 <select
                   value={form.seriesId}
                   onChange={e => setForm(p => ({ ...p, seriesId: e.target.value }))}
-                  style={{ width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', outline: 'none' }}
+                  style={{ width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', outline: 'none' }}
                 >
                   <option value="">Standalone</option>
                   {store.series.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

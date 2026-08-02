@@ -343,6 +343,76 @@ describe('novel CRUD', () => {
     const stored = JSON.parse(localStorage.getItem('nf_novels'))
     expect(stored.map(n => n.id)).toContain('other-2')
   })
+
+  it('uses the locked free project as the dashboard active project during import', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false, freeProjectId: 'free-1' }))
+
+    act(() => {
+      result.current.importData({
+        activeNovelId: 'paid-era-2',
+        novels: [
+          { id: 'free-1', title: 'Chosen Free Project', type: 'novel', focus: false },
+          { id: 'paid-era-2', title: 'Old Paid Project', type: 'novel', focus: true },
+        ],
+      })
+    })
+
+    expect(result.current.activeNovelId).toBe('free-1')
+    expect(result.current.novels.find(n => n.id === 'free-1').focus).toBe(true)
+    expect(result.current.novels.find(n => n.id === 'paid-era-2').focus).toBe(false)
+  })
+
+  it('uses the locked free project even when local data is fresher than cloud settings', () => {
+    localStorage.setItem('nf_localOwner', 'user-local')
+    localStorage.setItem('nf_localWriteAt', '5000')
+    localStorage.setItem('nf_activeNovel', JSON.stringify('paid-era-2'))
+    localStorage.setItem('nf_novels', JSON.stringify([
+      { id: 'free-1', title: 'Chosen Free Project', type: 'novel', focus: false },
+      { id: 'paid-era-2', title: 'Old Paid Project', type: 'novel', focus: true },
+    ]))
+
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false, freeProjectId: 'free-1' }))
+
+    act(() => {
+      result.current.importData({
+        _savedAt: 1000,
+        activeNovelId: 'paid-era-2',
+        novels: [
+          { id: 'free-1', title: 'Cloud Free Project', type: 'novel', focus: false },
+          { id: 'paid-era-2', title: 'Cloud Old Paid Project', type: 'novel', focus: true },
+        ],
+      })
+    })
+
+    expect(result.current.activeNovelId).toBe('free-1')
+    expect(result.current.novels.find(n => n.id === 'free-1').focus).toBe(true)
+    expect(result.current.novels.find(n => n.id === 'paid-era-2').focus).toBe(false)
+  })
+
+  it('promotes a newly selected free project to the dashboard active project', async () => {
+    const { result, rerender } = renderHook(
+      ({ freeProjectId }) => useStore('user-local', { cloudSyncEnabled: false, freeProjectId }),
+      { initialProps: { freeProjectId: null } }
+    )
+
+    act(() => {
+      result.current.importData({
+        activeNovelId: 'old-focus',
+        novels: [
+          { id: 'chosen-free', title: 'Chosen Free Project', type: 'novel', focus: false },
+          { id: 'old-focus', title: 'Old Focus Project', type: 'novel', focus: true },
+        ],
+      })
+    })
+
+    rerender({ freeProjectId: 'chosen-free' })
+
+    await waitFor(() => {
+      expect(result.current.activeNovelId).toBe('chosen-free')
+      expect(result.current.novels.find(n => n.id === 'chosen-free').focus).toBe(true)
+      expect(result.current.novels.find(n => n.id === 'old-focus').focus).toBe(false)
+    })
+  })
 })
 
 describe('getProjectExportData', () => {

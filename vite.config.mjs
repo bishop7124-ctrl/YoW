@@ -30,13 +30,29 @@ function staticHtmlMiddleware() {
   }
 }
 
+// The desktop app doesn't track users with Google Analytics — strip the gtag
+// block (marked by ga:start/ga:end comments) from index.html in that build.
+function stripAnalyticsForDesktop() {
+  let mode
+  return {
+    name: 'strip-analytics-for-desktop',
+    configResolved(config) {
+      mode = config.mode
+    },
+    transformIndexHtml(html) {
+      if (mode !== 'desktop') return html
+      return html.replace(/<!-- ga:start[\s\S]*?<!-- ga:end -->\n?/, '')
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{js,jsx}', 'tests/api/**/*.test.js'],
   },
-  plugins: [react(), staticHtmlMiddleware()],
+  plugins: [react(), staticHtmlMiddleware(), stripAnalyticsForDesktop()],
   build: {
     chunkSizeWarningLimit: 1000,
   },

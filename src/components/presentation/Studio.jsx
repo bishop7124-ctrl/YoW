@@ -154,6 +154,21 @@ export function StudioFrame({
             aria-label="Workspace"
             style={{ top: roomMenuCoords.top, left: roomMenuCoords.left, right: roomMenuCoords.right }}
           >
+            {primaryAction && (
+              <button
+                type="button"
+                className="studio-room-menu-item studio-room-menu-item-write"
+                onClick={(event) => { setRoomMenuOpen(false); primaryAction.props.onClick?.(event) }}
+              >
+                <span className="studio-room-tab" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                </span>
+                <span className="studio-room-copy">
+                  <strong>Write</strong>
+                  <small>Open the manuscript</small>
+                </span>
+              </button>
+            )}
             {rooms.map(room => (
               <button
                 key={room.id}
@@ -350,45 +365,21 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
   const [dirty, setDirty] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const isPhone = useIsPhone()
-  // iOS Safari has a long-standing, unfixed bug where focus()'s preventScroll
-  // option is silently ignored (webkit.org/b/236584) — it scrolls/resizes the
-  // visual viewport anyway, which is what was cutting off the top of this
-  // sheet on phones. Escape-to-close still works via the window keydown
-  // listener below without needing the sheet itself focused, so skip the
-  // call on phone-width viewports rather than fight a bug WebKit hasn't fixed.
+  // On phones this no longer renders as a fixed-position overlay at all (see
+  // the CSS for `.is-mobile-sheet`) — it's a normal in-flow, full-height
+  // block appended where the editor was opened from, and we scroll it into
+  // view like navigating to a new part of the page. This replaces an earlier
+  // attempt that kept `position: fixed` and just skipped the dialog's own
+  // `.focus()` call to dodge a WebKit bug where fixed elements get cut off
+  // by the on-screen keyboard/viewport resize (webkit.org/b/236584) — that
+  // mitigation still left real-device reports of the sheet's header being
+  // clipped/missing, so the fixed-overlay approach itself was dropped rather
+  // than patched further.
   useEffect(() => {
-    if (!isPhone) dialogRef.current?.focus({ preventScroll: true })
-  }, [isPhone])
-
-  // TEMPORARY diagnostic — remove once the phone-modal-clipping bug is found.
-  // Rendered via portal directly to <body> (outside the sheet's own possibly-
-  // broken layout) so it stays visible no matter what the sheet is doing.
-  const [debugInfo, setDebugInfo] = useState(null)
-  useEffect(() => {
-    if (!isPhone) return
-    const measure = () => {
-      const rect = dialogRef.current?.getBoundingClientRect()
-      const cs = dialogRef.current ? getComputedStyle(dialogRef.current) : null
-      setDebugInfo({
-        innerWH: `${window.innerWidth}x${window.innerHeight}`,
-        vv: window.visualViewport ? `${Math.round(window.visualViewport.width)}x${Math.round(window.visualViewport.height)} off=${Math.round(window.visualViewport.offsetTop)} scale=${window.visualViewport.scale}` : 'n/a',
-        scrollY: window.scrollY,
-        rect: rect ? `top=${Math.round(rect.top)} h=${Math.round(rect.height)} left=${Math.round(rect.left)} w=${Math.round(rect.width)}` : 'no dialogRef',
-        pos: cs?.position,
-        inset: cs ? `${cs.top}/${cs.right}/${cs.bottom}/${cs.left}` : '',
-      })
-    }
-    measure()
-    const t1 = setTimeout(measure, 300)
-    const t2 = setTimeout(measure, 1000)
-    window.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('scroll', measure)
-    return () => {
-      clearTimeout(t1); clearTimeout(t2)
-      window.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('scroll', measure)
+    if (isPhone) {
+      dialogRef.current?.scrollIntoView({ block: 'start' })
+    } else {
+      dialogRef.current?.focus({ preventScroll: true })
     }
   }, [isPhone])
 
@@ -450,7 +441,7 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
   return (
     <div
       className={cx('studio-sheet-backdrop', centered && 'is-centered', isPhone && 'is-mobile-sheet')}
-      onClick={closeOnBackdrop ? requestClose : undefined}
+      onClick={closeOnBackdrop && !isPhone ? requestClose : undefined}
     >
       <section
         ref={dialogRef}
@@ -489,19 +480,6 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
           </div>
         )}
       </section>
-      {debugInfo && createPortal(
-        <div
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999999,
-            background: '#ff00ff', color: '#000', fontSize: 10, lineHeight: 1.4,
-            padding: '4px 6px', fontFamily: 'monospace', pointerEvents: 'none',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-          }}
-        >
-          {`innerWH=${debugInfo.innerWH} vv=${debugInfo.vv} scrollY=${debugInfo.scrollY} pos=${debugInfo.pos} inset=${debugInfo.inset} rect: ${debugInfo.rect}`}
-        </div>,
-        document.body,
-      )}
     </div>
   )
 }

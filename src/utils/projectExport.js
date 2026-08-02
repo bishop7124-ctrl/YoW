@@ -97,6 +97,7 @@ export const createProjectZipBlob = (projectData) => {
     jsonFile('data/locations.json', projectData.locations ?? []),
     jsonFile('data/timeline.json', projectData.timeline ?? []),
     jsonFile('data/world-history.json', projectData.worldHistory ?? []),
+    jsonFile('data/eras.json', projectData.eras ?? []),
     jsonFile('data/acts.json', projectData.acts ?? []),
     jsonFile('data/chapters.json', projectData.chapters ?? []),
     jsonFile('data/scenes.json', projectData.scenes ?? []),

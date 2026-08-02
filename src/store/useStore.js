@@ -758,6 +758,22 @@ export function useStore(userId = null, options = {}) {
     setWritingSceneId(null)
   }, [saveSettingsNow])
 
+  const focusDashboardProject = useCallback((id) => {
+    const nextId = id ?? null
+    if (!nextId) return
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(novel => {
+      const shouldFocus = novel.id === nextId
+      return novel.focus === shouldFocus ? novel : { ...novel, focus: shouldFocus }
+    }))
+  }, [commitLocal])
+
+  const selectDashboardActiveProject = useCallback((id) => {
+    const nextId = id ?? null
+    if (!nextId) return
+    selectActiveNovel(nextId)
+    focusDashboardProject(nextId)
+  }, [selectActiveNovel, focusDashboardProject])
+
   // localStorage persistence
   useEffect(() => { novelsRef.current = novels; save('nf_novels', novels) }, [novels])
   useEffect(() => { activeNovelIdRef.current = activeNovelId; save('nf_activeNovel', activeNovelId) }, [activeNovelId])
@@ -875,9 +891,12 @@ export function useStore(userId = null, options = {}) {
     // trusted as authoritative — always prefer the cloud copy instead.
     const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && !hasLocalWriteFailed()
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
-    const resolvedActiveNovelId = shouldPreferLocal
-      ? sourceData.activeNovelId ?? null
-      : resolveActiveNovelId(sourceData, userId, remoteSavedAt)
+    const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
+    const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
+      ? freeProjectId
+      : shouldPreferLocal
+        ? sourceData.activeNovelId ?? null
+        : resolveActiveNovelId(sourceData, userId, remoteSavedAt)
 
     if (shouldPreferLocal && canSyncCloud) {
       const snapshot = getLocalSnapshot()
@@ -900,7 +919,7 @@ export function useStore(userId = null, options = {}) {
         upsertItems('comic_pages', userId, snapshot.comicPages ?? []),
         upsertItems('comic_panels', userId, snapshot.comicPanels ?? []),
         upsertItems('eras', userId, snapshot.eras ?? []),
-        saveUserSettings(userId, { activeNovelId: snapshot.activeNovelId ?? null, currentYear: snapshot.currentYear ?? 0, activeMapByNovel: snapshot.activeMapByNovel ?? {} }),
+        saveUserSettings(userId, { activeNovelId: resolvedActiveNovelId, currentYear: snapshot.currentYear ?? 0, activeMapByNovel: snapshot.activeMapByNovel ?? {} }),
         upsertItems('scenes', userId, snapshot.scenes ?? []),
       ])).catch(() => {})
     }
@@ -930,7 +949,14 @@ export function useStore(userId = null, options = {}) {
         ]
       : rawTimeline
 
-    setNovels(sourceData.novels ?? [])
+    const importedNovels = sourceData.novels ?? []
+    const freeProjectExists = freeProjectId && importedNovels.some(novel => novel.id === freeProjectId)
+    const nextNovels = freeProjectExists
+      ? importedNovels.map(novel => ({ ...novel, focus: novel.id === freeProjectId }))
+      : importedNovels
+    const focusChanged = freeProjectExists && JSON.stringify(importedNovels) !== JSON.stringify(nextNovels)
+
+    setNovels(nextNovels)
     setCharacters(sourceData.characters ?? [])
     setFactions(sourceData.factions ?? [])
     setLocations(sourceData.locations ?? [])
@@ -973,6 +999,9 @@ export function useStore(userId = null, options = {}) {
         activeMapByNovel: sourceData.activeMapByNovel ?? {},
       })).catch(() => {})
     }
+    if (canSyncCloud && focusChanged) {
+      trackSync(upsertItems('novels', userId, nextNovels)).catch(() => {})
+    }
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
       importing.current = false
@@ -981,7 +1010,15 @@ export function useStore(userId = null, options = {}) {
         trackSync(upsertItems('rpg_characters', userId, healedRpgCharacterChanges)).catch(() => {})
       }
     }, 500)
-  }, [userId, canSyncCloud, trackSync])
+  }, [userId, canSyncCloud, freeProjectId, trackSync])
+
+  useEffect(() => {
+    if (!freeProjectId || !novels.some(novel => novel.id === freeProjectId)) return
+    if (activeNovelIdRef.current !== freeProjectId) selectActiveNovel(freeProjectId)
+    if (novels.some(novel => Boolean(novel.focus) !== (novel.id === freeProjectId))) {
+      focusDashboardProject(freeProjectId)
+    }
+  }, [freeProjectId, novels, selectActiveNovel, focusDashboardProject])
 
   const finishRemoteLoad = useCallback((allowSaves = true) => {
     importing.current = false
@@ -1818,6 +1855,8 @@ export function useStore(userId = null, options = {}) {
         content: data.description ?? data.content ?? '',
         category: data.category ?? data.type ?? '',
         tags: data.tags ?? [],
+        startYear: data.startYear ?? null,
+        endYear: data.endYear ?? null,
       }
       commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, historyEntry])
     }
@@ -1849,6 +1888,8 @@ export function useStore(userId = null, options = {}) {
             content: data.description ?? data.content ?? h.content,
             category: data.category ?? data.type ?? h.category,
             tags: data.tags ?? h.tags,
+            startYear: 'startYear' in data ? data.startYear : h.startYear,
+            endYear: 'endYear' in data ? data.endYear : h.endYear,
           }
         }
         return h
@@ -1903,6 +1944,8 @@ export function useStore(userId = null, options = {}) {
         linkedCharacters: [],
         linkedLocations: [],
         worldHistoryEntryId: entryId,
+        startYear: data.startYear ?? null,
+        endYear: data.endYear ?? null,
       }
       const linkedEntry = { ...entry, timelineEventId: eventId }
       commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, event])
@@ -1933,6 +1976,8 @@ export function useStore(userId = null, options = {}) {
             description: data.content ?? data.description ?? e.description,
             category: data.category ?? data.type ?? e.category,
             tags: data.tags ?? e.tags,
+            startYear: 'startYear' in data ? data.startYear : e.startYear,
+            endYear: 'endYear' in data ? data.endYear : e.endYear,
           }
         }
         return e
@@ -2327,11 +2372,7 @@ export function useStore(userId = null, options = {}) {
     setEras(prev => prev.filter(e => e.novelId !== id))
     commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => a.novelId !== id))
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
-      const toDelete = prev.filter(s => s.novelId === id)
-      if (canSyncCloud) toDelete.forEach(s => deleteSceneDoc(userId, s.id).catch(console.error))
-      return prev.filter(s => s.novelId !== id)
-    })
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.novelId !== id))
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.filter(e => e.novelId !== id))
     commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.filter(e => e.novelId !== id))
     commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.filter(m => m.novelId !== id))
@@ -2598,7 +2639,7 @@ export function useStore(userId = null, options = {}) {
   const api = {
     readOnly,
     freeProjectId,
-    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, addNovel, updateNovel, deleteNovel, importProjectFromData, ensureSampleProject, enrichSampleProject, getProjectExportData, getProjectContextData,
+    novels, activeNovelId, activeNovel, setActiveNovelId: selectActiveNovel, setDashboardActiveProject: selectDashboardActiveProject, addNovel, updateNovel, deleteNovel, importProjectFromData, ensureSampleProject, enrichSampleProject, getProjectExportData, getProjectContextData,
     series, addSeries, deleteSeries, updateSeries, updateSeriesContinuity, reorderSeries, reorderNovels,
     continuityRecords: {
       characters,

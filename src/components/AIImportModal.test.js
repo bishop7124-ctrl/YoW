@@ -5,7 +5,7 @@ import { populateProject, populateYowProject, relabelActsForType, parseManuscrip
 function mockStore() {
   const calls = {
     characters: [], locations: [], lore: [], history: [], events: [], ideas: [],
-    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [],
+    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [],
   }
   let n = 0
   const nid = (p) => `${p}-${++n}`
@@ -32,6 +32,8 @@ function mockStore() {
     addComicPanel: (pageId, data) => { const p = { id: nid('panel'), pageId, ...data }; calls.comicPanels.push(p); return p },
     saveRpgCharacter: (data) => { const id = nid('rpg'); calls.rpgCharacters.push({ ...data, id }); return id },
     addMap: () => {}, updateActiveMapData: () => {}, addScheduleEvent: () => {},
+    addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
+    updateWhiteboard: (board) => { calls.whiteboards.push(board) },
   }
 }
 
@@ -125,6 +127,41 @@ describe('populateYowProject', () => {
     expect(page.characterIds).toEqual([store.calls.characters[0].id])
     expect(panel.pageId).toBe(page.id)
     expect(panel.characterIds).toEqual([store.calls.characters[0].id])
+  })
+
+  it('recreates eras and remaps eraId on world history entries and timeline events', () => {
+    const store = mockStore()
+    const data = {
+      eras: [{ id: 'old-era', novelId: 'old-novel', name: 'The Second Age', startYear: 0, endYear: 100 }],
+      worldHistory: [{ id: 'old-hist', novelId: 'old-novel', title: 'The Founding', eraId: 'old-era' }],
+      timeline: [{ id: 'old-event', novelId: 'old-novel', title: 'The Founding', eraId: 'old-era' }],
+    }
+    populateYowProject(store, data, { worldHistory: true, timeline: true })
+    expect(store.calls.eras).toHaveLength(1)
+    const newEraId = store.calls.eras[0].id
+    expect(newEraId).not.toBe('old-era')
+    expect(store.calls.history[0].eraId).toBe(newEraId)
+    expect(store.calls.events[0].eraId).toBe(newEraId)
+  })
+
+  it('does not recreate eras when neither world history nor timeline is selected', () => {
+    const store = mockStore()
+    const data = {
+      eras: [{ id: 'old-era', novelId: 'old-novel', name: 'The Second Age' }],
+      characters: [{ id: 'old-char', name: 'Mika' }],
+    }
+    populateYowProject(store, data, { characters: true })
+    expect(store.calls.eras).toHaveLength(0)
+  })
+
+  it('restores the whiteboard without needing a section toggle', () => {
+    const store = mockStore()
+    const data = {
+      whiteboards: [{ id: 'old-wb', novelId: 'old-novel', whiteboard: { notes: [{ id: 'n1', text: 'Idea' }], groups: [] } }],
+    }
+    populateYowProject(store, data, {})
+    expect(store.calls.whiteboards).toHaveLength(1)
+    expect(store.calls.whiteboards[0].notes[0].text).toBe('Idea')
   })
 
   it('restores character builder party members', () => {
