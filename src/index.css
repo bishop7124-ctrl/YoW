@@ -21739,3 +21739,20 @@ body {
     font-size: 16px !important;
   }
 }
+
+@media (max-width: 860px) {
+  /* Edit/Delete on a character (or location/lore/etc.) dossier header were
+     floating dead-centre with big empty gaps on both sides on phones —
+     reported directly from a real-device screenshot. Root cause: an earlier
+     mobile rule (`.studio-page-actions { align-self: center }`, written for
+     single-button action bars elsewhere like the workspace header) also
+     matches this header's actions block. `.studio-page-header` stacks to a
+     column on phones with `align-items: flex-start`, so without that
+     override the actions would already sit flush left under the title/chips
+     — `align-self: center` was the only thing pulling them to the middle.
+     Appended last so it wins over that earlier rule for the same reason as
+     the other overrides in this file. */
+  .studio-page-actions {
+    align-self: flex-start;
+  }
+}

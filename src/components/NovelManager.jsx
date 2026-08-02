@@ -1427,7 +1427,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   }
 
   return (
-    <div style={{ height: '100vh', overflowY: 'auto', background: 'var(--bg-main)', color: 'var(--text-main)', WebkitOverflowScrolling: 'touch' }}>
+    <div style={{ height: '100dvh', overflowY: 'auto', background: 'var(--bg-main)', color: 'var(--text-main)' }}>
 
       {/* Top bar */}
       <div className="library-top-bar" data-tour="library-top-bar">
