@@ -117,6 +117,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     writingSceneId, setWritingSceneId,
     activeNovel, updateNovel,
     sceneConflicts = [], restoreSceneConflict, discardSceneConflict,
+    syncStatus,
   } = store
 
   const projectTypeConfig = getProjectType(activeNovel?.type)
@@ -151,7 +152,6 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
-  const saveTimer = useRef(null)
   const editorRefs = useRef({})
   const focusedWriting = useFocusedWritingMode(userId)
 
@@ -205,13 +205,18 @@ export default function Manuscript({ store, userId, membership = null }) {
     return map
   }, [characters, locations])
 
-  // Autosave state tracking — wraps updateSceneContent with UI feedback
+  // Autosave state tracking — wraps updateSceneContent with UI feedback. The
+  // indicator itself only clears back to "saved" once the store's syncStatus
+  // confirms the cloud push actually landed (see the effect below) — it used
+  // to clear on a flat 2s timer regardless of whether the debounced cloud
+  // save (or the network round-trip) had actually finished, so "wait for
+  // Saved, then refresh" could still refresh before the edit reached the
+  // cloud, letting another tab's reload load stale cloud data and overwrite
+  // the edit (see the 2026-08-02/03 row in docs/ROADMAP.md's Bugs table).
   const handleContentUpdate = useCallback((sceneId, content) => {
     setLiveSceneContent(prev => ({ ...prev, [sceneId]: content }))
     updateSceneContent(sceneId, content)
     setSaveState('saving')
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => setSaveState('saved'), 2000)
   }, [updateSceneContent])
 
   const handleLiveContentChange = useCallback((sceneId, content) => {
@@ -225,9 +230,17 @@ export default function Manuscript({ store, userId, membership = null }) {
     saveSceneVersion(scene)
     updateScene(scene.id, { content: version.content, title: version.title })
     setSaveState('saving')
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => setSaveState('saved'), 2000)
   }, [scenes, updateScene])
+
+  // Only report "saved" once the store confirms nothing is still syncing to
+  // the cloud (see handleContentUpdate above for why this can't be a timer).
+  // canSyncCloud-less sessions (offline/local-only) never leave 'idle', so
+  // they fall through to "saved" immediately, matching the old timer's
+  // behavior there.
+  useEffect(() => {
+    if (!syncStatus) return
+    setSaveState(syncStatus.state === 'syncing' ? 'saving' : 'saved')
+  }, [syncStatus])
 
   const handleReplaceInScene = useCallback((sceneId, newContent) => {
     handleContentUpdate(sceneId, newContent)

@@ -5,6 +5,8 @@ import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiC
 import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
+import Modal from '../shared/Modal'
+import { downloadBlob, sanitizeFilename } from '../../utils/projectExportHelpers'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
@@ -117,7 +119,7 @@ function FreedomCard({ level, selected, onSelect }) {
 
 function ContextSelector({ store, onStart, onCancel, initialContext, initialAgentId, initialFreedomLevel }) {
   const defaultContext = {
-    characterIds: [], locationIds: [], loreEntryIds: [], worldHistoryIds: [], chapterIds: [], customInstruction: '',
+    characterIds: [], locationIds: [], loreEntryIds: [], worldHistoryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '',
   }
   const [ctx, setCtx] = useState({ ...defaultContext, ...(initialContext || {}) })
   const [agentId, setAgentId] = useState(initialAgentId || DEFAULT_AGENT_ID)
@@ -131,7 +133,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
   const clearAll  = (field)      => setCtx(prev => ({ ...prev, [field]: [] }))
 
   const {
-    characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [],
+    characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [], ideaEntries = [],
   } = store
 
   const allContextIds = useMemo(() => ({
@@ -140,7 +142,8 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
     loreEntryIds: loreEntries.map(e => e.id),
     worldHistoryIds: worldHistory.map(h => h.id),
     chapterIds: chapters.map(c => c.id),
-  }), [characters, locations, loreEntries, worldHistory, chapters])
+    ideaEntryIds: ideaEntries.map(i => i.id),
+  }), [characters, locations, loreEntries, worldHistory, chapters, ideaEntries])
 
   const selectAllRecords = () => setCtx(prev => ({ ...prev, ...allContextIds }))
   const clearAllRecords = () => setCtx(prev => ({
@@ -150,6 +153,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
     loreEntryIds: [],
     worldHistoryIds: [],
     chapterIds: [],
+    ideaEntryIds: [],
   }))
 
   const chaptersByAct = useMemo(() => {
@@ -179,7 +183,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
   }, [worldHistory])
 
   const total = ctx.characterIds.length + ctx.locationIds.length + ctx.loreEntryIds.length +
-    ctx.worldHistoryIds.length + ctx.chapterIds.length
+    ctx.worldHistoryIds.length + ctx.chapterIds.length + ctx.ideaEntryIds.length
   const availableTotal = Object.values(allContextIds).reduce((sum, ids) => sum + ids.length, 0)
   const allRecordsSelected = availableTotal > 0 && Object.entries(allContextIds).every(([field, ids]) =>
     ids.every(id => (ctx[field] || []).includes(id))
@@ -285,6 +289,16 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
           </Section>
         )}
 
+        {ideaEntries.length > 0 && (
+          <Section title={`Ideas${ctx.ideaEntryIds.length ? ` (${ctx.ideaEntryIds.length})` : ''}`} defaultOpen={ctx.ideaEntryIds.length > 0}>
+            <div className="flex gap-2 mb-2">
+              <button type="button" onClick={() => selectAll('ideaEntryIds', ideaEntries.map(i => i.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
+              <button type="button" onClick={() => clearAll('ideaEntryIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
+            </div>
+            {ideaEntries.map(i => <CheckItem key={i.id} label={i.title || '(untitled)'} sub={i.group} checked={ctx.ideaEntryIds.includes(i.id)} onChange={() => toggle('ideaEntryIds', i.id)} />)}
+          </Section>
+        )}
+
         {chapters.length > 0 && (
           <Section title={`Manuscript${ctx.chapterIds.length ? ` (${ctx.chapterIds.length} chapters)` : ''}`} defaultOpen={ctx.chapterIds.length > 0}>
             <div className="flex gap-2 mb-2">
@@ -334,10 +348,11 @@ function responseTitle(content, fallback = 'AI response') {
     .slice(0, 72)
 }
 
-function Message({ msg, onSaveResponse }) {
+function Message({ msg, onRequestSave }) {
   const isUser = msg.role === 'user'
   const [copied, setCopied] = useState(false)
   const [savedAs, setSavedAs] = useState('')
+  const [saving, setSaving] = useState('')
 
   const copyMessage = async () => {
     if (!msg.content) return
@@ -358,9 +373,11 @@ function Message({ msg, onSaveResponse }) {
     window.setTimeout(() => setCopied(false), 1200)
   }
 
-  const saveResponse = (type) => {
-    if (!msg.content || msg.streaming || isUser) return
-    const saved = onSaveResponse?.(type, msg.content)
+  const requestSave = async (type) => {
+    if (!msg.content || msg.streaming || saving) return
+    setSaving(type)
+    const saved = await onRequestSave?.(type, msg.content)
+    setSaving('')
     if (!saved) return
     setSavedAs(type)
     window.setTimeout(() => setSavedAs(''), 1400)
@@ -391,32 +408,93 @@ function Message({ msg, onSaveResponse }) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
           {copied ? 'Copied' : 'Copy'}
         </button>
-        {!isUser && (
-          <div className="ai-response-save-actions flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => saveResponse('idea')}
-              disabled={!msg.content || msg.streaming}
-              title="Save answer as an idea"
-              className="h-6 px-2 inline-flex items-center gap-1 rounded border border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18h6" /><path d="M10 22h4" /><path d="M8.5 14.5A6 6 0 1 1 15.5 14.5c-.9.7-1.5 1.6-1.5 2.5h-4c0-.9-.6-1.8-1.5-2.5Z" /></svg>
-              {savedAs === 'idea' ? 'Saved' : 'Idea'}
-            </button>
-            <button
-              type="button"
-              onClick={() => saveResponse('lore')}
-              disabled={!msg.content || msg.streaming}
-              title="Save answer as a lore entry"
-              className="h-6 px-2 inline-flex items-center gap-1 rounded border border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg>
-              {savedAs === 'lore' ? 'Saved' : 'Lore'}
-            </button>
-          </div>
-        )}
+        <div className="ai-response-save-actions flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => requestSave('idea')}
+            disabled={!msg.content || msg.streaming || !!saving}
+            title={isUser ? 'Save message as an idea' : 'Save answer as an idea'}
+            className="h-6 px-2 inline-flex items-center gap-1 rounded border border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18h6" /><path d="M10 22h4" /><path d="M8.5 14.5A6 6 0 1 1 15.5 14.5c-.9.7-1.5 1.6-1.5 2.5h-4c0-.9-.6-1.8-1.5-2.5Z" /></svg>
+            {savedAs === 'idea' ? 'Saved' : saving === 'idea' ? '…' : 'Idea'}
+          </button>
+          <button
+            type="button"
+            onClick={() => requestSave('lore')}
+            disabled={!msg.content || msg.streaming || !!saving}
+            title={isUser ? 'Save message as a lore entry' : 'Save answer as a lore entry'}
+            className="h-6 px-2 inline-flex items-center gap-1 rounded border border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg>
+            {savedAs === 'lore' ? 'Saved' : saving === 'lore' ? '…' : 'Lore'}
+          </button>
+        </div>
       </div>
     </div>
+  )
+}
+
+function SaveEntryModal({ type, content, existingCategories = [], existingGroups = [], onSave, onClose }) {
+  const isIdea = type === 'idea'
+  const [title, setTitle]     = useState(() => responseTitle(content, isIdea ? 'New idea' : 'New lore entry'))
+  const [category, setCategory] = useState('AI Chat')
+  const [body, setBody]       = useState(content || '')
+
+  const submit = (e) => {
+    e.preventDefault()
+    const trimmedTitle    = title.trim() || (isIdea ? 'Untitled idea' : 'Untitled entry')
+    const trimmedCategory = category.trim()
+    if (isIdea) {
+      onSave({ title: trimmedTitle, description: body, body, group: trimmedCategory, tags: ['AI Chat'] })
+    } else {
+      onSave({ title: trimmedTitle, category: trimmedCategory || 'AI Chat', content: body, tags: ['AI Chat'] })
+    }
+  }
+
+  const listId  = isIdea ? 'ai-save-groups' : 'ai-save-categories'
+  const options = isIdea ? existingGroups : existingCategories
+
+  return (
+    <Modal title={isIdea ? 'Save as Idea' : 'Save as Lore Entry'} onClose={onClose} centered>
+      <form onSubmit={submit} className="space-y-3 text-left">
+        <div>
+          <label className="block form-label mb-1.5">Title</label>
+          <input
+            className="field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder={isIdea ? 'e.g. A hidden second moon' : 'e.g. The Binding Laws'}
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="block form-label mb-1.5">{isIdea ? 'Group' : 'Category'}</label>
+          <input
+            className="field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]"
+            list={listId}
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            placeholder={isIdea ? 'e.g. Worldbuilding' : 'e.g. Magic System'}
+          />
+          <datalist id={listId}>{options.map(o => <option key={o} value={o} />)}</datalist>
+        </div>
+        <div>
+          <label className="block form-label mb-1.5">Content</label>
+          <textarea
+            className="field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)] resize-none h-48"
+            value={body}
+            onChange={e => setBody(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2 justify-end pt-1">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+          <button type="submit" className="bg-[var(--accent)] text-[var(--bg-main)] font-bold px-4 py-2 rounded text-sm hover:opacity-90">
+            Save {isIdea ? 'Idea' : 'Lore Entry'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -425,10 +503,19 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const [streaming, setStreaming] = useState(false)
   const [editingCategory, setEditingCategory] = useState(false)
   const [categoryDraft, setCategoryDraft]     = useState('')
+  const [editingTitle, setEditingTitle]       = useState(false)
+  const [titleDraft, setTitleDraft]           = useState('')
+  const [saveModal, setSaveModal]             = useState(null) // { type, content, resolve }
   const bottomRef      = useRef(null)
   const abortRef       = useRef(false)
   const inputRef       = useRef(null)
   const categoryInputRef = useRef(null)
+  const titleInputRef     = useRef(null)
+
+  // Defensive: a session's `messages` should always be an array, but guard against
+  // any that were ever saved malformed (e.g. mid-write interruption) — reading
+  // .length off undefined here crashes the whole Manuscript view for that project.
+  const messages = Array.isArray(session.messages) ? session.messages : []
 
   const resizeInput = useCallback(() => {
     const el = inputRef.current
@@ -450,7 +537,18 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     setEditingCategory(false)
   }
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [session.messages])
+  const startEditTitle = () => {
+    setTitleDraft(session.title || '')
+    setEditingTitle(true)
+    setTimeout(() => titleInputRef.current?.focus(), 10)
+  }
+  const commitTitle = () => {
+    const next = titleDraft.trim()
+    if (next) onUpdate(session.id, { title: next })
+    setEditingTitle(false)
+  }
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { inputRef.current?.focus() }, [session.id])
   useEffect(() => { resizeInput() }, [input, session.id, resizeInput])
 
@@ -461,6 +559,15 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const promptStore = useMemo(
     () => store.getProjectContextData?.(session.novelId) ?? store,
     [store, session.novelId]
+  )
+
+  const existingLoreCategories = useMemo(
+    () => [...new Set((promptStore.loreEntries || []).map(e => e.category).filter(Boolean))].sort(),
+    [promptStore]
+  )
+  const existingIdeaGroups = useMemo(
+    () => [...new Set((promptStore.ideaEntries || []).map(e => e.group).filter(Boolean))].sort(),
+    [promptStore]
   )
 
   const freedom = getFreedomLevel(session.freedomLevel)
@@ -475,7 +582,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     if (!text || streaming) return
     if (!hasKey) {
       const assistantMsg = { id: uid(), role: 'assistant', content: AI_CONFIG_REQUIRED_TEXT, streaming: false, error: true }
-      onUpdate(session.id, { messages: [...session.messages, assistantMsg], updatedAt: Date.now() })
+      onUpdate(session.id, { messages: [...messages, assistantMsg], updatedAt: Date.now() })
       return
     }
     setInput('')
@@ -483,12 +590,12 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
     const userMsg      = { id: uid(), role: 'user',      content: text }
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
-    const nextMessages = [...session.messages, userMsg, assistantMsg]
+    const nextMessages = [...messages, userMsg, assistantMsg]
     onUpdate(session.id, { messages: nextMessages, updatedAt: Date.now() })
     setStreaming(true)
 
     let accumulated = ''
-    const apiMessages = [...session.messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+    const apiMessages = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
 
     streamMessage({
       provider,
@@ -525,30 +632,30 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const stop = () => {
     abortRef.current = true
     setStreaming(false)
-    const messages = session.messages.map(m => m.streaming ? { ...m, streaming: false } : m)
-    onUpdate(session.id, { messages })
+    const stoppedMessages = messages.map(m => m.streaming ? { ...m, streaming: false } : m)
+    onUpdate(session.id, { messages: stoppedMessages })
   }
 
-  const saveResponse = (type, content) => {
-    const title = responseTitle(content)
-    if (type === 'idea') {
-      return store.addIdeaEntry?.({
-        title,
-        description: content,
-        body: content,
-        group: 'AI Chat',
-        tags: ['AI Chat'],
-      })
-    }
-    if (type === 'lore') {
-      return store.addLoreEntry?.({
-        title,
-        category: 'AI Chat',
-        content,
-        tags: ['AI Chat'],
-      })
-    }
-    return null
+  const requestSave = (type, content) => new Promise(resolve => setSaveModal({ type, content, resolve }))
+
+  const closeSaveModal = (result = false) => {
+    saveModal?.resolve?.(result)
+    setSaveModal(null)
+  }
+
+  const confirmSave = (fields) => {
+    const entry = saveModal?.type === 'idea' ? store.addIdeaEntry?.(fields) : store.addLoreEntry?.(fields)
+    closeSaveModal(!!entry)
+  }
+
+  const exportChat = () => {
+    if (!messages.length) return
+    const lines = [`# ${session.title || 'AI Chat'}`, '']
+    messages.forEach(m => {
+      lines.push(`**${m.role === 'user' ? 'You' : 'AI'}:**`, '', m.content || '', '')
+    })
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+    downloadBlob(blob, `${sanitizeFilename(session.title, 'ai-chat')}.md`)
   }
 
   const quickPrompts = [
@@ -559,16 +666,35 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
   const contextCount = (session.context.characterIds?.length || 0) + (session.context.locationIds?.length || 0) +
     (session.context.loreEntryIds?.length || 0) + (session.context.worldHistoryIds?.length || 0) +
-    (session.context.chapterIds?.length || 0)
+    (session.context.chapterIds?.length || 0) + (session.context.ideaEntryIds?.length || 0)
 
   return (
+    <>
     <div className="ai-chat-view flex flex-col h-full">
       <div className="ai-chat-session-header px-3 py-2 border-b border-[var(--border)] flex items-center gap-2 flex-shrink-0">
         <button onClick={onBack} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-[var(--text-main)] truncate">{session.title}</div>
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commitTitle(); if (e.key === 'Escape') setEditingTitle(false) }}
+              onBlur={commitTitle}
+              className="w-full text-sm font-semibold bg-[var(--bg-main)] border border-[var(--accent)]/40 rounded px-1.5 py-0.5 text-[var(--text-main)] outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={startEditTitle}
+              title="Rename chat"
+              className="block w-full text-left text-sm font-semibold text-[var(--text-main)] truncate hover:text-[var(--accent)] transition-colors"
+            >
+              {session.title}
+            </button>
+          )}
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
             <select
               value={session.agentId || DEFAULT_AGENT_ID}
@@ -614,6 +740,17 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         </div>
         <button
           type="button"
+          onClick={exportChat}
+          disabled={!messages.length}
+          title="Export chat"
+          className="h-7 w-7 inline-flex items-center justify-center border rounded transition-colors flex-shrink-0 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+        <button
+          type="button"
           onClick={() => onPin(session.id)}
           title={session.pinned ? 'Unpin' : 'Pin'}
           className={`h-7 w-7 inline-flex items-center justify-center border rounded transition-colors flex-shrink-0 ${
@@ -629,7 +766,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
       </div>
 
       <div className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
-        {session.messages.length === 0 && (
+        {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-3">
             <AIStar size={28} className="text-[var(--accent)] opacity-70" />
             {!hasKey && <AiConfigRequiredNotice style={{ maxWidth: 320, textAlign: 'left' }} />}
@@ -651,7 +788,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             </div>
           </div>
         )}
-        {session.messages.map(msg => <Message key={msg.id} msg={msg} onSaveResponse={saveResponse} />)}
+        {messages.map(msg => <Message key={msg.id} msg={msg} onRequestSave={requestSave} />)}
         <div ref={bottomRef} />
       </div>
 
@@ -697,6 +834,17 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         </div>
       </div>
     </div>
+    {saveModal && (
+      <SaveEntryModal
+        type={saveModal.type}
+        content={saveModal.content}
+        existingCategories={existingLoreCategories}
+        existingGroups={existingIdeaGroups}
+        onSave={confirmSave}
+        onClose={() => closeSaveModal(false)}
+      />
+    )}
+    </>
   )
 }
 
@@ -804,11 +952,12 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
           </div>
         )}
         {filtered.map(s => {
-          const lastMsg = s.messages[s.messages.length - 1]
+          const sMessages = Array.isArray(s.messages) ? s.messages : []
+          const lastMsg = sMessages[sMessages.length - 1]
           const preview = lastMsg?.content?.slice(0, 70) || 'No messages yet'
           const total   = (s.context.characterIds?.length || 0) + (s.context.locationIds?.length || 0) +
             (s.context.loreEntryIds?.length || 0) + (s.context.worldHistoryIds?.length || 0) +
-            (s.context.chapterIds?.length || 0)
+            (s.context.chapterIds?.length || 0) + (s.context.ideaEntryIds?.length || 0)
           const isEditingCat = editingCategoryFor === s.id
 
           return (

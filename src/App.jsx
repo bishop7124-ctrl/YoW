@@ -1312,7 +1312,7 @@ function AppInner() {
         store={store}
         open={libraryAiOpen}
         onClose={() => setLibraryAiOpen(false)}
-        initialContext={{ characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '' }}
+        initialContext={{ characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }}
         membership={membership}
         userId={userId}
       />

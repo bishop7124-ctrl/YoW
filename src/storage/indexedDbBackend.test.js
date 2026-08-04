@@ -49,6 +49,23 @@ describe('indexeddb backend shell', () => {
     expect(onWriteError.mock.calls[0][0].message).toBe('indexeddb unavailable')
   })
 
+  it('applyExternalWrite/applyExternalRemove update the mirror without re-persisting (another tab already did)', async () => {
+    const persisted = []
+    const backend = createIndexedDbBackend({
+      persistItem: async (key, value) => { persisted.push(['set', key, value]) },
+      removePersistedItem: async key => { persisted.push(['remove', key]) },
+    })
+
+    backend.applyExternalWrite('nf_characters', '[{"id":"char-1"}]')
+    expect(backend.getItem('nf_characters')).toBe('[{"id":"char-1"}]')
+
+    backend.applyExternalRemove('nf_characters')
+    expect(backend.getItem('nf_characters')).toBeNull()
+
+    await backend.flush()
+    expect(persisted).toEqual([])
+  })
+
   it('exposes a snapshot for backup and diagnostics', () => {
     const backend = createIndexedDbBackend({
       entries: new Map([['nf_maps', '[]']]),

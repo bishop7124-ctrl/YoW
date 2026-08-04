@@ -222,18 +222,11 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
   const [linkSearch, setLinkSearch] = useState('')
   const [showLinkSearch, setShowLinkSearch] = useState(false)
   const isExpanding = aiExpandId === idea.id
-  const textareaRef = useRef(null)
 
   useEffect(() => {
     setTitleDraft(idea.title || '')
     setBodyDraft(idea.description || idea.body || '')
   }, [idea.id, idea.title, idea.description, idea.body])
-
-  // Auto-resize textarea
-  useEffect(() => {
-    const el = textareaRef.current
-    if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
-  }, [bodyDraft])
 
   const commitTitle = () => {
     const t = titleDraft.trim()
@@ -362,7 +355,7 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
           {/* Document area */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', padding: '32px 48px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '32px 48px' }}>
             {/* Title */}
             <input
               value={titleDraft}
@@ -373,6 +366,7 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
               placeholder="Untitled idea"
               style={{
                 width: '100%',
+                flexShrink: 0,
                 background: 'none',
                 border: 'none',
                 outline: 'none',
@@ -387,9 +381,8 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
               }}
             />
 
-            {/* Body / content */}
+            {/* Body / content — fills remaining space and scrolls internally */}
             <textarea
-              ref={textareaRef}
               value={bodyDraft}
               onChange={e => setBodyDraft(e.target.value)}
               onBlur={commitBody}
@@ -397,11 +390,12 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
               placeholder={readOnly ? '' : 'Start writing your idea here…'}
               style={{
                 width: '100%',
+                flex: 1,
                 background: 'none',
                 border: 'none',
                 outline: 'none',
                 resize: 'none',
-                overflow: 'hidden',
+                overflowY: 'auto',
                 fontFamily: 'var(--font-sans, inherit)',
                 fontSize: 15,
                 color: 'var(--text-main)',

@@ -32,6 +32,7 @@ import {
   getProjectExportFilename,
 } from '../utils/projectExport'
 import { readItem, writeItem } from '../storage/projectStorage'
+import RecordConflictReview from './shared/RecordConflictReview'
 import { useIsMobile } from '../utils/useMediaQuery'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
 
@@ -906,6 +907,7 @@ export default function Layout({
   )
 
   const [aiOpen, setAiOpen] = useState(false)
+  const [recordConflictReviewOpen, setRecordConflictReviewOpen] = useState(false)
   const isMobileViewport = useIsMobile()
   const [openSectionTourId, setOpenSectionTourId] = useState(null)
 
@@ -990,10 +992,10 @@ export default function Layout({
   }, [section, viewMode])
 
   const initialContext = useMemo(() => {
-    if (viewMode === 'writing') return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: store.chapters.map(c => c.id), customInstruction: '' }
-    if (section === 'characters' && store.selectedCharacterId) return { characterIds: [store.selectedCharacterId], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '' }
-    if (section === 'locations' && store.selectedLocationId) return { characterIds: [], locationIds: [store.selectedLocationId], loreEntryIds: [], chapterIds: [], customInstruction: '' }
-    return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], customInstruction: '' }
+    if (viewMode === 'writing') return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: store.chapters.map(c => c.id), ideaEntryIds: [], customInstruction: '' }
+    if (section === 'characters' && store.selectedCharacterId) return { characterIds: [store.selectedCharacterId], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
+    if (section === 'locations' && store.selectedLocationId) return { characterIds: [], locationIds: [store.selectedLocationId], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
+    return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
   }, [viewMode, section, store.selectedCharacterId, store.selectedLocationId, store.chapters])
 
   const databaseContent = {
@@ -1093,6 +1095,16 @@ export default function Layout({
               >
                 <span aria-hidden="true">!</span>
                 <span>{localModeBubble.label}</span>
+              </button>
+            )}
+            {store.recordConflicts?.length > 0 && (
+              <button
+                type="button"
+                className="ms-toolbar-conflict-btn"
+                onClick={() => setRecordConflictReviewOpen(true)}
+                title="A record was edited in two browser tabs at once — your edit here was kept"
+              >
+                ⚠ {store.recordConflicts.length} sync {store.recordConflicts.length === 1 ? 'conflict' : 'conflicts'}
               </button>
             )}
             {tourStore?.toursEnabled && activeSectionTour && (
@@ -1218,6 +1230,15 @@ export default function Layout({
         <ProjectSettings
           store={store}
           onClose={() => setProjectSettingsOpen(false)}
+        />
+      )}
+
+      {recordConflictReviewOpen && (
+        <RecordConflictReview
+          conflicts={store.recordConflicts || []}
+          onRestore={store.restoreRecordConflict}
+          onDiscard={store.discardRecordConflict}
+          onClose={() => setRecordConflictReviewOpen(false)}
         />
       )}
 

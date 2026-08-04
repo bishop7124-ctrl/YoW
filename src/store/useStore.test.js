@@ -689,6 +689,211 @@ describe('lore CRUD', () => {
   })
 })
 
+// Two tabs on the same account share one localStorage. Before this fix, two
+// separate bugs both caused the same symptom: (1) debouncedSaveItems
+// re-pushed a table's ENTIRE in-memory array to the cloud on every change,
+// so a tab with a stale copy of unrelated records would silently overwrite
+// whatever another tab had just saved for those records there; (2)
+// independent of cloud sync, commitLocal's local-storage write did the same
+// thing to the shared localStorage/vault blob itself — writing this tab's
+// whole (possibly stale) array clobbered any record another tab had changed
+// locally, even with cloud sync off entirely (see the 2026-08-02
+// "structured-record-conflict" QA fail in docs/ROADMAP.md's Bugs table).
+// These tests cover both: per-record diffed cloud sync, the local-storage
+// rebase, and conflict detection/resolution for genuine same-record races.
+describe('multi-tab structured record sync', () => {
+  beforeEach(() => {
+    vi.mocked(upsertItems).mockClear()
+    vi.mocked(upsertItems).mockResolvedValue({})
+  })
+
+  it('only pushes the record(s) that actually changed, not the whole collection', async () => {
+    const { result } = renderHook(() => useStore('user-diff', { cloudSyncEnabled: true }))
+    act(() => { result.current.finishRemoteLoad(true) })
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+    act(() => { result.current.saveCharacter({ name: 'Sam' }) })
+    await waitFor(() => expect(upsertItems).toHaveBeenCalledWith('characters', 'user-diff', expect.arrayContaining([
+      expect.objectContaining({ name: 'Frodo' }), expect.objectContaining({ name: 'Sam' }),
+    ])), { timeout: 3000 })
+    const frodoId = result.current.characters.find(c => c.name === 'Frodo').id
+
+    vi.mocked(upsertItems).mockClear()
+    act(() => { result.current.saveCharacter({ name: 'Frodo', role: 'ring bearer' }, frodoId) })
+
+    await waitFor(() => {
+      const call = vi.mocked(upsertItems).mock.calls.find(c => c[0] === 'characters')
+      expect(call).toBeTruthy()
+      expect(call[2]).toEqual([expect.objectContaining({ name: 'Frodo', role: 'ring bearer' })])
+    }, { timeout: 3000 })
+  })
+
+  it('a stale second tab saving an unrelated character no longer reverts the first tab\'s edit', async () => {
+    const owner = 'user-multitab'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabA.result.current.finishRemoteLoad(true) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.finishRemoteLoad(true) })
+
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+    await waitFor(() => {
+      const call = vi.mocked(upsertItems).mock.calls.find(c => c[0] === 'characters' && c[2].some(i => i.id === 'char-A'))
+      expect(call?.[2]).toEqual([expect.objectContaining({ id: 'char-A', notes: 'edited by tab A' })])
+    }, { timeout: 3000 })
+
+    vi.mocked(upsertItems).mockClear()
+    act(() => { tabB.result.current.saveCharacter({ name: 'Bob', notes: 'edited by tab B' }, 'char-B') })
+
+    // Tab B's own commitLocal must adopt Tab A's edit for the record it
+    // never touched, rather than writing back its own stale copy — this is
+    // the local-storage-layer half of the fix (independent of cloud sync).
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+    expect(tabB.result.current.characters.find(c => c.id === 'char-B').notes).toBe('edited by tab B')
+    const storedAfterTabB = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(storedAfterTabB.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+
+    await waitFor(() => {
+      const call = vi.mocked(upsertItems).mock.calls.find(c => c[0] === 'characters')
+      expect(call).toBeTruthy()
+    }, { timeout: 3000 })
+
+    // Whatever Tab B pushes to the cloud (it may legitimately re-affirm
+    // char-A, since its local copy of char-A changed too) must never carry
+    // reverted content for either record.
+    const calls = vi.mocked(upsertItems).mock.calls.filter(c => c[0] === 'characters')
+    calls.forEach(call => {
+      const charA = call[2].find(item => item.id === 'char-A')
+      if (charA) expect(charA.notes).toBe('edited by tab A')
+      const charB = call[2].find(item => item.id === 'char-B')
+      if (charB) expect(charB.notes).toBe('edited by tab B')
+    })
+  })
+
+  it('protects unrelated records from a stale second tab even with cloud sync entirely off (pure local-storage layer)', () => {
+    const owner = 'user-multitab-local'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+
+    // Tab B, unaware of Tab A's edit, saves an unrelated character. Without
+    // the commitLocal rebase, this write would blow away char-A in the
+    // shared localStorage blob — this is exactly what the original bug
+    // report reproduced, and it has nothing to do with cloud sync at all.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Bob', notes: 'edited by tab B' }, 'char-B') })
+
+    const stored = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(stored.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+    expect(stored.find(c => c.id === 'char-B').notes).toBe('edited by tab B')
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+  })
+
+  it('two tabs editing DIFFERENT fields on the SAME record both survive via a field-level merge (no conflict, no loss)', async () => {
+    const owner = 'user-samerecord-fields'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', role: 'Original role', bio: 'Original bio' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab A only changes `role`; its form still submits the full record,
+    // including its own (unrelated) stale `bio`.
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', role: 'Tab A role', bio: 'Original bio' }, 'char-A') })
+    // Tab B, unaware of Tab A's edit, only changes `bio`.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Alice', role: 'Original role', bio: 'Tab B bio' }, 'char-A') })
+
+    // Both edits must survive — this is the actual shape of the QA report:
+    // saving one field must not silently revert a field another tab changed.
+    const stored = JSON.parse(localStorage.getItem('nf_characters')).find(c => c.id === 'char-A')
+    expect(stored.role).toBe('Tab A role')
+    expect(stored.bio).toBe('Tab B bio')
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').role).toBe('Tab A role')
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').bio).toBe('Tab B bio')
+    // Not a real conflict — different fields, nothing for the user to review.
+    expect(tabB.result.current.recordConflicts).toHaveLength(0)
+  })
+
+  it('flags a recordConflicts entry when two tabs edit the SAME record concurrently, and restore/discard resolve it', async () => {
+    const owner = 'user-conflict'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabA.result.current.finishRemoteLoad(true) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.finishRemoteLoad(true) })
+
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'from tab A' }, 'char-A') })
+    await waitFor(() => {
+      const call = vi.mocked(upsertItems).mock.calls.find(c => c[0] === 'characters')
+      expect(call?.[2]).toEqual([expect.objectContaining({ notes: 'from tab A' })])
+    }, { timeout: 3000 })
+
+    act(() => { tabB.result.current.saveCharacter({ name: 'Alice', notes: 'from tab B' }, 'char-A') })
+    await waitFor(() => expect(tabB.result.current.recordConflicts).toHaveLength(1), { timeout: 3000 })
+
+    const conflict = tabB.result.current.recordConflicts[0]
+    expect(conflict.table).toBe('characters')
+    expect(conflict.recordId).toBe('char-A')
+    expect(conflict.mine.notes).toBe('from tab B')
+    expect(conflict.theirs.notes).toBe('from tab A')
+
+    // Tab B kept its own edit — that's what should already be saved.
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab B')
+
+    act(() => { tabB.result.current.restoreRecordConflict(conflict.id) })
+    expect(tabB.result.current.recordConflicts).toHaveLength(0)
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab A')
+  })
+
+  it('discardRecordConflict keeps the current (mine) version and just dismisses the warning', async () => {
+    const owner = 'user-conflict-discard'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabA.result.current.finishRemoteLoad(true) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.finishRemoteLoad(true) })
+
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'from tab A' }, 'char-A') })
+    await waitFor(() => {
+      const call = vi.mocked(upsertItems).mock.calls.find(c => c[0] === 'characters')
+      expect(call?.[2]).toEqual([expect.objectContaining({ notes: 'from tab A' })])
+    }, { timeout: 3000 })
+
+    act(() => { tabB.result.current.saveCharacter({ name: 'Alice', notes: 'from tab B' }, 'char-A') })
+    await waitFor(() => expect(tabB.result.current.recordConflicts).toHaveLength(1), { timeout: 3000 })
+
+    act(() => { tabB.result.current.discardRecordConflict(tabB.result.current.recordConflicts[0].id) })
+    expect(tabB.result.current.recordConflicts).toHaveLength(0)
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab B')
+  })
+})
+
 describe('scene reorder/move cloud sync', () => {
   it('reorderScene pushes both swapped scenes to the cloud', async () => {
     vi.mocked(saveSceneDoc).mockClear()
@@ -824,6 +1029,27 @@ describe('immediate data-safety persistence', () => {
     expect(conflict.title).toContain('conflict copy')
   })
 
+  it('a stale second tab editing a different scene does not revert another scene\'s content (local-storage layer)', () => {
+    const tabA = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
+    const chapterId = tabA.result.current.chapters[0].id
+    const sceneOneId = tabA.result.current.scenes[0].id
+    act(() => { tabA.result.current.addScene(chapterId, 'Scene Two') })
+    const sceneTwoId = tabA.result.current.scenes.find(s => s.id !== sceneOneId).id
+
+    // Tab B loads before Tab A's edit, so its own in-memory copy of scene one is stale.
+    const tabB = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+
+    act(() => { tabA.result.current.updateSceneContent(sceneOneId, 'Scene one edited by tab A') })
+    // Tab B edits the OTHER scene — no conflict on scene one, so no conflict-copy
+    // safety net kicks in for it; only the generic commitLocal rebase protects it.
+    act(() => { tabB.result.current.updateSceneContent(sceneTwoId, 'Scene two edited by tab B') })
+
+    const storedScenes = JSON.parse(localStorage.getItem('nf_scenes'))
+    expect(storedScenes.find(s => s.id === sceneOneId).content).toBe('Scene one edited by tab A')
+    expect(storedScenes.find(s => s.id === sceneTwoId).content).toBe('Scene two edited by tab B')
+  })
+
   it('excludes conflict copies from the normal scenes list and exposes them via sceneConflicts', () => {
     const tabA = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
     act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
@@ -875,6 +1101,44 @@ describe('immediate data-safety persistence', () => {
 
     expect(tabAFresh.result.current.sceneConflicts).toHaveLength(0)
     expect(tabAFresh.result.current.scenes.find(s => s.id === sceneId).content).toBe('Tab B stale text')
+  })
+
+  // A scene conflict copy's push to the cloud (saveSceneDoc, inside
+  // updateSceneContent) is a separate, immediate, un-debounced, no-retry
+  // call that fails silently (.catch(console.error)) on a transient network
+  // or auth error — real errors of exactly this shape (AbortError, auth
+  // token refresh races) were observed live while testing this. If that
+  // push never lands and a later refresh/login imports a cloud snapshot
+  // that doesn't have the copy yet, a plain `setScenes(sourceData.scenes)`
+  // replace would silently discard it — this is what made the manuscript
+  // "silent overwrite" survive three earlier fixes: importData is a
+  // completely different code path from commitLocal, which is where all
+  // three earlier fixes were made.
+  it('importData does not silently drop a local conflict copy the cloud fetch doesn\'t have yet (failed/slow saveSceneDoc push)', () => {
+    const tabA = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
+    const sceneId = tabA.result.current.scenes[0].id
+
+    const tabB = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.updateSceneContent(sceneId, 'Tab A newer text') })
+    act(() => { tabB.result.current.updateSceneContent(sceneId, 'Tab B stale text') })
+
+    // Local disk now has the main scene + a conflict copy (proven by the
+    // existing tests above). Simulate a refresh whose cloud fetch reflects
+    // only the main scene — as if the conflict copy's saveSceneDoc push
+    // never made it to the server.
+    const cloudWithoutConflictCopy = {
+      novels: tabB.result.current.novels,
+      acts: tabB.result.current.acts,
+      chapters: tabB.result.current.chapters,
+      scenes: tabB.result.current.scenes, // excludes conflict copies already (novelScenes filters them)
+      _savedAt: Date.now(),
+    }
+    act(() => { tabB.result.current.importData(cloudWithoutConflictCopy) })
+
+    expect(tabB.result.current.scenes.find(s => s.id === sceneId).content).toBe('Tab B stale text')
+    const conflict = tabB.result.current.sceneConflicts.find(s => s.conflictOf === sceneId)
+    expect(conflict?.content).toBe('Tab A newer text')
   })
 })
 

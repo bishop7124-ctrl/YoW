@@ -39,6 +39,7 @@ const PROJECT_STORAGE_KEYS = [
   'nf_comicPages',
   'nf_comicPanels',
   'nf_eras',
+  'nf_recordConflicts',
   LOCAL_WRITE_AT_KEY,
   LOCAL_OWNER_KEY,
   LOCAL_WRITE_FAILED_KEY,
@@ -189,6 +190,42 @@ const SYNC_CATEGORY_CONFIG = {
   worldhistory: { storageKey: 'nf_worldHistory', titleField: 'title' },
   ideas: { storageKey: 'nf_ideaEntries', titleField: 'title' },
 }
+
+// Maps each cloud-synced table (the `table` argument passed to debouncedSaveItems)
+// to where its array lives in localStorage and a human label for the
+// cross-tab conflict banner. Used by debouncedSaveItems to (a) diff against
+// the last-synced snapshot so an edit in one tab only pushes the record(s)
+// it actually changed — not the whole stale collection — and (b) detect when
+// another tab changed the same record in the meantime, so that can be
+// surfaced as a conflict instead of silently overwritten.
+const CLOUD_TABLE_CONFIG = {
+  novels: { storageKey: 'nf_novels', label: 'Project' },
+  series_items: { storageKey: 'nf_series', label: 'Series' },
+  characters: { storageKey: 'nf_characters', label: 'Character' },
+  factions: { storageKey: 'nf_factions', label: 'Faction' },
+  locations: { storageKey: 'nf_locations', label: 'Location' },
+  timeline_events: { storageKey: 'nf_timeline', label: 'Timeline event' },
+  world_history: { storageKey: 'nf_worldHistory', label: 'World history entry' },
+  acts: { storageKey: 'nf_acts', label: 'Act' },
+  chapters: { storageKey: 'nf_chapters', label: 'Chapter' },
+  lore_entries: { storageKey: 'nf_loreEntries', label: 'Lore entry' },
+  idea_entries: { storageKey: 'nf_ideaEntries', label: 'Idea' },
+  maps_data: { storageKey: 'nf_maps', label: 'Map' },
+  whiteboards_data: { storageKey: 'nf_whiteboards', label: 'Whiteboard' },
+  story_schedule: { storageKey: 'nf_storySchedule', label: 'Schedule event' },
+  rpg_characters: { storageKey: 'nf_rpg_characters', label: 'RPG character' },
+  comic_pages: { storageKey: 'nf_comicPages', label: 'Comic page' },
+  comic_panels: { storageKey: 'nf_comicPanels', label: 'Comic panel' },
+  eras: { storageKey: 'nf_eras', label: 'Era' },
+}
+const recordConflictLabel = (item) => item?.name || item?.title || 'Untitled'
+// Bookkeeping fields that legitimately differ on every save and aren't
+// meaningful to merge or flag as a conflict field-by-field.
+const IGNORED_MERGE_FIELDS = new Set(['lastModified', 'updatedAt', 'wordHistory'])
+const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+const STORAGE_KEY_TO_TABLE = Object.fromEntries(
+  Object.entries(CLOUD_TABLE_CONFIG).map(([table, config]) => [config.storageKey, table])
+)
 
 const normalizeSyncText = value => String(value || '').trim().toLowerCase()
 
@@ -504,6 +541,13 @@ export function useStore(userId = null, options = {}) {
   const [comicPages, setComicPages] = useState(() => loadInitial('nf_comicPages', []))
   const [comicPanels, setComicPanels] = useState(() => loadInitial('nf_comicPanels', []))
   const [eras, setEras] = useState(() => loadInitial('nf_eras', []))
+  // Cross-tab conflicts detected by debouncedSaveItems (see CLOUD_TABLE_CONFIG):
+  // a record this tab is about to sync that another tab also changed in the
+  // meantime. Local-only bookkeeping, not synced to the cloud itself.
+  const [recordConflicts, setRecordConflicts] = useState(() => loadInitial('nf_recordConflicts', []))
+  // table -> Map(id -> item reference) as of the last successful (attempted)
+  // cloud push, used by debouncedSaveItems to diff out unchanged records.
+  const lastSyncedByTableRef = useRef({})
 
   const novelsRef = useRef(novels)
   const charactersRef = useRef(characters)
@@ -716,7 +760,107 @@ export function useStore(userId = null, options = {}) {
   }, [userId, getCurrentSnapshot])
 
   const commitLocal = useCallback((ref, setter, key, updater) => {
-    const next = typeof updater === 'function' ? updater(ref.current) : updater
+    const prevLocal = ref.current
+    const rawNext = typeof updater === 'function' ? updater(prevLocal) : updater
+    // True no-op — every element unchanged by reference, which `.map()`
+    // passes that found nothing to update (e.g. saveCharacter's second,
+    // bidirectional-relationship-sync commitLocal call when no relationship
+    // actually changed) produce despite building a brand new outer array.
+    // Skip storage/broadcast entirely: writing an unchanged copy back out
+    // would otherwise re-read `persisted` and re-broadcast for no reason,
+    // racing against whatever another tab wrote in the moment between this
+    // update's own back-to-back commitLocal calls and clobbering it with a
+    // stale snapshot this tab never actually intended to save.
+    if (Array.isArray(prevLocal) && Array.isArray(rawNext) &&
+        rawNext.length === prevLocal.length && rawNext.every((item, i) => item === prevLocal[i])) {
+      return prevLocal
+    }
+    let next = rawNext
+    // `next` here is built from `prevLocal` — THIS tab's own last-known copy
+    // of the whole collection, which can be stale for any record another tab
+    // changed without this tab knowing. Writing it straight to storage below
+    // would silently overwrite those records with this tab's stale copies,
+    // even though this update never touched them (the original multi-tab
+    // clobber, at the local-storage layer — happens with or without cloud
+    // sync, and independently of the cloud-side fix in debouncedSaveItems).
+    // Fix: read what's on disk right now and, for every record this update
+    // did NOT touch, adopt the fresher on-disk version instead of this tab's
+    // stale one. For the record this update DID touch, merge field-by-field
+    // against another tab's on-disk version instead of a blind whole-record
+    // overwrite: this tab's edit form only ever intentionally changed the
+    // field(s) the user actually typed into, but it submits the WHOLE record
+    // (including every other field exactly as this tab's — possibly stale —
+    // form loaded it). Without merging, saving just one field silently
+    // reverts every other field to this tab's stale snapshot, discarding
+    // whatever another tab saved for those fields in the meantime — this is
+    // the actual shape of the "two tabs, same record, different fields" QA
+    // failure, not just a whole-record race. Only when the SAME field was
+    // changed by both tabs to different values is it a genuine conflict:
+    // this tab's value wins there (consistent with everything else being a
+    // "last write wins per field" merge) and it's flagged for review rather
+    // than silently decided (see recordConflicts / RecordConflictReview).
+    // Scenes are excluded from the conflict-flagging (they have their own,
+    // older conflict-copy mechanism — mergeSceneUpdateWithPersistedCopy) but
+    // still benefit from the same rebase/merge, so an edit to one field of a
+    // scene doesn't clobber a different field (or a different scene) another
+    // tab saved.
+    if (key && Array.isArray(prevLocal) && Array.isArray(rawNext)) {
+      const persisted = load(key, [])
+      if (Array.isArray(persisted)) {
+        const table = STORAGE_KEY_TO_TABLE[key]
+        const config = table ? CLOUD_TABLE_CONFIG[table] : null
+        const persistedMap = new Map(persisted.map(r => [r?.id, r]))
+        const prevMap = new Map(prevLocal.map(r => [r?.id, r]))
+        const conflicts = []
+        next = rawNext.map(item => {
+          if (!item || item.id == null) return item
+          const mineBase = prevMap.get(item.id)
+          const touchedByThisUpdate = !mineBase || mineBase !== item
+          const theirs = persistedMap.get(item.id)
+          if (!touchedByThisUpdate) {
+            return theirs && !jsonEq(theirs, item) ? theirs : item
+          }
+          if (!mineBase || !theirs || theirs === mineBase || jsonEq(theirs, mineBase)) return item
+          const keys = new Set([...Object.keys(item), ...Object.keys(theirs), ...Object.keys(mineBase)])
+          let merged = null
+          let fieldConflict = false
+          keys.forEach(fieldKey => {
+            if (IGNORED_MERGE_FIELDS.has(fieldKey)) return
+            const mineChanged = !jsonEq(item[fieldKey], mineBase[fieldKey])
+            const theirsChanged = !jsonEq(theirs[fieldKey], mineBase[fieldKey])
+            if (mineChanged && theirsChanged) {
+              if (!jsonEq(item[fieldKey], theirs[fieldKey])) fieldConflict = true
+              return
+            }
+            if (!mineChanged && theirsChanged) {
+              if (!merged) merged = { ...item }
+              merged[fieldKey] = theirs[fieldKey]
+            }
+          })
+          if (fieldConflict && config) {
+            conflicts.push({
+              id: uid(),
+              table,
+              recordId: item.id,
+              label: config.label,
+              name: recordConflictLabel(item),
+              mine: item,
+              theirs,
+              detectedAt: Date.now(),
+            })
+          }
+          return merged || item
+        })
+        // A record present on disk but never seen by this tab at all (not in
+        // prevLocal, so this update can't have deleted it) — another tab
+        // created it since this tab last loaded; keep it rather than drop it.
+        const nextIds = new Set(next.map(r => r?.id))
+        const prevIds = new Set(prevLocal.map(r => r?.id))
+        const additions = persisted.filter(item => item && item.id != null && !nextIds.has(item.id) && !prevIds.has(item.id))
+        if (additions.length) next = [...next, ...additions]
+        if (conflicts.length) setRecordConflicts(prev => [...prev, ...conflicts])
+      }
+    }
     ref.current = next
     markLocalWrite(userId)
     save(key, next)
@@ -797,12 +941,83 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
   useEffect(() => { comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
   useEffect(() => { comicPanelsRef.current = comicPanels; save('nf_comicPanels', comicPanels) }, [comicPanels])
+  useEffect(() => { save('nf_recordConflicts', recordConflicts) }, [recordConflicts])
 
-  // Debounced per-entity save — key is the table name
+  // Debounced per-entity save — key is the table name. Diffs `items` against
+  // the last snapshot this tab actually pushed for `table` (lastSyncedByTableRef)
+  // and only upserts the records that changed, instead of resending the whole
+  // in-memory array. Without this, a second tab whose own copy of the
+  // collection is stale (it never learned about an edit made in the other
+  // tab) would, on its own next save, re-push its stale copy of every OTHER
+  // record too — silently reverting edits it never touched. (Same-record
+  // conflict detection happens earlier, synchronously in commitLocal — by
+  // the time this debounced callback runs, this tab's own commitLocal has
+  // already overwritten localStorage with its own edit, so it's too late to
+  // tell what the other tab had written.)
   const debouncedSaveItems = useMemo(
-    () => createKeyedDebounce((table, uid, items) => trackSync(upsertItems(table, uid, items)).catch(() => {}), 2000),
+    () => createKeyedDebounce((table, ownerId, items) => {
+      const prevMap = lastSyncedByTableRef.current[table] || new Map()
+      const changed = items.filter(item => prevMap.get(item.id) !== item)
+      lastSyncedByTableRef.current[table] = new Map(items.map(item => [item.id, item]))
+      if (!changed.length) return
+      trackSync(upsertItems(table, ownerId, changed)).catch(() => {})
+    }, 2000),
     [trackSync]
   )
+
+  // Table -> { setter, ref, storageKey } for the entity collections covered by
+  // CLOUD_TABLE_CONFIG, used to apply a recordConflicts resolution back onto
+  // the actual collection. `ref` is optional (a couple of collections, e.g.
+  // eras/series, don't keep a ref) — restoreRecordConflict captures the
+  // updated array itself rather than relying on the ref when absent.
+  const RECORD_STATE_SETTERS = useMemo(() => ({
+    novels: { setter: setNovels, ref: novelsRef, storageKey: 'nf_novels' },
+    series_items: { setter: setSeries, ref: null, storageKey: 'nf_series' },
+    characters: { setter: setCharacters, ref: charactersRef, storageKey: 'nf_characters' },
+    factions: { setter: setFactions, ref: factionsRef, storageKey: 'nf_factions' },
+    locations: { setter: setLocations, ref: locationsRef, storageKey: 'nf_locations' },
+    timeline_events: { setter: setTimeline, ref: timelineRef, storageKey: 'nf_timeline' },
+    world_history: { setter: setWorldHistory, ref: worldHistoryRef, storageKey: 'nf_worldHistory' },
+    acts: { setter: setActs, ref: actsRef, storageKey: 'nf_acts' },
+    chapters: { setter: setChapters, ref: chaptersRef, storageKey: 'nf_chapters' },
+    lore_entries: { setter: setLoreEntries, ref: loreEntriesRef, storageKey: 'nf_loreEntries' },
+    idea_entries: { setter: setIdeaEntries, ref: ideaEntriesRef, storageKey: 'nf_ideaEntries' },
+    maps_data: { setter: setMaps, ref: mapsRef, storageKey: 'nf_maps' },
+    whiteboards_data: { setter: setWhiteboards, ref: whiteboardsRef, storageKey: 'nf_whiteboards' },
+    story_schedule: { setter: setStorySchedule, ref: storyScheduleRef, storageKey: 'nf_storySchedule' },
+    rpg_characters: { setter: setRpgCharacters, ref: rpgCharactersRef, storageKey: 'nf_rpg_characters' },
+    comic_pages: { setter: setComicPages, ref: comicPagesRef, storageKey: 'nf_comicPages' },
+    comic_panels: { setter: setComicPanels, ref: comicPanelsRef, storageKey: 'nf_comicPanels' },
+    eras: { setter: setEras, ref: null, storageKey: 'nf_eras' },
+  }), [])
+
+  // Applies the OTHER tab's version of a conflicted record on top of the
+  // current (this tab's) version, and re-syncs it so the restored value
+  // becomes authoritative in the cloud too.
+  const restoreRecordConflict = useCallback((conflictId) => {
+    setRecordConflicts(prev => {
+      const conflict = prev.find(c => c.id === conflictId)
+      if (!conflict) return prev
+      const entry = RECORD_STATE_SETTERS[conflict.table]
+      if (entry) {
+        let nextItems = null
+        entry.setter(prevItems => {
+          nextItems = prevItems.map(r => (r.id === conflict.recordId ? conflict.theirs : r))
+          save(entry.storageKey, nextItems)
+          if (entry.ref) entry.ref.current = nextItems
+          return nextItems
+        })
+        markLocalWrite(userId)
+        if (canSyncCloud && nextItems) debouncedSaveItems(conflict.table, userId, nextItems)
+      }
+      return prev.filter(c => c.id !== conflictId)
+    })
+  }, [canSyncCloud, userId, debouncedSaveItems, RECORD_STATE_SETTERS])
+
+  // Keeps this tab's version (already saved) and just dismisses the warning.
+  const discardRecordConflict = useCallback((conflictId) => {
+    setRecordConflicts(prev => prev.filter(c => c.id !== conflictId))
+  }, [])
 
   // Debounced user-settings save (activeNovelId, currentYear, activeMapByNovel)
   const debouncedSaveSettings = useMemo(
@@ -889,7 +1104,19 @@ export function useStore(userId = null, options = {}) {
     // quota-failed nf_scenes snapshot look "fresher than the cloud." If any
     // key is known to have failed to persist, the on-disk snapshot cannot be
     // trusted as authoritative — always prefer the cloud copy instead.
-    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && !hasLocalWriteFailed()
+    // remoteSavedAt is derived from MAX(updated_at) across rows that still
+    // exist in the cloud, so it is NOT monotonic — deleting content (or an
+    // account simply sitting mostly-empty) can make it lower than it used to
+    // be. Without a staleness ceiling, a long-dormant browser tab/profile
+    // that never reloaded (e.g. after switching accounts on the same device)
+    // can still be holding an old nf_localWriteAt that outlives that dip,
+    // making genuinely stale/deleted local data look "newer than the cloud"
+    // and get resurrected and re-pushed to Supabase. This logic exists to
+    // protect a real recent edit from a slow cloud round-trip, not to revive
+    // dormant data, so cap how old "local" is allowed to be to still win.
+    const LOCAL_TRUST_WINDOW_MS = 30 * 60 * 1000
+    const localWriteIsRecent = localWriteAt > 0 && (Date.now() - localWriteAt) < LOCAL_TRUST_WINDOW_MS
+    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && !hasLocalWriteFailed()
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
     const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
@@ -964,7 +1191,25 @@ export function useStore(userId = null, options = {}) {
     setWorldHistory(rawHistory)
     setActs(sourceData.acts ?? [])
     setChapters(sourceData.chapters ?? [])
-    setScenes(sourceData.scenes ?? [])
+    setScenes((() => {
+      const importedScenes = sourceData.scenes ?? []
+      // A scene conflict copy (see mergeSceneUpdateWithPersistedCopy) is this
+      // tab's own safety net for a same-scene multi-tab edit — its push to
+      // the cloud is a separate, immediate, non-debounced `saveSceneDoc` call
+      // with no retry (unlike the batched per-table upserts), so a transient
+      // network/auth failure there fails silently (`.catch(console.error)`).
+      // If that happens and this import ends up trusting a local-vs-cloud
+      // snapshot that doesn't include the copy yet, it must not be silently
+      // dropped just because a plain `setScenes(sourceData.scenes)` replace
+      // doesn't know about it — union it back in from whatever's actually on
+      // local disk right now (which already correctly reflects any discard/
+      // restore the user has done through the app).
+      const localScenes = load('nf_scenes', [])
+      const importedIds = new Set(importedScenes.map(s => s.id))
+      const missingLocalConflicts = (Array.isArray(localScenes) ? localScenes : [])
+        .filter(s => s.conflictOf && !importedIds.has(s.id))
+      return missingLocalConflicts.length ? [...importedScenes, ...missingLocalConflicts] : importedScenes
+    })())
     setLoreEntries(sourceData.loreEntries ?? [])
     setIdeaEntries(sourceData.ideaEntries ?? [])
     setMaps(sourceData.maps ?? [])
@@ -1001,6 +1246,30 @@ export function useStore(userId = null, options = {}) {
     }
     if (canSyncCloud && focusChanged) {
       trackSync(upsertItems('novels', userId, nextNovels)).catch(() => {})
+    }
+    // Seed the per-table "last synced" snapshot from what was just loaded, so
+    // the first real edit after login only pushes that one changed record
+    // instead of re-diffing against an empty map and pushing the whole
+    // collection again (see debouncedSaveItems).
+    lastSyncedByTableRef.current = {
+      novels: new Map(nextNovels.map(item => [item.id, item])),
+      series_items: new Map((sourceData.series ?? []).map(item => [item.id, item])),
+      characters: new Map((sourceData.characters ?? []).map(item => [item.id, item])),
+      factions: new Map((sourceData.factions ?? []).map(item => [item.id, item])),
+      locations: new Map((sourceData.locations ?? []).map(item => [item.id, item])),
+      timeline_events: new Map(mergedTimeline.map(item => [item.id, item])),
+      world_history: new Map(rawHistory.map(item => [item.id, item])),
+      acts: new Map((sourceData.acts ?? []).map(item => [item.id, item])),
+      chapters: new Map((sourceData.chapters ?? []).map(item => [item.id, item])),
+      lore_entries: new Map((sourceData.loreEntries ?? []).map(item => [item.id, item])),
+      idea_entries: new Map((sourceData.ideaEntries ?? []).map(item => [item.id, item])),
+      maps_data: new Map((sourceData.maps ?? []).map(item => [item.id, item])),
+      whiteboards_data: new Map((sourceData.whiteboards ?? []).map(item => [item.id, item])),
+      story_schedule: new Map((sourceData.storySchedule ?? []).map(item => [item.id, item])),
+      rpg_characters: new Map(healedRpgCharacters.map(item => [item.id, item])),
+      comic_pages: new Map((sourceData.comicPages ?? []).map(item => [item.id, item])),
+      comic_panels: new Map((sourceData.comicPanels ?? []).map(item => [item.id, item])),
+      eras: new Map((sourceData.eras ?? []).map(item => [item.id, item])),
     }
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
@@ -1085,6 +1354,8 @@ export function useStore(userId = null, options = {}) {
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
     setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setComicPages([]); setComicPanels([]); setCurrentYear(0); setActiveNovelId(null)
     setEras([])
+    setRecordConflicts([])
+    lastSyncedByTableRef.current = {}
     setTimeout(() => {
       importing.current = false
       remoteReady.current = true
@@ -2680,6 +2951,7 @@ export function useStore(userId = null, options = {}) {
     scenes: novelScenes, addScene, deleteScene, updateScene, reorderScene, moveScene,
     updateSceneContent,
     sceneConflicts: novelSceneConflicts, restoreSceneConflict, discardSceneConflict,
+    recordConflicts, restoreRecordConflict, discardRecordConflict,
     selectedCharacterId, setSelectedCharacterId,
     selectedLocationId, setSelectedLocationId,
     selectedLoreEntryId, setSelectedLoreEntryId,
@@ -2714,7 +2986,7 @@ export function useStore(userId = null, options = {}) {
     'addAct', 'deleteAct', 'updateAct', 'reorderAct', 'moveAct',
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',
-    'restoreSceneConflict', 'discardSceneConflict',
+    'restoreSceneConflict', 'discardSceneConflict', 'restoreRecordConflict', 'discardRecordConflict',
     'addScheduleEvent', 'updateScheduleEvent', 'deleteScheduleEvent', 'replaceData',
     'saveRpgCharacter', 'deleteRpgCharacter',
     'addComicPage', 'updateComicPage', 'deleteComicPage', 'reorderComicPage', 'duplicateComicPage',

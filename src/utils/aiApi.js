@@ -253,7 +253,7 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
     agentDirective?.trim() || DEFAULT_CREATIVE_CHAT_DIRECTIVE,
   ].filter(Boolean)
 
-  const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, customInstruction } = context
+  const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, ideaEntryIds, customInstruction } = context
 
   if (characterIds?.length) {
     const chars = (store.characters || []).filter(c => characterIds.includes(c.id))
@@ -316,6 +316,18 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
         if (s.content?.trim()) lines.push(s.content)
       })
     })
+  }
+
+  if (ideaEntryIds?.length) {
+    const ideas = (store.ideaEntries || []).filter(i => ideaEntryIds.includes(i.id))
+    if (ideas.length) {
+      lines.push('\n--- IDEAS ---')
+      ideas.forEach(i => {
+        lines.push(`\n${i.title || '(untitled)'}${i.group ? ` (${i.group})` : ''}`)
+        if (i.description) lines.push(i.description)
+        if (i.body) lines.push(i.body)
+      })
+    }
   }
 
   if (customInstruction?.trim()) {

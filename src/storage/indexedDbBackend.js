@@ -45,6 +45,17 @@ export function createIndexedDbBackend({
       mirror.delete(key)
       enqueue(() => removePersisted(key))
     },
+    // Applies a write/removal another browser tab already made (and already
+    // persisted to the shared IndexedDB database) directly to this tab's own
+    // mirror — no re-persist (the other tab already did it; this database is
+    // shared) and no re-broadcast (would echo forever between tabs). See
+    // browserVaultAdapter.js's cross-tab BroadcastChannel bridge, which is
+    // what actually calls these — without it, each tab's mirror only ever
+    // reflects its own writes, so two tabs sharing the same account/project
+    // silently diverge and the next tab to write anything overwrites
+    // whatever the other tab saved for every record it didn't touch.
+    applyExternalWrite: (key, value) => { mirror.set(key, value) },
+    applyExternalRemove: key => { mirror.delete(key) },
     flush: () => queue,
     snapshot: () => Object.fromEntries(mirror),
   }

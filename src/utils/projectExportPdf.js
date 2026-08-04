@@ -1,5 +1,6 @@
 import { getExportPdfTheme } from './projectExportThemes.js'
 import { getProjectType } from '../constants/projectTypes.js'
+import { normalizeFactionLogo } from '../components/Factions/logoData.js'
 import {
   cleanText, escapeHtml, sortByOrder, sortByTitle, valueList,
   asArray, isCampaignProject, sessionExportRows, sessionExportSummary,
@@ -31,9 +32,6 @@ const prose = (text) => {
 
 const firstLetter = (value) => escapeHtml(String(value || '?').trim()[0]?.toUpperCase() || '?')
 
-const joinNames = (items = [], key = 'name', limit = 4) =>
-  items.slice(0, limit).map(item => item?.[key]).filter(Boolean).join(', ')
-
 const MAP_OBJECT_TYPE_LABELS = {
   marker: 'Marker',
   stamp: 'Stamp',
@@ -47,16 +45,7 @@ const MAP_OBJECT_TYPE_LABELS = {
   shape: 'Land / room',
 }
 
-const mapObjectTypeLabel = (object) => {
-  const semantic = object?.metadata?.semanticType
-  if (semantic === 'room') return 'Room'
-  if (semantic === 'corridor') return 'Corridor'
-  if (semantic === 'wall') return 'Wall'
-  return MAP_OBJECT_TYPE_LABELS[object?.type] || object?.type || 'Object'
-}
-
 const getMapObjects = (map = {}) => asArray(map.mapObjects ?? map.objects)
-const getMapLayers = (map = {}) => asArray(map.mapLayers ?? map.layers)
 const normalizeExportGrid = (map = {}) => {
   const settings = map?.metadata?.gridSettings || {}
   const interior = map?.mapType === 'interior' || map?.metadata?.mapType === 'interior'
@@ -86,67 +75,6 @@ const mapObjectName = (object, locationsById) => {
   const meta = object?.metadata || {}
   if (meta.locationId && locationsById.has(meta.locationId)) return locationsById.get(meta.locationId)
   return meta.name || meta.text || object?.name || object?.label || MAP_OBJECT_TYPE_LABELS[object?.type] || 'Map object'
-}
-
-const summarizeMap = (map, projectData) => {
-  const locationsById = locationNameById(projectData)
-  const objects = getMapObjects(map)
-  const layers = getMapLayers(map)
-  const grid = normalizeExportGrid(map)
-  const legacyLabels = [...asArray(map.mapLabels), ...asArray(map.mapPins)]
-    .map(item => item.text || item.label || item.name)
-    .filter(Boolean)
-  const legacyRegions = asArray(map.mapRegions).map(item => item.name || item.label).filter(Boolean)
-  const objectLabels = objects
-    .filter(object => ['label', 'location', 'marker'].includes(object?.type))
-    .map(object => mapObjectName(object, locationsById))
-    .filter(Boolean)
-  const regions = [
-    ...legacyRegions,
-    ...objects.filter(object => object?.type === 'region').map(object => mapObjectName(object, locationsById)),
-  ].filter(Boolean)
-  const routes = objects
-    .filter(object => ['road', 'border', 'river'].includes(object?.type))
-    .map(object => {
-      const kind = mapObjectTypeLabel(object)
-      return `${kind}: ${mapObjectName(object, locationsById)}`
-    })
-  const stamps = objects
-    .filter(object => object?.type === 'stamp')
-    .map(object => mapObjectName(object, locationsById))
-    .filter(Boolean)
-  const land = objects
-    .filter(object => object?.type === 'shape')
-    .map(object => mapObjectName(object, locationsById))
-    .filter(Boolean)
-  const typeCounts = objects.reduce((counts, object) => {
-    const label = mapObjectTypeLabel(object)
-    counts[label] = (counts[label] || 0) + 1
-    return counts
-  }, {})
-  const layerLines = layers.map(layer => {
-    const layerCount = objects.filter(object => (object?.metadata?.layerId || 'objects') === layer.id).length
-    const flags = valueList(layer.visible === false && 'hidden', layer.locked && 'locked').join(', ')
-    return `${layer.name || 'Layer'}: ${layerCount} object${layerCount === 1 ? '' : 's'}${flags ? ` (${flags})` : ''}`
-  })
-  const countLines = Object.entries(typeCounts).map(([label, count]) => `${label}: ${count}`)
-  const lines = [
-    layers.length ? `Layers: ${layerLines.join('; ')}` : '',
-    grid.enabled ? `Movement grid: ${grid.type}, ${grid.size}px, ${grid.scale}${grid.snapToGrid ? ', snap on' : ''}` : '',
-    countLines.length ? `Object counts: ${countLines.join('; ')}` : '',
-    objectLabels.length || legacyLabels.length ? `Labels and places: ${[...objectLabels, ...legacyLabels].slice(0, 18).join(', ')}` : '',
-    regions.length ? `Regions: ${regions.slice(0, 14).join(', ')}` : '',
-    routes.length ? `Routes and water: ${routes.slice(0, 12).join(', ')}` : '',
-    stamps.length ? `Stamps: ${stamps.slice(0, 14).join(', ')}` : '',
-    land.length ? `Land and rooms: ${land.slice(0, 12).join(', ')}` : '',
-  ].filter(Boolean)
-  return {
-    labels: [...objectLabels, ...legacyLabels],
-    regions,
-    layers,
-    objects,
-    lines,
-  }
 }
 
 const mapObjectPoints = (object) => {
@@ -312,6 +240,122 @@ const shareAny = (a = [], b = []) => {
 
 const getImage = (item) => item?.image || item?.coverPhoto || item?.photo || item?.avatar || ''
 
+const factionLogoShapeElement = (shape = {}) => {
+  const { type, cx = 50, cy = 50, size = 20 } = shape
+  const fill = safeMapColor(shape.color, '#d8c08a')
+  const opacity = Number.isFinite(Number(shape.opacity)) ? Math.max(0, Math.min(1, Number(shape.opacity))) : 1
+  const attrs = `fill="${fill}" opacity="${opacity}"`
+  switch (type) {
+    case 'circle':
+      return `<circle cx="${cx}" cy="${cy}" r="${size}" ${attrs}/>`
+    case 'square':
+      return `<rect x="${cx - size}" y="${cy - size}" width="${size * 2}" height="${size * 2}" rx="${Math.max(1, size * 0.1)}" ${attrs}/>`
+    case 'triangle':
+      return `<polygon points="${cx},${cy - size} ${cx + size * 0.866},${cy + size * 0.5} ${cx - size * 0.866},${cy + size * 0.5}" ${attrs}/>`
+    case 'diamond':
+      return `<polygon points="${cx},${cy - size} ${cx + size * 0.65},${cy} ${cx},${cy + size} ${cx - size * 0.65},${cy}" ${attrs}/>`
+    case 'star':
+      return `<polygon points="${Array.from({ length: 10 }, (_, i) => {
+        const angle = (i * Math.PI) / 5 - Math.PI / 2
+        const r = i % 2 === 0 ? size : size * 0.42
+        return `${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`
+      }).join(' ')}" ${attrs}/>`
+    case 'hexagon':
+    case 'pentagon':
+    case 'octagon': {
+      const sides = type === 'hexagon' ? 6 : type === 'pentagon' ? 5 : 8
+      const offset = type === 'hexagon' ? Math.PI / 6 : type === 'octagon' ? Math.PI / 8 : Math.PI / 2
+      return `<polygon points="${Array.from({ length: sides }, (_, i) => {
+        const angle = (i * 2 * Math.PI) / sides - offset
+        return `${cx + size * Math.cos(angle)},${cy + size * Math.sin(angle)}`
+      }).join(' ')}" ${attrs}/>`
+    }
+    case 'cross': {
+      const t = size * 0.35
+      return `<path d="M ${cx - t},${cy - size} H ${cx + t} V ${cy - t} H ${cx + size} V ${cy + t} H ${cx + t} V ${cy + size} H ${cx - t} V ${cy + t} H ${cx - size} V ${cy - t} H ${cx - t} Z" ${attrs}/>`
+    }
+    case 'shield':
+      return `<path d="M ${cx - size},${cy - size} H ${cx + size} L ${cx + size},${cy + size * 0.25} L ${cx},${cy + size} L ${cx - size},${cy + size * 0.25} Z" ${attrs}/>`
+    case 'crescent': {
+      const R = size
+      const r = size * 0.75
+      const d = size * 0.3
+      const ix = (R * R - r * r + d * d) / (2 * d)
+      const iy = Math.sqrt(Math.max(0, R * R - ix * ix))
+      return `<path d="M ${cx + ix},${cy - iy} A ${R},${R} 0 1,0 ${cx + ix},${cy + iy} A ${r},${r} 0 1,1 ${cx + ix},${cy - iy} Z" ${attrs}/>`
+    }
+    case 'ring': {
+      const ro = size
+      const ri = size * 0.55
+      return `<path d="M ${cx + ro},${cy} A ${ro},${ro} 0 1,0 ${cx - ro},${cy} A ${ro},${ro} 0 1,0 ${cx + ro},${cy} Z M ${cx + ri},${cy} A ${ri},${ri} 0 1,1 ${cx - ri},${cy} A ${ri},${ri} 0 1,1 ${cx + ri},${cy} Z" fill-rule="evenodd" ${attrs}/>`
+    }
+    case 'arrow': {
+      const hw = size * 0.35
+      const aw = size * 0.9
+      return `<polygon points="${cx},${cy - size} ${cx + aw},${cy + size * 0.1} ${cx + hw},${cy + size * 0.1} ${cx + hw},${cy + size} ${cx - hw},${cy + size} ${cx - hw},${cy + size * 0.1} ${cx - aw},${cy + size * 0.1}" ${attrs}/>`
+    }
+    case 'lightning':
+      return `<polygon points="${cx + size * 0.1},${cy - size} ${cx - size * 0.4},${cy - size * 0.08} ${cx + size * 0.08},${cy - size * 0.08} ${cx - size * 0.1},${cy + size} ${cx + size * 0.4},${cy + size * 0.08} ${cx - size * 0.08},${cy + size * 0.08}" ${attrs}/>`
+    case 'flame':
+      return `<path d="M ${cx},${cy + size} C ${cx - size * 0.65},${cy + size * 0.2} ${cx - size * 0.65},${cy - size * 0.4} ${cx},${cy - size} C ${cx + size * 0.65},${cy - size * 0.4} ${cx + size * 0.65},${cy + size * 0.2} ${cx},${cy + size} Z" ${attrs}/>`
+    case 'teardrop':
+      return `<path d="M ${cx},${cy + size} C ${cx - size * 0.65},${cy + size * 0.2} ${cx - size * 0.65},${cy - size * 0.35} ${cx},${cy - size * 0.45} C ${cx + size * 0.65},${cy - size * 0.35} ${cx + size * 0.65},${cy + size * 0.2} ${cx},${cy + size} Z" ${attrs}/>`
+    case 'heart':
+      return `<path d="M ${cx},${cy + size * 0.85} C ${cx - size * 1.15},${cy - size * 0.15} ${cx - size * 0.5},${cy - size * 0.95} ${cx},${cy - size * 0.35} C ${cx + size * 0.5},${cy - size * 0.95} ${cx + size * 1.15},${cy - size * 0.15} ${cx},${cy + size * 0.85} Z" ${attrs}/>`
+    case 'crown':
+      return `<polygon points="${cx - size},${cy + size * 0.55} ${cx - size},${cy - size * 0.1} ${cx - size * 0.5},${cy + size * 0.15} ${cx},${cy - size * 0.65} ${cx + size * 0.5},${cy + size * 0.15} ${cx + size},${cy - size * 0.1} ${cx + size},${cy + size * 0.55}" ${attrs}/>`
+    case 'sword': {
+      const bw = size * 0.09
+      return `<path d="M ${cx},${cy - size} L ${cx + bw},${cy + size * 0.25} L ${cx - bw},${cy + size * 0.25} Z M ${cx - size * 0.38},${cy + size * 0.25} H ${cx + size * 0.38} V ${cy + size * 0.36} H ${cx - size * 0.38} Z M ${cx - size * 0.07},${cy + size * 0.36} H ${cx + size * 0.07} V ${cy + size * 0.78} H ${cx - size * 0.07} Z M ${cx - size * 0.12},${cy + size * 0.78} L ${cx + size * 0.12},${cy + size * 0.78} L ${cx},${cy + size * 0.95} Z" ${attrs}/>`
+    }
+    case 'axe':
+      return `<path d="M ${cx - size * 0.06},${cy - size * 0.9} H ${cx + size * 0.06} V ${cy + size * 0.9} H ${cx - size * 0.06} Z M ${cx + size * 0.05},${cy - size * 0.85} C ${cx + size * 0.95},${cy - size * 0.9} ${cx + size * 0.95},${cy - size * 0.05} ${cx + size * 0.05},${cy - size * 0.1} Z" ${attrs}/>`
+    case 'tree':
+      return `<path d="M ${cx},${cy - size} L ${cx + size * 0.4},${cy - size * 0.35} H ${cx - size * 0.4} Z M ${cx},${cy - size * 0.55} L ${cx + size * 0.65},${cy + size * 0.25} H ${cx - size * 0.65} Z M ${cx - size * 0.1},${cy + size * 0.25} H ${cx + size * 0.1} V ${cy + size * 0.6} H ${cx - size * 0.1} Z" ${attrs}/>`
+    case 'banner':
+      return `<path d="M ${cx - size * 0.85},${cy - size} H ${cx - size * 0.7} V ${cy + size} H ${cx - size * 0.85} Z M ${cx - size * 0.7},${cy - size * 0.75} L ${cx + size * 0.85},${cy - size * 0.15} L ${cx - size * 0.7},${cy + size * 0.45} Z" ${attrs}/>`
+    case 'leaf':
+      return `<path d="M ${cx},${cy - size} Q ${cx + size * 1.15},${cy} ${cx},${cy + size} Q ${cx - size * 1.15},${cy} ${cx},${cy - size} Z" ${attrs}/>`
+    case 'key': {
+      const kx = cx - size * 0.45
+      const ky = cy
+      const R = size * 0.42
+      const r = size * 0.22
+      return `<path d="M ${kx + R},${ky} A ${R},${R} 0 1,0 ${kx - R},${ky} A ${R},${R} 0 1,0 ${kx + R},${ky} Z M ${kx + r},${ky} A ${r},${r} 0 1,1 ${kx - r},${ky} A ${r},${r} 0 1,1 ${kx + r},${ky} Z M ${kx + R * 0.9},${ky - size * 0.09} H ${cx + size * 0.85} V ${ky + size * 0.09} H ${kx + R * 0.9} Z M ${cx + size * 0.45},${ky + size * 0.09} H ${cx + size * 0.6} V ${ky + size * 0.32} H ${cx + size * 0.45} Z M ${cx + size * 0.68},${ky + size * 0.09} H ${cx + size * 0.8} V ${ky + size * 0.28} H ${cx + size * 0.68} Z" fill-rule="evenodd" ${attrs}/>`
+    }
+    case 'gear': {
+      const teeth = 8
+      const outerPts = Array.from({ length: teeth * 2 }, (_, i) => {
+        const angle = (i * Math.PI) / teeth
+        const r = i % 2 === 0 ? size : size * 0.78
+        return `${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`
+      }).join(' L ')
+      const holeR = size * 0.38
+      return `<path d="M ${outerPts} Z M ${cx + holeR},${cy} A ${holeR},${holeR} 0 1,0 ${cx - holeR},${cy} A ${holeR},${holeR} 0 1,0 ${cx + holeR},${cy} Z" fill-rule="evenodd" ${attrs}/>`
+    }
+    case 'sunburst':
+      return `<polygon points="${Array.from({ length: 24 }, (_, i) => {
+        const angle = (i * Math.PI) / 12 - Math.PI / 2
+        const r = i % 2 === 0 ? size : size * 0.35
+        return `${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`
+      }).join(' ')}" ${attrs}/>`
+    default:
+      return ''
+  }
+}
+
+const factionLogoImage = (faction) => {
+  const logo = normalizeFactionLogo(faction?.logo)
+  if (logo.source === 'image' && logo.image) return logo.image
+  if (!logo.shapes.length) return ''
+  const background = logo.backgroundTransparent
+    ? ''
+    : `<rect width="100" height="100" fill="${safeMapColor(logo.backgroundColor, '#0c0c12')}"/>`
+  const shapes = logo.shapes.map(factionLogoShapeElement).filter(Boolean).join('')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">${background}${shapes}</svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 const parseDataUrl = (value = '') => {
   const match = String(value).match(/^data:([^;,]+)(;base64)?,(.*)$/)
   if (!match) return null
@@ -368,6 +412,7 @@ const convertImageToJpegResource = (src, options = {}) => new Promise(resolve =>
     return
   }
   const image = new Image()
+  image.crossOrigin = 'anonymous'
   image.onload = () => {
     try {
       const maxSize = options.maxSize || 900
@@ -397,7 +442,13 @@ const prepareProjectPdfData = async (projectData) => {
     const pdfImage = await convertImageToJpegResource(image)
     return pdfImage ? { ...character, _pdfImage: pdfImage } : character
   }))
-  const mapProjectData = { ...projectData, characters }
+  const factions = await Promise.all((projectData.factions ?? []).map(async faction => {
+    const image = factionLogoImage(faction)
+    if (!image) return faction
+    const pdfImage = await convertImageToJpegResource(image)
+    return pdfImage ? { ...faction, _pdfImage: pdfImage, _exportLogoImage: image } : { ...faction, _exportLogoImage: image }
+  }))
+  const mapProjectData = { ...projectData, characters, factions }
   const maps = await Promise.all((projectData.maps ?? []).map(async map => {
     const image = getMapPreviewImage(map, mapProjectData)
     if (!image) return map
@@ -559,42 +610,35 @@ const relationshipSection = (characters = []) => {
   `
 }
 
-const timelineSpread = (items, projectData, type = 'timeline') => {
+const timelineSpread = (items) => {
   const events = sortByOrder(items).filter(Boolean)
   if (!events.length) return emptyState('No chronology entries yet.')
-  return `<div class="timeline-spread">${events.map((event, index) => {
-    const tags = getTags(event)
-    const related = relatedEntries(event, projectData, type).slice(0, 3)
-    return `
-      <article class="timeline-event">
-        <div class="timeline-index">${String(index + 1).padStart(2, '0')}</div>
-        <div>
-          ${htmlMeta(valueList(event.era, event.date, event.year, tags.join(', ')))}
-          <h2>${escapeHtml(event.title || 'Untitled Event')}</h2>
-          <div class="copy">${prose(event.description || event.content || event.notes) || '<p class="muted">No chronicle text recorded.</p>'}</div>
-          ${related.length ? `<p class="timeline-related">${escapeHtml(joinNames(related, 'title'))}</p>` : ''}
-        </div>
-      </article>
-    `
-  }).join('')}</div>`
+  const chunks = []
+  for (let offset = 0; offset < events.length; offset += 8) {
+    chunks.push(events.slice(offset, offset + 8).map((event, index) => `
+        <article class="timeline-event">
+          <div class="timeline-index">${String(offset + index + 1).padStart(2, '0')}</div>
+          <div>
+            ${htmlMeta(valueList(event.year, event.date, event.era))}
+            <h2>${escapeHtml(event.title || 'Untitled Event')}</h2>
+          </div>
+        </article>
+      `).join(''))
+  }
+  return `<div class="timeline-pages">${chunks.map((chunk, index) => `<div class="timeline-spread${index === chunks.length - 1 ? '' : ' timeline-spread--continued'}">${chunk}</div>`).join('')}</div>`
 }
 
 const mapSection = (projectData) => {
   const maps = projectData.maps ?? []
   if (!maps.length) return emptyState('No maps attached to this project.')
   return `<div class="map-grid">${maps.map(map => {
-    const summary = summarizeMap(map, projectData)
     const image = getMapPreviewImage(map, projectData)
-    const summaryList = summary.lines.length
-      ? `<ul>${summary.lines.slice(0, 7).map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
-      : '<p class="muted">Map object data is preserved in the project backup. No visible map objects are recorded yet.</p>'
     return `
       <article class="map-card">
         <div class="map-preview">${image ? `<img src="${escapeHtml(image)}" alt="">` : `<span>${firstLetter(map.name || 'Map')}</span>`}</div>
         <div>
           <h2>${escapeHtml(map.name || 'Untitled Map')}</h2>
-          ${htmlMeta(valueList(map.mapType, summary.objects.length && `${summary.objects.length} objects`, summary.layers.length && `${summary.layers.length} layers`, summary.regions.length && `${summary.regions.length} regions`))}
-          ${summaryList}
+          ${htmlMeta(valueList(map.mapType))}
         </div>
       </article>
     `
@@ -744,15 +788,21 @@ const makePdfCanvas = (theme) => {
     if (!image?.bytes || !image.width || !image.height) return false
     const name = `Im${images.length + 1}`
     images.push({ name, ...image })
-    const scale = Math.max(w / image.width, h / image.height)
+    const scale = options.fit === 'contain'
+      ? Math.min(w / image.width, h / image.height)
+      : Math.max(w / image.width, h / image.height)
     const drawW = image.width * scale
     const drawH = image.height * scale
     const [posX = '50%', posY = '50%'] = String(options.position || '50% 50%').split(/\s+/)
     const px = Math.max(0, Math.min(1, parseFloat(posX) / 100 || 0.5))
     const py = Math.max(0, Math.min(1, parseFloat(posY) / 100 || 0.5))
     const bottomY = topY - h
-    const drawX = x - Math.max(0, drawW - w) * px
-    const drawY = bottomY - Math.max(0, drawH - h) * (1 - py)
+    const drawX = options.fit === 'contain'
+      ? x + Math.max(0, w - drawW) * px
+      : x - Math.max(0, drawW - w) * px
+    const drawY = options.fit === 'contain'
+      ? bottomY + Math.max(0, h - drawH) * (1 - py)
+      : bottomY - Math.max(0, drawH - h) * (1 - py)
     draw('q')
     draw(`${x.toFixed(2)} ${bottomY.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re W n`)
     draw(`${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm`)
@@ -792,16 +842,9 @@ const drawMetricGrid = (pdf, stats, x, y, cols = 2, cellW = 142, cellH = 64, the
   })
 }
 
-const drawArtFrame = (pdf, label, x, y, w, h, theme, initial = '') => {
-  const mark = fitPdfText(initial || label, w - 28, 18)
+const drawImageFrame = (pdf, label, image, x, y, w, h, theme, initial = '', position = '50% 50%', fit = 'cover') => {
   pdf.rect(x, y - h, w, h, theme.palette.panelSoft, theme.palette.border, 1)
-  pdf.text(mark, x + w / 2 - measureText(mark, 18) / 2, y - h / 2, 18, { bold: true, color: theme.palette.accent, maxWidth: w - 28 })
-  pdf.text(label.toUpperCase(), x + 16, y - h + 22, 8, { bold: true, color: theme.palette.muted, tracking: 1, maxWidth: w - 32 })
-}
-
-const drawImageFrame = (pdf, label, image, x, y, w, h, theme, initial = '', position = '50% 50%') => {
-  pdf.rect(x, y - h, w, h, theme.palette.panelSoft, theme.palette.border, 1)
-  const hasImage = pdf.imageCover(image, x, y, w, h, { position })
+  const hasImage = pdf.imageCover(image, x, y, w, h, { position, fit })
   if (!hasImage) {
     const mark = fitPdfText(initial || label, w - 28, 18)
     pdf.text(mark, x + w / 2 - measureText(mark, 18) / 2, y - h / 2, 18, { bold: true, color: theme.palette.accent, maxWidth: w - 28 })
@@ -880,6 +923,56 @@ const makeArticleLineItems = (body, related = [], width) => {
     })
   }
   return items
+}
+
+const eventYearLabel = (event = {}) =>
+  valueList(event.year, event.date, event.era).join(' / ') || 'Undated'
+
+const TIMELINE_EVENTS_PER_PDF_PAGE = 6
+
+const createVisualTimelinePages = (items, theme, eyebrow = 'Timeline', title = 'Timeline') => {
+  const events = sortByOrder(items).filter(Boolean)
+  if (!events.length) {
+    const pdf = makePdfCanvas(theme)
+    pdf.pageBase(eyebrow, title, 'Event titles and years at a glance.')
+    const panelBottom = 58
+    const panelTop = 438
+    pdf.rect(56, panelBottom, 730, panelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
+    pdf.text('No chronology entries yet.', 82, 334, 13, { italic: true, color: theme.palette.muted, maxWidth: 670 })
+    return [pdfPage('Timeline', title, pdfContent(pdf))]
+  }
+
+  const pages = []
+  for (let offset = 0; offset < events.length; offset += TIMELINE_EVENTS_PER_PDF_PAGE) {
+    const chunk = events.slice(offset, offset + TIMELINE_EVENTS_PER_PDF_PAGE)
+    const pageNumber = Math.floor(offset / TIMELINE_EVENTS_PER_PDF_PAGE) + 1
+    const pageCount = Math.ceil(events.length / TIMELINE_EVENTS_PER_PDF_PAGE)
+    const pdf = makePdfCanvas(theme)
+    const pageTitle = pageNumber === 1 ? title : `${title} continued`
+    const range = `Events ${offset + 1}-${offset + chunk.length} of ${events.length}`
+    pdf.pageBase(eyebrow, pageTitle, `${range}${pageCount > 1 ? ` / Page ${pageNumber} of ${pageCount}` : ''}`)
+    const panelBottom = 58
+    const panelTop = 438
+    pdf.rect(56, panelBottom, 730, panelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
+
+    const laneY = 268
+    const startX = 112
+    const endX = 728
+    pdf.line(startX, laneY, endX, laneY, theme.palette.border, 1.2)
+    chunk.forEach((event, index) => {
+      const x = chunk.length === 1 ? (startX + endX) / 2 : startX + ((endX - startX) * index) / (chunk.length - 1)
+      const above = index % 2 === 0
+      const markerY = above ? laneY + 38 : laneY - 38
+      const yearY = above ? markerY + 24 : markerY - 24
+      const titleY = above ? markerY + 50 : markerY - 38
+      pdf.line(x, laneY, x, markerY, theme.palette.border, 0.8)
+      pdf.rect(x - 8, markerY - 8, 16, 16, theme.palette.page, theme.palette.accent, 1)
+      pdf.text(eventYearLabel(event), x - 52, yearY, 8, { bold: true, color: theme.palette.accent, tracking: 0.6, maxWidth: 104 })
+      pdf.textBox(event.title || 'Untitled Event', x - 60, titleY, 120, 9.4, { bold: true, color: theme.palette.text, lineHeight: 12.5, maxLines: 3 })
+    })
+    pages.push(pdfPage('Timeline', pageTitle, pdfContent(pdf)))
+  }
+  return pages
 }
 
 const createCoverPage = (projectData, theme) => {
@@ -1001,16 +1094,19 @@ const createCharacterPages = (character, projectData, theme, index) => {
   return pages
 }
 
-const createArticlePages = ({ section, eyebrow, title, subtitle, body, related, artLabel, initial }, theme) => {
-  const lineWidth = 500
+const createArticlePages = ({ section, eyebrow, title, subtitle, body, related, artLabel, initial, image, imagePosition, imageFit }, theme) => {
+  const hasArt = Boolean(artLabel || image)
+  const lineWidth = hasArt ? 500 : 670
   const items = makeArticleLineItems(body, related, lineWidth)
   const pages = []
   const pdf = makePdfCanvas(theme)
   const contentStartY = pdf.pageBase(eyebrow, title, subtitle)
-  const panelTop = Math.min(410, contentStartY - 18)
+  const panelTop = Math.min(hasArt ? 410 : 488, contentStartY - 18)
   const panelBottom = 58
   pdf.rect(56, panelBottom, 730, panelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
-  drawArtFrame(pdf, artLabel, 616, panelTop - 24, 138, Math.min(176, panelTop - panelBottom - 48), theme, initial)
+  if (hasArt) {
+    drawImageFrame(pdf, artLabel || 'Image', image, 616, panelTop - 24, 138, Math.min(176, panelTop - panelBottom - 48), theme, initial, imagePosition, imageFit)
+  }
   let nextIndex = renderLineItems(pdf, items, 0, 82, panelTop - 34, lineWidth, panelBottom + 22, theme)
   pages.push(pdfPage(section, title, pdfContent(pdf)))
 
@@ -1055,47 +1151,26 @@ const createTimelinePages = (event, projectData, theme, index, eyebrow = 'Timeli
 }
 
 const createMapPages = (map, projectData, theme) => {
-  const summary = summarizeMap(map, projectData)
   const title = map.name || 'Untitled Map'
-  const subtitle = valueList(
-    map.mapType,
-    summary.objects.length && `${summary.objects.length} objects`,
-    summary.layers.length && `${summary.layers.length} layers`,
-    summary.regions.length && `${summary.regions.length} regions`,
-  ).join(' - ')
-  const body = summary.lines.join('\n') || 'Map object data is preserved in the project backup. No visible map objects are recorded yet.'
-  const items = makeArticleLineItems(body, [], 310)
-  const pages = []
   const pdf = makePdfCanvas(theme)
-  const contentStartY = pdf.pageBase('Cartography', title, subtitle)
+  const contentStartY = pdf.pageBase('Cartography', title, map.mapType || 'Project map')
   const panelBottom = 58
-  const panelTop = Math.min(424, contentStartY - 18)
+  const panelTop = Math.min(464, contentStartY - 18)
   pdf.rect(50, panelBottom, 742, panelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
   drawImageFrame(
     pdf,
-    'Map Plate',
+    'Map',
     map._pdfImage,
-    76,
+    72,
     panelTop - 26,
-    330,
-    Math.min(245, panelTop - panelBottom - 52),
+    698,
+    panelTop - panelBottom - 52,
     theme,
     firstLetter(title).replace(/&.*;/, ''),
+    '50% 50%',
+    'contain',
   )
-  let nextIndex = renderLineItems(pdf, items, 0, 436, panelTop - 34, 310, panelBottom + 22, theme)
-  pages.push(pdfPage('Maps', title, pdfContent(pdf)))
-
-  let continuation = 2
-  while (nextIndex < items.length) {
-    const nextPdf = makePdfCanvas(theme)
-    const nextStart = nextPdf.pageBase('Cartography', `${title} continued`, `Continuation ${continuation}`)
-    const nextPanelTop = Math.min(488, nextStart - 18)
-    nextPdf.rect(56, panelBottom, 730, nextPanelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
-    nextIndex = renderLineItems(nextPdf, items, nextIndex, 82, nextPanelTop - 34, 670, panelBottom + 22, theme)
-    pages.push(pdfPage('Maps', `${title} continued ${continuation}`, pdfContent(nextPdf)))
-    continuation += 1
-  }
-  return pages
+  return [pdfPage('Maps', title, pdfContent(pdf))]
 }
 
 const createRelationshipsPage = (characters, theme) => {
@@ -1113,9 +1188,13 @@ const createRelationshipsPage = (characters, theme) => {
     const x = 55 + col * 245
     const y = 420 - row * 115
     pdf.rect(x, y - 84, 210, 84, theme.palette.panel, theme.palette.border, 0.8)
-    pdf.text(name, x + 14, y - 24, 15, { bold: true, color: theme.palette.text, maxWidth: 180 })
-    pdf.text(`${members.length} ${members.length === 1 ? 'member' : 'members'}`.toUpperCase(), x + 14, y - 43, 7, { bold: true, color: theme.palette.accent, tracking: 0.8, maxWidth: 180 })
-    pdf.textBox(members.map(member => member.name).filter(Boolean).join(', '), x + 14, y - 59, 180, 9, { color: theme.palette.muted, lineHeight: 12, maxLines: 2 })
+    const titleLines = wrapPdfText(name, 180, 13, 2)
+    titleLines.forEach((lineText, lineIndex) => {
+      pdf.text(lineText, x + 14, y - 21 - lineIndex * 15, 13, { bold: true, color: theme.palette.text, maxWidth: 180 })
+    })
+    const metaY = y - 29 - Math.max(1, titleLines.length) * 15
+    pdf.text(`${members.length} ${members.length === 1 ? 'member' : 'members'}`.toUpperCase(), x + 14, metaY, 7, { bold: true, color: theme.palette.accent, tracking: 0.8, maxWidth: 180 })
+    pdf.textBox(members.map(member => member.name).filter(Boolean).join(', '), x + 14, metaY - 16, 180, 8.4, { color: theme.palette.muted, lineHeight: 11, maxLines: 3 })
   })
   const links = characters.flatMap(character => getRelationshipLinks(character).map(rel => {
     const target = characters.find(item => item.id === rel.targetId)
@@ -1268,6 +1347,12 @@ const createPdfBytes = (pageContents, title, projectData) => {
           delete copy._pdfImage
           return copy
         }),
+        factions: (projectData.factions ?? []).map(faction => {
+          const copy = { ...faction }
+          delete copy._pdfImage
+          delete copy._exportLogoImage
+          return copy
+        }),
         maps: (projectData.maps ?? []).map(map => {
           const copy = { ...map }
           delete copy._pdfImage
@@ -1321,8 +1406,6 @@ const createProjectPdfPages = (projectData, theme) => {
         subtitle: valueList(location.type, location.region, location.tags?.join(', ')).join(' - '),
         body: location.description || location.notes || location.content,
         related: relatedEntries(location, projectData, 'location'),
-        artLabel: 'Location Art',
-        initial: firstLetter(location.name).replace(/&.*;/, ''),
       }, theme))
     })
   }
@@ -1337,6 +1420,8 @@ const createProjectPdfPages = (projectData, theme) => {
         related: relatedEntries(faction, projectData, 'faction'),
         artLabel: 'Faction Seal',
         initial: firstLetter(faction.name).replace(/&.*;/, ''),
+        image: faction._pdfImage,
+        imageFit: 'contain',
       }, theme))
     })
   }
@@ -1349,15 +1434,11 @@ const createProjectPdfPages = (projectData, theme) => {
         subtitle: valueList(entry.category || 'Uncategorized', entry.tags?.join(', ')).join(' - '),
         body: entry.content,
         related: relatedEntries(entry, projectData, 'lore'),
-        artLabel: 'Lore Plate',
-        initial: firstLetter(entry.title).replace(/&.*;/, ''),
       }, theme))
     })
   }
   if (enabled.has('timeline')) {
-    sortByOrder(projectData.timeline).forEach((event, index) => {
-      records.push(...createTimelinePages(event, projectData, theme, index, 'Timeline & History', 'Timeline'))
-    })
+    records.push(...createVisualTimelinePages(projectData.timeline, theme, 'Timeline & History', 'Timeline'))
   }
   if (enabled.has('worldhistory')) {
     sortByOrder(projectData.worldHistory).forEach((event, index) => {
@@ -1379,8 +1460,6 @@ const createProjectPdfPages = (projectData, theme) => {
         subtitle: valueList(entry.tags?.join(', ')).join(' - '),
         body: entry.content || entry.text || entry.body,
         related: [],
-        artLabel: 'Notes',
-        initial: firstLetter(entry.title || 'N').replace(/&.*;/, ''),
       }, theme))
     })
   }
@@ -1492,7 +1571,6 @@ const makeProjectPages = (projectData, theme) => {
           valueList(location.type, location.region, location.tags?.join(', ')),
           location.description || location.notes || location.content,
           relatedEntries(location, projectData, 'location'),
-          getImage(location),
         )
       ).join('') || emptyState('No locations yet.'),
     )
@@ -1510,6 +1588,7 @@ const makeProjectPages = (projectData, theme) => {
           valueList(faction.type, faction.leader && `Led by ${faction.leader}`, faction.status),
           faction.description || faction.notes,
           relatedEntries(faction, projectData, 'faction'),
+          factionLogoImage(faction),
         )
       ).join('') || emptyState('No factions yet.'),
     )
@@ -1527,7 +1606,6 @@ const makeProjectPages = (projectData, theme) => {
           valueList(entry.category || 'Uncategorized', entry.tags?.join(', ')),
           entry.content,
           relatedEntries(entry, projectData, 'lore'),
-          getImage(entry),
         )
       ).join('') || emptyState('No lore entries yet.'),
     )
@@ -1643,6 +1721,7 @@ export const createProjectVisualPdfHtml = (projectData, options = {}) => {
     .dossier-card { break-inside: avoid; display: grid; grid-template-columns: 39mm 1fr; gap: 5mm; padding: 5mm; margin-bottom: 5mm; }
     .portrait-frame { width: 39mm; min-height: 52mm; border: 1px solid var(--pdf-border); background: var(--pdf-panel-soft); display: grid; place-items: center; overflow: hidden; }
     .portrait-frame img, .article-image, .map-preview img { width: 100%; height: 100%; object-fit: cover; }
+    #factions .article-image { object-fit: contain; background: var(--pdf-panel-soft); }
     .portrait-frame span, .map-preview span { font: 900 32pt/1 var(--pdf-ui-font); color: var(--pdf-accent); opacity: .68; }
     .dossier-topline { display: flex; justify-content: space-between; gap: 6mm; margin-bottom: 1.5mm; }
     .dossier-body h2 { font-size: 20pt; }
@@ -1662,18 +1741,25 @@ export const createProjectVisualPdfHtml = (projectData, options = {}) => {
     .family-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4mm; margin-bottom: 5mm; }
     .family-card { padding: 4mm; break-inside: avoid; }
     .family-card div { display: flex; flex-wrap: wrap; gap: 1.5mm; }
+    .family-card h2, .family-card div span { overflow-wrap: anywhere; }
     .family-card div span { border: 1px solid var(--pdf-border); padding: 1mm 1.8mm; color: var(--pdf-muted); font: 7.8pt var(--pdf-ui-font); }
     .relationship-board { padding: 5mm; }
     .link-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 3mm; align-items: center; padding: 2mm 0; border-top: 1px solid color-mix(in srgb, var(--pdf-border) 45%, transparent); font: 9pt var(--pdf-ui-font); }
     .link-row span { color: var(--pdf-accent); text-transform: uppercase; letter-spacing: .08em; font-size: 7pt; }
-    .timeline-spread { display: grid; gap: 4mm; }
-    .timeline-event { break-inside: avoid; display: grid; grid-template-columns: 21mm 1fr; gap: 4mm; padding: 4.5mm; position: relative; }
-    .timeline-event:before { content:""; position:absolute; left: 14mm; top: 0; bottom: 0; width: 1px; background: var(--pdf-border); }
-    .timeline-index { position: relative; z-index: 1; width: 17mm; height: 17mm; border: 1px solid var(--pdf-accent); display: grid; place-items: center; background: var(--pdf-page); color: var(--pdf-accent); font: 900 10pt var(--pdf-ui-font); }
-    .timeline-related { color: var(--pdf-accent); font: 800 7.5pt var(--pdf-ui-font); letter-spacing: .08em; text-transform: uppercase; }
-    .map-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5mm; }
-    .map-card { break-inside: avoid; display: grid; grid-template-columns: 57mm 1fr; gap: 5mm; padding: 5mm; }
-    .map-preview { height: 43mm; border: 1px solid var(--pdf-border); background: var(--pdf-panel-soft); display: grid; place-items: center; overflow: hidden; }
+    .timeline-pages { display: grid; gap: 8mm; }
+    .timeline-spread { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; gap: 13mm 7mm; min-height: 76mm; padding: 16mm 4mm 8mm; break-inside: avoid; page-break-inside: avoid; }
+    .timeline-spread--continued { break-after: page; page-break-after: always; }
+    .timeline-spread:before { content:""; position:absolute; left: 9mm; right: 9mm; top: 31mm; height: 1px; background: var(--pdf-border); }
+    .timeline-event { break-inside: avoid; display: grid; justify-items: center; gap: 2.5mm; padding: 0; position: relative; box-shadow: none; border: 0; background: transparent; text-align: center; }
+    .timeline-event:before { content:""; position:absolute; left: 50%; top: 9mm; width: 1px; height: 9mm; background: var(--pdf-border); transform: translateX(-50%); }
+    .timeline-index { position: relative; z-index: 1; width: 12mm; height: 12mm; border: 1px solid var(--pdf-accent); display: grid; place-items: center; background: var(--pdf-page); color: var(--pdf-accent); font: 900 7.5pt var(--pdf-ui-font); }
+    .timeline-event h2 { font-size: 11pt; line-height: 1.1; margin: 0; overflow-wrap: anywhere; }
+    .timeline-event .meta { justify-content: center; margin-bottom: 1.5mm; }
+    .timeline-event .meta span { font-size: 6.6pt; }
+    .map-grid { display: grid; grid-template-columns: 1fr; gap: 5mm; }
+    .map-card { break-inside: avoid; display: grid; gap: 3mm; padding: 5mm; }
+    .map-preview { height: 132mm; border: 1px solid var(--pdf-border); background: var(--pdf-panel-soft); display: grid; place-items: center; overflow: hidden; }
+    .map-preview img { object-fit: contain; }
     .outline-act { padding: 5mm; margin-bottom: 5mm; break-inside: avoid; }
     .chapter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3mm; margin-top: 3mm; }
     .chapter-card { border: 1px solid var(--pdf-border); background: color-mix(in srgb, var(--pdf-panel-soft) 72%, transparent); padding: 3mm; min-height: 30mm; overflow: hidden; }

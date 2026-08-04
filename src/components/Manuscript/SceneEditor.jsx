@@ -7,6 +7,8 @@ import {
 } from './manuscriptUtils.js'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
+import { useTabPresence } from '../../utils/useTabPresence.js'
+import EditingElsewhereWarning from '../shared/EditingElsewhereWarning.jsx'
 
 const InlineInput = ({ value, onSave, className, placeholder }) => {
   const [temp, setTemp] = useState(value)
@@ -174,7 +176,7 @@ function parseSegments(content, entityNames, entityMap, notes = []) {
 }
 
 function buildWritingBlocks(content, notes) {
-  const length = content.length
+  const length = (content || '').length
   const blocks = []
   let pos = 0
 
@@ -441,6 +443,12 @@ export const SceneEditor = ({
   const [focused, setFocused] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [floatingNotePos, setFloatingNotePos] = useState(null)
+  // Warn up front rather than reconcile after the fact — see
+  // EditingElsewhereWarning and the 2026-08-02/03 Bugs table row in
+  // docs/ROADMAP.md for why silent post-hoc merging kept finding new gaps.
+  const otherEditorsCount = useTabPresence(`scene:${scene.id}`, focused)
+  const [showEditingElsewhereWarning, setShowEditingElsewhereWarning] = useState(false)
+  const warnedThisFocusRef = useRef(false)
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
   const localContentRef = useRef(localContent)
@@ -480,6 +488,14 @@ export const SceneEditor = ({
     })
     return () => window.cancelAnimationFrame(sync)
   }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
+
+  useEffect(() => {
+    if (!focused) { warnedThisFocusRef.current = false; return }
+    if (otherEditorsCount > 0 && !warnedThisFocusRef.current) {
+      warnedThisFocusRef.current = true
+      setShowEditingElsewhereWarning(true)
+    }
+  }, [focused, otherEditorsCount])
 
 
   // Resize before paint so caret measurement always uses the settled textarea height.
@@ -1167,6 +1183,31 @@ export const SceneEditor = ({
           rows={1}
           style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', height: 1, width: 1, top: 0, left: 0 }}
           tabIndex={-1}
+        />
+      )}
+
+      {showEditingElsewhereWarning && (
+        <EditingElsewhereWarning
+          label="scene"
+          onClose={() => {
+            setShowEditingElsewhereWarning(false)
+            textareaRef.current?.blur()
+            setFocused(false)
+          }}
+          onEditAnyway={() => {
+            setShowEditingElsewhereWarning(false)
+            // The dialog auto-focuses itself on mount (StudioSheet), which blurs the
+            // textarea and drops `focused` to false — the editable textarea then
+            // unmounts entirely (see the focused ? <textarea> : <preview> branch
+            // below), so textareaRef can be stale/detached here. Re-render focused
+            // first, then look the fresh node up by class once it's back in the DOM,
+            // so "Edit anyway" actually leaves the user able to keep typing.
+            setFocused(true)
+            window.setTimeout(() => {
+              const ta = wrapperRef.current?.querySelector('textarea.ms-textarea')
+              if (ta) { textareaRef.current = ta; ta.focus() }
+            }, 0)
+          }}
         />
       )}
     </div>

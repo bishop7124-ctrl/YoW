@@ -5,9 +5,47 @@ import { isDesktopAppRuntime } from '../utils/runtime.js'
 const DB_NAME = 'yow-storage'
 const DB_VERSION = 1
 const STORE_NAME = 'kv'
+const SYNC_CHANNEL_NAME = 'yow-storage-sync'
 
 let activeIndexedDbBackend = null
 let flushHandlersInstalled = false
+
+// Each browser tab hydrates its own in-memory mirror once at startup and
+// never re-reads IndexedDB after that (see indexedDbBackend.js) — IndexedDB
+// itself has no equivalent of localStorage's cross-tab `storage` event, so
+// without this, two tabs on the same account silently diverge: neither ever
+// sees what the other wrote, and the next tab to save anything overwrites
+// every record it didn't touch with its own stale copy. This bridges writes
+// across tabs of the same origin so `readItem`/`loadValue` in one tab
+// reflects what another tab just saved, restoring the assumption the rest
+// of the store's multi-tab conflict handling (commitLocal, scenes'
+// mergeSceneUpdateWithPersistedCopy) already depends on.
+function wireCrossTabSync(backend) {
+  if (typeof BroadcastChannel === 'undefined') return backend
+  let channel
+  try { channel = new BroadcastChannel(SYNC_CHANNEL_NAME) }
+  catch { return backend }
+
+  const rawSetItem = backend.setItem
+  const rawRemoveItem = backend.removeItem
+  backend.setItem = (key, value) => {
+    rawSetItem(key, value)
+    try { channel.postMessage({ type: 'set', key, value: String(value) }) }
+    catch { /* best effort — a same-tab write still succeeded above */ }
+  }
+  backend.removeItem = key => {
+    rawRemoveItem(key)
+    try { channel.postMessage({ type: 'remove', key }) }
+    catch { /* best effort */ }
+  }
+  channel.onmessage = event => {
+    const { type, key, value } = event.data || {}
+    if (!key) return
+    if (type === 'set') backend.applyExternalWrite?.(key, value)
+    else if (type === 'remove') backend.applyExternalRemove?.(key)
+  }
+  return backend
+}
 
 function getIndexedDb() {
   if (typeof window === 'undefined') return null
@@ -92,12 +130,12 @@ export async function initializeIndexedDbStorage({ onWriteError = console.error 
   try {
     const db = await openDatabase()
     const entries = await readAllEntries(db)
-    const backend = createIndexedDbBackend({
+    const backend = wireCrossTabSync(createIndexedDbBackend({
       entries,
       persistItem: (key, value) => putEntry(db, key, value),
       removePersistedItem: key => deleteEntry(db, key),
       onWriteError,
-    })
+    }))
     activeIndexedDbBackend = setStorageBackend(backend)
     installFlushHandlers(activeIndexedDbBackend)
     return activeIndexedDbBackend

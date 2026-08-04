@@ -63,6 +63,45 @@ describe('browser vault adapter', () => {
     resetStorageBackend()
   })
 
+  it('broadcasts writes/removals across tabs so a second tab\'s mirror reflects what the first tab saved', async () => {
+    const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
+    const { resetStorageBackend } = await import('./projectStorage.js')
+
+    // Two tabs = two independent hydrations, each installing its own backend
+    // instance. Without the cross-tab BroadcastChannel bridge, tab two's
+    // mirror would never learn about tab one's write no matter how long it
+    // waits — this is the actual root cause of the multi-tab silent-overwrite
+    // bug (see the 2026-08-02 row in docs/ROADMAP.md's Bugs table).
+    const tabOneBackend = await initializeIndexedDbStorage()
+    resetStorageBackend()
+    const tabTwoBackend = await initializeIndexedDbStorage()
+    resetStorageBackend()
+
+    // BroadcastChannel delivery is a real async task, not a microtask — a
+    // single setTimeout(0) can occasionally miss it under a busy event loop
+    // (e.g. the full suite running many files at once), so poll briefly
+    // instead of trusting one fixed-length wait.
+    const waitFor = async (check, timeoutMs = 500) => {
+      const start = Date.now()
+      while (!check()) {
+        if (Date.now() - start > timeoutMs) throw new Error('waitFor timed out')
+        await new Promise(resolve => setTimeout(resolve, 5))
+      }
+    }
+
+    tabOneBackend.setItem('nf_characters', '[{"id":"char-A","notes":"from tab one"}]')
+    await waitFor(() => tabTwoBackend.getItem('nf_characters') !== null)
+
+    expect(tabTwoBackend.getItem('nf_characters')).toBe('[{"id":"char-A","notes":"from tab one"}]')
+
+    tabOneBackend.removeItem('nf_characters')
+    await waitFor(() => tabTwoBackend.getItem('nf_characters') === null)
+    expect(tabTwoBackend.getItem('nf_characters')).toBeNull()
+
+    await tabOneBackend.flush()
+    await tabTwoBackend.flush()
+  })
+
   it('records write failures via onWriteError without breaking the synchronous mirror', async () => {
     const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
     const { resetStorageBackend, writeItem, readItem } = await import('./projectStorage.js')
