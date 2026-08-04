@@ -21,9 +21,10 @@ describe('reconcileCloudSyncData', () => {
       locations: [{ id: 'loc-cloud', novelId: 'project-1', name: 'Cloud only' }],
     }
 
-    const { mergedData, conflicts } = reconcileCloudSyncData(local, cloud, base, options)
+    const { mergedData, conflicts, mergeStats } = reconcileCloudSyncData(local, cloud, base, options)
 
     expect(conflicts).toHaveLength(0)
+    expect(mergeStats).toEqual({ localOnly: 1, cloudOnly: 1 })
     expect(mergedData.characters).toEqual([
       { id: 'char-1', novelId: 'project-1', name: 'Local' },
       { id: 'char-local', novelId: 'project-1', name: 'Local only' },

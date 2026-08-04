@@ -751,6 +751,16 @@ function SyncStatusLine({ syncStatus, localFirstSelected, canSyncCloud, isLocalM
   )
 }
 
+function formatResumeMergeExplanation(pendingModeChange) {
+  const localOnly = pendingModeChange?.mergeStats?.localOnly || 0
+  const cloudOnly = pendingModeChange?.mergeStats?.cloudOnly || 0
+  if (!localOnly && !cloudOnly) return 'The saved-entry totals match after pruning project data on both sides.'
+  const parts = []
+  if (localOnly) parts.push(`${localOnly} ${localOnly === 1 ? 'record exists' : 'records exist'} only on this device`)
+  if (cloudOnly) parts.push(`${cloudOnly} ${cloudOnly === 1 ? 'record exists' : 'records exist'} only in cloud`)
+  return `Saved-entry totals can differ because ${parts.join(' and ')}. The merge keeps those non-conflicting records unless you cancel.`
+}
+
 function StorageConfigurationPanel({
   membership,
   storageUsedBytes,
@@ -1189,6 +1199,9 @@ function StorageConfigurationPanel({
                         </div>
                         <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.mergedSummary || 'No saved project data found.'}</div>
                       </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '-6px 0 14px' }}>
+                      {formatResumeMergeExplanation(pendingModeChange)}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
                       {pendingModeChange.conflicts?.length

@@ -336,7 +336,7 @@ function AppInner() {
     const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
     const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
     const baseData = pruneSaveDataToProjects(loadLocalFirstSnapshot(userId) || {})
-    const { mergedData, conflicts, mergedCount } = reconcileCloudSyncData(localData, cloudData, baseData)
+    const { mergedData, conflicts, mergedCount, mergeStats } = reconcileCloudSyncData(localData, cloudData, baseData)
     return {
       localSummary: formatSaveSummary(buildSaveSummary(localData)),
       cloudSummary: formatSaveSummary(buildSaveSummary(cloudData)),
@@ -344,6 +344,7 @@ function AppInner() {
       mergedData,
       conflicts,
       mergedCount,
+      mergeStats,
       cloudAvailable: membership.canSyncCloud,
     }
   }

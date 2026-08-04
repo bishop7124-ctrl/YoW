@@ -96,6 +96,10 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
   const mergedData = { ...cloudData, ...localData }
   const conflicts = []
   let mergedCount = 0
+  const mergeStats = {
+    localOnly: 0,
+    cloudOnly: 0,
+  }
 
   Object.entries(TABLE_CONFIG).forEach(([table, config]) => {
     const baseMap = byId(baseData[config.key])
@@ -105,13 +109,17 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
     const mergedItems = []
 
     ids.forEach(id => {
+      const local = localMap.get(id)
+      const cloud = cloudMap.get(id)
+      if (local && !cloud) mergeStats.localOnly += 1
+      if (cloud && !local) mergeStats.cloudOnly += 1
       const result = mergeRecord({
         table,
         label: config.label,
         id,
         base: baseMap.get(id),
-        local: localMap.get(id),
-        cloud: cloudMap.get(id),
+        local,
+        cloud,
         now,
         conflictId,
       })
@@ -137,7 +145,7 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
       ? cloudData.activeNovelId
       : mergedData.novels?.[0]?.id ?? null
 
-  return { mergedData, conflicts, mergedCount }
+  return { mergedData, conflicts, mergedCount, mergeStats }
 }
 
 function conflictFields(mine, theirs) {
