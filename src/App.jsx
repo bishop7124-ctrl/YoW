@@ -34,6 +34,7 @@ import DesktopUpgradeWall from './components/desktop/DesktopUpgradeWall'
 import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
+import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import { loadAiSettings } from './utils/aiSettings'
@@ -303,7 +304,7 @@ function AppInner() {
     })
   }, [userId])
 
-  const handleStorageModeChange = (nextMode) => {
+  const handleStorageModeChange = (nextMode, options = {}) => {
     if (!desktopApp) return
     const savedMode = saveStorageMode(userId, nextMode)
     setStorageModeState({ userId: userId || null, mode: savedMode })
@@ -313,6 +314,11 @@ function AppInner() {
       try { localStorage.removeItem(nextNoticeKey) } catch { /* storage unavailable */ }
     }
     if (nextMode === STORAGE_MODES.CLOUD_SYNC) {
+      if (options.mergedData) {
+        importData(options.mergedData)
+        store.addRecordConflicts?.(options.conflicts || [])
+        saveLocalFirstSnapshot(userId, options.mergedData)
+      }
       // Cloud Sync resumes from the current local copy. We avoid pulling remote
       // data over local work when the user intentionally leaves Local-first mode.
       finishRemoteLoad(true)
@@ -324,10 +330,23 @@ function AppInner() {
     }
   }
 
-  const getResumeCloudSyncPreview = () => ({
-    localSummary: formatSaveSummary(buildLocalSaveSummary(store)),
-    cloudAvailable: membership.canSyncCloud,
-  })
+  const getResumeCloudSyncPreview = async () => {
+    if (!desktopApp || !userId) throw new Error('Sign in to resume cloud sync.')
+    if (!membership.canSyncCloud) throw new Error('Cloud hosting is inactive for this account.')
+    const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+    const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
+    const baseData = pruneSaveDataToProjects(loadLocalFirstSnapshot(userId) || {})
+    const { mergedData, conflicts, mergedCount } = reconcileCloudSyncData(localData, cloudData, baseData)
+    return {
+      localSummary: formatSaveSummary(buildSaveSummary(localData)),
+      cloudSummary: formatSaveSummary(buildSaveSummary(cloudData)),
+      mergedSummary: formatSaveSummary(buildSaveSummary(mergedData)),
+      mergedData,
+      conflicts,
+      mergedCount,
+      cloudAvailable: membership.canSyncCloud,
+    }
+  }
 
   const getManualCloudSyncPreview = async () => {
     if (!desktopApp || !userId) throw new Error('Sign in to use manual cloud sync.')

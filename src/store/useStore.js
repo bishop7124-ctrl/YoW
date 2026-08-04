@@ -669,6 +669,7 @@ export function useStore(userId = null, options = {}) {
     comicPages,
     comicPanels,
     eras,
+    recordConflicts,
   }), [
     novels,
     characters,
@@ -692,6 +693,7 @@ export function useStore(userId = null, options = {}) {
     comicPages,
     comicPanels,
     eras,
+    recordConflicts,
   ])
 
   useEffect(() => {
@@ -988,6 +990,7 @@ export function useStore(userId = null, options = {}) {
     rpg_characters: { setter: setRpgCharacters, ref: rpgCharactersRef, storageKey: 'nf_rpg_characters' },
     comic_pages: { setter: setComicPages, ref: comicPagesRef, storageKey: 'nf_comicPages' },
     comic_panels: { setter: setComicPanels, ref: comicPanelsRef, storageKey: 'nf_comicPanels' },
+    scenes: { setter: setScenes, ref: scenesRef, storageKey: 'nf_scenes' },
     eras: { setter: setEras, ref: null, storageKey: 'nf_eras' },
   }), [])
 
@@ -1008,15 +1011,23 @@ export function useStore(userId = null, options = {}) {
           return nextItems
         })
         markLocalWrite(userId)
-        if (canSyncCloud && nextItems) debouncedSaveItems(conflict.table, userId, nextItems)
+        if (canSyncCloud && nextItems) {
+          if (conflict.table === 'scenes') trackSync(saveSceneDoc(userId, conflict.theirs)).catch(() => {})
+          else debouncedSaveItems(conflict.table, userId, nextItems)
+        }
       }
       return prev.filter(c => c.id !== conflictId)
     })
-  }, [canSyncCloud, userId, debouncedSaveItems, RECORD_STATE_SETTERS])
+  }, [canSyncCloud, userId, debouncedSaveItems, trackSync, RECORD_STATE_SETTERS])
 
   // Keeps this tab's version (already saved) and just dismisses the warning.
   const discardRecordConflict = useCallback((conflictId) => {
     setRecordConflicts(prev => prev.filter(c => c.id !== conflictId))
+  }, [])
+
+  const addRecordConflicts = useCallback((conflicts = []) => {
+    if (!Array.isArray(conflicts) || conflicts.length === 0) return
+    setRecordConflicts(prev => [...prev, ...conflicts])
   }, [])
 
   // Debounced user-settings save (activeNovelId, currentYear, activeMapByNovel)
@@ -2951,7 +2962,7 @@ export function useStore(userId = null, options = {}) {
     scenes: novelScenes, addScene, deleteScene, updateScene, reorderScene, moveScene,
     updateSceneContent,
     sceneConflicts: novelSceneConflicts, restoreSceneConflict, discardSceneConflict,
-    recordConflicts, restoreRecordConflict, discardRecordConflict,
+    recordConflicts, restoreRecordConflict, discardRecordConflict, addRecordConflicts,
     selectedCharacterId, setSelectedCharacterId,
     selectedLocationId, setSelectedLocationId,
     selectedLoreEntryId, setSelectedLoreEntryId,
@@ -2986,7 +2997,7 @@ export function useStore(userId = null, options = {}) {
     'addAct', 'deleteAct', 'updateAct', 'reorderAct', 'moveAct',
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',
-    'restoreSceneConflict', 'discardSceneConflict', 'restoreRecordConflict', 'discardRecordConflict',
+    'restoreSceneConflict', 'discardSceneConflict', 'restoreRecordConflict', 'discardRecordConflict', 'addRecordConflicts',
     'addScheduleEvent', 'updateScheduleEvent', 'deleteScheduleEvent', 'replaceData',
     'saveRpgCharacter', 'deleteRpgCharacter',
     'addComicPage', 'updateComicPage', 'deleteComicPage', 'reorderComicPage', 'duplicateComicPage',

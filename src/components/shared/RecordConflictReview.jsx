@@ -31,14 +31,23 @@ function diffFields(mine, theirs) {
   return diffs
 }
 
-export default function RecordConflictReview({ conflicts, onRestore, onDiscard, onClose }) {
-  return (
-    <Modal title="Records changed in another tab" onClose={onClose} wide>
+export default function RecordConflictReview({
+  conflicts,
+  onRestore,
+  onDiscard,
+  onClose,
+  embedded = false,
+  title = 'Records changed in another tab',
+  intro = 'These were edited in two browser tabs at once. Your edit here was saved as-is — nothing was lost — but the other tab\'s version is shown below in case you want it instead. Keep yours (already saved) or restore theirs to overwrite it.',
+  mineLabel = 'Your version (kept)',
+  theirsLabel = "Other tab's version",
+  discardLabel = 'Keep mine',
+  restoreLabel = "Restore other tab's version",
+}) {
+  const content = (
       <div className="ms-conflict-review">
         <p className="ms-conflict-review-intro">
-          These were edited in two browser tabs at once. Your edit here was saved as-is — nothing
-          was lost — but the other tab's version is shown below in case you want it instead.
-          Keep yours (already saved) or restore theirs to overwrite it.
+          {intro}
         </p>
         {conflicts.length === 0 ? (
           <p className="ms-conflict-review-empty">No conflicts remain.</p>
@@ -57,7 +66,7 @@ export default function RecordConflictReview({ conflicts, onRestore, onDiscard, 
                   {diffs.length > 0 ? (
                     <table className="rc-conflict-diff">
                       <thead>
-                        <tr><th></th><th>Your version (kept)</th><th>Other tab's version</th></tr>
+                        <tr><th></th><th>{mineLabel}</th><th>{theirsLabel}</th></tr>
                       </thead>
                       <tbody>
                         {diffs.map(diff => (
@@ -74,10 +83,10 @@ export default function RecordConflictReview({ conflicts, onRestore, onDiscard, 
                   )}
                   <div className="ms-conflict-review-actions">
                     <button type="button" className="ms-conflict-btn" onClick={() => onDiscard(conflict.id)}>
-                      Keep mine
+                      {discardLabel}
                     </button>
                     <button type="button" className="ms-conflict-btn ms-conflict-btn-primary" onClick={() => onRestore(conflict.id)}>
-                      Restore other tab's version
+                      {restoreLabel}
                     </button>
                   </div>
                 </li>
@@ -86,6 +95,11 @@ export default function RecordConflictReview({ conflicts, onRestore, onDiscard, 
           </ul>
         )}
       </div>
+  )
+  if (embedded) return content
+  return (
+    <Modal title={title} onClose={onClose} wide>
+      {content}
     </Modal>
   )
 }

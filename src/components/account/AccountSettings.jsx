@@ -8,6 +8,7 @@ import { getStorageQuota } from '../../utils/storageQuota'
 import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
@@ -770,13 +771,23 @@ function StorageConfigurationPanel({
   const [manualSyncError, setManualSyncError] = useState('')
   const [pendingManualSync, setPendingManualSync] = useState(null)
   const [pendingModeChange, setPendingModeChange] = useState(null)
+  const [modeChangeBusy, setModeChangeBusy] = useState(false)
+  const [modeChangeError, setModeChangeError] = useState('')
   const manualSyncAvailable = desktopApp && localFirstSelected && membership.canSyncCloud && onManualCloudSync && onManualCloudSyncPreview
 
-  const requestStorageModeChange = (nextMode) => {
+  const requestStorageModeChange = async (nextMode) => {
     if (!onStorageModeChange) return
+    setModeChangeError('')
     if (localFirstSelected && nextMode === STORAGE_MODES.CLOUD_SYNC && membership.canSyncCloud) {
-      const preview = onResumeCloudSyncPreview?.() || {}
-      setPendingModeChange({ nextMode, ...preview })
+      setModeChangeBusy(true)
+      try {
+        const preview = await onResumeCloudSyncPreview?.() || {}
+        setPendingModeChange({ nextMode, ...preview })
+      } catch (error) {
+        setModeChangeError(error.message || 'Could not prepare Cloud Sync review.')
+      } finally {
+        setModeChangeBusy(false)
+      }
       return
     }
     onStorageModeChange(nextMode)
@@ -784,8 +795,55 @@ function StorageConfigurationPanel({
 
   const confirmStorageModeChange = () => {
     if (!pendingModeChange) return
-    onStorageModeChange?.(pendingModeChange.nextMode)
+    onStorageModeChange?.(pendingModeChange.nextMode, {
+      mergedData: pendingModeChange.mergedData,
+      conflicts: pendingModeChange.conflicts || [],
+    })
     setPendingModeChange(null)
+  }
+
+  const dismissPendingModeConflict = (conflictId) => {
+    setPendingModeChange(prev => prev
+      ? { ...prev, conflicts: (prev.conflicts || []).filter(conflict => conflict.id !== conflictId) }
+      : prev)
+  }
+
+  const restorePendingModeConflict = (conflictId) => {
+    setPendingModeChange(prev => {
+      if (!prev) return prev
+      const conflict = (prev.conflicts || []).find(item => item.id === conflictId)
+      if (!conflict) return prev
+      const keyByTable = {
+        novels: 'novels',
+        series_items: 'series',
+        characters: 'characters',
+        factions: 'factions',
+        locations: 'locations',
+        timeline_events: 'timeline',
+        world_history: 'worldHistory',
+        acts: 'acts',
+        chapters: 'chapters',
+        scenes: 'scenes',
+        lore_entries: 'loreEntries',
+        idea_entries: 'ideaEntries',
+        maps_data: 'maps',
+        whiteboards_data: 'whiteboards',
+        story_schedule: 'storySchedule',
+        rpg_characters: 'rpgCharacters',
+        comic_pages: 'comicPages',
+        comic_panels: 'comicPanels',
+        eras: 'eras',
+      }
+      const key = keyByTable[conflict.table]
+      if (!key) return { ...prev, conflicts: prev.conflicts.filter(item => item.id !== conflictId) }
+      const nextData = { ...(prev.mergedData || {}) }
+      nextData[key] = (nextData[key] || []).map(item => item.id === conflict.recordId ? conflict.theirs : item)
+      return {
+        ...prev,
+        mergedData: nextData,
+        conflicts: prev.conflicts.filter(item => item.id !== conflictId),
+      }
+    })
   }
 
   const runManualCloudSync = async (direction) => {
@@ -863,10 +921,10 @@ function StorageConfigurationPanel({
                 <input
                   type="checkbox"
                   checked={localFirstSelected}
-                  disabled={!onStorageModeChange}
+                  disabled={!onStorageModeChange || modeChangeBusy}
                   onChange={event => requestStorageModeChange(event.target.checked ? STORAGE_MODES.LOCAL_FIRST : STORAGE_MODES.CLOUD_SYNC)}
                 />
-                Local-first
+                {modeChangeBusy ? 'Reviewing...' : 'Local-first'}
               </label>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -884,6 +942,11 @@ function StorageConfigurationPanel({
               canSyncCloud={membership.canSyncCloud}
               isLocalMode={membership.isLocalMode}
             />
+            {modeChangeError && (
+              <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 800 }}>
+                {modeChangeError}
+              </div>
+            )}
           </div>
 
           {localFirstSelected && (
@@ -1044,13 +1107,37 @@ function StorageConfigurationPanel({
                       Resume automatic Cloud Sync?
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
-                      Cloud Sync will resume from this device copy. Future conflict review will compare local and cloud summaries before overwrite decisions.
+                      YOW will merge edits that do not overlap. Review the conflicts below before automatic sync resumes.
                     </div>
-                    <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)', marginBottom: 16 }}>
-                      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                        This device
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: 10,
+                      marginBottom: 16,
+                    }}>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          This device
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.localSummary || 'No saved project data found.'}</div>
                       </div>
-                      <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.localSummary || 'No saved project data found.'}</div>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          Cloud
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.cloudSummary || 'No saved project data found.'}</div>
+                      </div>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'var(--bg-nav)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                          After merge
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.mergedSummary || 'No saved project data found.'}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
+                      {pendingModeChange.conflicts?.length
+                        ? `${pendingModeChange.conflicts.length} ${pendingModeChange.conflicts.length === 1 ? 'edit needs' : 'edits need'} a choice. Everything else is already included in the merge.`
+                        : `${pendingModeChange.mergedCount || 0} non-conflicting ${pendingModeChange.mergedCount === 1 ? 'edit is' : 'edits are'} ready to merge. No conflicts found.`}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
                       <button
@@ -1067,9 +1154,22 @@ function StorageConfigurationPanel({
                         style={{ width: 'auto', padding: '8px 14px' }}
                         onClick={confirmStorageModeChange}
                       >
-                        Resume Cloud Sync
+                        {pendingModeChange.conflicts?.length ? 'Keep device choices and resume' : 'Merge and resume Cloud Sync'}
                       </button>
                     </div>
+                    {pendingModeChange.conflicts?.length > 0 && (
+                      <RecordConflictReview
+                        embedded
+                        conflicts={pendingModeChange.conflicts}
+                        onRestore={restorePendingModeConflict}
+                        onDiscard={dismissPendingModeConflict}
+                        intro="These records changed both on this device and in cloud while Local-first was on. This device is kept by default; choose the cloud version for any item where that is what you want to keep."
+                        mineLabel="This device"
+                        theirsLabel="Cloud version"
+                        discardLabel="Keep this device"
+                        restoreLabel="Use cloud version"
+                      />
+                    )}
                   </div>
                 </div>
               )}
