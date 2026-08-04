@@ -754,11 +754,11 @@ function SyncStatusLine({ syncStatus, localFirstSelected, canSyncCloud, isLocalM
 function formatResumeMergeExplanation(pendingModeChange) {
   const localOnly = pendingModeChange?.mergeStats?.localOnly || 0
   const cloudOnly = pendingModeChange?.mergeStats?.cloudOnly || 0
-  if (!localOnly && !cloudOnly) return 'The saved-entry totals match after pruning project data on both sides.'
+  if (!localOnly && !cloudOnly) return 'Only the fields listed below need a decision.'
   const parts = []
   if (localOnly) parts.push(`${localOnly} ${localOnly === 1 ? 'record exists' : 'records exist'} only on this device`)
   if (cloudOnly) parts.push(`${cloudOnly} ${cloudOnly === 1 ? 'record exists' : 'records exist'} only in cloud`)
-  return `Saved-entry totals can differ because ${parts.join(' and ')}. The merge keeps those non-conflicting records unless you cancel.`
+  return `Only the fields listed below need a decision. Other non-conflicting records (${parts.join(' and ')}) will be kept automatically unless you cancel.`
 }
 
 function StorageConfigurationPanel({
@@ -1084,9 +1084,7 @@ function StorageConfigurationPanel({
                   }}
                 >
                   <div style={{
-                    width: 'min(900px, 100%)',
-                    maxHeight: 'min(86vh, 900px)',
-                    overflowY: 'auto',
+                    width: 'min(520px, 100%)',
                     borderRadius: 10,
                     border: '1px solid var(--border)',
                     background: 'var(--bg-main)',
@@ -1161,7 +1159,9 @@ function StorageConfigurationPanel({
                   }}
                 >
                   <div style={{
-                    width: 'min(520px, 100%)',
+                    width: 'min(900px, 100%)',
+                    maxHeight: 'min(86vh, 900px)',
+                    overflowY: 'auto',
                     borderRadius: 10,
                     border: '1px solid var(--border)',
                     background: 'var(--bg-main)',

@@ -114,6 +114,15 @@ function buildLocalSaveSummary(store) {
   return buildSaveSummary(store?.getLocalSnapshot?.() || store || {})
 }
 
+function formatResumeSaveSummary(summary = {}) {
+  const projects = summary.projects || 0
+  const words = summary.words || 0
+  return [
+    `${projects.toLocaleString()} ${projects === 1 ? 'project' : 'projects'}`,
+    `${words.toLocaleString()} ${words === 1 ? 'written word' : 'written words'}`,
+  ].join(', ')
+}
+
 function parseRoute() {
   const path = window.location.pathname
   const params = new URLSearchParams(window.location.search)
@@ -338,9 +347,9 @@ function AppInner() {
     const baseData = pruneSaveDataToProjects(loadLocalFirstSnapshot(userId) || {})
     const { mergedData, conflicts, mergedCount, mergeStats } = reconcileCloudSyncData(localData, cloudData, baseData)
     return {
-      localSummary: formatSaveSummary(buildSaveSummary(localData)),
-      cloudSummary: formatSaveSummary(buildSaveSummary(cloudData)),
-      mergedSummary: formatSaveSummary(buildSaveSummary(mergedData)),
+      localSummary: formatResumeSaveSummary(buildSaveSummary(localData)),
+      cloudSummary: formatResumeSaveSummary(buildSaveSummary(cloudData)),
+      mergedSummary: formatResumeSaveSummary(buildSaveSummary(mergedData)),
       mergedData,
       conflicts,
       mergedCount,
