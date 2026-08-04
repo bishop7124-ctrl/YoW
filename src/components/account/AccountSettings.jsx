@@ -1137,7 +1137,9 @@ function StorageConfigurationPanel({
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
                       {pendingModeChange.conflicts?.length
                         ? `${pendingModeChange.conflicts.length} ${pendingModeChange.conflicts.length === 1 ? 'edit needs' : 'edits need'} a choice. Everything else is already included in the merge.`
-                        : `${pendingModeChange.mergedCount || 0} non-conflicting ${pendingModeChange.mergedCount === 1 ? 'edit is' : 'edits are'} ready to merge. No conflicts found.`}
+                        : pendingModeChange.mergedCount > 0
+                          ? `${pendingModeChange.mergedCount} non-conflicting ${pendingModeChange.mergedCount === 1 ? 'edit is' : 'edits are'} ready to merge. No conflicts found.`
+                          : 'No differences found between this device and cloud. Cloud Sync can resume safely.'}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
                       <button
