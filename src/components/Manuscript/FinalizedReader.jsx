@@ -13,8 +13,11 @@ function renderInlineMarkdown(text, keyPrefix = '') {
   let last = 0, m, idx = 0
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(text.slice(last, m.index))
-    if (m[0].startsWith('**')) parts.push(<strong key={`${keyPrefix}-b${idx}`}>{m[2]}</strong>)
-    else if (m[0].startsWith('*')) parts.push(<em key={`${keyPrefix}-i${idx}`}>{m[3]}</em>)
+    // See SceneEditor.jsx's renderInlineMarkdown — which alternative matched
+    // must be read from which capture group is populated, not sniffed from
+    // the raw match text.
+    if (m[2] !== undefined) parts.push(<strong key={`${keyPrefix}-b${idx}`}>{m[2]}</strong>)
+    else if (m[3] !== undefined) parts.push(<em key={`${keyPrefix}-i${idx}`}>{m[3]}</em>)
     else parts.push(<u key={`${keyPrefix}-u${idx}`}>{m[4]}</u>)
     last = m.index + m[0].length
     idx++

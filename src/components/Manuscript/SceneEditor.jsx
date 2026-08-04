@@ -49,10 +49,16 @@ function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
         </span>
       )
     }
-    if (m[0].startsWith('**')) {
+    // Which alternative matched must be read from which capture group is
+    // populated, not sniffed from the raw match text — `m[0].startsWith('**')`
+    // is also true when the *italic* alternative matches a stretch whose
+    // captured content itself starts with a stray `*` (e.g. unbalanced
+    // asterisks like "**bold*"), leaving m[2] undefined and throwing on
+    // m[2].length.
+    if (m[2] !== undefined) {
       const innerStart = baseOffset + m.index + 2
       parts.push(<strong key={`${keyPrefix}-b${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[2].length}>{m[2]}</strong>)
-    } else if (m[0].startsWith('*')) {
+    } else if (m[3] !== undefined) {
       const innerStart = baseOffset + m.index + 1
       parts.push(<em key={`${keyPrefix}-i${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[3].length}>{m[3]}</em>)
     } else {
