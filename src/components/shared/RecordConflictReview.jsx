@@ -9,10 +9,8 @@ function formatWhen(timestamp) {
 
 function fieldPreview(value) {
   if (value == null || value === '') return '(empty)'
-  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`
-  if (typeof value === 'object') return '(complex value)'
-  const text = String(value)
-  return text.length > 140 ? `${text.slice(0, 140)}…` : text
+  if (typeof value === 'object') return JSON.stringify(value, null, 2)
+  return String(value)
 }
 
 // Fields both versions share that actually differ — what the user needs to
@@ -35,6 +33,8 @@ export default function RecordConflictReview({
   conflicts,
   onRestore,
   onDiscard,
+  onRestoreField,
+  onDiscardField,
   onClose,
   embedded = false,
   title = 'Records changed in another tab',
@@ -54,7 +54,10 @@ export default function RecordConflictReview({
         ) : (
           <ul className="ms-conflict-review-list">
             {conflicts.map(conflict => {
-              const diffs = diffFields(conflict.mine, conflict.theirs)
+              const diffs = Array.isArray(conflict.fields) && conflict.fields.length
+                ? conflict.fields
+                : diffFields(conflict.mine, conflict.theirs)
+              const fieldChoices = typeof onRestoreField === 'function' && typeof onDiscardField === 'function'
               return (
                 <li key={conflict.id} className="ms-conflict-review-item">
                   <div className="ms-conflict-review-item-head">
@@ -72,8 +75,22 @@ export default function RecordConflictReview({
                         {diffs.map(diff => (
                           <tr key={diff.key}>
                             <td className="rc-conflict-diff-field">{diff.key}</td>
-                            <td>{fieldPreview(diff.mine)}</td>
-                            <td>{fieldPreview(diff.theirs)}</td>
+                            <td>
+                              <pre className="rc-conflict-value">{fieldPreview(diff.mine)}</pre>
+                              {fieldChoices && (
+                                <button type="button" className="ms-conflict-btn" onClick={() => onDiscardField(conflict.id, diff.key)}>
+                                  {discardLabel}
+                                </button>
+                              )}
+                            </td>
+                            <td>
+                              <pre className="rc-conflict-value">{fieldPreview(diff.theirs)}</pre>
+                              {fieldChoices && (
+                                <button type="button" className="ms-conflict-btn ms-conflict-btn-primary" onClick={() => onRestoreField(conflict.id, diff.key)}>
+                                  {restoreLabel}
+                                </button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -81,14 +98,16 @@ export default function RecordConflictReview({
                   ) : (
                     <p className="ms-conflict-review-preview">Only timing metadata differs — content is effectively the same.</p>
                   )}
-                  <div className="ms-conflict-review-actions">
-                    <button type="button" className="ms-conflict-btn" onClick={() => onDiscard(conflict.id)}>
-                      {discardLabel}
-                    </button>
-                    <button type="button" className="ms-conflict-btn ms-conflict-btn-primary" onClick={() => onRestore(conflict.id)}>
-                      {restoreLabel}
-                    </button>
-                  </div>
+                  {!fieldChoices && (
+                    <div className="ms-conflict-review-actions">
+                      <button type="button" className="ms-conflict-btn" onClick={() => onDiscard(conflict.id)}>
+                        {discardLabel}
+                      </button>
+                      <button type="button" className="ms-conflict-btn ms-conflict-btn-primary" onClick={() => onRestore(conflict.id)}>
+                        {restoreLabel}
+                      </button>
+                    </div>
+                  )}
                 </li>
               )
             })}

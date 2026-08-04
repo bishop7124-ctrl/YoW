@@ -31,6 +31,7 @@ function byId(items = []) {
 function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) {
   if (!base) {
     if (local && cloud && !jsonEq(local, cloud)) {
+      const fields = conflictFields(local, cloud)
       return {
         record: local,
         conflict: {
@@ -41,6 +42,7 @@ function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) 
           name: labelFor(local),
           mine: local,
           theirs: cloud,
+          fields,
           detectedAt: now,
           source: 'cloud-sync-resume',
         },
@@ -57,13 +59,15 @@ function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) 
 
   const keys = new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(cloud)])
   let merged = { ...local }
-  let hasConflict = false
+  const fields = []
   keys.forEach(key => {
     if (IGNORED_FIELDS.has(key)) return
     const localChanged = !jsonEq(local[key], base[key])
     const cloudChanged = !jsonEq(cloud[key], base[key])
     if (localChanged && cloudChanged) {
-      if (!jsonEq(local[key], cloud[key])) hasConflict = true
+      if (!jsonEq(local[key], cloud[key])) {
+        fields.push({ key, mine: local[key], theirs: cloud[key] })
+      }
       return
     }
     if (!localChanged && cloudChanged) merged[key] = cloud[key]
@@ -71,7 +75,7 @@ function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) 
 
   return {
     record: merged,
-    conflict: hasConflict ? {
+    conflict: fields.length ? {
       id: conflictId(),
       table,
       recordId: id,
@@ -79,6 +83,7 @@ function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) 
       name: labelFor(local),
       mine: merged,
       theirs: cloud,
+      fields,
       detectedAt: now,
       source: 'cloud-sync-resume',
     } : null,
@@ -133,4 +138,14 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
       : mergedData.novels?.[0]?.id ?? null
 
   return { mergedData, conflicts, mergedCount }
+}
+
+function conflictFields(mine, theirs) {
+  const keys = new Set([...Object.keys(mine || {}), ...Object.keys(theirs || {})])
+  const fields = []
+  keys.forEach(key => {
+    if (IGNORED_FIELDS.has(key)) return
+    if (!jsonEq(mine?.[key], theirs?.[key])) fields.push({ key, mine: mine?.[key], theirs: theirs?.[key] })
+  })
+  return fields
 }

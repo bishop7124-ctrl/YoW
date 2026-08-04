@@ -78,7 +78,30 @@ describe('reconcileCloudSyncData', () => {
         label: 'Scene',
         mine: expect.objectContaining({ content: 'Local text' }),
         theirs: expect.objectContaining({ content: 'Cloud text' }),
+        fields: [{ key: 'content', mine: 'Local text', theirs: 'Cloud text' }],
       }),
+    ])
+  })
+
+  it('lists every same-field conflict so the review UI can resolve fields individually', () => {
+    const base = {
+      novels: [{ id: 'project-1', title: 'Base project' }],
+      characters: [{ id: 'char-1', novelId: 'project-1', name: 'Alice', pronouns: 'they/them', background: { origin: 'old' } }],
+    }
+    const local = {
+      ...base,
+      characters: [{ id: 'char-1', novelId: 'project-1', name: 'Alice', pronouns: 'he/him', background: { origin: 'device' } }],
+    }
+    const cloud = {
+      ...base,
+      characters: [{ id: 'char-1', novelId: 'project-1', name: 'Alice', pronouns: 'she/her', background: { origin: 'cloud' } }],
+    }
+
+    const { conflicts } = reconcileCloudSyncData(local, cloud, base, options)
+
+    expect(conflicts[0].fields).toEqual([
+      { key: 'pronouns', mine: 'he/him', theirs: 'she/her' },
+      { key: 'background', mine: { origin: 'device' }, theirs: { origin: 'cloud' } },
     ])
   })
 })

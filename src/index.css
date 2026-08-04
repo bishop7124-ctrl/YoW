@@ -13465,6 +13465,19 @@ body {
   vertical-align: top;
   border-top: 1px solid var(--border);
 }
+.rc-conflict-value {
+  max-height: 170px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0 0 8px;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-main) 72%, transparent);
+  color: var(--text-main);
+  font: inherit;
+  line-height: 1.45;
+}
 .rc-conflict-diff-field {
   color: var(--text-muted);
   font-weight: 700;

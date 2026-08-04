@@ -52,6 +52,22 @@ describe('sync summary', () => {
     expect(pruneSaveDataToProjects(data).activeMapByNovel).toEqual({ 'current-project': 'map-1' })
   })
 
+  it('keeps manuscript scenes attached to a current project chapter even if novelId is missing', () => {
+    const pruned = pruneSaveDataToProjects({
+      novels: [{ id: 'current-project' }],
+      chapters: [{ id: 'chapter-1', novelId: 'current-project' }],
+      scenes: [
+        { id: 'scene-kept', chapterId: 'chapter-1', content: 'Current manuscript text' },
+        { id: 'scene-orphan', chapterId: 'missing-chapter', content: 'Old manuscript text' },
+      ],
+    })
+
+    expect(pruned.scenes).toEqual([
+      { id: 'scene-kept', chapterId: 'chapter-1', content: 'Current manuscript text' },
+    ])
+    expect(buildSaveSummary(pruned).words).toBe(3)
+  })
+
   it('formats the summary for confirmation dialogs', () => {
     expect(formatSaveSummary({ projects: 1, words: 2, entries: 3 }))
       .toBe('1 project, 2 written words, 3 saved entries')

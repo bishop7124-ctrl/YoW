@@ -55,11 +55,17 @@ export function pruneSaveDataToProjects(data = {}) {
   const filterProjectRows = rows => (
     Array.isArray(rows) ? rows.filter(row => projectIds.has(row?.novelId)) : []
   )
+  const chapters = filterProjectRows(data.chapters)
+  const chapterIds = new Set(chapters.map(chapter => chapter.id).filter(Boolean))
 
   const next = { ...data, novels }
   PROJECT_SCOPED_KEYS.forEach(key => {
     next[key] = filterProjectRows(data[key])
   })
+  next.chapters = chapters
+  next.scenes = Array.isArray(data.scenes)
+    ? data.scenes.filter(scene => projectIds.has(scene?.novelId) || chapterIds.has(scene?.chapterId))
+    : []
 
   next.series = Array.isArray(data.series)
     ? data.series

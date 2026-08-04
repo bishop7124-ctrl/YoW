@@ -808,6 +808,18 @@ function StorageConfigurationPanel({
       : prev)
   }
 
+  const dismissPendingModeConflictField = (conflictId, fieldKey) => {
+    setPendingModeChange(prev => {
+      if (!prev) return prev
+      const nextConflicts = (prev.conflicts || []).flatMap(conflict => {
+        if (conflict.id !== conflictId) return [conflict]
+        const fields = (conflict.fields || []).filter(field => field.key !== fieldKey)
+        return fields.length ? [{ ...conflict, fields }] : []
+      })
+      return { ...prev, conflicts: nextConflicts }
+    })
+  }
+
   const restorePendingModeConflict = (conflictId) => {
     setPendingModeChange(prev => {
       if (!prev) return prev
@@ -843,6 +855,48 @@ function StorageConfigurationPanel({
         mergedData: nextData,
         conflicts: prev.conflicts.filter(item => item.id !== conflictId),
       }
+    })
+  }
+
+  const restorePendingModeConflictField = (conflictId, fieldKey) => {
+    setPendingModeChange(prev => {
+      if (!prev) return prev
+      const conflict = (prev.conflicts || []).find(item => item.id === conflictId)
+      const field = conflict?.fields?.find(item => item.key === fieldKey)
+      if (!conflict || !field) return prev
+      const keyByTable = {
+        novels: 'novels',
+        series_items: 'series',
+        characters: 'characters',
+        factions: 'factions',
+        locations: 'locations',
+        timeline_events: 'timeline',
+        world_history: 'worldHistory',
+        acts: 'acts',
+        chapters: 'chapters',
+        scenes: 'scenes',
+        lore_entries: 'loreEntries',
+        idea_entries: 'ideaEntries',
+        maps_data: 'maps',
+        whiteboards_data: 'whiteboards',
+        story_schedule: 'storySchedule',
+        rpg_characters: 'rpgCharacters',
+        comic_pages: 'comicPages',
+        comic_panels: 'comicPanels',
+        eras: 'eras',
+      }
+      const key = keyByTable[conflict.table]
+      if (!key) return prev
+      const nextData = { ...(prev.mergedData || {}) }
+      nextData[key] = (nextData[key] || []).map(item =>
+        item.id === conflict.recordId ? { ...item, [fieldKey]: field.theirs } : item
+      )
+      const nextConflicts = (prev.conflicts || []).flatMap(item => {
+        if (item.id !== conflictId) return [item]
+        const fields = (item.fields || []).filter(candidate => candidate.key !== fieldKey)
+        return fields.length ? [{ ...item, fields }] : []
+      })
+      return { ...prev, mergedData: nextData, conflicts: nextConflicts }
     })
   }
 
@@ -1020,7 +1074,9 @@ function StorageConfigurationPanel({
                   }}
                 >
                   <div style={{
-                    width: 'min(520px, 100%)',
+                    width: 'min(900px, 100%)',
+                    maxHeight: 'min(86vh, 900px)',
+                    overflowY: 'auto',
                     borderRadius: 10,
                     border: '1px solid var(--border)',
                     background: 'var(--bg-main)',
@@ -1165,6 +1221,8 @@ function StorageConfigurationPanel({
                         conflicts={pendingModeChange.conflicts}
                         onRestore={restorePendingModeConflict}
                         onDiscard={dismissPendingModeConflict}
+                        onRestoreField={restorePendingModeConflictField}
+                        onDiscardField={dismissPendingModeConflictField}
                         intro="These records changed both on this device and in cloud while Local-first was on. This device is kept by default; choose the cloud version for any item where that is what you want to keep."
                         mineLabel="This device"
                         theirsLabel="Cloud version"
