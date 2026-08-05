@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::fs;
 use std::os::raw::{c_char, c_int, c_void};
@@ -480,7 +481,21 @@ fn maybe_create_auto_snapshot(app: &tauri::AppHandle) -> Result<Option<VaultSnap
 fn list_snapshots_with_prefix(app: &tauri::AppHandle, prefix: &str) -> Result<Vec<VaultSnapshot>, String> {
   let backups = backup_dir(app)?;
   let mut snapshots = Vec::new();
-  for entry in fs::read_dir(&backups).map_err(|error| format!("Could not read backup directory: {error}"))? {
+  collect_snapshots_from_dir(&backups, Some(prefix), &mut HashSet::new(), &mut snapshots)?;
+  snapshots.sort_by(|a, b| b.modified_seconds.cmp(&a.modified_seconds));
+  Ok(snapshots)
+}
+
+fn collect_snapshots_from_dir(
+  backups: &PathBuf,
+  prefix: Option<&str>,
+  seen: &mut HashSet<String>,
+  snapshots: &mut Vec<VaultSnapshot>,
+) -> Result<(), String> {
+  if !backups.is_dir() {
+    return Ok(());
+  }
+  for entry in fs::read_dir(backups).map_err(|error| format!("Could not read backup directory: {error}"))? {
     let entry = entry.map_err(|error| format!("Could not read backup entry: {error}"))?;
     let path = entry.path();
     if !path.is_file() {
@@ -489,7 +504,10 @@ fn list_snapshots_with_prefix(app: &tauri::AppHandle, prefix: &str) -> Result<Ve
     let Some(name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
       continue;
     };
-    if !name.starts_with(prefix) || !name.ends_with(".db") {
+    if prefix.map(|value| !name.starts_with(value)).unwrap_or(false) || !is_restorable_snapshot_name(name) {
+      continue;
+    }
+    if !seen.insert(name.to_string()) {
       continue;
     }
     snapshots.push(VaultSnapshot {
@@ -499,8 +517,7 @@ fn list_snapshots_with_prefix(app: &tauri::AppHandle, prefix: &str) -> Result<Ve
       modified_seconds: modified_seconds(&path),
     });
   }
-  snapshots.sort_by(|a, b| b.modified_seconds.cmp(&a.modified_seconds));
-  Ok(snapshots)
+  Ok(())
 }
 
 fn prune_auto_snapshots(app: &tauri::AppHandle) -> Result<(), String> {
@@ -565,42 +582,44 @@ fn vault_reveal_in_finder(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn vault_list_snapshots(app: tauri::AppHandle) -> Result<Vec<VaultSnapshot>, String> {
   let backups = backup_dir(&app)?;
+  let default_backups = app_default_dir(&app)?.join("Backups");
+  let mut seen = HashSet::new();
   let mut snapshots = Vec::new();
-  for entry in fs::read_dir(&backups).map_err(|error| format!("Could not read backup directory: {error}"))? {
-    let entry = entry.map_err(|error| format!("Could not read backup entry: {error}"))?;
-    let path = entry.path();
-    if !path.is_file() {
-      continue;
-    }
-    let Some(name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
-      continue;
-    };
-    if !(name.starts_with("vault-snapshot-") || name.starts_with("vault-auto-") || name.starts_with("vault-before-restore-")) || !name.ends_with(".db") {
-      continue;
-    }
-    snapshots.push(VaultSnapshot {
-      name: name.to_string(),
-      path: path.to_string_lossy().into_owned(),
-      size_bytes: file_size(&path),
-      modified_seconds: modified_seconds(&path),
-    });
+  collect_snapshots_from_dir(&backups, None, &mut seen, &mut snapshots)?;
+  if default_backups != backups {
+    collect_snapshots_from_dir(&default_backups, None, &mut seen, &mut snapshots)?;
   }
   snapshots.sort_by(|a, b| b.modified_seconds.cmp(&a.modified_seconds));
   Ok(snapshots)
+}
+
+fn is_restorable_snapshot_name(name: &str) -> bool {
+  (name.starts_with("vault-snapshot-") || name.starts_with("vault-auto-") || name.starts_with("vault-before-restore-")) && name.ends_with(".db")
 }
 
 fn snapshot_path_for_restore(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
   if name.contains('/') || name.contains('\\') || name.contains("..") {
     return Err("Invalid snapshot name.".to_string());
   }
-  if !(name.starts_with("vault-snapshot-") || name.starts_with("vault-auto-") || name.starts_with("vault-before-restore-")) || !name.ends_with(".db") {
+  if !is_restorable_snapshot_name(name) {
     return Err("Invalid snapshot file.".to_string());
   }
-  let path = backup_dir(app)?.join(name);
-  if !path.is_file() {
-    return Err("Snapshot could not be found.".to_string());
+  let backups = backup_dir(app)?;
+  let path = backups.join(name);
+  if path.is_file() {
+    return Ok(path);
   }
-  Ok(path)
+
+  let default_path = app_default_dir(app)?.join("Backups").join(name);
+  if default_path.is_file() {
+    let copied_path = backups.join(name);
+    if !copied_path.is_file() {
+      fs::copy(&default_path, &copied_path).map_err(|error| format!("Could not copy vault snapshot: {error}"))?;
+    }
+    return Ok(copied_path);
+  }
+
+  Err("Snapshot could not be found. It may have been moved or deleted outside YOW.".to_string())
 }
 
 #[tauri::command]

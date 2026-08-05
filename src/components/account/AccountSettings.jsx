@@ -587,7 +587,8 @@ function DesktopVaultPanel() {
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
               Choose where YOW keeps this device's vault. Pick an empty folder to move the current
               vault there, or pick a folder that already contains a YOW <code>vault.db</code> to switch
-              to that vault. The current file stays in place as a backup, and YOW reloads afterwards.
+              to that vault. Moving copies your existing snapshots into the new Backups folder;
+              switching to an existing vault uses that vault's own snapshots. The current file stays in place as a backup, and YOW reloads afterwards.
               Avoid folders synced by Dropbox or iCloud — sync tools can corrupt a live database.
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
