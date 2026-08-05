@@ -572,7 +572,33 @@ fn snapshot_path_for_restore(app: &tauri::AppHandle, name: &str) -> Result<PathB
 }
 
 #[tauri::command]
-fn vault_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<VaultRestoreResult, String> {
+async fn vault_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<VaultRestoreResult, String> {
+  use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+  let prompt_app = app.clone();
+  let prompt_name = name.clone();
+  let confirmed = tauri::async_runtime::spawn_blocking(move || {
+    prompt_app
+      .dialog()
+      .message(format!(
+        "Restore {prompt_name}? This replaces the current desktop vault with that snapshot. \
+YOW will create a pre-restore safety copy first, then reopen in Local-first mode so Cloud Sync stays paused."
+      ))
+      .title("Restore vault snapshot?")
+      .kind(MessageDialogKind::Warning)
+      .buttons(MessageDialogButtons::OkCancelCustom(
+        "Restore snapshot".to_string(),
+        "Cancel".to_string(),
+      ))
+      .blocking_show()
+  })
+  .await
+  .map_err(|error| format!("Could not show restore confirmation: {error}"))?;
+
+  if !confirmed {
+    return Err("Snapshot restore cancelled.".to_string());
+  }
+
   let snapshot = snapshot_path_for_restore(&app, &name)?;
   let safety = create_vault_snapshot(&app, "vault-before-restore")?;
   let target = vault_path(&app)?;
