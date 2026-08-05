@@ -803,13 +803,21 @@ function StorageConfigurationPanel({
     onStorageModeChange(nextMode)
   }
 
-  const confirmStorageModeChange = () => {
+  const confirmStorageModeChange = async () => {
     if (!pendingModeChange) return
-    onStorageModeChange?.(pendingModeChange.nextMode, {
-      mergedData: pendingModeChange.mergedData,
-      conflicts: pendingModeChange.conflicts || [],
-    })
-    setPendingModeChange(null)
+    setModeChangeBusy(true)
+    setModeChangeError('')
+    try {
+      await onStorageModeChange?.(pendingModeChange.nextMode, {
+        mergedData: pendingModeChange.mergedData,
+        conflicts: pendingModeChange.conflicts || [],
+      })
+      setPendingModeChange(null)
+    } catch (error) {
+      setModeChangeError(error.message || 'Could not resume Cloud Sync.')
+    } finally {
+      setModeChangeBusy(false)
+    }
   }
 
   const dismissPendingModeConflict = (conflictId) => {
@@ -1215,6 +1223,7 @@ function StorageConfigurationPanel({
                         type="button"
                         className="account-secondary-button"
                         style={{ width: 'auto', padding: '8px 14px' }}
+                        disabled={Boolean(modeChangeBusy)}
                         onClick={() => setPendingModeChange(null)}
                       >
                         Cancel
@@ -1223,11 +1232,17 @@ function StorageConfigurationPanel({
                         type="button"
                         className="account-primary-button"
                         style={{ width: 'auto', padding: '8px 14px' }}
+                        disabled={Boolean(modeChangeBusy)}
                         onClick={confirmStorageModeChange}
                       >
-                        {pendingModeChange.conflicts?.length ? 'Keep device choices and resume' : 'Merge and resume Cloud Sync'}
+                        {modeChangeBusy ? 'Resuming...' : pendingModeChange.conflicts?.length ? 'Keep device choices and resume' : 'Merge and resume Cloud Sync'}
                       </button>
                     </div>
+                    {modeChangeError && (
+                      <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 800, marginTop: 12 }}>
+                        {modeChangeError}
+                      </div>
+                    )}
                     {pendingModeChange.conflicts?.length > 0 && (
                       <RecordConflictReview
                         embedded

@@ -35,6 +35,7 @@ import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktop
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
+import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import { loadAiSettings } from './utils/aiSettings'
@@ -313,8 +314,13 @@ function AppInner() {
     })
   }, [userId])
 
-  const handleStorageModeChange = (nextMode, options = {}) => {
+  const handleStorageModeChange = async (nextMode, options = {}) => {
     if (!desktopApp) return
+    if (nextMode === STORAGE_MODES.CLOUD_SYNC && options.mergedData) {
+      const reviewedData = await persistReviewedCloudSyncResume(userId, options.mergedData, { trackSync: store.trackSync })
+      importData(reviewedData)
+      store.addRecordConflicts?.(options.conflicts || [])
+    }
     const savedMode = saveStorageMode(userId, nextMode)
     setStorageModeState({ userId: userId || null, mode: savedMode })
     const nextNoticeKey = getLocalModeNoticeKey(userId, membership, nextMode)
@@ -323,11 +329,6 @@ function AppInner() {
       try { localStorage.removeItem(nextNoticeKey) } catch { /* storage unavailable */ }
     }
     if (nextMode === STORAGE_MODES.CLOUD_SYNC) {
-      if (options.mergedData) {
-        importData(options.mergedData)
-        store.addRecordConflicts?.(options.conflicts || [])
-        saveLocalFirstSnapshot(userId, options.mergedData)
-      }
       // Cloud Sync resumes from the current local copy. We avoid pulling remote
       // data over local work when the user intentionally leaves Local-first mode.
       finishRemoteLoad(true)
