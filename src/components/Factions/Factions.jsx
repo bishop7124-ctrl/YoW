@@ -48,8 +48,9 @@ export default function Factions({ store }) {
     const previousLogoImage = editTarget?.logo?.image
     if (previousLogoImage && previousLogoImage !== form.logo?.image) deleteUserMedia(previousLogoImage).catch(console.error)
     const faction = saveFaction(form, editTarget?.id)
-    if (faction?.id && selectedFactionId) setSelectedFactionId(faction.id)
     store.refreshStorageUsedBytes?.().catch(console.error)
+    if (!faction) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
+    if (faction.id && selectedFactionId) setSelectedFactionId(faction.id)
     setShowForm(false)
     setEditTarget(null)
   }

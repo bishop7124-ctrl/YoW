@@ -635,7 +635,7 @@ export default function LoginPage({
                   </button>
                 </p>}
 
-                {onOpenLegal && (
+                {!isDesktop && onOpenLegal && (
                   <div className="mt-6 flex justify-center gap-4 flex-wrap">
                     <button type="button" onClick={() => onOpenLegal('privacy')} className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">Privacy</button>
                     <button type="button" onClick={() => onOpenLegal('terms')}   className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">Terms</button>

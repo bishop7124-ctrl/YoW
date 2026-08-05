@@ -245,6 +245,7 @@ export default function CharacterBuilder({ store }) {
   const handleWizardSave = (charData) => {
     const id = store.saveRpgCharacter(charData)
     store.refreshStorageUsedBytes?.().catch(console.error)
+    if (!id) return // blocked (e.g. cloud storage full) — keep the wizard open so nothing is lost
     setWizardOpen(false)
     setSelectedId(id)
     setView('detail')

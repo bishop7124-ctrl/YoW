@@ -198,6 +198,7 @@ export default function Lore({ store }) {
       setSelectedLoreEntryId(entry?.id || editTarget.id)
     } else {
       const entry = addLoreEntry(data)
+      if (!entry) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
       setSelectedLoreEntryId(entry.id)
     }
     setEditing(false)

@@ -9,7 +9,7 @@ const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime',
 // Storage quotas in bytes per plan key.
 // These are the canonical quota values — also used by storageQuota.js.
 export const PLAN_STORAGE_BYTES = {
-  free:                  5    * 1024 * 1024,        //   5 MB
+  free:                  3    * 1024 * 1024,        //   3 MB
   trial:                  1   * 1024 * 1024 * 1024,  //   1 GB
   premium_monthly:        5   * 1024 * 1024 * 1024,  //   5 GB
   premium_plus_lifetime:  8   * 1024 * 1024 * 1024,  //   8 GB

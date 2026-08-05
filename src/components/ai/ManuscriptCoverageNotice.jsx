@@ -1,12 +1,14 @@
 // Surfaces the silent scene-count/content truncation in aiToolPrompts.js's
-// summariseScenes — without this, a long manuscript is quietly analysed
-// only in part with no indication to the user of what was left out.
+// summariseScenes. This can happen because either there are more scenes than
+// the prompt includes, or individual scene excerpts are longer than the
+// per-scene prompt cap.
 export function ManuscriptCoverageNotice({ coverage, style = {} }) {
   if (!coverage) return null
   const { totalScenes, includedScenes, omittedScenes, contentTruncated } = coverage
   if (omittedScenes <= 0 && !contentTruncated) return null
 
   const parts = []
+  const lead = omittedScenes > 0 ? 'Manuscript is large' : 'AI context is limited'
   if (omittedScenes > 0) {
     parts.push(`analysing the first ${includedScenes} of ${totalScenes} scenes — ${omittedScenes} scene${omittedScenes === 1 ? '' : 's'} will be skipped`)
   } else {
@@ -29,7 +31,7 @@ export function ManuscriptCoverageNotice({ coverage, style = {} }) {
         ...style,
       }}
     >
-      Manuscript is large: {parts.join('; ')}. Results only reflect the included content.
+      {lead}: {parts.join('; ')}. Results only reflect the included content.
     </div>
   )
 }

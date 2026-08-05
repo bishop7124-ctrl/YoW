@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
+import { exportAllProjects } from '../../utils/projectExportAll'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
 import { STORAGE_MODES, saveStorageMode } from '../../utils/storageMode'
 import { getStorageQuota } from '../../utils/storageQuota'
@@ -69,7 +70,7 @@ const CUSTOM_COLOR_FIELDS = [
   { key: 'border', label: 'Borders', hint: 'Dividers, input outlines, card edges' },
 ]
 
-function MaintenancePayButton({ style }) {
+export function MaintenancePayButton({ style }) {
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const handlePay = async () => {
@@ -857,6 +858,84 @@ function formatResumeMergeExplanation(pendingModeChange) {
   return `Only the fields listed below need a decision. Other non-conflicting records (${parts.join(' and ')}) will be kept automatically unless you cancel.`
 }
 
+function ExportAllProjectsCard({ store, novels }) {
+  const [busyFormat, setBusyFormat] = useState('')
+  const [progress, setProgress] = useState(null)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  const runExportAll = async (format) => {
+    if (!novels.length || busyFormat) return
+    setBusyFormat(format)
+    setMessage('')
+    setError('')
+    setProgress({ done: 0, total: novels.length })
+    try {
+      const results = await exportAllProjects(store, novels, format, {
+        onProgress: (done, total) => setProgress({ done, total }),
+      })
+      const failed = results.filter(r => !r.ok)
+      if (failed.length) {
+        setError(`${failed.length} of ${results.length} project${results.length === 1 ? '' : 's'} failed to export: ${failed.map(f => f.title).join(', ')}`)
+      } else {
+        setMessage(`Exported all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'Word documents' : 'backup ZIPs'}.`)
+      }
+    } catch (err) {
+      setError(err.message || 'Export failed. Please try again.')
+    } finally {
+      setBusyFormat('')
+      setProgress(null)
+    }
+  }
+
+  return (
+    <div style={{
+      marginBottom: 18,
+      padding: '14px 16px',
+      borderRadius: 10,
+      background: 'var(--bg-nav)',
+      border: '1px solid var(--border)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    }}>
+      <div>
+        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>
+          Export all projects
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
+          Download every project you own in one pass — as restorable backup ZIPs, or as readable Word documents. Each project downloads as a separate file.
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="account-secondary-button"
+          style={{ width: 'auto', padding: '8px 14px' }}
+          disabled={!novels.length || Boolean(busyFormat)}
+          onClick={() => runExportAll('zip')}
+        >
+          {busyFormat === 'zip' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as ZIP backups'}
+        </button>
+        <button
+          type="button"
+          className="account-secondary-button"
+          style={{ width: 'auto', padding: '8px 14px' }}
+          disabled={!novels.length || Boolean(busyFormat)}
+          onClick={() => runExportAll('docx')}
+        >
+          {busyFormat === 'docx' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as Word documents'}
+        </button>
+      </div>
+      {!novels.length && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No projects to export yet.</div>
+      )}
+      {message && <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 800 }}>{message}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 800 }}>{error}</div>}
+    </div>
+  )
+}
+
 function StorageConfigurationPanel({
   membership,
   storageUsedBytes,
@@ -868,6 +947,8 @@ function StorageConfigurationPanel({
   effectiveLocalMode,
   desktopApp,
   syncStatus,
+  store,
+  novels,
 }) {
   const cloudQuota = getStorageQuota(membership)
   const localFirstSelected = storageMode === STORAGE_MODES.LOCAL_FIRST
@@ -879,12 +960,12 @@ function StorageConfigurationPanel({
   const [pendingModeChange, setPendingModeChange] = useState(null)
   const [modeChangeBusy, setModeChangeBusy] = useState(false)
   const [modeChangeError, setModeChangeError] = useState('')
-  const manualSyncAvailable = desktopApp && localFirstSelected && membership.canSyncCloud && onManualCloudSync && onManualCloudSyncPreview
+  const manualSyncAvailable = desktopApp && localFirstSelected && membership.canSyncCloud && !membership.isLocalMode && onManualCloudSync && onManualCloudSyncPreview
 
   const requestStorageModeChange = async (nextMode) => {
     if (!onStorageModeChange) return
     setModeChangeError('')
-    if (localFirstSelected && nextMode === STORAGE_MODES.CLOUD_SYNC && membership.canSyncCloud) {
+    if (localFirstSelected && nextMode === STORAGE_MODES.CLOUD_SYNC && membership.canSyncCloud && !membership.isLocalMode) {
       setModeChangeBusy(true)
       try {
         const preview = await onResumeCloudSyncPreview?.() || {}
@@ -1066,6 +1147,33 @@ function StorageConfigurationPanel({
             />
           </div>
 
+          {membership.isLocalMode ? (
+            <div style={{
+              marginBottom: 18,
+              padding: '14px 16px',
+              borderRadius: 10,
+              background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--accent)' }}>
+                Cloud sync unavailable
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                Cloud hosting for this account has lapsed, so cloud sync — automatic and manual, upload and download — is fully removed until you renew. There is no toggle to turn it back on from here: everything simply stays in this device's local vault. Nothing is deleted, and you can still export a backup any time.
+              </div>
+              <SyncStatusLine
+                syncStatus={syncStatus}
+                localFirstSelected
+                canSyncCloud={false}
+                isLocalMode
+              />
+              <MaintenancePayButton style={{ marginTop: 4 }} />
+            </div>
+          ) : (
+          <>
           <div style={{
             marginBottom: 18,
             padding: '14px 16px',
@@ -1359,6 +1467,8 @@ function StorageConfigurationPanel({
               )}
             </div>
           )}
+          </>
+          )}
 
           <DesktopVaultPanel />
         </>
@@ -1387,6 +1497,8 @@ function StorageConfigurationPanel({
           </div>
         </>
       )}
+
+      <ExportAllProjectsCard store={store} novels={novels} />
 
       {(effectiveLocalMode || localModeActive) && (
         <div style={{
@@ -2625,7 +2737,7 @@ export default function AccountSettings({
   effectiveLocalMode = false,
   desktopApp = false,
 }) {
-  const { user, getAccessToken, updateProfile, refreshUser } = useAuth()
+  const { user, getAccessToken, updateProfile, refreshUser, signOut } = useAuth()
   const membership = useMemo(() => getMembership(user), [user])
   const [billingBusy, setBillingBusy] = useState('')
   const [billingError, setBillingError] = useState('')
@@ -2695,9 +2807,15 @@ export default function AccountSettings({
             <p className="eyebrow">Account</p>
             <h1 id="account-settings-title">Settings</h1>
           </div>
-          <button className="account-icon-button" type="button" onClick={onClose} aria-label="Close account settings">
-            ×
-          </button>
+          {desktopApp ? (
+            <button className="account-secondary-button" type="button" onClick={signOut}>
+              Sign out
+            </button>
+          ) : (
+            <button className="account-icon-button" type="button" onClick={onClose} aria-label="Close account settings">
+              ×
+            </button>
+          )}
         </header>
 
         <nav className="account-settings-tabs" aria-label="Account settings sections">
@@ -2778,6 +2896,8 @@ export default function AccountSettings({
               effectiveLocalMode={effectiveLocalMode}
               desktopApp={desktopApp}
               syncStatus={store?.syncStatus}
+              store={store}
+              novels={novels}
             />
           )}
 
@@ -2972,7 +3092,7 @@ export default function AccountSettings({
 
             {membership.isFree && (
               <div className="account-readonly-note" style={{ marginTop: 14 }}>
-                Free plan includes one active text-first project, 5 MB cloud storage, and locked Map Builder/AI Tools. All other projects are view-only and exportable.
+                Free plan includes one active text-first project, 3 MB cloud storage, and locked Map Builder/AI Tools. All other projects are view-only and exportable.
                 {membership.wasMonthly && ' Your active project is locked because you previously held a monthly subscription.'}
               </div>
             )}
@@ -3009,7 +3129,7 @@ export default function AccountSettings({
               </div>
             )}
 
-            <div style={{ marginTop: 14 }}>
+            {!desktopApp && <div style={{ marginTop: 14 }}>
               <a
                 href="/pricing"
                 onClick={e => { e.preventDefault(); window.history.pushState(null, '', '/pricing'); window.dispatchEvent(new PopStateEvent('popstate')) }}
@@ -3017,7 +3137,7 @@ export default function AccountSettings({
               >
                 View full pricing page →
               </a>
-            </div>
+            </div>}
 
             {billingMessage && <p className="account-success">{billingMessage}</p>}
             {billingError && <p className="account-error">{billingError}</p>}

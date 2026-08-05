@@ -91,7 +91,8 @@ export default function Timeline({ store }) {
       const event = updateEvent(formState.item.id, data)
       if (event?.id) setSelectedId(event.id)
     } else {
-      addEvent(data, { createHistory: false })
+      const event = addEvent(data, { createHistory: false })
+      if (!event) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
     }
     setFormState(null)
   }

@@ -47,7 +47,7 @@ export default function EraManager({ eras = [], addEra, updateEra, deleteEra }) 
 
       {showAdd
         ? <EraForm
-            onSave={(data) => { addEra(data); setShowAdd(false) }}
+            onSave={(data) => { if (addEra(data)) setShowAdd(false) }}
             onCancel={() => setShowAdd(false)}
           />
         : (

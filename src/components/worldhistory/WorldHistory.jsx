@@ -63,6 +63,7 @@ export default function WorldHistory({ store }) {
       setSelectedId(event?.id || editTarget.id)
     } else {
       const event = addEvent(data, { createHistory: false })
+      if (!event) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
       setSelectedId(event.id)
     }
     closeForm()

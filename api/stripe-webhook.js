@@ -186,7 +186,7 @@ export default async function handler(req, res) {
       case 'checkout.session.completed': {
         const session = event.data.object
 
-        if (session.metadata?.plan === 'maintenance') {
+        if (session.metadata?.plan === 'maintenance' || session.metadata?.plan === 'hosting_renewal') {
           // First maintenance subscription checkout — extend immediately.
           const userId = session.metadata?.user_id || session.client_reference_id
           await extendMaintenance(supabaseAdmin, userId)
@@ -224,7 +224,7 @@ export default async function handler(req, res) {
         const latestSub = await stripe.subscriptions.retrieve(subId, { expand: ['latest_invoice'] })
 
         // Maintenance subscription renewal — extend access rather than updating membership plan.
-        if (latestSub.metadata?.plan === 'maintenance' && event.type === 'invoice.paid') {
+        if ((latestSub.metadata?.plan === 'maintenance' || latestSub.metadata?.plan === 'hosting_renewal') && event.type === 'invoice.paid') {
           const userId = latestSub.metadata?.user_id
             || invoice.metadata?.user_id
             || invoice.parent?.subscription_details?.metadata?.user_id

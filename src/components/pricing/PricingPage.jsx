@@ -28,7 +28,7 @@ function removeSchema(id) {
 // --------------------------------------------------------------------------
 const FEATURE_ROWS = [
   { label: 'Active projects',         free: '1',         lifetime: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
-  { label: 'Storage',                 free: '5 MB',      lifetime: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
+  { label: 'Storage',                 free: '3 MB',      lifetime: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
   { label: 'All studio rooms',        free: 'Text-first rooms only', lifetime: '✓', founder: '✓',      monthly: '✓'         },
   { label: 'Map Builder',             free: 'View-only / locked', lifetime: '✓', founder: '✓',         monthly: '✓'         },
   { label: 'Bring-your-own-key AI',   free: '—',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
@@ -54,7 +54,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What happens if I don\'t renew cloud hosting?',
-    a: 'You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 5 MB allowance unless you renew Cloud Mode.',
+    a: 'You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 3 MB allowance unless you renew Cloud Mode.',
   },
   {
     q: 'How many Founder slots are there?',

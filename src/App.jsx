@@ -16,6 +16,7 @@ import LegalModal from './components/legal/LegalModal'
 import AboutPage from './components/about/AboutPage'
 import YOWLogo from './components/brand/YOWLogo'
 import FreeProjectSelector from './components/account/FreeProjectSelector'
+import CloudExpiryWarningModal from './components/account/CloudExpiryWarningModal'
 import WelcomeWizard from './components/onboarding/WelcomeWizard'
 import OnboardingTour from './components/onboarding/OnboardingTour'
 import { useTourStore } from './components/onboarding/useTourStore'
@@ -30,7 +31,6 @@ import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
-import DesktopUpgradeWall from './components/desktop/DesktopUpgradeWall'
 import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
@@ -107,12 +107,21 @@ function isLocalModeNoticeDismissed(key) {
   try { return localStorage.getItem(key) === '1' } catch { return false }
 }
 
-function loadStorageModeState(userId) {
-  return { userId: userId || null, mode: loadStorageMode(userId) }
+// Cloud-hosting pre-expiry popup: shown once per warning cycle (keyed by the
+// actual expiry date, so a fresh warning cycle after a renewal-then-relapse
+// shows again). Platform-agnostic — not gated on desktopApp.
+function getMaintenanceModalKey(userId, maintenanceExpiresAt) {
+  if (!userId || !maintenanceExpiresAt) return null
+  return `nf_maintenanceModalSeen:${userId}:${new Date(maintenanceExpiresAt).toISOString().slice(0, 10)}`
 }
 
-function buildLocalSaveSummary(store) {
-  return buildSaveSummary(store?.getLocalSnapshot?.() || store || {})
+function isMaintenanceModalSeen(key) {
+  if (!key) return false
+  try { return localStorage.getItem(key) === '1' } catch { return false }
+}
+
+function loadStorageModeState(userId) {
+  return { userId: userId || null, mode: loadStorageMode(userId) }
 }
 
 function formatResumeSaveSummary(summary = {}) {
@@ -209,7 +218,7 @@ class ErrorBoundary extends Component {
 
 function AppInner() {
   const desktopApp = isDesktopAppRuntime()
-  const { user, loading: authLoading, updateProfile, recoveryMode, signOut } = useAuth()
+  const { user, loading: authLoading, updateProfile, recoveryMode } = useAuth()
   useEffect(() => {
     document.body.classList.toggle('desktop-app-shell', desktopApp)
     return () => document.body.classList.remove('desktop-app-shell')
@@ -300,6 +309,23 @@ function AppInner() {
     ? (dismissedLocalModeNotices[localModeNoticeKey] ?? isLocalModeNoticeDismissed(localModeNoticeKey))
     : false
 
+  // Pre-expiry popup (in addition to the Account Settings banner): opens once
+  // the first time it's encountered in a given warning cycle, on both web and
+  // desktop. Keyed by the actual expiry date so it re-fires for a later cycle.
+  const maintenanceModalKey = useMemo(
+    () => (membership.isLifetime && !membership.isFounder && membership.maintenanceWarning
+      ? getMaintenanceModalKey(userId, membership.maintenanceExpiresAt)
+      : null),
+    [userId, membership.isLifetime, membership.isFounder, membership.maintenanceWarning, membership.maintenanceExpiresAt]
+  )
+  const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false)
+  useEffect(() => {
+    if (!maintenanceModalKey || isMaintenanceModalSeen(maintenanceModalKey)) return
+    setMaintenanceModalOpen(true)
+    try { localStorage.setItem(maintenanceModalKey, '1') } catch { /* storage unavailable */ }
+  }, [maintenanceModalKey])
+  const closeMaintenanceModal = () => setMaintenanceModalOpen(false)
+
   useEffect(() => {
     setStorageModeState(prev => {
       const next = loadStorageModeState(userId)
@@ -342,8 +368,21 @@ function AppInner() {
     }
   }
 
+  // Cloud sync is a hard, binary function of entitlement, not a sticky user
+  // preference: `effectiveLocalMode` below already forces local-only the
+  // moment `membership.isLocalMode` is true (hosting lapsed), with no
+  // separate "Local-first" mode to turn on or off — the Storage tab hides
+  // that toggle entirely while lapsed (see AccountSettings.jsx). We
+  // deliberately do NOT persist a `storageMode` preference change here: doing
+  // so would outlive the lapse and leave the account stuck in Local-first
+  // after renewal. Because `useStore`'s per-collection debounced-save effects
+  // are keyed on `canSyncCloud`, the moment entitlement is restored and
+  // `effectiveLocalMode` naturally goes back to false, cloud sync resumes on
+  // its own — no manual "resume" step required.
+
   const getResumeCloudSyncPreview = async () => {
     if (!desktopApp || !userId) throw new Error('Sign in to resume cloud sync.')
+    if (membership.isLocalMode) throw new Error('Cloud sync is fully unavailable while hosting is inactive. Renew Cloud Mode to restore it.')
     if (!membership.canSyncCloud) throw new Error('Cloud hosting is inactive for this account.')
     const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
     const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
@@ -363,6 +402,7 @@ function AppInner() {
 
   const getManualCloudSyncPreview = async () => {
     if (!desktopApp || !userId) throw new Error('Sign in to use manual cloud sync.')
+    if (membership.isLocalMode) throw new Error('Cloud sync is fully unavailable while hosting is inactive. Renew Cloud Mode to restore it.')
     if (!userLocalFirstMode) throw new Error('Turn on Local-first before using manual cloud sync.')
     if (!membership.canSyncCloud) throw new Error('Cloud hosting is inactive for this account.')
 
@@ -376,6 +416,7 @@ function AppInner() {
 
   const handleManualCloudSync = async (direction) => {
     if (!desktopApp || !userId) throw new Error('Sign in to use manual cloud sync.')
+    if (membership.isLocalMode) throw new Error('Cloud sync is fully unavailable while hosting is inactive. Renew Cloud Mode to restore it.')
     if (!userLocalFirstMode) throw new Error('Turn on Local-first before using manual cloud sync.')
     if (!membership.canSyncCloud) throw new Error('Cloud hosting is inactive for this account.')
 
@@ -651,15 +692,21 @@ function AppInner() {
       let msg = 'Your trial has ended. Upgrade in Account settings to edit again.'
       if (reason === 'free-project') msg = 'This project is view-only on your free plan. Upgrade to edit all projects.'
       if (reason === 'free-limit') msg = 'Free plan includes one active project. Upgrade to create unlimited projects.'
-      if (reason === 'storage-exceeded') msg = 'Cloud storage limit reached. Delete some hosted content or upgrade your plan to continue.'
+      if (reason === 'storage-exceeded') msg = "Cloud storage limit reached — this wasn't saved. Delete some hosted content or upgrade your plan to continue."
       setReadOnlyNotice({
         msg,
+        sticky: reason === 'storage-exceeded',
         storage: reason === 'storage-exceeded' && usedBytes != null && quotaBytes != null
           ? { used: usedBytes, quota: quotaBytes }
           : null,
       })
       window.clearTimeout(handleReadOnly.timeout)
-      handleReadOnly.timeout = window.setTimeout(() => setReadOnlyNotice(null), 4000)
+      // Storage-exceeded is a blocking condition, not a transient status — leave it
+      // up until the user dismisses it instead of letting it flash by in 4s while
+      // whatever form they were using has already closed.
+      if (reason !== 'storage-exceeded') {
+        handleReadOnly.timeout = window.setTimeout(() => setReadOnlyNotice(null), 4000)
+      }
     }
     window.addEventListener('membership-read-only', handleReadOnly)
     return () => {
@@ -809,8 +856,9 @@ function AppInner() {
     store.enrichSampleProject?.(existingSample.id)
   }, [userId, dataLoading, store.readOnly, store.novels, store.enrichSampleProject])
 
-  // Pricing page is accessible regardless of auth state
-  if (showPricing) {
+  // Pricing/marketing pages are web-only. The desktop app is intentionally just
+  // auth plus the signed-in account surface.
+  if (!desktopApp && showPricing) {
     return (
       <>
         <PricingPage
@@ -825,7 +873,7 @@ function AppInner() {
     )
   }
 
-  if (showFeatures) {
+  if (!desktopApp && showFeatures) {
     return (
       <>
         <FeaturesPage
@@ -840,7 +888,7 @@ function AppInner() {
     )
   }
 
-  if (showFAQ) {
+  if (!desktopApp && showFAQ) {
     return (
       <>
         <FAQPage
@@ -855,7 +903,7 @@ function AppInner() {
     )
   }
 
-  if (showFounders) {
+  if (!desktopApp && showFounders) {
     return (
       <>
         <FoundersPage
@@ -870,7 +918,7 @@ function AppInner() {
     )
   }
 
-  if (showDownload) {
+  if (!desktopApp && showDownload) {
     return (
       <>
         <DownloadPage
@@ -887,7 +935,7 @@ function AppInner() {
     )
   }
 
-  if (founderProfileSlug) {
+  if (!desktopApp && founderProfileSlug) {
     return (
       <>
         <FounderProfilePage
@@ -966,12 +1014,6 @@ function AppInner() {
     )
   }
 
-  // Desktop is a Lifetime/Founder feature: browser-plan accounts get a clear
-  // upgrade state, not a broken app (PRD Phase 4).
-  if (desktopApp && !membership.isDesktopEntitled) {
-    return <DesktopUpgradeWall user={user} onSignOut={signOut} />
-  }
-
   const showFreeSelector = membership.isFree && !membership.freeProjectId && store.novels.length >= 1
 
   const handleFreeProjectConfirm = async (projectId) => {
@@ -1039,6 +1081,15 @@ function AppInner() {
               }}
             >
               Storage settings
+            </button>
+          )}
+          {readOnlyNotice.sticky && (
+            <button
+              type="button"
+              className="membership-toast-link"
+              onClick={() => setReadOnlyNotice(null)}
+            >
+              Dismiss
             </button>
           )}
         </div>
@@ -1170,6 +1221,112 @@ function AppInner() {
     </>
   )
 
+  if (desktopApp) {
+    return (
+      <>
+        <AccountSettings
+          open
+          onClose={() => {}}
+          storageUsedBytes={store.storageUsedBytes}
+          activeTab={accountTab}
+          onTabChange={setAccountTab}
+          store={store}
+          tourStore={tourStore}
+          storageMode={storageMode}
+          onStorageModeChange={handleStorageModeChange}
+          onResumeCloudSyncPreview={getResumeCloudSyncPreview}
+          onManualCloudSyncPreview={getManualCloudSyncPreview}
+          onManualCloudSync={handleManualCloudSync}
+          effectiveLocalMode={effectiveLocalMode}
+          desktopApp
+        />
+        {desktopVaultError && (
+          <div role="alert" className="membership-toast">
+            <span>
+              Your local vault couldn't be reached, so recent edits are being kept in a small temporary space on this device instead.
+              {' '}Reconnect to move them into your vault.
+            </span>
+            <button
+              type="button"
+              className="membership-toast-link"
+              disabled={desktopVaultRetryBusy}
+              onClick={handleRetryDesktopVault}
+            >
+              {desktopVaultRetryBusy ? 'Reconnecting…' : 'Reconnect vault'}
+            </button>
+            <button
+              type="button"
+              className="membership-toast-link"
+              onClick={() => setAccountTab('storage')}
+            >
+              Storage settings
+            </button>
+          </div>
+        )}
+        {desktopLicenceStale && (
+          <div role="status" className="membership-toast">
+            <span>YOW hasn't been able to verify your Lifetime licence for a while. Connect to the internet when you can — your writing is not affected.</span>
+            <button type="button" className="membership-toast-link" onClick={() => setDesktopLicenceStale(false)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+        {desktopUpdate && (
+          <div role="status" className="membership-toast">
+            <span>
+              {desktopUpdateState === 'error'
+                ? "Couldn't install the update. It'll be offered again next launch."
+                : `Update available: version ${desktopUpdate.version}.`}
+            </span>
+            {desktopUpdateState !== 'error' && (
+              <button
+                type="button"
+                className="membership-toast-link"
+                disabled={desktopUpdateState === 'installing'}
+                onClick={handleInstallDesktopUpdate}
+              >
+                {desktopUpdateState === 'installing' ? 'Installing…' : 'Restart to update'}
+              </button>
+            )}
+            <button type="button" className="membership-toast-link" onClick={() => setDesktopUpdate(null)}>
+              Later
+            </button>
+          </div>
+        )}
+        {desktopDeviceLimit && (
+          <div role="status" className="membership-toast">
+            <span>This device isn't activated yet — your plan has reached its device limit.</span>
+            <button
+              type="button"
+              className="membership-toast-link"
+              onClick={() => { setDesktopDeviceLimit(false); setAccountTab('membership') }}
+            >
+              Manage devices
+            </button>
+            <button type="button" className="membership-toast-link" onClick={() => setDesktopDeviceLimit(false)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+        {user && !vaultNoticeAck && (
+          <div role="status" className="membership-toast">
+            <span>Your writing is saved in a local vault on this device. You can move it or create snapshots any time.</span>
+            <button
+              type="button"
+              className="membership-toast-link"
+              onClick={() => { ackVaultNotice(); setAccountTab('storage') }}
+            >
+              Storage settings
+            </button>
+            <button type="button" className="membership-toast-link" onClick={ackVaultNotice}>
+              Got it
+            </button>
+          </div>
+        )}
+      </>
+    )
+  }
+
   const handleOpenProject = (id) => {
     store.setActiveNovelId(id)
     setSection('dashboard')
@@ -1261,6 +1418,16 @@ function AppInner() {
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <BetaBanner />
+      {maintenanceModalOpen && user && !dataLoading && !isFirstRun && !showWelcomeTour && (
+        <CloudExpiryWarningModal
+          membership={membership}
+          store={store}
+          novels={store.novels}
+          desktopApp={desktopApp}
+          onClose={closeMaintenanceModal}
+          onOpenExportSettings={() => { closeMaintenanceModal(); setAccountTab('storage'); setAccountOpen(true) }}
+        />
+      )}
     </>
   )
 

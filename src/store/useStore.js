@@ -2042,6 +2042,7 @@ export function useStore(userId = null, options = {}) {
   }
 
   const saveRpgCharacter = (data, id) => {
+    if (!id && storageExceededCheck()) { return null }
     const characterId = id || uid()
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => {
       if (id) return prev.map(c => c.id === id ? { ...c, ...data, updatedAt: new Date().toISOString() } : c)
@@ -2429,6 +2430,7 @@ export function useStore(userId = null, options = {}) {
   const novelComicPanels = comicPanels.filter(p => p.novelId === activeNovelId)
 
   const addComicPage = (issueId, data = {}) => {
+    if (storageExceededCheck()) { return null }
     const pagesInIssue = comicPagesRef.current.filter(p => p.novelId === activeNovelId && p.issueId === issueId)
     const page = {
       id: uid(),
@@ -2492,6 +2494,7 @@ export function useStore(userId = null, options = {}) {
 
   // Comic panel CRUD
   const addComicPanel = (pageId, data = {}) => {
+    if (storageExceededCheck()) { return null }
     const panelsOnPage = comicPanelsRef.current.filter(p => p.pageId === pageId)
     const panel = {
       id: uid(),
@@ -2600,6 +2603,7 @@ export function useStore(userId = null, options = {}) {
   const novelEras = eras.filter(e => e.novelId === activeNovelId)
 
   const addEra = (data) => {
+    if (storageExceededCheck()) { return null }
     const era = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data } // eslint-disable-line react-hooks/purity
     setEras(prev => [...prev, era])
     return era

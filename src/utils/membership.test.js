@@ -21,12 +21,12 @@ const makeUser = (overrides = {}) => ({
 })
 
 describe('membership plan limits', () => {
-  it('uses a 5 MB quota for Free cloud accounts', () => {
+  it('uses a 3 MB quota for Free cloud accounts', () => {
     const membership = getMembership(makeUser())
 
-    expect(PLAN_STORAGE_BYTES.free).toBe(5 * 1024 * 1024)
+    expect(PLAN_STORAGE_BYTES.free).toBe(3 * 1024 * 1024)
     expect(membership.isFree).toBe(true)
-    expect(membership.storageQuotaBytes).toBe(5 * 1024 * 1024)
+    expect(membership.storageQuotaBytes).toBe(3 * 1024 * 1024)
     expect(membership.usesFreeCloudLimits).toBe(true)
   })
 

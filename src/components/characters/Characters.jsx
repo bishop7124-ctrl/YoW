@@ -985,13 +985,12 @@ export default function Characters({ store, userId, membership }) {
     if (previousImage && previousImage !== formData.image) deleteUserMedia(previousImage).catch(console.error)
     const savedId = saveCharacter(formData, editTarget?.id || null)
     store.refreshStorageUsedBytes?.().catch(console.error)
+    if (!savedId) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
     setShowForm(false)
     setEditTarget(null)
-    if (savedId) {
-      setSelectedCharacterId(savedId)
-      if (!editTarget) setProfileTab('overview')
-      else if (profileTabs.some(([id]) => id === savedEditorTab)) setProfileTab(savedEditorTab)
-    }
+    setSelectedCharacterId(savedId)
+    if (!editTarget) setProfileTab('overview')
+    else if (profileTabs.some(([id]) => id === savedEditorTab)) setProfileTab(savedEditorTab)
   }
 
   const getCharacterFaction = (char) => char?.factionId ? factions.find(f => f.id === char.factionId) : null

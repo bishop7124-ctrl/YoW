@@ -9,6 +9,11 @@ const PLAN_CONFIG = {
   premium_plus_lifetime: { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME', mode: 'payment' },
   founder:               { priceEnv: 'STRIPE_PRICE_ID_FOUNDER',               mode: 'payment' },
   maintenance:           { priceEnv: 'STRIPE_PRICE_ID_MAINTENANCE',           mode: 'subscription' },
+  // The Account Settings "Renew Cloud Mode" button (and the pre-expiry
+  // popup) send `hosting_renewal` — kept as an alias for `maintenance` so
+  // both names route to the same Stripe price. See api/stripe-webhook.js,
+  // which also treats these two plan keys as equivalent.
+  hosting_renewal:       { priceEnv: 'STRIPE_PRICE_ID_MAINTENANCE',           mode: 'subscription' },
 }
 
 async function getRemainingFounderSlots(supabase) {

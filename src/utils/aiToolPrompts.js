@@ -2,7 +2,29 @@
 import { getProjectType } from '../constants/projectTypes'
 
 const MAX_CONTENT_CHARS = 1200
-const MAX_SCENES_INLINE = 20
+const CONTEXT_LIMITS = {
+  project_scan: { maxUnits: 80, contentChars: 320 },
+  focused_chapter: { maxUnits: 14, contentChars: 4000 },
+  act_review: { maxUnits: 32, contentChars: 900 },
+}
+
+export const AI_CONTEXT_MODES = [
+  {
+    id: 'project_scan',
+    label: 'Project scan',
+    description: 'Broad pass across the full structure using scene summaries and short excerpts.',
+  },
+  {
+    id: 'focused_chapter',
+    label: 'Focused chapter',
+    description: 'Close-read one chapter with much longer scene excerpts.',
+  },
+  {
+    id: 'act_review',
+    label: 'Act review',
+    description: 'Review one act at a middle level of detail.',
+  },
+]
 
 function truncate(str, max = MAX_CONTENT_CHARS) {
   if (!str) return ''
@@ -109,16 +131,119 @@ function summariseLocations(locations) {
   return locations.map(l => `${l.name}${l.category ? ` (${l.category})` : ''}: ${truncate(l.description, 250)}`).join('\n')
 }
 
-function summariseScenes(scenes, chapters, acts) {
+function sortByOrder(items) {
+  return [...(items || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+}
+
+function orderedScenesForProject(scenes, chapters, acts) {
+  const sceneByChapter = new Map()
+  ;(scenes || []).forEach(scene => {
+    if (!sceneByChapter.has(scene.chapterId)) sceneByChapter.set(scene.chapterId, [])
+    sceneByChapter.get(scene.chapterId).push(scene)
+  })
+
+  const chapterByAct = new Map()
+  ;(chapters || []).forEach(chapter => {
+    if (!chapterByAct.has(chapter.actId)) chapterByAct.set(chapter.actId, [])
+    chapterByAct.get(chapter.actId).push(chapter)
+  })
+
+  const ordered = []
+  sortByOrder(acts).forEach(act => {
+    sortByOrder(chapterByAct.get(act.id)).forEach(chapter => {
+      sortByOrder(sceneByChapter.get(chapter.id)).forEach(scene => ordered.push(scene))
+    })
+  })
+
+  const seen = new Set(ordered.map(scene => scene.id))
+  sortByOrder(scenes).forEach(scene => {
+    if (!seen.has(scene.id)) ordered.push(scene)
+  })
+  return ordered
+}
+
+function sceneWordCount(scene) {
+  return (scene?.content || '').trim().match(/\S+/g)?.length || 0
+}
+
+function summariseSceneMap(scenes, chapters, acts) {
+  if (!scenes?.length) return ''
   const chapMap = Object.fromEntries((chapters || []).map(c => [c.id, c]))
-  const actMap  = Object.fromEntries((acts || []).map(a => [a.id, a]))
-  const visible = (scenes || []).slice(0, MAX_SCENES_INLINE)
-  return visible.map(s => {
-    const chap = chapMap[s.chapterId]
-    const act  = chap ? actMap[chap.actId] : null
-    const loc  = `${act ? `Act: ${act.title} / ` : ''}${chap ? `Ch: ${chap.title} / ` : ''}Scene: ${s.title || 'Untitled'}`
-    return `${loc}\nPOV: ${s.pov || 'unset'} | Location: ${s.locationTag || 'unset'}\n${truncate(s.content, 600)}`
+  const actMap = Object.fromEntries((acts || []).map(a => [a.id, a]))
+  return scenes.map(scene => {
+    const chapter = chapMap[scene.chapterId]
+    const act = chapter ? actMap[chapter.actId] : null
+    const loc = `${act ? `Act: ${act.title} / ` : ''}${chapter ? `Ch: ${chapter.title} / ` : ''}Scene: ${scene.title || 'Untitled'}`
+    const synopsis = scene.synopsis ? `Summary: ${truncate(scene.synopsis, 280)}` : 'Summary: no saved scene summary'
+    return `${loc} (${sceneWordCount(scene)} words)\n${synopsis}`
+  }).join('\n')
+}
+
+function summariseScenesForContext(scenes, chapters, acts, { maxUnits, contentChars }) {
+  const visible = (scenes || []).slice(0, maxUnits)
+  const chapMap = Object.fromEntries((chapters || []).map(c => [c.id, c]))
+  const actMap = Object.fromEntries((acts || []).map(a => [a.id, a]))
+  return visible.map(scene => {
+    const chapter = chapMap[scene.chapterId]
+    const act = chapter ? actMap[chapter.actId] : null
+    const loc = `${act ? `Act: ${act.title} / ` : ''}${chapter ? `Ch: ${chapter.title} / ` : ''}Scene: ${scene.title || 'Untitled'}`
+    const summary = scene.synopsis ? `Summary: ${truncate(scene.synopsis, 500)}` : ''
+    return [loc, `POV: ${scene.pov || 'unset'} | Location: ${scene.locationTag || 'unset'} | Words: ${sceneWordCount(scene)}`, summary, truncate(scene.content, contentChars)]
+      .filter(Boolean)
+      .join('\n')
   }).join('\n\n---\n\n')
+}
+
+function normaliseContextSelection(selection) {
+  const mode = AI_CONTEXT_MODES.some(item => item.id === selection?.mode) ? selection.mode : 'project_scan'
+  return { mode, targetId: selection?.targetId || null }
+}
+
+export function getAiContextMode(mode) {
+  return AI_CONTEXT_MODES.find(item => item.id === mode) || AI_CONTEXT_MODES[0]
+}
+
+function getScopedProseScenes(scenes, chapters, acts, selection) {
+  const ordered = orderedScenesForProject(scenes, chapters, acts)
+  if (selection.mode === 'focused_chapter') {
+    const chapter = chapters.find(c => c.id === selection.targetId) || sortByOrder(chapters)[0]
+    return {
+      units: chapter ? ordered.filter(scene => scene.chapterId === chapter.id) : [],
+      targetLabel: chapter?.title || 'first chapter',
+    }
+  }
+  if (selection.mode === 'act_review') {
+    const act = acts.find(a => a.id === selection.targetId) || sortByOrder(acts)[0]
+    const chapterIds = new Set((chapters || []).filter(chapter => chapter.actId === act?.id).map(chapter => chapter.id))
+    return {
+      units: act ? ordered.filter(scene => chapterIds.has(scene.chapterId)) : [],
+      targetLabel: act?.title || 'first act',
+    }
+  }
+  return { units: ordered, targetLabel: 'the full project' }
+}
+
+export function getManuscriptCoverage(units, selection = { mode: 'project_scan' }) {
+  const all = units || []
+  const mode = getAiContextMode(selection?.mode).id
+  const limit = CONTEXT_LIMITS[mode] || CONTEXT_LIMITS.project_scan
+  const totalScenes = all.length
+  const includedScenes = Math.min(totalScenes, limit.maxUnits)
+  const omittedScenes = totalScenes - includedScenes
+  const contentTruncated = all
+    .slice(0, includedScenes)
+    .some(s => (s.content || '').length > limit.contentChars)
+  return { totalScenes, includedScenes, omittedScenes, contentTruncated, mode, contentChars: limit.contentChars }
+}
+
+export function getAiContextTargets(store, novelId, novel, mode) {
+  const targetKind = novel?.type === 'comic'
+    ? (mode === 'focused_chapter' ? 'issue' : 'volume')
+    : (mode === 'focused_chapter' ? 'chapter' : 'act')
+  const source = targetKind === 'issue' || targetKind === 'chapter'
+    ? (store.chapters || []).filter(item => item.novelId === novelId)
+    : (store.acts || []).filter(item => item.novelId === novelId)
+  return sortByOrder(source).map(item => ({ id: item.id, label: item.title || `Untitled ${targetKind}` }))
 }
 
 function summarisePanel(panel, index) {
@@ -156,24 +281,6 @@ function summariseComicPages(comicPages, comicPanels, chapters, acts) {
   }).join('\n\n---\n\n')
 }
 
-// Reports how much of a project's manuscript content an AI tool prompt
-// actually includes, since summariseScenes/summariseComicPages silently cap
-// unit count and per-unit length with no in-prompt signal — callers surface
-// this to the user instead. `units` is scenes for prose projects or comic
-// pages (each optionally carrying a flattened `content` string) for comics.
-const CONTENT_TRUNCATE_CHARS = 600
-
-export function getManuscriptCoverage(units) {
-  const all = units || []
-  const totalScenes = all.length
-  const includedScenes = Math.min(totalScenes, MAX_SCENES_INLINE)
-  const omittedScenes = totalScenes - includedScenes
-  const contentTruncated = all
-    .slice(0, includedScenes)
-    .some(s => (s.content || '').length > CONTENT_TRUNCATE_CHARS)
-  return { totalScenes, includedScenes, omittedScenes, contentTruncated }
-}
-
 // Comic pages don't carry a single `.content` field the way scenes do — this
 // flattens a page + its panels into one string purely so getManuscriptCoverage
 // can apply the same truncation heuristic used for prose scenes.
@@ -185,13 +292,18 @@ export function flattenComicPageForCoverage(page, comicPanels) {
 
 // Convenience wrapper so AI tool components don't need to duplicate the
 // comic-vs-prose branch: reads the right collection off `store` for `novel`.
-export function getManuscriptCoverageForNovel(store, novelId, novel) {
+export function getManuscriptCoverageForNovel(store, novelId, novel, contextSelection) {
+  const selection = normaliseContextSelection(contextSelection)
   if (novel?.type === 'comic') {
     const comicPages  = (store.comicPages  || []).filter(p => p.novelId === novelId)
     const comicPanels = (store.comicPanels || []).filter(p => comicPages.some(page => page.id === p.pageId))
-    return getManuscriptCoverage(comicPages.map(page => flattenComicPageForCoverage(page, comicPanels)))
+    return getManuscriptCoverage(comicPages.map(page => flattenComicPageForCoverage(page, comicPanels)), selection)
   }
-  return getManuscriptCoverage((store.scenes || []).filter(s => s.novelId === novelId))
+  const chapters = (store.chapters || []).filter(c => c.novelId === novelId)
+  const acts = (store.acts || []).filter(a => a.novelId === novelId)
+  const scenes = (store.scenes || []).filter(s => s.novelId === novelId)
+  const { units } = getScopedProseScenes(scenes, chapters, acts, selection)
+  return getManuscriptCoverage(units, selection)
 }
 
 // ── Plot Hole Detector ────────────────────────────────────────────────────────
@@ -229,7 +341,10 @@ Return an empty findings array if no significant issues are found. Maximum 12 fi
 // Builds the manuscript-content section shared by Plot Hole/Lore Conflict/
 // Style prompts, reading comic pages/panels instead of prose scenes for
 // Comic/Graphic Novel projects (which have no scenes at all).
-function buildManuscriptContentSection(store, novelId, novel, { suffix = '' } = {}) {
+function buildManuscriptContentSection(store, novelId, novel, { suffix = '', contextSelection } = {}) {
+  const selection = normaliseContextSelection(contextSelection)
+  const mode = getAiContextMode(selection.mode)
+  const limit = CONTEXT_LIMITS[selection.mode] || CONTEXT_LIMITS.project_scan
   const chapters = (store.chapters || []).filter(c => c.novelId === novelId)
   const acts     = (store.acts     || []).filter(a => a.novelId === novelId)
 
@@ -242,10 +357,17 @@ function buildManuscriptContentSection(store, novelId, novel, { suffix = '' } = 
 
   const scenes = (store.scenes || []).filter(s => s.novelId === novelId)
   if (!scenes.length) return ''
-  return `## MANUSCRIPT SCENES${suffix}\n${summariseScenes(scenes, chapters, acts)}`
+  const { units, targetLabel } = getScopedProseScenes(scenes, chapters, acts, selection)
+  const contextNote = `Context mode: ${mode.label}. ${mode.description} Target: ${targetLabel}.`
+  if (selection.mode === 'project_scan') {
+    const sceneMap = summariseSceneMap(units, chapters, acts)
+    const excerpts = summariseScenesForContext(units, chapters, acts, limit)
+    return `## MANUSCRIPT STRUCTURE MAP${suffix}\n${contextNote}\n${sceneMap}\n\n## MANUSCRIPT EXCERPTS${suffix}\n${excerpts}`
+  }
+  return `## MANUSCRIPT SCENES${suffix}\n${contextNote}\n${summariseScenesForContext(units, chapters, acts, limit)}`
 }
 
-export function buildPlotHoleUserPrompt(store, novelId) {
+export function buildPlotHoleUserPrompt(store, novelId, contextSelection) {
   const novel      = store.novels?.find(n => n.id === novelId)
   const characters = (store.characters || []).filter(c => c.novelId === novelId)
   const lore       = (store.loreEntries || []).filter(e => e.novelId === novelId)
@@ -260,7 +382,7 @@ export function buildPlotHoleUserPrompt(store, novelId) {
     sections.push(`## LORE\n${summariseLore(lore)}`)
   if (timeline.length)
     sections.push(`## TIMELINE\n${summariseTimeline(timeline)}`)
-  const content = buildManuscriptContentSection(store, novelId, novel)
+  const content = buildManuscriptContentSection(store, novelId, novel, { contextSelection })
   if (content) sections.push(content)
 
   return sections.join('\n\n') || 'No project data available yet.'
@@ -306,7 +428,7 @@ Rules:
 Maximum 12 findings. Return empty findings array if no conflicts found.`
 }
 
-export function buildLoreConflictUserPrompt(store, novelId) {
+export function buildLoreConflictUserPrompt(store, novelId, contextSelection) {
   const novel      = store.novels?.find(n => n.id === novelId)
   const characters = (store.characters  || []).filter(c => c.novelId === novelId)
   const lore       = (store.loreEntries || []).filter(e => e.novelId === novelId)
@@ -322,7 +444,7 @@ export function buildLoreConflictUserPrompt(store, novelId) {
     sections.push(`## LORE ENTRIES\n${summariseLore(lore)}`)
   if (timeline.length)
     sections.push(`## TIMELINE\n${summariseTimeline(timeline)}`)
-  const content = buildManuscriptContentSection(store, novelId, novel, { suffix: ' (sample)' })
+  const content = buildManuscriptContentSection(store, novelId, novel, { suffix: ' (sample)', contextSelection })
   if (content) sections.push(content)
 
   return sections.join('\n\n') || 'No project data available yet.'
@@ -373,7 +495,7 @@ Rules:
 Maximum 10 findings.`
 }
 
-export function buildStyleUserPrompt(store, novelId, sceneIds) {
+export function buildStyleUserPrompt(store, novelId, sceneIds, contextSelection) {
   const novel      = store.novels?.find(n => n.id === novelId)
   const styleGuide = novel?.styleGuide || ''
 
@@ -382,7 +504,7 @@ export function buildStyleUserPrompt(store, novelId, sceneIds) {
     sections.push(`## STYLE GUIDE\n${styleGuide}`)
 
   if (novel?.type === 'comic') {
-    const content = buildManuscriptContentSection(store, novelId, novel, { suffix: ' TO ANALYSE' })
+    const content = buildManuscriptContentSection(store, novelId, novel, { suffix: ' TO ANALYSE', contextSelection })
     sections.push(content || 'No comic pages available.')
     return sections.join('\n\n')
   }
@@ -390,12 +512,14 @@ export function buildStyleUserPrompt(store, novelId, sceneIds) {
   const allScenes = (store.scenes   || []).filter(s => s.novelId === novelId)
   const chapters  = (store.chapters || []).filter(c => c.novelId === novelId)
   const acts      = (store.acts     || []).filter(a => a.novelId === novelId)
+  const selection = normaliseContextSelection(contextSelection)
+  const scoped = getScopedProseScenes(allScenes, chapters, acts, selection).units
   const selected  = sceneIds?.length
     ? allScenes.filter(s => sceneIds.includes(s.id))
-    : allScenes
+    : scoped
 
   if (selected.length)
-    sections.push(`## SCENES TO ANALYSE\n${summariseScenes(selected, chapters, acts)}`)
+    sections.push(`## SCENES TO ANALYSE\n${summariseScenesForContext(selected, chapters, acts, CONTEXT_LIMITS[selection.mode] || CONTEXT_LIMITS.project_scan)}`)
   else
     sections.push('No manuscript scenes available.')
 

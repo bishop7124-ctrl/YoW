@@ -17,7 +17,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What happens if I don\'t renew cloud hosting?',
-        a: "You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 5 MB allowance unless you renew Cloud Mode.",
+        a: "You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 3 MB allowance unless you renew Cloud Mode.",
       },
       {
         q: 'Do monthly subscribers pay a cloud hosting renewal?',
@@ -101,7 +101,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'Is there a free plan?',
-        a: "Yes. The Free plan lets you run one active text-first cloud project with 5 MB storage. Map Builder and AI Tools stay visible but locked, and no credit card is required to start.",
+        a: "Yes. The Free plan lets you run one active text-first cloud project with 3 MB storage. Map Builder and AI Tools stay visible but locked, and no credit card is required to start.",
       },
       {
         q: 'Does YOW work on mobile?',

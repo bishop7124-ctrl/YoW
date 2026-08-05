@@ -94,15 +94,8 @@ export default function ConvertModal({ idea, store, onClose, onConverted }) {
         entityId = loc?.id || loc
 
       } else if (selectedType === 'faction') {
-        const newId = uid()
-        store.setFactions(prev => [...prev, {
-          id: newId,
-          name: entityName,
-          description: desc,
-          motto: '',
-          members: [],
-        }])
-        entityId = newId
+        const faction = store.saveFaction({ name: entityName, description: desc, motto: '', members: [] })
+        entityId = faction?.id
 
       } else if (selectedType === 'lore') {
         const entry = store.addLoreEntry({ title: entityName, content: desc, category: '', characterIds: [] })
@@ -117,6 +110,12 @@ export default function ConvertModal({ idea, store, onClose, onConverted }) {
         const firstActId = acts[0]?.id || null
         store.addChapter(firstActId, { title: entityName, synopsis: desc, order: 999 })
         entityId = uid()
+      }
+
+      if (!entityId) {
+        setError("Cloud storage limit reached — this wasn't converted. Delete some hosted content or upgrade your plan, then try again.")
+        setConverting(false)
+        return
       }
 
       onConverted(selectedType, entityId, entityName)

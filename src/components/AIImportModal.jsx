@@ -582,7 +582,7 @@ export function populateYowProject(store, data, sel) {
     for (const era of data.eras) {
       const { id: oldId, novelId: _nid, ...rest } = era
       const created = store.addEra(rest)
-      eraIdMap[oldId] = created.id
+      if (created) eraIdMap[oldId] = created.id
     }
   }
 
@@ -638,7 +638,7 @@ export function populateYowProject(store, data, sel) {
     for (const h of ord(data.worldHistory)) {
       const { id: oldId, novelId: _nid, timelineEventId: _tid, eraId, ...rest } = h
       const entry = store.addHistoryEntry({ ...rest, eraId: remapEra(eraId) })
-      idMap[oldId] = entry.id
+      if (entry) idMap[oldId] = entry.id
     }
   }
 

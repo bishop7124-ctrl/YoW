@@ -216,7 +216,8 @@ export default function Locations({ store }) {
         <Modal title={editTarget ? "Edit Location" : "New Location"} onClose={() => setShowForm(false)} wide>
           <LocationForm initial={editTarget} onSave={(d) => {
             const location = saveLocation(d, editTarget?.id)
-            if (location?.id) setSelectedLocationId(location.id)
+            if (!location) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
+            setSelectedLocationId(location.id)
             setShowForm(false)
           }} onCancel={() => setShowForm(false)} />
         </Modal>
