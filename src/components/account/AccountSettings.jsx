@@ -495,6 +495,9 @@ function DesktopVaultPanel() {
   }
 
   const selectedSnapshotDetails = snapshots.find(item => item.name === selectedSnapshot)
+  const autoSnapshotCount = snapshots.filter(snapshot => snapshot?.name?.startsWith('vault-auto-')).length
+  const manualSnapshotCount = snapshots.filter(snapshot => snapshot?.name?.startsWith('vault-snapshot-')).length
+  const autoSnapshotRetention = Number(info?.auto_snapshot_retention) || 10
 
   return (
     <div style={{ marginBottom: 28, paddingBottom: 24, borderBottom: '1px solid var(--border)' }}>
@@ -644,6 +647,9 @@ function DesktopVaultPanel() {
             {busy === 'restore' ? 'Restoring...' : 'Restore'}
           </button>
         </div>
+        <p style={{ margin: '-2px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Automatic snapshots keep the latest {autoSnapshotRetention}; older automatic snapshots are replaced as new ones are made. Manual snapshots are kept indefinitely. Current snapshots: {autoSnapshotCount} automatic, {manualSnapshotCount} manual.
+        </p>
         {restoreConfirmOpen && (
           <div
             role="dialog"

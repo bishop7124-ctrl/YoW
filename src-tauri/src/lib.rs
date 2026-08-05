@@ -72,6 +72,7 @@ struct VaultInfo {
   size_bytes: u64,
   wal_size_bytes: u64,
   entry_count: i64,
+  auto_snapshot_retention: usize,
 }
 
 #[derive(Deserialize)]
@@ -348,6 +349,7 @@ fn vault_info(app: tauri::AppHandle) -> Result<VaultInfo, String> {
     size_bytes: file_size(&path),
     wal_size_bytes: file_size(&wal_path),
     entry_count: entry_count(db.raw)?,
+    auto_snapshot_retention: AUTO_SNAPSHOT_RETENTION,
   })
 }
 
