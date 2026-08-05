@@ -184,8 +184,13 @@ fn vault_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn backup_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-  let dir = vault_dir(app)?.join("Backups");
+  let active_dir = vault_dir(app)?;
+  let dir = active_dir.join("Backups");
   fs::create_dir_all(&dir).map_err(|error| format!("Could not create backup directory: {error}"))?;
+  let default_dir = app_default_dir(app)?;
+  if active_dir != default_dir {
+    copy_backup_files(&default_dir.join("Backups"), &dir)?;
+  }
   Ok(dir)
 }
 
@@ -375,6 +380,7 @@ async fn vault_relocate(app: tauri::AppHandle) -> Result<Option<VaultRelocateRes
 
   let current_dir = vault_dir(&app)?;
   let current_path = vault_path(&app)?;
+  let current_backup_dir = backup_dir(&app)?;
   if target_dir == current_dir {
     return Err("The vault already lives in that folder.".to_string());
   }
@@ -392,6 +398,7 @@ async fn vault_relocate(app: tauri::AppHandle) -> Result<Option<VaultRelocateRes
       }
       fs::copy(&current_path, &target_path)
         .map_err(|error| format!("Could not copy the vault to the chosen folder: {error}"))?;
+      copy_backup_files(&current_backup_dir, &target_dir.join("Backups"))?;
     }
     "moved"
   };
@@ -503,6 +510,29 @@ fn prune_auto_snapshots(app: &tauri::AppHandle) -> Result<(), String> {
     if path.exists() {
       fs::remove_file(&path).map_err(|error| format!("Could not prune old automatic snapshot: {error}"))?;
     }
+  }
+  Ok(())
+}
+
+fn copy_backup_files(source_dir: &PathBuf, target_dir: &PathBuf) -> Result<(), String> {
+  if !source_dir.is_dir() {
+    return Ok(());
+  }
+  fs::create_dir_all(target_dir).map_err(|error| format!("Could not create backup directory: {error}"))?;
+  for entry in fs::read_dir(source_dir).map_err(|error| format!("Could not read backup directory: {error}"))? {
+    let entry = entry.map_err(|error| format!("Could not read backup entry: {error}"))?;
+    let source = entry.path();
+    if !source.is_file() {
+      continue;
+    }
+    let Some(name) = source.file_name() else {
+      continue;
+    };
+    let target = target_dir.join(name);
+    if target.exists() {
+      continue;
+    }
+    fs::copy(&source, &target).map_err(|error| format!("Could not copy vault snapshot: {error}"))?;
   }
   Ok(())
 }
