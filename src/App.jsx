@@ -317,9 +317,11 @@ function AppInner() {
   const handleStorageModeChange = async (nextMode, options = {}) => {
     if (!desktopApp) return
     if (nextMode === STORAGE_MODES.CLOUD_SYNC && options.mergedData) {
+      await store.flushPendingSync?.()
       const reviewedData = await persistReviewedCloudSyncResume(userId, options.mergedData, { trackSync: store.trackSync })
       importData(reviewedData)
       store.addRecordConflicts?.(options.conflicts || [])
+      await store.flushPendingSync?.()
     }
     const savedMode = saveStorageMode(userId, nextMode)
     setStorageModeState({ userId: userId || null, mode: savedMode })
