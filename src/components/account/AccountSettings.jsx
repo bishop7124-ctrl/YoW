@@ -481,7 +481,8 @@ function DesktopVaultPanel() {
     setMessage('')
     setError('')
     try {
-      const result = await restoreDesktopVaultSnapshot(selectedSnapshot)
+      const snapshotTarget = selectedSnapshotDetails?.path || selectedSnapshot
+      const result = await restoreDesktopVaultSnapshot(snapshotTarget)
       saveStorageMode(userId, STORAGE_MODES.LOCAL_FIRST)
       await flushDesktopVaultBackend()
       setRestoreConfirmOpen(false)

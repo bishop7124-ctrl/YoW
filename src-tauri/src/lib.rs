@@ -597,8 +597,36 @@ fn is_restorable_snapshot_name(name: &str) -> bool {
   (name.starts_with("vault-snapshot-") || name.starts_with("vault-auto-") || name.starts_with("vault-before-restore-")) && name.ends_with(".db")
 }
 
+fn validate_snapshot_path(path: &PathBuf) -> Result<PathBuf, String> {
+  if !path.is_file() {
+    return Err("Snapshot could not be found. It may have been moved or deleted outside YOW.".to_string());
+  }
+  let Some(name) = path.file_name().and_then(|file_name| file_name.to_str()) else {
+    return Err("Invalid snapshot file.".to_string());
+  };
+  if !is_restorable_snapshot_name(name) {
+    return Err("Invalid snapshot file.".to_string());
+  }
+  let Some(parent) = path.parent() else {
+    return Err("Invalid snapshot location.".to_string());
+  };
+  if parent.file_name().and_then(|file_name| file_name.to_str()) != Some("Backups") {
+    return Err("Invalid snapshot location.".to_string());
+  }
+  let Some(vault_dir) = parent.parent() else {
+    return Err("Invalid snapshot location.".to_string());
+  };
+  if !vault_dir.join("vault.db").is_file() {
+    return Err("Invalid snapshot location.".to_string());
+  }
+  Ok(path.clone())
+}
+
 fn snapshot_path_for_restore(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
-  if name.contains('/') || name.contains('\\') || name.contains("..") {
+  if name.contains('/') || name.contains('\\') {
+    return validate_snapshot_path(&PathBuf::from(name));
+  }
+  if name.contains("..") {
     return Err("Invalid snapshot name.".to_string());
   }
   if !is_restorable_snapshot_name(name) {

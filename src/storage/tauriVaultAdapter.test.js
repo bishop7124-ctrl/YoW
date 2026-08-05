@@ -61,7 +61,7 @@ describe('tauri vault adapter', () => {
           if (command === 'vault_create_snapshot') return { path: '/tmp/YOW/Backups/vault-snapshot.db', size_bytes: 100 }
           if (command === 'vault_create_auto_snapshot') return { name: 'vault-auto-1.db', path: '/tmp/YOW/Backups/vault-auto-1.db', size_bytes: 100 }
           if (command === 'vault_list_snapshots') return [{ name: 'vault-auto-1.db', size_bytes: 100 }, { name: 'vault-snapshot-1.db', size_bytes: 100 }]
-          if (command === 'vault_restore_snapshot') return { restored_path: `/tmp/YOW/Backups/${payload.name}`, safety_snapshot_path: '/tmp/YOW/Backups/vault-before-restore.db' }
+          if (command === 'vault_restore_snapshot') return { restored_path: payload.name, safety_snapshot_path: '/tmp/YOW/Backups/vault-before-restore.db' }
           if (command === 'vault_reveal_in_finder') return null
           return []
         }),
@@ -83,7 +83,7 @@ describe('tauri vault adapter', () => {
     await expect(createDesktopVaultSnapshot()).resolves.toEqual({ path: '/tmp/YOW/Backups/vault-snapshot.db', size_bytes: 100 })
     await expect(createDesktopVaultAutoSnapshot()).resolves.toEqual({ name: 'vault-auto-1.db', path: '/tmp/YOW/Backups/vault-auto-1.db', size_bytes: 100 })
     await expect(listDesktopVaultSnapshots()).resolves.toEqual([{ name: 'vault-auto-1.db', size_bytes: 100 }, { name: 'vault-snapshot-1.db', size_bytes: 100 }])
-    await expect(restoreDesktopVaultSnapshot('vault-snapshot-1.db')).resolves.toEqual({
+    await expect(restoreDesktopVaultSnapshot('/tmp/YOW/Backups/vault-snapshot-1.db')).resolves.toEqual({
       restored_path: '/tmp/YOW/Backups/vault-snapshot-1.db',
       safety_snapshot_path: '/tmp/YOW/Backups/vault-before-restore.db',
     })
@@ -94,7 +94,7 @@ describe('tauri vault adapter', () => {
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_create_snapshot')
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_create_auto_snapshot')
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_list_snapshots')
-    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_restore_snapshot', { name: 'vault-snapshot-1.db' })
+    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_restore_snapshot', { name: '/tmp/YOW/Backups/vault-snapshot-1.db' })
     expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_reveal_in_finder')
   })
 
