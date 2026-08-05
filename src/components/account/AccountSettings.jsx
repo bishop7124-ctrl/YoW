@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
-import { STORAGE_MODES } from '../../utils/storageMode'
+import { STORAGE_MODES, saveStorageMode } from '../../utils/storageMode'
 import { getStorageQuota } from '../../utils/storageQuota'
 import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
@@ -25,6 +25,7 @@ import { isDesktopAppRuntime } from '../../utils/runtime'
 import { loadValue, writeItem } from '../../storage/projectStorage'
 import {
   createDesktopVaultSnapshot,
+  flushDesktopVaultBackend,
   getDesktopVaultIntegrityStatus,
   getDesktopVaultInfo,
   isTauriVaultAvailable,
@@ -368,6 +369,8 @@ function DesktopDevicesPanel() {
 }
 
 function DesktopVaultPanel() {
+  const { user } = useAuth()
+  const userId = user?.uid || user?.id || null
   const [info, setInfo] = useState(null)
   const [integrity, setIntegrity] = useState(null)
   const [snapshots, setSnapshots] = useState([])
@@ -376,6 +379,7 @@ function DesktopVaultPanel() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [moveConfirmOpen, setMoveConfirmOpen] = useState(false)
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
   const available = isDesktopAppRuntime() && isTauriVaultAvailable()
 
   const refreshInfo = async () => {
@@ -473,23 +477,24 @@ function DesktopVaultPanel() {
 
   const restoreSnapshot = async () => {
     if (!selectedSnapshot) return
-    const snapshot = snapshots.find(item => item.name === selectedSnapshot)
-    const label = snapshot?.name || selectedSnapshot
-    const confirmed = window.confirm(`Restore ${label}? YOW will first create a safety copy of your current vault, then reload the app from the selected snapshot.`)
-    if (!confirmed) return
     setBusy('restore')
     setMessage('')
     setError('')
     try {
-      await restoreDesktopVaultSnapshot(selectedSnapshot)
-      setMessage('Snapshot restored. Reloading YOW...')
-      window.setTimeout(() => window.location.reload(), 500)
+      const result = await restoreDesktopVaultSnapshot(selectedSnapshot)
+      saveStorageMode(userId, STORAGE_MODES.LOCAL_FIRST)
+      await flushDesktopVaultBackend()
+      setRestoreConfirmOpen(false)
+      setMessage(`Snapshot restored in Local-first mode. Current vault was saved first at ${result?.safety_snapshot_path || 'Backups'}. Reloading YOW...`)
+      window.setTimeout(() => window.location.reload(), 900)
     } catch (err) {
       setError(typeof err === 'string' ? err : err?.message || 'Could not restore the selected snapshot.')
     } finally {
       setBusy('')
     }
   }
+
+  const selectedSnapshotDetails = snapshots.find(item => item.name === selectedSnapshot)
 
   return (
     <div style={{ marginBottom: 28, paddingBottom: 24, borderBottom: '1px solid var(--border)' }}>
@@ -631,7 +636,7 @@ function DesktopVaultPanel() {
           </select>
           <button
             type="button"
-            onClick={restoreSnapshot}
+            onClick={() => { setRestoreConfirmOpen(true); setMessage(''); setError('') }}
             disabled={!!busy || !selectedSnapshot}
             className="account-secondary-button"
             style={{ width: 'auto', padding: '8px 14px', borderColor: 'color-mix(in srgb, #ef4444 45%, var(--border))', color: '#ef4444' }}
@@ -639,6 +644,88 @@ function DesktopVaultPanel() {
             {busy === 'restore' ? 'Restoring...' : 'Restore'}
           </button>
         </div>
+        {restoreConfirmOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm vault snapshot restore"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 3000,
+              background: 'rgba(5, 8, 12, 0.62)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div style={{
+              width: 'min(560px, 100%)',
+              borderRadius: 10,
+              border: '1px solid color-mix(in srgb, #ef4444 45%, var(--border))',
+              background: 'var(--bg-main)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.38)',
+              padding: 20,
+              color: 'var(--text-main)',
+            }}>
+              <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>
+                Restore this vault snapshot?
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
+                This replaces the current desktop vault with the selected snapshot and reopens YOW in Local-first mode. Any edits made after that snapshot will no longer be in the active vault after YOW reloads, and Cloud Sync will stay paused until you resume it.
+              </div>
+              <div style={{
+                padding: 12,
+                borderRadius: 8,
+                background: 'var(--bg-nav)',
+                border: '1px solid var(--border)',
+                fontSize: 12,
+                lineHeight: 1.6,
+                marginBottom: 14,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+                  Selected snapshot
+                </div>
+                <strong>{getSnapshotLabel(selectedSnapshotDetails)} · {formatSnapshotTime(selectedSnapshotDetails?.modified_seconds) || selectedSnapshotDetails?.name || selectedSnapshot}</strong>
+                <br />
+                <span style={{ color: 'var(--text-muted)' }}>{formatVaultBytes(selectedSnapshotDetails?.size_bytes)} · {selectedSnapshotDetails?.name || selectedSnapshot}</span>
+              </div>
+              <div style={{
+                padding: 12,
+                borderRadius: 8,
+                background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))',
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                lineHeight: 1.55,
+                marginBottom: 16,
+              }}>
+                Before restoring, YOW will create a new "Pre-restore safety copy" of the current vault. If this snapshot is older than you meant, restore that safety copy to get back to your current data before resuming Cloud Sync.
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="account-secondary-button"
+                  style={{ width: 'auto', padding: '8px 14px' }}
+                  disabled={Boolean(busy)}
+                  onClick={() => setRestoreConfirmOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="account-primary-button"
+                  style={{ width: 'auto', padding: '8px 14px', background: '#ef4444', borderColor: '#ef4444' }}
+                  disabled={Boolean(busy)}
+                  onClick={restoreSnapshot}
+                >
+                  {busy === 'restore' ? 'Restoring...' : 'Restore snapshot and reload'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {message && <p style={{ margin: 0, fontSize: 12, color: 'var(--accent)', lineHeight: 1.5 }}>{message}</p>}
         {error && <p style={{ margin: 0, fontSize: 12, color: '#ef4444', lineHeight: 1.5 }}>{error}</p>}
       </div>
