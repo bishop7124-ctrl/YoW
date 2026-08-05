@@ -84,17 +84,35 @@ function timestampMs(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+// The full load below fans out into ~20 fully-parallel per-table requests
+// (see loadUserData). With that many requests in flight, the odds that any
+// single one hits a one-off network blip are much higher than for a lone
+// request — and since a real failure must never be papered over as "this
+// project is just empty" (see the note below), one flaky table used to fail
+// the entire load and bounce the user to the connection-hiccup screen even
+// though the other ~19 tables came back fine. Retry each query a couple of
+// times with a short backoff before letting it count as a genuine failure.
+async function withRetry(queryFn, attempts = 3, delayMs = 300) {
+  let result
+  for (let i = 0; i < attempts; i++) {
+    result = await queryFn()
+    if (!result.error) return result
+    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs * (i + 1)))
+  }
+  return result
+}
+
 // Load all user data from normalized tables on login
 export async function loadUserData(userId) {
   if (OFFLINE_MODE) return { _savedAt: 0 }
 
   const [settingsResult, ...entityResults] = await Promise.all([
-    supabase.from('user_settings').select('data, updated_at').eq('user_id', userId).maybeSingle(),
+    withRetry(() => supabase.from('user_settings').select('data, updated_at').eq('user_id', userId).maybeSingle()),
     ...APP_DATA_TABLES.map(table => {
       // scenes uses scene_id as the id column (legacy schema)
       const idCol = table === 'scenes' ? 'scene_id' : 'id'
       const columns = table === 'scenes' ? `${idCol}, data` : `${idCol}, data, updated_at`
-      return supabase.from(table).select(columns).eq('user_id', userId)
+      return withRetry(() => supabase.from(table).select(columns).eq('user_id', userId))
     }),
   ])
 

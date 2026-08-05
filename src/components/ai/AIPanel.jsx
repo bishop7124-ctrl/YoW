@@ -6,6 +6,7 @@ import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVE
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
 import Modal from '../shared/Modal'
+import { UserMediaImage } from '../shared/UserMedia'
 import { downloadBlob, sanitizeFilename } from '../../utils/projectExportHelpers'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -67,7 +68,7 @@ function CheckItem({ label, sub, checked, onChange, image }) {
     <label className="flex items-center gap-2 cursor-pointer group py-0.5">
       <input type="checkbox" checked={checked} onChange={onChange} className="accent-[var(--accent)] flex-shrink-0" />
       {image ? (
-        <img src={image} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+        <UserMediaImage src={image} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
       ) : sub !== undefined && (
         <div className="w-5 h-5 rounded-full bg-[var(--accent-fade)] border border-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
           <span className="text-[8px] font-bold text-[var(--accent)]">{label.charAt(0)}</span>

@@ -3,6 +3,7 @@ import CharacterSheet from './CharacterSheet'
 import CharacterWizard from './CharacterWizard'
 import DiceRoller from './DiceRoller'
 import { RACES, CLASSES, CHARACTER_STATUSES, getProficiencyBonus, getModifier, formatMod } from './rpgData'
+import { UserMediaImage } from '../shared/UserMedia'
 
 // ─── Party Card ───────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ function PartyCard({ character, onClick }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {character.portrait
-            ? <img src={character.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <UserMediaImage src={character.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" opacity=".5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
           }
         </div>

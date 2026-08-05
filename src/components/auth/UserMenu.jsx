@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../../context/AuthContext'
+import { UserMediaImage } from '../shared/UserMedia'
 
 function MenuIcon({ name }) {
   const common = {
@@ -100,7 +101,7 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
         aria-expanded={open}
       >
         {avatarUrl ? (
-          <img src={avatarUrl} alt="" className="user-menu-avatar" referrerPolicy="no-referrer" />
+          <UserMediaImage src={avatarUrl} alt="" className="user-menu-avatar" referrerPolicy="no-referrer" />
         ) : (
           <span className="user-menu-avatar user-menu-avatar-fallback">
             {initial}

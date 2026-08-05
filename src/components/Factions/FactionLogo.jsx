@@ -2,6 +2,7 @@
 // Each shape: { id, type, cx, cy, size, color }
 
 import { normalizeFactionLogo } from './logoData'
+import { UserMediaImage } from '../shared/UserMedia'
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function getShapeElement(shape, extraProps = {}) {
@@ -193,7 +194,7 @@ export default function FactionLogo({ shapes = [], size = 64 }) {
 
   if (logo.source === 'image' && logo.image) {
     return (
-      <img
+      <UserMediaImage
         src={logo.image}
         alt=""
         width={size}

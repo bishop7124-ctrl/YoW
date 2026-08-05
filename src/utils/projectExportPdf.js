@@ -7,6 +7,7 @@ import {
   getRelationshipLinks, getEnabled, buildOutline, wordCount, buildSummaryStats,
   getProjectExportLabel, getProjectWorkspaceLabel, getProjectPdfFilename, downloadBlob,
 } from './projectExportHelpers.js'
+import { getSignedUserMediaUrl, isUserMediaReference } from './uploadUserMedia.js'
 
 const textEncoder = new TextEncoder()
 
@@ -406,9 +407,18 @@ const jpegResourceFromDataUrl = (value) => {
   return size ? { bytes, ...size } : null
 }
 
-const convertImageToJpegResource = (src, options = {}) => new Promise(resolve => {
+const convertImageToJpegResource = async (src, options = {}) => {
+  let resolvedSrc = src
+  if (isUserMediaReference(src)) {
+    try {
+      resolvedSrc = await getSignedUserMediaUrl(src)
+    } catch {
+      resolvedSrc = src
+    }
+  }
+  return new Promise(resolve => {
   if (!src || typeof Image === 'undefined' || typeof document === 'undefined') {
-    resolve(jpegResourceFromDataUrl(src))
+    resolve(jpegResourceFromDataUrl(resolvedSrc))
     return
   }
   const image = new Image()
@@ -428,12 +438,13 @@ const convertImageToJpegResource = (src, options = {}) => new Promise(resolve =>
       ctx.drawImage(image, 0, 0, width, height)
       resolve(jpegResourceFromDataUrl(canvas.toDataURL('image/jpeg', options.quality || 0.82)))
     } catch {
-      resolve(jpegResourceFromDataUrl(src))
+      resolve(jpegResourceFromDataUrl(resolvedSrc))
     }
   }
-  image.onerror = () => resolve(jpegResourceFromDataUrl(src))
-  image.src = src
-})
+  image.onerror = () => resolve(jpegResourceFromDataUrl(resolvedSrc))
+  image.src = resolvedSrc
+  })
+}
 
 const prepareProjectPdfData = async (projectData) => {
   const characters = await Promise.all((projectData.characters ?? []).map(async character => {

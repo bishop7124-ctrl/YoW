@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { loreRefsFor } from '../../utils/worldLinks'
+import { UserMediaImage } from '../shared/UserMedia'
 
 const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
@@ -102,7 +103,7 @@ function LinkPicker({ title, items, selected, getLabel, onToggle }) {
             const active = selected.includes(item.id)
             return (
               <button key={item.id} type="button" onClick={() => onToggle(item.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
-                {item.image && <img src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
+                {item.image && <UserMediaImage src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
                 {active && <span>✓</span>}{getLabel(item)}
               </button>
             )
@@ -377,7 +378,7 @@ function LinkedItems({ title, ids, items, getLabel, onOpen }) {
       <div className="flex flex-wrap gap-2">
         {linked.map(item => (
           <button key={item.id} onClick={() => onOpen(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[var(--accent-fade)] border border-[var(--accent)]/30 text-[var(--accent)] hover:opacity-80 transition-opacity">
-            {item.image && <img src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
+            {item.image && <UserMediaImage src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
             {getLabel(item)}
           </button>
         ))}

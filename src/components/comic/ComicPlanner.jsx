@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import { UserMediaImage } from '../shared/UserMedia'
 import './ComicPlanner.css'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
       {hasContent ? (
         <div className="cp-upload-preview">
           {value && (
-            <img src={value} alt="reference" className="cp-upload-img" />
+            <UserMediaImage src={value} alt="reference" className="cp-upload-img" />
           )}
           {!value && sessionPdfUrl && (
             <div className="cp-pdf-preview">

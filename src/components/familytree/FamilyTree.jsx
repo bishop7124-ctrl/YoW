@@ -9,6 +9,7 @@ import {
   makeFamilyLink,
   validateFamilyLink,
 } from "../../utils/familyRelationships";
+import { UserMediaImage, UserMediaSvgImage } from "../shared/UserMedia";
 
 const NODE_W = 190;
 const NODE_H = 78;
@@ -654,7 +655,7 @@ export default function FamilyTree({ store }) {
                             )}
                             {hasPhoto && (
                               <>
-                                <image href={char.image} x={photoX} y={photoY} width={photoSize} height={photoSize} clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: "none", filter: isDeceased ? "grayscale(0.6)" : undefined }} />
+                                <UserMediaSvgImage href={char.image} x={photoX} y={photoY} width={photoSize} height={photoSize} clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: "none", filter: isDeceased ? "grayscale(0.6)" : undefined }} />
                                 <rect x={photoX} y={photoY} width={photoSize} height={photoSize} rx="6" fill="none" stroke="var(--border)" strokeWidth="1" style={{ pointerEvents: "none" }} />
                               </>
                             )}
@@ -685,7 +686,7 @@ export default function FamilyTree({ store }) {
                     <div className="text-xs text-[var(--text-muted)] mb-1">Selected</div>
                     <div className="flex items-center gap-2">
                       {selectedCharacter.image ? (
-                        <img src={selectedCharacter.image} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-[var(--border)]" />
+                        <UserMediaImage src={selectedCharacter.image} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-[var(--border)]" />
                       ) : (
                         <div className="w-8 h-8 rounded-full bg-[var(--accent-fade)] border border-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
                           <span className="text-[10px] font-bold text-[var(--accent)]">{selectedCharacter.name.charAt(0)}</span>
@@ -810,7 +811,7 @@ export default function FamilyTree({ store }) {
           >
             <div className="w-64 bg-[var(--bg-nav)]/95 backdrop-blur-md border-2 border-[var(--accent)]/60 rounded-xl p-4 shadow-2xl text-left">
               {hoveredCharacter.image && (
-                <img src={hoveredCharacter.image} alt={hoveredCharacter.name} className="w-full h-28 object-cover rounded-lg mb-3" />
+                <UserMediaImage src={hoveredCharacter.image} alt={hoveredCharacter.name} className="w-full h-28 object-cover rounded-lg mb-3" />
               )}
               <div className="flex items-center gap-2 mb-2">
                 {icon && <img src={icon} alt="" className="w-5 h-5 opacity-80" />}

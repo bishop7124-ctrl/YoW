@@ -8,6 +8,8 @@ import { allRefsFor } from '../../utils/worldLinks'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { groupFamilyRelationships } from '../../utils/familyRelationships'
+import { UserMediaImage } from '../shared/UserMedia'
+import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
 import CharacterInterview from '../aitools/CharacterInterview'
@@ -118,7 +120,7 @@ function ImageLightbox({ src, alt, onClose }) {
       >
         ✕
       </button>
-      <img
+      <UserMediaImage
         src={src}
         alt={alt}
         onClick={e => e.stopPropagation()}
@@ -133,7 +135,7 @@ function CharacterPortrait({ src, position, zoom, className = '' }) {
   const z = zoom || 1
   return (
     <div className={`overflow-hidden ${className}`}>
-      <img
+      <UserMediaImage
         src={src}
         alt=""
         className="w-full h-full object-cover pointer-events-none"
@@ -270,6 +272,7 @@ function ComboSelect({ value, onChange, options, placeholder, allowCustom = fals
 function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) {
   const [pos, setPos] = useState(imagePosition || '50% 50%')
   const [zoom, setZoom] = useState(imageZoom || 1)
+  const resolvedImage = useUserMediaUrl(image)
   const pickerRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
 
@@ -306,7 +309,7 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
             onMouseLeave={() => setIsDragging(false)}
           >
             <img
-              src={image}
+              src={resolvedImage || image}
               alt="Portrait"
               className="w-full h-full pointer-events-none"
               style={previewStyle}
@@ -349,19 +352,19 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
         <div className="flex flex-col gap-4 items-center flex-shrink-0 pt-6">
           <div className="text-center">
             <div className="w-10 h-10 rounded-full overflow-hidden border border-[var(--border)] mx-auto">
-              <img src={image} alt="" className="w-full h-full" style={previewStyle} />
+              <UserMediaImage src={image} alt="" className="w-full h-full" style={previewStyle} />
             </div>
             <p className="text-[9px] text-[var(--text-muted)] mt-1">Avatar</p>
           </div>
           <div className="text-center">
             <div className="w-16 h-20 rounded-lg overflow-hidden border border-[var(--border)] mx-auto">
-              <img src={image} alt="" className="w-full h-full" style={previewStyle} />
+              <UserMediaImage src={image} alt="" className="w-full h-full" style={previewStyle} />
             </div>
             <p className="text-[9px] text-[var(--text-muted)] mt-1">Card</p>
           </div>
           <div className="text-center">
             <div className="w-24 h-24 rounded-xl overflow-hidden border border-[var(--border)] mx-auto">
-              <img src={image} alt="" className="w-full h-full" style={previewStyle} />
+              <UserMediaImage src={image} alt="" className="w-full h-full" style={previewStyle} />
             </div>
             <p className="text-[9px] text-[var(--text-muted)] mt-1">Profile</p>
           </div>

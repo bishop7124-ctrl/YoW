@@ -18,6 +18,7 @@ import {
 import { isCampaignProjectType } from '../utils/projectStats'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
 import { trackEvent } from '../utils/analytics'
+import { UserMediaImage } from './shared/UserMedia'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
 const isProjectTypeSelectable = (type) => Boolean(PROJECT_TYPES[type])
@@ -301,7 +302,7 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
             <div className="active-project-cover-inner">
               {!novel?.coverPhoto && <div className="active-project-hero-bg" style={{ background: getCoverGradient(novel?.title || 'Your Own World') }} />}
               {novel?.coverPhoto
-                ? <img src={novel.coverPhoto} alt="" />
+                ? <UserMediaImage src={novel.coverPhoto} alt="" />
                 : (
                   <span className="empty-cover-placeholder" aria-label="No project cover photo">
                     <strong>{hasActiveProject ? novel.title[0]?.toUpperCase() : '?'}</strong>
@@ -705,7 +706,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
               <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
               <span className="project-cover-preview-frame" style={{ background: form.coverPhoto ? 'var(--bg-main)' : getCoverGradient(form.name || series.name) }}>
                 {form.coverPhoto ? (
-                  <img src={form.coverPhoto} alt="" />
+                  <UserMediaImage src={form.coverPhoto} alt="" />
                 ) : (
                   <span>Add cover photo</span>
                 )}
@@ -1031,7 +1032,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
                   <input type="file" accept="image/*" onChange={handleCoverSelect} style={{ display: 'none' }} />
                   <span className="project-cover-preview-frame" style={{ background: form.coverPhoto ? 'var(--bg-main)' : getCoverGradient(form.title || project.title) }}>
                     {form.coverPhoto ? (
-                      <img src={form.coverPhoto} alt="" />
+                      <UserMediaImage src={form.coverPhoto} alt="" />
                     ) : (
                       <span>Add cover photo</span>
                     )}
@@ -1116,7 +1117,7 @@ function SeriesCard({ series, seriesStats, onClick, onEdit }) {
         style={{ background: series.coverPhoto ? undefined : getCoverGradient(series.name) }}
       >
         {series.coverPhoto
-          ? <img src={series.coverPhoto} alt="" />
+          ? <UserMediaImage src={series.coverPhoto} alt="" />
           : <span className="series-dash-card-letter">{series.name[0]?.toUpperCase()}</span>
         }
         <span className="series-dash-card-type-badge">Series</span>
@@ -1164,7 +1165,7 @@ function ProjectCard({ stats, onClick, onEdit, onExport, isFocus, onSetFocus, vi
         style={{ background: project.coverPhoto ? undefined : getCoverGradient(project.title) }}
       >
         {project.coverPhoto
-          ? <img src={project.coverPhoto} alt="" />
+          ? <UserMediaImage src={project.coverPhoto} alt="" />
           : <span className="series-dash-card-letter empty-cover-placeholder" aria-label="No project cover photo"><strong>{project.title[0]?.toUpperCase()}</strong><small>Add cover photo</small></span>
         }
         <span className="project-dash-card-type-badge">{cfg.label}</span>

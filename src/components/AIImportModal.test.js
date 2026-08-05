@@ -5,7 +5,7 @@ import { populateProject, populateYowProject, relabelActsForType, parseManuscrip
 function mockStore() {
   const calls = {
     characters: [], locations: [], lore: [], history: [], events: [], ideas: [],
-    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [],
+    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [], maps: [],
   }
   let n = 0
   const nid = (p) => `${p}-${++n}`
@@ -31,7 +31,18 @@ function mockStore() {
     addComicPage: (issueId, data) => { const p = { id: nid('page'), issueId, ...data }; calls.comicPages.push(p); return p },
     addComicPanel: (pageId, data) => { const p = { id: nid('panel'), pageId, ...data }; calls.comicPanels.push(p); return p },
     saveRpgCharacter: (data) => { const id = nid('rpg'); calls.rpgCharacters.push({ ...data, id }); return id },
-    addMap: () => {}, updateActiveMapData: () => {}, addScheduleEvent: () => {},
+    addMap: (name, mapType) => {
+      const id = nid('map')
+      calls.maps.push({ id, name, mapType })
+      return id
+    },
+    updateActiveMapData: () => {},
+    updateMapData: (mapId, updater) => {
+      const map = calls.maps.find(m => m.id === mapId)
+      if (!map) return
+      Object.assign(map, updater(map))
+    },
+    addScheduleEvent: () => {},
     addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
     updateWhiteboard: (board) => { calls.whiteboards.push(board) },
   }
@@ -142,6 +153,22 @@ describe('populateYowProject', () => {
     expect(newEraId).not.toBe('old-era')
     expect(store.calls.history[0].eraId).toBe(newEraId)
     expect(store.calls.events[0].eraId).toBe(newEraId)
+  })
+
+  it('restores each imported map\'s pins/objects onto its own new map, not a stale active one', () => {
+    const store = mockStore()
+    const data = {
+      maps: [
+        { id: 'old-map-1', novelId: 'old-novel', name: 'Continent', mapType: 'region', mapPins: [{ id: 'p1' }], mapObjects: [{ id: 'o1' }] },
+        { id: 'old-map-2', novelId: 'old-novel', name: 'Capital City', mapType: 'local', mapPins: [{ id: 'p2' }], mapObjects: [{ id: 'o2' }] },
+      ],
+    }
+    populateYowProject(store, data, { maps: true })
+    expect(store.calls.maps).toHaveLength(2)
+    expect(store.calls.maps[0].name).toBe('Continent')
+    expect(store.calls.maps[0].mapPins).toEqual([{ id: 'p1' }])
+    expect(store.calls.maps[1].name).toBe('Capital City')
+    expect(store.calls.maps[1].mapPins).toEqual([{ id: 'p2' }])
   })
 
   it('does not recreate eras when neither world history nor timeline is selected', () => {

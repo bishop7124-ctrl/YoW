@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { StudioBoard, StudioButton, StudioEmpty } from '../presentation/Studio'
 import { getEnabledSections, getProjectTypeStage } from '../../constants/projectTypes'
+import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
@@ -699,6 +700,8 @@ export default function ProjectDashboard({ store }) {
   const sceneInsights = useMemo(() => stats ? buildSceneInsights(stats) : null, [stats])
   const coverageInsights = useMemo(() => stats ? buildCoverageInsights(stats) : [], [stats])
   const momentumInsights = useMemo(() => analytics ? buildMomentumInsights(analytics, dailyGoal) : null, [analytics, dailyGoal])
+  const heroBgImage = stats?.project?.bannerImage || stats?.project?.coverPhoto || ''
+  const resolvedHeroBgImage = useUserMediaUrl(heroBgImage)
   if (!stats) {
     return (
       <StudioBoard className="overview-board">
@@ -740,10 +743,9 @@ export default function ProjectDashboard({ store }) {
   const unitLabel = stats.projectType.structure?.level3 || 'Scene'
   const unitLabelLower = unitLabel.toLowerCase()
   const projectStatusLabel = formatProjectStatus(project.status)
-  const heroBgImage = project.bannerImage || project.coverPhoto
   const overviewHeroStyle = {
     '--overview-cover-fallback': getCoverGradient(project.title),
-    ...(heroBgImage ? { '--overview-cover-art': `url("${heroBgImage}")` } : {}),
+    ...(resolvedHeroBgImage ? { '--overview-cover-art': `url("${resolvedHeroBgImage}")` } : {}),
   }
 
   const updateDailyGoal = value => {
@@ -755,7 +757,7 @@ export default function ProjectDashboard({ store }) {
   return (
     <StudioBoard className="overview-board">
       <div className="overview-layout">
-        <header data-tour="dashboard-header" className={`overview-hero${heroBgImage ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
+        <header data-tour="dashboard-header" className={`overview-hero${resolvedHeroBgImage ? ' overview-hero-has-cover' : ''}`} style={overviewHeroStyle}>
           <div className="overview-hero-copy">
             <p className="studio-kicker">{stats.projectType.label} project</p>
             <div className="overview-hero-badges">

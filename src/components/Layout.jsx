@@ -35,6 +35,7 @@ import { readItem, writeItem } from '../storage/projectStorage'
 import RecordConflictReview from './shared/RecordConflictReview'
 import { useIsMobile } from '../utils/useMediaQuery'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
+import { UserMediaImage } from './shared/UserMedia'
 
 // ─── Project status ──────────────────────────────────────────────────────────
 
@@ -628,7 +629,7 @@ function ProjectSettings({ store, onClose }) {
                 <div className="project-cover-preview project-cover-preview-compact">
                   <div className="project-cover-preview-frame" style={{ background: novel?.coverPhoto ? 'var(--bg-main)' : 'linear-gradient(135deg, var(--bg-main), color-mix(in srgb, var(--accent) 16%, var(--bg-main)))' }}>
                     {novel?.coverPhoto ? (
-                      <img src={novel.coverPhoto} alt="" />
+                      <UserMediaImage src={novel.coverPhoto} alt="" />
                     ) : (
                       <span>No cover photo</span>
                     )}
@@ -656,7 +657,7 @@ function ProjectSettings({ store, onClose }) {
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>Background image for the project overview header.</p>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   {novel?.bannerImage && (
-                    <img src={novel.bannerImage} alt="" style={{ width: 80, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }} />
+                    <UserMediaImage src={novel.bannerImage} alt="" style={{ width: 80, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }} />
                   )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'transparent', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1 }}>

@@ -2395,16 +2395,23 @@ export function useStore(userId = null, options = {}) {
     setMaps(prev => prev.map(m => m.id === mapId ? { ...m, name } : m))
   }
 
-  const updateActiveMapData = (updater) => {
-    const currentActiveMapId = activeMapByNovel[activeNovelId] ?? maps.find(m => m.novelId === activeNovelId)?.id
-    if (!currentActiveMapId) return
+  // Patches a specific map by id. Unlike updateActiveMapData, this doesn't rely on
+  // activeMapByNovel/maps state having caught up with a just-created map — safe to
+  // call right after addMap() in the same tick (e.g. importing multiple maps in a loop).
+  const updateMapData = (mapId, updater) => {
+    if (!mapId) return
     setMaps(prev => prev.map(m => {
-      if (m.id !== currentActiveMapId) return m
+      if (m.id !== mapId) return m
       const patch = updater(m) || {}
       delete patch.mapData
       delete patch.mapOverlay
       return { ...m, ...patch }
     }))
+  }
+
+  const updateActiveMapData = (updater) => {
+    const currentActiveMapId = activeMapByNovel[activeNovelId] ?? maps.find(m => m.novelId === activeNovelId)?.id
+    updateMapData(currentActiveMapId, updater)
   }
 
   const updateCurrentYear = (value) => {
@@ -2955,7 +2962,7 @@ export function useStore(userId = null, options = {}) {
     currentYear: activeNovel?.currentYear ?? currentYear, updateCurrentYear,
     loreEntries: novelLoreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
     ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, deleteIdeaEntry,
-    whiteboard, updateWhiteboard, mapProject, updateMapProject, addMap, selectMap, deleteMap, renameMap, updateActiveMapData,
+    whiteboard, updateWhiteboard, mapProject, updateMapProject, addMap, selectMap, deleteMap, renameMap, updateActiveMapData, updateMapData,
     addLocation: saveLocation,
     acts: novelActs, addAct, deleteAct, updateAct, reorderAct, moveAct,
     chapters: novelChapters, addChapter, deleteChapter, updateChapter, reorderChapter, moveChapter,
@@ -2993,7 +3000,7 @@ export function useStore(userId = null, options = {}) {
     'addEra', 'updateEra', 'deleteEra',
     'updateCurrentYear', 'addLoreEntry', 'updateLoreEntry', 'deleteLoreEntry',
     'addIdeaEntry', 'updateIdeaEntry', 'deleteIdeaEntry', 'updateWhiteboard', 'updateMapProject',
-    'addMap', 'deleteMap', 'renameMap', 'updateActiveMapData', 'addLocation',
+    'addMap', 'deleteMap', 'renameMap', 'updateActiveMapData', 'updateMapData', 'addLocation',
     'addAct', 'deleteAct', 'updateAct', 'reorderAct', 'moveAct',
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',

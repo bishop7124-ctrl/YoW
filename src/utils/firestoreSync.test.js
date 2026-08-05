@@ -5,6 +5,10 @@ const mockState = vi.hoisted(() => ({
   tables: {},
   selects: [],
   upserts: [],
+  // Queue of { error } results to hand out (in order) before falling back to
+  // the normal success response — lets tests simulate a table query that
+  // fails N times before succeeding, or fails on every attempt.
+  errorQueues: {},
 }))
 
 vi.mock('../supabase', () => ({
@@ -12,20 +16,23 @@ vi.mock('../supabase', () => ({
     from: vi.fn((table) => ({
       select: vi.fn((columns) => {
         mockState.selects.push({ table, columns })
+        const nextResult = () => {
+          const queue = mockState.errorQueues[table]
+          if (queue?.length) return { data: null, error: queue.shift() }
+          return { data: mockState.tables[table] || [], error: null }
+        }
         return {
           eq: vi.fn(() => {
             if (table === 'user_settings') {
               return {
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: mockState.tables.user_settings || null,
-                  error: null,
+                maybeSingle: vi.fn(() => {
+                  const queue = mockState.errorQueues[table]
+                  if (queue?.length) return Promise.resolve({ data: null, error: queue.shift() })
+                  return Promise.resolve({ data: mockState.tables.user_settings || null, error: null })
                 }),
               }
             }
-            return Promise.resolve({
-              data: mockState.tables[table] || [],
-              error: null,
-            })
+            return Promise.resolve(nextResult())
           }),
         }
       }),
@@ -59,6 +66,7 @@ describe('loadUserData', () => {
     mockState.tables = {}
     mockState.selects = []
     mockState.upserts = []
+    mockState.errorQueues = {}
   })
 
   it('uses persisted updated_at timestamps instead of load time for freshness', async () => {
@@ -85,6 +93,40 @@ describe('loadUserData', () => {
     expect(mockState.selects.find(call => call.table === 'characters')?.columns).toContain('updated_at')
     expect(mockState.selects.find(call => call.table === 'scenes')?.columns).toBe('scene_id, data')
   })
+
+  it('recovers from a one-off transient error on a single table instead of failing the whole load', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.tables.characters = [{
+      id: 'char-1',
+      data: { id: 'char-1', novelId: 'novel-1', name: 'Survives A Blip' },
+      updated_at: '2026-07-19T10:05:00.000Z',
+    }]
+    // Fails once, then the next attempt (from withRetry) hits the normal
+    // success path above — simulating a single dropped request among the
+    // ~20 fired in parallel by loadUserData, not a real outage.
+    mockState.errorQueues.characters = [{ message: 'network blip' }]
+
+    const data = await loadUserData('user-1')
+
+    expect(data.characters).toEqual([{ id: 'char-1', novelId: 'novel-1', name: 'Survives A Blip' }])
+  })
+
+  it('still throws (and never hydrates a zeroed-out category) when a table fails on every retry attempt', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.tables.characters = [{
+      id: 'char-1',
+      data: { id: 'char-1', novelId: 'novel-1', name: 'Should Not Silently Vanish' },
+      updated_at: '2026-07-19T10:05:00.000Z',
+    }]
+    // More failures queued than withRetry's attempt budget — a genuine,
+    // persistent failure must still surface as a thrown error, not as an
+    // empty characters array indistinguishable from a truly empty project.
+    mockState.errorQueues.characters = [
+      { message: 'down 1' }, { message: 'down 2' }, { message: 'down 3' },
+    ]
+
+    await expect(loadUserData('user-1')).rejects.toThrow(/characters/)
+  })
 })
 
 describe('scene cloud cleanup on project delete', () => {
@@ -92,6 +134,7 @@ describe('scene cloud cleanup on project delete', () => {
     mockState.tables = {}
     mockState.selects = []
     mockState.upserts = []
+    mockState.errorQueues = {}
   })
 
   it('writes novel_id on scene saves so bulk cleanup can find them later', async () => {

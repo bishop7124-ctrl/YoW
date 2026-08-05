@@ -8,6 +8,7 @@ import { getStorageQuota } from '../../utils/storageQuota'
 import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import { UserMediaImage } from '../shared/UserMedia'
 import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
@@ -2303,7 +2304,7 @@ function ProfileDetails({ user, updateProfile, localProfileOnly = false, storage
         </div>
         <div className="account-profile-avatar" aria-hidden="true">
           {profileDraft.avatarUrl ? (
-            <img src={profileDraft.avatarUrl} alt="" referrerPolicy="no-referrer" />
+            <UserMediaImage src={profileDraft.avatarUrl} alt="" referrerPolicy="no-referrer" />
           ) : (
             <span>{avatarInitial}</span>
           )}

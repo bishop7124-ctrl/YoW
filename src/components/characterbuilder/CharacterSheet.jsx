@@ -8,6 +8,7 @@ import {
   ASI_LEVELS, METAMAGIC_OPTIONS, getMetamagicKnownCount, INVOCATIONS, getInvocationsKnownCount,
 } from './rpgData'
 import { cantripsForClass, spellsForClassAtLevel, findSpellByName } from './spellData'
+import { UserMediaImage } from '../shared/UserMedia'
 
 const toSpellEntry = (spell) => ({
   id: `spell-${spell.name.replace(/\s+/g, '-').toLowerCase()}`,
@@ -1167,7 +1168,7 @@ export default function CharacterSheet({ character, onUpdate, onBack, store }) {
             overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             {character.portrait
-              ? <img src={character.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <UserMediaImage src={character.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" opacity=".5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
             }
           </div>

@@ -3,6 +3,7 @@ import { getShapeElement } from './FactionLogo'
 import { DEFAULT_LOGO_BACKGROUND, normalizeFactionLogo } from './logoData'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import SegmentedControl from '../shared/SegmentedControl'
+import { UserMediaImage } from '../shared/UserMedia'
 
 const uid = () => Math.random().toString(36).slice(2)
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -218,7 +219,7 @@ export default function LogoBuilder({ logo, onChange, canvasSize = 176, store })
       {source === 'image' ? (
         <div className="flex flex-col items-center gap-3 py-2">
           <div className="w-44 h-44 rounded-xl border-2 border-[var(--border)] bg-[var(--bg-main)] overflow-hidden flex items-center justify-center">
-            <img src={image} alt="Faction logo preview" className="w-full h-full object-contain" />
+            <UserMediaImage src={image} alt="Faction logo preview" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-wrap justify-center gap-2">
             <label className="btn btn-secondary btn-sm cursor-pointer">

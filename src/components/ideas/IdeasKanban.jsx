@@ -859,6 +859,11 @@ export default function IdeasKanban({ store, userId = null, membership = null })
 
   const handleCardPointerDown = useCallback((idea, e) => {
     if (e.button !== 0 || readOnly || idea.status === 'archived') return
+    // Stop the browser's native text-selection drag from starting at all —
+    // relying solely on `user-select: none` via React state is too slow
+    // (it only takes effect after a re-render), so the mouse can "paint" a
+    // selection across cards/columns during the brief window before that.
+    if (e.pointerType === 'mouse') e.preventDefault()
     const rect = e.currentTarget.getBoundingClientRect()
     dragData.current = {
       id: idea.id,
@@ -884,6 +889,13 @@ export default function IdeasKanban({ store, userId = null, membership = null })
         setDraggingId(d.id)
         setGhostStyle({ x: ev.clientX - d.offsetX, y: ev.clientY - d.offsetY, width: d.width })
         startAutoScroll()
+        // Belt-and-braces: apply user-select:none directly to the DOM right
+        // now, rather than waiting for the draggingId state update to reach
+        // the board via re-render, and clear any selection that already
+        // started in the gap between pointerdown and this threshold.
+        document.body.style.userSelect = 'none'
+        document.body.style.webkitUserSelect = 'none'
+        window.getSelection?.()?.removeAllRanges?.()
       }
 
       if (d.moved) {
@@ -896,6 +908,8 @@ export default function IdeasKanban({ store, userId = null, membership = null })
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
       stopAutoScroll()
+      document.body.style.userSelect = ''
+      document.body.style.webkitUserSelect = ''
 
       const d = dragData.current
       if (d?.moved) {
@@ -916,7 +930,11 @@ export default function IdeasKanban({ store, userId = null, membership = null })
   }, [readOnly, resolveDropTarget, handleMove, startAutoScroll, stopAutoScroll])
 
   // Cleanup on unmount
-  useEffect(() => () => stopAutoScroll(), [stopAutoScroll])
+  useEffect(() => () => {
+    stopAutoScroll()
+    document.body.style.userSelect = ''
+    document.body.style.webkitUserSelect = ''
+  }, [stopAutoScroll])
 
   // ── Derived ──────────────────────────────────────────────────────────────────
 

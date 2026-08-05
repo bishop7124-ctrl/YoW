@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import { UserMediaImage } from '../shared/UserMedia'
 import {
   RACES, CLASSES, BACKGROUNDS, ALIGNMENTS, ABILITY_KEYS, ABILITY_SHORT,
   STANDARD_ARRAY, POINT_BUY_COSTS, POINT_BUY_BUDGET, STARTING_EQUIPMENT,
@@ -71,7 +72,7 @@ function StepBasics({ data, onChange, store, pendingUploadRef }) {
           overflow: 'hidden', flexShrink: 0,
         }}>
           {data.portrait
-            ? <img src={data.portrait} alt="Portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <UserMediaImage src={data.portrait} alt="Portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <div style={{ textAlign: 'center', padding: 10 }}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" opacity=".5">
                   <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
@@ -657,7 +658,7 @@ function StepReview({ data }) {
       {/* Identity */}
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
         {data.portrait && (
-          <img src={data.portrait} alt="" style={{ width: 80, height: 96, objectFit: 'cover', borderRadius: 10, flexShrink: 0, border: '2px solid color-mix(in srgb, var(--accent) 40%, transparent)' }} />
+          <UserMediaImage src={data.portrait} alt="" style={{ width: 80, height: 96, objectFit: 'cover', borderRadius: 10, flexShrink: 0, border: '2px solid color-mix(in srgb, var(--accent) 40%, transparent)' }} />
         )}
         <div>
           <h3 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>{data.name || 'Unnamed'}</h3>

@@ -3,6 +3,7 @@ import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType, 
 import { FACTION_ICONS } from '../../constants/factionIcons'
 import { familyRelationshipMapEdges } from '../../utils/familyRelationships'
 import FactionLogo from '../Factions/FactionLogo'
+import { UserMediaImage } from '../shared/UserMedia'
 
 const toArray = value => Array.isArray(value) ? value : []
 
@@ -67,7 +68,7 @@ const initials = name => (name || '?')
 
 function CharacterAvatar({ character, size = 62 }) {
   if (character.image) {
-    return <img src={character.image} alt="" style={{ width: size, height: size }} className="rounded-full object-cover border-2 border-[var(--border)]" />
+    return <UserMediaImage src={character.image} alt="" style={{ width: size, height: size }} className="rounded-full object-cover border-2 border-[var(--border)]" />
   }
   return (
     <span style={{ width: size, height: size }} className="rounded-full grid place-items-center border-2 border-[var(--border)] bg-[var(--surface2)] text-[var(--accent)] font-bold">

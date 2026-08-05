@@ -4,6 +4,7 @@ import UserMenu from '../auth/UserMenu'
 import { getProjectType } from '../../constants/projectTypes'
 import { hasJourneyContent, normalizeJourney } from '../../utils/characterJourney'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import { UserMediaImage } from '../shared/UserMedia'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -367,7 +368,7 @@ function OverviewTab({ series, orderedProjects, allStats, onOpenProject }) {
                   <span className="sbt-num">{i + 1}</span>
                   <span className="sbt-title">
                     <div className="sbt-cover" style={{ background: project.coverPhoto ? undefined : getCoverGradient(project.title) }}>
-                      {project.coverPhoto ? <img src={project.coverPhoto} alt="" /> : <span>{project.title?.[0]?.toUpperCase()}</span>}
+                      {project.coverPhoto ? <UserMediaImage src={project.coverPhoto} alt="" /> : <span>{project.title?.[0]?.toUpperCase()}</span>}
                     </div>
                     <span className="sbt-title-text">
                       {project.title || 'Untitled'}
@@ -452,7 +453,7 @@ function ProjectsTab({ orderedProjects, allStats, onOpenProject, onAddProject, o
                 onDragEnd={handleDragEnd}
               >
                 <div className="series-book-card-cover" style={{ background: project.coverPhoto ? undefined : getCoverGradient(project.title) }}>
-                  {project.coverPhoto ? <img src={project.coverPhoto} alt="" /> : <span className="series-book-card-letter">{project.title?.[0]?.toUpperCase()}</span>}
+                  {project.coverPhoto ? <UserMediaImage src={project.coverPhoto} alt="" /> : <span className="series-book-card-letter">{project.title?.[0]?.toUpperCase()}</span>}
                   <div className="series-book-card-num">#{i + 1}</div>
                   <div className="series-book-card-drag" title="Drag to reorder">⠿</div>
                 </div>
@@ -1399,7 +1400,7 @@ export default function SeriesDashboard({
             onKeyDown={e => e.key === 'Enter' && coverInputRef.current?.click()}
           >
             {series.coverPhoto
-              ? <img src={series.coverPhoto} alt="" />
+              ? <UserMediaImage src={series.coverPhoto} alt="" />
               : <span className="series-hero-cover-letter">{series.name[0]?.toUpperCase()}</span>
             }
             <div className="series-hero-cover-edit-hint">Change cover</div>

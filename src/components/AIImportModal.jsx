@@ -706,11 +706,13 @@ export function populateYowProject(store, data, sel) {
 
   if (sel.maps) {
     for (const map of data.maps || []) {
-      // addMap creates the map and immediately makes it the active map for this novel,
-      // so updateActiveMapData targets the map we just created.
-      store.addMap(map.name || 'Map', map.mapType || 'regional')
+      // addMap's "active map" state update hasn't landed by the time this loop runs
+      // again (React state is async), so target the new map by its returned id rather
+      // than relying on updateActiveMapData — otherwise map content silently gets
+      // dropped (or written onto the wrong map) when importing more than one map.
+      const newMapId = store.addMap(map.name || 'Map', map.mapType || 'regional')
       const { id: _id, novelId: _nid, name: _n, mapType: _mt, created: _c, ...rest } = map
-      if (Object.keys(rest).length) store.updateActiveMapData(() => rest)
+      if (newMapId && Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
     }
   }
 
