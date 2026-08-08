@@ -24,6 +24,7 @@ export default function ManuscriptCatalogue({
   currentStats,
   onRetire,
   onRestore,
+  onDownload,
   onClose,
 }) {
   const [confirmRetire, setConfirmRetire] = useState(false)
@@ -85,9 +86,14 @@ export default function ManuscriptCatalogue({
                       {stats.words.toLocaleString()} words / {stats.acts} {labels.level1.toLowerCase()}{stats.acts === 1 ? '' : 's'} / {stats.chapters} {labels.level2.toLowerCase()}{stats.chapters === 1 ? '' : 's'} / {stats.scenes} {labels.level3.toLowerCase()}{stats.scenes === 1 ? '' : 's'}
                     </p>
                   </div>
-                  <button type="button" className="ms-catalogue-secondary" onClick={() => setRestoreCopy(copy)}>
-                    Restore
-                  </button>
+                  <div className="ms-catalogue-actions">
+                    <button type="button" className="ms-catalogue-secondary" onClick={() => onDownload(copy)}>
+                      Download
+                    </button>
+                    <button type="button" className="ms-catalogue-secondary" onClick={() => setRestoreCopy(copy)}>
+                      Restore
+                    </button>
+                  </div>
                 </li>
               )
             })}

@@ -47,7 +47,7 @@ vi.mock('./imageOptimize.js', () => ({
   optimizeImageToDataUrl: vi.fn(async () => 'data:image/webp;base64,ZmFrZQ=='),
 }))
 
-const { uploadUserMedia, deleteUserMedia, getSignedUserMediaUrl, getUserMediaPath } = await import('./uploadUserMedia.js')
+const { uploadUserMedia, uploadEmbeddedImage, deleteUserMedia, getSignedUserMediaUrl, getUserMediaPath } = await import('./uploadUserMedia.js')
 const { optimizeImage, optimizeImageToDataUrl } = await import('./imageOptimize.js')
 
 describe('uploadUserMedia', () => {
@@ -121,6 +121,54 @@ describe('uploadUserMedia', () => {
       category: 'covers',
       quotaBytes: 1_000_000,
     })).rejects.toThrow('Upload failed: bucket not found')
+  })
+})
+
+describe('uploadEmbeddedImage', () => {
+  beforeEach(() => {
+    mockState.uploadResult = { error: null }
+    mockState.uploadCalls = []
+    mockState.offlineMode = false
+    vi.clearAllMocks()
+  })
+
+  const dataUrl = 'data:image/png;base64,ZmFrZS1wbmctYnl0ZXM='
+
+  it('requires a userId and category', async () => {
+    await expect(uploadEmbeddedImage(dataUrl, { category: 'characters' }))
+      .rejects.toThrow('uploadEmbeddedImage requires a userId.')
+    await expect(uploadEmbeddedImage(dataUrl, { userId: 'user-1' }))
+      .rejects.toThrow('uploadEmbeddedImage requires a category.')
+  })
+
+  it('rejects a value that is not a base64 image data URL', async () => {
+    await expect(uploadEmbeddedImage('yow-media:user-1/characters/abc.webp', { userId: 'user-1', category: 'characters' }))
+      .rejects.toThrow('Not a base64 image data URL.')
+    await expect(uploadEmbeddedImage('https://example.com/a.png', { userId: 'user-1', category: 'characters' }))
+      .rejects.toThrow('Not a base64 image data URL.')
+  })
+
+  it('returns the data URL unchanged in offline mode, without touching Supabase', async () => {
+    mockState.offlineMode = true
+    const result = await uploadEmbeddedImage(dataUrl, { userId: 'user-1', category: 'characters' })
+    expect(result).toBe(dataUrl)
+    expect(mockState.uploadCalls).toHaveLength(0)
+  })
+
+  it('uploads the decoded bytes directly, skipping optimizeImage, and returns a private media reference', async () => {
+    const url = await uploadEmbeddedImage(dataUrl, { userId: 'user-1', category: 'characters' })
+
+    expect(optimizeImage).not.toHaveBeenCalled()
+    expect(mockState.uploadCalls).toHaveLength(1)
+    expect(mockState.uploadCalls[0].path).toMatch(/^user-1\/characters\/[a-f0-9-]+\.png$/)
+    expect(mockState.uploadCalls[0].opts).toEqual({ contentType: 'image/png', upsert: false })
+    expect(url).toBe(`yow-media:${mockState.uploadCalls[0].path}`)
+  })
+
+  it('surfaces a Supabase upload error as a thrown Error', async () => {
+    mockState.uploadResult = { error: { message: 'bucket not found' } }
+    await expect(uploadEmbeddedImage(dataUrl, { userId: 'user-1', category: 'characters' }))
+      .rejects.toThrow('Upload failed: bucket not found')
   })
 })
 

@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { OFFLINE_MODE } from './offlineMock'
+import { uploadEmbeddedImage } from './uploadUserMedia'
 
 // Tables that hold per-novel entity rows
 const NOVEL_TABLES = [
@@ -48,6 +49,82 @@ const TABLE_TO_KEY = {
 }
 
 const APP_DATA_TABLES = [...USER_TABLES, ...NOVEL_TABLES]
+
+// Storage category per table, mirroring the categories the app's own upload
+// UIs already use (see uploadUserMedia() call sites) so relocated images land
+// next to freshly-uploaded ones instead of in a separate bucket layout.
+const CATEGORY_BY_TABLE = {
+  characters: 'characters',
+  factions: 'factions',
+  locations: 'locations',
+  novels: 'covers',
+  series_items: 'series',
+  comic_pages: 'comic',
+  comic_panels: 'comic',
+}
+
+const BASE64_IMAGE_PREFIX = 'data:image'
+const MAX_SCAN_DEPTH = 4
+
+// Recursively finds any string field holding an inline base64 image (a
+// `data:image/...;base64,...` value) and uploads it via uploadEmbeddedImage,
+// replacing the field with the returned yow-media: Storage reference.
+//
+// Why this exists: uploadUserMedia() has routed new uploads made through the
+// app's own file pickers to Storage since 2026-07-27, but that only covers
+// that one entry point. Anything that lands in these tables another way —
+// importing/restoring a project export whose JSON still has images inlined,
+// or an older row from before that migration shipped — skips uploadUserMedia
+// entirely and gets written to the JSONB `data` column as-is. On a
+// large/image-heavy account that turns into multi-MB rows, which is what
+// caused the login statement-timeout failures this was written to fix (see
+// scripts/migrate_embedded_images_to_storage.mjs for the one-off backfill of
+// data that already made it into the DB before this existed). This is the
+// forward-looking half of that fix: a safety net at the single choke point
+// every entity write passes through, so no future code path can reintroduce
+// the same bloat, whether or not it remembers to call uploadUserMedia itself.
+//
+// Failures are logged and left as-is rather than thrown — one bad image
+// shouldn't block the rest of a save. maxDepth guards against pathological
+// nesting; every field shape in these tables is well within it.
+async function stripEmbeddedImages(table, userId, items) {
+  const category = CATEGORY_BY_TABLE[table]
+  if (!category || !items?.length) return items
+
+  let changed = false
+
+  async function walk(value, depth) {
+    if (depth > MAX_SCAN_DEPTH || value == null) return value
+
+    if (typeof value === 'string') {
+      if (!value.startsWith(BASE64_IMAGE_PREFIX)) return value
+      try {
+        const ref = await uploadEmbeddedImage(value, { userId, category })
+        changed = true
+        return ref
+      } catch (error) {
+        console.warn(`[sync] could not relocate embedded image in ${table}:`, error)
+        return value
+      }
+    }
+
+    if (Array.isArray(value)) {
+      return Promise.all(value.map(v => walk(v, depth + 1)))
+    }
+
+    if (typeof value === 'object') {
+      const entries = await Promise.all(
+        Object.entries(value).map(async ([k, v]) => [k, await walk(v, depth + 1)])
+      )
+      return Object.fromEntries(entries)
+    }
+
+    return value
+  }
+
+  const next = await Promise.all(items.map(item => walk(item, 0)))
+  return changed ? next : items
+}
 
 function getTableRows(table, userId, items = []) {
   if (!items?.length) return []
@@ -178,7 +255,8 @@ export async function loadUserData(userId) {
 export async function upsertItems(table, userId, items) {
   if (OFFLINE_MODE || !items?.length) return
 
-  const rows = getTableRows(table, userId, items)
+  const cleanItems = await stripEmbeddedImages(table, userId, items)
+  const rows = getTableRows(table, userId, cleanItems)
   const { error } = await supabase.from(table).upsert(rows)
   throwIfSupabaseError(error, `upsert error for ${table}`)
 }

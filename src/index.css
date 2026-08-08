@@ -16443,6 +16443,13 @@ body {
   margin-bottom: 5px;
 }
 
+.ms-catalogue-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .ms-catalogue-primary,
 .ms-catalogue-secondary {
   flex-shrink: 0;
@@ -16482,6 +16489,18 @@ body {
 
 .ms-catalogue-checkbox input {
   accent-color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .ms-catalogue-current,
+  .ms-catalogue-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ms-catalogue-actions {
+    justify-content: flex-end;
+  }
 }
 
 /* Toolbar word-count text */
