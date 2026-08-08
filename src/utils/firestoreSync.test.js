@@ -9,6 +9,16 @@ const mockState = vi.hoisted(() => ({
   // the normal success response — lets tests simulate a table query that
   // fails N times before succeeding, or fails on every attempt.
   errorQueues: {},
+  embeddedUploadCalls: [],
+  embeddedUploadShouldFail: false,
+}))
+
+vi.mock('./uploadUserMedia', () => ({
+  uploadEmbeddedImage: vi.fn(async (dataUrl, { userId, category }) => {
+    mockState.embeddedUploadCalls.push({ dataUrl, userId, category })
+    if (mockState.embeddedUploadShouldFail) throw new Error('upload failed')
+    return `yow-media:${userId}/${category}/relocated.webp`
+  }),
 }))
 
 vi.mock('../supabase', () => ({
@@ -126,6 +136,81 @@ describe('loadUserData', () => {
     ]
 
     await expect(loadUserData('user-1')).rejects.toThrow(/characters/)
+  })
+})
+
+describe('upsertItems embedded-image safety net', () => {
+  beforeEach(() => {
+    mockState.tables = {}
+    mockState.upserts = []
+    mockState.embeddedUploadCalls = []
+    mockState.embeddedUploadShouldFail = false
+  })
+
+  it('relocates an inline base64 image field to Storage before writing the row', async () => {
+    const { upsertItems } = await import('./firestoreSync.js')
+
+    await upsertItems('characters', 'user-1', [
+      { id: 'char-1', novelId: 'novel-1', name: 'Cara', image: 'data:image/png;base64,ZmFrZQ==' },
+    ])
+
+    expect(mockState.embeddedUploadCalls).toEqual([
+      { dataUrl: 'data:image/png;base64,ZmFrZQ==', userId: 'user-1', category: 'characters' },
+    ])
+    const row = mockState.upserts.find(u => u.table === 'characters').rows[0]
+    expect(row.data.image).toBe('yow-media:user-1/characters/relocated.webp')
+  })
+
+  it('leaves already-migrated rows (yow-media: refs, plain URLs, no image) untouched, without calling the uploader', async () => {
+    const { upsertItems } = await import('./firestoreSync.js')
+
+    const items = [
+      { id: 'char-1', novelId: 'novel-1', name: 'Already migrated', image: 'yow-media:user-1/characters/abc.webp' },
+      { id: 'char-2', novelId: 'novel-1', name: 'No image at all' },
+    ]
+    await upsertItems('characters', 'user-1', items)
+
+    expect(mockState.embeddedUploadCalls).toHaveLength(0)
+    const rows = mockState.upserts.find(u => u.table === 'characters').rows
+    expect(rows[0].data.image).toBe('yow-media:user-1/characters/abc.webp')
+    expect(rows[1].data).toEqual(items[1])
+  })
+
+  it('finds embedded images nested inside arrays/objects (e.g. comic panels), not just top-level fields', async () => {
+    const { upsertItems } = await import('./firestoreSync.js')
+
+    await upsertItems('comic_pages', 'user-1', [
+      { id: 'page-1', novelId: 'novel-1', panels: [{ id: 'p1', imageUrl: 'data:image/png;base64,ZmFrZQ==' }] },
+    ])
+
+    expect(mockState.embeddedUploadCalls).toEqual([
+      { dataUrl: 'data:image/png;base64,ZmFrZQ==', userId: 'user-1', category: 'comic' },
+    ])
+    const row = mockState.upserts.find(u => u.table === 'comic_pages').rows[0]
+    expect(row.data.panels[0].imageUrl).toBe('yow-media:user-1/comic/relocated.webp')
+  })
+
+  it('fails open: keeps the original base64 and still saves the rest of the row if the relocation upload errors', async () => {
+    mockState.embeddedUploadShouldFail = true
+    const { upsertItems } = await import('./firestoreSync.js')
+
+    await upsertItems('characters', 'user-1', [
+      { id: 'char-1', novelId: 'novel-1', name: 'Cara', image: 'data:image/png;base64,ZmFrZQ==' },
+    ])
+
+    const row = mockState.upserts.find(u => u.table === 'characters').rows[0]
+    expect(row.data.image).toBe('data:image/png;base64,ZmFrZQ==')
+    expect(row.data.name).toBe('Cara')
+  })
+
+  it('does not scan tables with no known image field (no CATEGORY_BY_TABLE entry)', async () => {
+    const { upsertItems } = await import('./firestoreSync.js')
+
+    await upsertItems('timeline_events', 'user-1', [
+      { id: 'evt-1', novelId: 'novel-1', description: 'data:image/png;base64,ZmFrZQ==' },
+    ])
+
+    expect(mockState.embeddedUploadCalls).toHaveLength(0)
   })
 })
 

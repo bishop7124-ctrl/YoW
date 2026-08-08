@@ -16,6 +16,12 @@ const INTERVIEW_MODES = [
   { id: 'dialogue',      label: 'Dialogue voice',  desc: 'Test speaking style and patterns' },
 ]
 
+function ideaTitleFromInterview(content, characterName) {
+  const firstLine = content.trim().split(/\n+/).find(Boolean) || 'Interview capture'
+  const cleaned = firstLine.replace(/\s+/g, ' ').slice(0, 76)
+  return characterName ? `${characterName}: ${cleaned}` : cleaned
+}
+
 function Avatar({ name }) {
   const initials = name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?'
   return (
@@ -38,7 +44,7 @@ export default function CharacterInterview({ store, userId }) {
   const [streaming,      setStreaming]      = useState(false)
   const [error,          setError]         = useState(null)
   const [interviewId,    setInterviewId]   = useState(null)
-  const [savedNotes,     setSavedNotes]    = useState([])
+  const [savedIdeas,     setSavedIdeas]    = useState([])
   const [savingNote,     setSavingNote]    = useState(null)
   const [noteSaved,      setNoteSaved]     = useState(null)
   const [started,        setStarted]       = useState(false)
@@ -71,7 +77,7 @@ export default function CharacterInterview({ store, userId }) {
     setCharId(session.character_id)
     setMode(session.mode || 'general')
     setMessages(session.messages || [])
-    setSavedNotes(session.saved_notes || [])
+    setSavedIdeas(session.saved_notes || [])
     setInterviewId(session.id)
     setStarted(true)
   }, [])
@@ -95,7 +101,7 @@ export default function CharacterInterview({ store, userId }) {
   const startInterview = useCallback(async () => {
     if (!charId || !character) return
     setMessages([])
-    setSavedNotes([])
+    setSavedIdeas([])
     setInterviewId(null)
     setError(null)
     setStarted(true)
@@ -153,23 +159,48 @@ export default function CharacterInterview({ store, userId }) {
         const final = [...nextMsgs, { role: 'assistant', content: buffer }]
         setMessages(final)
         if (interviewId) {
-          updateInterview(interviewId, final, savedNotes).catch(() => {})
+          updateInterview(interviewId, final, savedIdeas).catch(() => {})
         }
       },
       onError: msg => { ctl.finish(); setStreaming(false); setError(msg) },
     })
-  }, [input, streaming, character, messages, novel, store, mode, timelinePos, interviewId, savedNotes, userId, begin])
+  }, [input, streaming, character, messages, novel, store, mode, timelinePos, interviewId, savedIdeas, userId, begin])
 
   const handleCancel = useCallback(() => {
     cancel()
     setStreaming(false)
   }, [cancel])
 
-  const saveNote = useCallback(async (content, msgIndex) => {
-    const note = { content, savedAt: new Date().toISOString(), msgIndex }
-    const next = [...savedNotes, note]
-    setSavedNotes(next)
+  const saveIdea = useCallback(async (content, msgIndex) => {
     setSavingNote(msgIndex)
+    const rawIdeas = (store.ideaEntries || []).filter(idea => (idea.status || 'raw') === 'raw')
+    const maxOrder = rawIdeas.length ? Math.max(...rawIdeas.map(idea => idea.order || 0)) : -1
+    const savedAt = new Date().toISOString()
+    const idea = store.addIdeaEntry?.({
+      title: ideaTitleFromInterview(content, character?.name),
+      description: content,
+      body: content,
+      tags: ['character-interview'],
+      status: 'raw',
+      order: maxOrder + 1,
+      updatedAt: Date.now(),
+      source: {
+        type: 'character-interview',
+        interviewId,
+        messageIndex: msgIndex,
+        mode,
+        savedAt,
+      },
+      linkedEntities: character ? [{ type: 'character', id: character.id, name: character.name || 'Character' }] : [],
+    })
+    if (!idea) {
+      setSavingNote(null)
+      setError('Could not save this answer as an idea.')
+      return
+    }
+    const capture = { content, savedAt, msgIndex, ideaId: idea.id }
+    const next = [...savedIdeas, capture]
+    setSavedIdeas(next)
     if (interviewId) {
       try { await updateInterview(interviewId, messages, next) } catch { /* local-only */ }
     }
@@ -178,12 +209,12 @@ export default function CharacterInterview({ store, userId }) {
       setNoteSaved(msgIndex)
       setTimeout(() => setNoteSaved(null), 2000)
     }, 400)
-  }, [savedNotes, interviewId, messages])
+  }, [store, character, interviewId, mode, savedIdeas, messages])
 
   const reset = () => {
     setStarted(false)
     setMessages([])
-    setSavedNotes([])
+    setSavedIdeas([])
     setInterviewId(null)
     setError(null)
   }
@@ -203,7 +234,7 @@ export default function CharacterInterview({ store, userId }) {
 
         <div style={{ background: 'color-mix(in srgb, #f59e0b 8%, transparent)', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)', borderRadius: 8, padding: '8px 12px', marginBottom: 20 }}>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            ⚠️ Interview responses are exploratory and <strong style={{ color: 'var(--text-main)' }}>not automatically canon</strong>. Save useful answers to notes manually.
+            ⚠️ Interview responses are exploratory and <strong style={{ color: 'var(--text-main)' }}>not automatically canon</strong>. Save useful answers as raw ideas.
           </p>
         </div>
 
@@ -319,7 +350,7 @@ export default function CharacterInterview({ store, userId }) {
 
       {/* Canon notice */}
       <div style={{ padding: '6px 16px', background: 'color-mix(in srgb, #f59e0b 6%, transparent)', borderBottom: '1px solid color-mix(in srgb, #f59e0b 20%, transparent)', flexShrink: 0 }}>
-        <p style={{ fontSize: 10, color: '#f59e0b', margin: 0 }}>Exploratory mode — responses are not automatically canon. Save useful answers to notes.</p>
+        <p style={{ fontSize: 10, color: '#f59e0b', margin: 0 }}>Exploratory mode — responses are not automatically canon. Save useful answers as raw ideas.</p>
       </div>
 
       {!aiConfigured && (
@@ -355,11 +386,11 @@ export default function CharacterInterview({ store, userId }) {
               </div>
               {msg.role === 'assistant' && msg.content && !streaming && (
                 <button
-                  onClick={() => saveNote(msg.content, i)}
+                  onClick={() => saveIdea(msg.content, i)}
                   disabled={savingNote === i}
                   style={{ marginTop: 5, fontSize: 10, fontWeight: 600, color: noteSaved === i ? '#4ade80' : 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}
                 >
-                  {noteSaved === i ? '✓ Saved to notes' : savingNote === i ? 'Saving…' : '+ Save to notes'}
+                  {noteSaved === i ? '✓ Saved as idea' : savingNote === i ? 'Saving…' : '+ Save as idea'}
                 </button>
               )}
             </div>
@@ -373,14 +404,14 @@ export default function CharacterInterview({ store, userId }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Saved notes panel */}
-      {savedNotes.length > 0 && (
+      {/* Saved ideas panel */}
+      {savedIdeas.length > 0 && (
         <details style={{ flexShrink: 0, borderTop: '1px solid var(--border)' }}>
           <summary style={{ padding: '8px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer' }}>
-            {savedNotes.length} saved note{savedNotes.length !== 1 ? 's' : ''} from this interview
+            {savedIdeas.length} saved idea{savedIdeas.length !== 1 ? 's' : ''} from this interview
           </summary>
           <div style={{ padding: '0 16px 12px', maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {savedNotes.map((note, i) => (
+            {savedIdeas.map((note, i) => (
               <div key={i} style={{ background: 'color-mix(in srgb, var(--bg-main) 60%, transparent)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 10px' }}>
                 <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.5, margin: '0 0 3px', whiteSpace: 'pre-wrap' }}>{note.content}</p>
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>{new Date(note.savedAt).toLocaleTimeString()}</p>

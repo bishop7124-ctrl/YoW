@@ -512,6 +512,29 @@ export default function Manuscript({ store, userId, membership = null }) {
     setCatalogueOpen(false)
   }, [restoreManuscriptCopy])
 
+  const handleDownloadManuscriptCopy = useCallback(async (copy) => {
+    if (!copy) return
+    const copyChapterNumbers = {}
+    let count = 1
+    ;(copy.acts || [])
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .forEach(act => {
+        ;(copy.chapters || [])
+          .filter(chapter => chapter.actId === act.id)
+          .sort((a, b) => a.order - b.order)
+          .forEach(chapter => { copyChapterNumbers[chapter.id] = count++ })
+      })
+    const copyTitle = copy.title || 'Retired manuscript'
+    await exportToDocx(
+      { ...activeNovel, title: `${activeNovel?.title || copy.projectTitle || 'Untitled'} - ${copyTitle}` },
+      copy.acts || [],
+      copy.chapters || [],
+      copy.scenes || [],
+      copyChapterNumbers
+    )
+  }, [activeNovel])
+
   const handleFinaliseDraft = useCallback(() => {
     if (!activeNovel?.id || !isNovelProject) return
     const now = new Date()
@@ -1313,6 +1336,7 @@ export default function Manuscript({ store, userId, membership = null }) {
           currentStats={manuscriptCopyStats}
           onRetire={handleRetireManuscript}
           onRestore={handleRestoreManuscriptCopy}
+          onDownload={handleDownloadManuscriptCopy}
           onClose={() => setCatalogueOpen(false)}
         />
       )}

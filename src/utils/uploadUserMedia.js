@@ -62,6 +62,51 @@ export async function uploadUserMedia(file, options = {}) {
 }
 
 /**
+ * Uploads an already-encoded base64 image (a `data:image/...;base64,...`
+ * string) straight to Storage, skipping optimizeImage's resize/recompress
+ * pass. Used by firestoreSync's embedded-image safety net (see
+ * stripEmbeddedImages below) to move legacy base64 image data — e.g. from a
+ * pre-2026-07-27 upload, or a project import/restore whose export JSON still
+ * had images inlined — out of the JSONB columns and into Storage, the same
+ * place uploadUserMedia() puts new uploads. No quota check: this is
+ * relocating bytes the account already "has" (as inline JSON) rather than
+ * adding new usage, and refusing to relocate them for being over quota would
+ * just leave the account stuck with the oversized rows that cause the
+ * statement-timeout failure this exists to prevent.
+ *
+ * @param {string} dataUrl
+ * @param {object} options
+ * @param {string} options.userId
+ * @param {string} options.category
+ * @returns {Promise<string>} the uploaded image's private media reference
+ */
+export async function uploadEmbeddedImage(dataUrl, options = {}) {
+  const { userId, category } = options
+  if (!category) throw new Error('uploadEmbeddedImage requires a category.')
+  if (!userId) throw new Error('uploadEmbeddedImage requires a userId.')
+
+  const match = /^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/.exec(dataUrl)
+  if (!match) throw new Error('Not a base64 image data URL.')
+  const [, mimeType, base64] = match
+
+  if (OFFLINE_MODE) return dataUrl
+
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  const blob = new Blob([bytes], { type: mimeType })
+
+  const path = `${userId}/${category}/${crypto.randomUUID()}.${extensionForMimeType(mimeType)}`
+  const { error } = await supabase.storage.from(BUCKET_NAME).upload(path, blob, {
+    contentType: mimeType,
+    upsert: false,
+  })
+  if (error) throw new Error(`Upload failed: ${error.message}`)
+
+  return `${PRIVATE_MEDIA_PREFIX}${path}`
+}
+
+/**
  * Returns the object path for a saved user-media reference. Supports the new
  * private yow-media:path form as well as legacy public URLs already saved in
  * project records before the bucket was made private.
