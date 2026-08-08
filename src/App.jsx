@@ -715,6 +715,17 @@ function AppInner() {
     }
   }, [])
 
+  // The storage-exceeded notice above is sticky by design (see comment in
+  // handleReadOnly) so it survives until the user dismisses it — but AppInner
+  // itself never remounts across a sign-out/sign-in, so with no reset here a
+  // banner raised for one account stayed on screen after switching to a
+  // completely different (not-over-quota) account. Clear it on every user
+  // change instead; it'll re-raise on its own if the new account actually
+  // hits a blocked write.
+  useEffect(() => {
+    setReadOnlyNotice(null)
+  }, [userId])
+
   // Force default theme on all public/marketing pages so user theme choices
   // never leak into the landing experience.
   const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || showDownload || !!founderProfileSlug || !user

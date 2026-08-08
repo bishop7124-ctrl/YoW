@@ -17,7 +17,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What happens if I don\'t renew cloud hosting?',
-        a: "You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 3 MB allowance unless you renew Cloud Mode.",
+        a: "You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 250 MB allowance unless you renew Cloud Mode.",
       },
       {
         q: 'Do monthly subscribers pay a cloud hosting renewal?',
@@ -45,8 +45,8 @@ const FAQ_SECTIONS = [
     heading: 'Features & AI',
     items: [
       {
-        q: 'What is bring-your-own-key AI?',
-        a: 'Your Own World supports connecting your own API keys from providers like OpenRouter, Google AI, or Anthropic. This means you pay your AI provider directly — YOW never marks up AI usage. All paid plans include this; the Free plan does not include AI features.',
+        q: 'What does "connect your own AI provider" mean?',
+        a: 'On any paid plan, you connect your own account from a provider like ChatGPT, Claude, or OpenRouter. You pay that provider directly for what you use — YOW never marks up AI usage or resells it to you. The Free plan doesn\'t include AI features.',
       },
       {
         q: 'Do the AI tools know about my specific world?',
@@ -101,7 +101,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'Is there a free plan?',
-        a: "Yes. The Free plan lets you run one active text-first cloud project with 3 MB storage. Map Builder and AI Tools stay visible but locked, and no credit card is required to start.",
+        a: "Yes. The Free plan gives you one project with the full writing and worldbuilding toolkit — including Map Builder — plus 250 MB storage. Only AI tools are paid-only. No credit card is required to start.",
       },
       {
         q: 'Does YOW work on mobile?',

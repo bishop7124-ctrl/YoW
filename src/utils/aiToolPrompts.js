@@ -223,6 +223,51 @@ function getScopedProseScenes(scenes, chapters, acts, selection) {
   return { units: ordered, targetLabel: 'the full project' }
 }
 
+function orderedComicPagesForProject(comicPages, chapters, acts) {
+  const pagesByIssue = new Map()
+  ;(comicPages || []).forEach(page => {
+    if (!pagesByIssue.has(page.issueId)) pagesByIssue.set(page.issueId, [])
+    pagesByIssue.get(page.issueId).push(page)
+  })
+  const issuesByVolume = new Map()
+  ;(chapters || []).forEach(issue => {
+    if (!issuesByVolume.has(issue.actId)) issuesByVolume.set(issue.actId, [])
+    issuesByVolume.get(issue.actId).push(issue)
+  })
+
+  const ordered = []
+  sortByOrder(acts).forEach(volume => {
+    sortByOrder(issuesByVolume.get(volume.id)).forEach(issue => {
+      sortByOrder(pagesByIssue.get(issue.id)).forEach(page => ordered.push(page))
+    })
+  })
+  const seen = new Set(ordered.map(page => page.id))
+  sortByOrder(comicPages).forEach(page => {
+    if (!seen.has(page.id)) ordered.push(page)
+  })
+  return ordered
+}
+
+function getScopedComicPages(comicPages, chapters, acts, selection) {
+  const ordered = orderedComicPagesForProject(comicPages, chapters, acts)
+  if (selection.mode === 'focused_chapter') {
+    const issue = chapters.find(c => c.id === selection.targetId) || sortByOrder(chapters)[0]
+    return {
+      units: issue ? ordered.filter(page => page.issueId === issue.id) : [],
+      targetLabel: issue?.title || 'first issue',
+    }
+  }
+  if (selection.mode === 'act_review') {
+    const volume = acts.find(a => a.id === selection.targetId) || sortByOrder(acts)[0]
+    const issueIds = new Set((chapters || []).filter(issue => issue.actId === volume?.id).map(issue => issue.id))
+    return {
+      units: volume ? ordered.filter(page => issueIds.has(page.issueId)) : [],
+      targetLabel: volume?.title || 'first volume',
+    }
+  }
+  return { units: ordered, targetLabel: 'the full project' }
+}
+
 export function getManuscriptCoverage(units, selection = { mode: 'project_scan' }) {
   const all = units || []
   const mode = getAiContextMode(selection?.mode).id
@@ -240,10 +285,12 @@ export function getAiContextTargets(store, novelId, novel, mode) {
   const targetKind = novel?.type === 'comic'
     ? (mode === 'focused_chapter' ? 'issue' : 'volume')
     : (mode === 'focused_chapter' ? 'chapter' : 'act')
+  const acts = (store.acts || []).filter(item => item.novelId === novelId)
+  const chapters = (store.chapters || []).filter(item => item.novelId === novelId)
   const source = targetKind === 'issue' || targetKind === 'chapter'
-    ? (store.chapters || []).filter(item => item.novelId === novelId)
-    : (store.acts || []).filter(item => item.novelId === novelId)
-  return sortByOrder(source).map(item => ({ id: item.id, label: item.title || `Untitled ${targetKind}` }))
+    ? sortByOrder(acts).flatMap(act => sortByOrder(chapters.filter(chapter => chapter.actId === act.id)))
+    : sortByOrder(acts)
+  return source.map(item => ({ id: item.id, label: item.title || `Untitled ${targetKind}` }))
 }
 
 function summarisePanel(panel, index) {
@@ -260,7 +307,7 @@ function summarisePanel(panel, index) {
 // rather than prose scenes — this mirrors summariseScenes for that model so
 // Plot Hole/Lore Conflict/Style tools can actually read comic content instead
 // of silently analysing an empty manuscript section.
-function summariseComicPages(comicPages, comicPanels, chapters, acts) {
+function summariseComicPages(comicPages, comicPanels, chapters, acts, { maxUnits = CONTEXT_LIMITS.project_scan.maxUnits } = {}) {
   const chapMap  = Object.fromEntries((chapters || []).map(c => [c.id, c]))
   const actMap   = Object.fromEntries((acts || []).map(a => [a.id, a]))
   const panelsByPage = {}
@@ -268,7 +315,7 @@ function summariseComicPages(comicPages, comicPanels, chapters, acts) {
     if (!panelsByPage[p.pageId]) panelsByPage[p.pageId] = []
     panelsByPage[p.pageId].push(p)
   })
-  const visible = (comicPages || []).slice(0, MAX_SCENES_INLINE)
+  const visible = sortByOrder(comicPages).slice(0, maxUnits)
   return visible.map(page => {
     const issue = chapMap[page.issueId]
     const volume = issue ? actMap[issue.actId] : null
@@ -297,7 +344,10 @@ export function getManuscriptCoverageForNovel(store, novelId, novel, contextSele
   if (novel?.type === 'comic') {
     const comicPages  = (store.comicPages  || []).filter(p => p.novelId === novelId)
     const comicPanels = (store.comicPanels || []).filter(p => comicPages.some(page => page.id === p.pageId))
-    return getManuscriptCoverage(comicPages.map(page => flattenComicPageForCoverage(page, comicPanels)), selection)
+    const chapters = (store.chapters || []).filter(c => c.novelId === novelId)
+    const acts = (store.acts || []).filter(a => a.novelId === novelId)
+    const { units } = getScopedComicPages(comicPages, chapters, acts, selection)
+    return getManuscriptCoverage(units.map(page => flattenComicPageForCoverage(page, comicPanels)), selection)
   }
   const chapters = (store.chapters || []).filter(c => c.novelId === novelId)
   const acts = (store.acts || []).filter(a => a.novelId === novelId)
@@ -352,7 +402,9 @@ function buildManuscriptContentSection(store, novelId, novel, { suffix = '', con
     const comicPages  = (store.comicPages  || []).filter(p => p.novelId === novelId)
     const comicPanels = (store.comicPanels || []).filter(p => comicPages.some(page => page.id === p.pageId))
     if (!comicPages.length) return ''
-    return `## COMIC PAGES${suffix}\n${summariseComicPages(comicPages, comicPanels, chapters, acts)}`
+    const { units, targetLabel } = getScopedComicPages(comicPages, chapters, acts, selection)
+    const contextNote = `Context mode: ${mode.label}. ${mode.description} Target: ${targetLabel}.`
+    return `## COMIC PAGES${suffix}\n${contextNote}\n${summariseComicPages(units, comicPanels, chapters, acts, limit)}`
   }
 
   const scenes = (store.scenes || []).filter(s => s.novelId === novelId)

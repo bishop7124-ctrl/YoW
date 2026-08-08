@@ -12,10 +12,37 @@ const QUICK_PROMPTS = [
   { label: 'Add dialogue', text: 'Write a short, natural dialogue exchange that fits the current scene context and characters.' },
 ]
 
+const POV_OPTIONS = [
+  { value: 'first person', label: 'First person' },
+  { value: 'second person', label: 'Second person' },
+  { value: 'third person limited', label: 'Third limited' },
+  { value: 'third person omniscient', label: 'Third omniscient' },
+]
+
+const TENSE_OPTIONS = [
+  { value: 'past tense', label: 'Past tense' },
+  { value: 'present tense', label: 'Present tense' },
+  { value: 'future tense', label: 'Future tense' },
+]
+
 function loadAIConfig(userId) {
   const cfg = getActiveAiConfig(userId)
   if (!cfg.apiKey?.trim()) return null
   return cfg
+}
+
+function buildRewritePrompt(kind, target, itemLabel, hasSelectedText) {
+  const scope = hasSelectedText ? 'the highlighted text' : `the focused ${itemLabel.toLowerCase()}`
+  const instruction = kind === 'pov'
+    ? `Rewrite ${scope} in ${target} point of view.`
+    : `Rewrite ${scope} in ${target}.`
+
+  return [
+    instruction,
+    'Preserve the original events, meaning, character intent, continuity, and authorial voice.',
+    'Adjust pronouns, verb forms, interiority, and narration only as needed for the requested change.',
+    'Return only the rewritten prose, with no explanation or markdown.',
+  ].join(' ')
 }
 
 function buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText = '') {
@@ -51,11 +78,14 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   const [suggestion, setSuggestion] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
+  const [targetPov, setTargetPov] = useState(POV_OPTIONS[0].value)
+  const [targetTense, setTargetTense] = useState(TENSE_OPTIONS[0].value)
   const abortRef = useRef(false)
 
   const configured = !!loadAIConfig(userId)
   const activeType = getProjectType(activeNovel?.type)
   const itemLabel = activeType.structure?.level3 || 'Scene'
+  const hasSelectedText = !!selectedText.trim()
   const quickPrompts = QUICK_PROMPTS.map(q => ({
     ...q,
     text: q.text.replaceAll('scene', itemLabel.toLowerCase()).replaceAll('Scene', itemLabel),
@@ -125,6 +155,63 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
             {q.label}
           </button>
         ))}
+      </div>
+
+      <div className="ms-panel-section-header" style={{ marginTop: 14 }}>Rewrite options</div>
+      <div className="ai-rewrite-tools">
+        <label className="ai-rewrite-field">
+          <span>Point of view</span>
+          <div className="ai-rewrite-row">
+            <select
+              value={targetPov}
+              onChange={e => setTargetPov(e.target.value)}
+              disabled={streaming || !configured}
+              className="ai-rewrite-select"
+            >
+              {POV_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              className="ai-chip ai-rewrite-btn"
+              disabled={streaming || !configured || !activeScene}
+              title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
+              onClick={() => {
+                setPrompt('')
+                generate(buildRewritePrompt('pov', targetPov, itemLabel, hasSelectedText))
+              }}
+            >
+              Change
+            </button>
+          </div>
+        </label>
+
+        <label className="ai-rewrite-field">
+          <span>Tense</span>
+          <div className="ai-rewrite-row">
+            <select
+              value={targetTense}
+              onChange={e => setTargetTense(e.target.value)}
+              disabled={streaming || !configured}
+              className="ai-rewrite-select"
+            >
+              {TENSE_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              className="ai-chip ai-rewrite-btn"
+              disabled={streaming || !configured || !activeScene}
+              title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
+              onClick={() => {
+                setPrompt('')
+                generate(buildRewritePrompt('tense', targetTense, itemLabel, hasSelectedText))
+              }}
+            >
+              Change
+            </button>
+          </div>
+        </label>
       </div>
 
 	      {/* Custom prompt */}

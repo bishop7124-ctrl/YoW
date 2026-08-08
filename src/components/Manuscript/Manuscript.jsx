@@ -13,13 +13,80 @@ import { saveSceneVersion } from '../../utils/sceneVersions'
 import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
+import ManuscriptCatalogue from './ManuscriptCatalogue.jsx'
 import { FormatContent, NotesPanel, SaveIndicator } from './ManuscriptToolbar.jsx'
 import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
 import FocusedWritingShell, { ManuscriptZoomControl } from './FocusedWritingShell.jsx'
 import { useFocusedWritingMode } from './useFocusedWritingMode.js'
 import SceneConflictReview from './SceneConflictReview.jsx'
+import { useSceneWindow } from './useSceneWindow.js'
 
 const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
+
+// Rough placeholder height for a scene that hasn't been mounted (and measured) yet —
+// see useSceneWindow.js and the SceneSlot component below. Doesn't need to be exact:
+// it only has to be close enough that scrolling past an unmounted scene doesn't cause
+// a jarring jump, and it's replaced with the real measured height (SceneSlot's
+// ResizeObserver) the moment the scene is ever actually mounted, including on the very
+// next scroll past it in most cases (see ROOT_MARGIN in useSceneWindow.js).
+const PLACEHOLDER_HEADER_PX = 90
+function estimateSceneHeight(scene, formatSettings) {
+  const length = scene?.content?.length || 0
+  const fontSize = formatSettings?.fontSize || 19
+  const lineHeight = formatSettings?.lineHeight || 2
+  const lineHeightPx = fontSize * lineHeight
+  // ~68 characters/line at the default 19px font in the ~960px column; a bigger font
+  // fits fewer characters per line, so scale the estimate down as fontSize grows.
+  const charsPerLine = Math.max(30, 68 * (19 / fontSize))
+  const estimatedLines = Math.max(2, Math.ceil(length / charsPerLine))
+  return Math.round(PLACEHOLDER_HEADER_PX + estimatedLines * lineHeightPx)
+}
+
+// Stable per-scene wrapper: this div (and its `id`/`data-scene-id`, which
+// Manuscript.jsx's/StructureSidebar.jsx's scrollIntoView-by-id callers and
+// useSceneWindow.js's IntersectionObserver both rely on) never unmounts — only its
+// children swap between a real SceneEditor and a lightweight placeholder as the scene
+// scrolls in and out of the virtualization window. Keeping the wrapper stable (instead
+// of keying the whole scene item on `mount`) means useSceneWindow only has to
+// register/unregister this element once per scene, not on every mount/unmount toggle.
+function SceneSlot({ sceneId, mount, title, estimatedHeight, registerElement, onHeightMeasured, onActivatePlaceholder, children }) {
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    registerElement(sceneId, wrapperRef.current)
+    return () => registerElement(sceneId, null)
+  }, [sceneId, registerElement])
+
+  // Only measure while a real editor is mounted, and only via ResizeObserver (an
+  // async, layout-already-computed callback) — never a synchronous
+  // getBoundingClientRect()/scrollHeight read here, which would reintroduce exactly
+  // the forced-reflow cost this whole feature exists to avoid.
+  useEffect(() => {
+    if (!mount) return undefined
+    const el = wrapperRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(entries => {
+      const height = entries[0]?.contentRect?.height
+      if (height) onHeightMeasured(sceneId, height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [mount, sceneId, onHeightMeasured])
+
+  return (
+    <div ref={wrapperRef} id={`ms-scene-${sceneId}`} data-scene-id={sceneId}>
+      {mount ? children : (
+        <div
+          className="ms-scene-placeholder"
+          style={{ minHeight: estimatedHeight }}
+          onClick={() => onActivatePlaceholder(sceneId)}
+        >
+          <span className="ms-scene-placeholder-title">{title}</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const SESSION_PLAN_FIELDS = [
   { key: 'hooks', label: 'Hooks', placeholder: 'Opening hooks, rumors, clues, or pressure that pulls the group in.' },
@@ -39,6 +106,11 @@ const SESSION_RECAP_FIELDS = [
 
 const filledFields = (source, fields) =>
   fields.filter(field => String(source?.[field.key] || '').trim()).length
+
+const countWords = content => {
+  const trimmed = content?.trim()
+  return trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0
+}
 
 function CampaignSessionWorkflow({ chapter, encounters, labels, projectType, onUpdateChapter }) {
   const plan = chapter.sessionPlan || {}
@@ -113,11 +185,15 @@ export default function Manuscript({ store, userId, membership = null }) {
     moveAct, moveChapter, moveScene,
     characters, locations,
     setSelectedCharacterId, setSelectedLocationId,
+    loreEntries, factions, timeline, worldHistory, ideaEntries, storySchedule, rpgCharacters,
+    setSelectedLoreEntryId, setSelectedIdeaEntryId, setSelectedTimelineEventId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
+    retireManuscript, restoreManuscriptCopy,
     activeNovel, updateNovel,
     sceneConflicts = [], restoreSceneConflict, discardSceneConflict,
     syncStatus,
+    recordLocalWrite,
   } = store
 
   const projectTypeConfig = getProjectType(activeNovel?.type)
@@ -147,13 +223,54 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [versionHistorySceneId, setVersionHistorySceneId] = useState(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [pacingOpen, setPacingOpen] = useState(false)
+  const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [liveSceneContent, setLiveSceneContent] = useState({})
   const [aiSelectionContext, setAiSelectionContext] = useState({ sceneId: null, text: '' })
+  // Scenes forced to mount a real SceneEditor regardless of viewport position — see
+  // pinScene below. Bridges the gap between a programmatic jump/creation (which needs
+  // editorRefs populated *now*, synchronously-ish) and the IntersectionObserver in
+  // useSceneWindow.js actually catching up once the scroll lands.
+  const [pinnedSceneIds, setPinnedSceneIds] = useState(() => new Set())
 
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
   const editorRefs = useRef({})
   const focusedWriting = useFocusedWritingMode(userId)
+  const { inView: scenesInView, registerElement: registerSceneElement, supported: virtualizationSupported } = useSceneWindow(scrollContainerRef)
+  const sceneHeightCacheRef = useRef(new Map())
+  const handleHeightMeasured = useCallback((sceneId, height) => {
+    sceneHeightCacheRef.current.set(sceneId, height)
+  }, [])
+  const pinScene = useCallback((sceneId, duration = 1200) => {
+    setPinnedSceneIds(prev => (prev.has(sceneId) ? prev : new Set(prev).add(sceneId)))
+    window.setTimeout(() => {
+      setPinnedSceneIds(prev => {
+        if (!prev.has(sceneId)) return prev
+        const next = new Set(prev)
+        next.delete(sceneId)
+        return next
+      })
+    }, duration)
+  }, [])
+
+  const handleOpenReferenceEntry = useCallback((entry) => {
+    if (!entry) return
+    if (entry.type === 'character') setSelectedCharacterId?.(entry.rawId)
+    if (entry.type === 'location') setSelectedLocationId?.(entry.rawId)
+    if (entry.type === 'lore') setSelectedLoreEntryId?.(entry.rawId)
+    if (entry.type === 'idea') setSelectedIdeaEntryId?.(entry.rawId)
+    if (entry.type === 'timeline' || entry.type === 'history') setSelectedTimelineEventId?.(entry.rawId)
+
+    window.dispatchEvent(new CustomEvent('switch-section', {
+      detail: { section: entry.section },
+    }))
+  }, [
+    setSelectedCharacterId,
+    setSelectedLocationId,
+    setSelectedLoreEntryId,
+    setSelectedIdeaEntryId,
+    setSelectedTimelineEventId,
+  ])
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
   const activeSceneForAI = activeScene
@@ -181,6 +298,10 @@ export default function Manuscript({ store, userId, membership = null }) {
   const exportButtonLabel = isScriptProject ? 'Export Script' : 'Export'
   const finalizedDrafts = useMemo(
     () => Array.isArray(activeNovel?.finalizedDrafts) ? activeNovel.finalizedDrafts : [],
+    [activeNovel]
+  )
+  const manuscriptCopies = useMemo(
+    () => Array.isArray(activeNovel?.manuscriptCopies) ? activeNovel.manuscriptCopies : [],
     [activeNovel]
   )
   const readerDraftId = readerDraft.projectId === activeNovel?.id ? readerDraft.draftId : null
@@ -222,6 +343,20 @@ export default function Manuscript({ store, userId, membership = null }) {
   const handleLiveContentChange = useCallback((sceneId, content) => {
     setLiveSceneContent(prev => prev[sceneId] === content ? prev : { ...prev, [sceneId]: content })
   }, [])
+
+  // On every debounced store commit's trailing edge, SceneEditor.jsx flushes the
+  // localStorage draft (this call) immediately before calling onUpdate — which commits
+  // to the store via commitLocal, writing the very same `nf_scenes` key moments later
+  // (see the 2026-08-07 conflict-copy row in docs/ROADMAP.md for why the draft flush
+  // has to happen there at all). Telling the store's commitLocal "I (this tab) already
+  // wrote this" via recordLocalWrite means it recognizes its own sibling write instead
+  // of re-reading/re-merging the whole account's scenes as if another tab might have
+  // changed something — see the skip-check comment in useStore.js's commitLocal.
+  const handlePersistDraft = useCallback((scene, content, options) => {
+    const raw = persistSceneDraftToLocalStorage(scene, content, options)
+    if (raw !== undefined) recordLocalWrite?.('nf_scenes', raw)
+    return raw
+  }, [recordLocalWrite])
 
   const handleRestoreVersion = useCallback((version) => {
     const scene = scenes.find(s => s.id === version.sceneId)
@@ -332,9 +467,50 @@ export default function Manuscript({ store, userId, membership = null }) {
       : scene
   )), [liveSceneContent, scenes])
 
-  const totalWordCount = useMemo(() =>
-    liveScenes.reduce((acc, s) => acc + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0)
-  , [liveScenes])
+  // Re-splitting every scene's full text on every keystroke is fine for a short
+  // manuscript but becomes the dominant cost once total length reaches tens of
+  // thousands of words. `scenes` (the debounced store copy) only changes every
+  // ~400ms while typing, so the full-manuscript pass belongs there; per-keystroke
+  // work is then just a correction for whichever scene has an uncommitted live
+  // edit, which is O(1) rather than O(manuscript length).
+  const baseWordCount = useMemo(
+    () => scenes.reduce((acc, s) => acc + countWords(s.content), 0),
+    [scenes]
+  )
+  const sceneById = useMemo(() => new Map(scenes.map(s => [s.id, s])), [scenes])
+  const totalWordCount = useMemo(() => {
+    let total = baseWordCount
+    for (const sceneId of Object.keys(liveSceneContent)) {
+      const committed = sceneById.get(sceneId)
+      const liveContent = liveSceneContent[sceneId]
+      if (!committed || committed.content === liveContent) continue
+      total += countWords(liveContent) - countWords(committed.content)
+    }
+    return total
+  }, [baseWordCount, liveSceneContent, sceneById])
+
+  const manuscriptCopyStats = useMemo(() => ({
+    acts: acts.length,
+    chapters: chapters.length,
+    scenes: scenes.length,
+    words: totalWordCount,
+  }), [acts.length, chapters.length, scenes.length, totalWordCount])
+
+  const handleRetireManuscript = useCallback((title) => {
+    const copy = retireManuscript?.(title)
+    if (!copy) return
+    setLiveSceneContent({})
+    setReaderDraft({ projectId: null, draftId: null })
+    setCatalogueOpen(false)
+  }, [retireManuscript])
+
+  const handleRestoreManuscriptCopy = useCallback((copyId, options) => {
+    const copy = restoreManuscriptCopy?.(copyId, options)
+    if (!copy) return
+    setLiveSceneContent({})
+    setReaderDraft({ projectId: null, draftId: null })
+    setCatalogueOpen(false)
+  }, [restoreManuscriptCopy])
 
   const handleFinaliseDraft = useCallback(() => {
     if (!activeNovel?.id || !isNovelProject) return
@@ -366,13 +542,20 @@ export default function Manuscript({ store, userId, membership = null }) {
     setFinalizedPageIndex(0)
   }, [activeNovel, isNovelProject, acts, chapters, scenes, labels, finalizedDrafts, updateNovel])
 
+  // Built from `scenes` (the debounced store copy), not `liveScenes` — the act/chapter/scene
+  // ordering doesn't depend on in-progress keystrokes, so keying this off liveScenes was
+  // rebuilding the entire manuscript's flattened render list (and handing every SceneEditor
+  // a new `scene` object, defeating memoization) on every keystroke anywhere in the
+  // manuscript. This now only recomputes when structure changes or a scene's debounced
+  // content lands (~every 400ms while typing, not every keystroke). Live content for the
+  // scene actually being edited is merged back in at render time, just for that one scene.
   const orderedContent = useMemo(() => {
     const result = []
     acts.forEach(act => {
       const actChapters = chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order)
       result.push({ type: 'act', act, hasChapters: actChapters.length > 0 })
       actChapters.forEach(chap => {
-        const chapScenes = liveScenes.filter(s => s.chapterId === chap.id).sort((a, b) => a.order - b.order)
+        const chapScenes = scenes.filter(s => s.chapterId === chap.id).sort((a, b) => a.order - b.order)
         result.push({ type: 'chapter', chap, hasScenes: chapScenes.length > 0 })
         chapScenes.forEach((scene, idx) => {
           result.push({ type: 'scene', scene, sceneIndex: idx, chapterSceneCount: chapScenes.length, chap })
@@ -380,11 +563,34 @@ export default function Manuscript({ store, userId, membership = null }) {
       })
     })
     return result
-  }, [acts, chapters, liveScenes])
+  }, [acts, chapters, scenes])
+
+  // Under scene virtualization, a scene id that has never appeared before might land
+  // outside the current viewport window (e.g. a scene added from the Outline sidebar's
+  // own "+ Add Scene", which doesn't go through handleAddScene below) and briefly render
+  // as a placeholder — with no mounted SceneEditor to receive the focus() call whoever
+  // just created it is about to make. Pin every newly-seen scene id for a couple of
+  // seconds so it's always a real, mounted editor when a caller does the followup
+  // focus/scrollIntoView. `known === null` on the very first run means "just mounted the
+  // manuscript" — those aren't new, so don't pin the entire (possibly 80k-word) document.
+  const knownSceneIdsRef = useRef(null)
+  useEffect(() => {
+    const currentIds = new Set(scenes.map(s => s.id))
+    const known = knownSceneIdsRef.current
+    if (known === null) {
+      knownSceneIdsRef.current = currentIds
+      return
+    }
+    for (const id of currentIds) {
+      if (!known.has(id)) pinScene(id, 1500)
+    }
+    knownSceneIdsRef.current = currentIds
+  }, [scenes, pinScene])
 
   const handleSplitScene = (sceneId, chapterId, before, after) => {
     updateSceneContent(sceneId, before)
     const newScene = addScene(chapterId, labels.level3)
+    pinScene(newScene.id, 2000)
     setTimeout(() => {
       updateSceneContent(newScene.id, after)
       editorRefs.current[newScene.id]?.focus({ placeCursor: 'end' })
@@ -394,6 +600,7 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const handleAddScene = chapterId => {
     const newScene = addScene(chapterId, labels.level3)
+    pinScene(newScene.id, 2000)
     setTimeout(() => {
       editorRefs.current[newScene.id]?.focus({ placeCursor: 'end' })
       editorRefs.current[newScene.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -502,6 +709,19 @@ export default function Manuscript({ store, userId, membership = null }) {
     setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: 'end' }), 200)
   }, [focusedWriting.enabled, setActiveSceneId])
 
+  // Clicking a virtualized-away scene's placeholder (see SceneSlot above) — setting it
+  // active forces a real SceneEditor to mount (same as any other click-to-activate
+  // path), then focus it once that's happened. Unlike a precise preview click
+  // (SceneEditor.jsx's activateAt), there's no rendered text yet to hit-test a click
+  // position against, so this lands the caret at the end rather than exactly where the
+  // user clicked — an acceptable trade for a case that should be rare in practice
+  // (placeholders only show scenes well outside the current scroll position).
+  const handleActivatePlaceholder = useCallback((sceneId) => {
+    pinScene(sceneId, 1000)
+    setActiveSceneId(sceneId)
+    setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: 'end' }), 60)
+  }, [pinScene, setActiveSceneId])
+
   const handleSelectChapter = useCallback((chapId) => {
     requestAnimationFrame(() => {
       document.getElementById(`ms-chap-${chapId}`)
@@ -594,6 +814,20 @@ export default function Manuscript({ store, userId, membership = null }) {
         )}
 
         <div className="flex-1" />
+
+        {!activeFinalizedDraft && (
+          <button
+            type="button"
+            onClick={() => setCatalogueOpen(true)}
+            className="ms-toolbar-btn"
+            title="Retire or restore manuscript copies"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7h18" /><path d="M5 7l1 13h12l1-13" /><path d="M9 7V4h6v3" /><path d="M10 12h4" />
+            </svg>
+            Catalogue
+          </button>
+        )}
 
         {isNovelProject && finalizedDrafts.length > 0 && (
           <select
@@ -849,8 +1083,22 @@ export default function Manuscript({ store, userId, membership = null }) {
               )
 
               if (item.type === 'scene') {
-                const { scene, sceneIndex, chapterSceneCount, chap } = item
+                const { sceneIndex, chapterSceneCount, chap } = item
+                // Merge in-progress content back in only for this one scene, at the point
+                // it's actually rendered — see the orderedContent comment above.
+                const scene = Object.prototype.hasOwnProperty.call(liveSceneContent, item.scene.id)
+                  ? { ...item.scene, content: liveSceneContent[item.scene.id] }
+                  : item.scene
                 const isLastInChapter = sceneIndex === chapterSceneCount - 1
+                // See useSceneWindow.js / SceneSlot above: only mount a real SceneEditor
+                // (textarea or ContentPreview) for the currently-active scene, a
+                // recently-navigated-to/created one, or one within/near the viewport —
+                // everything else renders as a fixed-height placeholder. This is the
+                // architectural fix the 2026-08-06/08 typing-lag row in
+                // docs/ROADMAP.md landed on: keeping every scene's DOM mounted meant any
+                // layout-forcing read anywhere on the page had the *whole* manuscript's
+                // DOM to lay out, not just the visible part.
+                const mount = !virtualizationSupported || scene.id === activeSceneId || pinnedSceneIds.has(scene.id) || scenesInView.has(scene.id)
                 return (
                   <div key={`scene-${scene.id}`}>
                     {sceneIndex > 0 && (
@@ -867,32 +1115,52 @@ export default function Manuscript({ store, userId, membership = null }) {
                       </div>
                     )}
 
-                    <SceneEditor
-                      scene={scene}
-                      sceneIndex={sceneIndex}
-                      onUpdate={handleContentUpdate}
-                      onUpdateScene={updateScene}
-                      onSplit={handleSplitScene}
-                      innerRef={proxy => { editorRefs.current[scene.id] = proxy }}
-                      onFocus={() => setActiveSceneId(scene.id)}
-                      entityMap={entityMap}
-                      onEntityClick={handleEntityClick}
-	                      onOpenNotes={() => setActiveSidebarTab('notes')}
-	                      onNoteClick={handleNoteClick}
-	                      highlightedNoteSeq={highlightedNoteSeq}
-	                      formatSettings={formatSettings}
-                      characterNames={characterNames}
-                      locationNames={locationNames}
-                      onPersistDraft={persistSceneDraftToLocalStorage}
-                      onLiveContentChange={handleLiveContentChange}
-                      onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
-                      onOpenVersionHistory={setVersionHistorySceneId}
-                      projectType={activeNovel?.type || 'novel'}
-                      focusedWriting={focusedWriting.enabled && focusedWriting.caretFollow}
-                      scrollContainerRef={scrollContainerRef}
-                      pageZoom={focusedWriting.pageZoom}
-                      keepEditingOnExternalBlur={activeSidebarTab === 'ai'}
-                    />
+                    <SceneSlot
+                      sceneId={scene.id}
+                      mount={mount}
+                      title={scene.title && scene.title !== 'Scene' ? scene.title : `Scene ${sceneIndex + 1}`}
+                      estimatedHeight={sceneHeightCacheRef.current.get(scene.id) ?? estimateSceneHeight(scene, formatSettings)}
+                      registerElement={registerSceneElement}
+                      onHeightMeasured={handleHeightMeasured}
+                      onActivatePlaceholder={handleActivatePlaceholder}
+                    >
+                      <SceneEditor
+                        scene={scene}
+                        sceneIndex={sceneIndex}
+                        onUpdate={handleContentUpdate}
+                        onUpdateScene={updateScene}
+                        onSplit={handleSplitScene}
+                        innerRef={proxy => {
+                          if (proxy) editorRefs.current[scene.id] = proxy
+                          else delete editorRefs.current[scene.id]
+                        }}
+                        onFocus={() => setActiveSceneId(scene.id)}
+                        entityMap={entityMap}
+                        onEntityClick={handleEntityClick}
+	                        onOpenNotes={() => setActiveSidebarTab('notes')}
+	                        onNoteClick={handleNoteClick}
+	                        highlightedNoteSeq={highlightedNoteSeq}
+	                        formatSettings={formatSettings}
+                        characterNames={characterNames}
+                        locationNames={locationNames}
+                        onPersistDraft={handlePersistDraft}
+                        onLiveContentChange={handleLiveContentChange}
+                        onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
+                        onOpenVersionHistory={setVersionHistorySceneId}
+                        projectType={activeNovel?.type || 'novel'}
+                        // Reverted: enabling the continuous per-keystroke comfort-scroll
+                        // (useCaretComfortScroll's 'input'-driven centering) for the regular
+                        // editor made things *worse*, not better — it re-centers on every
+                        // keystroke during completely normal typing, not just after a
+                        // click/Enter jump, which read as constant unwanted scrolling. Back to
+                        // Focused-Writing-only for the continuous behavior; the click/Enter
+                        // jump itself is being root-caused separately (see SceneEditor.jsx).
+                        caretFollowEnabled={focusedWriting.enabled && focusedWriting.caretFollow}
+                        scrollContainerRef={scrollContainerRef}
+                        pageZoom={focusedWriting.pageZoom}
+                        keepEditingOnExternalBlur={activeSidebarTab === 'ai'}
+                      />
+                    </SceneSlot>
 
                     {isLastInChapter && (
                       <div className="mt-10 text-center font-sans">
@@ -920,7 +1188,7 @@ export default function Manuscript({ store, userId, membership = null }) {
           onSetPanel={setActiveSidebarTab}
           acts={acts}
           chapters={chapters}
-          scenes={liveScenes}
+          scenes={scenes}
           addAct={addAct}
           addChapter={addChapter}
           addScene={addScene}
@@ -940,6 +1208,17 @@ export default function Manuscript({ store, userId, membership = null }) {
           totalWordCount={totalWordCount}
           writingGoals={writingGoals}
           onUpdateGoals={handleUpdateGoals}
+          activeNovel={activeNovel}
+          characters={characters}
+          locations={locations}
+          loreEntries={loreEntries}
+          factions={factions}
+          timeline={timeline}
+          worldHistory={worldHistory}
+          ideaEntries={ideaEntries}
+          storySchedule={storySchedule}
+          rpgCharacters={rpgCharacters}
+          onOpenReferenceEntry={handleOpenReferenceEntry}
           formatSlot={<FormatContent settings={formatSettings} onChange={handleFormatChange} />}
           notesSlot={
             <NotesPanel
@@ -1024,6 +1303,17 @@ export default function Manuscript({ store, userId, membership = null }) {
           activeNovelId={activeNovel?.id}
           onOpenScene={handleSelectScene}
           onClose={() => setPacingOpen(false)}
+        />
+      )}
+
+      {catalogueOpen && (
+        <ManuscriptCatalogue
+          copies={manuscriptCopies}
+          labels={labels}
+          currentStats={manuscriptCopyStats}
+          onRetire={handleRetireManuscript}
+          onRestore={handleRestoreManuscriptCopy}
+          onClose={() => setCatalogueOpen(false)}
         />
       )}
     </div>

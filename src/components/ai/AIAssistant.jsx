@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { streamMessage, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
-import { appendAiBarExchange } from '../../utils/aiChatHistory'
+import { AI_CHAT_HISTORY_EVENT, appendAiBarExchange, appendAiBarExchangeToSessions, getAiChatStorageKey } from '../../utils/aiChatHistory'
 import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
 import { AI_CONFIG_REQUIRED_TEXT, AiSettingsLink } from './AiConfigRequired'
 import AIStar from './AIStar'
@@ -117,11 +117,20 @@ function describeAiBarResult(result, fallback) {
   return fallback
 }
 
-function recordAiBarExchange(args) {
+function recordAiBarExchange(store, args) {
   try {
-    appendAiBarExchange(args)
+    if (store?.activeNovel?.id && typeof store.updateNovel === 'function') {
+      const { nextSession, nextSessions } = appendAiBarExchangeToSessions(store.activeNovel.aiChatSessions || [], args)
+      store.updateNovel(store.activeNovel.id, { aiChatSessions: nextSessions })
+      window.dispatchEvent(new CustomEvent(AI_CHAT_HISTORY_EVENT, {
+        detail: { storageKey: getAiChatStorageKey(args.novelId), novelId: args.novelId, sessions: nextSessions },
+      }))
+      return nextSession
+    }
+    return appendAiBarExchange(args)
   } catch (error) {
     console.warn('[ai-bar] Unable to save exchange to chat history', error)
+    return null
   }
 }
 
@@ -306,7 +315,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
             .replace(/\s*```$/, '')
             .trim()
           const result = JSON.parse(cleaned)
-          recordAiBarExchange({
+          recordAiBarExchange(store, {
             novelId: store.activeNovelId,
             section,
             userText: text,

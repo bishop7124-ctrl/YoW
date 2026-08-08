@@ -86,18 +86,41 @@ const STORE_ESTIMATE_KEYS = [
   'whiteboards',
 ]
 
+// Per-key cache of each STORE_ESTIMATE_KEYS entry's serialised byte size, keyed by that
+// key's own array/object identity. Callers (useStore.js) recompute this on every change
+// to *any* of these arrays — including a single scene's content commit, which happens on
+// every ~400ms during a typing burst — but only one key's reference actually changes at a
+// time in that case (`scenes`). Re-stringifying every other key too, every time, was
+// measured causing multi-second keystroke-to-paint lag on a real multi-project account
+// (2026-08-08). Caching per key means an edit to one array only re-stringifies that array;
+// everything else reuses its last computed size until its own reference changes.
+const storeSizeCache = new Map() // key -> { ref, size }
+
 /**
  * Estimates storage used by the in-memory store.
  * Returns an integer number of bytes.  This is approximate — treat as a
- * lower bound since the serialised DB representation may differ slightly.
+ * lower bound since the serialised DB representation may differ slightly
+ * (summing each key's own serialised size, rather than one combined blob,
+ * also drops the shared wrapper object's own handful of bytes — negligible
+ * next to real account content, and still a lower bound either way).
  */
 export function estimateStoreSize(store) {
   try {
-    const slice = {}
+    let total = 0
     for (const key of STORE_ESTIMATE_KEYS) {
-      if (store[key] !== undefined) slice[key] = store[key]
+      const value = store[key]
+      if (value === undefined) continue
+      const cached = storeSizeCache.get(key)
+      let size
+      if (cached && cached.ref === value) {
+        size = cached.size
+      } else {
+        size = new Blob([JSON.stringify(value)]).size
+        storeSizeCache.set(key, { ref: value, size })
+      }
+      total += size
     }
-    return new Blob([JSON.stringify(slice)]).size
+    return total
   } catch {
     return 0
   }

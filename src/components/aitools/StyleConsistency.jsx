@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { streamMessage } from '../../utils/aiApi'
-import { buildStyleSystemPrompt, buildStyleUserPrompt, getManuscriptCoverageForNovel } from '../../utils/aiToolPrompts'
+import { buildStyleSystemPrompt, buildStyleUserPrompt, getManuscriptCoverage, getManuscriptCoverageForNovel } from '../../utils/aiToolPrompts'
 import { loadFindings, saveAllFindings, updateFindingStatus, rowToFinding } from '../../utils/aiFindings'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
 import { ManuscriptCoverageNotice } from '../ai/ManuscriptCoverageNotice'
+import { AiContextSelector } from '../ai/AiContextSelector'
 import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
 import { AiRunProgress } from './AiRunProgress'
 import { buildFindingNavIndex, resolveFindingRef, navigateToFindingRef } from '../../utils/aiFindingNav'
@@ -62,13 +63,14 @@ export default function StyleConsistency({ store, userId }) {
   const [saved,       setSaved]      = useState(false)
   const [filter,      setFilter]     = useState('all')
   const [selectedIds, setSelectedIds] = useState([])
+  const [contextSelection, setContextSelection] = useState({ mode: 'project_scan', targetId: null })
   const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
   const { progressChars, elapsedMs, begin, cancel } = useAiRunControls()
   const coverage = useMemo(() => {
-    if (isComic) return getManuscriptCoverageForNovel(store, novelId, novel)
-    const selectedScenes = selectedIds.length ? scenes.filter(s => selectedIds.includes(s.id)) : scenes
-    return getManuscriptCoverageForNovel({ ...store, scenes: selectedScenes }, novelId, novel)
-  }, [store, novelId, novel, isComic, scenes, selectedIds])
+    if (isComic) return getManuscriptCoverageForNovel(store, novelId, novel, contextSelection)
+    if (selectedIds.length) return getManuscriptCoverage(scenes.filter(s => selectedIds.includes(s.id)), contextSelection)
+    return getManuscriptCoverageForNovel(store, novelId, novel, contextSelection)
+  }, [store, novelId, novel, isComic, scenes, selectedIds, contextSelection])
   const navIndex = useMemo(() => buildFindingNavIndex(store, novelId), [store, novelId])
   const resolveRef = useCallback(text => resolveFindingRef(navIndex, text), [navIndex])
   const onNavigate = useCallback(match => navigateToFindingRef(store, match), [store])
@@ -107,7 +109,7 @@ export default function StyleConsistency({ store, userId }) {
     setLoading(false)
 
     const system = buildStyleSystemPrompt(novel, hasStyleGuide)
-    const user   = buildStyleUserPrompt(store, novelId, selectedIds.length ? selectedIds : undefined)
+    const user   = buildStyleUserPrompt(store, novelId, selectedIds.length ? selectedIds : undefined, contextSelection)
     const ctl = begin(() => { setRunning(false); setError(STALL_ERROR_TEXT) })
     let buffer = ''
     streamMessage({
@@ -127,7 +129,7 @@ export default function StyleConsistency({ store, userId }) {
       },
       onError: msg => { ctl.finish(); setRunning(false); setError(msg) },
     })
-  }, [novel, store, novelId, selectedIds, hasStyleGuide, userId, begin])
+  }, [novel, store, novelId, selectedIds, hasStyleGuide, userId, begin, contextSelection])
 
   const handleCancel = useCallback(() => {
     cancel()
@@ -211,6 +213,7 @@ export default function StyleConsistency({ store, userId }) {
             </p>
           </div>
         )}
+        <AiContextSelector store={store} novelId={novelId} novel={novel} value={contextSelection} onChange={setContextSelection} />
         <ManuscriptCoverageNotice coverage={coverage} style={{ marginTop: 8 }} />
       </div>
 

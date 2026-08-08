@@ -125,14 +125,40 @@ export const dateKey = value => {
   return `${year}-${month}-${day}`
 }
 
-export function persistSceneDraftToLocalStorage(scene, content) {
-  if (!scene?.id) return
+// This is a crash-safety net on top of the normal 400ms-debounced store commit
+// (see updateSceneContent/commitLocal in useStore.js): it protects the handful
+// of keystrokes that debounce window wouldn't have flushed yet if the browser
+// dies with no chance to run pagehide/beforeunload. Doing the underlying work —
+// a full read-parse-map-stringify-write of the *entire* nf_scenes blob, plus a
+// version snapshot carrying a full copy of the scene's content — on literally
+// every keystroke was the actual source of the "typing lag on 80k+ word
+// manuscripts" reports: cost scaled with total project size and ran dozens of
+// times a second while typing.
+//
+// Throttled with a plain "skip if too soon" gate — no trailing setTimeout. A
+// deferred timer here would keep firing after the scene/component (or the whole
+// app, on sign-out/project-switch) is gone, and could write a stale scene's
+// content back into localStorage for the wrong project — the same class of bug
+// as the phantom-project incident (see docs/ROADMAP.md, 2026-08-02). Skipping is
+// safe because the callers that actually matter for crash/navigation safety
+// (blur, pagehide, beforeunload, tab-hide, unmount — see SceneEditor's
+// flushDraft/handleEditorBlur) pass `{ immediate: true }` and always write
+// straight away, and the normal 400ms store debounce catches up regardless.
+const DRAFT_THROTTLE_MS = 1500
+const VERSION_SNAPSHOT_THROTTLE_MS = 60_000
+const lastDraftSavedAt = new Map() // sceneId -> timestamp
+const lastVersionSnapshotAt = new Map() // sceneId -> timestamp
+
+// Returns the raw JSON string actually written to `nf_scenes` (or undefined on
+// error/no-op) — see persistSceneDraftToLocalStorage's own comment on why callers
+// need this.
+function runPersistSceneDraft(scene, content) {
   try {
     const now = Date.now()
     const today = dateKey(now)
     writeItem('nf_localWriteAt', String(now))
     const scenes = JSON.parse(readItem('nf_scenes') || '[]')
-    if (!Array.isArray(scenes)) return
+    if (!Array.isArray(scenes)) return undefined
 
     const nextScenes = scenes.map(item => {
       if (item.id !== scene.id) return item
@@ -148,14 +174,48 @@ export function persistSceneDraftToLocalStorage(scene, content) {
     if (!nextScenes.some(item => item.id === scene.id)) {
       nextScenes.push({ ...scene, content, lastModified: now, wordHistory: [{ date: today, words: countWords(content), timestamp: now }] })
     }
-    writeItem('nf_scenes', JSON.stringify(nextScenes))
+    const raw = JSON.stringify(nextScenes)
+    writeItem('nf_scenes', raw)
 
-    import('../../utils/sceneVersions').then(m => {
-      m.saveSceneVersion({ ...scene, content })
-    }).catch(() => {})
+    // Version history is a periodic checkpoint, not a per-keystroke log — cap how
+    // often a snapshot (a full copy of the scene's content, across every scene's
+    // history in nf_scene_versions) gets written regardless of how often drafts do.
+    const lastSnapshot = lastVersionSnapshotAt.get(scene.id) || 0
+    if (now - lastSnapshot >= VERSION_SNAPSHOT_THROTTLE_MS) {
+      lastVersionSnapshotAt.set(scene.id, now)
+      import('../../utils/sceneVersions').then(m => {
+        m.saveSceneVersion({ ...scene, content })
+      }).catch(() => {})
+    }
+    return raw
   } catch (error) {
     console.warn('Could not save latest scene draft before leaving the page.', error)
+    return undefined
   }
+}
+
+// Returns the raw JSON string written to `nf_scenes` (or undefined if throttled/
+// skipped/errored). Manuscript.jsx feeds this into the store's `recordLocalWrite`
+// so `commitLocal`'s own `nf_scenes` write moments later (the debounced commit's
+// trailing edge always calls this with `immediate: true` right before its store
+// commit — see the flushDraft comment above) recognizes it as this same tab's own
+// prior write rather than an unexplained external change, and can skip redoing the
+// full account-wide read-parse-merge round trip it would otherwise pay for on every
+// single commit while typing. See the skip-check comment in useStore.js's
+// commitLocal for why that's provably safe, not an approximation.
+export function persistSceneDraftToLocalStorage(scene, content, { immediate = false } = {}) {
+  if (!scene?.id) return undefined
+  const now = Date.now()
+  if (!immediate) {
+    const last = lastDraftSavedAt.get(scene.id) || 0
+    // Too soon since the last write for this scene — skip. The 400ms store
+    // debounce and the next immediate (blur/exit) flush both catch up on
+    // whatever this call would have written, so nothing is silently lost,
+    // just deferred to whichever comes first.
+    if (now - last < DRAFT_THROTTLE_MS) return undefined
+  }
+  lastDraftSavedAt.set(scene.id, now)
+  return runPersistSceneDraft(scene, content)
 }
 
 // ─── Format settings ──────────────────────────────────────────────────────────

@@ -136,24 +136,32 @@ const clearLocalWriteFailed = (key) => {
   } catch { /* best effort */ }
 }
 const hasLocalWriteFailed = () => readFailedWriteKeys().size > 0
+// Returns the exact raw string actually written (or null on failure) — commitLocal's
+// externalWrite check below caches this per key so a later commit can tell "did
+// anything else touch this key since I wrote it" with a cheap string comparison
+// instead of re-parsing/re-diffing the whole collection every time.
 const save = (key, val) => {
   try {
-    writeItem(key, JSON.stringify(val))
+    const raw = JSON.stringify(val)
+    writeItem(key, raw)
     clearLocalWriteFailed(key)
+    return raw
   } catch (error) {
     if (key === 'nf_novels' && Array.isArray(val)) {
       try {
         const withoutCovers = val.map(item => ({ ...item, coverPhoto: null }))
-        writeItem(key, JSON.stringify(withoutCovers))
+        const raw = JSON.stringify(withoutCovers)
+        writeItem(key, raw)
         clearLocalWriteFailed(key)
         console.warn('Project data was saved without cover photos because browser storage is full.', error)
-        return
+        return raw
       } catch {
         // Fall through to the shared warning below.
       }
     }
     markLocalWriteFailed(key)
     console.warn(`Could not save ${key} to browser storage.`, error)
+    return null
   }
 }
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -287,6 +295,21 @@ const buildStarterStructure = (novelId, type) => {
   })
 
   return { acts: starterActs, chapters: starterChapters, scenes: starterScenes }
+}
+
+const buildManuscriptCopy = ({ project, acts, chapters, scenes, title }) => {
+  const now = new Date().toISOString()
+  return {
+    id: uid(),
+    projectId: project.id,
+    title: title?.trim() || `Retired manuscript ${new Date(now).toLocaleDateString()}`,
+    retiredAt: now,
+    projectTitle: project.title || project.name || 'Untitled project',
+    projectType: project.type || 'novel',
+    acts: acts.map(act => ({ ...act })),
+    chapters: chapters.map(chapter => ({ ...chapter })),
+    scenes: scenes.map(scene => ({ ...scene })),
+  }
 }
 
 const sampleProjectSeedKey = (ownerId) => ownerId ? `nf_sampleProjectSeeded:the-last-ember-v3:${ownerId}` : null
@@ -604,6 +627,23 @@ export function useStore(userId = null, options = {}) {
     return used
   }, [canSyncCloud, userId])
   useEffect(() => { refreshStorageUsedBytes().catch(console.error) }, [refreshStorageUsedBytes])
+  // estimateStoreSize used to JSON.stringify + Blob-size the *entire* account's data —
+  // every novel, character, and scene's full text, across every project — as one combined
+  // blob on every call. Computing that synchronously in this `useMemo`, keyed on `scenes`
+  // among everything else, meant every single scene-content commit while typing (every
+  // ~400ms, via SceneEditor's own debounced store commit) forced a full-account
+  // JSON.stringify on the main thread, in the middle of a keystroke's render — flagged as
+  // a likely lag contributor when it landed (2026-08-06 ROADMAP note) but never actually
+  // fixed, and confirmed live 2026-08-08 via a user screen recording showing multi-second
+  // keystroke-to-paint delay unrelated to anything in SceneEditor.jsx/
+  // useCaretComfortScroll.js. estimateStoreSize itself now caches each key's serialised
+  // size against that key's own array/object reference (storageQuota.js), so a scene edit
+  // — which only changes the `scenes` reference — re-stringifies just `scenes`, not
+  // `novels`/`characters`/`factions`/`locations`/etc. too. That keeps this fully
+  // synchronous (no staleness, quota enforcement exactly as responsive as before — a
+  // debounced version was tried first and reverted here because it weakened
+  // storageExceededCheck's responsiveness and broke its test coverage) while cutting the
+  // actual per-keystroke cost down to "the one array that changed."
   const storageUsedBytes = useMemo(() => storageMediaBytes + estimateStoreSize({
     novels, characters, factions, locations, timeline, worldHistory,
     acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards,
@@ -761,6 +801,30 @@ export function useStore(userId = null, options = {}) {
     }
   }, [userId, getCurrentSnapshot])
 
+  // Per-key raw string this tab's own commitLocal last actually wrote — lets a later
+  // commit for the same key answer "has anything else (another real browser tab, via
+  // the cross-tab storage broadcast) touched this key since I wrote it" with one cheap
+  // string comparison, instead of unconditionally paying for load(key)'s JSON.parse
+  // plus the full per-record merge/rebase loop below on every single commit. See the
+  // skip-check inside commitLocal for why this is provably safe, not just a perf hack.
+  // A ref (not module-level state) so each real tab's own useStore() instance gets an
+  // independent cache — critical for the multi-tab tests in useStore.test.js, which
+  // simulate two tabs as two renderHook() instances sharing this same module: a
+  // module-level cache would conflate "tab A wrote this" with "tab B wrote this" and
+  // silently skip the rebase tab B actually needs.
+  const lastWrittenRawByKeyRef = useRef(new Map())
+
+  // Exposed so a caller outside commitLocal that independently writes straight to one
+  // of these storage keys (today: SceneEditor.jsx's persistSceneDraftToLocalStorage,
+  // which writes `nf_scenes` directly, immediately before the debounced store commit's
+  // own commitLocal call for the same key — see manuscriptUtils.js's comment) can tell
+  // commitLocal "this was me, not another tab," so it doesn't mistake its own sibling
+  // write for an external change and pay for the full merge unnecessarily.
+  const recordLocalWrite = useCallback((key, raw) => {
+    if (!key || raw == null) return
+    lastWrittenRawByKeyRef.current.set(key, raw)
+  }, [])
+
   const commitLocal = useCallback((ref, setter, key, updater) => {
     const prevLocal = ref.current
     const rawNext = typeof updater === 'function' ? updater(prevLocal) : updater
@@ -806,7 +870,27 @@ export function useStore(userId = null, options = {}) {
     // still benefit from the same rebase/merge, so an edit to one field of a
     // scene doesn't clobber a different field (or a different scene) another
     // tab saved.
-    if (key && Array.isArray(prevLocal) && Array.isArray(rawNext)) {
+    //
+    // That whole rebase is only ever *necessary* when something else actually
+    // wrote to `key` since this tab's own last write to it — if nothing did,
+    // "on disk" and "this tab's last-known copy" are identical by construction,
+    // and the merge loop below would just hand every record back unchanged
+    // (persisted === prevLocal for all of them). Skipping it in that case is
+    // provably equivalent, not an approximation: `next` is already `rawNext`,
+    // exactly what the merge would have produced. On a large collection (e.g.
+    // an account's full `nf_scenes`, which can run into the low single-digit
+    // MB across many projects — see the 2026-08 typing-lag investigation in
+    // docs/ROADMAP.md) the skipped `load(key, [])` JSON.parse and the
+    // per-record diff loop are the dominant cost of every commit, so this
+    // turns the common single-tab case (by far the hottest path — every
+    // scene-content commit while typing goes through here) from an O(whole
+    // collection) read-modify-write into effectively just the O(whole
+    // collection) write `save()` already has to do regardless.
+    const externalWrite = key && (
+      lastWrittenRawByKeyRef.current.get(key) === undefined ||
+      readItem(key) !== lastWrittenRawByKeyRef.current.get(key)
+    )
+    if (key && externalWrite && Array.isArray(prevLocal) && Array.isArray(rawNext)) {
       const persisted = load(key, [])
       if (Array.isArray(persisted)) {
         const table = STORAGE_KEY_TO_TABLE[key]
@@ -865,7 +949,11 @@ export function useStore(userId = null, options = {}) {
     }
     ref.current = next
     markLocalWrite(userId)
-    save(key, next)
+    const rawWritten = save(key, next)
+    if (key) {
+      if (rawWritten != null) lastWrittenRawByKeyRef.current.set(key, rawWritten)
+      else lastWrittenRawByKeyRef.current.delete(key) // write failed — force the safe path next time
+    }
     setter(next)
     return next
   }, [userId])
@@ -938,7 +1026,7 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { mapsRef.current = maps; save('nf_maps', maps) }, [maps])
   useEffect(() => { activeMapByNovelRef.current = activeMapByNovel; save('nf_activeMapByNovel', activeMapByNovel) }, [activeMapByNovel])
   useEffect(() => { whiteboardsRef.current = whiteboards; save('nf_whiteboards', whiteboards) }, [whiteboards])
-  useEffect(() => save('nf_series', series), [series])
+  useEffect(() => { save('nf_series', series) }, [series])
   useEffect(() => { storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
   useEffect(() => { rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
   useEffect(() => { comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
@@ -1836,6 +1924,17 @@ export function useStore(userId = null, options = {}) {
   }, [commitLocal, canSyncCloud, userId, debouncedSaveScene])
 
   const updateSceneContent = useCallback((sceneId, content) => {
+    // Block growing a scene once storage is full — same gate as the add* actions
+    // below (storageExceededCheck), but content edits aren't "add" calls so they
+    // never hit that check. Only the growing direction is blocked: trimming or
+    // rewriting existing text (deletes, replaces) must still go through, or a
+    // full-quota account couldn't even edit its way back under the limit.
+    const previous = scenesRef.current.find(s => s.id === sceneId)
+    const isGrowing = content.length > (previous?.content?.length || 0)
+    if (isGrowing && storageQuotaBytes && storageUsedBytes >= storageQuotaBytes) {
+      notifyReadOnly('storage-exceeded', { usedBytes: storageUsedBytes, quotaBytes: storageQuotaBytes })
+      return
+    }
     const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return mergeSceneUpdateWithPersistedCopy(prev, sceneId, s => {
         const updated = withSceneContentHistory(s, content)
@@ -1848,7 +1947,7 @@ export function useStore(userId = null, options = {}) {
         .filter(scene => scene.conflictOf === sceneId)
         .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
-  }, [userId, canSyncCloud, debouncedSaveScene, commitLocal])
+  }, [userId, canSyncCloud, debouncedSaveScene, commitLocal, storageQuotaBytes, storageUsedBytes])
 
   const deleteAct = (id) => {
     const chapterIds = chaptersRef.current.filter(c => c.actId === id).map(c => c.id)
@@ -1917,6 +2016,123 @@ export function useStore(userId = null, options = {}) {
         .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
   }
+
+  const replaceProjectManuscript = useCallback((projectId, nextStructure) => {
+    if (!projectId) return null
+    const currentActIds = actsRef.current
+      .filter(act => act.novelId === projectId)
+      .map(act => act.id)
+    const currentChapterIds = chaptersRef.current
+      .filter(chapter => chapter.novelId === projectId)
+      .map(chapter => chapter.id)
+    const currentSceneIds = scenesRef.current
+      .filter(scene => scene.novelId === projectId)
+      .map(scene => scene.id)
+    currentSceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+
+    const nextActs = (nextStructure.acts || []).map(act => ({ ...act, novelId: projectId }))
+    const nextChapters = (nextStructure.chapters || []).map(chapter => ({ ...chapter, novelId: projectId }))
+    const nextScenes = (nextStructure.scenes || []).map(scene => ({ ...scene, novelId: projectId }))
+
+    commitLocal(actsRef, setActs, 'nf_acts', prev => [
+      ...prev.filter(act => act.novelId !== projectId),
+      ...nextActs,
+    ])
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [
+      ...prev.filter(chapter => chapter.novelId !== projectId),
+      ...nextChapters,
+    ])
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [
+      ...prev.filter(scene => scene.novelId !== projectId),
+      ...nextScenes,
+    ])
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => {
+      if (character.novelId !== projectId || !character.journey) return character
+      return { ...character, journey: clearJourneyLinks(character.journey, { sceneIds: currentSceneIds }) }
+    }))
+
+    if (canSyncCloud) {
+      currentActIds.forEach(actId => deleteItem('acts', userId, actId).catch(console.error))
+      currentChapterIds.forEach(chapterId => deleteItem('chapters', userId, chapterId).catch(console.error))
+      currentSceneIds.forEach(sceneId => deleteSceneDoc(userId, sceneId).catch(console.error))
+      if (nextActs.length) trackSync(upsertItems('acts', userId, nextActs)).catch(console.error)
+      if (nextChapters.length) trackSync(upsertItems('chapters', userId, nextChapters)).catch(console.error)
+      if (nextScenes.length) trackSync(upsertItems('scenes', userId, nextScenes)).catch(console.error)
+    }
+
+    setWritingSceneId(null)
+    setSelectedSceneId(null)
+    return { acts: nextActs, chapters: nextChapters, scenes: nextScenes }
+  }, [canSyncCloud, userId, commitLocal, debouncedSaveScene, trackSync])
+
+  const retireManuscript = useCallback((title) => {
+    const projectId = activeNovelIdRef.current
+    const project = novelsRef.current.find(novel => novel.id === projectId)
+    if (!project || isFreeLockedProject(projectId)) {
+      if (projectId) notifyReadOnly('free-project')
+      return null
+    }
+    const copy = buildManuscriptCopy({
+      project,
+      acts: actsRef.current.filter(act => act.novelId === projectId).sort((a, b) => a.order - b.order),
+      chapters: chaptersRef.current.filter(chapter => chapter.novelId === projectId).sort((a, b) => a.order - b.order),
+      scenes: scenesRef.current.filter(scene => scene.novelId === projectId && !scene.conflictOf).sort((a, b) => a.order - b.order),
+      title,
+    })
+    const starter = buildStarterStructure(projectId, project.type)
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(novel => (
+      novel.id === projectId
+        ? {
+            ...novel,
+            manuscriptCopies: [copy, ...(Array.isArray(novel.manuscriptCopies) ? novel.manuscriptCopies : [])].slice(0, 30),
+            lastRetiredManuscriptAt: copy.retiredAt,
+          }
+        : novel
+    )))
+    replaceProjectManuscript(projectId, starter)
+    return copy
+  }, [commitLocal, replaceProjectManuscript])
+
+  const restoreManuscriptCopy = useCallback((copyId, options = {}) => {
+    const projectId = activeNovelIdRef.current
+    const project = novelsRef.current.find(novel => novel.id === projectId)
+    if (!project || isFreeLockedProject(projectId)) {
+      if (projectId) notifyReadOnly('free-project')
+      return null
+    }
+    const copies = Array.isArray(project.manuscriptCopies) ? project.manuscriptCopies : []
+    const copy = copies.find(item => item.id === copyId)
+    if (!copy) return null
+
+    let currentCopy = null
+    if (options.retireCurrentFirst) {
+      currentCopy = buildManuscriptCopy({
+        project,
+        acts: actsRef.current.filter(act => act.novelId === projectId).sort((a, b) => a.order - b.order),
+        chapters: chaptersRef.current.filter(chapter => chapter.novelId === projectId).sort((a, b) => a.order - b.order),
+        scenes: scenesRef.current.filter(scene => scene.novelId === projectId && !scene.conflictOf).sort((a, b) => a.order - b.order),
+        title: options.currentTitle,
+      })
+    }
+
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(novel => {
+      if (novel.id !== projectId) return novel
+      const existingCopies = Array.isArray(novel.manuscriptCopies) ? novel.manuscriptCopies : []
+      return {
+        ...novel,
+        manuscriptCopies: currentCopy
+          ? [currentCopy, ...existingCopies].slice(0, 30)
+          : existingCopies,
+        lastRestoredManuscriptAt: new Date().toISOString(),
+      }
+    }))
+    replaceProjectManuscript(projectId, {
+      acts: copy.acts || [],
+      chapters: copy.chapters || [],
+      scenes: copy.scenes || [],
+    })
+    return copy
+  }, [commitLocal, replaceProjectManuscript])
 
   // Replaces the original scene's content with a conflict copy's content (see
   // mergeSceneUpdateWithPersistedCopy), then removes the copy — the "restore" side
@@ -2971,7 +3187,9 @@ export function useStore(userId = null, options = {}) {
     acts: novelActs, addAct, deleteAct, updateAct, reorderAct, moveAct,
     chapters: novelChapters, addChapter, deleteChapter, updateChapter, reorderChapter, moveChapter,
     scenes: novelScenes, addScene, deleteScene, updateScene, reorderScene, moveScene,
+    retireManuscript, restoreManuscriptCopy,
     updateSceneContent,
+    recordLocalWrite,
     sceneConflicts: novelSceneConflicts, restoreSceneConflict, discardSceneConflict,
     recordConflicts, restoreRecordConflict, discardRecordConflict, addRecordConflicts,
     selectedCharacterId, setSelectedCharacterId,
@@ -3008,6 +3226,7 @@ export function useStore(userId = null, options = {}) {
     'addAct', 'deleteAct', 'updateAct', 'reorderAct', 'moveAct',
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
     'addScene', 'deleteScene', 'updateScene', 'reorderScene', 'moveScene', 'updateSceneContent',
+    'retireManuscript', 'restoreManuscriptCopy',
     'restoreSceneConflict', 'discardSceneConflict', 'restoreRecordConflict', 'discardRecordConflict', 'addRecordConflicts',
     'addScheduleEvent', 'updateScheduleEvent', 'deleteScheduleEvent', 'replaceData',
     'saveRpgCharacter', 'deleteRpgCharacter',

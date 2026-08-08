@@ -136,7 +136,7 @@ function ProjectExportMenu({ onExport, compact = false }) {
   if (!onExport) return null
 
   const options = [
-    ['docx', 'Word document', 'Readable export — story, characters, locations, lore, timeline, and more'],
+    ['docx', 'Word docs ZIP', 'Readable export — separate Word documents for story, characters, locations, lore, timeline, and more'],
     ['pdf', 'Visual PDF', 'Styled World Bible-style export'],
     ['zip', 'Backup zip', 'Restore file for YOW — JSON data, not for reading'],
   ]

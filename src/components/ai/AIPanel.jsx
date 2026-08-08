@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
-import { AI_CHAT_HISTORY_EVENT, getAiChatStorageKey, loadAiChatSessions, saveAiChatSessions } from '../../utils/aiChatHistory'
+import { AI_CHAT_HISTORY_EVENT, createAiChatDocxBlob, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
@@ -12,6 +12,7 @@ import { downloadBlob, sanitizeFilename } from '../../utils/projectExportHelpers
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 const load = (key, def) => { try { return JSON.parse(localStorage.getItem(key)) ?? def } catch { return def } }
 const save = (key, val) => localStorage.setItem(key, JSON.stringify(val))
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
 const AI_PANEL_FRAME_KEY = 'nf_aiPanelFrame'
 const MIN_PANEL_WIDTH = 380
@@ -516,7 +517,10 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   // Defensive: a session's `messages` should always be an array, but guard against
   // any that were ever saved malformed (e.g. mid-write interruption) — reading
   // .length off undefined here crashes the whole Manuscript view for that project.
-  const messages = Array.isArray(session.messages) ? session.messages : []
+  const messages = useMemo(
+    () => Array.isArray(session.messages) ? session.messages : [],
+    [session.messages]
+  )
 
   const resizeInput = useCallback(() => {
     const el = inputRef.current
@@ -651,12 +655,11 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
   const exportChat = () => {
     if (!messages.length) return
-    const lines = [`# ${session.title || 'AI Chat'}`, '']
-    messages.forEach(m => {
-      lines.push(`**${m.role === 'user' ? 'You' : 'AI'}:**`, '', m.content || '', '')
+    createAiChatDocxBlob(session).then(blob => {
+      downloadBlob(blob, `${sanitizeFilename(session.title, 'ai-chat')}.docx`)
+    }).catch(error => {
+      console.error('[ai-chat] Could not export chat', error)
     })
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
-    downloadBlob(blob, `${sanitizeFilename(session.title, 'ai-chat')}.md`)
   }
 
   const quickPrompts = [
@@ -1097,8 +1100,9 @@ function AIUpgradeWall({ onClose, docked }) {
 export default function AIPanel({ store, open, onClose, initialContext, membership, userId = null, docked = false, onPopOut }) {
   const novelId = store.activeNovelId
   const chatStorageKey = getAiChatStorageKey(novelId)
+  const activeProject = store.novels?.find?.(novel => novel.id === novelId) ?? store.activeNovel ?? null
   const [aiSettings, setAiSettings] = useState(() => loadAiSettings(userId, DEFAULT_SETTINGS))
-  const [sessions,   setSessions]   = useState(() => loadAiChatSessions(novelId))
+  const [sessions,   setSessions]   = useState(() => mergeAiChatSessions(activeProject?.aiChatSessions, loadAiChatSessions(novelId), novelId))
   const [view,       setView]       = useState('sessions') // 'sessions' | 'context' | 'chat'
   const [activeId,   setActiveId]   = useState(null)
   const [fullscreen, setFullscreen] = useState(() => load('nf_aiFullscreen', false))
@@ -1119,19 +1123,29 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     return () => window.removeEventListener(AI_SETTINGS_EVENT, handleAiSettingsUpdate)
   }, [userId])
   useEffect(() => {
-    if (activeChatStorageKey.current !== chatStorageKey) {
-      activeChatStorageKey.current = chatStorageKey
-      setSessions(loadAiChatSessions(novelId))
-      setActiveId(null)
-      setView('sessions')
-      return
+    activeChatStorageKey.current = chatStorageKey
+    const projectSessions = normalizeAiChatSessions(activeProject?.aiChatSessions, novelId)
+    const legacySessions = loadAiChatSessions(novelId)
+    const nextSessions = mergeAiChatSessions(projectSessions, legacySessions, novelId)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSessions(prev => sameJson(prev, nextSessions) ? prev : nextSessions)
+    setActiveId(null)
+    setView('sessions')
+    if (legacySessions.length && activeProject?.id && typeof store.updateNovel === 'function' && !sameJson(projectSessions, nextSessions)) {
+      store.updateNovel(activeProject.id, { aiChatSessions: nextSessions })
     }
-    saveAiChatSessions(novelId, sessions)
-  }, [sessions, chatStorageKey, novelId])
+  }, [chatStorageKey, novelId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeChatStorageKey.current !== chatStorageKey) return
+    if (!activeProject?.id || typeof store.updateNovel !== 'function') return
+    const projectSessions = normalizeAiChatSessions(activeProject.aiChatSessions, novelId)
+    if (sameJson(projectSessions, sessions)) return
+    store.updateNovel(activeProject.id, { aiChatSessions: sessions })
+  }, [sessions, chatStorageKey, novelId]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handleChatHistoryUpdate = (event) => {
       if (event.detail?.storageKey !== chatStorageKey) return
-      setSessions(loadAiChatSessions(novelId))
+      setSessions(prev => mergeAiChatSessions(event.detail?.sessions, prev, novelId))
     }
     window.addEventListener(AI_CHAT_HISTORY_EVENT, handleChatHistoryUpdate)
     return () => window.removeEventListener(AI_CHAT_HISTORY_EVENT, handleChatHistoryUpdate)

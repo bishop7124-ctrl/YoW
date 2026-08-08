@@ -2,14 +2,27 @@ import {
   cleanText, formatDate, sortByOrder, sortByTitle, valueList,
   isCampaignProject, isComicProject, sessionExportRows,
   getEnabled, buildOutline, wordCount, buildSummaryStats,
-  getProjectExportLabel, getProjectDocxFilename, downloadBlob,
+  getProjectExportLabel, getProjectDocxZipFilename, downloadBlob, sanitizeFilename,
 } from './projectExportHelpers.js'
+import { normalizeAiChatSessions } from './aiChatHistory.js'
+import { buildZipBlob } from './zipUtils.js'
+import { getScheduleCalendar, monthName } from './scheduleCalendar.js'
 
+// A single `\n` within a block is a soft line break the writer typed on purpose
+// (dialogue formatted one line per beat, poetry, etc.) — replacing it with a space
+// silently discarded it. `break: 1` emits a real <w:br/> instead, which round-trips
+// back through docx re-import correctly (see the matching fix + comment in
+// FinalizedReader.jsx's exportToDocx, the manuscript-specific export path).
 const addDocParagraphs = (children, { Paragraph, TextRun }, text, options = {}) => {
   const blocks = cleanText(text).split(/\n{2,}/).map(block => block.trim()).filter(Boolean)
   blocks.forEach(block => {
+    const lines = block.split('\n').map(line => line.trim()).filter(Boolean)
     children.push(new Paragraph({
-      children: [new TextRun({ text: block.replace(/\n/g, ' '), size: 22 })],
+      children: lines.map((line, index) => new TextRun({
+        text: line,
+        size: 22,
+        ...(index > 0 ? { break: 1 } : {}),
+      })),
       spacing: { after: 160 },
       ...options,
     }))
@@ -36,6 +49,39 @@ const addDocFields = (children, docx, fields) => {
   })
 }
 
+const addAiChatMessages = (children, docx, session) => {
+  addDocHeading(children, docx, session.title || 'Untitled Chat', docx.HeadingLevel.HEADING_2)
+  addDocFields(children, docx, [
+    ['Category', session.category],
+    ['Created', formatDate(session.createdAt)],
+    ['Updated', formatDate(session.updatedAt)],
+  ])
+  ;(session.messages || []).forEach(message => {
+    children.push(new docx.Paragraph({
+      children: [
+        new docx.TextRun({ text: message.role === 'user' ? 'You' : 'AI', bold: true, size: 20 }),
+      ],
+      spacing: { before: 120, after: 60 },
+    }))
+    addDocParagraphs(children, docx, message.content, { indent: { left: 240 } })
+  })
+}
+
+const scheduleDateLabel = (project, event) => {
+  if (event?.date) return event.date
+  const parts = []
+  if (event?.year !== null && event?.year !== undefined && String(event.year).trim() !== '') {
+    parts.push(`Year ${event.year}`)
+  }
+  if (event?.month !== null && event?.month !== undefined && String(event.month).trim() !== '') {
+    parts.push(monthName(getScheduleCalendar(project), Number(event.month)))
+  }
+  if (event?.day !== null && event?.day !== undefined && String(event.day).trim() !== '') {
+    parts.push(`Day ${event.day}`)
+  }
+  return parts.join(', ')
+}
+
 export const createProjectDocxBlob = async (projectData) => {
   const docx = await import('docx')
   const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } = docx
@@ -58,6 +104,14 @@ export const createProjectDocxBlob = async (projectData) => {
     ['Exported', formatDate(new Date().toISOString())],
     ...buildSummaryStats(projectData),
   ])
+
+  const aiChatSessions = normalizeAiChatSessions(project.aiChatSessions, project.id)
+    .filter(session => session.messages?.length)
+  if (aiChatSessions.length) {
+    children.push(new Paragraph({ children: [new PageBreak()] }))
+    addDocHeading(children, docx, 'AI Chats')
+    aiChatSessions.forEach(session => addAiChatMessages(children, docx, session))
+  }
 
   if (enabled.has('outline') && isComicProject(project)) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
@@ -143,6 +197,28 @@ export const createProjectDocxBlob = async (projectData) => {
             spacing: { before: 80, after: 80 },
           }))
           addDocParagraphs(children, docx, scene.synopsis || scene.summary || scene.content, { indent: { left: 360 } })
+        })
+      })
+    })
+  }
+
+  if (enabled.has('manuscript')) {
+    children.push(new Paragraph({ children: [new PageBreak()] }))
+    addDocHeading(children, docx, isCampaignProject(project) ? 'Session Drafts' : 'Manuscript')
+    buildOutline(projectData).forEach(({ act, chapters }) => {
+      addDocHeading(children, docx, act.title || 'Untitled Act', HeadingLevel.HEADING_2)
+      chapters.forEach(({ chapter, scenes }, chapterIndex) => {
+        addDocHeading(children, docx, chapter.title || `Chapter ${chapterIndex + 1}`, HeadingLevel.HEADING_3)
+        scenes.forEach(scene => {
+          const title = scene.title && scene.title !== 'Scene' ? scene.title : 'Scene'
+          children.push(new Paragraph({
+            children: [
+              new TextRun({ text: title, bold: true, size: 20 }),
+              new TextRun({ text: ` (${wordCount(scene.content)} words)`, italics: true, size: 18 }),
+            ],
+            spacing: { before: 80, after: 80 },
+          }))
+          addDocParagraphs(children, docx, scene.content, { indent: { left: 240 } })
         })
       })
     })
@@ -262,6 +338,21 @@ export const createProjectDocxBlob = async (projectData) => {
     })
   }
 
+  if (enabled.has('schedule')) {
+    children.push(new Paragraph({ children: [new PageBreak()] }))
+    addDocHeading(children, docx, 'Schedule')
+    sortByOrder(projectData.storySchedule).forEach(event => {
+      addDocHeading(children, docx, event.title || 'Untitled Schedule Event', HeadingLevel.HEADING_2)
+      addDocFields(children, docx, [
+        ['Date', scheduleDateLabel(project, event)],
+        ['Category', event.category],
+        ['Duration', event.duration],
+        ['Tags', event.tags?.join(', ')],
+      ])
+      addDocParagraphs(children, docx, event.description || event.notes || event.content)
+    })
+  }
+
   if (enabled.has('timeline')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'Timeline')
@@ -293,7 +384,176 @@ export const createProjectDocxBlob = async (projectData) => {
   return Packer.toBlob(doc)
 }
 
+const withProjectSections = (projectData, enabledSections, overrides = {}) => {
+  const { project: projectOverride, ...dataOverrides } = overrides
+  return {
+    ...projectData,
+    project: {
+      ...(projectData.project ?? {}),
+      enabledSections,
+      aiChatSessions: [],
+      ...(projectOverride ?? {}),
+    },
+    characters: [],
+    factions: [],
+    locations: [],
+    timeline: [],
+    worldHistory: [],
+    eras: [],
+    acts: [],
+    chapters: [],
+    scenes: [],
+    loreEntries: [],
+    ideaEntries: [],
+    maps: [],
+    whiteboards: [],
+    storySchedule: [],
+    rpgCharacters: [],
+    comicPages: [],
+    comicPanels: [],
+    ...dataOverrides,
+  }
+}
+
+const hasMessages = (session) => Array.isArray(session?.messages) && session.messages.length > 0
+
+const getProjectDocxCategoryData = (projectData) => {
+  const project = projectData.project ?? {}
+  const enabled = getEnabled(projectData)
+  const aiChatSessions = normalizeAiChatSessions(project.aiChatSessions, project.id).filter(hasMessages)
+  const outlineLabel = isComicProject(project)
+    ? 'Comic Script'
+    : isCampaignProject(project)
+      ? 'Campaign Sessions'
+      : 'Outline'
+  const manuscriptLabel = isComicProject(project)
+    ? 'Comic Script'
+    : isCampaignProject(project)
+      ? 'Session Drafts'
+      : 'Manuscript'
+  const hasStructure = Boolean((projectData.acts?.length || projectData.chapters?.length || projectData.scenes?.length))
+  const hasManuscriptText = Boolean((projectData.scenes ?? []).some(scene => cleanText(scene.content)))
+
+  return [
+    {
+      label: 'Overview',
+      data: withProjectSections(projectData, [], {
+        project: { ...project, enabledSections: [], aiChatSessions: [] },
+        characters: projectData.characters ?? [],
+        factions: projectData.factions ?? [],
+        locations: projectData.locations ?? [],
+        timeline: projectData.timeline ?? [],
+        worldHistory: projectData.worldHistory ?? [],
+        scenes: projectData.scenes ?? [],
+      }),
+      include: true,
+    },
+    {
+      label: outlineLabel,
+      data: withProjectSections(projectData, ['outline'], {
+        acts: projectData.acts ?? [],
+        chapters: projectData.chapters ?? [],
+        scenes: (projectData.scenes ?? []).map(scene => ({ ...scene, content: '', summary: scene.summary || scene.synopsis || '' })),
+        comicPages: projectData.comicPages ?? [],
+        comicPanels: projectData.comicPanels ?? [],
+      }),
+      include: enabled.has('outline') && hasStructure,
+    },
+    {
+      label: manuscriptLabel,
+      data: withProjectSections(projectData, ['manuscript'], {
+        acts: projectData.acts ?? [],
+        chapters: projectData.chapters ?? [],
+        scenes: projectData.scenes ?? [],
+      }),
+      include: hasManuscriptText,
+    },
+    {
+      label: 'Characters',
+      data: withProjectSections(projectData, ['characters'], { characters: projectData.characters ?? [] }),
+      include: enabled.has('characters') && Boolean(projectData.characters?.length),
+    },
+    {
+      label: 'Locations',
+      data: withProjectSections(projectData, ['locations'], { locations: projectData.locations ?? [] }),
+      include: enabled.has('locations') && Boolean(projectData.locations?.length),
+    },
+    {
+      label: 'Factions',
+      data: withProjectSections(projectData, ['factions'], { factions: projectData.factions ?? [] }),
+      include: enabled.has('factions') && Boolean(projectData.factions?.length),
+    },
+    {
+      label: 'Lore',
+      data: withProjectSections(projectData, ['lore'], { loreEntries: projectData.loreEntries ?? [] }),
+      include: enabled.has('lore') && Boolean(projectData.loreEntries?.length),
+    },
+    {
+      label: 'Notes',
+      data: withProjectSections(projectData, ['ideas'], { ideaEntries: projectData.ideaEntries ?? [] }),
+      include: enabled.has('ideas') && Boolean(projectData.ideaEntries?.length),
+    },
+    {
+      label: 'Schedule',
+      data: withProjectSections(projectData, ['schedule'], { storySchedule: projectData.storySchedule ?? [] }),
+      include: enabled.has('schedule') && Boolean(projectData.storySchedule?.length),
+    },
+    {
+      label: 'Timeline',
+      data: withProjectSections(projectData, ['timeline'], { timeline: projectData.timeline ?? [] }),
+      include: enabled.has('timeline') && Boolean(projectData.timeline?.length),
+    },
+    {
+      label: 'World History',
+      data: withProjectSections(projectData, ['worldhistory'], { worldHistory: projectData.worldHistory ?? [] }),
+      include: enabled.has('worldhistory') && Boolean(projectData.worldHistory?.length),
+    },
+    {
+      label: 'AI Chats',
+      data: withProjectSections(projectData, [], { project: { ...project, enabledSections: [], aiChatSessions } }),
+      include: Boolean(aiChatSessions.length),
+    },
+  ].filter(section => section.include)
+}
+
+const uniqueEntryName = (name, used) => {
+  if (!used.has(name)) {
+    used.add(name)
+    return name
+  }
+  const dot = name.lastIndexOf('.')
+  const base = dot === -1 ? name : name.slice(0, dot)
+  const ext = dot === -1 ? '' : name.slice(dot)
+  let n = 2
+  let candidate = `${base}-${n}${ext}`
+  while (used.has(candidate)) {
+    n += 1
+    candidate = `${base}-${n}${ext}`
+  }
+  used.add(candidate)
+  return candidate
+}
+
+export const createProjectDocxEntries = async (projectData, prefix = '') => {
+  const projectBase = sanitizeFilename(projectData.project?.title, 'project')
+  const used = new Set()
+  const entries = []
+  for (const section of getProjectDocxCategoryData(projectData)) {
+    const blob = await createProjectDocxBlob(section.data)
+    const filename = uniqueEntryName(`${prefix}${projectBase}-${sanitizeFilename(section.label, 'section')}.docx`, used)
+    entries.push({ name: filename, bytes: new Uint8Array(await blob.arrayBuffer()) })
+  }
+  return entries
+}
+
+export const createProjectDocxZipBlob = async (projectData) =>
+  buildZipBlob(await createProjectDocxEntries(projectData))
+
+export const downloadProjectDocxZip = async (projectData) => {
+  const blob = await createProjectDocxZipBlob(projectData)
+  downloadBlob(blob, getProjectDocxZipFilename(projectData.project))
+}
+
 export const downloadProjectDocx = async (projectData) => {
-  const blob = await createProjectDocxBlob(projectData)
-  downloadBlob(blob, getProjectDocxFilename(projectData.project))
+  await downloadProjectDocxZip(projectData)
 }

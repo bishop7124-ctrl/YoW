@@ -15,6 +15,51 @@ const ChevronIcon = ({ open }) => (
   </svg>
 )
 
+const DragHandle = ({ item, label, onDragStart }) => (
+  <button
+    type="button"
+    draggable
+    onDragStart={e => {
+      e.stopPropagation()
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('application/x-yow-outline-item', JSON.stringify(item))
+      onDragStart(item)
+    }}
+    onDragEnd={() => onDragStart(null)}
+    className="outline-drag-handle"
+    title={`Drag to reorder ${label}`}
+    aria-label={`Drag to reorder ${label}`}
+  >
+    <span />
+    <span />
+    <span />
+    <span />
+    <span />
+    <span />
+  </button>
+)
+
+const DropZone = ({ active, onDrop, label, level = 0 }) => (
+  <div
+    role="button"
+    tabIndex={-1}
+    aria-label={label}
+    onDragOver={e => {
+      if (!active) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+    }}
+    onDrop={e => {
+      if (!active) return
+      e.preventDefault()
+      e.stopPropagation()
+      onDrop()
+    }}
+    className={`outline-drop-zone ${active ? 'is-active' : ''}`}
+    style={{ '--drop-indent': `${level * 22}px` }}
+  />
+)
+
 const MoveBtn = ({ onClick, title, disabled, children }) => {
   const isMobile = useIsMobile()
   return (
@@ -247,7 +292,7 @@ const InlineTitle = ({ value, onSave, className }) => {
   )
 }
 
-const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScene, reorderScene, moveScene, deleteScene, labels, indicators }) => {
+const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, onDragStart }) => {
   const wordCount = useMemo(() => {
     return scene.content?.trim().split(/\s+/).filter(Boolean).length || 0
   }, [scene.content])
@@ -259,7 +304,12 @@ const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScen
   }
 
   return (
-    <div className="group flex gap-2 px-3 py-2 rounded hover:bg-[var(--bg-hover)] transition-colors">
+    <div className="group outline-scene-row">
+      <DragHandle
+        item={{ type: 'scene', id: scene.id, parentId: scene.chapterId }}
+        label={labels.level3.toLowerCase()}
+        onDragStart={onDragStart}
+      />
       <div className="flex flex-col items-center gap-0.5 pt-1 flex-shrink-0">
         <MoveBtn onClick={() => reorderScene(scene.id, 'up')} disabled={isFirst} title="Move up">▲</MoveBtn>
         <MoveBtn onClick={() => reorderScene(scene.id, 'down')} disabled={isLast} title="Move down">▼</MoveBtn>
@@ -311,7 +361,7 @@ const SceneRow = ({ scene, sceneIdx, chapterOptions, isFirst, isLast, updateScen
   )
 }
 
-const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, isFirst, isLast, updateChapter, reorderChapter, moveChapter, deleteChapter, addScene, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, isCampaign }) => {
+const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, isFirst, isLast, updateChapter, reorderChapter, moveChapter, deleteChapter, addScene, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, isCampaign, dragItem, onDragStart, onDropScene }) => {
   const [open, setOpen] = useState(true)
   const chapterScenes = useMemo(() => scenes.filter(s => s.chapterId === chapter.id).sort((a, b) => a.order - b.order), [scenes, chapter.id])
   const wordCount = useMemo(() => chapterScenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [chapterScenes])
@@ -328,8 +378,13 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
   }
 
   return (
-    <div className="ml-6 border-l border-[var(--border)] pl-4">
+    <div className="outline-chapter-card">
       <div className="group flex gap-2 items-start py-2">
+        <DragHandle
+          item={{ type: 'chapter', id: chapter.id, parentId: chapter.actId }}
+          label={labels.level2.toLowerCase()}
+          onDragStart={onDragStart}
+        />
         <div className="flex flex-col items-center gap-0.5 pt-0.5 flex-shrink-0">
           <MoveBtn onClick={() => reorderChapter(chapter.id, 'up')} disabled={isFirst} title="Move chapter up">▲</MoveBtn>
           <MoveBtn onClick={() => reorderChapter(chapter.id, 'down')} disabled={isLast} title="Move chapter down">▼</MoveBtn>
@@ -393,9 +448,15 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
 
       {open && (
         <div className="space-y-1 pb-2">
+          <DropZone
+            active={dragItem?.type === 'scene'}
+            label={`Drop ${labels.level3.toLowerCase()} at start of ${title}`}
+            level={2}
+            onDrop={() => onDropScene(chapter.id, 0)}
+          />
           {chapterScenes.map((scene, idx) => (
+            <div key={scene.id}>
             <SceneRow
-              key={scene.id}
               scene={scene}
               sceneIdx={idx}
               chapterOptions={chapterOptions}
@@ -407,11 +468,19 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
               deleteScene={deleteScene}
               labels={labels}
               indicators={indicators}
+              onDragStart={onDragStart}
             />
+            <DropZone
+              active={dragItem?.type === 'scene'}
+              label={`Drop ${labels.level3.toLowerCase()} after ${scene.title || labels.level3}`}
+              level={2}
+              onDrop={() => onDropScene(chapter.id, idx + 1)}
+            />
+            </div>
           ))}
           <button
             onClick={() => addScene(chapter.id, labels.level3)}
-            className="ml-3 text-[11px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] uppercase tracking-wider transition-colors py-1"
+            className="outline-add-inline ml-8"
           >
             + {labels.level3}
           </button>
@@ -421,7 +490,7 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
   )
 }
 
-const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters, scenes, isFirst, isLast, updateAct, reorderAct, deleteAct, addChapter, updateChapter, reorderChapter, moveChapter, deleteChapter, addScene, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, isCampaign }) => {
+const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters, scenes, isFirst, isLast, updateAct, reorderAct, deleteAct, addChapter, updateChapter, reorderChapter, moveChapter, deleteChapter, addScene, updateScene, reorderScene, moveScene, deleteScene, labels, indicators, isCampaign, dragItem, onDragStart, onDropChapter, onDropScene }) => {
   const [open, setOpen] = useState(true)
   const actChapters = useMemo(() => chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order), [chapters, act.id])
   const wordCount = useMemo(() => {
@@ -430,8 +499,13 @@ const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters,
   }, [actChapters, scenes])
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-nav)] overflow-hidden">
-      <div className="group flex gap-2 items-start px-4 py-3" style={{ backgroundColor: 'var(--bg-hover)' }}>
+    <div className="outline-act-card">
+      <div className="group outline-act-header">
+        <DragHandle
+          item={{ type: 'act', id: act.id }}
+          label={labels.level1.toLowerCase()}
+          onDragStart={onDragStart}
+        />
         <div className="flex flex-col items-center gap-0.5 pt-0.5 flex-shrink-0">
           <MoveBtn onClick={() => reorderAct(act.id, 'up')} disabled={isFirst} title="Move act up">▲</MoveBtn>
           <MoveBtn onClick={() => reorderAct(act.id, 'down')} disabled={isLast} title="Move act down">▼</MoveBtn>
@@ -483,9 +557,15 @@ const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters,
 
       {open && (
         <div className="p-3 space-y-2">
+          <DropZone
+            active={dragItem?.type === 'chapter'}
+            label={`Drop ${labels.level2.toLowerCase()} at start of ${act.title}`}
+            level={1}
+            onDrop={() => onDropChapter(act.id, 0)}
+          />
           {actChapters.map((chap, idx) => (
+            <div key={chap.id}>
             <ChapterCard
-              key={chap.id}
               chapter={chap}
               chapterNum={chapterGlobalNums[chap.id]}
               actOptions={actOptions}
@@ -505,11 +585,21 @@ const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters,
               labels={labels}
               indicators={indicators}
               isCampaign={isCampaign}
+              dragItem={dragItem}
+              onDragStart={onDragStart}
+              onDropScene={onDropScene}
             />
+            <DropZone
+              active={dragItem?.type === 'chapter'}
+              label={`Drop ${labels.level2.toLowerCase()} after ${chap.title || labels.level2}`}
+              level={1}
+              onDrop={() => onDropChapter(act.id, idx + 1)}
+            />
+            </div>
           ))}
           <button
             onClick={() => addChapter(act.id, '')}
-            className="ml-10 text-[11px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] uppercase tracking-wider transition-colors py-1"
+            className="outline-add-inline ml-10"
           >
             + {labels.level2}
           </button>
@@ -521,11 +611,12 @@ const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters,
 
 export default function StoryOutline({ store }) {
   const {
-    acts, addAct, updateAct, deleteAct, reorderAct,
+    acts, addAct, updateAct, deleteAct, reorderAct, moveAct,
     chapters, addChapter, updateChapter, deleteChapter, reorderChapter, moveChapter,
     scenes, addScene, updateScene, deleteScene, reorderScene, moveScene,
     activeNovel,
   } = store
+  const [dragItem, setDragItem] = useState(null)
 
   const labels = getProjectType(activeNovel?.type).structure
   const indicators = getStoryEventIndicators(activeNovel?.type)
@@ -534,31 +625,28 @@ export default function StoryOutline({ store }) {
   const totalWords = useMemo(() => scenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [scenes])
   const totalScenes = scenes.length
   const totalChapters = chapters.length
+  const sortedActs = useMemo(() => acts.slice().sort((a, b) => a.order - b.order), [acts])
 
   const chapterGlobalNums = useMemo(() => {
     const map = {}
     let count = 1
-    acts.slice().sort((a, b) => a.order - b.order).forEach(act => {
+    sortedActs.forEach(act => {
       chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order).forEach(chap => { map[chap.id] = count++ })
     })
     return map
-  }, [acts, chapters])
+  }, [sortedActs, chapters])
 
   const actOptions = useMemo(() => (
-    acts
-      .slice()
-      .sort((a, b) => a.order - b.order)
+    sortedActs
       .map((act, idx) => ({
         id: act.id,
         label: act.title || `${labels.level1} ${idx + 1}`,
         chapterCount: chapters.filter(chap => chap.actId === act.id).length,
       }))
-  ), [acts, chapters, labels.level1])
+  ), [sortedActs, chapters, labels.level1])
 
   const chapterOptions = useMemo(() => (
-    acts
-      .slice()
-      .sort((a, b) => a.order - b.order)
+    sortedActs
       .flatMap(act => chapters
         .filter(chap => chap.actId === act.id)
         .sort((a, b) => a.order - b.order)
@@ -569,12 +657,38 @@ export default function StoryOutline({ store }) {
             : chap.title || labels.level2,
           sceneCount: scenes.filter(scene => scene.chapterId === chap.id).length,
         })))
-  ), [acts, chapters, scenes, labels.level2, chapterGlobalNums])
+  ), [sortedActs, chapters, scenes, labels.level2, chapterGlobalNums])
+
+  const actSummaries = useMemo(() => sortedActs.map(act => {
+    const actChapters = chapters.filter(chapter => chapter.actId === act.id)
+    const chapterIds = new Set(actChapters.map(chapter => chapter.id))
+    const actScenes = scenes.filter(scene => chapterIds.has(scene.chapterId))
+    const words = actScenes.reduce((n, scene) => n + (scene.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0)
+    return { act, chapters: actChapters.length, scenes: actScenes.length, words }
+  }), [sortedActs, chapters, scenes])
+
+  const onDropAct = (toIndex) => {
+    if (dragItem?.type !== 'act' || !moveAct) return
+    moveAct(dragItem.id, toIndex)
+    setDragItem(null)
+  }
+
+  const onDropChapter = (toActId, toIndex) => {
+    if (dragItem?.type !== 'chapter') return
+    moveChapter(dragItem.id, toActId, toIndex)
+    setDragItem(null)
+  }
+
+  const onDropScene = (toChapterId, toIndex) => {
+    if (dragItem?.type !== 'scene') return
+    moveScene(dragItem.id, toChapterId, toIndex)
+    setDragItem(null)
+  }
 
   return (
     <div className="h-full flex flex-col bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden">
       {/* Header */}
-      <div className="studio-topbar flex-shrink-0 px-8 py-5 flex items-center justify-between" data-tour="outline-header">
+      <div className="studio-topbar outline-topbar" data-tour="outline-header">
         <div>
           <p className="eyebrow">Structure</p>
           <h1 className="font-serif text-2xl font-bold text-[var(--text-main)]">Story Outline</h1>
@@ -595,7 +709,7 @@ export default function StoryOutline({ store }) {
       </div>
 
       {/* Outline tree */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="outline-workspace">
         {acts.length === 0 ? (
           <div className="empty-state mx-auto mt-12 max-w-lg">
             <p className="text-[var(--text-muted)] text-sm">No {labels.level1.toLowerCase()}s yet.</p>
@@ -610,10 +724,43 @@ export default function StoryOutline({ store }) {
             </button>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto space-y-4">
-            {acts.slice().sort((a, b) => a.order - b.order).map((act, idx) => (
+          <div className="outline-grid">
+            <aside className="outline-map-panel">
+              <div>
+                <p className="eyebrow">Map</p>
+                <h2>Outline Flow</h2>
+              </div>
+              <div className="outline-map-list">
+                {actSummaries.map(({ act, chapters: chapterCount, scenes: sceneCount, words }, idx) => (
+                  <div key={act.id} className="outline-map-item">
+                    <span className="outline-map-index">{idx + 1}</span>
+                    <div>
+                      <strong>{act.title || `${labels.level1} ${idx + 1}`}</strong>
+                      <small>{chapterCount} {labels.level2.toLowerCase()}{chapterCount !== 1 ? 's' : ''} · {sceneCount} {labels.level3.toLowerCase()}{sceneCount !== 1 ? 's' : ''} · {words.toLocaleString()} words</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="outline-drop-help">
+                Drag the dot handle on any {labels.level1.toLowerCase()}, {labels.level2.toLowerCase()}, or {labels.level3.toLowerCase()} to reorder it.
+              </div>
+              <button
+                onClick={() => addAct(`${labels.level1} ${acts.length + 1}`)}
+                className="btn btn-primary w-full justify-center"
+              >
+                + {labels.level1}
+              </button>
+            </aside>
+
+            <main className="outline-tree-panel">
+            <DropZone
+              active={dragItem?.type === 'act'}
+              label={`Drop ${labels.level1.toLowerCase()} at start of outline`}
+              onDrop={() => onDropAct(0)}
+            />
+            {sortedActs.map((act, idx) => (
+              <div key={act.id}>
               <ActCard
-                key={act.id}
                 act={act}
                 actOptions={actOptions}
                 chapterOptions={chapterOptions}
@@ -638,8 +785,19 @@ export default function StoryOutline({ store }) {
                 labels={labels}
                 indicators={indicators}
                 isCampaign={isCampaign}
+                dragItem={dragItem}
+                onDragStart={setDragItem}
+                onDropChapter={onDropChapter}
+                onDropScene={onDropScene}
               />
+              <DropZone
+                active={dragItem?.type === 'act'}
+                label={`Drop ${labels.level1.toLowerCase()} after ${act.title || labels.level1}`}
+                onDrop={() => onDropAct(idx + 1)}
+              />
+              </div>
             ))}
+            </main>
           </div>
         )}
       </div>

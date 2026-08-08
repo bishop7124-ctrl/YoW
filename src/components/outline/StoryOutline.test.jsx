@@ -23,6 +23,7 @@ const baseStore = {
   updateAct: vi.fn(),
   deleteAct: vi.fn(),
   reorderAct: vi.fn(),
+  moveAct: vi.fn(),
   addChapter: vi.fn(),
   updateChapter: vi.fn(),
   deleteChapter: vi.fn(),
@@ -65,5 +66,47 @@ describe('StoryOutline', () => {
     })
 
     expect(store.moveScene).toHaveBeenCalledWith('scene-1', 'chapter-3', 1)
+  })
+
+  it('reorders acts by dropping an act between outline drop zones', () => {
+    const store = renderOutline()
+
+    fireEvent.dragStart(screen.getAllByLabelText('Drag to reorder act')[0], {
+      dataTransfer: { effectAllowed: '', setData: vi.fn() },
+    })
+    fireEvent.dragOver(screen.getByLabelText('Drop act after Act 2'))
+    fireEvent.drop(screen.getByLabelText('Drop act after Act 2'), {
+      dataTransfer: { dropEffect: '' },
+    })
+
+    expect(store.moveAct).toHaveBeenCalledWith('act-1', 2)
+  })
+
+  it('moves a chapter by dropping it into another act', () => {
+    const store = renderOutline()
+
+    fireEvent.dragStart(screen.getAllByLabelText('Drag to reorder chapter')[0], {
+      dataTransfer: { effectAllowed: '', setData: vi.fn() },
+    })
+    fireEvent.dragOver(screen.getByLabelText('Drop chapter at start of Act 2'))
+    fireEvent.drop(screen.getByLabelText('Drop chapter at start of Act 2'), {
+      dataTransfer: { dropEffect: '' },
+    })
+
+    expect(store.moveChapter).toHaveBeenCalledWith('chapter-1', 'act-2', 0)
+  })
+
+  it('moves a scene by dropping it into another chapter', () => {
+    const store = renderOutline()
+
+    fireEvent.dragStart(screen.getAllByLabelText('Drag to reorder scene')[0], {
+      dataTransfer: { effectAllowed: '', setData: vi.fn() },
+    })
+    fireEvent.dragOver(screen.getByLabelText('Drop scene at start of Chapter 2: Crossroads'))
+    fireEvent.drop(screen.getByLabelText('Drop scene at start of Chapter 2: Crossroads'), {
+      dataTransfer: { dropEffect: '' },
+    })
+
+    expect(store.moveScene).toHaveBeenCalledWith('scene-1', 'chapter-2', 0)
   })
 })

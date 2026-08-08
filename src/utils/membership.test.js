@@ -21,12 +21,12 @@ const makeUser = (overrides = {}) => ({
 })
 
 describe('membership plan limits', () => {
-  it('uses a 3 MB quota for Free cloud accounts', () => {
+  it('uses a 250 MB quota for Free cloud accounts', () => {
     const membership = getMembership(makeUser())
 
-    expect(PLAN_STORAGE_BYTES.free).toBe(3 * 1024 * 1024)
+    expect(PLAN_STORAGE_BYTES.free).toBe(250 * 1024 * 1024)
     expect(membership.isFree).toBe(true)
-    expect(membership.storageQuotaBytes).toBe(3 * 1024 * 1024)
+    expect(membership.storageQuotaBytes).toBe(250 * 1024 * 1024)
     expect(membership.usesFreeCloudLimits).toBe(true)
   })
 
@@ -47,5 +47,24 @@ describe('membership plan limits', () => {
     expect(membership.usesFreeCloudLimits).toBe(true)
     expect(membership.freeProjectId).toBe('project-1')
     expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.free)
+  })
+
+  it('treats beta tester accounts as temporary full-access members', () => {
+    const membership = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'beta_tester',
+        subscription_status: 'active',
+        beta_tester: true,
+      },
+    }))
+
+    expect(membership.isBetaTester).toBe(true)
+    expect(membership.isPaid).toBe(true)
+    expect(membership.isFree).toBe(false)
+    expect(membership.activePlanKey).toBe('beta_tester')
+    expect(membership.activePlanDef.label).toBe('Beta Tester')
+    expect(membership.freeProjectId).toBe(null)
+    expect(membership.isDesktopEntitled).toBe(true)
+    expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.beta_tester)
   })
 })

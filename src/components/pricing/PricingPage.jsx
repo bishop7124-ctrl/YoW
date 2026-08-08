@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import { HOSTING_INCLUDED_YEARS, HOSTING_RENEWAL_FEE_GBP, PLANS, FOUNDER_SLOTS_TOTAL } from '../../utils/membership'
-import { supabase } from '../../supabase'
+import BetaInterestModal from '../account/BetaInterestModal'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { usePageMeta } from '../../utils/usePageMeta'
+import './PricingPage.css'
+
+const freePlanDef = PLANS.find(p => p.key === 'free')
+const monthlyPlanDef = PLANS.find(p => p.key === 'premium_monthly')
+const lifetimePlanDef = PLANS.find(p => p.key === 'premium_plus_lifetime')
+const founderPlanDef = PLANS.find(p => p.key === 'founder')
 
 // --------------------------------------------------------------------------
 // Structured data helpers (injected into <head> while the page is mounted)
@@ -24,20 +30,19 @@ function removeSchema(id) {
 }
 
 // --------------------------------------------------------------------------
-// Feature comparison table data
+// Feature comparison table data — only real differentiators, in plain
+// language. Column order matches the card order: Free, Monthly, Lifetime, Founder.
 // --------------------------------------------------------------------------
 const FEATURE_ROWS = [
-  { label: 'Active projects',         free: '1',         lifetime: 'Unlimited', founder: 'Unlimited', monthly: 'Unlimited' },
-  { label: 'Storage',                 free: '3 MB',      lifetime: '8 GB',      founder: '15 GB',     monthly: '5 GB'      },
-  { label: 'All studio rooms',        free: 'Text-first rooms only', lifetime: '✓', founder: '✓',      monthly: '✓'         },
-  { label: 'Map Builder',             free: 'View-only / locked', lifetime: '✓', founder: '✓',         monthly: '✓'         },
-  { label: 'Bring-your-own-key AI',   free: '—',         lifetime: '✓',         founder: '✓',         monthly: '✓'         },
-  { label: 'Founder badge',           free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Feature your debut work', free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Priority feature input',  free: '—',         lifetime: '—',         founder: '✓',         monthly: '—'         },
-  { label: 'Mode after hosting ends',  free: 'Free cloud limits', lifetime: 'Local forever + free cloud limits', founder: 'Cloud Mode', monthly: 'Free cloud limits after cancellation' },
-  { label: 'Cloud hosting included',   free: 'Starter limits', lifetime: `${HOSTING_INCLUDED_YEARS} years, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime fair-use', monthly: 'While subscribed' },
-  { label: 'Support tier',            free: 'Community', lifetime: 'Priority',  founder: 'Priority',  monthly: 'Priority'  },
+  { label: 'Projects',                free: '1',       monthly: 'Unlimited', lifetime: 'Unlimited', founder: 'Unlimited' },
+  { label: 'Cloud storage',           free: freePlanDef?.storageLabelShort, monthly: monthlyPlanDef?.storageLabelShort, lifetime: lifetimePlanDef?.storageLabelShort, founder: founderPlanDef?.storageLabelShort },
+  { label: 'Full writing & worldbuilding toolkit', free: '✓ in your 1 project', monthly: '✓', lifetime: '✓', founder: '✓' },
+  { label: 'Connect your own AI provider', free: '—', monthly: '✓', lifetime: '✓', founder: '✓' },
+  { label: 'Desktop app (Mac & Windows)', free: '—', monthly: '—', lifetime: '✓', founder: '✓' },
+  { label: 'Cloud sync',               free: 'Free-tier limits', monthly: 'While subscribed', lifetime: `${HOSTING_INCLUDED_YEARS} yrs included, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime, no renewal' },
+  { label: 'Founder badge & recognition', free: '—', monthly: '—', lifetime: '—', founder: '✓' },
+  { label: 'Support',                 free: 'Community', monthly: 'Priority', lifetime: 'Priority', founder: 'Priority' },
+  { label: 'Payment',                 free: 'Free, forever', monthly: 'Monthly, cancel anytime', lifetime: 'One-time payment', founder: 'One-time payment' },
 ]
 
 // --------------------------------------------------------------------------
@@ -46,35 +51,43 @@ const FEATURE_ROWS = [
 const FAQ_ITEMS = [
   {
     q: 'What does Lifetime actually cover?',
-    a: `Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for hosted sync, storage, and backups. After that, the desktop app keeps working in Local Mode forever, and web cloud access falls back to Free limits unless you renew Cloud Mode for £${HOSTING_RENEWAL_FEE_GBP}/year.`,
+    a: `Lifetime gives you everything in Monthly — unlimited projects, the full toolkit, and 8 GB of cloud storage — plus the desktop app for Mac and Windows, and every future update for free. It includes ${HOSTING_INCLUDED_YEARS} years of cloud sync. After that, the desktop app keeps working in Local Mode forever, and you can either renew cloud sync for £${HOSTING_RENEWAL_FEE_GBP}/year or keep writing locally at no cost.`,
+  },
+  {
+    q: 'Why isn\'t the desktop app included in Monthly?',
+    a: 'The desktop app is a one-time-purchase perk reserved for Lifetime and Founder — it\'s how we can keep Monthly\'s price low. Monthly gives you the complete web app, unlimited projects, and cloud sync; if you later decide you want to own the app outright, you can upgrade to Lifetime at any time.',
+  },
+  {
+    q: 'Can I switch from Monthly to Lifetime later?',
+    a: 'Yes. Open Account Settings → Membership and choose Lifetime — checkout walks you through it, and your projects and data carry straight over. Cancel the Monthly subscription from the same screen once you\'re switched.',
   },
   {
     q: 'What is the cloud hosting renewal?',
-    a: `The cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year, due only after the included ${HOSTING_INCLUDED_YEARS}-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups above the Free allowance. If you choose not to renew, your lifetime desktop app licence remains active and web cloud access falls back to Free limits.`,
+    a: `The cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year, and it only applies to Lifetime after the included ${HOSTING_INCLUDED_YEARS}-year period ends. It covers hosted sync, storage, and backups. If you'd rather not renew, your desktop app licence stays active forever and you keep writing in Local Mode at no cost — nothing is taken away, you just sync manually instead of automatically.`,
   },
   {
     q: 'What happens if I don\'t renew cloud hosting?',
-    a: 'You keep access to the desktop app in Local Mode. Your projects are stored on this device, you can keep editing locally, and you can import or export backups. Web cloud access falls back to the Free one-project, 3 MB allowance unless you renew Cloud Mode.',
+    a: `You keep full access to the desktop app in Local Mode — your work stays safely on your device and you can keep editing, importing, and exporting. Web/cloud access falls back to the Free plan's one-project, ${freePlanDef?.storageLabelShort} allowance until you renew.`,
   },
   {
     q: 'How many Founder slots are there?',
-    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots globally. Once they're gone, they're gone. Founders have lifetime Cloud Mode included within the published storage and fair-use cap.`,
+    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots, ever. Once they're gone, they're gone. Founders get lifetime cloud sync included, with no renewal, within the published fair-use cap.`,
   },
   {
-    q: 'Do monthly subscribers pay a cloud hosting renewal?',
-    a: `No. Monthly subscribers pay ${PLANS.find(p => p.key === 'premium_monthly')?.priceLabel}/month, which includes Cloud Mode while subscribed. The annual renewal only applies to Lifetime plan holders after their included hosting period.`,
+    q: 'Do Monthly subscribers pay a cloud hosting renewal?',
+    a: `No. Monthly is ${monthlyPlanDef?.priceLabel}/month, and that includes cloud sync for as long as you're subscribed. The renewal fee only applies to Lifetime plan holders once their included hosting period ends.`,
   },
   {
     q: 'What happens to my data if I downgrade to Free?',
-    a: 'Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable/exportable. You\'ll designate one active text-first project to edit. Everything else becomes view-only, and premium rooms such as Map Builder and AI Tools stay locked until you upgrade again.',
+    a: `Your projects, characters, lore, and maps are always yours. If you downgrade, you'll pick one project to keep as your active workspace — it keeps the full toolkit, including Map Builder, within the Free plan's ${freePlanDef?.storageLabelShort} allowance. Every other project becomes view-only and stays fully exportable. AI tools lock until you upgrade again.`,
   },
   {
     q: 'Can I cancel my Monthly subscription?',
-    a: 'Yes. Cancel any time from your account settings via the billing portal. You\'ll retain full access until the end of your current billing period.',
+    a: 'Yes, any time, from Account Settings → Membership. You keep full access until the end of your current billing period — no penalty, no retention calls.',
   },
   {
-    q: 'What is bring-your-own-key AI?',
-    a: 'Your Own World supports connecting your own API keys from providers like OpenRouter, Google AI, or Anthropic. This means you pay your AI provider directly — YOW never marks up AI usage. All paid plans include this; the Free plan does not include AI features.',
+    q: 'What does "connect your own AI provider" mean?',
+    a: 'On any paid plan, you link your own account from a provider like ChatGPT, Claude, or OpenRouter, right from Account Settings. You pay that provider directly for what you use — YOW never marks up or resells AI usage. The Free plan doesn\'t include AI features.',
   },
   {
     q: 'Is my storage quota shared across projects?',
@@ -143,40 +156,23 @@ function FounderSlotsCounter({ slots }) {
   )
 }
 
-function PricingCard({ plan, onSelect, busy, founderSlots }) {
+function PricingCard({ plan, onSelect, onFreeStart, busy, founderSlots }) {
   const isFounder = plan.isFounder
-  const soldOut   = isFounder && founderSlots !== null && founderSlots?.remaining === 0
+  const isFree = plan.key === 'free'
+  const soldOut = isFounder && founderSlots !== null && founderSlots?.remaining === 0
 
   return (
     <article
-      style={{
-        position: 'relative',
-        height: '100%',
-        borderRadius: 14,
-        border: '1.5px solid var(--border)',
-        background: 'var(--bg-nav)',
-        padding: '28px 24px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0,
-      }}
+      className={`pricing-card${plan.highlight ? ' pricing-card--highlight' : ''}`}
       aria-label={`${plan.label} plan — ${plan.priceLabel}`}
     >
       {isFounder && <FounderSlotsCounter slots={founderSlots} />}
 
-      {/* Badge */}
+      {/* Badge / ribbon */}
       {plan.badge && (
-        <div style={{
-          position: 'absolute', top: -12, left: 20,
-          background: 'var(--bg-nav)',
-          border: '1px solid var(--border)',
-          color: 'var(--text-muted)',
-          fontSize: 10, fontWeight: 900, letterSpacing: '.08em',
-          textTransform: 'uppercase', borderRadius: 99,
-          padding: '3px 10px',
-        }}>
-          {plan.badge}
-        </div>
+        plan.highlight
+          ? <div className="pricing-card-ribbon">{plan.badge}</div>
+          : <div className="pricing-card-badge">{plan.badge}</div>
       )}
 
       {/* Plan name */}
@@ -189,9 +185,9 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
       </h3>
 
       {/* Price */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '4px 0 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '4px 0 10px' }}>
         <span style={{
-          fontSize: plan.key === 'free' ? 26 : 34,
+          fontSize: plan.key === 'free' ? 26 : plan.highlight ? 38 : 34,
           fontWeight: 900, color: 'var(--text-main)',
           letterSpacing: '-.02em',
         }}>
@@ -204,13 +200,25 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
         )}
       </div>
 
+      {plan.valueNote && (
+        <p className="pricing-card-valuenote">{plan.valueNote}</p>
+      )}
+
       {/* Description */}
       <p style={{
         fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)',
-        margin: '0 0 20px',
+        margin: '0 0 16px',
       }}>
         {plan.longDescription || plan.description}
       </p>
+
+      {/* Key benefit callout — the one thing this plan should be known for */}
+      {plan.keyBenefit && (
+        <div className="pricing-card-keybenefit">
+          <span className="pricing-card-keybenefit-icon" aria-hidden="true">{plan.keyBenefit.icon}</span>
+          <span>{plan.keyBenefit.label}</span>
+        </div>
+      )}
 
       {/* Features list */}
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10, flexGrow: 1 }}>
@@ -224,7 +232,7 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
 
       {plan.disclaimer && (
         <p style={{
-          marginTop: 16, fontSize: 11, color: 'var(--text-muted)',
+          marginTop: 16, fontSize: 11.5, color: 'var(--text-muted)',
           lineHeight: 1.5, fontStyle: 'italic',
         }}>
           {plan.disclaimer}
@@ -232,45 +240,34 @@ function PricingCard({ plan, onSelect, busy, founderSlots }) {
       )}
 
       {/* CTA */}
-      {plan.key !== 'free' && (
+      {!isFree && (
         <button
           type="button"
+          className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`}
           onClick={() => onSelect && !soldOut && onSelect(plan.key)}
           disabled={busy || soldOut}
-          style={{
-            width: '100%',
-            padding: '12px 0',
-            borderRadius: 8,
-            border: '1.5px solid var(--accent)',
-            background: 'transparent',
-            color: 'var(--accent)',
-            fontSize: 14, fontWeight: 800,
-            cursor: busy || soldOut ? 'not-allowed' : 'pointer',
-            opacity: busy || soldOut ? 0.55 : 1,
-            marginTop: 20,
-            transition: 'opacity .15s',
-          }}
         >
           {busy
             ? 'Opening…'
             : soldOut
               ? 'Sold out'
-              : isFounder
-                ? 'Claim Founder status'
-                : plan.interval === 'month'
-                  ? 'Start monthly'
-                  : 'Get lifetime access'}
+              : 'Register interest'}
         </button>
       )}
 
-      {plan.key === 'free' && (
-        <div style={{
-          width: '100%', padding: '12px 0', marginTop: 20,
-          textAlign: 'center', fontSize: 13, fontWeight: 700,
-          color: 'var(--text-muted)',
-        }}>
-          Free forever — no card required
-        </div>
+      {isFree && (
+        <button
+          type="button"
+          className="pricing-card-cta"
+          onClick={onFreeStart}
+        >
+          Start for free
+        </button>
+      )}
+      {isFree && (
+        <p style={{ margin: '10px 0 0', textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>
+          No card required
+        </p>
       )}
     </article>
   )
@@ -312,21 +309,25 @@ function FaqItem({ q, a, open, onToggle }) {
   )
 }
 
+function cellClass(val) {
+  if (val === '✓') return 'is-check'
+  if (val === '—') return 'is-dash'
+  return ''
+}
+
 // --------------------------------------------------------------------------
 // Main page
 // --------------------------------------------------------------------------
 export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const founderSlots = useFounderSlots()
   const [openFaq, setOpenFaq]   = useState(null)
-  const [busy, setBusy]         = useState('')
   const [billingError, setBillingError] = useState('')
+  const [interestPlan, setInterestPlan] = useState(null)
 
-  const monthlyPlan = PLANS.find(p => p.key === 'premium_monthly')
-  const lifetimePlan = PLANS.find(p => p.key === 'premium_plus_lifetime')
   usePageMeta({
     path: '/pricing/',
     title: 'Pricing — Your Own World | Worldbuilding & Writing Software',
-    description: `Simple, honest pricing for Your Own World — Free, Monthly at ${monthlyPlan?.priceLabel}/month, Lifetime at ${lifetimePlan?.priceLabel}, and Founder.`,
+    description: `Affordable, honest pricing for Your Own World — Free, Monthly at ${monthlyPlanDef?.priceLabel}/month, Lifetime at ${lifetimePlanDef?.priceLabel} (includes the desktop app), and Founder.`,
   })
 
   // Inject / remove JSON-LD schemas while this page is mounted.
@@ -335,7 +336,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
       '@context': 'https://schema.org',
       '@type': 'WebPage',
       name: 'Pricing — Your Own World',
-      description: 'Simple, honest pricing for worldbuilding and writing software. Free plan, lifetime access, and monthly subscription options.',
+      description: 'Affordable, honest pricing for worldbuilding and writing software. A genuinely useful free plan, a low-cost monthly subscription, and a lifetime option that includes the desktop app.',
       url: 'https://www.yourownworld.co.uk/pricing',
       mainEntity: {
         '@type': 'ItemList',
@@ -390,54 +391,16 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   const handleSelect = async (planKey) => {
     if (!planKey) return
-    if (!user) {
-      // Not logged in — send to sign-up / sign-in
-      onGetStarted?.()
-      return
-    }
-    // Logged-in user — initiate checkout
-    const endpoint = import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL
-    if (!endpoint) {
-      setBillingError('Billing is not configured yet. Please try again later.')
-      return
-    }
-    try {
-      setBusy(planKey)
-      setBillingError('')
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ plan: planKey, currency: 'gbp' }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Could not open billing. Please try again.')
-      }
-      const { url } = await res.json()
-      window.location.assign(url)
-    } catch (err) {
-      setBillingError(err.message || 'Something went wrong.')
-    } finally {
-      setBusy('')
-    }
+    setBillingError('')
+    setInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
   }
 
-  const displayPlans = [
-    PLANS.find(p => p.key === 'free'),
-    PLANS.find(p => p.key === 'premium_monthly'),
-    PLANS.find(p => p.key === 'premium_plus_lifetime'),
-    PLANS.find(p => p.key === 'founder'),
-  ].filter(Boolean)
+  const displayPlans = [freePlanDef, monthlyPlanDef, lifetimePlanDef, founderPlanDef].filter(Boolean)
 
   const pageBg = 'var(--bg-main)'
 
   return (
-    <div style={{ minHeight: '100vh', background: pageBg, color: 'var(--text-main)' }}>
+    <div className="marketing-shell" style={{ minHeight: '100vh', background: pageBg, color: 'var(--text-main)' }}>
       <MarketingNav activePath="/pricing/" user={user} onLogin={onSignIn} onGetStarted={onGetStarted} />
 
       <main>
@@ -446,8 +409,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           aria-labelledby="pricing-hero-heading"
           style={{
             textAlign: 'center',
-            padding: 'clamp(48px, 8vw, 96px) 24px clamp(40px, 6vw, 72px)',
-            maxWidth: 700, margin: '0 auto',
+            padding: 'clamp(48px, 8vw, 96px) 24px clamp(32px, 5vw, 56px)',
+            maxWidth: 720, margin: '0 auto',
           }}
         >
           <p style={{
@@ -472,11 +435,10 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           <p style={{
             fontSize: 'clamp(15px, 2.5vw, 18px)',
             color: 'var(--text-muted)', lineHeight: 1.7,
-            maxWidth: 560, margin: '0 auto 32px',
+            maxWidth: 580, margin: '0 auto 32px',
           }}>
-            Start with a text-first Free plan. Subscribe monthly if you need flexibility, or choose
-            Lifetime if you want permanent app access with Local Mode forever and Cloud Mode included
-            for three years.
+            Every plan runs on the same powerful toolkit. The only question is how many worlds
+            you're building, and whether you'd rather own the app outright or pay as you go.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
@@ -503,28 +465,27 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               Compare plans
             </button>
           </div>
+
+          <div className="pricing-trust-row">
+            <span className="pricing-trust-chip"><CheckIcon /> No card required for Free</span>
+            <span className="pricing-trust-chip"><CheckIcon /> Cancel Monthly any time</span>
+            <span className="pricing-trust-chip"><CheckIcon /> Built solo, by a working novelist</span>
+          </div>
+
           <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-muted)', opacity: 0.7 }}>
             Prices shown in GBP. VAT may apply depending on your location and is calculated at checkout.
           </p>
         </section>
 
         {/* ── Plan cards ── */}
-        <section
-          aria-label="Pricing plans"
-          style={{
-            maxWidth: 1160, margin: '0 auto',
-            padding: 'clamp(40px, 6vw, 56px) 24px 80px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: 16,
-          }}
-        >
+        <section aria-label="Pricing plans" className="pricing-cards">
           {displayPlans.map(plan => (
             <PricingCard
               key={plan.key}
               plan={plan}
               onSelect={handleSelect}
-              busy={busy === plan.key}
+              onFreeStart={onGetStarted}
+              busy={false}
               founderSlots={founderSlots}
             />
           ))}
@@ -533,11 +494,48 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         {billingError && (
           <p style={{
             textAlign: 'center', color: '#ef4444', fontSize: 13,
-            fontWeight: 600, maxWidth: 480, margin: '-40px auto 48px',
+            fontWeight: 600, maxWidth: 480, margin: '24px auto 0',
           }}>
             {billingError}
           </p>
         )}
+
+        {/* ── Why so affordable ── */}
+        <section
+          aria-labelledby="affordable-heading"
+          style={{ padding: 'clamp(56px, 8vw, 96px) 24px' }}
+        >
+          <div className="pricing-founder-note">
+            <div className="pricing-founder-note-mark" aria-hidden="true">“</div>
+            <h2
+              id="affordable-heading"
+              style={{
+                fontSize: 'clamp(20px, 3.5vw, 26px)', fontWeight: 900,
+                letterSpacing: '-.015em', margin: '0 0 18px',
+                color: 'var(--text-main)',
+              }}
+            >
+              Why is YOW so affordable?
+            </h2>
+            <p style={{ fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+              I built Your Own World because I was tired of stitching together half a dozen
+              separate writing tools — and paying full price for each one.
+            </p>
+            <p style={{ fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+              My goal was never to build the most expensive platform on the market. It's to build
+              the tool I wish I'd had when I started — powerful enough for serious work, priced so
+              it's an easy yes for as many writers as possible.
+            </p>
+            <p style={{ fontSize: 15.5, lineHeight: 1.8, color: 'var(--text-muted)', margin: 0 }}>
+              I'd rather spend my time shipping features you'll actually use than dreaming up new
+              ways to lock them behind higher tiers. That's the trade I've made, and it's why the
+              pricing here looks the way it does.
+            </p>
+            <p style={{ marginTop: 24, fontSize: 12.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--text-muted)', opacity: 0.75 }}>
+              — Founder's note
+            </p>
+          </div>
+        </section>
 
         {/* ── Comparison table ── */}
         <section
@@ -558,57 +556,25 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           >
             Everything side by side
           </h2>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table
-              role="table"
-              style={{
-                width: '100%', borderCollapse: 'collapse',
-                fontSize: 13,
-              }}
-            >
+          <div className="pricing-table-wrap">
+            <table role="table" className="pricing-table">
               <thead>
                 <tr>
-                  <th style={{
-                    textAlign: 'left', padding: '10px 12px',
-                    color: 'var(--text-muted)', fontWeight: 700,
-                    borderBottom: '1px solid var(--border)',
-                    fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase',
-                    width: '24%',
-                  }}>
-                    Feature
-                  </th>
-                  {['Free', 'Lifetime', 'Founder', 'Monthly'].map(h => (
-                    <th key={h} style={{
-                      textAlign: 'center', padding: '10px 8px',
-                      color: 'var(--text-muted)',
-                      fontWeight: 700,
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase',
-                      minWidth: 80,
-                    }}>
-                      {h}
-                    </th>
-                  ))}
+                  <th>Feature</th>
+                  <th>Free</th>
+                  <th>Monthly</th>
+                  <th className="col-highlight">Lifetime</th>
+                  <th>Founder</th>
                 </tr>
               </thead>
               <tbody>
-                {FEATURE_ROWS.map((row, ri) => (
-                  <tr key={row.label} style={{ background: ri % 2 === 0 ? 'transparent' : 'var(--bg-nav)' }}>
-                    <td style={{
-                      padding: '12px 12px', color: 'var(--text-main)',
-                      fontWeight: 600, borderRight: '1px solid var(--border)',
-                    }}>
-                      {row.label}
-                    </td>
-                    {[row.free, row.lifetime, row.founder, row.monthly].map((val, ci) => (
-                      <td key={ci} style={{
-                        textAlign: 'center', padding: '12px 8px',
-                        color: val === '✓' ? 'var(--accent)' : val === '—' ? 'var(--border)' : 'var(--text-muted)',
-                        fontWeight: val === '✓' ? 900 : 500,
-                      }}>
-                        {val}
-                      </td>
-                    ))}
+                {FEATURE_ROWS.map(row => (
+                  <tr key={row.label}>
+                    <td>{row.label}</td>
+                    <td data-label="Free" className={cellClass(row.free)}>{row.free}</td>
+                    <td data-label="Monthly" className={cellClass(row.monthly)}>{row.monthly}</td>
+                    <td data-label="Lifetime" className={`col-highlight ${cellClass(row.lifetime)}`}>{row.lifetime}</td>
+                    <td data-label="Founder" className={cellClass(row.founder)}>{row.founder}</td>
                   </tr>
                 ))}
               </tbody>
@@ -616,52 +582,59 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           </div>
         </section>
 
-        {/* ── Lifetime vs Monthly explainer ── */}
+        {/* ── Which plan explainer ── */}
         <section
-          aria-labelledby="lifetime-explainer-heading"
+          aria-labelledby="which-plan-heading"
           style={{
-            maxWidth: 800, margin: '0 auto',
+            maxWidth: 980, margin: '0 auto',
             padding: '0 24px 96px',
             textAlign: 'center',
           }}
         >
           <h2
-            id="lifetime-explainer-heading"
+            id="which-plan-heading"
             style={{
               fontSize: 'clamp(20px, 3.5vw, 28px)', fontWeight: 900,
               letterSpacing: '-.015em', margin: '0 0 16px',
               color: 'var(--text-main)',
             }}
           >
-            Lifetime or monthly? Here's the honest answer.
+            Which plan is right for you?
           </h2>
           <p style={{
             fontSize: 15, lineHeight: 1.8, color: 'var(--text-muted)',
-            margin: '0 auto 28px', maxWidth: 620,
+            margin: '0 auto 28px', maxWidth: 640,
           }}>
-            If you're committed to building your world and want to own your tools outright,
-            a lifetime plan is a better investment. If you're still exploring or your needs
-            change, Monthly gives you full access with no commitment.
+            Most writers land on Lifetime — one payment, and you own the app and the desktop
+            experience outright. Here's the honest breakdown.
           </p>
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gap: 16, textAlign: 'left',
           }}>
             {[
               {
-                heading: 'Choose lifetime if…',
+                heading: 'Choose Monthly if…',
                 points: [
-                  'You build worlds seriously and consistently',
-                  'You want to own your software, not rent it',
-                  'You prefer a single payment and no billing cycle',
+                  "You're exploring and not ready to commit",
+                  "You're happy working entirely in the browser",
+                  'You prefer to spread the cost over time',
                 ],
               },
               {
-                heading: 'Choose monthly if…',
+                heading: 'Choose Lifetime if…',
                 points: [
-                  "You're exploring and not ready to commit",
-                  'You prefer to spread the cost over time',
-                  'Flexibility and cancel-anytime matters most',
+                  'You build worlds seriously and consistently',
+                  'You want the desktop app and to own your software, not rent it',
+                  `You want a single ${lifetimePlanDef?.priceLabel} payment instead of a bill every month`,
+                ],
+              },
+              {
+                heading: 'Choose Founder if…',
+                points: [
+                  'You want lifetime cloud sync locked in with zero renewal, ever',
+                  'You want your name and debut work featured on YOW',
+                  'You want to back this from day one and be recognised for it',
                 ],
               },
             ].map(block => (
@@ -757,6 +730,13 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
       </main>
 
       <MarketingFooter />
+      <BetaInterestModal
+        open={!!interestPlan}
+        user={user}
+        planKey={interestPlan?.key}
+        planLabel={interestPlan?.label}
+        onClose={() => setInterestPlan(null)}
+      />
     </div>
   )
 }
