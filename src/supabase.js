@@ -13,7 +13,12 @@ if (!offlineMode && (!supabaseUrl || !supabaseAnonKey)) {
 
 const fetchWithTimeout = (url, options = {}) => {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 8000)
+  // 8s was too tight for accounts with large tables (e.g. many characters) —
+  // the query itself was healthy, it just needed more time to finish, and the
+  // client was aborting it before it could. 20s gives real headroom while
+  // still failing fast enough to surface the "connection hiccup" retry screen
+  // for genuinely broken requests.
+  const timeout = setTimeout(() => controller.abort(), 20000)
   let abortFromParent
 
   if (options.signal) {
