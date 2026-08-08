@@ -29,8 +29,8 @@ export default function CloudExpiryWarningModal({ membership, store, novels, des
       })
       const failed = results.filter(r => !r.ok)
       setMessage(failed.length
-        ? `Exported ${results.length - failed.length} of ${results.length} projects. Some failed — try again from Storage settings.`
-        : `Exported all ${results.length} project${results.length === 1 ? '' : 's'}.`)
+        ? `Downloaded a ZIP with ${results.length - failed.length} of ${results.length} projects. Some failed — try again from Storage settings.`
+        : `Downloaded a ZIP with all ${results.length} project${results.length === 1 ? '' : 's'}.`)
     } catch (err) {
       setError(err.message || 'Export failed. Please try again from Storage settings.')
     } finally {
@@ -68,8 +68,8 @@ export default function CloudExpiryWarningModal({ membership, store, novels, des
         </h2>
         <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           {desktopApp
-            ? "When it ends, the desktop app switches to Local Mode automatically — your writing stays on this device and nothing is deleted. Cloud sync just pauses until you renew."
-            : "When it ends, your web account falls back to Free cloud limits (one project, 3 MB) until you renew Cloud Mode. Nothing is deleted, but it's a good time to grab a full backup."}
+            ? "When it ends, cloud sync is fully turned off on this device — there's no toggle to switch it back on. Your writing stays safely in the local vault, and cloud sync resumes automatically the moment you renew."
+            : "When it ends, your web account falls back to Free cloud limits (one project, 5 MB) until you renew Cloud Mode. Nothing is deleted, but it's a good time to grab a full backup."}
         </p>
         <p style={{ margin: '0 0 18px', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           Renew for £{HOSTING_RENEWAL_FEE_GBP}/year to keep hosted sync, storage, and backups — or export everything now just in case.
@@ -90,7 +90,7 @@ export default function CloudExpiryWarningModal({ membership, store, novels, des
             disabled={!list.length || Boolean(busyFormat)}
             onClick={() => runExportAll('docx')}
           >
-            {busyFormat === 'docx' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as Word docs'}
+            {busyFormat === 'docx' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as Word docs ZIP'}
           </button>
         </div>
         {message && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--accent)', fontWeight: 800 }}>{message}</p>}

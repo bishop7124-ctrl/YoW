@@ -145,7 +145,10 @@ const SETTINGS_GROUPS = [
   { label: 'AI',                sections: ['aitools'] },
 ]
 
-const FREE_LOCKED_SECTIONS = new Set(['map', 'aitools'])
+// Free plan is limited by project count and storage, not by locking core
+// worldbuilding rooms — Map Builder is available to every plan. AI Tools
+// stays paid-only because it costs real API usage.
+const FREE_LOCKED_SECTIONS = new Set(['aitools'])
 
 const openUpgradePage = () => {
   window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))
@@ -749,9 +752,9 @@ function ProjectSettings({ store, onClose }) {
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
               <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Export</p>
               <div className="project-settings-action-grid">
-                <button type="button" onClick={() => handleExport('docx')} className="project-settings-action-card" disabled={!!exporting} title="Readable export — story, characters, locations, lore, timeline, and more">
-                  <strong>Word document</strong>
-                  <span>Readable export — story, characters, locations, lore, timeline, and more</span>
+                <button type="button" onClick={() => handleExport('docx')} className="project-settings-action-card" disabled={!!exporting} title="Readable ZIP — separate Word documents for story, characters, locations, lore, timeline, and more">
+                  <strong>Word docs ZIP</strong>
+                  <span>Separate Word documents for story, characters, locations, lore, timeline, and more</span>
                 </button>
                 <button type="button" onClick={() => handleExport('zip')} className="project-settings-action-card" disabled={!!exporting} title="Restore file for YOW — JSON data, not for reading">
                   <strong>Backup zip</strong>
@@ -1202,10 +1205,8 @@ export default function Layout({
               <SectionErrorBoundary key={section}>
                 {isSectionLockedForFree(section) ? (
                   renderLockedFeature(
-                    section === 'map' ? 'Map Builder' : 'AI Tools',
-                    section === 'map'
-                      ? 'Free is a text-first workspace. Upgrade to create and edit maps for your worlds and campaigns.'
-                      : 'Upgrade to unlock project-aware analysis, character interviews, and story consistency tools.'
+                    'AI Tools',
+                    'Upgrade to unlock project-aware analysis, character interviews, and story consistency tools.'
                   )
                 ) : section === 'map' && isMobileViewport ? (
                   <div className="workspace-page grid h-full place-items-center p-6">

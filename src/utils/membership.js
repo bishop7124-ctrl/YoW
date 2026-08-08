@@ -5,13 +5,39 @@ export const TRIAL_DAYS = 28
 const DAY_MS = 24 * 60 * 60 * 1000
 const PAID_STATUSES = new Set(['active', 'trialing'])
 const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder'])
+const BETA_TESTER_PLAN_KEY = 'beta_tester'
+
+const BETA_TESTER_PLAN = {
+  key: BETA_TESTER_PLAN_KEY,
+  label: 'Beta Tester',
+  price: 0,
+  interval: null,
+  priceLabel: 'Beta',
+  priceSuffix: null,
+  storageLabelShort: '15 GB',
+  description: 'Full beta access while YOW is in beta.',
+  features: [
+    'Full app access during beta',
+    'Unlimited projects',
+    'AI tools and advanced features unlocked',
+    'Beta access may be revoked when YOW leaves beta',
+  ],
+  badge: 'Beta',
+  highlight: false,
+}
 
 // Storage quotas in bytes per plan key.
 // These are the canonical quota values — also used by storageQuota.js.
+//
+// Free is 250 MB (up from 5 MB as of the 2026-08-08 pricing overhaul) — enough
+// for a full manuscript plus cover art and a handful of character/map images,
+// so Free feels genuinely usable rather than a crippled trial. It's still a
+// clear, honest step below the paid tiers.
 export const PLAN_STORAGE_BYTES = {
-  free:                  3    * 1024 * 1024,        //   3 MB
-  trial:                  1   * 1024 * 1024 * 1024,  //   1 GB
-  premium_monthly:        5   * 1024 * 1024 * 1024,  //   5 GB
+  free:                  250  * 1024 * 1024,        // 250 MB
+  trial:                  8   * 1024 * 1024 * 1024,  //   8 GB (mirrors Monthly/Lifetime so trials preview the real thing)
+  beta_tester:           15   * 1024 * 1024 * 1024,  //  15 GB during beta
+  premium_monthly:        8   * 1024 * 1024 * 1024,  //   8 GB
   premium_plus_lifetime:  8   * 1024 * 1024 * 1024,  //   8 GB
   founder:               15   * 1024 * 1024 * 1024,  //  15 GB
 }
@@ -37,16 +63,36 @@ export const PLANS = [
     interval: null,
     priceLabel: 'Free',
     priceSuffix: null,
-    storageLabelShort: '5 MB',
-    description: 'A text-first starter workspace. One active cloud project, community support.',
+    storageLabelShort: '250 MB',
+    description: 'One project, fully featured. Every core writing and worldbuilding tool, no card required.',
     features: [
-      '1 active text-first cloud project',
-      '5 MB cloud storage',
-      'Map Builder visible but locked',
-      'No AI tools',
-      'DOCX, PDF & ZIP export',
-      'Community support',
+      '1 project — not a demo, the real toolkit',
+      'Manuscript, Codex, Timeline, Characters, Map Builder & more',
+      '250 MB cloud storage',
+      'Export to DOCX, PDF & ZIP any time',
     ],
+    disclaimer: 'AI tools aren’t included on Free — connect your own AI provider on any paid plan.',
+    badge: null,
+    highlight: false,
+  },
+  {
+    key: 'premium_monthly',
+    label: 'Monthly',
+    price: BILLING.monthlyPrice,
+    interval: 'month',
+    priceLabel: `£${BILLING.monthlyPrice}`,
+    priceSuffix: '/month',
+    storageLabelShort: '8 GB',
+    description: 'Unlimited projects and the full web app, with cloud sync included. Cancel any time.',
+    features: [
+      'Unlimited projects',
+      'Every writing & worldbuilding tool, unlocked',
+      'Cloud sync across all your devices',
+      '8 GB cloud storage',
+      'Connect your own AI provider (ChatGPT, Claude and more)',
+      'Cancel any time — no long-term contract',
+    ],
+    disclaimer: 'Desktop app not included on Monthly — see Lifetime to own it outright.',
     badge: null,
     highlight: false,
   },
@@ -58,19 +104,19 @@ export const PLANS = [
     priceLabel: `£${BILLING.lifetimePrice}`,
     priceSuffix: 'once',
     storageLabelShort: '8 GB',
-    description: 'Own the YOW app outright. Local Mode is permanent; cloud hosting is included for 3 years.',
-    longDescription: `Pay once for permanent app access, unlimited local projects, and all current features. Includes ${HOSTING_INCLUDED_YEARS} years of Cloud Mode for sync, hosted storage, and backups. After that, the desktop app keeps working in Local Mode forever and web cloud access falls back to Free limits unless you renew Cloud Mode at £${HOSTING_RENEWAL_FEE_GBP}/year.`,
+    description: 'Everything in Monthly, plus the desktop app — pay once and own it outright.',
+    longDescription: `One payment for everything in Monthly, the desktop app for Mac and Windows, and every future update — free, forever. Includes ${HOSTING_INCLUDED_YEARS} years of cloud sync; after that it's £${HOSTING_RENEWAL_FEE_GBP}/year to keep syncing, or switch to offline Local Mode for free, forever.`,
+    keyBenefit: { icon: '🖥️', label: 'Includes the Desktop App' },
+    valueNote: `Pays for itself in ${Math.round(BILLING.lifetimePrice / BILLING.monthlyPrice)} months vs Monthly — then every year after is free.`,
     features: [
-      'Unlimited projects',
-      'Permanent Local Mode access',
-      '8 GB storage',
-      'Bring-your-own-key AI',
-      'Priority support',
-      `${HOSTING_INCLUDED_YEARS} years of Cloud Mode included`,
-      `Cloud hosting renewal: £${HOSTING_RENEWAL_FEE_GBP}/year after that`,
-      'Export your data any time',
+      'Everything in Monthly — unlimited projects, full toolkit, 8 GB storage',
+      'Desktop app for Mac & Windows',
+      'Every future update, free, forever',
+      `${HOSTING_INCLUDED_YEARS} years of cloud sync included`,
+      `Then £${HOSTING_RENEWAL_FEE_GBP}/year to keep syncing — or Local Mode free, forever`,
+      'One payment. No subscription, ever.',
     ],
-    badge: 'Best value',
+    badge: 'Most Popular',
     highlight: true,
   },
   {
@@ -81,41 +127,20 @@ export const PLANS = [
     priceLabel: `£${BILLING.founderPrice}`,
     priceSuffix: 'once',
     storageLabelShort: '15 GB',
-    description: 'Founder status, permanent app access, and lifetime Cloud Mode within fair-use limits.',
-    longDescription: 'For the writers who believe in this from the start. Founder status is permanent, visible, and limited. Includes lifetime Cloud Mode for hosted storage, backups, and sync within the published fair-use cap.',
+    description: 'Everything in Lifetime, plus permanent recognition as one of the first believers in YOW.',
+    longDescription: `Everything in Lifetime, plus more storage and lifetime cloud sync with no renewal, ever. Founder status is permanent and limited to ${FOUNDER_SLOTS_TOTAL} writers, ever.`,
+    keyBenefit: { icon: '✦', label: `Limited to ${FOUNDER_SLOTS_TOTAL} writers, ever` },
     features: [
-      'Everything in Lifetime',
-      '15 GB storage',
-      'Lifetime Cloud Mode included',
-      'No annual hosting renewal fee',
+      'Everything in Lifetime, plus:',
+      '15 GB cloud storage',
+      'Lifetime cloud sync — no renewal, ever',
       'Permanent Founder badge',
       'Feature your debut work on YOW',
-      'Founder recognition section',
-      'Priority feature consideration',
+      'Priority say in what we build next',
     ],
     badge: 'Exclusive',
     highlight: false,
     isFounder: true,
-  },
-  {
-    key: 'premium_monthly',
-    label: 'Monthly',
-    price: BILLING.monthlyPrice,
-    interval: 'month',
-    priceLabel: `£${BILLING.monthlyPrice}`,
-    priceSuffix: '/month',
-    storageLabelShort: '5 GB',
-    description: 'Full app access and Cloud Mode while subscribed. Cancel any time.',
-    features: [
-      'Full platform access',
-      'Cloud Mode while subscribed',
-      'Local Mode available',
-      '5 GB storage',
-      'Future updates included',
-      'Cancel any time',
-    ],
-    badge: null,
-    highlight: false,
   },
 ]
 
@@ -132,10 +157,11 @@ export function getMembership(user) {
 
   const subscriptionStatus = user?.app_metadata?.subscription_status || user?.user_metadata?.subscription_status || 'none'
   const subscriptionPlan = user?.app_metadata?.subscription_plan || user?.user_metadata?.subscription_plan || null
+  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || user?.app_metadata?.beta_tester === true || user?.user_metadata?.beta_tester === true
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
   const isFounder = subscriptionPlan === 'founder'
 
-  const isPaid = PAID_STATUSES.has(subscriptionStatus) || isLifetime
+  const isPaid = PAID_STATUSES.has(subscriptionStatus) || isLifetime || isBetaTester
   const isTrialActive = !isPaid && now < trialEndsAt
   const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS))
   const isFree = !isPaid && !isTrialActive
@@ -146,13 +172,16 @@ export function getMembership(user) {
   // 'plan' is the tier category used for CSS badge classes
   const plan = isPaid ? 'paid' : isTrialActive ? 'trial' : 'free'
 
-  const activePlanKey = isPaid
-    ? (subscriptionPlan || 'premium_monthly')
+  const activePlanKey = isBetaTester
+    ? BETA_TESTER_PLAN_KEY
+    : isPaid
+      ? (subscriptionPlan || 'premium_monthly')
     : isTrialActive
       ? 'trial'
       : 'free'
 
   const activePlanDef = PLANS.find(p => p.key === activePlanKey)
+    || (activePlanKey === BETA_TESTER_PLAN_KEY ? BETA_TESTER_PLAN : null)
     || PLANS.find(p => p.key === 'premium_monthly') // trial fallback for display
 
   // ── Cloud hosting renewal logic (lifetime non-founder users only) ──
@@ -218,11 +247,12 @@ export function getMembership(user) {
     activePlanDef,
     subscriptionStatus,
     isPaid,
+    isBetaTester,
     isLifetime,
     isFounder,
     // Desktop app access is a Lifetime/Founder entitlement (PRD Phase 4).
     // Browser plan behavior is unchanged — this only gates the desktop shell.
-    isDesktopEntitled: isLifetime,
+    isDesktopEntitled: isLifetime || isBetaTester,
     isTrialActive,
     isFree,
     isReadOnly: false,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildProjectTypePromptContext,
+  getAiContextTargets,
   getManuscriptCoverage,
   getManuscriptCoverageForNovel,
   buildPlotHoleUserPrompt,
@@ -131,16 +132,25 @@ describe('getManuscriptCoverage', () => {
     const scenes = Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, content: 'short content' }))
     const coverage = getManuscriptCoverage(scenes)
 
-    expect(coverage).toEqual({ totalScenes: 5, includedScenes: 5, omittedScenes: 0, contentTruncated: false })
+    expect(coverage).toMatchObject({ totalScenes: 5, includedScenes: 5, omittedScenes: 0, contentTruncated: false, mode: 'project_scan' })
   })
 
-  it('reports omitted scenes once a manuscript exceeds the inline scene cap', () => {
+  it('reports omitted scenes once a context mode exceeds its unit cap', () => {
+    const scenes = Array.from({ length: 45 }, (_, i) => ({ id: `s${i}`, content: 'short content' }))
+    const coverage = getManuscriptCoverage(scenes, { mode: 'act_review' })
+
+    expect(coverage.totalScenes).toBe(45)
+    expect(coverage.includedScenes).toBe(32)
+    expect(coverage.omittedScenes).toBe(13)
+  })
+
+  it('allows a wider broad project scan than the old first-20 sample', () => {
     const scenes = Array.from({ length: 45 }, (_, i) => ({ id: `s${i}`, content: 'short content' }))
     const coverage = getManuscriptCoverage(scenes)
 
     expect(coverage.totalScenes).toBe(45)
-    expect(coverage.includedScenes).toBe(20)
-    expect(coverage.omittedScenes).toBe(25)
+    expect(coverage.includedScenes).toBe(45)
+    expect(coverage.omittedScenes).toBe(0)
   })
 
   it('flags content truncation when an included scene exceeds the per-scene character cap', () => {
@@ -151,8 +161,48 @@ describe('getManuscriptCoverage', () => {
   })
 
   it('handles an empty or missing scene list without throwing', () => {
-    expect(getManuscriptCoverage([])).toEqual({ totalScenes: 0, includedScenes: 0, omittedScenes: 0, contentTruncated: false })
-    expect(getManuscriptCoverage(undefined)).toEqual({ totalScenes: 0, includedScenes: 0, omittedScenes: 0, contentTruncated: false })
+    expect(getManuscriptCoverage([])).toMatchObject({ totalScenes: 0, includedScenes: 0, omittedScenes: 0, contentTruncated: false })
+    expect(getManuscriptCoverage(undefined)).toMatchObject({ totalScenes: 0, includedScenes: 0, omittedScenes: 0, contentTruncated: false })
+  })
+
+  it('scopes focused chapter prompts to the selected chapter', () => {
+    const novel = { id: 'novel-1', type: 'novel', title: 'Scope Test' }
+    const store = {
+      novels: [novel],
+      acts: [{ id: 'a1', novelId: 'novel-1', title: 'Act One', order: 0 }],
+      chapters: [
+        { id: 'c1', novelId: 'novel-1', actId: 'a1', title: 'Chapter One', order: 0 },
+        { id: 'c2', novelId: 'novel-1', actId: 'a1', title: 'Chapter Two', order: 1 },
+      ],
+      scenes: [
+        { id: 's1', novelId: 'novel-1', chapterId: 'c1', title: 'Opening', content: 'first chapter text', order: 0 },
+        { id: 's2', novelId: 'novel-1', chapterId: 'c2', title: 'Later', content: 'second chapter text', order: 0 },
+      ],
+    }
+
+    const prompt = buildPlotHoleUserPrompt(store, 'novel-1', { mode: 'focused_chapter', targetId: 'c2' })
+
+    expect(prompt).toContain('Context mode: Focused chapter')
+    expect(prompt).toContain('Later')
+    expect(prompt).toContain('second chapter text')
+    expect(prompt).not.toContain('first chapter text')
+  })
+
+  it('offers act and chapter context targets in manuscript order', () => {
+    const novel = { id: 'novel-1', type: 'novel' }
+    const store = {
+      acts: [
+        { id: 'a2', novelId: 'novel-1', title: 'Second', order: 1 },
+        { id: 'a1', novelId: 'novel-1', title: 'First', order: 0 },
+      ],
+      chapters: [
+        { id: 'c2', novelId: 'novel-1', actId: 'a1', title: 'Chapter Two', order: 1 },
+        { id: 'c1', novelId: 'novel-1', actId: 'a1', title: 'Chapter One', order: 0 },
+      ],
+    }
+
+    expect(getAiContextTargets(store, 'novel-1', novel, 'act_review').map(item => item.label)).toEqual(['First', 'Second'])
+    expect(getAiContextTargets(store, 'novel-1', novel, 'focused_chapter').map(item => item.label)).toEqual(['Chapter One', 'Chapter Two'])
   })
 })
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } from 'react'
 import {
   SCRIPT_TYPES, SCENE_STATUSES, nextStatus,
   buildScriptBlocks, getScriptElements, getScriptElementLabel, getNextScriptElementAfterEnter,
@@ -423,7 +423,41 @@ const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDele
 
 // ─── Scene editor ─────────────────────────────────────────────────────────────
 
-export const SceneEditor = ({
+// Every keystroke in any one scene touches manuscript-wide state (live word count,
+// autosave indicator, etc.), which re-renders the whole scene list. In an 80k+ word
+// manuscript that's dozens of unfocused scenes each re-running ContentPreview's regex
+// entity/markdown parsing over their full text — the actual source of the typing lag.
+// Memoize so a keystroke only re-renders the scene whose `scene` prop actually changed;
+// everything else here (callbacks recreated per-render, refs) is either already stable
+// or is a per-scene closure that behaves identically as long as `scene` itself is
+// unchanged, so it's safe to leave out of the comparison.
+//
+// entityMap/characterNames/locationNames are (surprisingly) NOT reliably stable
+// references even though Manuscript.jsx memoizes them off `characters`/`locations` —
+// something elsewhere in the store re-creates those arrays every few seconds during
+// normal use (independent of anything this file controls), which was silently
+// defeating this memo entirely: every scene bailed out on `entityMap` alone, every
+// time. Compare these three by cheap shape (entry/name count) instead of reference —
+// a renamed character mid-burst going unhighlighted for a moment is a fine trade for
+// not re-running full-scene regex parsing on 38 other scenes every few seconds.
+const sameShape = (a, b) => (a?.length ?? Object.keys(a || {}).length) === (b?.length ?? Object.keys(b || {}).length)
+
+const sceneEditorPropsEqual = (prev, next) => (
+  prev.scene === next.scene &&
+  prev.sceneIndex === next.sceneIndex &&
+  sameShape(prev.entityMap, next.entityMap) &&
+  prev.highlightedNoteSeq === next.highlightedNoteSeq &&
+  prev.formatSettings === next.formatSettings &&
+  sameShape(prev.characterNames, next.characterNames) &&
+  sameShape(prev.locationNames, next.locationNames) &&
+  prev.projectType === next.projectType &&
+  prev.caretFollowEnabled === next.caretFollowEnabled &&
+  prev.scrollContainerRef === next.scrollContainerRef &&
+  prev.pageZoom === next.pageZoom &&
+  prev.keepEditingOnExternalBlur === next.keepEditingOnExternalBlur
+)
+
+const SceneEditorImpl = ({
   scene, sceneIndex,
   onUpdate, onUpdateScene, onSplit,
   innerRef, onFocus: onFocusExternal,
@@ -436,7 +470,7 @@ export const SceneEditor = ({
   onSelectionContextChange = () => {},
   onOpenVersionHistory,
   projectType,
-  focusedWriting = false,
+  caretFollowEnabled = false,
   scrollContainerRef,
   pageZoom = 1,
   keepEditingOnExternalBlur = false,
@@ -458,6 +492,17 @@ export const SceneEditor = ({
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
   const localContentRef = useRef(localContent)
+  // Manuscript.jsx overlays live (uncommitted) content onto the `scene` prop for
+  // whichever scene is actively being edited, which means `scene` gets a brand new
+  // object identity on every keystroke. Any effect keyed on `scene` itself therefore
+  // re-runs every keystroke too — see the exit-flush effect below, where that used to
+  // mean its cleanup (an unthrottled `onPersistDraft(..., {immediate:true})` plus a
+  // forced `debouncedUpdate.flush()`, i.e. the full localStorage/store-commit cost)
+  // fired on every single character typed, silently defeating the draft-persist
+  // throttle above. Track `scene` via a ref instead so effects can read the latest
+  // value without depending on its identity.
+  const sceneRef = useRef(scene)
+  useEffect(() => { sceneRef.current = scene }, [scene])
   const lastSelectionRef = useRef({ start: localContent.length, end: localContent.length })
   const undoStackRef = useRef([])
   const redoStackRef = useRef([])
@@ -504,28 +549,99 @@ export const SceneEditor = ({
   }, [focused, otherEditorsCount])
 
 
-  // Resize before paint so caret measurement always uses the settled textarea height.
-	  useLayoutEffect(() => {
-	    if (!focused) return
-	    const textareas = wrapperRef.current?.querySelectorAll('textarea.ms-textarea') || []
-	    textareas.forEach(ta => {
-	      ta.style.height = 'auto'
-	      ta.style.height = ta.scrollHeight + 'px'
-	    })
-	  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom, writingBlocks])
+  // `ta.style.height = 'auto'` followed by reading `scrollHeight` forces the browser
+  // to lay out the textarea's entire content to find its natural height — cheap for a
+  // normal scene, but measured at 40ms+ for a scene in the tens of thousands of words,
+  // on every single keystroke (useLayoutEffect re-runs on every `localContent` change).
+  // Below the threshold, resize exactly as before. Above it, avoid the layout-forcing
+  // read on every keystroke: grow a generous, purely-cheap buffer once per typing burst
+  // (`ta.style.height` here is a plain CSSOM string read/write, not a layout query — it
+  // doesn't force reflow) so newly typed text is never clipped (the textarea has
+  // `overflow: hidden`), then correct to the exact height on a short debounce once
+  // typing pauses.
+  const RESIZE_PRECISE_THRESHOLD = 20000
+  const RESIZE_GROWTH_BUFFER_PX = 600
+  // hasResizeBaselineRef: true once this focus session has an accurate
+  // scrollHeight-measured height to grow from. Must start (and reset on blur) false —
+  // without a real baseline, the cheap growth path would read a stale/empty
+  // `ta.style.height` and undersize a large scene's textarea straight into clipped
+  // content. growthAppliedRef: true once the cheap buffer has been applied for the
+  // *current* typing burst, so repeated keystrokes before the debounce fires don't
+  // keep stacking +600px on top of each other — one buffer bump per burst is enough,
+  // and preciseResize (on the debounce, or via the threshold/no-baseline branch)
+  // always clears it.
+  const hasResizeBaselineRef = useRef(false)
+  const growthAppliedRef = useRef(false)
+
+  const preciseResize = useCallback(() => {
+    const textareas = wrapperRef.current?.querySelectorAll('textarea.ms-textarea') || []
+    textareas.forEach(ta => {
+      ta.style.height = 'auto'
+      ta.style.height = ta.scrollHeight + 'px'
+    })
+    hasResizeBaselineRef.current = true
+    growthAppliedRef.current = false
+  }, [])
+  const debouncedPreciseResize = useDebouncedCallback(preciseResize, 200)
+
+  useEffect(() => {
+    if (!focused) hasResizeBaselineRef.current = false
+  }, [focused])
+
+  useLayoutEffect(() => {
+    if (!focused) return
+    const textareas = wrapperRef.current?.querySelectorAll('textarea.ms-textarea') || []
+    if (!textareas.length) return
+
+    if (localContent.length <= RESIZE_PRECISE_THRESHOLD || !hasResizeBaselineRef.current) {
+      textareas.forEach(ta => {
+        ta.style.height = 'auto'
+        ta.style.height = ta.scrollHeight + 'px'
+      })
+      hasResizeBaselineRef.current = true
+      growthAppliedRef.current = false
+      return
+    }
+
+    if (!growthAppliedRef.current) {
+      textareas.forEach(ta => {
+        const current = Number.parseFloat(ta.style.height) || 0
+        ta.style.height = (current + RESIZE_GROWTH_BUFFER_PX) + 'px'
+      })
+      growthAppliedRef.current = true
+    }
+    debouncedPreciseResize.schedule()
+  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom, writingBlocks, debouncedPreciseResize])
 
   const scheduleCaretFollow = useCaretComfortScroll({
     textareaRef,
     scrollContainerRef,
-    enabled: focusedWriting && focused,
+    enabled: caretFollowEnabled && focused,
     scale: pageZoom,
   })
 
   useLayoutEffect(() => {
-    if (focusedWriting && focused) scheduleCaretFollow()
-  }, [focusedWriting, focused, localContent, formatSettings, pageZoom, scheduleCaretFollow])
+    if (caretFollowEnabled && focused) scheduleCaretFollow()
+  }, [caretFollowEnabled, focused, localContent, formatSettings, pageZoom, scheduleCaretFollow])
 
-  const debouncedUpdate = useDebouncedCallback(text => onUpdate(scene.id, text), 400)
+  // The store's own conflict detection (mergeSceneUpdateWithPersistedCopy in
+  // useStore.js) treats any mismatch between localStorage's `nf_scenes` and its
+  // in-memory copy as "another tab changed this" — it has no way to know that
+  // persistSceneDraftToLocalStorage (a *separate* write path to that same
+  // localStorage key) is this same tab's own throttled draft, just lagging behind.
+  // Before that draft write was throttled, it ran on every keystroke and was
+  // always in lockstep with this debounced commit, so the mismatch never came up.
+  // Now it can lag up to DRAFT_THROTTLE_MS behind, so on a normal typing pause the
+  // store reads a stale draft, sees it differ from the fresh content it's about to
+  // save, and raises a false "edited in two tabs" conflict — every pause, in a
+  // single tab. Flushing the draft immediately right here, synchronously before
+  // the store read, guarantees they're identical at the moment that comparison
+  // happens — and since this only runs once per debounce (not per keystroke), it
+  // doesn't reintroduce the per-keystroke cost the throttle was fixing.
+  const debouncedUpdate = useDebouncedCallback(text => {
+    onPersistDraft(sceneRef.current, text, { immediate: true })
+    onUpdate(scene.id, text)
+  }, 400)
 
   const measureCaret = useTextareaCaretRect(textareaRef, pageZoom)
 
@@ -555,6 +671,19 @@ export const SceneEditor = ({
     setFloatingNotePos({ top, side })
   }, [measureCaret])
 
+  // measureCaret's mirror-div technique (useTextareaCaretRect.js) has to mirror
+  // every character before the cursor and read its layout back — on a large scene
+  // that's a full reflow of the manuscript's DOM (all scenes are mounted at once,
+  // unvirtualized), measured at 400-500ms+ for a ~245k-character scene. Calling it
+  // synchronously on every keystroke — which the un-debounced version below did,
+  // from handleChange *and* onKeyUp *and* onSelect (all three fire per keystroke) —
+  // was the real, dominant cause of the "still super laggy" typing reports on large
+  // manuscripts; the earlier React re-render and localStorage fixes were real but
+  // secondary next to this. Debounce it: the floating "+" note button only needs to
+  // catch up once typing pauses, not track every character, and clicks still feel
+  // instant since a deliberate click is followed by a pause anyway.
+  const debouncedSyncFloatingNoteButton = useDebouncedCallback(syncFloatingNoteButton, 300)
+
   const syncCursorTools = useCallback(() => {
     rememberSelection()
     syncFloatingNoteButton()
@@ -570,15 +699,39 @@ export const SceneEditor = ({
       }) || textareaRef.current
       if (!ta) return
       setFocused(true)
-      ta.focus()
+      // preventScroll: without it, .focus() triggers the browser's own default
+      // "scroll this element into view" — its own heuristic, not ours, and it
+      // fires on *every* call here regardless of whether `ta` was already
+      // focused (this runs after essentially every discrete edit: Enter with
+      // auto-indent — on by default — undo/redo, note insert/delete, script
+      // paragraph insert, AI content insert). This alone wasn't enough, though
+      // (see below) — confirmed via a user-supplied screen recording of the
+      // *regular* editor (not Focused Writing) still jumping after this fix
+      // shipped on its own.
+      ta.focus({ preventScroll: true })
       textareaRef.current = ta
       const base = Number(ta.dataset.msStart) || 0
       ta.setSelectionRange(Math.max(0, start - base), Math.max(0, end - base))
       lastSelectionRef.current = { start, end }
       syncFloatingNoteButton()
-      if (focusedWriting) scheduleCaretFollow()
+      // `preventScroll` only governs `.focus()` — it does nothing for the
+      // `setSelectionRange` call just above, which can *independently* trigger
+      // the browser's own "scroll the selection into view." Confirmed live by
+      // instrumenting `Element.prototype.scrollTop`/`scrollTo`/`scrollIntoView`
+      // at the prototype level: none of them fire, yet the container's
+      // scrollTop measurably jumps — this native reveal happens inside the
+      // browser engine below the DOM API surface entirely, so there is no
+      // option (unlike `preventScroll`) to suppress it going in. The only way
+      // to deal with it is reactively: let it happen, then immediately correct.
+      // `immediate` always runs here — deliberately unconditional, not gated on
+      // `caretFollowEnabled` (see that flag's own gating in the hook call
+      // below, and the comment on `schedule`'s `immediate` option in
+      // useCaretComfortScroll.js) — because this native jump happens in every
+      // mode, and it's a correction for a browser glitch, not the "keep caret
+      // centered while typing" feature `caretFollowEnabled` toggles.
+      scheduleCaretFollow({ immediate: true })
     }, 0)
-  }, [focusedWriting, scheduleCaretFollow, syncFloatingNoteButton])
+  }, [scheduleCaretFollow, syncFloatingNoteButton])
 
   // ─── Undo / redo ─────────────────────────────────────────────────────────
   // Snapshots cover raw content (+ script blocks, for script projects) and the caret
@@ -656,7 +809,11 @@ export const SceneEditor = ({
         setTimeout(() => {
           const ta = textareaRef.current
           if (!ta) return
-          ta.focus()
+          // preventScroll: Manuscript.jsx's callers of this already do their own
+          // deliberate scrollIntoView around this focus() call — see the
+          // preventScroll comment on focusRange above for why the browser's own
+          // competing scroll-on-focus needs to be suppressed here too.
+          ta.focus({ preventScroll: true })
 	          if (placeCursor === 'end') {
 	            const end = localContentRef.current.length
 	            ta.setSelectionRange(end, end)
@@ -698,6 +855,14 @@ export const SceneEditor = ({
 	        focusRange(insertedStart, insertedEnd)
 	      },
 	    })
+	    // Manuscript.jsx's scene-virtualization (useSceneWindow.js) mounts/unmounts
+	    // this component per scene as it scrolls in and out of view, keeping a map of
+	    // these ref objects for programmatic focus/scrollIntoView/appendContent
+	    // (jumping from the Outline, splitting a scene, AI inserts). Without this
+	    // cleanup, unmounting left a stale entry behind whose closures point at a
+	    // detached textarea — harmless (a silent no-op if ever called) but worth
+	    // clearing so a re-mount always gets a fresh object.
+	    return () => innerRef?.(null)
 	  }, [innerRef, scene, debouncedUpdate, focusRange, onLiveContentChange, onUpdateScene, syncFloatingNoteButton, recordBeforeEdit])
 
   useEffect(() => {
@@ -707,7 +872,7 @@ export const SceneEditor = ({
   useEffect(() => {
     if (!focused) return undefined
     const flushDraft = () => {
-      onPersistDraft(scene, localContentRef.current)
+      onPersistDraft(sceneRef.current, localContentRef.current, { immediate: true })
       debouncedUpdate.flush()
     }
     const handleVisibilityChange = () => {
@@ -722,7 +887,9 @@ export const SceneEditor = ({
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       flushDraft()
     }
-  }, [focused, scene, debouncedUpdate, onPersistDraft])
+    // Deliberately NOT depending on `scene` — see sceneRef above. This effect should
+    // only re-subscribe when focus starts/ends, not on every keystroke.
+  }, [focused, debouncedUpdate, onPersistDraft])
 
 	  const handleChange = e => {
 	    recordBeforeEdit()
@@ -743,7 +910,7 @@ export const SceneEditor = ({
 	    onLiveContentChange(scene.id, nextContent)
 	    setLocalContent(nextContent)
 	    debouncedUpdate.schedule(nextContent)
-	    window.requestAnimationFrame(syncFloatingNoteButton)
+	    debouncedSyncFloatingNoteButton.schedule()
 	    if (!isScript && delta !== 0 && scene.notes?.length) {
 	      onUpdateScene(scene.id, {
 	        notes: scene.notes.map(note => {
@@ -768,11 +935,11 @@ export const SceneEditor = ({
 
 	  const syncActiveScriptBlock = useCallback(() => {
 	    rememberSelection()
-	    syncFloatingNoteButton()
+	    debouncedSyncFloatingNoteButton.schedule()
 	    if (!isScript || !textareaRef.current) return
 	    const nextIndex = getScriptBlockIndexAtOffset(localContentRef.current, textareaRef.current.selectionStart)
 	    setActiveScriptBlockIndex(Math.min(nextIndex, Math.max(0, localScriptBlocks.length - 1)))
-	  }, [isScript, localScriptBlocks.length, rememberSelection, syncFloatingNoteButton])
+	  }, [isScript, localScriptBlocks.length, rememberSelection, debouncedSyncFloatingNoteButton])
 
   const setActiveScriptElement = useCallback((type) => {
     if (!isScript) return
@@ -785,7 +952,7 @@ export const SceneEditor = ({
       scriptBlocks: nextBlocks,
       textMode: 'script',
     })
-    window.setTimeout(() => textareaRef.current?.focus(), 0)
+    window.setTimeout(() => textareaRef.current?.focus({ preventScroll: true }), 0)
   }, [activeScriptBlockIndex, isScript, localContent, localScriptBlocks, onUpdateScene, scene.id])
 
   const cycleScriptElement = useCallback((direction = 1) => {
@@ -844,7 +1011,7 @@ export const SceneEditor = ({
 	      if (!ta) return
 	      if (selected) { ta.selectionStart = start + syntax.length; ta.selectionEnd = start + syntax.length + selected.length }
 	      else { ta.selectionStart = ta.selectionEnd = start + syntax.length }
-	      ta.focus()
+	      ta.focus({ preventScroll: true })
 	      rememberSelection()
 	      syncFloatingNoteButton()
 	    }, 0)
@@ -988,9 +1155,29 @@ export const SceneEditor = ({
 	    textIndent: !isScript && !isBullets && formatSettings.autoIndent ? `${formatSettings.indentSize}ch` : undefined,
 	  }
 
+	  // Replaces the `autoFocus` attribute the real textarea(s) used to have.
+	  // `autoFocus` calls the browser's native, uncontrollable focus() under the
+	  // hood — no `preventScroll` option — so every preview-to-editable
+	  // transition (e.g. clicking into a scene) triggered the browser's own
+	  // "scroll this into view" heuristic, independent of anything above and
+	  // independent of Focused Writing mode: this is what a user-supplied
+	  // screen recording showed as "the page jumps," reproduced in the regular
+	  // (non-Focused-Writing) editor. `focusRange`'s own explicit, precisely
+	  // targeted, `preventScroll`-safe focus call (used by click-to-position,
+	  // undo/redo, notes, etc.) already covers placing the caret correctly a
+	  // tick later — this effect only needs to grab initial focus, without the
+	  // native scroll, for the cases that don't go through focusRange (mainly:
+	  // Tab-focusing into a scene via the hidden placeholder textarea below).
+	  useLayoutEffect(() => {
+	    if (!focused) return
+	    const wrapper = wrapperRef.current
+	    if (!wrapper || wrapper.contains(document.activeElement)) return
+	    wrapper.querySelector('textarea.ms-textarea')?.focus({ preventScroll: true })
+	  }, [focused])
+
 	  const handleEditorBlur = () => {
 	    burstActiveRef.current = false
-	    onPersistDraft(scene, localContentRef.current)
+	    onPersistDraft(scene, localContentRef.current, { immediate: true })
 	    debouncedUpdate.flush()
 	    window.setTimeout(() => {
 	      if (wrapperRef.current?.contains(document.activeElement)) return
@@ -1000,8 +1187,13 @@ export const SceneEditor = ({
 	    }, 0)
 	  }
 
+	  // `id="ms-scene-{id}"` used to live on this wrapper; it's now on the stable
+	  // SceneSlot wrapper in Manuscript.jsx, since that wrapper survives this
+	  // component mounting/unmounting under scene virtualization
+	  // (useSceneWindow.js), and Manuscript.jsx's/StructureSidebar.jsx's
+	  // scrollIntoView-by-id callers need a target that's always present.
 	  return (
-	    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`} id={`ms-scene-${scene.id}`}>
+	    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`}>
 	      {/* Scene header — title + controls */}
 	      <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}`}>
         <div className="ms-scene-header-row">
@@ -1116,7 +1308,6 @@ export const SceneEditor = ({
 	                  rows={1}
 	                  className="ms-textarea ms-textarea-block"
 	                  style={textStyle}
-	                  autoFocus={block.start === 0}
 	                />
 	              )
 	            })}
@@ -1139,7 +1330,6 @@ export const SceneEditor = ({
 	            rows={1}
 	            className="ms-textarea"
 	            style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
-	            autoFocus
 	          />
 	        )
 	      ) : (
@@ -1211,7 +1401,7 @@ export const SceneEditor = ({
             setFocused(true)
             window.setTimeout(() => {
               const ta = wrapperRef.current?.querySelector('textarea.ms-textarea')
-              if (ta) { textareaRef.current = ta; ta.focus() }
+              if (ta) { textareaRef.current = ta; ta.focus({ preventScroll: true }) }
             }, 0)
           }}
         />
@@ -1219,5 +1409,7 @@ export const SceneEditor = ({
     </div>
   )
 }
+
+export const SceneEditor = memo(SceneEditorImpl, sceneEditorPropsEqual)
 
 // ─── Format settings panel ────────────────────────────────────────────────────

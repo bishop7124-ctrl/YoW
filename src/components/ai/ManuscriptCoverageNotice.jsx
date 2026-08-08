@@ -4,7 +4,7 @@
 // per-scene prompt cap.
 export function ManuscriptCoverageNotice({ coverage, style = {} }) {
   if (!coverage) return null
-  const { totalScenes, includedScenes, omittedScenes, contentTruncated } = coverage
+  const { totalScenes, includedScenes, omittedScenes, contentTruncated, contentChars } = coverage
   if (omittedScenes <= 0 && !contentTruncated) return null
 
   const parts = []
@@ -15,7 +15,7 @@ export function ManuscriptCoverageNotice({ coverage, style = {} }) {
     parts.push(`analysing all ${totalScenes} scenes`)
   }
   if (contentTruncated) {
-    parts.push('some scene text has been shortened to fit')
+    parts.push(contentChars ? `some scene text has been shortened to about ${contentChars.toLocaleString()} characters each` : 'some scene text has been shortened to fit')
   }
 
   return (

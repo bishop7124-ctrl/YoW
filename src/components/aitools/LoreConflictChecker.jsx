@@ -6,6 +6,7 @@ import { getActiveAiConfig } from '../../utils/aiSettings'
 import FindingCard from './FindingCard'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice } from '../ai/AiConfigRequired'
 import { ManuscriptCoverageNotice } from '../ai/ManuscriptCoverageNotice'
+import { AiContextSelector } from '../ai/AiContextSelector'
 import { useAiRunControls, STALL_ERROR_TEXT } from './useAiRunControls'
 import { AiRunProgress } from './AiRunProgress'
 import { buildFindingNavIndex, resolveFindingRef, navigateToFindingRef } from '../../utils/aiFindingNav'
@@ -32,11 +33,12 @@ export default function LoreConflictChecker({ store, userId }) {
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
   const [filter,   setFilter]   = useState('all')
+  const [contextSelection, setContextSelection] = useState({ mode: 'project_scan', targetId: null })
   const aiConfigured = !!getActiveAiConfig(userId).apiKey?.trim()
   const { progressChars, elapsedMs, begin, cancel } = useAiRunControls()
   const coverage = useMemo(
-    () => getManuscriptCoverageForNovel(store, novelId, novel),
-    [store, novelId, novel]
+    () => getManuscriptCoverageForNovel(store, novelId, novel, contextSelection),
+    [store, novelId, novel, contextSelection]
   )
   const navIndex = useMemo(() => buildFindingNavIndex(store, novelId), [store, novelId])
   const resolveRef = useCallback(text => resolveFindingRef(navIndex, text), [navIndex])
@@ -67,7 +69,7 @@ export default function LoreConflictChecker({ store, userId }) {
     setLoading(false)
 
     const system = buildLoreConflictSystemPrompt(novel)
-    const user   = buildLoreConflictUserPrompt(store, novelId)
+    const user   = buildLoreConflictUserPrompt(store, novelId, contextSelection)
     const ctl = begin(() => { setRunning(false); setError(STALL_ERROR_TEXT) })
     let buffer = ''
     streamMessage({
@@ -87,7 +89,7 @@ export default function LoreConflictChecker({ store, userId }) {
       },
       onError: msg => { ctl.finish(); setRunning(false); setError(msg) },
     })
-  }, [novel, store, novelId, userId, begin])
+  }, [novel, store, novelId, userId, begin, contextSelection])
 
   const handleCancel = useCallback(() => {
     cancel()
@@ -147,6 +149,7 @@ export default function LoreConflictChecker({ store, userId }) {
             Compares lore entries, world rules, character facts, and manuscript scenes for inconsistencies. Mark deliberate contradictions as "Intentional mystery".
           </p>
         </div>
+        <AiContextSelector store={store} novelId={novelId} novel={novel} value={contextSelection} onChange={setContextSelection} />
         <ManuscriptCoverageNotice coverage={coverage} style={{ marginTop: 8 }} />
       </div>
 

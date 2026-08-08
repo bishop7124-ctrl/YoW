@@ -1,0 +1,256 @@
+/* ==========================================================================
+   Pricing page — plan cards grid & responsive comparison table
+   Kept scoped to this page; everything else on PricingPage.jsx stays inline
+   to match the rest of the marketing site's authoring style.
+   ========================================================================== */
+
+/* ---- Trust chip row ---- */
+.pricing-trust-row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 24px;
+}
+
+.pricing-trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* ---- Plan cards grid ---- */
+.pricing-cards {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(28px, 5vw, 44px) 24px 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 980px) {
+  .pricing-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .pricing-cards { grid-template-columns: 1fr; gap: 18px; padding: 24px 16px 4px; }
+}
+
+.pricing-card {
+  position: relative;
+  height: 100%;
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-nav);
+  padding: 30px 24px 26px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pricing-card--highlight {
+  border: 2px solid var(--accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--bg-nav)) 0%, var(--bg-nav) 55%);
+  box-shadow: 0 24px 60px -24px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+@media (min-width: 981px) {
+  .pricing-card--highlight {
+    transform: translateY(-14px);
+    padding-top: 36px;
+    padding-bottom: 32px;
+  }
+}
+
+.pricing-card-ribbon {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: var(--bg-main);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 7px 18px;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.pricing-card-badge {
+  position: absolute;
+  top: -12px;
+  left: 20px;
+  background: var(--bg-nav);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.pricing-card-keybenefit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--accent-fade);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 10px;
+  padding: 11px 13px;
+  margin: 2px 0 16px;
+  line-height: 1.35;
+}
+
+.pricing-card-keybenefit-icon {
+  font-size: 17px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.pricing-card-valuenote {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: -8px 0 16px;
+  line-height: 1.5;
+}
+
+.pricing-card-cta {
+  width: 100%;
+  padding: 14px 0;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 800;
+  cursor: pointer;
+  margin-top: 20px;
+  min-height: 50px;
+  transition: opacity .15s ease, transform .08s ease;
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.pricing-card-cta--solid {
+  background: var(--accent);
+  color: var(--bg-main);
+  border-color: var(--accent);
+  font-size: 15.5px;
+}
+
+.pricing-card-cta:disabled { opacity: .55; cursor: not-allowed; }
+.pricing-card-cta:active:not(:disabled) { transform: scale(.98); }
+
+/* ---- Founder note ("Why is YoW so affordable?") ---- */
+.pricing-founder-note {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: clamp(36px, 6vw, 56px) 28px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--bg-nav);
+  text-align: center;
+}
+
+.pricing-founder-note-mark {
+  font-size: 42px;
+  line-height: 1;
+  color: var(--accent);
+  opacity: .5;
+  margin-bottom: 4px;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+/* ---- Comparison table ---- */
+.pricing-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.pricing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pricing-table th,
+.pricing-table td {
+  padding: 13px 10px;
+}
+
+.pricing-table thead th {
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pricing-table thead th:first-child { text-align: left; width: 26%; }
+
+.pricing-table tbody td { text-align: center; color: var(--text-muted); }
+.pricing-table tbody td:first-child { text-align: left; color: var(--text-main); font-weight: 600; }
+.pricing-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--bg-nav) 60%, transparent); }
+
+.pricing-table td.is-check { color: var(--accent); font-weight: 900; }
+.pricing-table td.is-dash { color: var(--border); }
+
+.pricing-table .col-highlight { background: var(--accent-fade); }
+.pricing-table thead th.col-highlight { background: transparent; color: var(--accent); }
+
+@media (max-width: 700px) {
+  .pricing-table-wrap { overflow-x: visible; }
+  .pricing-table thead { display: none; }
+  .pricing-table, .pricing-table tbody, .pricing-table tr, .pricing-table td { display: block; width: 100%; }
+
+  .pricing-table tr {
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px 16px;
+    background: var(--bg-nav) !important;
+  }
+
+  .pricing-table td {
+    border: none;
+    padding: 10px 0;
+    text-align: left !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .pricing-table td:first-child {
+    display: block;
+    font-weight: 900;
+    font-size: 13.5px;
+    color: var(--text-main);
+    padding: 13px 0 9px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+  }
+
+  .pricing-table td:not(:first-child)::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .pricing-table td.col-highlight { background: transparent; }
+  .pricing-table td.col-highlight:not(:first-child) { color: var(--accent); font-weight: 700; }
+}

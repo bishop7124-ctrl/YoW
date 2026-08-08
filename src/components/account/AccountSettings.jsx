@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { exportAllProjects } from '../../utils/projectExportAll'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
@@ -12,6 +11,7 @@ import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { UserMediaImage } from '../shared/UserMedia'
 import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
+import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
@@ -71,41 +71,27 @@ const CUSTOM_COLOR_FIELDS = [
 ]
 
 export function MaintenancePayButton({ style }) {
-  const [paying, setPaying] = useState(false)
-  const [error, setError] = useState('')
-  const handlePay = async () => {
-    setPaying(true)
-    setError('')
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const endpoint = import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL || '/api/create-checkout-session'
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ plan: 'hosting_renewal' }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Checkout failed')
-      window.location.href = json.url
-    } catch (err) {
-      setError(err.message)
-      setPaying(false)
-    }
-  }
+  const { user, refreshUser } = useAuth()
+  const [modalOpen, setModalOpen] = useState(false)
   return (
     <div style={style}>
       <button
-        onClick={handlePay}
-        disabled={paying}
+        onClick={() => setModalOpen(true)}
         style={{
           padding: '8px 18px', borderRadius: 7, background: '#f59e0b', color: '#000',
-          fontWeight: 700, fontSize: 13, border: 'none', cursor: paying ? 'wait' : 'pointer',
-          opacity: paying ? 0.7 : 1,
+          fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
         }}
       >
-        {paying ? 'Redirecting…' : `Pay £${HOSTING_RENEWAL_FEE_GBP} · Restore Cloud Mode`}
+        Register interest in Cloud Mode renewal
       </button>
-      {error && <p style={{ margin: '6px 0 0', color: '#ef4444', fontSize: 12 }}>{error}</p>}
+      <BetaInterestModal
+        open={modalOpen}
+        user={user}
+        planKey="hosting_renewal"
+        planLabel="Cloud Mode renewal"
+        onClose={() => setModalOpen(false)}
+        onGranted={refreshUser}
+      />
     </div>
   )
 }
@@ -875,10 +861,14 @@ function ExportAllProjectsCard({ store, novels }) {
         onProgress: (done, total) => setProgress({ done, total }),
       })
       const failed = results.filter(r => !r.ok)
-      if (failed.length) {
+      const succeeded = results.length - failed.length
+      if (failed.length && succeeded) {
+        setMessage(`Downloaded a ZIP with ${succeeded} of ${results.length} project${results.length === 1 ? '' : 's'}.`)
+        setError(`${failed.length} project${failed.length === 1 ? '' : 's'} failed to export: ${failed.map(f => f.title).join(', ')}`)
+      } else if (failed.length) {
         setError(`${failed.length} of ${results.length} project${results.length === 1 ? '' : 's'} failed to export: ${failed.map(f => f.title).join(', ')}`)
       } else {
-        setMessage(`Exported all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'Word documents' : 'backup ZIPs'}.`)
+        setMessage(`Downloaded a ZIP with all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'category Word documents' : 'backup ZIPs'}.`)
       }
     } catch (err) {
       setError(err.message || 'Export failed. Please try again.')
@@ -904,7 +894,7 @@ function ExportAllProjectsCard({ store, novels }) {
           Export all projects
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
-          Download every project you own in one pass — as restorable backup ZIPs, or as readable Word documents. Each project downloads as a separate file.
+          Download every project you own in one pass — as restorable backup ZIPs, or as readable category Word documents. All projects are bundled into a single ZIP download.
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -924,7 +914,7 @@ function ExportAllProjectsCard({ store, novels }) {
           disabled={!novels.length || Boolean(busyFormat)}
           onClick={() => runExportAll('docx')}
         >
-          {busyFormat === 'docx' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as Word documents'}
+          {busyFormat === 'docx' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as Word docs ZIP'}
         </button>
       </div>
       {!novels.length && (
@@ -1918,7 +1908,7 @@ function AISettingsPanel({ userId, membership }) {
           </div>
         </div>
         <AiUpgradeRequiredNotice>
-          AI settings are available after you upgrade. Paid plans unlock bring-your-own-key AI for chat, manuscript suggestions, and project analysis.
+          AI settings are available after you upgrade. Paid plans let you connect your own AI provider for chat, manuscript suggestions, and project analysis.
         </AiUpgradeRequiredNotice>
       </section>
     )
@@ -2164,6 +2154,7 @@ async function requestBillingUrl(endpoint, accessToken, body) {
 function PlanBadge({ membership }) {
   let label = 'Free'
   if (membership.isTrialActive) label = 'Trial'
+  else if (membership.isBetaTester) label = 'Beta Tester'
   else if (membership.isPaid) label = membership.activePlanDef?.label || 'Premium'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2235,7 +2226,11 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
           </span>
         ) : isDowngrade ? null
           : plan.key === 'free' ? (
-            membership.isPaid && !membership.isLifetime ? (
+            membership.isBetaTester ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>
+                After beta
+              </span>
+            ) : membership.isPaid && !membership.isLifetime ? (
               <button
                 type="button"
                 className="account-secondary-button"
@@ -2258,7 +2253,7 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
               onClick={() => onSelect(plan.key)}
               disabled={anyBusy}
             >
-              {busy ? 'Opening...' : plan.key === membership.activePlanKey ? 'Renew' : 'Upgrade'}
+              {busy ? 'Opening...' : 'Register interest'}
             </button>
           )}
       </div>
@@ -2742,6 +2737,7 @@ export default function AccountSettings({
   const [billingBusy, setBillingBusy] = useState('')
   const [billingError, setBillingError] = useState('')
   const [billingMessage, setBillingMessage] = useState('')
+  const [betaInterestPlan, setBetaInterestPlan] = useState(null)
   const [fallbackTab, setFallbackTab] = useState('profile')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const selectedTab = onTabChange ? activeTab : fallbackTab
@@ -2774,6 +2770,11 @@ export default function AccountSettings({
 
   const openBilling = async (planKey) => {
     // planKey = null → open customer portal; otherwise open checkout for that plan
+    if (planKey) {
+      setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
+      return
+    }
+
     const endpoint = planKey ? billingEndpoints.checkout : billingEndpoints.portal
     if (!endpoint) {
       setBillingError('Billing is not configured for this build yet.')
@@ -2937,12 +2938,18 @@ export default function AccountSettings({
                 <>
                   <div>
                     <span>App licence</span>
-                    <strong>Monthly — cancel any time</strong>
+                    <strong>{membership.isBetaTester ? 'Beta tester — temporary full access' : 'Monthly — cancel any time'}</strong>
                   </div>
                   <div>
                     <span>Cloud hosting</span>
-                    <strong>Cloud Mode while subscribed</strong>
+                    <strong>{membership.isBetaTester ? 'Cloud Mode during beta' : 'Cloud Mode while subscribed'}</strong>
                   </div>
+                  {membership.isBetaTester && (
+                    <div>
+                      <span>Beta notice</span>
+                      <strong>Revoked when beta ends</strong>
+                    </div>
+                  )}
                 </>
               )}
               {membership.isPaid && membership.isLifetime && (
@@ -2979,9 +2986,11 @@ export default function AccountSettings({
               )}
               <div>
                 <span>Access level</span>
-                <strong>
+              <strong>
                   {effectiveLocalMode
                     ? 'Local Mode'
+                    : membership.isBetaTester
+                    ? 'Full access (beta tester)'
                     : membership.isPaid
                     ? 'Full access'
                     : membership.isTrialActive
@@ -3092,7 +3101,7 @@ export default function AccountSettings({
 
             {membership.isFree && (
               <div className="account-readonly-note" style={{ marginTop: 14 }}>
-                Free plan includes one active text-first project, 3 MB cloud storage, and locked Map Builder/AI Tools. All other projects are view-only and exportable.
+                Free plan includes one active project with the full toolkit (including Map Builder), 250 MB cloud storage, and no AI tools. All other projects are view-only and exportable.
                 {membership.wasMonthly && ' Your active project is locked because you previously held a monthly subscription.'}
               </div>
             )}
@@ -3114,7 +3123,7 @@ export default function AccountSettings({
             )}
 
             {/* Stripe customer portal: cancellation for subscribers, billing history/receipts for one-time purchasers */}
-            {membership.isPaid && (
+            {membership.isPaid && !membership.isBetaTester && (
               <div className="account-actions">
                 <button
                   type="button"
@@ -3153,6 +3162,17 @@ export default function AccountSettings({
           onClose={() => setDeleteModalOpen(false)}
         />
       )}
+      <BetaInterestModal
+        open={!!betaInterestPlan}
+        user={user}
+        planKey={betaInterestPlan?.key}
+        planLabel={betaInterestPlan?.label}
+        onClose={() => setBetaInterestPlan(null)}
+        onGranted={async () => {
+          setBillingMessage('Beta tester access is active. Full product access is unlocked during beta.')
+          await refreshUser()
+        }}
+      />
     </div>
   )
 }

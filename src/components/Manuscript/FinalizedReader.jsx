@@ -157,6 +157,22 @@ export default function FinalizedReader({ draft, viewMode, pageIndex, onPageInde
   )
 }
 
+// A `\n{2,}` gap in scene.content is a real paragraph break (its own <w:p> below);
+// a single `\n` within one of those blocks is a soft line break the writer typed on
+// purpose (dialogue formatted one line per beat, poetry, etc.). That used to get
+// joined with a space here, silently discarding it — round-tripping through
+// export/re-import turned deliberately broken lines into one run-on line. `docx`'s
+// TextRun `break` option emits a real <w:br/> between lines within the same
+// paragraph, which docxImport.js's extractParaText already turns back into `\n` on
+// import, so fixing the write side here is enough to fix the round trip.
+function linesToRuns(TextRun, lines, runOptions) {
+  return lines.map((line, index) => new TextRun({
+    ...runOptions,
+    text: line,
+    ...(index > 0 ? { break: 1 } : {}),
+  }))
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalNumbers) {
   const { Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak } = await import('docx')
@@ -214,10 +230,10 @@ export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalN
           blocks.forEach(block => {
             if (!block.text?.trim()) return
             const type = block.type || scene.scriptElement || 'action'
-            const text = block.text.split('\n').map(l => l.trim()).filter(Boolean).join(' ')
+            const lines = block.text.split('\n').map(l => l.trim()).filter(Boolean)
             const isCentered = type === 'character' || type === 'transition'
             children.push(new Paragraph({
-              children: [new TextRun({ text, font: 'Courier New', size: 24, bold: type === 'character' || type === 'scene_heading' || type === 'transition' })],
+              children: linesToRuns(TextRun, lines, { font: 'Courier New', size: 24, bold: type === 'character' || type === 'scene_heading' || type === 'transition' }),
               alignment: isCentered ? AlignmentType.CENTER : AlignmentType.LEFT,
               indent: type === 'dialogue' ? { left: 1800, right: 1440 } : type === 'parenthetical' ? { left: 2160, right: 1800 } : { left: 720, right: 720 },
               spacing: { before: type === 'scene_heading' ? 260 : 80, after: 80, line: 300 },
@@ -230,7 +246,7 @@ export async function exportToDocx(novel, acts, chapters, scenes, chapterGlobalN
           const lines = block.split('\n').map(l => l.trim()).filter(Boolean)
           if (!lines.length) return
           children.push(new Paragraph({
-            children: [new TextRun({ text: lines.join(' '), font: 'Times New Roman', size: 24 })],
+            children: linesToRuns(TextRun, lines, { font: 'Times New Roman', size: 24 }),
             indent: { firstLine: 720 },
             spacing: { after: 0, line: 360 },
           }))

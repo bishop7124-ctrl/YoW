@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import StructureSidebar from './StructureSidebar'
 import AIStar from '../ai/AIStar'
+import ManuscriptReferencePanel from './ManuscriptReferencePanel'
 
 // ─── Word / date helpers ──────────────────────────────────────────────────────
 
@@ -100,6 +101,15 @@ const AIIcon = () => (
   <AIStar size={15} />
 )
 
+const ReferenceIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2.5 2.5h10v10h-10z" />
+    <path d="M5 5h5" />
+    <path d="M5 7.5h5" />
+    <path d="M5 10h3" />
+  </svg>
+)
+
 const FormatIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" />
@@ -108,6 +118,7 @@ const FormatIcon = () => (
 
 const TABS = [
   { id: 'structure', label: 'Outline', subtitle: 'Acts, chapters, scenes', Icon: StructureIcon },
+  { id: 'reference', label: 'Reference', subtitle: 'Project-wide lookup', Icon: ReferenceIcon },
   { id: 'status',    label: 'Status',  subtitle: 'Progress and targets', Icon: ProgressIcon },
   { id: 'notes',     label: 'Notes',   subtitle: 'Scene note blocks', Icon: NotesIcon },
   { id: 'format',    label: 'Format',  subtitle: 'Page and typing style', Icon: FormatIcon },
@@ -515,6 +526,19 @@ export default function WritingSidebar({
   writingGoals,
   onUpdateGoals,
 
+  // Reference tab
+  activeNovel,
+  characters,
+  locations,
+  loreEntries,
+  factions,
+  timeline,
+  worldHistory,
+  ideaEntries,
+  storySchedule,
+  rpgCharacters,
+  onOpenReferenceEntry,
+
   // Pre-rendered slots
   formatSlot,
   notesSlot,
@@ -607,6 +631,23 @@ export default function WritingSidebar({
               scenes={scenes}
               acts={acts}
               chapters={chapters}
+            />
+          )}
+
+          {/* Reference */}
+          {visiblePanelId === 'reference' && (
+            <ManuscriptReferencePanel
+              activeNovel={activeNovel}
+              characters={characters}
+              locations={locations}
+              loreEntries={loreEntries}
+              factions={factions}
+              timeline={timeline}
+              worldHistory={worldHistory}
+              ideaEntries={ideaEntries}
+              storySchedule={storySchedule}
+              rpgCharacters={rpgCharacters}
+              onOpenEntry={onOpenReferenceEntry}
             />
           )}
 

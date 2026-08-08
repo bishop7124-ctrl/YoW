@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
+import { estimateStoreSize } from '../utils/storageQuota.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -413,6 +414,82 @@ describe('novel CRUD', () => {
       expect(result.current.novels.find(n => n.id === 'old-focus').focus).toBe(false)
     })
   })
+
+  it('retires the current manuscript and outline, then starts a fresh manuscript', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'Draft House', type: 'novel' }) })
+    const originalSceneId = result.current.scenes[0].id
+    act(() => {
+      result.current.updateAct(result.current.acts[0].id, { title: 'Old Act' })
+      result.current.updateChapter(result.current.chapters[0].id, { title: 'Old Chapter' })
+      result.current.updateScene(originalSceneId, { title: 'Old Scene', content: 'old words here' })
+    })
+
+    let copy
+    act(() => {
+      copy = result.current.retireManuscript('Submission draft')
+    })
+
+    expect(copy.title).toBe('Submission draft')
+    expect(copy.acts[0].title).toBe('Old Act')
+    expect(copy.chapters[0].title).toBe('Old Chapter')
+    expect(copy.scenes[0].content).toBe('old words here')
+    expect(result.current.activeNovel.manuscriptCopies).toHaveLength(1)
+    expect(result.current.activeNovel.manuscriptCopies[0].id).toBe(copy.id)
+    expect(result.current.acts).toHaveLength(1)
+    expect(result.current.chapters).toHaveLength(1)
+    expect(result.current.scenes).toHaveLength(1)
+    expect(result.current.scenes[0].id).not.toBe(originalSceneId)
+    expect(result.current.scenes[0].content).toBe('')
+  })
+
+  it('restores a retired manuscript copy and can retire the current manuscript first', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'Draft House', type: 'novel' }) })
+    act(() => {
+      result.current.updateAct(result.current.acts[0].id, { title: 'First Outline' })
+      result.current.updateScene(result.current.scenes[0].id, { title: 'First Scene', content: 'first draft' })
+    })
+    let firstCopy
+    act(() => { firstCopy = result.current.retireManuscript('First retired draft') })
+    act(() => {
+      result.current.updateAct(result.current.acts[0].id, { title: 'Second Outline' })
+      result.current.updateScene(result.current.scenes[0].id, { title: 'Second Scene', content: 'second draft' })
+    })
+
+    act(() => {
+      result.current.restoreManuscriptCopy(firstCopy.id, {
+        retireCurrentFirst: true,
+        currentTitle: 'Second retired draft',
+      })
+    })
+
+    expect(result.current.acts[0].title).toBe('First Outline')
+    expect(result.current.scenes[0].content).toBe('first draft')
+    expect(result.current.activeNovel.manuscriptCopies).toHaveLength(2)
+    expect(result.current.activeNovel.manuscriptCopies[0].title).toBe('Second retired draft')
+    expect(result.current.activeNovel.manuscriptCopies[0].acts[0].title).toBe('Second Outline')
+    expect(result.current.activeNovel.manuscriptCopies[0].scenes[0].content).toBe('second draft')
+  })
+
+  it('cleans up old cloud manuscript rows when retiring', () => {
+    vi.mocked(deleteItem).mockClear()
+    vi.mocked(deleteSceneDoc).mockClear()
+    const { result } = renderHook(() => useStore('cloud-user', { cloudSyncEnabled: true }))
+
+    act(() => { result.current.addNovel({ title: 'Cloud Draft', type: 'novel' }) })
+    const actId = result.current.acts[0].id
+    const chapterId = result.current.chapters[0].id
+    const sceneId = result.current.scenes[0].id
+
+    act(() => { result.current.retireManuscript('Cloud copy') })
+
+    expect(deleteItem).toHaveBeenCalledWith('acts', 'cloud-user', actId)
+    expect(deleteItem).toHaveBeenCalledWith('chapters', 'cloud-user', chapterId)
+    expect(deleteSceneDoc).toHaveBeenCalledWith('cloud-user', sceneId)
+  })
 })
 
 describe('getProjectExportData', () => {
@@ -805,6 +882,48 @@ describe('multi-tab structured record sync', () => {
     expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
   })
 
+  // commitLocal caches the raw string it last wrote per key (see useStore.js) so a
+  // *later* commit for the same key can skip the expensive re-read/re-merge when
+  // nothing else has touched storage since — but only once a tab has actually
+  // written that key at least once, establishing its own cache. This test makes
+  // sure that cache doesn't go stale: a tab that already wrote (and cached) a key
+  // must still notice a genuinely external write that lands in between two of its
+  // own commits, not just on its very first write ever (already covered above).
+  it('a cached tab still picks up another tab\'s edit that lands between two of its own commits', () => {
+    const owner = 'user-multitab-cache-invalidation'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab B writes once first — this establishes tab B's own "last raw I wrote"
+    // cache for nf_characters, the exact state that lets a later commit take the
+    // fast skip path.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Bob', notes: 'first edit by tab B' }, 'char-B') })
+    expect(tabB.result.current.characters.find(c => c.id === 'char-B').notes).toBe('first edit by tab B')
+
+    // Tab A, entirely independently, now edits the OTHER record — tab B has no
+    // way to know this happened yet.
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+
+    // Tab B commits again. Storage now differs from what tab B itself last wrote
+    // (tab A's write landed in between), so this must NOT take the skip path —
+    // it has to notice and adopt tab A's edit, not silently overwrite it with
+    // tab B's stale cached copy of char-A.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Bob', notes: 'second edit by tab B' }, 'char-B') })
+
+    const stored = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(stored.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+    expect(stored.find(c => c.id === 'char-B').notes).toBe('second edit by tab B')
+    expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+  })
+
   it('two tabs editing DIFFERENT fields on the SAME record both survive via a field-level merge (no conflict, no loss)', async () => {
     const owner = 'user-samerecord-fields'
     const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', role: 'Original role', bio: 'Original bio' }]
@@ -1139,6 +1258,66 @@ describe('immediate data-safety persistence', () => {
     expect(tabB.result.current.scenes.find(s => s.id === sceneId).content).toBe('Tab B stale text')
     const conflict = tabB.result.current.sceneConflicts.find(s => s.conflictOf === sceneId)
     expect(conflict?.content).toBe('Tab A newer text')
+  })
+})
+
+// ─── storage quota enforcement ───────────────────────────────────────────────
+// A full-quota account could still type indefinitely into an existing scene —
+// storageExceededCheck only ever gated the add* actions (new scene/chapter/
+// character/etc.), never edits to a scene already on the page. updateSceneContent
+// now blocks growing a scene's content once usage is at/over quota, while still
+// allowing edits that shrink or merely rewrite existing content.
+
+describe('storage quota enforcement', () => {
+  // The estimateStoreSize mock (module-level, always 0) only feeds storageUsedBytes
+  // through a useMemo keyed on the store's data arrays, so bumping its return value
+  // alone doesn't retroactively change already-rendered storageUsedBytes — a
+  // dependency (e.g. `scenes`) has to actually change reference first. A shrinking
+  // content edit is perfect for that: it's never blocked by the quota gate itself,
+  // so it reliably forces the recompute that then reflects the new (over-quota)
+  // estimate on the next render.
+  const goOverQuota = (result, overQuotaBytes, sceneId, shrunkContent) => {
+    vi.mocked(estimateStoreSize).mockReturnValue(overQuotaBytes)
+    act(() => { result.current.updateSceneContent(sceneId, shrunkContent) })
+  }
+
+  afterEach(() => {
+    vi.mocked(estimateStoreSize).mockReturnValue(0)
+  })
+
+  it('blocks growing a scene\'s content once storage is full, without touching stored content', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false, storageQuotaBytes: 1000 }))
+    act(() => { result.current.addNovel({ title: 'Full Account', type: 'novel' }) })
+    const sceneId = result.current.scenes[0].id
+    act(() => { result.current.updateSceneContent(sceneId, 'Some starting text that is reasonably long.') })
+
+    goOverQuota(result, 2000, sceneId, 'Shorter.')
+    expect(result.current.storageUsedBytes).toBeGreaterThan(result.current.storageQuotaBytes)
+
+    const onReadOnly = vi.fn()
+    window.addEventListener('membership-read-only', onReadOnly)
+
+    act(() => { result.current.updateSceneContent(sceneId, 'Shorter. And now much more appended text.') })
+
+    expect(result.current.scenes.find(s => s.id === sceneId).content).toBe('Shorter.')
+    expect(onReadOnly).toHaveBeenCalledTimes(1)
+    expect(onReadOnly.mock.calls[0][0].detail.reason).toBe('storage-exceeded')
+
+    window.removeEventListener('membership-read-only', onReadOnly)
+  })
+
+  it('still allows shrinking or rewriting existing content once storage is full', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false, storageQuotaBytes: 1000 }))
+    act(() => { result.current.addNovel({ title: 'Full Account', type: 'novel' }) })
+    const sceneId = result.current.scenes[0].id
+    act(() => { result.current.updateSceneContent(sceneId, 'Some starting text that is reasonably long.') })
+
+    goOverQuota(result, 2000, sceneId, 'Shorter.')
+    expect(result.current.storageUsedBytes).toBeGreaterThan(result.current.storageQuotaBytes)
+
+    act(() => { result.current.updateSceneContent(sceneId, 'Tiny.') })
+
+    expect(result.current.scenes.find(s => s.id === sceneId).content).toBe('Tiny.')
   })
 })
 

@@ -1,8 +1,9 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import registerPaidInterest from './api/register-paid-interest.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -46,13 +47,61 @@ function stripAnalyticsForDesktop() {
   }
 }
 
+function installLocalApiEnv(mode) {
+  const env = loadEnv(mode, __dirname, '')
+  const keys = [
+    'FEEDBACK_EMAIL',
+    'FEEDBACK_EMAIL_PASSWORD',
+    'SITE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'SUPABASE_URL',
+    'VITE_SUPABASE_URL',
+  ]
+  for (const key of keys) {
+    if (!process.env[key] && env[key]) process.env[key] = env[key]
+  }
+  if (!process.env.SUPABASE_URL && env.VITE_SUPABASE_URL) {
+    process.env.SUPABASE_URL = env.VITE_SUPABASE_URL
+  }
+}
+
+function localApiMiddleware(mode) {
+  return {
+    name: 'local-api-middleware',
+    configureServer(server) {
+      installLocalApiEnv(mode)
+      server.middlewares.use('/api/register-paid-interest', async (req, res) => {
+        try {
+          let rawBody = ''
+          for await (const chunk of req) rawBody += chunk
+          req.body = rawBody ? JSON.parse(rawBody) : {}
+          res.status = (statusCode) => {
+            res.statusCode = statusCode
+            return res
+          }
+          res.json = (payload) => {
+            if (!res.getHeader('Content-Type')) res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(payload))
+          }
+          await registerPaidInterest(req, res)
+        } catch (err) {
+          server.config.logger.error(`[local-api] register-paid-interest failed: ${err.message}`)
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: err.message || 'Local API failed.' }))
+        }
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{js,jsx}', 'tests/api/**/*.test.js'],
   },
-  plugins: [react(), staticHtmlMiddleware(), stripAnalyticsForDesktop()],
+  plugins: [react(), staticHtmlMiddleware(), stripAnalyticsForDesktop(), localApiMiddleware(mode)],
   build: {
     chunkSizeWarningLimit: 1000,
   },
@@ -68,4 +117,4 @@ export default defineConfig({
         path.includes('node_modules.broken-20260505'),
     },
   },
-})
+}))

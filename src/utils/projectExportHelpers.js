@@ -169,5 +169,8 @@ export const getProjectExportFilename = (project) =>
 export const getProjectDocxFilename = (project) =>
   `${getProjectBaseName(project)}-${getProjectExportSlug(project, 'project-export')}.docx`
 
+export const getProjectDocxZipFilename = (project) =>
+  `${getProjectBaseName(project)}-${getProjectExportSlug(project, 'project-export')}-word-docs.zip`
+
 export const getProjectPdfFilename = (project) =>
   `${getProjectBaseName(project)}-${getProjectExportSlug(project, 'project-export')}.pdf`
