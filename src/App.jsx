@@ -1,4 +1,5 @@
 import { Component, useCallback, useMemo, useState, useEffect, useRef } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
 import { loadUserData, replaceUserData } from './utils/firestoreSync'
@@ -1526,6 +1527,7 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <AppInner />
+        <Analytics />
       </AuthProvider>
     </ErrorBoundary>
   )
