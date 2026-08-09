@@ -6,6 +6,7 @@ import { estimateStoreSize } from '../utils/storageQuota'
 import { clearJourneyLinks } from '../utils/characterJourney'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
 import { deleteUserMedia } from '../utils/uploadUserMedia'
@@ -84,9 +85,19 @@ const loadLastActiveProject = (ownerId) => {
     return null
   }
 }
-const clearProjectLocalStorage = () => {
+// `sceneIds`: the scene ids known locally right before clearing, so their
+// individual `nf_scene_content:<id>` keys (see src/storage/sceneContentStore.js
+// — scene prose lives outside PROJECT_STORAGE_KEYS' flat per-collection
+// list, one key per scene) get removed too, rather than silently surviving
+// a sign-out and staying on disk for whichever account uses this browser
+// next. Best-effort: a scene whose content key was written in an earlier
+// session and never made it into this session's in-memory scenes (e.g. a
+// prior storage hiccup) won't be enumerated here — an accepted small gap,
+// not a regression versus today's behaviour, which cleans none of these up.
+const clearProjectLocalStorage = (sceneIds = []) => {
   try {
     PROJECT_STORAGE_KEYS.forEach(key => removeItem(key))
+    sceneIds.forEach(id => { if (id != null) removeItem(sceneContentKey(id)) })
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {
@@ -396,7 +407,7 @@ const mergeSceneUpdateWithPersistedCopy = (prev, sceneId, updateScene) => {
   // base for the rebuilt array. Falling back to a persisted snapshot for the
   // whole array would silently discard live edits to every other scene (e.g.
   // after a localStorage write failure left `nf_scenes` stale).
-  const persisted = load('nf_scenes', [])
+  const persisted = hydrateScenesFromStorage(load('nf_scenes', []))
   const stateScene = prev.find(s => s.id === sceneId)
   const persistedScene = (Array.isArray(persisted) ? persisted : []).find(s => s.id === sceneId)
   if (!stateScene && !persistedScene) return prev
@@ -431,7 +442,7 @@ const getLocalSnapshot = () => ({
   worldHistory: load('nf_worldHistory', []),
   acts: load('nf_acts', []),
   chapters: load('nf_chapters', []),
-  scenes: load('nf_scenes', []),
+  scenes: hydrateScenesFromStorage(load('nf_scenes', [])),
   loreEntries: load('nf_loreEntries', []),
   ideaEntries: load('nf_ideaEntries', []),
   maps: load('nf_maps', []),
@@ -552,7 +563,7 @@ export function useStore(userId = null, options = {}) {
   const [currentYear, setCurrentYear] = useState(() => loadInitial('nf_currentYear', 0))
   const [acts, setActs] = useState(() => loadInitial('nf_acts', []))
   const [chapters, setChapters] = useState(() => loadInitial('nf_chapters', []))
-  const [scenes, setScenes] = useState(() => loadInitial('nf_scenes', []))
+  const [scenes, setScenes] = useState(() => hydrateScenesFromStorage(loadInitial('nf_scenes', [])))
   const [loreEntries, setLoreEntries] = useState(() => loadInitial('nf_loreEntries', []))
   const [ideaEntries, setIdeaEntries] = useState(() => loadInitial('nf_ideaEntries', []))
   const [maps, setMaps] = useState(() => loadInitial('nf_maps', []))
@@ -747,7 +758,7 @@ export function useStore(userId = null, options = {}) {
     importing.current = true
     syncPendingRef.current = 0
     setSyncStatus({ state: 'idle', lastSyncedAt: null, lastError: null })
-    clearProjectLocalStorage()
+    clearProjectLocalStorage((scenesRef.current || []).map(s => s?.id))
     clearProjectRefs({
       novelsRef,
       charactersRef,
@@ -813,6 +824,39 @@ export function useStore(userId = null, options = {}) {
   // module-level cache would conflate "tab A wrote this" with "tab B wrote this" and
   // silently skip the rebase tab B actually needs.
   const lastWrittenRawByKeyRef = useRef(new Map())
+
+  // `commitLocal` already writes `save(key, next)` itself (see below) and calls
+  // `setter(next)` with that exact same array reference — but a handful of
+  // per-collection "persist on state change" effects further down (one per
+  // collection, `useEffect(() => save(key, collection), [collection])`) also
+  // exist for the few code paths that legitimately bypass `commitLocal`
+  // entirely (full-account reset on logout, project import replacing a whole
+  // collection at once — see the raw `setScenes(...)` calls in this file).
+  // Those effects fire on *every* state change regardless of source, so a
+  // commitLocal-driven update pays for a second, fully redundant save() of
+  // the exact value it just wrote. For most collections that's cheap and
+  // harmless; for `nf_scenes` specifically (this account's single largest
+  // collection by far, into the low single-digit MB — see the 2026-08
+  // typing-lag investigation in docs/ROADMAP.md) it doubled the cost of an
+  // already-expensive full-array stringify+localStorage write on every
+  // ~400ms debounce cycle while typing. Tracking the exact reference
+  // commitLocal already persisted per key lets that effect skip its own
+  // save() when nothing has changed since — a plain reference-equality
+  // check, not a re-serialize, so it's free to check — while still saving
+  // for real when state changed via one of the non-commitLocal paths above
+  // (a fresh array reference commitLocal never saw). A ref, not module-level
+  // state, for the same reason as lastWrittenRawByKeyRef above.
+  const lastCommitLocalValueByKeyRef = useRef(new Map())
+
+  // Per-scene write cache and id set for the `nf_scenes` content split (see
+  // src/storage/sceneContentStore.js) — a scene's own prose is persisted
+  // under its own `nf_scene_content:<id>` key instead of inline inside the
+  // account-wide `nf_scenes` blob, so a single scene's edit only ever
+  // serializes and writes that one scene instead of every scene in every
+  // project. Refs, not module-level state, for the same per-tab-instance
+  // reason as lastWrittenRawByKeyRef above.
+  const lastWrittenSceneContentByIdRef = useRef(new Map())
+  const knownSceneContentIdsRef = useRef(new Set())
 
   // Exposed so a caller outside commitLocal that independently writes straight to one
   // of these storage keys (today: SceneEditor.jsx's persistSceneDraftToLocalStorage,
@@ -891,7 +935,7 @@ export function useStore(userId = null, options = {}) {
       readItem(key) !== lastWrittenRawByKeyRef.current.get(key)
     )
     if (key && externalWrite && Array.isArray(prevLocal) && Array.isArray(rawNext)) {
-      const persisted = load(key, [])
+      const persisted = key === 'nf_scenes' ? hydrateScenesFromStorage(load(key, [])) : load(key, [])
       if (Array.isArray(persisted)) {
         const table = STORAGE_KEY_TO_TABLE[key]
         const config = table ? CLOUD_TABLE_CONFIG[table] : null
@@ -949,10 +993,22 @@ export function useStore(userId = null, options = {}) {
     }
     ref.current = next
     markLocalWrite(userId)
-    const rawWritten = save(key, next)
+    // `next` stays the full (content-included) array for everything else in
+    // this function and for the caller's own use of commitLocal's return
+    // value — only the bytes handed to save() for `nf_scenes` are split, via
+    // splitScenesForStorage's own prevLocal-based safety check (see that
+    // function's doc comment for why it's keyed off prevLocal, not a cache).
+    const rawWritten = key === 'nf_scenes'
+      ? save(key, splitScenesForStorage(next, prevLocal, lastWrittenSceneContentByIdRef.current, knownSceneContentIdsRef.current))
+      : save(key, next)
     if (key) {
-      if (rawWritten != null) lastWrittenRawByKeyRef.current.set(key, rawWritten)
-      else lastWrittenRawByKeyRef.current.delete(key) // write failed — force the safe path next time
+      if (rawWritten != null) {
+        lastWrittenRawByKeyRef.current.set(key, rawWritten)
+        lastCommitLocalValueByKeyRef.current.set(key, next)
+      } else {
+        lastWrittenRawByKeyRef.current.delete(key) // write failed — force the safe path next time
+        lastCommitLocalValueByKeyRef.current.delete(key)
+      }
     }
     setter(next)
     return next
@@ -1020,7 +1076,33 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { currentYearRef.current = currentYear; save('nf_currentYear', currentYear) }, [currentYear])
   useEffect(() => { actsRef.current = acts; save('nf_acts', acts) }, [acts])
   useEffect(() => { chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
-  useEffect(() => { scenesRef.current = scenes; save('nf_scenes', scenes) }, [scenes])
+  useEffect(() => {
+    scenesRef.current = scenes
+    // Skip the save() entirely when commitLocal already persisted this exact
+    // array reference moments ago (the hot path during typing) — see
+    // lastCommitLocalValueByKeyRef's comment above for why this is safe: a
+    // plain reference check, not a re-serialize, so it costs nothing to
+    // check, and it still saves for real whenever `scenes` changed via one
+    // of the few paths that legitimately bypass commitLocal (full-account
+    // reset, project import).
+    if (lastCommitLocalValueByKeyRef.current.get('nf_scenes') === scenes) return
+    // Route through the same split-aware save as commitLocal (see its own
+    // comment above `splitScenesForStorage`'s import) — this effect is the
+    // *other* place `nf_scenes` gets written, for the handful of paths that
+    // replace `scenes` wholesale instead of going through commitLocal
+    // (initial load, full-account reset, project import). Calling the plain
+    // `save('nf_scenes', scenes)` here (as this effect did before) bypassed
+    // the split entirely and was one half of a real data-loss incident
+    // (2026-08-09): it silently re-inlined every scene's content back into
+    // the metadata blob on every load, and the *other* half — the old
+    // touched-only content-key write — then stripped it right back out
+    // without ever having written it anywhere. `prevScenes: []` here is
+    // deliberate, not an oversight: for every path that reaches this
+    // effect, `scenes` is a wholesale replacement with no meaningful
+    // "before" state in this tab, so every scene should be verified/written
+    // as needed rather than assumed already correct on disk.
+    save('nf_scenes', splitScenesForStorage(scenes, [], lastWrittenSceneContentByIdRef.current, knownSceneContentIdsRef.current))
+  }, [scenes])
   useEffect(() => { loreEntriesRef.current = loreEntries; save('nf_loreEntries', loreEntries) }, [loreEntries])
   useEffect(() => { ideaEntriesRef.current = ideaEntries; save('nf_ideaEntries', ideaEntries) }, [ideaEntries])
   useEffect(() => { mapsRef.current = maps; save('nf_maps', maps) }, [maps])
@@ -1303,7 +1385,7 @@ export function useStore(userId = null, options = {}) {
       // doesn't know about it — union it back in from whatever's actually on
       // local disk right now (which already correctly reflects any discard/
       // restore the user has done through the app).
-      const localScenes = load('nf_scenes', [])
+      const localScenes = hydrateScenesFromStorage(load('nf_scenes', []))
       const importedIds = new Set(importedScenes.map(s => s.id))
       const missingLocalConflicts = (Array.isArray(localScenes) ? localScenes : [])
         .filter(s => s.conflictOf && !importedIds.has(s.id))
@@ -1426,7 +1508,7 @@ export function useStore(userId = null, options = {}) {
   const clearData = useCallback(() => {
     importing.current = true
     remoteReady.current = false
-    clearProjectLocalStorage()
+    clearProjectLocalStorage((scenesRef.current || []).map(s => s?.id))
     clearProjectRefs({
       novelsRef,
       charactersRef,
