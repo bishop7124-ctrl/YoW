@@ -1138,13 +1138,15 @@ describe('immediate data-safety persistence', () => {
     act(() => { tabA.result.current.updateSceneContent(sceneId, 'Tab A newer text') })
     act(() => { tabB.result.current.updateSceneContent(sceneId, 'Tab B stale text') })
 
+    // Scene prose is persisted under its own `nf_scene_content:<id>` key
+    // (see src/storage/sceneContentStore.js) rather than inline inside
+    // `nf_scenes` — read metadata from one and content from the other.
     const storedScenes = JSON.parse(localStorage.getItem('nf_scenes'))
-    const original = storedScenes.find(scene => scene.id === sceneId)
     const conflict = storedScenes.find(scene => scene.conflictOf === sceneId)
 
-    expect(original.content).toBe('Tab B stale text')
+    expect(localStorage.getItem(`nf_scene_content:${sceneId}`)).toBe('Tab B stale text')
     expect(conflict).toBeTruthy()
-    expect(conflict.content).toBe('Tab A newer text')
+    expect(localStorage.getItem(`nf_scene_content:${conflict.id}`)).toBe('Tab A newer text')
     expect(conflict.title).toContain('conflict copy')
   })
 
@@ -1164,9 +1166,93 @@ describe('immediate data-safety persistence', () => {
     // safety net kicks in for it; only the generic commitLocal rebase protects it.
     act(() => { tabB.result.current.updateSceneContent(sceneTwoId, 'Scene two edited by tab B') })
 
-    const storedScenes = JSON.parse(localStorage.getItem('nf_scenes'))
-    expect(storedScenes.find(s => s.id === sceneOneId).content).toBe('Scene one edited by tab A')
-    expect(storedScenes.find(s => s.id === sceneTwoId).content).toBe('Scene two edited by tab B')
+    // Scene prose lives under its own `nf_scene_content:<id>` key — see the
+    // sceneContentKey comment on the previous test above.
+    expect(localStorage.getItem(`nf_scene_content:${sceneOneId}`)).toBe('Scene one edited by tab A')
+    expect(localStorage.getItem(`nf_scene_content:${sceneTwoId}`)).toBe('Scene two edited by tab B')
+  })
+
+  // Regression test for a real data-loss incident (2026-08-09, see
+  // docs/ROADMAP.md): an earlier version of the scene-content storage split
+  // stripped every scene's content from the `nf_scenes` metadata blob on
+  // every write, but only ever wrote a content key for the one scene that
+  // specific commit actually touched. On a real account loaded via
+  // importData/hydration — i.e. every scene already has real content that
+  // was never individually written by *this* commit's own updater — the
+  // very first edit to any single scene silently discarded every other
+  // scene's only copy of its content, both locally and (once that damaged
+  // state reached a later commit) in cloud sync too. This test reproduces
+  // that exact shape: many scenes with real pre-existing content loaded in
+  // one shot (not built up via individual updateSceneContent calls, which
+  // would have already exercised the one-time migration path scene by
+  // scene), then a single edit to just one of them.
+  it('does not discard other scenes\' content the first time any single scene is edited on an imported account', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    const novel = { id: 'novel-1', title: 'Heavy Account', type: 'novel' }
+    const scenes = Array.from({ length: 12 }, (_, i) => ({
+      id: `scene-${i}`,
+      novelId: novel.id,
+      chapterId: 'chapter-1',
+      title: `Scene ${i}`,
+      content: `Original untouched content for scene ${i}.`,
+      order: i,
+    }))
+
+    act(() => {
+      result.current.importData({
+        novels: [novel],
+        activeNovelId: novel.id,
+        chapters: [{ id: 'chapter-1', novelId: novel.id, actId: 'act-1', title: 'Chapter 1', order: 0 }],
+        acts: [{ id: 'act-1', novelId: novel.id, title: 'Act 1', order: 0 }],
+        scenes,
+      })
+    })
+
+    // Sanity check: every scene actually loaded with its real content in
+    // memory before the edit that triggers the first real commit.
+    expect(result.current.scenes).toHaveLength(12)
+    expect(result.current.scenes.every(s => s.content.startsWith('Original untouched content'))).toBe(true)
+
+    // `importData` replaces `scenes` wholesale (not through commitLocal), so
+    // it's the *other* `nf_scenes` write path — the per-collection effect —
+    // that has to do this correctly on its own, before any edit ever
+    // happens. Pin that directly: right after import, every scene's content
+    // should already be split out to its own key, not still sitting
+    // unsplit inside `nf_scenes` (which is what an earlier version of that
+    // effect did, bypassing the split entirely).
+    for (let i = 0; i < 12; i++) {
+      expect(localStorage.getItem(`nf_scene_content:scene-${i}`)).toBe(`Original untouched content for scene ${i}.`)
+    }
+    const metaAfterImport = JSON.parse(localStorage.getItem('nf_scenes'))
+    metaAfterImport.forEach(s => expect(s.content).toBeUndefined())
+
+    // Edit exactly one scene — the first commitLocal-driven write to
+    // `nf_scenes` since the import. This is the exact moment the original
+    // bug destroyed every other scene's content.
+    act(() => { result.current.updateSceneContent('scene-5', 'Edited scene 5 content') })
+
+    expect(localStorage.getItem('nf_scene_content:scene-5')).toBe('Edited scene 5 content')
+    for (let i = 0; i < 12; i++) {
+      if (i === 5) continue
+      expect(localStorage.getItem(`nf_scene_content:scene-${i}`)).toBe(`Original untouched content for scene ${i}.`)
+    }
+
+    // The metadata blob itself should have content stripped for all of
+    // them (that's the whole point of the split) but never at the cost of
+    // the content living nowhere at all.
+    const meta = JSON.parse(localStorage.getItem('nf_scenes'))
+    expect(meta).toHaveLength(12)
+    meta.forEach(s => expect(s.content).toBeUndefined())
+
+    // Also confirm the in-memory store (what the rest of the app actually
+    // reads) still has every scene's real content — this should never have
+    // regressed even under the original bug, since the split only ever
+    // touched the storage layer, but worth locking in explicitly.
+    expect(result.current.scenes.find(s => s.id === 'scene-5').content).toBe('Edited scene 5 content')
+    for (let i = 0; i < 12; i++) {
+      if (i === 5) continue
+      expect(result.current.scenes.find(s => s.id === `scene-${i}`).content).toBe(`Original untouched content for scene ${i}.`)
+    }
   })
 
   it('excludes conflict copies from the normal scenes list and exposes them via sceneConflicts', () => {
