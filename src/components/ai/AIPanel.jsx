@@ -350,7 +350,7 @@ function responseTitle(content, fallback = 'AI response') {
     .slice(0, 72)
 }
 
-function Message({ msg, onRequestSave }) {
+function Message({ msg, onRequestSave, onRetry, streaming }) {
   const isUser = msg.role === 'user'
   const [copied, setCopied] = useState(false)
   const [savedAs, setSavedAs] = useState('')
@@ -385,6 +385,8 @@ function Message({ msg, onRequestSave }) {
     window.setTimeout(() => setSavedAs(''), 1400)
   }
 
+  const canRetry = !isUser && msg.error && !!onRetry
+
   return (
     <div className={`ai-chat-message flex ${isUser ? 'justify-end is-user' : 'justify-start is-assistant'} mb-3 group/message`}>
       <div className={`max-w-[88%] min-w-0 ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
@@ -396,21 +398,36 @@ function Message({ msg, onRequestSave }) {
           {msg.content}
           {msg.streaming && <span className="inline-block w-1.5 h-3.5 bg-[var(--accent)] ml-0.5 animate-pulse rounded-sm align-middle" />}
         </div>
-        <button
-          type="button"
-          onClick={copyMessage}
-          disabled={!msg.content}
-          title={copied ? 'Copied' : `Copy ${isUser ? 'prompt' : 'answer'}`}
-          className={`h-6 px-2 inline-flex items-center gap-1 rounded border text-[10px] font-bold transition-all ${
-            isUser
-              ? 'border-[var(--accent)]/30 text-[var(--text-main)] bg-[var(--bg-nav)] hover:border-[var(--accent)]'
-              : 'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)]'
-          } ${msg.content ? 'opacity-100' : 'opacity-40 cursor-not-allowed'}`}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-        <div className="ai-response-save-actions flex items-center gap-1">
+        {/* Single row for all message actions — previously Copy sat on its own
+            line directly above the Idea/Lore row, which read as two stacked,
+            overlapping-looking button clusters. */}
+        <div className="ai-message-actions flex items-center flex-wrap gap-1">
+          <button
+            type="button"
+            onClick={copyMessage}
+            disabled={!msg.content}
+            title={copied ? 'Copied' : `Copy ${isUser ? 'prompt' : 'answer'}`}
+            className={`h-6 px-2 inline-flex items-center gap-1 rounded border text-[10px] font-bold transition-all ${
+              isUser
+                ? 'border-[var(--accent)]/30 text-[var(--text-main)] bg-[var(--bg-nav)] hover:border-[var(--accent)]'
+                : 'border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-main)] hover:text-[var(--text-main)] hover:border-[var(--accent)]'
+            } ${msg.content ? 'opacity-100' : 'opacity-40 cursor-not-allowed'}`}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+          {canRetry && (
+            <button
+              type="button"
+              onClick={() => onRetry(msg.id)}
+              disabled={streaming}
+              title="Resend this request"
+              className="h-6 px-2 inline-flex items-center gap-1 rounded border border-red-500/40 text-[10px] font-bold text-red-400 bg-transparent hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>
+              Retry
+            </button>
+          )}
           <button
             type="button"
             onClick={() => requestSave('idea')}
@@ -500,19 +517,34 @@ function SaveEntryModal({ type, content, existingCategories = [], existingGroups
   )
 }
 
+// Streamed responses arrive as many small chunks per second. Pushing every
+// chunk into the session (and from there into the global novels store, which
+// diffs and persists the *entire* collection — see commitLocal in useStore.js)
+// turned each AI reply into dozens of full-collection JSON stringify/parse and
+// localStorage-write cycles per second, which is what made the chat feel
+// laggy while the AI was typing. Chunks now only update local component state
+// (cheap, ChatView-only re-render); the session/global store is flushed at
+// most once per this interval, plus always on completion/stop, so a crash
+// mid-stream still loses at most one interval's worth of text.
+const STREAM_FLUSH_INTERVAL_MS = 400
+
 function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCategory }) {
   const [input, setInput]         = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [liveMessage, setLiveMessage] = useState(null) // { id, content } — in-flight assistant text not yet flushed to the store
   const [editingCategory, setEditingCategory] = useState(false)
   const [categoryDraft, setCategoryDraft]     = useState('')
   const [editingTitle, setEditingTitle]       = useState(false)
   const [titleDraft, setTitleDraft]           = useState('')
   const [saveModal, setSaveModal]             = useState(null) // { type, content, resolve }
   const bottomRef      = useRef(null)
+  const scrollRef       = useRef(null)
+  const isNearBottomRef = useRef(true)
   const abortRef       = useRef(false)
   const inputRef       = useRef(null)
   const categoryInputRef = useRef(null)
   const titleInputRef     = useRef(null)
+  const lastFlushRef    = useRef(0)
 
   // Defensive: a session's `messages` should always be an array, but guard against
   // any that were ever saved malformed (e.g. mid-write interruption) — reading
@@ -521,6 +553,13 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     () => Array.isArray(session.messages) ? session.messages : [],
     [session.messages]
   )
+
+  // Overlay the not-yet-flushed streaming text onto the message list for display,
+  // so typing still looks live even though the store isn't updated on every chunk.
+  const displayMessages = useMemo(() => {
+    if (!liveMessage) return messages
+    return messages.map(m => m.id === liveMessage.id ? { ...m, content: liveMessage.content } : m)
+  }, [messages, liveMessage])
 
   const resizeInput = useCallback(() => {
     const el = inputRef.current
@@ -553,7 +592,28 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     setEditingTitle(false)
   }
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  // Only auto-scroll if the reader is already at (or near) the bottom, so
+  // scrolling up to re-read earlier messages while a reply streams in doesn't
+  // get yanked back down.
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+  }
+
+  // New message appended (user sends, or a reply starts/finishes) — smooth-scroll once.
+  useEffect(() => {
+    if (isNearBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length])
+
+  // Streaming text growing — re-running scrollIntoView({ smooth }) on every one of
+  // these (previously on every chunk) restarted the scroll animation dozens of
+  // times a second, which is what made the reply feel jumpy as it typed out.
+  // An instant jump keeps it pinned to the bottom without the repeated animation.
+  useEffect(() => {
+    if (liveMessage && isNearBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+  }, [liveMessage?.content])
+
   useEffect(() => { inputRef.current?.focus() }, [session.id])
   useEffect(() => { resizeInput() }, [input, session.id, resizeInput])
 
@@ -582,6 +642,59 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     [promptStore, session.context, session.agentId, session.freedomLevel]
   )
 
+  // Shared by send() (appends a new user+assistant pair) and retry() (replaces
+  // a failed assistant reply in place) — nextMessages is the full messages
+  // array to write, already containing the fresh streaming placeholder.
+  const runAssistantStream = (nextMessages, assistantMsgId, apiMessages) => {
+    onUpdate(session.id, { messages: nextMessages, updatedAt: Date.now() })
+    setStreaming(true)
+    setLiveMessage({ id: assistantMsgId, content: '' })
+    lastFlushRef.current = Date.now()
+
+    let accumulated = ''
+
+    streamMessage({
+      provider,
+      apiKey:  provCfg.apiKey,
+      model:   provCfg.model || PROVIDERS[provider]?.defaultModel,
+      baseUrl: provCfg.baseUrl,
+      systemPrompt,
+      messages: apiMessages,
+      onChunk: (chunk) => {
+        if (abortRef.current) return
+        accumulated += chunk
+        // Update local state on every chunk (cheap) so it still looks live;
+        // only push into the session/global store periodically (see
+        // STREAM_FLUSH_INTERVAL_MS comment above ChatView).
+        setLiveMessage({ id: assistantMsgId, content: accumulated })
+        const now = Date.now()
+        if (now - lastFlushRef.current >= STREAM_FLUSH_INTERVAL_MS) {
+          lastFlushRef.current = now
+          onUpdate(session.id, {
+            messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, content: accumulated } : m),
+            updatedAt: Date.now(),
+          })
+        }
+      },
+      onDone: () => {
+        setStreaming(false)
+        onUpdate(session.id, {
+          messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, content: accumulated, streaming: false } : m),
+          updatedAt: Date.now(),
+        })
+        setLiveMessage(null)
+      },
+      onError: (err) => {
+        setStreaming(false)
+        onUpdate(session.id, {
+          messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, content: `Error: ${err}`, streaming: false, error: true } : m),
+          updatedAt: Date.now(),
+        })
+        setLiveMessage(null)
+      },
+    })
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || streaming) return
@@ -596,49 +709,42 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     const userMsg      = { id: uid(), role: 'user',      content: text }
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
     const nextMessages = [...messages, userMsg, assistantMsg]
-    onUpdate(session.id, { messages: nextMessages, updatedAt: Date.now() })
-    setStreaming(true)
+    const apiMessages  = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+    runAssistantStream(nextMessages, assistantMsg.id, apiMessages)
+  }
 
-    let accumulated = ''
-    const apiMessages = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-
-    streamMessage({
-      provider,
-      apiKey:  provCfg.apiKey,
-      model:   provCfg.model || PROVIDERS[provider]?.defaultModel,
-      baseUrl: provCfg.baseUrl,
-      systemPrompt,
-      messages: apiMessages,
-      onChunk: (chunk) => {
-        if (abortRef.current) return
-        accumulated += chunk
-        onUpdate(session.id, {
-          messages: nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m),
-          updatedAt: Date.now(),
-        })
-      },
-      onDone: () => {
-        setStreaming(false)
-        onUpdate(session.id, {
-          messages: nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated, streaming: false } : m),
-          updatedAt: Date.now(),
-        })
-      },
-      onError: (err) => {
-        setStreaming(false)
-        onUpdate(session.id, {
-          messages: nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: `Error: ${err}`, streaming: false, error: true } : m),
-          updatedAt: Date.now(),
-        })
-      },
-    })
+  // Re-send a failed request: reuses the conversation up to (but not
+  // including) the failed reply, and replaces it in place with a fresh
+  // streaming placeholder rather than appending a duplicate exchange.
+  const retry = (failedMsgId) => {
+    if (streaming) return
+    const idx = messages.findIndex(m => m.id === failedMsgId)
+    if (idx === -1) return
+    const priorMessages = messages.slice(0, idx)
+    if (!hasKey) {
+      const assistantMsg = { id: uid(), role: 'assistant', content: AI_CONFIG_REQUIRED_TEXT, streaming: false, error: true }
+      onUpdate(session.id, { messages: [...priorMessages, assistantMsg, ...messages.slice(idx + 1)], updatedAt: Date.now() })
+      return
+    }
+    abortRef.current = false
+    const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
+    const nextMessages = [...priorMessages, assistantMsg, ...messages.slice(idx + 1)]
+    const apiMessages  = priorMessages.map(m => ({ role: m.role, content: m.content }))
+    runAssistantStream(nextMessages, assistantMsg.id, apiMessages)
   }
 
   const stop = () => {
     abortRef.current = true
     setStreaming(false)
-    const stoppedMessages = messages.map(m => m.streaming ? { ...m, streaming: false } : m)
+    const stoppedMessages = messages.map(m => {
+      if (!m.streaming) return m
+      // Carry over whatever text arrived since the last periodic flush so
+      // stopping mid-stream doesn't drop the most recent chunks.
+      const latestContent = liveMessage?.id === m.id ? liveMessage.content : m.content
+      return { ...m, content: latestContent, streaming: false }
+    })
     onUpdate(session.id, { messages: stoppedMessages })
+    setLiveMessage(null)
   }
 
   const requestSave = (type, content) => new Promise(resolve => setSaveModal({ type, content, resolve }))
@@ -769,7 +875,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         </button>
       </div>
 
-      <div className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
+      <div ref={scrollRef} onScroll={handleScroll} className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-3">
             <AIStar size={28} className="text-[var(--accent)] opacity-70" />
@@ -792,7 +898,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             </div>
           </div>
         )}
-        {messages.map(msg => <Message key={msg.id} msg={msg} onRequestSave={requestSave} />)}
+        {displayMessages.map(msg => <Message key={msg.id} msg={msg} onRequestSave={requestSave} onRetry={retry} streaming={streaming} />)}
         <div ref={bottomRef} />
       </div>
 

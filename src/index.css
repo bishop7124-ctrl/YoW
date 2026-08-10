@@ -6409,12 +6409,12 @@ body {
     var(--accent);
 }
 
-.ai-response-save-actions {
+.ai-message-actions {
   opacity: .82;
 }
 
-.ai-response-save-actions:hover,
-.ai-chat-message:focus-within .ai-response-save-actions {
+.ai-message-actions:hover,
+.ai-chat-message:focus-within .ai-message-actions {
   opacity: 1;
 }
 
