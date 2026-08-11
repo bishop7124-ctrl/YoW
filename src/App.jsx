@@ -546,6 +546,8 @@ function AppInner() {
       }
     : null
 
+  const [signupPrefillEmail, setSignupPrefillEmail] = useState('')
+
   const navigatePublic = (path) => {
     window.history.pushState(null, '', path)
     setShowPricing(isPricingPath(path))
@@ -555,6 +557,11 @@ function AppInner() {
     setShowDownload(isDownloadPath(path))
     setFounderProfileSlug(getFounderProfileSlug(path))
     setAuthRouteMode(getAuthRouteMode(path))
+  }
+
+  const goToSignup = (email) => {
+    if (email) setSignupPrefillEmail(email)
+    navigatePublic('/signup')
   }
 
   useEffect(() => {
@@ -879,7 +886,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -894,7 +901,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -909,7 +916,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -924,7 +931,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -941,7 +948,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -957,7 +964,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1015,13 +1022,14 @@ function AppInner() {
           recoveryMode={recoveryMode}
           initialScreen={desktopApp || recoveryMode || authRouteMode || openLoginAfterSignOut || hasDeepLinkTarget ? 'auth' : 'home'}
           initialMode={authRouteMode || 'login'}
+          initialEmail={signupPrefillEmail}
           variant={desktopApp ? 'desktop' : 'web'}
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         {!desktopApp && <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />}
         {!desktopApp && (
-          <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+          <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
         )}
       </>
     )
@@ -1430,7 +1438,7 @@ function AppInner() {
       {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+      <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       {maintenanceModalOpen && user && !dataLoading && !isFirstRun && !showWelcomeTour && (
         <CloudExpiryWarningModal
           membership={membership}

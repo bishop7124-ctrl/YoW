@@ -3,232 +3,247 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>YOW Owner Checklist Before Development Continues and Launch</title>
+  <title>YOW Owner Launch Checklist</title>
   <style>
     :root {
       color-scheme: light;
       --bg: #f5f2ed;
       --panel: #ffffff;
+      --panel-2: #faf8f4;
+      --panel-3: #eee9df;
       --ink: #17202a;
       --muted: #637083;
       --line: #d8d1c7;
-      --soft: #faf8f4;
       --brand: #2f675b;
-      --brand-soft: #dff0ea;
-      --warn: #9a6200;
-      --warn-soft: #fff2cd;
-      --danger: #a43333;
-      --danger-soft: #f8dfdf;
-      --ok: #246b45;
-      --ok-soft: #ddf1e5;
-      --blue: #405aa8;
-      --blue-soft: #e4e9ff;
-      --shadow: 0 12px 34px rgba(23, 32, 42, 0.08);
+      --brand-2: #25584d;
+      --pass: #3aa866;
+      --fail: #c84848;
+      --blocked: #b77512;
+      --retest: #4268c7;
+      --na: #8992a0;
+      --progress: #7b55c7;
+      --radius: 8px;
     }
 
     * { box-sizing: border-box; }
-
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--ink);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.55;
-    }
-
-    main {
-      width: min(1160px, calc(100% - 28px));
-      margin: 0 auto;
-      padding: 28px 0 52px;
+      font-size: 14px;
+      line-height: 1.5;
     }
 
     header {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      padding: clamp(22px, 4vw, 42px);
-    }
-
-    h1, h2, h3 { margin: 0; line-height: 1.18; letter-spacing: 0; }
-    h1 { font-size: clamp(30px, 5vw, 54px); max-width: 880px; }
-    h2 { font-size: clamp(22px, 3vw, 32px); margin-bottom: 10px; }
-    h3 { font-size: 17px; margin-bottom: 8px; }
-    p { margin: 0 0 12px; }
-    a { color: var(--brand); font-weight: 750; }
-    code { background: #eee9df; border-radius: 4px; padding: 2px 5px; }
-
-    .lede {
-      max-width: 860px;
-      color: var(--muted);
-      font-size: 18px;
-      margin-top: 16px;
-    }
-
-    .topline {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 18px;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 5px 10px;
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .pill.blocker { background: var(--danger-soft); color: var(--danger); }
-    .pill.owner { background: var(--brand-soft); color: var(--brand); }
-    .pill.qa { background: var(--warn-soft); color: var(--warn); }
-    .pill.launch { background: var(--blue-soft); color: var(--blue); }
-
-    .summary-grid {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 24px;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 22px;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      backdrop-filter: blur(10px);
     }
 
-    .metric {
-      background: var(--soft);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-      min-height: 94px;
-    }
+    h1, h2 { margin: 0; line-height: 1.2; letter-spacing: 0; }
+    h1 { color: var(--brand); font-size: 22px; }
+    h2 { font-size: 17px; }
+    p { margin: 0; }
+    code { background: var(--panel-3); border-radius: 4px; padding: 2px 5px; }
+    a { color: var(--brand); font-weight: 750; }
 
-    .metric strong {
-      display: block;
-      font-size: 28px;
-      line-height: 1;
-      margin-bottom: 8px;
-    }
-
-    .metric span {
+    .subtitle {
+      margin-top: 4px;
       color: var(--muted);
       font-size: 13px;
+      max-width: 900px;
     }
 
-    .controls {
+    .header-actions,
+    .toolbar-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 18px;
+      justify-content: flex-end;
     }
 
     button {
       border: 1px solid var(--line);
+      border-radius: var(--radius);
       background: var(--panel);
       color: var(--ink);
-      border-radius: 6px;
-      padding: 9px 12px;
+      padding: 7px 12px;
       font: inherit;
+      font-size: 13px;
       font-weight: 750;
       cursor: pointer;
     }
 
     button:hover { border-color: var(--brand); }
+    .primary { background: var(--brand); border-color: var(--brand); color: white; }
+    .danger { background: #fff2f0; border-color: #e1a6a0; color: #96352d; }
 
-    section {
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 24px 48px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 76px;
+      z-index: 8;
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 0;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .search {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--ink);
+      padding: 9px 12px;
+      font: inherit;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter {
+      padding: 6px 10px;
+      border-radius: 999px;
+      color: var(--muted);
+    }
+
+    .filter.active {
+      color: white;
+      background: var(--brand);
+      border-color: var(--brand);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 24px;
+      color: var(--brand);
+      line-height: 1;
+      margin-bottom: 7px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .intro,
+    .section {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      padding: clamp(18px, 3vw, 28px);
-      margin-top: 18px;
+      border-radius: var(--radius);
+      margin: 14px 0;
+      overflow: hidden;
     }
 
-    .section-head {
-      display: flex;
+    .intro { padding: 16px; }
+    .intro p { margin-top: 8px; color: var(--muted); }
+    .intro ol { margin: 12px 0 0 22px; padding: 0; }
+    .intro li { margin: 5px 0; }
+
+    .section-header {
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+      background: var(--panel-2);
+      padding: 13px 16px;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
       gap: 12px;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 12px;
+      align-items: center;
+      text-align: left;
     }
 
-    .section-head p {
-      color: var(--muted);
-      max-width: 760px;
+    .section-header:hover { background: var(--panel-3); }
+    .section-count { color: var(--muted); font-size: 12px; }
+    .chev { color: var(--muted); }
+    .section.collapsed .chev { transform: rotate(-90deg); }
+    .section.collapsed .items { display: none; }
+
+    .item {
+      border-top: 1px solid var(--line);
+      padding: 14px 16px;
     }
 
-    .count {
-      flex: 0 0 auto;
-      background: var(--soft);
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 5px 10px;
+    .item.hidden { display: none; }
+    .item-main {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) minmax(280px, 0.92fr);
+      gap: 16px;
+    }
+
+    .item-title {
+      margin: 0 0 6px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .route,
+    .expected,
+    .evidence {
       color: var(--muted);
-      font-size: 13px;
+      margin: 6px 0;
+    }
+
+    .route b,
+    .expected b,
+    .evidence b {
+      color: var(--ink);
       font-weight: 750;
     }
 
-    .callout {
-      border-left: 4px solid var(--brand);
-      background: var(--soft);
-      border-radius: 6px;
-      padding: 13px 15px;
-      margin: 14px 0;
+    .steps {
+      margin: 8px 0 0 20px;
+      padding: 0;
     }
 
-    .callout.danger { border-left-color: var(--danger); background: var(--danger-soft); }
-    .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
-
-    .task-list {
-      display: grid;
-      gap: 9px;
-    }
-
-    label.task {
-      display: grid;
-      grid-template-columns: 22px minmax(0, 1fr);
-      gap: 10px;
-      align-items: start;
-      background: var(--soft);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 11px 12px;
-    }
-
-    label.task input {
-      width: 16px;
-      height: 16px;
-      margin-top: 4px;
-      accent-color: var(--brand);
-    }
-
-    label.task.done {
-      background: var(--ok-soft);
-      border-color: #aad7bf;
-    }
-
-    label.task.done .task-title {
-      text-decoration: line-through;
-      text-decoration-thickness: 1px;
-    }
-
-    .task-title { font-weight: 800; }
-    .task small {
-      display: block;
-      color: var(--muted);
-      margin-top: 3px;
-    }
+    .steps li { margin: 4px 0; }
 
     .tag-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 7px;
+      gap: 5px;
+      margin-top: 8px;
     }
 
     .tag {
-      background: #eee9df;
-      color: #4c5665;
+      color: var(--muted);
+      border: 1px solid var(--line);
       border-radius: 999px;
       padding: 2px 7px;
       font-size: 11px;
@@ -237,271 +252,709 @@
       letter-spacing: 0.035em;
     }
 
-    textarea {
-      width: 100%;
-      min-height: 82px;
-      resize: vertical;
+    .controls {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
+      background: var(--panel-2);
       padding: 10px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status input { position: absolute; opacity: 0; pointer-events: none; }
+    .status.active { color: white; }
+    .status.pass.active { background: var(--pass); border-color: var(--pass); }
+    .status.fail.active { background: var(--fail); border-color: var(--fail); }
+    .status.blocked.active { background: var(--blocked); border-color: var(--blocked); }
+    .status.retest.active { background: var(--retest); border-color: var(--retest); }
+    .status.na.active { background: var(--na); border-color: var(--na); }
+    .status.progress.active { background: var(--progress); border-color: var(--progress); }
+
+    textarea,
+    .meta-input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
       background: var(--panel);
       color: var(--ink);
+      padding: 8px;
       font: inherit;
-      margin-top: 10px;
+      resize: vertical;
     }
+
+    textarea { min-height: 86px; }
+    .meta-input { min-height: 36px; margin-bottom: 8px; }
+
+    .field-label {
+      display: block;
+      margin: 8px 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .export-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(23, 32, 42, 0.58);
+      z-index: 20;
+      padding: 20px;
+    }
+
+    .export-modal.open { display: flex; }
+    .dialog {
+      width: min(520px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+
+    .dialog h2 { margin: 0 0 12px; }
+    .dialog label { display: block; margin: 9px 0; color: var(--ink); }
 
     footer {
+      margin-top: 16px;
       color: var(--muted);
       font-size: 13px;
-      margin-top: 18px;
-      padding: 0 2px;
     }
 
-    @media (max-width: 820px) {
-      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .section-head { display: block; }
-      .count { display: inline-flex; margin-top: 8px; }
-    }
+    @media (max-width: 860px) {
+      header,
+      .toolbar,
+      .item-main {
+        grid-template-columns: 1fr;
+      }
 
-    @media (max-width: 520px) {
-      main { width: min(100% - 20px, 1160px); padding-top: 10px; }
-      header, section { border-radius: 8px; }
-      .summary-grid { grid-template-columns: 1fr; }
-      button { width: 100%; }
+      .header-actions,
+      .toolbar-actions {
+        justify-content: flex-start;
+      }
+
+      .toolbar { top: 126px; }
+      .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .status-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
 <body>
-  <main>
-    <header>
-      <div class="topline">
-        <span class="pill owner">Owner Checklist</span>
-        <span class="pill blocker">Launch Blockers Included</span>
-        <span class="pill qa">Manual QA</span>
-        <span class="pill launch">Updated 2026-08-11</span>
-      </div>
-      <h1>Everything Required From You Before YOW Can Continue Development And Launch</h1>
-      <p class="lede">This is the human-side checklist: product decisions, account setup, live testing, evidence, copy approval, and launch operations. It deliberately leaves ordinary engineering implementation to the agents.</p>
-      <div class="summary-grid" aria-label="Checklist progress">
-        <div class="metric"><strong id="total-count">0</strong><span>Total owner tasks</span></div>
-        <div class="metric"><strong id="done-count">0</strong><span>Completed in this browser</span></div>
-        <div class="metric"><strong id="blocker-count">0</strong><span>Payment/legal/data blockers</span></div>
-        <div class="metric"><strong id="percent-count">0%</strong><span>Owner readiness</span></div>
-      </div>
-      <div class="controls">
-        <button type="button" id="clear-completed">Clear completed ticks</button>
-        <button type="button" id="copy-summary">Copy progress summary</button>
-      </div>
-    </header>
+  <header>
+    <div>
+      <h1>YOW Owner Launch Checklist</h1>
+      <div class="subtitle">Evidence-style tracker for the decisions, credentials, manual checks, and launch assets required from the owner before development can continue safely and YOW can launch.</div>
+    </div>
+    <div class="header-actions">
+      <button type="button" onclick="expandAll()">Expand All</button>
+      <button type="button" onclick="collapseAll()">Collapse All</button>
+      <button type="button" class="primary" onclick="openExport()">Export Evidence</button>
+      <button type="button" class="danger" onclick="resetAll()">Reset</button>
+    </div>
+  </header>
 
-    <section data-section="immediate">
-      <div class="section-head">
-        <div>
-          <h2>Immediate Development Unblockers</h2>
-          <p>Do these first so development can continue without guessing around launch promises, credentials, or live-account evidence.</p>
-        </div>
-        <span class="count"></span>
-      </div>
-      <div class="callout danger">
-        Real paid checkout should stay disabled until the price mismatch and payment re-enable decision are resolved.
-      </div>
-      <div class="task-list">
-        <label class="task" data-tags="decision blocker payment"><input type="checkbox" id="task-paid-plan-decision"><span><span class="task-title">Decide how paid plans come back online.</span><small>Choose whether to remove the temporary beta-interest flow, keep manual access temporarily, or migrate beta testers before real checkout returns.</small><span class="tag-row"><span class="tag">Decision</span><span class="tag">Payment</span></span></span></label>
-        <label class="task" data-tags="credential blocker payment"><input type="checkbox" id="task-stripe-prices"><span><span class="task-title">Update Stripe prices to match the live site.</span><small>The site now displays Monthly £10, Lifetime £150, Founder £300. Stripe Price objects/env vars must charge the same amounts before taking money.</small><span class="tag-row"><span class="tag">Stripe</span><span class="tag">Blocker</span></span></span></label>
-        <label class="task" data-tags="credential qa"><input type="checkbox" id="task-vercel-env"><span><span class="task-title">Confirm production Vercel environment variables.</span><small>Check email, Supabase, Stripe, site URL, AI settings encryption, and webhook secrets are present in the production environment after any changes.</small><span class="tag-row"><span class="tag">Vercel</span><span class="tag">Secrets</span></span></span></label>
-        <label class="task" data-tags="qa blocker"><input type="checkbox" id="task-live-test-accounts"><span><span class="task-title">Provide or create two clean live test accounts.</span><small>Needed for account isolation, AI key isolation, onboarding, membership states, and real-auth QA. Do not use your owner/admin account for destructive tests.</small><span class="tag-row"><span class="tag">QA</span><span class="tag">Accounts</span></span></span></label>
-        <label class="task" data-tags="decision scope"><input type="checkbox" id="task-scope-confirm"><span><span class="task-title">Confirm the final launch promise for all 6 active project types.</span><small>Novel, Novella, Short Story, D&amp;D Campaign, TTRPG Campaign, and Comic/Graphic Novel are all launch scope unless you explicitly move one to Future/Excluded.</small><span class="tag-row"><span class="tag">Scope</span><span class="tag">Product</span></span></span></label>
-      </div>
-    </section>
-
-    <section data-section="qa">
-      <div class="section-head">
-        <div>
-          <h2>Manual QA You Need To Run Or Witness</h2>
-          <p>Automation exists, but these checks need a real browser, real auth, production configuration, owner judgement, or account dashboards.</p>
-        </div>
-        <span class="count"></span>
-      </div>
-      <div class="task-list">
-        <label class="task" data-tags="qa blocker data"><input type="checkbox" id="task-data-safety-checklist"><span><span class="task-title">Run the dedicated data-safety checklist and export evidence.</span><small>Use <code>docs/data-safety-qa-checklist.html</code> for account isolation, autosave, stale writes, backups/restore, destructive actions, media/quota, desktop vault, cloud expiry, and failure injection.</small><span class="tag-row"><span class="tag">Data Safety</span><span class="tag">Blocker</span></span></span></label>
-        <label class="task" data-tags="qa auth data"><input type="checkbox" id="task-account-switch"><span><span class="task-title">Real-auth account switch test.</span><small>Switch Account A to Account B without a browser restart and verify B never shows or overwrites A data.</small><span class="tag-row"><span class="tag">Auth</span><span class="tag">Cloud Data</span></span></span></label>
-        <label class="task" data-tags="qa ai data"><input type="checkbox" id="task-ai-key-isolation"><span><span class="task-title">AI key isolation and sync test.</span><small>Confirm synced AI settings follow only the correct account/device, saved keys remain masked, remove works, and Account B never sees Account A credentials.</small><span class="tag-row"><span class="tag">AI</span><span class="tag">Credential Safety</span></span></span></label>
-        <label class="task" data-tags="qa onboarding"><input type="checkbox" id="task-new-account-onboarding"><span><span class="task-title">Brand-new account onboarding test.</span><small>Verify the sample-project choice, own-project path, AI setup prompt, tour sequencing, deletion of sample data, and no unwanted tour replay on fresh browsers.</small><span class="tag-row"><span class="tag">Onboarding</span></span></span></label>
-        <label class="task" data-tags="qa data"><input type="checkbox" id="task-multitab"><span><span class="task-title">Multi-tab conflict retest on the deployed build.</span><small>Two tabs should not silently overwrite structured records or scene edits. Same-field conflicts should show the conflict banner with working restore/keep controls.</small><span class="tag-row"><span class="tag">Data Safety</span><span class="tag">Tabs</span></span></span></label>
-        <label class="task" data-tags="qa storage"><input type="checkbox" id="task-media-storage"><span><span class="task-title">Live signed-in image upload and storage quota test.</span><small>Upload, replace, and delete media in production; confirm Supabase Storage writes, RLS ownership, storage-used increments/decrements, and old objects are cleaned up.</small><span class="tag-row"><span class="tag">Storage</span><span class="tag">Supabase</span></span></span></label>
-        <label class="task" data-tags="qa export"><input type="checkbox" id="task-export-review"><span><span class="task-title">Review exported ZIP, DOCX, PDF, and World Bible files.</span><small>Open the actual exports, confirm content is complete, ordered correctly, readable, and restorable into an account with existing projects.</small><span class="tag-row"><span class="tag">Exports</span></span></span></label>
-        <label class="task" data-tags="qa responsive"><input type="checkbox" id="task-responsive"><span><span class="task-title">Responsive sign-off at 375px, 768px, desktop, and wide desktop.</span><small>Core writing, dashboard, pricing, settings, modal, map, export, AI, and project-type workflows must remain usable without hidden controls or broken layouts.</small><span class="tag-row"><span class="tag">Mobile</span><span class="tag">Tablet</span></span></span></label>
-        <label class="task" data-tags="qa ai"><input type="checkbox" id="task-live-ai"><span><span class="task-title">Live AI provider QA.</span><small>Test configured and unconfigured AI states, streaming lag, Retry on failed requests, Character Chat grounding, AI Import, Ideas expansion, and save-to-Idea/Lore actions.</small><span class="tag-row"><span class="tag">AI</span></span></span></label>
-      </div>
-    </section>
-
-    <section data-section="billing">
-      <div class="section-head">
-        <div>
-          <h2>Payments, Accounts, And Entitlements</h2>
-          <p>These tasks protect trust: users must be charged the displayed price and receive exactly the access promised.</p>
-        </div>
-        <span class="count"></span>
-      </div>
-      <div class="task-list">
-        <label class="task" data-tags="payment blocker"><input type="checkbox" id="task-checkout-monthly"><span><span class="task-title">Run Monthly checkout QA at the new £10 price.</span><small>Verify Stripe session/subscription, webhook delivery, Supabase metadata, app entitlement, customer portal, cancellation, and expiry behaviour.</small><span class="tag-row"><span class="tag">Stripe</span><span class="tag">Monthly</span></span></span></label>
-        <label class="task" data-tags="payment blocker"><input type="checkbox" id="task-checkout-lifetime"><span><span class="task-title">Run Lifetime checkout QA at the new £150 price.</span><small>Verify lifetime entitlement, desktop entitlement, included cloud-hosting period, account copy, and export access.</small><span class="tag-row"><span class="tag">Stripe</span><span class="tag">Lifetime</span></span></span></label>
-        <label class="task" data-tags="payment blocker"><input type="checkbox" id="task-checkout-founder"><span><span class="task-title">Run Founder checkout QA at the new £300 price.</span><small>Verify Founder status, slot count, badge, fair-use storage cap, lifetime cloud promise, and public Founder recognition copy.</small><span class="tag-row"><span class="tag">Stripe</span><span class="tag">Founder</span></span></span></label>
-        <label class="task" data-tags="payment qa"><input type="checkbox" id="task-hosting-renewal"><span><span class="task-title">Retest £6/year cloud-hosting renewal after the plan alias fix.</span><small>Confirm the renewal button reaches Stripe, webhook extends cloud hosting, and lapsed/renewed messaging is correct.</small><span class="tag-row"><span class="tag">Renewal</span></span></span></label>
-        <label class="task" data-tags="payment qa"><input type="checkbox" id="task-failure-cancel"><span><span class="task-title">Run checkout cancel, failed-payment, and no-entitlement checks.</span><small>The app must not grant paid access unless webhook-confirmed metadata says it should.</small><span class="tag-row"><span class="tag">Failure Path</span></span></span></label>
-        <label class="task" data-tags="payment ops"><input type="checkbox" id="task-founder-slots"><span><span class="task-title">Set final Founder slot count and reservation policy.</span><small>Confirm how many Founder places exist, whether any are reserved, and how sold-out state should be handled.</small><span class="tag-row"><span class="tag">Ops</span><span class="tag">Founder</span></span></span></label>
-      </div>
-    </section>
-
-    <section data-section="legal">
-      <div class="section-head">
-        <div>
-          <h2>Legal, Pricing, And Promise Review</h2>
-          <p>This is the final owner read-through: what the public pages say must match what the product actually does.</p>
-        </div>
-        <span class="count"></span>
-      </div>
-      <div class="task-list">
-        <label class="task" data-tags="legal blocker"><input type="checkbox" id="task-terms-privacy"><span><span class="task-title">Approve Terms, Privacy, cancellation, refund, storage, and cloud-expiry language.</span><small>Users need clear purchase terms, data ownership, cancellation, storage caps, export rights, inactive cleanup, and Local Mode/cloud hosting explanations.</small><span class="tag-row"><span class="tag">Legal</span><span class="tag">Blocker</span></span></span></label>
-        <label class="task" data-tags="copy legal"><input type="checkbox" id="task-pricing-copy"><span><span class="task-title">Approve pricing-page copy line by line.</span><small>Free, Monthly, Lifetime, Founder, cloud renewal, beta-interest, and AI wording must be accurate and writer-friendly.</small><span class="tag-row"><span class="tag">Pricing</span><span class="tag">Copy</span></span></span></label>
-        <label class="task" data-tags="copy marketing"><input type="checkbox" id="task-excluded-features"><span><span class="task-title">Confirm excluded-feature wording is honest everywhere.</span><small>Do not imply collaboration, player portals, public sharing, live VTT play, full fantasy calendar engines, native mobile apps, publishing integrations, marketplace/community, or group campaign portals.</small><span class="tag-row"><span class="tag">Marketing</span><span class="tag">Scope</span></span></span></label>
-        <label class="task" data-tags="copy marketing"><input type="checkbox" id="task-ttrpg-positioning"><span><span class="task-title">Approve D&amp;D/TTRPG positioning as private prep for solo GMs.</span><small>Campaign copy should promise planning, drafting, worldbuilding, prep, export, and private organization, not shared table operation.</small><span class="tag-row"><span class="tag">Campaigns</span><span class="tag">Copy</span></span></span></label>
-        <label class="task" data-tags="copy"><input type="checkbox" id="task-desktop-promise"><span><span class="task-title">Keep desktop/Lifetime claims gated until the desktop app is truly ready.</span><small>Lifetime can only be sold on the permanent desktop/local-vault promise after the desktop phases, entitlement checks, installers, and QA pass.</small><span class="tag-row"><span class="tag">Desktop</span><span class="tag">Lifetime</span></span></span></label>
-      </div>
-    </section>
-
-    <section data-section="assets">
-      <div class="section-head">
-        <div>
-          <h2>Launch Assets And Trust Material</h2>
-          <p>These are not code blockers by themselves, but they make the public launch feel real, credible, and grounded.</p>
-        </div>
-        <span class="count"></span>
-      </div>
-      <div class="task-list">
-        <label class="task" data-tags="marketing asset"><input type="checkbox" id="task-real-screenshots"><span><span class="task-title">Provide or approve real screenshots for public feature pages.</span><small>The roadmap calls out current CSS mockups on feature landing pages. Replace with real app screenshots before broader paid launch where possible.</small><span class="tag-row"><span class="tag">Assets</span><span class="tag">Marketing</span></span></span></label>
-        <label class="task" data-tags="marketing trust"><input type="checkbox" id="task-testimonials"><span><span class="task-title">Collect beta/founder testimonials or consented project examples.</span><small>YOW is new, so trust needs to come from honest founder/beta-user evidence, screenshots, and examples.</small><span class="tag-row"><span class="tag">Trust</span></span></span></label>
-        <label class="task" data-tags="marketing"><input type="checkbox" id="task-founder-directory"><span><span class="task-title">Approve Founder recognition and example Founder profiles.</span><small>Verify the Founders directory/profile pages, final wording, opt-in handling, and replacement process for example entries.</small><span class="tag-row"><span class="tag">Founder</span><span class="tag">Public Pages</span></span></span></label>
-        <label class="task" data-tags="marketing"><input type="checkbox" id="task-launch-copy"><span><span class="task-title">Do one final public-page read-through.</span><small>Homepage, Features, FAQ, Pricing, About, AI overview, and all feature landing pages should be clear, accurate, and free of stale beta/old-price language.</small><span class="tag-row"><span class="tag">Copy</span><span class="tag">SEO</span></span></span></label>
-      </div>
-    </section>
-
-    <section data-section="ops">
-      <div class="section-head">
-        <div>
-          <h2>Launch Operations</h2>
-          <p>These make sure you can support users after the switch flips.</p>
-        </div>
-        <span class="count"></span>
-      </div>
-      <div class="task-list">
-        <label class="task" data-tags="ops"><input type="checkbox" id="task-support-inbox"><span><span class="task-title">Confirm support/admin inbox access and email deliverability.</span><small>Beta-interest forms, feedback, password flows, welcome emails, purchase emails, and support responses need a monitored inbox.</small><span class="tag-row"><span class="tag">Support</span><span class="tag">Email</span></span></span></label>
-        <label class="task" data-tags="ops"><input type="checkbox" id="task-analytics"><span><span class="task-title">Confirm analytics, error reporting, and production monitoring expectations.</span><small>GA is present, but decide what you need to watch at launch: signups, checkout attempts, export failures, AI failures, storage quota issues, and support emails.</small><span class="tag-row"><span class="tag">Monitoring</span></span></span></label>
-        <label class="task" data-tags="ops desktop"><input type="checkbox" id="task-desktop-installers"><span><span class="task-title">Verify desktop app distribution before selling Lifetime/Founder on that promise.</span><small>macOS/Windows installers, download links, device limits, offline grace, vault relocation, local-only editing, and update/support wording need owner sign-off.</small><span class="tag-row"><span class="tag">Desktop</span><span class="tag">Distribution</span></span></span></label>
-        <label class="task" data-tags="ops"><input type="checkbox" id="task-go-no-go"><span><span class="task-title">Hold a final go/no-go pass against the launch readiness gate.</span><small>All open roadmap gates should be either passed, explicitly deferred by product decision, or kept as launch blockers.</small><span class="tag-row"><span class="tag">Go/No-Go</span></span></span></label>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-head">
-        <div>
-          <h2>Owner Notes</h2>
-          <p>Use this as the scratchpad for credentials still needed, accounts used for QA, decisions made, and evidence links.</p>
+  <main class="wrap">
+    <div class="toolbar">
+      <input id="search" class="search" type="search" placeholder="Search owner tasks, routes, notes, evidence..." oninput="applyFilters()">
+      <div class="toolbar-actions">
+        <div class="filters">
+          <button type="button" id="filter-all" class="filter active" onclick="setFilter('all')">All</button>
+          <button type="button" id="filter-open" class="filter" onclick="setFilter('open')">Open</button>
+          <button type="button" id="filter-progress" class="filter" onclick="setFilter('progress')">In Progress</button>
+          <button type="button" id="filter-fail" class="filter" onclick="setFilter('fail')">Failed</button>
+          <button type="button" id="filter-blocked" class="filter" onclick="setFilter('blocked')">Blocked</button>
+          <button type="button" id="filter-retest" class="filter" onclick="setFilter('retest')">Retest</button>
+          <button type="button" id="filter-notes" class="filter" onclick="setFilter('notes')">Has Notes</button>
         </div>
       </div>
-      <textarea id="notes" placeholder="Example: Stripe prices updated on 2026-08-__; test accounts: qa-owner+1@..., qa-owner+2@...; pricing copy approved except cloud expiry paragraph."></textarea>
+    </div>
+
+    <section class="stats" aria-label="Progress summary">
+      <div class="stat"><strong id="stat-pass">0</strong><span>Passed</span></div>
+      <div class="stat"><strong id="stat-open">0</strong><span>Open</span></div>
+      <div class="stat"><strong id="stat-progress">0</strong><span>In progress</span></div>
+      <div class="stat"><strong id="stat-fail">0</strong><span>Failed</span></div>
+      <div class="stat"><strong id="stat-blocked">0</strong><span>Blocked</span></div>
+      <div class="stat"><strong id="stat-complete">0%</strong><span>Owner readiness</span></div>
     </section>
+
+    <section class="intro">
+      <h2>How To Use This</h2>
+      <p>This checklist tracks only work that needs owner action, owner judgement, credentials, or live manual evidence. Agent implementation tasks remain in <a href="ROADMAP.md">docs/ROADMAP.md</a> and deferred QA detail remains in <a href="QA_PLAN.md">docs/QA_PLAN.md</a>.</p>
+      <ol>
+        <li>Use <b>In Progress</b> while you are gathering credentials, evidence, or decisions.</li>
+        <li>Use <b>Blocked</b> when you cannot continue without an outside action such as Stripe, Vercel, Supabase, app-store/signing, or legal review.</li>
+        <li>Use <b>Retest</b> after a fix or configuration change, then run the full route again before marking Pass.</li>
+        <li>Add concrete notes and artifact links: account aliases, project names, export filenames, screenshots, dashboard observations, and exact dates.</li>
+        <li>Export evidence at the end of each owner QA session and attach it back to the roadmap/QA record.</li>
+      </ol>
+    </section>
+
+    <div id="sections"></div>
 
     <footer>
-      Source of truth: <a href="ROADMAP.md">docs/ROADMAP.md</a>, <a href="QA_PLAN.md">docs/QA_PLAN.md</a>, <a href="QA_CHECKLIST.md">docs/QA_CHECKLIST.md</a>, and <a href="../BILLING.md">BILLING.md</a>. This HTML is an owner-facing export and does not replace the roadmap.
+      Source of truth: <a href="ROADMAP.md">docs/ROADMAP.md</a>, <a href="QA_PLAN.md">docs/QA_PLAN.md</a>, <a href="QA_CHECKLIST.md">docs/QA_CHECKLIST.md</a>, and <a href="../BILLING.md">BILLING.md</a>. This owner checklist is a working tracker, not a replacement roadmap.
     </footer>
   </main>
 
+  <div id="exportModal" class="export-modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+    <div class="dialog">
+      <h2 id="exportTitle">Export Evidence</h2>
+      <label><input type="radio" name="format" value="markdown" checked> Markdown report</label>
+      <label><input type="radio" name="format" value="html"> HTML report</label>
+      <label><input type="radio" name="format" value="json"> JSON data</label>
+      <label><input type="radio" name="format" value="csv"> CSV spreadsheet</label>
+      <label><input id="exportAll" type="checkbox" checked> Include open items without notes</label>
+      <div class="header-actions" style="margin-top:16px;">
+        <button type="button" onclick="closeExport()">Cancel</button>
+        <button type="button" class="primary" onclick="runExport()">Download</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    const storageKey = 'yow-owner-launch-checklist-v1';
-    const notesKey = 'yow-owner-launch-checklist-notes-v1';
-    const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
-    const sections = Array.from(document.querySelectorAll('section[data-section]'));
-    const notes = document.getElementById('notes');
+    const STORE_KEY = 'yow-owner-launch-checklist-v2';
+    const COLLAPSE_KEY = 'yow-owner-launch-checklist-collapsed-v2';
+    const STATUSES = ['progress', 'pass', 'fail', 'blocked', 'retest', 'na'];
+    const STATUS_LABELS = {
+      progress: 'In Progress',
+      pass: 'Pass',
+      fail: 'Fail',
+      blocked: 'Blocked',
+      retest: 'Retest',
+      na: 'N/A'
+    };
 
-    function loadState() {
-      try {
-        const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-        boxes.forEach((box) => {
-          box.checked = Boolean(saved[box.id]);
-        });
-        notes.value = localStorage.getItem(notesKey) || '';
-      } catch {
-        boxes.forEach((box) => {
-          box.checked = false;
-        });
+    const SECTIONS = [
+      {
+        id: 'unblock',
+        title: '0. Immediate Development Unblockers',
+        items: [
+          item('paid-plan-decision', 'Decide how paid plans come back online', 'Pricing and Account Settings paid-plan CTAs', [
+            'Choose whether to remove the temporary beta-interest flow, keep manual beta access temporarily, or migrate beta testers before real checkout returns.',
+            'Record whether paid checkout remains disabled while this decision is open.',
+            'Confirm what the next development slice should implement once the decision is made.'
+          ], 'The product has one explicit owner-approved path for moving from beta-interest to real paid checkout.', 'Decision, date, current checkout state, and any migration notes.', ['decision', 'payment', 'blocker']),
+          item('stripe-price-alignment', 'Update Stripe prices to match the live site', 'Stripe Dashboard and Vercel production env', [
+            'Confirm the site-displayed prices: Monthly £10, Lifetime £150, Founder £300, hosting renewal £6/year.',
+            'Create or update Stripe Price objects so real checkout charges those exact amounts.',
+            'Point the production `STRIPE_PRICE_ID_*` variables at the correct live Price IDs.',
+            'Redeploy/refresh the production functions that read those env vars.'
+          ], 'No user can be charged an old price while the site displays a new one.', 'Stripe Price IDs, Vercel env screenshot/check, deployment timestamp.', ['stripe', 'payment', 'blocker']),
+          item('production-env-check', 'Confirm production environment variables', 'Vercel, Supabase, Stripe, email provider', [
+            'Verify production has current Supabase URL/anon/service-role values, Stripe secret/price/webhook values, `SITE_URL`, feedback email credentials, and AI settings encryption secrets.',
+            'Confirm no secret is placed in a client-exposed `VITE_` variable unless it is intended to be public.',
+            'Record the deployment/redeploy needed after any env change.'
+          ], 'Production configuration is complete enough for payment, interest form, auth, AI settings sync, and support email routes.', 'Environment checklist, deployment ID, and any redacted screenshots.', ['credentials', 'vercel', 'supabase']),
+          item('test-account-matrix', 'Create the live QA account matrix', 'Production YOW accounts', [
+            'Create or identify Account A, Account B, a fresh new account, a Free account, Monthly-like account, Lifetime-like account, Founder-like account, beta_tester account, and desktop-entitled account where available.',
+            'Do not use the owner/admin account for destructive tests.',
+            'Record account aliases, entitlement state, AI sync state, and baseline project names.'
+          ], 'Manual QA can be run without risking real owner data or mixing account states.', 'Account matrix, entitlement notes, baseline screenshots.', ['qa', 'accounts', 'blocker']),
+          item('launch-scope-confirm', 'Confirm the final launch promise for all 6 active project types', 'Roadmap Launch Required / Project Type Launch Scope', [
+            'Confirm Novel, Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel remain final launch scope.',
+            'If any type should not block final launch, explicitly move it to Future/Excluded in the roadmap by product decision.',
+            'Confirm beta/limited labels are allowed only during public beta, not final paid launch.'
+          ], 'Engineering knows whether to finish all 6 active workflows or reduce the launch promise intentionally.', 'Owner scope decision and any roadmap update reference.', ['scope', 'decision', 'project-types'])
+        ]
+      },
+      {
+        id: 'data-safety',
+        title: '1. Data Safety Evidence You Need To Run Or Witness',
+        items: [
+          item('data-safety-export', 'Run the dedicated data-safety checklist and export evidence', 'docs/data-safety-qa-checklist.html', [
+            'Run the data-safety checklist in a real browser against the intended environment.',
+            'Include auth isolation, autosave, stale writes, backup/restore, destructive actions, media/quota, desktop vault if in scope, cloud expiry, and failure injection.',
+            'Export Markdown or HTML evidence at the end of the session.'
+          ], 'The Data Safety gate has a dated evidence artifact rather than relying on memory or code inspection.', 'Export filename, date, account aliases, environment, and any failed item IDs.', ['qa', 'data-safety', 'blocker']),
+          item('same-scene-conflict-final', 'Witness the final same-scene multi-tab conflict route', 'Two tabs, same account/project/scene, deployed build', [
+            'Open the same scene in two tabs and verify the “Also open in another tab” warning appears when expected.',
+            'Edit in both tabs, wait for the real Saved state, refresh both tabs, and confirm both agree.',
+            'Log out and back in, confirm neither edit is lost, and confirm conflict-copy review survives refresh.',
+            'Use Restore/Discard only after exporting or screenshotting the conflict evidence.'
+          ], 'The recently recurring same-scene data-loss class cannot pass without the exact warning, refresh, relogin, and conflict-copy survival proof.', 'Browser, account, project, scene, warning screenshot, conflict resolution result.', ['qa', 'conflict', 'blocker']),
+          item('structured-conflict-final', 'Witness structured-record conflict coverage', 'Two tabs, same account, deployed build', [
+            'Edit different records in two tabs and confirm both survive.',
+            'Edit different fields on the same record in two tabs and confirm both survive where field-level merge applies.',
+            'Edit the same field concurrently and confirm a visible sync-conflict banner appears.',
+            'Use Restore/Keep mine controls and verify refresh/export behavior afterward.'
+          ], 'Structured record QA no longer relies on vague last-write-wins acceptance for valuable user content.', 'Record types, fields edited, final values, banner/control screenshots.', ['qa', 'conflict', 'worldbuilding']),
+          item('account-switch-real-auth', 'Real-auth account switch test', 'Same browser, two real Supabase accounts', [
+            'Sign into Account A and open a project containing A-only sentinel records.',
+            'Sign out, then sign into Account B without clearing browser storage or restarting.',
+            'Search B for A sentinel names and create/edit B-only records.',
+            'Refresh, sign out, return to A, and confirm A data is intact.'
+          ], 'Account B never sees or overwrites Account A data, AI keys, profile settings, or storage state.', 'A/B project counts, search terms, screenshots, any local storage observations.', ['qa', 'auth', 'blocker']),
+          item('ai-key-isolation-sync', 'AI key isolation and sync test', 'Account Settings -> AI, all AI surfaces', [
+            'Configure Account A provider/key and optional synced AI settings.',
+            'Verify Account Settings, AI Assistant, AI Chat, AI Import, manuscript suggestions, Ideas AI expand, AI Tools, and Character Chat can use A settings.',
+            'Sign into Account B in the same browser and a fresh profile and confirm B sees no A key/settings.',
+            'Disable A sync, remove A key, and confirm fresh profiles/devices no longer receive it.'
+          ], 'AI credentials remain masked, owner-scoped, removable, and never hydrate into a different account.', 'Accounts, surfaces checked, sync state, key removal result.', ['qa', 'ai', 'security']),
+          item('media-storage-live', 'Live signed-in media upload and quota test', 'Supabase Storage user-media bucket', [
+            'Upload, refresh, sign out/in, and open from a second profile for every major image surface.',
+            'Replace and delete media, then confirm old object cleanup and storage-used decrement.',
+            'Confirm owner-scoped write/delete RLS with Account B.',
+            'Confirm no localStorage-full warning is triggered by inline base64 growth.'
+          ], 'Production media storage behaves like owned user data, not disposable local cache.', 'Object paths, usage before/after, account IDs, screenshots.', ['qa', 'storage', 'media']),
+          item('storage-full-route', 'Storage-full route fails loudly and recoverably', 'Production or controlled test profile', [
+            'Trigger the storage-exceeded route through the supported test hook or a safe quota scenario.',
+            'Attempt text edits, media upload, and structured-record creation.',
+            'Verify warnings are sticky/clear, forms keep unsaved user input, and freeing space allows retry.',
+            'Confirm the current Free 250 MB and Monthly 8 GB quota expectations are used, not old caps.'
+          ], 'Quota failures never look like successful saves and never discard the user input needed to recover.', 'Method, plan state, warning copy, preserved input, retry result.', ['qa', 'quota', 'blocker'])
+        ]
+      },
+      {
+        id: 'exports',
+        title: '2. Export Ownership And Restore Review',
+        items: [
+          item('zip-backup-review', 'Review ZIP backup completeness for every active project type', 'Backup ZIP export and restore', [
+            'Create sentinel data in manuscript/session/page-panel content, worldbuilding, map, schedule, factions, character builder, project settings, AI chats, and type-specific records where applicable.',
+            'Export ZIP, inspect the archive for sentinel strings and expected JSON files, then restore as a new project.',
+            'Confirm restored project type, structure, counts, ordering, images, settings, and type-specific data.',
+            'Delete the restored copy and confirm cleanup.'
+          ], 'Every active project type can be reconstructed from backup without mutating unrelated projects.', 'Per-type results, ZIP filenames, restored project names, missing data notes.', ['export', 'restore', 'blocker']),
+          item('readable-docx-bundle-review', 'Review the promised readable DOCX bundle', 'Readable Word export ZIP', [
+            'Generate the readable Word export bundle for realistic projects.',
+            'Confirm it contains separate category Word files for Overview, Outline/Campaign Sessions/Comic Script, Manuscript/Session Drafts, Schedule, Characters, Locations, Factions, Lore, Notes, Timeline, World History, and AI Chats when present.',
+            'Search for sentinel content and confirm conflict/internal/deleted records do not appear as normal live content.',
+            'Treat World Bible PDF/HTML as secondary/styled export evidence, not the primary promised readable worldbuilding export.'
+          ], 'The user can recover meaningful creative work from readable Word files even if app restore is unavailable.', 'Bundle filename, category files present, missing sections, World Bible note if checked.', ['export', 'ownership']),
+          item('import-existing-account', 'Restore into an account with existing projects', 'Import ZIP into populated account', [
+            'Record the existing project list and counts before import.',
+            'Import a ZIP from another project/account if permitted.',
+            'Confirm a new independent project appears rather than overwriting an existing one.',
+            'Open unrelated projects and verify sentinel records remain untouched.'
+          ], 'Import cannot damage or silently replace unrelated user data.', 'Before/after project list, affected IDs, restore result.', ['export', 'restore', 'isolation']),
+          item('bad-import-safe', 'Corrupt or wrong-format imports fail safely', 'Import ZIP / third-party archive route', [
+            'Try a truncated ZIP, a non-YOW ZIP, a renamed text file, and an oversized archive where practical.',
+            'Observe error handling and the project list afterward.',
+            'Refresh and confirm no partial project polluted the library unless clearly labelled as recoverable.',
+            'Confirm existing data remains unchanged.'
+          ], 'Bad imports never damage existing projects and provide a clear error or safe partial-recovery state.', 'Files tested, errors shown, project count before/after.', ['export', 'error'])
+        ]
+      },
+      {
+        id: 'payment',
+        title: '3. Payments, Plans, And Entitlements',
+        items: [
+          item('beta-interest-flow', 'QA the temporary beta-interest flow', 'Production Pricing and Account Settings CTAs', [
+            'Signed in as Free, click each paid-plan CTA and submit the interest form.',
+            'Confirm the admin inbox receives plan/user details.',
+            'Confirm Supabase auth metadata becomes `subscription_plan: beta_tester` only for signed-in submissions.',
+            'Refresh and confirm unlimited projects, AI tools, desktop entitlement label, and Beta Tester membership state.',
+            'Submit signed out and confirm it emails interest without claiming account access.'
+          ], 'Temporary access grants are intentional, traceable, and cannot accidentally grant an account from signed-out interest.', 'Inbox evidence, account metadata, plan label, signed-out result.', ['payment', 'beta', 'qa']),
+          item('checkout-monthly', 'Run Monthly checkout QA at £10', 'Stripe Checkout and Billing Portal', [
+            'Complete checkout using the owner-approved live or test-mode route.',
+            'Verify Stripe session/subscription, webhook delivery, Supabase metadata, and app access.',
+            'Open customer portal, cancel where safe, and verify expiry/cancel behavior.',
+            'Confirm checkout cannot charge the old £12 amount.'
+          ], 'Monthly users are charged the displayed £10 price and receive the correct entitlement only after webhook-confirmed metadata.', 'Stripe session, webhook result, account metadata, portal result.', ['payment', 'stripe', 'blocker']),
+          item('checkout-lifetime', 'Run Lifetime checkout QA at £150', 'Stripe Checkout and YOW entitlement state', [
+            'Complete checkout using the owner-approved live or test-mode route.',
+            'Verify one-time payment, webhook delivery, lifetime entitlement, desktop entitlement, included cloud-hosting period, and export access.',
+            'Confirm checkout cannot charge old £179 pricing.',
+            'Do not sell Lifetime on desktop/local-vault promises until desktop scope below passes.'
+          ], 'Lifetime access matches the displayed £150 offer and does not overpromise unfinished desktop/local-vault behavior.', 'Stripe payment, metadata, plan label, cloud-hosting expiry, desktop copy note.', ['payment', 'lifetime', 'blocker']),
+          item('checkout-founder', 'Run Founder checkout QA at £300', 'Stripe Checkout, Founder slots, Founder surfaces', [
+            'Complete checkout using the owner-approved live or test-mode route.',
+            'Verify Founder status, Founder slot count, badge, fair-use storage cap, lifetime cloud promise, and public recognition copy.',
+            'Confirm checkout cannot charge old £399 pricing.',
+            'Verify sold-out/reserved-slot behavior if configured.'
+          ], 'Founder buyers are charged the displayed £300 price and receive exactly the promised recognition and entitlement.', 'Stripe payment, metadata, slot count, badge screenshot, public page note.', ['payment', 'founder', 'blocker']),
+          item('hosting-renewal', 'Retest £6/year cloud-hosting renewal', 'Cloud Mode renewal CTA and webhook', [
+            'Use a lapsed or simulated-lapsed hosting account.',
+            'Click renewal and confirm the plan alias fix reaches Stripe correctly.',
+            'Verify webhook extends `cloud_hosting_expires_at` / maintenance expiry and Cloud Mode resumes.',
+            'Confirm fresher local/desktop data is not overwritten by older cloud state.'
+          ], 'Hosting renewal restores access without rollback or unexpected data replacement.', 'Plan state before/after, Stripe result, metadata, data comparison.', ['payment', 'cloud', 'sync']),
+          item('failure-cancel-payment', 'Run checkout cancel, failed-payment, and no-entitlement checks', 'Stripe failure/cancel paths', [
+            'Cancel checkout before completion.',
+            'Trigger a failed payment where safe.',
+            'Verify the app does not grant paid access without webhook-confirmed entitlement metadata.',
+            'Confirm account messaging is clear and existing data remains safe.'
+          ], 'Payment failure paths do not accidentally grant access or damage user content.', 'Failure method, metadata before/after, app state, messages.', ['payment', 'failure'])
+        ]
+      },
+      {
+        id: 'plan-copy',
+        title: '4. Legal, Pricing, And Promise Review',
+        items: [
+          item('legal-terms-privacy', 'Approve Terms, Privacy, cancellation, refund, storage, and cloud-expiry language', 'Legal pages and purchase/support flow copy', [
+            'Review data ownership, export rights, cancellation, refund, inactive cleanup, cloud expiry, storage caps, Local Mode, AI provider/key handling, and account deletion language.',
+            'Confirm any legal review or owner sign-off date.',
+            'Confirm purchase flow links to the necessary legal pages before real checkout returns.'
+          ], 'The legal/promise gate cannot fail because essential terms are absent, stale, or misleading.', 'Approved pages, date, reviewer, open edits.', ['legal', 'blocker']),
+          item('pricing-copy-current', 'Approve current pricing and entitlement copy line by line', 'Pricing, FAQ, Features, Account Settings, Upgrade walls', [
+            'Confirm Free £0 / 250 MB / one active cloud project / Map Builder unlocked / AI locked.',
+            'Confirm Monthly £10 / 8 GB and Lifetime £150 / 8 GB copy matches current product decisions.',
+            'Confirm Founder £300 and cloud renewal £6/year are stated consistently.',
+            'Confirm beta_tester temporary access is either hidden from public copy or intentionally explained where needed.'
+          ], 'Users see one coherent pricing promise across public pages and in-app account surfaces.', 'Pages checked, screenshots, stale-copy issues.', ['copy', 'pricing', 'entitlement']),
+          item('excluded-feature-copy', 'Confirm excluded-feature wording is honest everywhere', 'Homepage, Features, FAQ, Pricing, SEO/static pages', [
+            'Search public copy for collaboration, public sharing, player portals, live VTT/table use, full fantasy calendar engine, native mobile apps, publishing integrations, marketplace/community, and group campaign portal implications.',
+            'Confirm D&D/TTRPG pages are positioned for private prep, solo GMs, drafting, worldbuilding, organization, and export.',
+            'Record every page that needs copy edits.'
+          ], 'Marketing does not imply excluded or unfinished features.', 'Pages searched, terms found, edits needed.', ['copy', 'marketing', 'scope']),
+          item('desktop-promise-gate', 'Gate desktop/Lifetime claims until the desktop app scope is truly ready', 'Pricing, FAQ, download/account pages', [
+            'Confirm whether current launch should advertise desktop/local vault at all.',
+            'If desktop is account-only at this stage, make sure no page promises desktop editing/local vault yet.',
+            'If desktop vault/editor launch is in scope, require the desktop QA section before selling Lifetime/Founder on that promise.'
+          ], 'Lifetime/Founder copy does not sell a desktop capability before it exists and passes QA.', 'Owner decision, pages checked, desktop scope note.', ['copy', 'desktop', 'lifetime'])
+        ]
+      },
+      {
+        id: 'desktop',
+        title: '5. Desktop Scope And Distribution',
+        items: [
+          item('desktop-scope-decision', 'Decide whether desktop is account-only or full local-vault/editor for the next launch step', 'Desktop app PRD and current build', [
+            'Confirm the current build’s desktop scope with engineering.',
+            'If the app is account-only, mark full vault/editor tests N/A for this pass and run account-only checks instead.',
+            'If full desktop vault/editor is in scope, keep all data-safety desktop vault tests as blockers before selling Lifetime/Founder on the desktop promise.'
+          ], 'Desktop QA expectations match what the build actually contains.', 'Decision, build/version, tests marked N/A or required.', ['desktop', 'decision']),
+          item('desktop-account-only-check', 'Run desktop account-only surface QA if that is the current build scope', 'Packaged desktop app', [
+            'Launch signed out and verify only the compact login/auth screen appears.',
+            'Sign in with Lifetime, Founder, Monthly, and Free accounts and verify every plan lands directly in Account Settings.',
+            'Confirm there is no project library/editor/pricing/download/features/founders route exposure if account-only is intended.',
+            'Verify device information, sign-out, device cap messaging, and offline grace nag behavior.'
+          ], 'An account-only desktop build does not accidentally expose unfinished workspace/data paths.', 'Build version, accounts, screenshots, device-cap/offline notes.', ['desktop', 'qa']),
+          item('desktop-vault-editor-check', 'Run full desktop vault/editor data-safety QA only when that build exists', 'Packaged desktop app with local vault/editor enabled', [
+            'Create/edit projects, scenes, worldbuilding, map, schedule, and images.',
+            'Quit, relaunch, and force quit during active editing.',
+            'Test snapshots, before-restore safety copy, vault move/locate, unreachable vault warning, Local-first mode, manual upload/download, and divergent cloud/local conflicts.',
+            'Verify no empty vault is ever presented as if real data disappeared.'
+          ], 'The desktop local vault can be sold as permanent local access without risking silent local data loss.', 'Build version, vault path, snapshot files, sync state, conflict results.', ['desktop', 'vault', 'blocker']),
+          item('desktop-distribution', 'Verify desktop distribution before selling it', 'Download links, installers, signing/update process', [
+            'Verify macOS and Windows installer/download links.',
+            'Confirm code signing/notarization expectations, device limits, update/support wording, and account entitlement checks.',
+            'Confirm the purchase flow only advertises desktop once distribution is ready.'
+          ], 'Users who buy desktop entitlement can actually get, install, activate, and understand the app.', 'Installer links, version, signing notes, support copy.', ['desktop', 'ops'])
+        ]
+      },
+      {
+        id: 'launch-assets',
+        title: '6. Launch Assets, Trust, And Operations',
+        items: [
+          item('real-screenshots', 'Provide or approve real screenshots for public feature pages', 'Feature landing pages and marketing assets', [
+            'Review current public feature pages that still rely on CSS mockups.',
+            'Capture or approve real screenshots showing actual product state.',
+            'Confirm screenshots do not expose private project data or unsupported features.'
+          ], 'Public pages feel credible and do not visually promise a fake interface.', 'Screenshot filenames, pages updated/approved, privacy review.', ['marketing', 'assets']),
+          item('testimonials-trust', 'Collect beta/founder trust material where possible', 'Testimonials, consented project examples, Founder stories', [
+            'Collect beta/founder testimonials or consented screenshots/project examples.',
+            'Record consent and usage limits.',
+            'Approve Founder recognition/profile handling and example-profile replacement process.'
+          ], 'Launch has honest social proof without pretending YOW has incumbent scale.', 'Names/aliases, consent notes, assets approved.', ['marketing', 'trust']),
+          item('public-page-readthrough', 'Do one final public-page read-through', 'Homepage, Features, FAQ, Pricing, About, AI overview, feature landing pages', [
+            'Hard-load each public page in production.',
+            'Check nav, FAQ accordion, CTAs, current prices, plan copy, SEO/social metadata, and absence of stale beta or excluded-feature language.',
+            'Record any page that needs edits before launch.'
+          ], 'Public pages are coherent, current, and production-routable.', 'Pages checked, issues found, screenshots.', ['marketing', 'copy', 'seo']),
+          item('support-inbox', 'Confirm support/admin inbox access and deliverability', 'Admin email, forms, auth emails, support flow', [
+            'Verify beta-interest forms, feedback forms, password flows, welcome emails, purchase emails, and support replies go to a monitored inbox.',
+            'Confirm email credentials are not stale and production sends are not blocked.',
+            'Record who monitors the inbox at launch.'
+          ], 'Users can reach support and owner/admin notifications are visible.', 'Inbox screenshots, test email timestamps, owner assigned.', ['ops', 'email']),
+          item('monitoring-go-no-go', 'Hold final go/no-go against the launch readiness gate', 'Roadmap Launch Readiness Gate', [
+            'Review Scope, Project-type, Data safety, Export ownership, Payment, Legal/promise, Responsive, Performance, and Marketing gates.',
+            'Mark each gate passed, explicitly deferred by product decision, or launch-blocking.',
+            'Do not enable real paid checkout while any payment/legal/data-loss blocker remains.'
+          ], 'The launch decision is explicit and grounded in evidence, not momentum.', 'Gate table outcome, date, launch decision, remaining blockers.', ['ops', 'go-no-go', 'blocker'])
+        ]
       }
+    ];
+
+    function item(id, title, route, steps, expected, evidence, tags) {
+      return { id, title, route, steps, expected, evidence, tags };
     }
 
-    function saveState() {
-      const saved = {};
-      boxes.forEach((box) => {
-        saved[box.id] = box.checked;
-      });
-      localStorage.setItem(storageKey, JSON.stringify(saved));
-      localStorage.setItem(notesKey, notes.value);
+    let state = loadJson(STORE_KEY, {});
+    let collapsed = loadJson(COLLAPSE_KEY, {});
+    let currentFilter = 'all';
+
+    function loadJson(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+      catch { return fallback; }
     }
 
-    function updateProgress() {
-      const total = boxes.length;
-      const done = boxes.filter((box) => box.checked).length;
-      const blocker = boxes.filter((box) => box.closest('.task')?.dataset.tags.includes('blocker')).length;
-      document.getElementById('total-count').textContent = String(total);
-      document.getElementById('done-count').textContent = String(done);
-      document.getElementById('blocker-count').textContent = String(blocker);
-      document.getElementById('percent-count').textContent = total ? `${Math.round((done / total) * 100)}%` : '0%';
+    function saveState() { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+    function saveCollapsed() { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); }
+    function getEntry(id) { return state[id] || { status: '', note: '', evidence: '' }; }
 
-      boxes.forEach((box) => {
-        box.closest('.task').classList.toggle('done', box.checked);
-      });
-
-      sections.forEach((section) => {
-        const sectionBoxes = Array.from(section.querySelectorAll('input[type="checkbox"]'));
-        const sectionDone = sectionBoxes.filter((box) => box.checked).length;
-        const count = section.querySelector('.count');
-        if (count) count.textContent = `${sectionDone}/${sectionBoxes.length} complete`;
-      });
+    function render() {
+      const root = document.getElementById('sections');
+      root.innerHTML = SECTIONS.map(section => {
+        const rows = section.items.map(renderItem).join('');
+        const done = section.items.filter(i => ['pass', 'na'].includes(getEntry(i.id).status)).length;
+        const collapsedClass = collapsed[section.id] ? ' collapsed' : '';
+        return `<section id="${section.id}" class="section${collapsedClass}">
+          <button type="button" class="section-header" onclick="toggleSection('${section.id}')">
+            <h2>${esc(section.title)}</h2>
+            <span class="section-count">${done} / ${section.items.length}</span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="items">${rows}</div>
+        </section>`;
+      }).join('');
+      updateStats();
+      applyFilters();
     }
 
-    boxes.forEach((box) => {
-      box.addEventListener('change', () => {
-        saveState();
-        updateProgress();
-      });
-    });
+    function renderItem(entry) {
+      const saved = getEntry(entry.id);
+      const haystack = [
+        entry.title, entry.route, entry.expected, entry.evidence,
+        entry.steps.join(' '), entry.tags.join(' '), saved.note, saved.evidence
+      ].join(' ').toLowerCase();
+      return `<article class="item" id="item-${entry.id}" data-id="${entry.id}" data-status="${saved.status || 'open'}" data-search="${escAttr(haystack)}">
+        <div class="item-main">
+          <div>
+            <p class="item-title">${esc(entry.title)}</p>
+            <p class="route"><b>Route:</b> ${esc(entry.route)}</p>
+            <ol class="steps">${entry.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+            <p class="expected"><b>Expected:</b> ${esc(entry.expected)}</p>
+            <p class="evidence"><b>Evidence to capture:</b> ${esc(entry.evidence)}</p>
+            <div class="tag-row">${entry.tags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>
+          </div>
+          <div class="controls">
+            <div class="status-grid">${STATUSES.map(statusButton(entry.id, saved.status)).join('')}</div>
+            <label class="field-label" for="evidence-${entry.id}">Evidence / artifact links</label>
+            <input id="evidence-${entry.id}" class="meta-input" value="${escAttr(saved.evidence || '')}" oninput="updateField('${entry.id}', 'evidence', this.value)" placeholder="Screenshots, export filenames, account aliases, dashboard IDs...">
+            <label class="field-label" for="note-${entry.id}">Notes / decisions / reproduction details</label>
+            <textarea id="note-${entry.id}" oninput="updateField('${entry.id}', 'note', this.value)" placeholder="What did you decide? What happened? What is still blocked?">${esc(saved.note || '')}</textarea>
+          </div>
+        </div>
+      </article>`;
+    }
 
-    notes.addEventListener('input', saveState);
+    function statusButton(id, current) {
+      return status => `<label class="status ${status} ${current === status ? 'active' : ''}">
+        <input type="checkbox" ${current === status ? 'checked' : ''} onchange="setStatus('${id}', '${status}', this.checked)">
+        ${STATUS_LABELS[status]}
+      </label>`;
+    }
 
-    document.getElementById('clear-completed').addEventListener('click', () => {
-      boxes.forEach((box) => {
-        box.checked = false;
-      });
+    function setStatus(id, status, checked) {
+      state[id] = { ...getEntry(id), status: checked ? status : '' };
       saveState();
-      updateProgress();
+      render();
+    }
+
+    function updateField(id, field, value) {
+      state[id] = { ...getEntry(id), [field]: value };
+      saveState();
+      const row = document.getElementById(`item-${id}`);
+      if (row) {
+        row.dataset.search = [row.innerText, getEntry(id).note, getEntry(id).evidence].join(' ').toLowerCase();
+      }
+      updateStats();
+      applyFilters();
+    }
+
+    function updateStats() {
+      const items = SECTIONS.flatMap(s => s.items);
+      const counts = { pass: 0, progress: 0, fail: 0, blocked: 0, retest: 0, na: 0, open: 0 };
+      items.forEach(i => {
+        const status = getEntry(i.id).status || 'open';
+        counts[status] = (counts[status] || 0) + 1;
+      });
+      const complete = Math.round(((counts.pass + counts.na) / items.length) * 100) || 0;
+      document.getElementById('stat-pass').textContent = counts.pass;
+      document.getElementById('stat-open').textContent = counts.open;
+      document.getElementById('stat-progress').textContent = counts.progress;
+      document.getElementById('stat-fail').textContent = counts.fail;
+      document.getElementById('stat-blocked').textContent = counts.blocked;
+      document.getElementById('stat-complete').textContent = `${complete}%`;
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`filter-${filter}`).classList.add('active');
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const query = document.getElementById('search').value.trim().toLowerCase();
+      document.querySelectorAll('.item').forEach(row => {
+        const status = row.dataset.status || 'open';
+        const noted = !!(getEntry(row.dataset.id).note || getEntry(row.dataset.id).evidence || '').trim();
+        let show = true;
+        if (query && !row.dataset.search.includes(query)) show = false;
+        if (currentFilter === 'open' && status !== 'open') show = false;
+        if (['progress', 'fail', 'blocked', 'retest'].includes(currentFilter) && status !== currentFilter) show = false;
+        if (currentFilter === 'notes' && !noted) show = false;
+        row.classList.toggle('hidden', !show);
+      });
+    }
+
+    function toggleSection(id) {
+      collapsed[id] = !collapsed[id];
+      saveCollapsed();
+      document.getElementById(id).classList.toggle('collapsed', collapsed[id]);
+    }
+
+    function collapseAll() {
+      SECTIONS.forEach(s => collapsed[s.id] = true);
+      saveCollapsed();
+      render();
+    }
+
+    function expandAll() {
+      SECTIONS.forEach(s => collapsed[s.id] = false);
+      saveCollapsed();
+      render();
+    }
+
+    function resetAll() {
+      if (!confirm('Reset all statuses, notes, and evidence for this owner launch checklist?')) return;
+      state = {};
+      saveState();
+      render();
+    }
+
+    function openExport() { document.getElementById('exportModal').classList.add('open'); }
+    function closeExport() { document.getElementById('exportModal').classList.remove('open'); }
+    document.getElementById('exportModal').addEventListener('click', event => {
+      if (event.target.id === 'exportModal') closeExport();
     });
 
-    document.getElementById('copy-summary').addEventListener('click', async () => {
-      const done = boxes.filter((box) => box.checked).length;
-      const total = boxes.length;
-      const incomplete = boxes
-        .filter((box) => !box.checked)
-        .map((box) => `- ${box.closest('.task').querySelector('.task-title').textContent}`)
-        .join('\n');
-      const text = `YOW owner checklist: ${done}/${total} complete\n\nRemaining:\n${incomplete || '- None'}\n\nNotes:\n${notes.value || '(none)'}`;
-      await navigator.clipboard.writeText(text);
-      document.getElementById('copy-summary').textContent = 'Copied';
-      setTimeout(() => {
-        document.getElementById('copy-summary').textContent = 'Copy progress summary';
-      }, 1200);
-    });
+    function collectRows() {
+      const includeOpen = document.getElementById('exportAll').checked;
+      const rows = [];
+      SECTIONS.forEach(section => {
+        section.items.forEach(entry => {
+          const saved = getEntry(entry.id);
+          const hasEvidence = !!(saved.note || saved.evidence || saved.status);
+          if (!includeOpen && !hasEvidence) return;
+          rows.push({
+            section: section.title,
+            id: entry.id,
+            title: entry.title,
+            route: entry.route,
+            steps: entry.steps,
+            expected: entry.expected,
+            evidencePrompt: entry.evidence,
+            tags: entry.tags,
+            status: saved.status || 'open',
+            evidence: saved.evidence || '',
+            note: saved.note || ''
+          });
+        });
+      });
+      return rows;
+    }
 
-    loadState();
-    updateProgress();
+    function runExport() {
+      const rows = collectRows();
+      const format = document.querySelector('input[name="format"]:checked').value;
+      const stamp = new Date().toISOString().slice(0,16).replace('T', '_').replace(':', '-');
+      if (format === 'json') {
+        download(`yow-owner-launch-checklist-${stamp}.json`, JSON.stringify(rows, null, 2), 'application/json');
+      } else if (format === 'csv') {
+        const cells = ['Section', 'ID', 'Title', 'Status', 'Route', 'Steps', 'Expected', 'Evidence Prompt', 'Evidence', 'Note', 'Tags'];
+        const lines = [cells.join(',')].concat(rows.map(r => [
+          csv(r.section), csv(r.id), csv(r.title), csv(r.status), csv(r.route), csv(r.steps.join(' | ')),
+          csv(r.expected), csv(r.evidencePrompt), csv(r.evidence), csv(r.note), csv(r.tags.join(' | '))
+        ].join(',')));
+        download(`yow-owner-launch-checklist-${stamp}.csv`, lines.join('\n'), 'text/csv');
+      } else if (format === 'html') {
+        download(`yow-owner-launch-checklist-${stamp}.html`, reportHtml(rows), 'text/html');
+      } else {
+        download(`yow-owner-launch-checklist-${stamp}.md`, reportMarkdown(rows), 'text/markdown');
+      }
+      closeExport();
+    }
+
+    function reportMarkdown(rows) {
+      let md = `# YOW Owner Launch Checklist Evidence\n\nGenerated: ${new Date().toLocaleString()}\n\n`;
+      let last = '';
+      rows.forEach(row => {
+        if (row.section !== last) {
+          md += `\n## ${row.section}\n\n`;
+          last = row.section;
+        }
+        md += `### ${row.title}\n\n`;
+        md += `- Status: ${STATUS_LABELS[row.status] || 'Open'}\n`;
+        md += `- Route: ${row.route}\n`;
+        md += `- Expected: ${row.expected}\n`;
+        md += `- Evidence Prompt: ${row.evidencePrompt}\n`;
+        md += `- Tags: ${row.tags.join(', ')}\n`;
+        if (row.evidence.trim()) md += `- Evidence: ${row.evidence.trim()}\n`;
+        if (row.note.trim()) md += `- Notes: ${row.note.trim()}\n`;
+        md += '\nSteps:\n';
+        row.steps.forEach((step, index) => { md += `${index + 1}. ${step}\n`; });
+        md += '\n';
+      });
+      return md;
+    }
+
+    function reportHtml(rows) {
+      const body = rows.map(row => `<section>
+        <h2>${esc(row.title)}</h2>
+        <p><b>Status:</b> ${esc(STATUS_LABELS[row.status] || 'Open')}</p>
+        <p><b>Section:</b> ${esc(row.section)}</p>
+        <p><b>Route:</b> ${esc(row.route)}</p>
+        <ol>${row.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+        <p><b>Expected:</b> ${esc(row.expected)}</p>
+        <p><b>Evidence prompt:</b> ${esc(row.evidencePrompt)}</p>
+        <p><b>Tags:</b> ${esc(row.tags.join(', '))}</p>
+        ${row.evidence ? `<p><b>Evidence:</b> ${esc(row.evidence)}</p>` : ''}
+        ${row.note ? `<p><b>Notes:</b> ${esc(row.note)}</p>` : ''}
+      </section>`).join('');
+      return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>YOW Owner Launch Checklist Evidence</title><style>
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:920px;margin:0 auto;padding:32px;color:#17202a;line-height:1.5}
+        h1{color:#2f675b} section{border-top:1px solid #d8d1c7;padding:18px 0} h2{font-size:18px} p{margin:7px 0}
+      </style></head><body><h1>YOW Owner Launch Checklist Evidence</h1><p>Generated: ${new Date().toLocaleString()}</p>${body}</body></html>`;
+    }
+
+    function csv(value) {
+      return `"${String(value || '').replace(/"/g, '""')}"`;
+    }
+
+    function download(filename, content, mime) {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([content], { type: mime }));
+      link.download = filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+
+    function esc(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function escAttr(value) {
+      return esc(value).replace(/"/g, '&quot;');
+    }
+
+    render();
   </script>
 </body>
 </html>

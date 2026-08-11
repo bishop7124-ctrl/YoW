@@ -24,6 +24,11 @@ vite.config.mjs.timestamp*
 backup-before-*/
 broken-files/
 
+# Google OAuth secrets for scripts/sync-interest-emails.mjs — never commit
+scripts/interest-sync/credentials.json
+scripts/interest-sync/token.json
+scripts/interest-sync/logs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

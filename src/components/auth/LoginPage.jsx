@@ -106,12 +106,13 @@ export default function LoginPage({
   recoveryMode,
   initialScreen = 'home',
   initialMode = 'login',
+  initialEmail = '',
   variant = 'web',
 }) {
   const { signIn, signUp, signInWithGoogle, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
   const [screen, setScreen] = useState(initialScreen)
   const [mode, setMode] = useState(initialMode)
-  const [email, setEmail] = useState(import.meta.env.VITE_DEV_EMAIL ?? '')
+  const [email, setEmail] = useState(initialEmail || (import.meta.env.VITE_DEV_EMAIL ?? ''))
   const [password, setPassword] = useState(import.meta.env.VITE_DEV_PASSWORD ?? '')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
