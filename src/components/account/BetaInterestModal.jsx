@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../../supabase'
+import { PLANS } from '../../utils/membership'
 
 const DEFAULT_PLAN_LABELS = {
   premium_monthly: 'Monthly',
@@ -7,6 +8,16 @@ const DEFAULT_PLAN_LABELS = {
   founder: 'Founder',
   hosting_renewal: 'Cloud Mode renewal',
 }
+
+// Selectable plan options for the interest picker — paid plans only, and no
+// pricing shown here (this is a "what do you get" hover, not a price list).
+const PICKABLE_PLANS = PLANS.filter(plan => plan.key !== 'free').map(plan => ({
+  key: plan.key,
+  label: plan.label,
+  badge: plan.badge,
+  description: plan.description,
+  features: (plan.features || []).filter(feature => !feature.includes('£')),
+}))
 
 const INTEREST_ENDPOINT = import.meta.env.VITE_REGISTER_PAID_INTEREST_URL || '/api/register-paid-interest'
 
@@ -27,17 +38,24 @@ export default function BetaInterestModal({
   onGranted,
   onCreateAccount,
 }) {
-  const selectedPlan = planLabel || DEFAULT_PLAN_LABELS[planKey] || 'Paid plan'
+  // A caller that already knows which plan the user wants (e.g. a specific
+  // plan card on the pricing page) pins it and skips the picker. A generic
+  // entry point (the beta disclaimer) leaves it open for the user to choose.
+  const showPlanPicker = !planKey
   const [form, setForm] = useState(() => ({
     name: user?.user_metadata?.full_name || '',
     email: user?.email || '',
     projectType: '',
     message: '',
   }))
+  const [selectedPlanKey, setSelectedPlanKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [granted, setGranted] = useState(false)
   const [betaActivated, setBetaActivated] = useState(false)
+
+  const effectivePlanKey = planKey || selectedPlanKey
+  const selectedPlan = planLabel || DEFAULT_PLAN_LABELS[effectivePlanKey] || 'a paid plan'
 
   const title = useMemo(() => (
     granted
@@ -65,7 +83,7 @@ export default function BetaInterestModal({
         },
         body: JSON.stringify({
           ...form,
-          plan: planKey,
+          plan: effectivePlanKey,
           planLabel: selectedPlan,
           page: window.location.pathname,
         }),
@@ -103,6 +121,31 @@ export default function BetaInterestModal({
                 Paid plans are coming soon. Register your interest here and we’ll email you when {selectedPlan} is ready.
               </p>
               <form className="beta-interest-form" onSubmit={handleSubmit}>
+                {showPlanPicker && (
+                  <div className="beta-interest-field">
+                    <span>Which plan are you interested in?</span>
+                    <div className="beta-interest-plan-options">
+                      {PICKABLE_PLANS.map(plan => (
+                        <button
+                          key={plan.key}
+                          type="button"
+                          className={`beta-interest-plan-option${selectedPlanKey === plan.key ? ' is-selected' : ''}`}
+                          onClick={() => setSelectedPlanKey(plan.key)}
+                          aria-pressed={selectedPlanKey === plan.key}
+                        >
+                          {plan.badge && <span className="beta-interest-plan-badge">{plan.badge}</span>}
+                          <span className="beta-interest-plan-name">{plan.label}</span>
+                          <div className="beta-interest-plan-tooltip" role="tooltip">
+                            <p className="beta-interest-plan-tooltip-desc">{plan.description}</p>
+                            <ul>
+                              {plan.features.map(feature => <li key={feature}>{feature}</li>)}
+                            </ul>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <label className="beta-interest-field">
                   <span>Name</span>
                   <input value={form.name} onChange={e => updateField('name', e.target.value)} maxLength={120} />
@@ -120,7 +163,7 @@ export default function BetaInterestModal({
                   <textarea value={form.message} onChange={e => updateField('message', e.target.value)} maxLength={1200} rows={4} />
                 </label>
                 {error && <p className="account-error">{error}</p>}
-                <button type="submit" className="account-primary-button" disabled={busy}>
+                <button type="submit" className="account-primary-button" disabled={busy || (showPlanPicker && !selectedPlanKey)}>
                   {busy ? 'Registering...' : 'Register interest'}
                 </button>
               </form>
@@ -144,7 +187,7 @@ export default function BetaInterestModal({
               )}
               {!betaActivated && onCreateAccount ? (
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button type="button" className="account-primary-button" onClick={onCreateAccount}>
+                  <button type="button" className="account-primary-button" onClick={() => onCreateAccount(form.email)}>
                     Create a free account
                   </button>
                   <button type="button" className="account-secondary-button" onClick={onClose}>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs `node scripts/sync-interest-emails.mjs` every hour via macOS launchd,
+  independent of Claude Code or any terminal being open.
+
+  Install (see README.md "Scheduling" section for the full walkthrough):
+    cp scripts/interest-sync/co.uk.yourownworld.interest-sync.plist \
+       ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/co.uk.yourownworld.interest-sync.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/co.uk.yourownworld.interest-sync.plist
+    rm ~/Library/LaunchAgents/co.uk.yourownworld.interest-sync.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>co.uk.yourownworld.interest-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/bishop/Desktop/Claude/yow/scripts/sync-interest-emails.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/bishop/Desktop/Claude/yow</string>
+
+  <!-- Run once an hour (3600s). Change to e.g. 86400 for once a day. -->
+  <key>StartInterval</key>
+  <integer>3600</integer>
+
+  <!-- Also run once immediately when the job is loaded. -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/bishop/Desktop/Claude/yow/scripts/interest-sync/logs/sync.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/bishop/Desktop/Claude/yow/scripts/interest-sync/logs/sync.error.log</string>
+</dict>
+</plist>

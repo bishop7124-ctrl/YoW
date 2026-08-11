@@ -155,10 +155,9 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
       <BetaInterestModal
         open={interestOpen}
         user={user}
-        planLabel="a paid plan"
         onClose={() => setInterestOpen(false)}
         onGranted={onGranted}
-        onCreateAccount={!user ? () => { setInterestOpen(false); onGetStarted?.() } : undefined}
+        onCreateAccount={!user ? (email) => { setInterestOpen(false); onGetStarted?.(email) } : undefined}
       />
     </>
   )

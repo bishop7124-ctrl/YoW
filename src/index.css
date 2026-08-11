@@ -9590,6 +9590,99 @@ body {
   box-shadow: 0 0 0 3px var(--accent-fade);
 }
 
+.beta-interest-plan-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.beta-interest-plan-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.beta-interest-plan-option.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-fade);
+  color: var(--accent);
+}
+
+.beta-interest-plan-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bg-main);
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* Hover/focus box outlining what the plan includes — deliberately no pricing,
+   this is a "what do you get" preview, not a price list. Opens downward: these
+   options sit near the top of a scrolling modal, so opening upward (against
+   the header) got clipped by the modal's overflow:auto. */
+.beta-interest-plan-tooltip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  width: 240px;
+  max-width: 70vw;
+  background: var(--bg-nav);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-md, 0 12px 32px rgba(0,0,0,.35));
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity .12s ease, transform .12s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.beta-interest-plan-option:hover .beta-interest-plan-tooltip,
+.beta-interest-plan-option:focus-visible .beta-interest-plan-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.beta-interest-plan-tooltip-desc {
+  margin: 0 0 8px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.beta-interest-plan-tooltip ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.beta-interest-plan-tooltip li {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .beta-interest-form .account-primary-button,
 .beta-interest-modal > main > section > .account-primary-button {
   width: 100%;
