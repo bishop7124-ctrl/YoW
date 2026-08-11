@@ -9495,7 +9495,11 @@ body {
 .beta-interest-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  /* 9000 matches this codebase's convention for must-see overlays (cookie banner,
+     global search, version history) — this modal must win over page-level modals
+     like the welcome wizard (z-index 800) it can now be opened on top of from the
+     beta disclaimer. */
+  z-index: 9000;
   display: grid;
   place-items: center;
   padding: 24px;
