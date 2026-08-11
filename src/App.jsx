@@ -218,7 +218,7 @@ class ErrorBoundary extends Component {
 
 function AppInner() {
   const desktopApp = isDesktopAppRuntime()
-  const { user, loading: authLoading, updateProfile, recoveryMode } = useAuth()
+  const { user, loading: authLoading, updateProfile, recoveryMode, refreshUser } = useAuth()
   useEffect(() => {
     document.body.classList.toggle('desktop-app-shell', desktopApp)
     return () => document.body.classList.remove('desktop-app-shell')
@@ -879,7 +879,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner />
+        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       </>
     )
   }
@@ -894,7 +894,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner />
+        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       </>
     )
   }
@@ -909,7 +909,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner />
+        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       </>
     )
   }
@@ -924,7 +924,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner />
+        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       </>
     )
   }
@@ -941,7 +941,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner />
+        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       </>
     )
   }
@@ -957,7 +957,7 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner />
+        <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       </>
     )
   }
@@ -1020,7 +1020,9 @@ function AppInner() {
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         {!desktopApp && <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />}
-        {!desktopApp && <BetaBanner />}
+        {!desktopApp && (
+          <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
+        )}
       </>
     )
   }
@@ -1428,7 +1430,7 @@ function AppInner() {
       {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <BetaBanner />
+      <BetaBanner user={user} onGetStarted={() => navigatePublic('/signup')} onGranted={refreshUser} />
       {maintenanceModalOpen && user && !dataLoading && !isFirstRun && !showWelcomeTour && (
         <CloudExpiryWarningModal
           membership={membership}

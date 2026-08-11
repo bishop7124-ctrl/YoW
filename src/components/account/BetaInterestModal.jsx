@@ -25,6 +25,7 @@ export default function BetaInterestModal({
   planLabel,
   onClose,
   onGranted,
+  onCreateAccount,
 }) {
   const selectedPlan = planLabel || DEFAULT_PLAN_LABELS[planKey] || 'Paid plan'
   const [form, setForm] = useState(() => ({
@@ -137,12 +138,24 @@ export default function BetaInterestModal({
                 </>
               ) : (
                 <p className="beta-interest-copy">
-                  Thanks, your interest has been registered. Sign in or create a free account before registering from inside the app to activate beta tester access.
+                  Thanks, your interest has been registered. Sign in or create a free account, then
+                  register again from inside the app to activate beta tester access.
                 </p>
               )}
-              <button type="button" className="account-primary-button" onClick={onClose}>
-                Continue with beta access
-              </button>
+              {!betaActivated && onCreateAccount ? (
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="account-primary-button" onClick={onCreateAccount}>
+                    Create a free account
+                  </button>
+                  <button type="button" className="account-secondary-button" onClick={onClose}>
+                    I'll do this later
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="account-primary-button" onClick={onClose}>
+                  Continue with beta access
+                </button>
+              )}
             </section>
           )}
         </main>
