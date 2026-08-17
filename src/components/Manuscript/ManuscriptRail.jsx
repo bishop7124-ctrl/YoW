@@ -369,6 +369,12 @@ export default function ManuscriptRail({
   activeSceneId, onSelectScene, onSelectChapter,
   labels, totalWordCount,
   collapsed, onToggleCollapsed,
+  // Mobile-only (≤900px): the rail becomes an off-canvas sheet instead of
+  // collapsing to a spine — a separate flag from `collapsed` because the two
+  // breakpoints want different things from the same "not fully shown" idea
+  // (spine still shows something at a glance; off-canvas shows nothing until
+  // opened). Ignored above 900px.
+  mobileSheetOpen = false,
 }) {
   const [renamingActId, setRenamingActId] = useState(null)
   const [dragOver, setDragOver] = useState(null)
@@ -432,7 +438,7 @@ export default function ManuscriptRail({
   }, [acts, chapters, scenes])
 
   return (
-    <aside data-tour="manuscript-structure" className={`ms-rail font-sans${collapsed ? ' is-collapsed' : ''}`}>
+    <aside data-tour="manuscript-structure" className={`ms-rail font-sans${collapsed ? ' is-collapsed' : ''}${mobileSheetOpen ? ' is-sheet-open' : ''}`}>
       <div className="ms-rail-h">
         <span className="ms-rail-h-label">Manuscript</span>
         {totalWordCount > 0 && !collapsed && <span className="ms-rail-h-words">{totalWordCount.toLocaleString()}w</span>}

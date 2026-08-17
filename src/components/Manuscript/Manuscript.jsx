@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { isPhoneViewport } from '../../utils/useMediaQuery'
+import { isPhoneViewport, useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
+import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
 import ManuscriptTopbar from './ManuscriptTopbar.jsx'
 import ManuscriptSurface from './ManuscriptSurface.jsx'
@@ -210,7 +211,31 @@ export default function Manuscript({ store, userId, membership = null }) {
   // of a persistent side panel, so defaulting it open (as desktop does)
   // buries the manuscript behind it the moment a scene opens — same reasoning
   // the old activeSidebarTab default had.
-  const [railCollapsed, setRailCollapsed] = useState(false)
+  // Breakpoints per spec §3/§7 step 7: ≥1251px rail expanded, 901-1250px
+  // auto-collapsed to the spine (unless the user's explicitly toggled it —
+  // railUserToggledRef below), ≤900px rail becomes an off-canvas sheet
+  // (railSheetOpen) instead of collapsing at all.
+  const isNarrowBand = useMediaQuery(1250)
+  const isMobileBand = useMediaQuery(900)
+  const [railCollapsed, setRailCollapsed] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth <= 1250
+  ))
+  const [railSheetOpen, setRailSheetOpen] = useState(false)
+  const railUserToggledRef = useRef(false)
+  // Auto-collapse follows the breakpoint until the user makes an explicit
+  // choice, at which point it stops overriding them (matches the
+  // prototype's `if (!userRail) …` behavior) — this only runs above the
+  // mobile band, where collapse-to-spine doesn't apply at all (rail is an
+  // off-canvas sheet there instead, driven by railSheetOpen).
+  useEffect(() => {
+    if (railUserToggledRef.current || isMobileBand) return
+    setRailCollapsed(isNarrowBand)
+  }, [isNarrowBand, isMobileBand])
+  const handleToggleRail = useCallback(() => {
+    if (isMobileBand) { setRailSheetOpen(v => !v); return }
+    railUserToggledRef.current = true
+    setRailCollapsed(v => !v)
+  }, [isMobileBand])
   const [inspectorOpen, setInspectorOpen] = useState(() => !isPhoneViewport())
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
@@ -820,6 +845,17 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const handleCloseSurface = useCallback(() => setSurfaceId(null), [])
 
+  // Mobile bottom bar (≤900px): one of four surfaces at a time — Outline
+  // (rail sheet), Write (bare manuscript), Inspector (bottom sheet), AI.
+  // Only one is ever open on mobile, unlike desktop where the inspector and
+  // a topbar surface can be open together.
+  const mobileTab = railSheetOpen ? 'outline' : surfaceId === 'ai' ? 'ai' : inspectorOpen ? 'inspect' : 'write'
+  const handleMobileTab = useCallback((tab) => {
+    setRailSheetOpen(tab === 'outline')
+    setInspectorOpen(tab === 'inspect')
+    setSurfaceId(tab === 'ai' ? 'ai' : null)
+  }, [])
+
   // Details (SceneEditor's new header button) and Ask AI (the selection bar)
   // both need the inspector/surface open AND pointed at the scene the user
   // was just looking at, not necessarily whatever activeSceneId already was.
@@ -946,7 +982,7 @@ export default function Manuscript({ store, userId, membership = null }) {
           labels={labels}
           onSelectScene={handleSelectScene}
           railCollapsed={railCollapsed}
-          onToggleRail={() => setRailCollapsed(v => !v)}
+          onToggleRail={handleToggleRail}
           saveState={saveState}
           wordCount={totalWordCount}
           aiOpen={surfaceId === 'ai'}
@@ -1010,8 +1046,9 @@ export default function Manuscript({ store, userId, membership = null }) {
             onSelectChapter={handleSelectChapter}
             labels={labels}
             totalWordCount={totalWordCount}
-            collapsed={railCollapsed}
-            onToggleCollapsed={() => setRailCollapsed(v => !v)}
+            collapsed={railCollapsed && !isMobileBand}
+            onToggleCollapsed={handleToggleRail}
+            mobileSheetOpen={railSheetOpen}
           />
         )}
 
@@ -1255,6 +1292,30 @@ export default function Manuscript({ store, userId, membership = null }) {
           onToast={toast}
         />
       </div>
+      )}
+
+      {/* Mobile-only (≤900px, CSS-hidden above that) bottom bar — hidden
+          during focused writing and while viewing a finalized draft, same
+          as the desktop chrome those two states already hide. */}
+      {!focusedWriting.enabled && !activeFinalizedDraft && (
+        <nav className="ms-tabbar font-sans" aria-label="Manuscript navigation">
+          <button type="button" className={mobileTab === 'outline' ? 'is-on' : ''} onClick={() => handleMobileTab('outline')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+            Outline
+          </button>
+          <button type="button" className={mobileTab === 'write' ? 'is-on' : ''} onClick={() => handleMobileTab('write')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M4 20h4l10-10-4-4L4 16z" /></svg>
+            Write
+          </button>
+          <button type="button" className={mobileTab === 'inspect' ? 'is-on' : ''} onClick={() => handleMobileTab('inspect')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></svg>
+            Inspector
+          </button>
+          <button type="button" className={mobileTab === 'ai' ? 'is-on' : ''} onClick={() => handleMobileTab('ai')}>
+            <AIStar size={18} />
+            AI
+          </button>
+        </nav>
       )}
       {toastNode}
 
