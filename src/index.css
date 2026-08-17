@@ -3904,6 +3904,14 @@ textarea:focus {
  */
 .ms-scroll-container {
   overflow-anchor: none;
+  /* Lets .ms-scene-body's note-gutter drop-out below query against the
+     writing column's own width (per the handoff spec's explicit "not a
+     viewport media query" requirement) rather than the full window —
+     matters once the rail/inspector share the window with the prose column,
+     since a wide window with both panels open can leave the column itself
+     too narrow for a gutter even though the viewport isn't "mobile". */
+  container-type: inline-size;
+  container-name: ms-writing-column;
 }
 
 .manuscript-document {
@@ -14675,6 +14683,24 @@ body {
 }
 .ms-rail.is-collapsed { width: 44px; }
 
+/* ≤900px: off-canvas sheet instead of an in-flow column — see the
+   mobileSheetOpen prop in ManuscriptRail.jsx and the bottom tab bar below. */
+@media (max-width: 900px) {
+  .ms-rail {
+    position: absolute;
+    z-index: 25;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(85vw, var(--ms-rail-w));
+    transform: translateX(-101%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  .ms-rail.is-collapsed { width: min(85vw, var(--ms-rail-w)); }
+  .ms-rail.is-sheet-open { transform: none; }
+}
+
 .ms-rail-h {
   display: flex;
   align-items: center;
@@ -14940,10 +14966,6 @@ body {
 .ms-rail-f-btn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent); background: var(--accent-fade); }
 .ms-rail-f-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Mobile (≤900px) off-canvas sheet behaviour lands in step 7 (responsive bands) —
-   deliberately not guessed at here since it needs a railSheetOpen state distinct
-   from the desktop collapsed/spine toggle above. */
-
 /* ─── ManuscriptInspector (redesign) — one four-tab panel (Scene, Notes, Format,
    Progress) replacing WritingSidebar's six-tab strip + separate panel chrome.
    See docs/design/Manuscript Editor Handoff Spec.md §4. ─────────────────────── */
@@ -15120,6 +15142,22 @@ body {
 
 @media (min-width: 901px) and (max-width: 1250px) {
   .ms-insp { width: min(320px, 34vw); }
+}
+
+/* ≤900px: bottom sheet instead of a persistent side column — controlled by
+   the same inspectorOpen state as desktop, just rendered differently. */
+@media (max-width: 900px) {
+  .ms-insp {
+    position: absolute;
+    z-index: 25;
+    inset: auto 0 0 0;
+    width: 100%;
+    height: 62vh;
+    border-left: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 18px 18px 0 0;
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 /* ─── ManuscriptTopbar (redesign) — three zones replacing the old flat
@@ -15340,6 +15378,40 @@ body {
 
 @media (max-width: 900px) {
   .ms-topbar-zone-mid { display: none; }
+  /* AI/Inspector/Project/Focus/zoom all duplicate the mobile bottom tab bar
+     (Outline/Write/Inspector/AI) or don't fit — only the overflow menu
+     (search, pacing, template, import, history, finalise, export,
+     catalogue, fullscreen) stays reachable from the top bar itself. The
+     rail toggle is redundant with the bottom bar's Outline tab too. */
+  .ms-topbar-zone-left .ms-topbar-iconbtn { display: none; }
+  .ms-topbar-zone-tools > *:not(.ms-topbar-menu-wrap) { display: none; }
+}
+
+/* ─── Mobile bottom tab bar (redesign) — Outline/Write/Inspector/AI drives
+   all four surfaces at ≤900px instead of the desktop rail+topbar buttons.
+   See Manuscript.jsx's handleMobileTab. ─────────────────────────────────── */
+.ms-tabbar { display: none; }
+@media (max-width: 900px) {
+  .ms-tabbar {
+    display: flex;
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border);
+    background: var(--bg-nav);
+  }
+  .ms-tabbar button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 9px 0 11px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .ms-tabbar button.is-on { color: var(--accent-text); }
 }
 
 /* ─── ManuscriptSurface (redesign) — one full-height right panel (AI, Search,
@@ -15564,10 +15636,13 @@ body {
 .ms-gutter-note:hover { color: var(--accent-text); }
 .ms-gutter-note.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Placeholder viewport fallback — step 7 replaces this with a container
-   query on the writing column per the handoff spec (a container query needs
-   `container-type: inline-size` on the scroll container, added then). */
-@media (max-width: 900px) {
+/* Container query (not a viewport media query — spec is explicit about
+   this) on the writing column itself, named via container-name on
+   .ms-scroll-container above. Drops the gutter once the column can't fit
+   prose (620px) + gap (28px) + gutter (188px) comfortably — which can
+   happen at a wide viewport too, if the rail and inspector are both open
+   and eating into the column's share of it. */
+@container ms-writing-column (max-width: 880px) {
   .ms-scene-body.has-gutter { grid-template-columns: minmax(0, 620px); }
   .ms-scene-gutter { display: none; }
 }
