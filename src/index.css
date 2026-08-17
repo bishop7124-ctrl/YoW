@@ -6792,6 +6792,25 @@ body {
    per the handoff spec §8. See ManuscriptBookView.jsx for the pagination
    math. ───────────────────────────────────────────────────────────────── */
 .ms-book {
+  /* UK B-format trade paperback: 129mm x 198mm trim. Margins are a single
+     symmetric approximation of a real book's alternating inner (gutter)/
+     outer margins -- close enough that the line/word count per page is
+     genuinely print-accurate, without the complexity of separate recto/
+     verso layouts. Body type 10.5pt on 14pt leading is a standard UK
+     fiction trade-paperback spec (~32 lines/page on this text block).
+     These are laid out in real mm/pt, at the browser's nominal 96px/inch
+     reference -- the same fixed mapping print-preview uses -- so the page
+     is never bigger or smaller than an actual printed page; only the
+     wrapper's transform (see ManuscriptBookView.jsx's `scale`) shrinks it
+     to fit a small viewport, which never changes the reflow underneath. */
+  --ms-page-w: 99mm;
+  --ms-page-h: 160mm;
+  --ms-page-margin-x: 15mm;
+  --ms-page-margin-top: 18mm;
+  --ms-page-margin-bottom: 20mm;
+  --ms-spine-gap: 28mm;
+  --ms-page-font: 10.5pt;
+  --ms-page-leading: 14pt;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -6802,50 +6821,59 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+.ms-book-viewport {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 .ms-book-spread {
   position: relative;
-  width: min(940px, 100%);
-  flex: 1;
-  min-height: 0;
-  max-height: 660px;
+  flex-shrink: 0;
+  width: calc(2 * var(--ms-page-w) + var(--ms-spine-gap) + 2 * var(--ms-page-margin-x));
+  height: calc(var(--ms-page-h) + var(--ms-page-margin-top) + var(--ms-page-margin-bottom));
   border-radius: var(--r-sm);
   background: var(--bg-raise);
   box-shadow: var(--shadow-lg);
-  padding: 46px 52px 40px;
+  padding: var(--ms-page-margin-top) var(--ms-page-margin-x) var(--ms-page-margin-bottom);
   overflow: hidden;
 }
 .ms-book-spread::before {
   content: "";
   position: absolute;
-  top: 26px;
-  bottom: 26px;
+  top: var(--ms-page-margin-top);
+  bottom: var(--ms-page-margin-bottom);
   left: 50%;
   width: 1px;
   background: var(--border);
 }
 .ms-book-flow {
-  height: 100%;
+  height: var(--ms-page-h);
+  column-width: var(--ms-page-w);
   column-count: 2;
-  column-gap: 76px;
+  column-gap: var(--ms-spine-gap);
   column-fill: auto;
   font-family: var(--font-serif);
-  font-size: 15.5px;
-  line-height: 1.72;
+  font-size: var(--ms-page-font);
+  line-height: var(--ms-page-leading);
   color: var(--prose-text, var(--text-main));
   transition: transform 0.26s ease;
   will-change: transform;
 }
 .ms-book-flow h2 {
   font-family: var(--font-serif);
-  font-size: 20px;
-  margin: 0 0 18px;
+  font-size: 15pt;
+  margin: 0 0 14pt;
   break-after: avoid;
   color: var(--text-main);
 }
 .ms-book-flow h3 {
   font-family: var(--font-serif);
-  font-size: 17px;
-  margin: 22px 0 14px;
+  font-size: 12.5pt;
+  margin: 16pt 0 10pt;
   break-after: avoid;
   color: var(--text-main);
 }
@@ -6875,7 +6903,13 @@ body {
 .ms-book-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 @media (max-width: 900px) {
-  .ms-book-spread { padding: 26px 22px; }
+  /* A single physical page rather than a two-page spread -- still true
+     B-format size, just not shown side by side (there isn't room to shrink
+     a whole spread and keep the text legible on a small screen). */
+  .ms-book-spread {
+    width: calc(var(--ms-page-w) + 2 * var(--ms-page-margin-x));
+  }
+  .ms-book-spread::before { display: none; }
   .ms-book-flow { column-count: 1; }
 }
 
@@ -15276,36 +15310,27 @@ body {
 .ms-scene-header--write.ms-scene-header:hover,
 .group\/scene:focus-within .ms-scene-header--write.ms-scene-header { opacity: 1; }
 
-.ms-gutter-note {
+/* Edit mode's note gutter: a persistent (not hover-gated) comment-bubble icon
+   per note, not a text-preview card -- Write mode has the inline box for
+   reading/editing text, so the gutter only needs to say "a note is here". */
+.ms-gutter-note-icon {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-  padding: 6px 9px;
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  border-left: 2px solid var(--accent);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   background: var(--accent-fade);
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-  cursor: pointer;
-  overflow: hidden;
-}
-.ms-gutter-note span {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.ms-gutter-note b {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--accent-text);
-  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
 }
-.ms-gutter-note:hover { color: var(--accent-text); }
-.ms-gutter-note.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ms-gutter-note-icon svg { width: 13px; height: 13px; }
+.ms-gutter-note-icon.has-text { background: color-mix(in srgb, var(--accent-fade) 70%, var(--accent) 12%); }
+.ms-gutter-note-icon:hover { transform: translateY(-1px); border-color: var(--accent); }
+.ms-gutter-note-icon.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Container query (not a viewport media query — spec is explicit about
    this) on the writing column itself, named via container-name on

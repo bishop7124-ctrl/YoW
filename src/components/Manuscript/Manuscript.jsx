@@ -876,24 +876,31 @@ export default function Manuscript({ store, userId, membership = null }) {
     try { localStorage.setItem(lastSurfaceStorageKey, lastSurfaceId) } catch { /* ignore */ }
   }, [lastSurfaceStorageKey, lastSurfaceId])
 
+  // A surface (AI/Search/History/Finalise) and the inspector are never open
+  // at once — opening one closes the other, in every entry point below.
   const handleToggleSurface = useCallback((id) => {
     setSurfaceId(current => {
       if (current === id) return null
       setLastSurfaceId(id)
+      setInspectorOpen(false)
       return id
     })
   }, [])
 
   const handleOpenLastSurface = useCallback(() => {
-    setSurfaceId(current => (current ? null : lastSurfaceId))
+    setSurfaceId(current => {
+      const next = current ? null : lastSurfaceId
+      if (next) setInspectorOpen(false)
+      return next
+    })
   }, [lastSurfaceId])
 
   const handleCloseSurface = useCallback(() => setSurfaceId(null), [])
 
   // Mobile bottom bar (≤900px): one of four surfaces at a time — Outline
   // (rail sheet), Write (bare manuscript), Inspector (bottom sheet), AI.
-  // Only one is ever open on mobile, unlike desktop where the inspector and
-  // a topbar surface can be open together.
+  // Only one is ever open at a time, matching the desktop rule above that a
+  // topbar surface and the inspector are mutually exclusive.
   const mobileTab = railSheetOpen ? 'outline' : surfaceId === 'ai' ? 'ai' : inspectorOpen ? 'inspect' : 'write'
   const handleMobileTab = useCallback((tab) => {
     setRailSheetOpen(tab === 'outline')
@@ -908,6 +915,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     setActiveSceneId(sceneId)
     setInspectorTab('scene')
     setInspectorOpen(true)
+    setSurfaceId(null)
   }, [setActiveSceneId])
 
   const handleAskAI = useCallback((sceneId) => {
@@ -918,6 +926,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   const handleOpenNotesInspector = useCallback(() => {
     setInspectorTab('notes')
     setInspectorOpen(true)
+    setSurfaceId(null)
   }, [])
 
   const handleOverflowAction = useCallback((actionId) => {
@@ -1046,7 +1055,11 @@ export default function Manuscript({ store, userId, membership = null }) {
           aiOpen={surfaceId === 'ai'}
           onToggleAI={() => handleToggleSurface('ai')}
           inspectorOpen={inspectorOpen}
-          onToggleInspector={() => setInspectorOpen(v => !v)}
+          onToggleInspector={() => setInspectorOpen(v => {
+            const next = !v
+            if (next) setSurfaceId(null)
+            return next
+          })}
           hideAIAndInspector={mode !== 'edit'}
           onEnterFocus={() => { setInspectorOpen(false); setSurfaceId(null); focusedWriting.setEnabled(true) }}
           onOverflowAction={handleOverflowAction}

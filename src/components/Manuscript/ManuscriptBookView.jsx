@@ -53,12 +53,23 @@ function useVisibleFlow(draft) {
 // aligned final spread". Spread count is Math.ceil(flow.scrollWidth /
 // (flow.clientWidth + columnGap)), recomputed on every navigation and from a
 // ResizeObserver on the flow — deliberately never cached across a resize.
+//
+// The spread itself (.ms-book-spread, .ms-book-flow) is laid out in real mm/
+// pt at the browser's fixed 96px/inch reference — see the --ms-page-* custom
+// properties on .ms-book in index.css — so its line/word count always
+// matches a genuine UK B-format page, never however much space happened to
+// be free on screen. `scale` below only ever shrinks that true-size spread
+// to fit a smaller viewport (never enlarges past 100%); a CSS transform
+// doesn't touch the layout/reflow underneath, so the fit never changes what
+// the reflow already decided.
 export default function ManuscriptBookView({ draft, projectTitle }) {
   const nodes = useVisibleFlow(draft)
+  const viewportRef = useRef(null)
   const spreadRef = useRef(null)
   const flowRef = useRef(null)
   const [spread, setSpread] = useState(0)
   const [spreadCount, setSpreadCount] = useState(1)
+  const [scale, setScale] = useState(1)
 
   const measure = useCallback(() => {
     const flow = flowRef.current
@@ -70,9 +81,27 @@ export default function ManuscriptBookView({ draft, projectTitle }) {
     setSpread(current => Math.max(0, Math.min(current, count - 1)))
   }, [])
 
+  const fitScale = useCallback(() => {
+    const viewport = viewportRef.current
+    const spreadEl = spreadRef.current
+    if (!viewport || !spreadEl) return
+    // offsetWidth/Height are the spread's true, untransformed layout size —
+    // reading them back through its own possibly-already-scaled transform is
+    // fine, transforms never affect offsetWidth/Height.
+    const naturalWidth = spreadEl.offsetWidth
+    const naturalHeight = spreadEl.offsetHeight
+    if (!naturalWidth || !naturalHeight) return
+    const next = Math.min(1, viewport.clientWidth / naturalWidth, viewport.clientHeight / naturalHeight)
+    setScale(Number.isFinite(next) && next > 0 ? next : 1)
+  }, [])
+
   useLayoutEffect(() => {
     measure()
   }, [measure, nodes])
+
+  useLayoutEffect(() => {
+    fitScale()
+  }, [fitScale, nodes])
 
   useEffect(() => {
     const flow = flowRef.current
@@ -81,6 +110,26 @@ export default function ManuscriptBookView({ draft, projectTitle }) {
     ro.observe(flow)
     return () => ro.disconnect()
   }, [measure])
+
+  // Belt-and-braces alongside the ResizeObserver below: a window resize can
+  // cross the 900px breakpoint that swaps the spread's own natural size
+  // (full spread vs a single page, see index.css) without necessarily
+  // changing the *viewport* element's box in every browser/engine the same
+  // observer would catch reliably.
+  useEffect(() => {
+    window.addEventListener('resize', fitScale)
+    return () => window.removeEventListener('resize', fitScale)
+  }, [fitScale])
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    const spreadEl = spreadRef.current
+    if (!viewport || !spreadEl || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(() => fitScale())
+    ro.observe(viewport)
+    ro.observe(spreadEl)
+    return () => ro.disconnect()
+  }, [fitScale])
 
   useEffect(() => {
     const flow = flowRef.current
@@ -95,11 +144,13 @@ export default function ManuscriptBookView({ draft, projectTitle }) {
 
   return (
     <div className="ms-book" aria-label={`${projectTitle || 'Manuscript'} — book view`}>
-      <div className="ms-book-spread" ref={spreadRef}>
-        <div className="ms-book-flow" ref={flowRef}>
-          <h2>{decodeHtmlEntities(projectTitle) || 'Untitled'}</h2>
-          {nodes.length === 0 && <p className="ms-book-empty">Nothing finalized to read yet.</p>}
-          {nodes}
+      <div className="ms-book-viewport" ref={viewportRef}>
+        <div className="ms-book-spread" ref={spreadRef} style={{ transform: `scale(${scale})` }}>
+          <div className="ms-book-flow" ref={flowRef}>
+            <h2>{decodeHtmlEntities(projectTitle) || 'Untitled'}</h2>
+            {nodes.length === 0 && <p className="ms-book-empty">Nothing finalized to read yet.</p>}
+            {nodes}
+          </div>
         </div>
       </div>
       <div className="ms-book-nav font-sans">
