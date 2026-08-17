@@ -15095,6 +15095,226 @@ body {
   .ms-insp { width: min(320px, 34vw); }
 }
 
+/* ─── ManuscriptTopbar (redesign) — three zones replacing the old flat
+   ms-toolbar row of ~12 buttons. See handoff spec §4. ───────────────────────── */
+
+.ms-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-nav);
+  position: relative;
+  z-index: 30;
+}
+.ms-topbar-zone { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ms-topbar-zone-left { flex: 0 1 auto; overflow: hidden; }
+.ms-topbar-zone-tools { flex: 0 0 auto; }
+.ms-topbar-zone-mid { flex: 1; justify-content: center; min-width: 0; gap: 12px; }
+
+.ms-topbar-iconbtn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-topbar-iconbtn:hover { background: var(--accent-fade); color: var(--accent-text); }
+.ms-topbar-iconbtn[aria-pressed="true"] { background: var(--accent-fade); color: var(--accent-text); }
+
+.ms-topbar-crumb {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: var(--r-pill);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.ms-topbar-crumb:hover { background: var(--accent-fade); }
+.ms-topbar-crumb-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.ms-topbar-crumb-path { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+.ms-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  flex: 0 0 auto;
+}
+.ms-modes button {
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ms-modes button:hover { color: var(--text-main); }
+.ms-modes button.is-on { background: var(--accent-fade); color: var(--accent-text); font-weight: 700; }
+
+.ms-topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+}
+.ms-topbar-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); flex: 0 0 auto; }
+.ms-topbar-status-sep { color: var(--text-faint); }
+.ms-topbar-status-long { color: var(--text-faint); }
+.ms-topbar-conflict-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--r-pill);
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ms-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-topbar-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+.ms-topbar-btn.is-on { background: var(--accent-fade); color: var(--accent-text); }
+.ms-topbar-btn-primary { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
+.ms-topbar-btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #000); color: var(--accent-contrast); }
+
+.ms-topbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex: 0 0 auto; }
+
+.ms-topbar-menu-wrap { position: relative; }
+.ms-topbar-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: 236px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: 40;
+}
+.ms-topbar-menu-h {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 8px 10px 4px;
+}
+.ms-topbar-menu-i {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-main);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ms-topbar-menu-i:hover { background: var(--accent-fade); color: var(--accent-text); }
+.ms-topbar-menu-i kbd { margin-left: auto; font: 11px var(--font); color: var(--text-faint); }
+
+/* ── Go-to-scene palette ── */
+.ms-goto-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(10, 14, 13, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 24px 24px;
+}
+.ms-goto-box {
+  width: min(480px, 100%);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  background: var(--bg-raise);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.ms-goto-input {
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 15px;
+  outline: none;
+}
+.ms-goto-list { overflow-y: auto; padding: 6px; }
+.ms-goto-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.ms-goto-item:hover { background: var(--accent-fade); }
+.ms-goto-item-title { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.ms-goto-item-path { font-size: 11px; color: var(--text-faint); }
+
+@media (max-width: 900px) {
+  .ms-topbar-zone-mid { display: none; }
+}
+
 /* ─── Scene virtualization placeholder (see useSceneWindow.js / Manuscript.jsx's
    SceneSlot) — a scene scrolled far enough out of view renders this instead of a real
    SceneEditor. Deliberately minimal: no entity highlighting or markdown rendering, just
