@@ -1,20 +1,19 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import { isPhoneViewport } from '../../utils/useMediaQuery'
-import WritingSidebar from './WritingSidebar'
+import ManuscriptRail from './ManuscriptRail.jsx'
+import ManuscriptInspector from './ManuscriptInspector.jsx'
+import ManuscriptTopbar from './ManuscriptTopbar.jsx'
+import ManuscriptSurface from './ManuscriptSurface.jsx'
+import { useToast } from './Toast.jsx'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
-import AISuggestionPanel from './AISuggestionPanel'
-import AIStar from '../ai/AIStar'
-import SceneVersionHistory from './SceneVersionHistory'
-import ManuscriptSearch from './ManuscriptSearch'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
 import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
 import ManuscriptCatalogue from './ManuscriptCatalogue.jsx'
-import { FormatContent, NotesPanel, SaveIndicator } from './ManuscriptToolbar.jsx'
 import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
 import FocusedWritingShell, { ManuscriptZoomControl } from './FocusedWritingShell.jsx'
 import { useFocusedWritingMode } from './useFocusedWritingMode.js'
@@ -185,8 +184,6 @@ export default function Manuscript({ store, userId, membership = null }) {
     moveAct, moveChapter, moveScene,
     characters, locations,
     setSelectedCharacterId, setSelectedLocationId,
-    loreEntries, factions, timeline, worldHistory, ideaEntries, storySchedule, rpgCharacters,
-    setSelectedLoreEntryId, setSelectedIdeaEntryId, setSelectedTimelineEventId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
     retireManuscript, restoreManuscriptCopy,
@@ -203,12 +200,30 @@ export default function Manuscript({ store, userId, membership = null }) {
   // mode returns to this scene instead of the top of the manuscript.
   const activeSceneId = writingSceneId
   const setActiveSceneId = setWritingSceneId
-  // On mobile the sidebar becomes a bottom-sheet overlay instead of a persistent side
-  // panel, so defaulting it open (as desktop does) buries the manuscript behind it the
-  // moment a scene opens. Land on the manuscript there and let the tab strip open it.
-  const [activeSidebarTab, setActiveSidebarTab] = useState(() => (
-    isPhoneViewport() ? null : 'structure'
-  )) // null | 'structure' | 'goals' | 'progress' | 'notes'
+  // Redesign chrome state. `activeSidebarTab` (one string covering structure/
+  // status/notes/format/ai) is gone — replaced by three independent pieces
+  // matching the new layout: the rail's own collapse state, the inspector's
+  // open flag + which of its four tabs is active, and the surface's which-
+  // panel-if-any (AI/Search/History/Finalise, mutually exclusive with each
+  // other but independent of the inspector, which it overlays rather than
+  // replaces). On mobile the inspector becomes a bottom-sheet overlay instead
+  // of a persistent side panel, so defaulting it open (as desktop does)
+  // buries the manuscript behind it the moment a scene opens — same reasoning
+  // the old activeSidebarTab default had.
+  const [railCollapsed, setRailCollapsed] = useState(false)
+  const [inspectorOpen, setInspectorOpen] = useState(() => !isPhoneViewport())
+  const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
+  const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
+  // Lazy initializer (not an effect) so this reads localStorage once, on
+  // first render, rather than mounting with 'ai' and then correcting itself
+  // a tick later via a setState-in-effect.
+  const [lastSurfaceId, setLastSurfaceId] = useState(() => {
+    try {
+      return (activeNovel?.id && localStorage.getItem(`nf-manuscript-last-surface:${activeNovel.id}`)) || 'ai'
+    } catch {
+      return 'ai'
+    }
+  })
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [formatSettings, setFormatSettings] = useState(loadFormat)
@@ -221,11 +236,11 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [finalizedReaderView, setFinalizedReaderView] = useState('scroll')
   const [finalizedPageIndex, setFinalizedPageIndex] = useState(0)
   const [versionHistorySceneId, setVersionHistorySceneId] = useState(null)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [pacingOpen, setPacingOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [liveSceneContent, setLiveSceneContent] = useState({})
   const [aiSelectionContext, setAiSelectionContext] = useState({ sceneId: null, text: '' })
+  const { toast, toastNode } = useToast()
   // Scenes forced to mount a real SceneEditor regardless of viewport position — see
   // pinScene below. Bridges the gap between a programmatic jump/creation (which needs
   // editorRefs populated *now*, synchronously-ish) and the IntersectionObserver in
@@ -253,24 +268,17 @@ export default function Manuscript({ store, userId, membership = null }) {
     }, duration)
   }, [])
 
-  const handleOpenReferenceEntry = useCallback((entry) => {
-    if (!entry) return
-    if (entry.type === 'character') setSelectedCharacterId?.(entry.rawId)
-    if (entry.type === 'location') setSelectedLocationId?.(entry.rawId)
-    if (entry.type === 'lore') setSelectedLoreEntryId?.(entry.rawId)
-    if (entry.type === 'idea') setSelectedIdeaEntryId?.(entry.rawId)
-    if (entry.type === 'timeline' || entry.type === 'history') setSelectedTimelineEventId?.(entry.rawId)
-
-    window.dispatchEvent(new CustomEvent('switch-section', {
-      detail: { section: entry.section },
-    }))
-  }, [
-    setSelectedCharacterId,
-    setSelectedLocationId,
-    setSelectedLoreEntryId,
-    setSelectedIdeaEntryId,
-    setSelectedTimelineEventId,
-  ])
+  // handleOpenReferenceEntry (jump from a reference-panel click to a
+  // character/location/lore/idea/timeline entry) is deliberately not carried
+  // over here — WritingSidebar's Reference tab (ManuscriptReferencePanel,
+  // the browse-everything panel this fed) has no home in the new inspector;
+  // the handoff spec defers "reference" to the breadcrumb's ⌘K palette and
+  // entity clicks. Entity clicks already work (handleEntityClick, used by
+  // both SceneEditor's inline entity links and the inspector's Scene tab
+  // chips) — the palette only searches scenes so far, not the full
+  // character/location/lore/timeline set ManuscriptReferencePanel browsed.
+  // That's a real, disclosed gap versus today, not an oversight: flagged in
+  // the redesign's final report rather than rebuilt under time pressure.
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
   const activeSceneForAI = activeScene
@@ -422,9 +430,10 @@ export default function Manuscript({ store, userId, membership = null }) {
     if (!focusedWriting.enabled) return undefined
     const handleEscape = event => {
       if (event.key !== 'Escape') return
-      if (activeSidebarTab) {
+      if (surfaceId || inspectorOpen) {
         event.preventDefault()
-        setActiveSidebarTab(null)
+        setSurfaceId(null)
+        setInspectorOpen(false)
         return
       }
       event.preventDefault()
@@ -432,7 +441,23 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [activeSidebarTab, focusedWriting])
+  }, [surfaceId, inspectorOpen, focusedWriting])
+
+  // Adapter for FocusedWritingShell's single activePanelId/onSetPanel pair
+  // (notes/format/ai/status) onto the redesign's separate inspectorTab/
+  // inspectorOpen/surfaceId state — 'ai' maps to the surface, everything
+  // else to the inspector ('status' is FocusedWritingShell's id for what the
+  // inspector now calls 'progress').
+  const focusedPanelId = surfaceId === 'ai'
+    ? 'ai'
+    : (inspectorOpen ? (inspectorTab === 'progress' ? 'status' : inspectorTab) : null)
+  const handleSetFocusedPanel = useCallback((id) => {
+    if (id === 'ai') { setSurfaceId(v => (v === 'ai' ? null : 'ai')); return }
+    if (id === null) { setInspectorOpen(false); setSurfaceId(null); return }
+    setInspectorTab(id === 'status' ? 'progress' : id)
+    setInspectorOpen(true)
+    setSurfaceId(null)
+  }, [])
 
   const handleFormatChange = useCallback((next) => {
     setFormatSettings(next)
@@ -710,7 +735,11 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
   }, [addAct, addChapter, addScene, updateSceneContent, labels.level3])
 
-  const handleExport = async () => {
+  // useCallback (this wasn't memoized before the redesign) so
+  // handleOverflowAction below — which now needs to call the current
+  // handleExport for the overflow menu's Export item — doesn't get a new
+  // function identity on every render as a side effect of depending on it.
+  const handleExport = useCallback(async () => {
     setExporting(true)
     try {
       await exportToDocx(activeNovel, acts, chapters, scenes, chapterGlobalNumbers)
@@ -720,7 +749,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     } finally {
       setExporting(false)
     }
-  }
+  }, [activeNovel, acts, chapters, scenes, chapterGlobalNumbers])
 
   // Navigate from sidebar click
   const handleSelectScene = useCallback((sceneId) => {
@@ -752,6 +781,104 @@ export default function Manuscript({ store, userId, membership = null }) {
     })
   }, [])
 
+  // Breadcrumb: act · chapter · scene for whichever scene last took focus
+  // (onFocus on every SceneEditor already keeps activeSceneId current — see
+  // handleSelectScene/the SceneEditor render below — so this satisfies "the
+  // scene under the caret, including after a rail jump" without a second
+  // scroll-position observer; scenesInView from useSceneWindow remains the
+  // one and only IntersectionObserver in this file).
+  const activeAct = activeChapter ? acts.find(a => a.id === activeChapter.actId) : null
+  const breadcrumbPath = activeAct || activeChapter || activeScene
+    ? [
+        activeAct?.title,
+        activeChapter ? getChapterTitle(activeChapter) : null,
+        activeScene ? (activeScene.title && activeScene.title !== 'Scene' ? activeScene.title : labels.level3) : null,
+      ].filter(Boolean).join(' · ')
+    : ''
+
+  // Surfaces: one at a time, opening another replaces it, closing remembers
+  // lastSurfaceId (persisted per project, hydrated by the lazy useState
+  // initializer above) so ⌘J/re-opening the AI button returns to whatever
+  // was last open — spec §5.1.
+  const lastSurfaceStorageKey = activeNovel?.id ? `nf-manuscript-last-surface:${activeNovel.id}` : null
+  useEffect(() => {
+    if (!lastSurfaceStorageKey) return
+    try { localStorage.setItem(lastSurfaceStorageKey, lastSurfaceId) } catch { /* ignore */ }
+  }, [lastSurfaceStorageKey, lastSurfaceId])
+
+  const handleToggleSurface = useCallback((id) => {
+    setSurfaceId(current => {
+      if (current === id) return null
+      setLastSurfaceId(id)
+      return id
+    })
+  }, [])
+
+  const handleOpenLastSurface = useCallback(() => {
+    setSurfaceId(current => (current ? null : lastSurfaceId))
+  }, [lastSurfaceId])
+
+  const handleCloseSurface = useCallback(() => setSurfaceId(null), [])
+
+  // Details (SceneEditor's new header button) and Ask AI (the selection bar)
+  // both need the inspector/surface open AND pointed at the scene the user
+  // was just looking at, not necessarily whatever activeSceneId already was.
+  const handleOpenSceneDetails = useCallback((sceneId) => {
+    setActiveSceneId(sceneId)
+    setInspectorTab('scene')
+    setInspectorOpen(true)
+  }, [setActiveSceneId])
+
+  const handleAskAI = useCallback((sceneId) => {
+    setActiveSceneId(sceneId)
+    handleToggleSurface('ai')
+  }, [setActiveSceneId, handleToggleSurface])
+
+  const handleOpenNotesInspector = useCallback(() => {
+    setInspectorTab('notes')
+    setInspectorOpen(true)
+  }, [])
+
+  const handleOverflowAction = useCallback((actionId) => {
+    switch (actionId) {
+      case 'search': handleToggleSurface('search'); break
+      case 'pacing': setPacingOpen(true); break
+      case 'template': setTemplateModalOpen(true); break
+      case 'import': setImportModalOpen(true); break
+      case 'history':
+        setVersionHistorySceneId(activeSceneId)
+        handleToggleSurface('history')
+        break
+      case 'finalise': handleToggleSurface('finalise'); break
+      case 'export': handleExport(); break
+      case 'catalogue': setCatalogueOpen(true); break
+      default: break
+    }
+  }, [handleToggleSurface, activeSceneId, handleExport])
+
+  // Global shortcuts not already owned by a child (⌘K's go-to-scene palette
+  // and ⌘' 's note action are local to ManuscriptTopbar/SceneEditor
+  // respectively — see their own keydown handling). Skipped entirely while
+  // focused-writing owns Escape (its own effect above already handles that
+  // case) to avoid the two effects fighting over the same keypress.
+  useEffect(() => {
+    const handler = event => {
+      const meta = event.metaKey || event.ctrlKey
+      if (event.key === 'Escape' && !focusedWriting.enabled && surfaceId) {
+        event.preventDefault()
+        handleCloseSurface()
+        return
+      }
+      if (!meta) return
+      if (event.key === '\\') { event.preventDefault(); setRailCollapsed(v => !v); return }
+      if (event.key.toLowerCase() === 'f' && !activeFinalizedDraft) { event.preventDefault(); handleToggleSurface('search'); return }
+      if (event.key.toLowerCase() === 'j') { event.preventDefault(); handleOpenLastSurface(); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedWriting.enabled, surfaceId, activeFinalizedDraft])
+
   if (isComicProject) return <ComicPlanner store={store} />
 
   return (
@@ -763,258 +890,83 @@ export default function Manuscript({ store, userId, membership = null }) {
           projectTitle={activeNovel?.title}
           saveState={saveState}
           wordCount={totalWordCount}
-          breadcrumb={activeChapter || activeScene
-            ? [activeChapter ? getChapterTitle(activeChapter) : null, activeScene?.title || labels.level3].filter(Boolean).join(' / ')
-            : ''}
-          activePanelId={activeSidebarTab}
-          onSetPanel={setActiveSidebarTab}
+          breadcrumb={breadcrumbPath}
+          activePanelId={focusedPanelId}
+          onSetPanel={handleSetFocusedPanel}
           onExit={() => focusedWriting.setEnabled(false)}
           pageZoom={focusedWriting.pageZoom}
           onPageZoomChange={focusedWriting.setPageZoom}
         />
-      ) : (
-      <div data-tour="manuscript-toolbar" className="ms-toolbar font-sans flex items-center gap-2 flex-shrink-0 px-3">
-
-        {!activeFinalizedDraft && (
-          <>
-            {/* Template picker */}
-            <button
-              onClick={() => setTemplateModalOpen(true)}
-              className="ms-toolbar-btn"
-              title="Choose a structural template"
-            >
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="0.9" y="0.9" width="3.5" height="3.5" rx="0.8" />
-                <rect x="6.6" y="0.9" width="3.5" height="3.5" rx="0.8" />
-                <rect x="0.9" y="6.6" width="3.5" height="3.5" rx="0.8" />
-                <rect x="6.6" y="6.6" width="3.5" height="3.5" rx="0.8" />
-              </svg>
-              Template
+      ) : activeFinalizedDraft ? (
+        // Transitional reading header for the current activeFinalizedDraft
+        // swap — step 8 replaces this whole branch with FinalizedReader as a
+        // proper full-screen reader over the editor (Esc exits back to Edit)
+        // per the handoff spec's three-modes work; this preserves today's
+        // working "view a finalized draft" behavior in the meantime rather
+        // than dropping it while that's still unbuilt.
+        <div className="ms-topbar font-sans" data-tour="manuscript-toolbar">
+          <div className="ms-topbar-zone ms-topbar-zone-left">
+            <button type="button" className="ms-topbar-btn" onClick={() => setReaderDraft({ projectId: null, draftId: null })}>
+              ← Working draft
             </button>
-
-            {/* Import */}
-            <button
-              onClick={() => setImportModalOpen(true)}
-              className="ms-toolbar-btn"
-              title={importTitle}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Import
-            </button>
-
-            <div className="w-px h-4 bg-[var(--border)] mx-1" />
-          </>
-        )}
-
-        {/* Save state */}
-        <SaveIndicator state={saveState} />
-
-        {/* Word count */}
-        <span data-tour="manuscript-word-count" className="ms-toolbar-wordcount">
-          {totalWordCount > 0 ? `${totalWordCount.toLocaleString()} words` : 'No content yet'}
-        </span>
-
-        {isScriptProject && !activeFinalizedDraft && (
-          <span
-            className="ms-toolbar-badge"
-            title="Readable script export is available; industry formatting is still in progress."
-          >
-            Script beta
-          </span>
-        )}
-
-        {sceneConflicts.length > 0 && (
-          <button
-            type="button"
-            className="ms-toolbar-conflict-btn"
-            onClick={() => setConflictReviewOpen(true)}
-            title="A scene was edited in two browser tabs at once — both versions were kept"
-          >
-            ⚠ {sceneConflicts.length} conflict {sceneConflicts.length === 1 ? 'copy' : 'copies'}
-          </button>
-        )}
-
-        <div className="flex-1" />
-
-        {!activeFinalizedDraft && (
-          <button
-            type="button"
-            onClick={() => setCatalogueOpen(true)}
-            className="ms-toolbar-btn"
-            title="Retire or restore manuscript copies"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7h18" /><path d="M5 7l1 13h12l1-13" /><path d="M9 7V4h6v3" /><path d="M10 12h4" />
-            </svg>
-            Catalogue
-          </button>
-        )}
-
-        {isNovelProject && finalizedDrafts.length > 0 && (
-          <select
-            className="ms-toolbar-select"
-            value={readerDraftId || ''}
-            onChange={event => {
-              setReaderDraft({ projectId: activeNovel?.id || null, draftId: event.target.value || null })
-              setFinalizedPageIndex(0)
-            }}
-            title="View a finalized draft"
-            aria-label="View a finalized draft"
-          >
-            <option value="">Working draft</option>
-            {finalizedDrafts.map(draft => (
-              <option key={draft.id} value={draft.id}>
-                {decodeHtmlEntities(draft.title) || 'Final draft'}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {isNovelProject && !activeFinalizedDraft && (
-          <button
-            onClick={handleFinaliseDraft}
-            className="ms-toolbar-btn"
-            title="Copy this manuscript into an uneditable reader view"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />
-              <path d="M8 7h8" /><path d="M8 11h6" />
-            </svg>
-            Finalise
-          </button>
-        )}
-
-        {activeFinalizedDraft && (
-          <div className="ms-toolbar-segment" role="group" aria-label="Finalized reader view">
-            <button
-              type="button"
-              className={finalizedReaderView === 'scroll' ? 'is-active' : ''}
-              onClick={() => setFinalizedReaderView('scroll')}
-            >
-              Scroll
-            </button>
-            <button
-              type="button"
-              className={finalizedReaderView === 'pages' ? 'is-active' : ''}
-              onClick={() => {
-                setFinalizedReaderView('pages')
-                setFinalizedPageIndex(0)
-              }}
-            >
-              Pages
-            </button>
+            <span className="ms-topbar-crumb-title">{decodeHtmlEntities(activeFinalizedDraft.title) || 'Final draft'}</span>
           </div>
-        )}
-
-        {/* Search */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setSearchOpen(v => !v)}
-            className={`ms-toolbar-btn${searchOpen ? ' is-active' : ''}`}
-            title="Search and replace across all scenes"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-            Search
-          </button>
-        )}
-
-        {/* Pacing */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setPacingOpen(v => !v)}
-            className={`ms-toolbar-btn${pacingOpen ? ' is-active' : ''}`}
-            title="Pacing chart — word count by scene or chapter"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M8 17V13M12 17v-6M16 17V9" />
-            </svg>
-            Pacing
-          </button>
-        )}
-
-        {/* Notes toggle — duplicates the mobile bottom tab bar's Notes tab, so it's hidden there */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setActiveSidebarTab(v => v === 'notes' ? null : 'notes')}
-            className={`ms-toolbar-btn ms-toolbar-btn-notes${activeSidebarTab === 'notes' ? ' is-active' : ''}`}
-            title="Scene notes"
-          >
-            Notes{activeScene?.notes?.length ? ` (${activeScene.notes.length})` : ''}
-          </button>
-        )}
-
-        {/* AI assistant — duplicates the mobile bottom tab bar's AI tab, so it's hidden there */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setActiveSidebarTab(v => v === 'ai' ? null : 'ai')}
-            className={`ms-toolbar-btn ms-toolbar-btn-ai${activeSidebarTab === 'ai' ? ' is-active' : ''}`}
-            title="AI writing assistant"
-          >
-            <AIStar size={11} />
-            AI
-          </button>
-        )}
-
-        {/* Export */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="ms-toolbar-btn disabled:opacity-50"
-            title={exportTitle}
-          >
-            {exporting ? 'Exporting…' : (
-              <span className="flex items-center gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                {exportButtonLabel}
-              </span>
+          <div className="ms-topbar-zone ms-topbar-zone-mid">
+            <div className="ms-modes" role="group" aria-label="Finalized reader view">
+              <button type="button" className={finalizedReaderView === 'scroll' ? 'is-on' : ''} onClick={() => setFinalizedReaderView('scroll')}>Scroll</button>
+              <button type="button" className={finalizedReaderView === 'pages' ? 'is-on' : ''} onClick={() => { setFinalizedReaderView('pages'); setFinalizedPageIndex(0) }}>Pages</button>
+            </div>
+          </div>
+          <div className="ms-topbar-zone ms-topbar-zone-tools">
+            {finalizedDrafts.length > 1 && (
+              <select
+                className="ms-toolbar-select"
+                value={readerDraftId || ''}
+                onChange={event => {
+                  setReaderDraft({ projectId: activeNovel?.id || null, draftId: event.target.value || null })
+                  setFinalizedPageIndex(0)
+                }}
+                title="View a different finalized draft"
+                aria-label="View a different finalized draft"
+              >
+                {finalizedDrafts.map(draft => (
+                  <option key={draft.id} value={draft.id}>{decodeHtmlEntities(draft.title) || 'Final draft'}</option>
+                ))}
+              </select>
             )}
-          </button>
-        )}
-
-        {/* Fullscreen toggle */}
-        {!activeFinalizedDraft && (
-          <ManuscriptZoomControl
-            pageZoom={focusedWriting.pageZoom}
-            onPageZoomChange={focusedWriting.setPageZoom}
-          />
-        )}
-
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => { setActiveSidebarTab(null); focusedWriting.setEnabled(true) }}
-            className="ms-toolbar-btn"
-            title="Focused writing mode"
-            aria-label="Enter focused writing mode"
-          >
-            Focus
-          </button>
-        )}
-
-        <button
-          onClick={toggleFullscreen}
-          className="ms-toolbar-btn"
-          title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {fullscreen ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M4.5 1.5H1.5v3M7.5 1.5h3v3M4.5 10.5H1.5v-3M7.5 10.5h3v-3" />
-            </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M1.5 4.5V1.5h3M10.5 4.5V1.5h-3M1.5 7.5v3h3M10.5 7.5v3h-3" />
-            </svg>
+          </div>
+        </div>
+      ) : (
+        <ManuscriptTopbar
+          projectTitle={activeNovel?.title}
+          breadcrumbPath={breadcrumbPath}
+          acts={acts}
+          chapters={chapters}
+          scenes={scenes}
+          labels={labels}
+          onSelectScene={handleSelectScene}
+          railCollapsed={railCollapsed}
+          onToggleRail={() => setRailCollapsed(v => !v)}
+          saveState={saveState}
+          wordCount={totalWordCount}
+          aiOpen={surfaceId === 'ai'}
+          onToggleAI={() => handleToggleSurface('ai')}
+          inspectorOpen={inspectorOpen}
+          onToggleInspector={() => setInspectorOpen(v => !v)}
+          onEnterFocus={() => { setInspectorOpen(false); setSurfaceId(null); focusedWriting.setEnabled(true) }}
+          onOverflowAction={handleOverflowAction}
+          conflictCount={sceneConflicts.length}
+          onOpenConflicts={() => setConflictReviewOpen(true)}
+          fullscreen={fullscreen}
+          onToggleFullscreen={toggleFullscreen}
+          zoomControl={<ManuscriptZoomControl pageZoom={focusedWriting.pageZoom} onPageZoomChange={focusedWriting.setPageZoom} />}
+          scriptBetaBadge={isScriptProject && (
+            <span className="ms-toolbar-badge" title="Readable script export is available; industry formatting is still in progress.">
+              Script beta
+            </span>
           )}
-        </button>
-      </div>
+          overflowItemTitles={{ import: importTitle, export: exportTitle }}
+        />
       )}
 
       {/* ── Body: writing area + right sidebar ──────────────── */}
@@ -1028,7 +980,40 @@ export default function Manuscript({ store, userId, membership = null }) {
           />
         </div>
       ) : (
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
+
+        {/* Left rail — hidden during focused writing per spec §5.4 ("the
+            rail, inspector and gutter hide"); the inspector below keeps
+            working there too, though, preserving the old WritingSidebar's
+            focus-mode overlay capability (FocusedWritingShell's own
+            notes/format/ai/status buttons) rather than dropping it ahead of
+            step 8's fuller mode rework. */}
+        {!focusedWriting.enabled && (
+          <ManuscriptRail
+            acts={acts}
+            chapters={chapters}
+            scenes={scenes}
+            addAct={addAct}
+            addChapter={addChapter}
+            addScene={addScene}
+            updateAct={updateAct}
+            updateChapter={updateChapter}
+            updateScene={updateScene}
+            deleteAct={deleteAct}
+            deleteChapter={deleteChapter}
+            deleteScene={deleteScene}
+            moveAct={moveAct}
+            moveChapter={moveChapter}
+            moveScene={moveScene}
+            activeSceneId={activeSceneId}
+            onSelectScene={handleSelectScene}
+            onSelectChapter={handleSelectChapter}
+            labels={labels}
+            totalWordCount={totalWordCount}
+            collapsed={railCollapsed}
+            onToggleCollapsed={() => setRailCollapsed(v => !v)}
+          />
+        )}
 
         {/* Writing area */}
         <main ref={scrollContainerRef} data-tour="manuscript-editor" className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
@@ -1160,16 +1145,16 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onFocus={() => setActiveSceneId(scene.id)}
                         entityMap={entityMap}
                         onEntityClick={handleEntityClick}
-	                        onOpenNotes={() => setActiveSidebarTab('notes')}
+	                        onOpenNotes={handleOpenNotesInspector}
 	                        onNoteClick={handleNoteClick}
 	                        highlightedNoteSeq={highlightedNoteSeq}
 	                        formatSettings={formatSettings}
-                        characterNames={characterNames}
-                        locationNames={locationNames}
                         onPersistDraft={handlePersistDraft}
                         onLiveContentChange={handleLiveContentChange}
                         onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
-                        onOpenVersionHistory={setVersionHistorySceneId}
+                        onOpenVersionHistory={id => { setVersionHistorySceneId(id); handleToggleSurface('history') }}
+                        onOpenSceneDetails={handleOpenSceneDetails}
+                        onAskAI={handleAskAI}
                         projectType={activeNovel?.type || 'novel'}
                         // Reverted: enabling the continuous per-keystroke comfort-scroll
                         // (useCaretComfortScroll's 'input'-driven centering) for the regular
@@ -1181,7 +1166,7 @@ export default function Manuscript({ store, userId, membership = null }) {
                         caretFollowEnabled={focusedWriting.enabled && focusedWriting.caretFollow}
                         scrollContainerRef={scrollContainerRef}
                         pageZoom={focusedWriting.pageZoom}
-                        keepEditingOnExternalBlur={activeSidebarTab === 'ai'}
+                        keepEditingOnExternalBlur={surfaceId === 'ai'}
                       />
                     </SceneSlot>
 
@@ -1204,67 +1189,74 @@ export default function Manuscript({ store, userId, membership = null }) {
           </div>
         </main>
 
-        {/* Right writing sidebar */}
-        <WritingSidebar
-          focusedMode={focusedWriting.enabled}
-          activePanelId={activeSidebarTab}
-          onSetPanel={setActiveSidebarTab}
-          acts={acts}
-          chapters={chapters}
-          scenes={scenes}
-          addAct={addAct}
-          addChapter={addChapter}
-          addScene={addScene}
-          updateAct={updateAct}
-          updateChapter={updateChapter}
-          updateScene={updateScene}
-          deleteAct={deleteAct}
-          deleteChapter={deleteChapter}
-          deleteScene={deleteScene}
-          moveAct={moveAct}
-          moveChapter={moveChapter}
-          moveScene={moveScene}
-          activeSceneId={activeSceneId}
-          onSelectScene={handleSelectScene}
-          onSelectChapter={handleSelectChapter}
-          labels={labels}
-          totalWordCount={totalWordCount}
-          writingGoals={writingGoals}
-          onUpdateGoals={handleUpdateGoals}
+        {/* Inspector — Scene/Notes/Format/Progress. Not gated on focus mode
+            (see the rail comment above): FocusedWritingShell's own
+            notes/format/status/ai buttons still need somewhere to open. */}
+        {inspectorOpen && (
+          <ManuscriptInspector
+            activeTab={inspectorTab}
+            onSetTab={setInspectorTab}
+            onClose={() => setInspectorOpen(false)}
+            scene={activeScene}
+            onUpdateScene={updateScene}
+            characterNames={characterNames}
+            locationNames={locationNames}
+            entityMap={entityMap}
+            onEntityClick={handleEntityClick}
+            highlightedNoteSeq={highlightedNoteSeq}
+            formatSettings={formatSettings}
+            onFormatChange={handleFormatChange}
+            scenes={scenes}
+            chapters={chapters}
+            writingGoals={writingGoals}
+            onUpdateGoals={handleUpdateGoals}
+          />
+        )}
+
+        {/* Surface — AI/Search/History/Finalise, one at a time, overlays the
+            inspector (absolutely positioned — this is why the row above got
+            `relative`). Not gated on focus mode either: AI stays reachable
+            there via FocusedWritingShell's own AI button. */}
+        <ManuscriptSurface
+          activeSurface={surfaceId}
+          onClose={handleCloseSurface}
+          contextLabel={activeScene ? (activeScene.title && activeScene.title !== 'Scene' ? activeScene.title : labels.level3) : undefined}
+          activeScene={activeSceneForAI}
           activeNovel={activeNovel}
           characters={characters}
           locations={locations}
-          loreEntries={loreEntries}
-          factions={factions}
-          timeline={timeline}
-          worldHistory={worldHistory}
-          ideaEntries={ideaEntries}
-          storySchedule={storySchedule}
-          rpgCharacters={rpgCharacters}
-          onOpenReferenceEntry={handleOpenReferenceEntry}
-          formatSlot={<FormatContent settings={formatSettings} onChange={handleFormatChange} />}
-          notesSlot={
-            <NotesPanel
-	              scene={activeScene}
-	              onUpdateScene={updateScene}
-	              highlightedSeq={highlightedNoteSeq}
-	            />
-          }
-	          aiSlot={
-	            <AISuggestionPanel
-	              activeScene={activeSceneForAI}
-	              activeNovel={activeNovel}
-	              characters={characters}
-	              locations={locations}
-	              selectedText={activeAISelectionText}
-	              onAppendToScene={handleAppendToScene}
-	              userId={userId}
-	              membership={membership}
-            />
-          }
+          selectedText={activeAISelectionText}
+          onAppendToScene={handleAppendToScene}
+          userId={userId}
+          membership={membership}
+          scenes={scenes}
+          chapters={chapters}
+          acts={acts}
+          activeNovelId={activeNovel?.id}
+          onOpenScene={handleSelectScene}
+          onReplaceInScene={handleReplaceInScene}
+          historyScene={scenes.find(s => s.id === versionHistorySceneId) ?? null}
+          onRestoreVersion={handleRestoreVersion}
+          labels={labels}
+          finaliseStats={manuscriptCopyStats}
+          isNovelProject={isNovelProject}
+          finalizedDrafts={finalizedDrafts}
+          onFinalise={handleFinaliseDraft}
+          onOpenFinalizedDraft={(draftId) => {
+            setReaderDraft({ projectId: activeNovel?.id || null, draftId })
+            setFinalizedReaderView('pages')
+            setFinalizedPageIndex(0)
+            handleCloseSurface()
+          }}
+          onOpenCatalogue={() => setCatalogueOpen(true)}
+          onExport={handleExport}
+          exporting={exporting}
+          exportButtonLabel={exportButtonLabel}
+          onToast={toast}
         />
       </div>
       )}
+      {toastNode}
 
       {/* Template modal */}
       {templateModalOpen && (
@@ -1295,27 +1287,9 @@ export default function Manuscript({ store, userId, membership = null }) {
         />
       )}
 
-      {/* Version history modal */}
-      {versionHistorySceneId && (
-        <SceneVersionHistory
-          scene={scenes.find(s => s.id === versionHistorySceneId) ?? null}
-          onRestore={handleRestoreVersion}
-          onClose={() => setVersionHistorySceneId(null)}
-        />
-      )}
-
-      {/* Global search & replace */}
-      {searchOpen && (
-        <ManuscriptSearch
-          scenes={scenes}
-          chapters={chapters}
-          acts={acts}
-          activeNovelId={activeNovel?.id}
-          onOpenScene={handleSelectScene}
-          onReplaceInScene={handleReplaceInScene}
-          onClose={() => setSearchOpen(false)}
-        />
-      )}
+      {/* Version history and Search & replace are no longer separate modals —
+          both now render embedded inside ManuscriptSurface above
+          (surfaceId === 'history' / 'search'), sharing its chrome. */}
 
       {/* Pacing chart */}
       {pacingOpen && (

@@ -1,7 +1,10 @@
 import { SaveIndicator } from './ManuscriptToolbar.jsx'
 
+// 'structure' dropped — that panel is the rail now (ManuscriptRail.jsx),
+// which has no presence in focus mode to begin with. 'status' stays as the
+// id this component and its CONTROLS bar use; Manuscript.jsx's adapter maps
+// it onto the inspector's 'progress' tab (its post-redesign name).
 const CONTROLS = [
-  ['structure', 'Structure'],
   ['notes', 'Notes'],
   ['format', 'Format'],
   ['ai', 'AI'],
