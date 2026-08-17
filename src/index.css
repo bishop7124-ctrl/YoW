@@ -14631,6 +14631,292 @@ body {
   background: var(--accent-fade);
 }
 
+/* ─── ManuscriptRail (redesign) — left rail lifted from StructureSidebar, now a
+   sibling of <main> instead of a panel inside the right sidebar. Collapses to a
+   44px "spine" of ticks. See docs/design/Manuscript Editor Handoff Spec.md §4. ── */
+
+.ms-rail {
+  --ms-rail-w: 268px;
+  width: var(--ms-rail-w);
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-nav);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: width 0.18s ease;
+}
+.ms-rail.is-collapsed { width: 44px; }
+
+.ms-rail-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 12px 8px;
+  flex-shrink: 0;
+}
+.ms-rail.is-collapsed .ms-rail-h { justify-content: center; padding: 12px 0 0; }
+.ms-rail-h-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 700;
+}
+.ms-rail.is-collapsed .ms-rail-h-label { display: none; }
+.ms-rail-h-words {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ms-rail-collapse-btn { margin-left: auto; }
+.ms-rail.is-collapsed .ms-rail-collapse-btn { margin: 0; }
+
+.ms-rail-icon-btn {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-rail-icon-btn:hover { background: var(--accent-fade); color: var(--accent-text); }
+
+/* ── Collapsed spine ── */
+.ms-rail-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 14px 0;
+  overflow: hidden;
+  flex: 1;
+}
+.ms-rail-spine-tick {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ms-rail-spine-tick:hover { background: var(--text-faint); }
+.ms-rail-spine-tick.is-active { background: var(--accent); width: 20px; }
+
+/* ── Tree ── */
+.ms-rail-tree { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+
+.ms-rail-act { margin-top: 10px; }
+.ms-rail-act:first-child { margin-top: 0; }
+.ms-rail-act-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.ms-rail-act-h.is-dragging { opacity: 0.4; }
+.ms-rail-act-btn {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ms-rail-act-btn:hover { color: var(--text-main); }
+.ms-rail-act-n {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.ms-rail-act-h:hover .ms-rail-act-n { margin-right: 4px; }
+
+.ms-rail-chapters.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: var(--r-sm); }
+
+.ms-rail-chapter { margin: 2px 0 6px; }
+.ms-rail-chapter-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.ms-rail-chapter-h:hover { background: var(--bg-hover); }
+.ms-rail-chapter-h.is-dragging { opacity: 0.4; }
+.ms-rail-caret { color: var(--text-faint); background: none; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; transition: transform 0.15s; flex-shrink: 0; }
+.ms-rail-chapter-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.ms-rail-chapter-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ms-rail-chapter-n { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--text-faint); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+.ms-rail-scenes {
+  display: flex;
+  flex-direction: column;
+  padding-left: 8px;
+  margin-left: 11px;
+  border-left: 1px solid var(--border);
+}
+.ms-rail-scenes.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+.ms-rail-addrow { display: flex; justify-content: center; height: 6px; margin: 0 8px; opacity: 0; transition: opacity 0.12s; }
+.ms-rail-addrow:hover, .ms-rail-scenes:hover .ms-rail-addrow { opacity: 1; }
+.ms-rail-addrow-end { height: auto; opacity: 1; margin: 2px 0 0; }
+.ms-rail-addrow button {
+  height: 16px;
+  margin-top: -5px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-faint);
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ms-rail-addrow-end button {
+  height: 22px;
+  margin-top: 2px;
+  width: 100%;
+  justify-content: center;
+  border-style: dashed;
+}
+.ms-rail-addrow button:hover { color: var(--accent-text); border-color: var(--accent); }
+
+.ms-rail-scene {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.ms-rail-scene:hover { background: var(--bg-hover); color: var(--text-main); }
+.ms-rail-scene.is-active { background: var(--accent-fade); color: var(--accent-text); font-weight: 600; }
+.ms-rail-scene.is-dragging { opacity: 0.35; }
+.ms-rail-scene-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.ms-rail-sq { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto; cursor: pointer; }
+.ms-rail-scene-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-rail-scene-words { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.ms-rail-row-actions { display: none; align-items: center; gap: 1px; flex-shrink: 0; }
+.ms-rail-act-h:hover .ms-rail-row-actions,
+.ms-rail-act-h:focus-within .ms-rail-row-actions,
+.ms-rail-chapter-h:hover .ms-rail-row-actions,
+.ms-rail-chapter-h:focus-within .ms-rail-row-actions,
+.ms-rail-scene:hover .ms-rail-row-actions,
+.ms-rail-scene:focus-within .ms-rail-row-actions {
+  display: flex;
+}
+.ms-rail-row-actions .ms-rail-icon-btn { width: 20px; height: 20px; }
+.ms-rail-delete-btn:hover { color: var(--danger, #ef4444); background: color-mix(in srgb, var(--danger, #ef4444) 14%, transparent); }
+
+.ms-rail-grip {
+  display: none;
+  color: var(--text-faint);
+  cursor: grab;
+  flex-shrink: 0;
+  align-items: center;
+}
+.ms-rail-act-h:hover .ms-rail-grip,
+.ms-rail-chapter-h:hover .ms-rail-grip,
+.ms-rail-scene:hover .ms-rail-grip {
+  display: flex;
+}
+
+.ms-rail-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  color: var(--text-main);
+  font: inherit;
+  padding: 0;
+}
+
+.ms-rail-dropzone {
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+  margin: 2px 0;
+}
+
+.ms-rail-f { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.ms-rail-f-btn {
+  flex: 1 1 72px;
+  justify-content: center;
+  white-space: nowrap;
+  padding: 7px 8px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.ms-rail-f-btn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent); background: var(--accent-fade); }
+.ms-rail-f-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Mobile (≤900px) off-canvas sheet behaviour lands in step 7 (responsive bands) —
+   deliberately not guessed at here since it needs a railSheetOpen state distinct
+   from the desktop collapsed/spine toggle above. */
+
 /* ─── Scene virtualization placeholder (see useSceneWindow.js / Manuscript.jsx's
    SceneSlot) — a scene scrolled far enough out of view renders this instead of a real
    SceneEditor. Deliberately minimal: no entity highlighting or markdown rendering, just
