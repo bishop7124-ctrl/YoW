@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SaveIndicator } from './ManuscriptToolbar.jsx'
 import AIStar from '../ai/AIStar'
 
@@ -23,7 +23,15 @@ const MODES = [
   { id: 'final', label: 'Finalised' },
 ]
 
-const OVERFLOW_SECTIONS = [
+// A function (not a static array) so the Fullscreen label can reflect current
+// state, and Import/Export can carry the same dynamic, project-type-aware
+// help text the old toolbar's title attributes had (script projects get
+// different wording) — `itemTitles` is an optional {id: string} map merged
+// onto each item's `title` field. `fullscreen` isn't in the spec's overflow
+// list, but the old toolbar's working fullscreen toggle has to land
+// *somewhere*, and burying it in "View" here is lower-cost than inventing a
+// new always-visible button the spec's three-zone layout doesn't have room for.
+const buildOverflowSections = (fullscreen, itemTitles = {}) => [
   {
     heading: 'Find',
     items: [
@@ -36,7 +44,7 @@ const OVERFLOW_SECTIONS = [
     items: [
       { id: 'pacing', label: 'Pacing chart' },
       { id: 'template', label: 'Apply a template' },
-      { id: 'import', label: 'Import a document' },
+      { id: 'import', label: 'Import a document', title: itemTitles.import },
       { id: 'history', label: 'Version history' },
     ],
   },
@@ -44,8 +52,14 @@ const OVERFLOW_SECTIONS = [
     heading: 'Finish',
     items: [
       { id: 'finalise', label: 'Finalise draft' },
-      { id: 'export', label: 'Export…', kbd: '⌘E' },
+      { id: 'export', label: 'Export…', kbd: '⌘E', title: itemTitles.export },
       { id: 'catalogue', label: 'Retired drafts' },
+    ],
+  },
+  {
+    heading: 'View',
+    items: [
+      { id: 'fullscreen', label: fullscreen ? 'Exit fullscreen' : 'Fullscreen' },
     ],
   },
 ]
@@ -116,7 +130,7 @@ function GoToScenePalette({ onClose, acts, chapters, scenes, labels, onSelectSce
 
 // ─── Overflow menu ──────────────────────────────────────────────────────────
 
-function OverflowMenu({ open, onClose, onAction }) {
+function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
   const ref = useRef(null)
   useEffect(() => {
     if (!open) return undefined
@@ -126,13 +140,14 @@ function OverflowMenu({ open, onClose, onAction }) {
   }, [open, onClose])
 
   if (!open) return null
+  const sections = buildOverflowSections(fullscreen, itemTitles)
   return (
     <div className="ms-topbar-menu" ref={ref} role="menu">
-      {OVERFLOW_SECTIONS.map(section => (
+      {sections.map(section => (
         <div key={section.heading}>
           <div className="ms-topbar-menu-h">{section.heading}</div>
           {section.items.map(item => (
-            <button key={item.id} type="button" className="ms-topbar-menu-i" onClick={() => { onAction(item.id); onClose() }}>
+            <button key={item.id} type="button" className="ms-topbar-menu-i" title={item.title} onClick={() => { onAction(item.id); onClose() }}>
               {item.label}
               {item.kbd && <kbd>{item.kbd}</kbd>}
             </button>
@@ -158,9 +173,24 @@ export default function ManuscriptTopbar({
   onOverflowAction,
   conflictCount = 0,
   onOpenConflicts,
+  fullscreen, onToggleFullscreen,
+  zoomControl,
+  scriptBetaBadge,
+  overflowItemTitles,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [gotoOpen, setGotoOpen] = useState(false)
+
+  // 'goto-scene' opens this component's own local palette state and
+  // 'fullscreen' calls the dedicated toggle prop, rather than bubbling to
+  // onOverflowAction like every other item — Manuscript.jsx owns fullscreen
+  // state (this component only renders the current label) and never sees
+  // the palette's open state at all.
+  const handleOverflowAction = useCallback((actionId) => {
+    if (actionId === 'goto-scene') { setGotoOpen(true); return }
+    if (actionId === 'fullscreen') { onToggleFullscreen?.(); return }
+    onOverflowAction?.(actionId)
+  }, [onOverflowAction, onToggleFullscreen])
 
   return (
     <>
@@ -191,6 +221,7 @@ export default function ManuscriptTopbar({
         </div>
 
         <div className="ms-topbar-zone ms-topbar-zone-mid">
+          {scriptBetaBadge}
           <span className="ms-topbar-status">
             <span className="ms-topbar-dot" />
             <SaveIndicator state={saveState} />
@@ -206,6 +237,7 @@ export default function ManuscriptTopbar({
         </div>
 
         <div className="ms-topbar-zone ms-topbar-zone-tools">
+          {zoomControl}
           <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
             <AIStar size={13} /> AI
           </button>
@@ -227,7 +259,13 @@ export default function ManuscriptTopbar({
             <button type="button" className="ms-topbar-iconbtn" onClick={() => setMenuOpen(v => !v)} title="More" aria-haspopup="menu" aria-expanded={menuOpen}>
               <MoreIcon />
             </button>
-            <OverflowMenu open={menuOpen} onClose={() => setMenuOpen(false)} onAction={onOverflowAction} />
+            <OverflowMenu
+              open={menuOpen}
+              onClose={() => setMenuOpen(false)}
+              onAction={handleOverflowAction}
+              fullscreen={fullscreen}
+              itemTitles={overflowItemTitles}
+            />
           </div>
         </div>
       </header>
