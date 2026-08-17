@@ -14917,6 +14917,184 @@ body {
    deliberately not guessed at here since it needs a railSheetOpen state distinct
    from the desktop collapsed/spine toggle above. */
 
+/* ─── ManuscriptInspector (redesign) — one four-tab panel (Scene, Notes, Format,
+   Progress) replacing WritingSidebar's six-tab strip + separate panel chrome.
+   See docs/design/Manuscript Editor Handoff Spec.md §4. ─────────────────────── */
+
+.ms-insp {
+  --ms-insp-w: 320px;
+  width: var(--ms-insp-w);
+  flex: 0 0 auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-nav);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ms-insp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ms-insp-tabs button {
+  flex: 1;
+  padding: 7px 4px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-insp-tabs button:hover { background: var(--bg-hover); color: var(--text-main); }
+.ms-insp-tabs button.is-on { background: var(--accent-fade); color: var(--accent-text); font-weight: 700; }
+.ms-insp-close {
+  flex: 0 0 auto !important;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.ms-insp-close:hover { background: var(--bg-hover); color: var(--text-main); }
+
+.ms-insp-body { flex: 1; overflow-y: auto; }
+.ms-insp-scroll { padding: 16px; }
+.ms-insp-empty { padding: 28px 16px; text-align: center; font-size: 12px; color: var(--text-faint); }
+
+.ms-insp-group { margin-bottom: 22px; }
+.ms-insp-group:last-child { margin-bottom: 0; }
+.ms-insp-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+.ms-insp-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ms-opt {
+  padding: 6px 11px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.ms-opt:hover { border-color: var(--border-strong); color: var(--text-main); }
+.ms-opt.is-on { background: var(--accent-fade); border-color: transparent; color: var(--accent-text); font-weight: 700; }
+
+.ms-insp-field { display: block; margin-bottom: 12px; }
+.ms-insp-field span { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.ms-insp-field input,
+.ms-insp-field textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font: 13px var(--font);
+}
+.ms-insp-field textarea { border-radius: var(--r-md); resize: vertical; min-height: 60px; }
+.ms-insp-field input:focus, .ms-insp-field textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 0;
+  cursor: pointer;
+}
+.ms-chip:hover { color: var(--text-main); background: var(--accent-fade); }
+
+.ms-insp-reset {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  width: 100%;
+  text-align: left;
+}
+.ms-insp-reset:hover { color: var(--accent-text); }
+
+/* ── Progress tab ── */
+.ms-insp-goal { margin-bottom: 22px; }
+.ms-insp-goal-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.ms-insp-goal-top b { font-size: 24px; line-height: 1; font-weight: 700; color: var(--text-main); }
+.ms-insp-goal-top small { color: var(--text-muted); font-size: 12px; }
+.ms-insp-goal-top button {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent-text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ms-insp-goal-input {
+  margin-left: auto;
+  width: 64px;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 12px;
+}
+.ms-insp-bar { height: 7px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+.ms-insp-bar > div { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.2s ease; }
+.ms-insp-goal-meta { display: flex; justify-content: space-between; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--text-faint); }
+
+.ms-insp-spark { display: flex; align-items: flex-end; gap: 5px; height: 44px; margin: 10px 0 4px; }
+.ms-insp-spark-bar { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--bg-hover); }
+.ms-insp-spark-bar.is-now { background: var(--accent); }
+.ms-insp-spark-x { display: flex; gap: 5px; font-size: 10px; color: var(--text-faint); }
+.ms-insp-spark-x span { flex: 1; text-align: center; }
+
+.ms-insp-tgt { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 12px; }
+.ms-insp-tgt b { font-weight: 600; color: var(--text-main); }
+.ms-insp-tgt-n {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ms-insp-tgt-n:hover { color: var(--accent-text); }
+
+@media (min-width: 901px) and (max-width: 1250px) {
+  .ms-insp { width: min(320px, 34vw); }
+}
+
 /* ─── Scene virtualization placeholder (see useSceneWindow.js / Manuscript.jsx's
    SceneSlot) — a scene scrolled far enough out of view renders this instead of a real
    SceneEditor. Deliberately minimal: no entity highlighting or markdown rendering, just
