@@ -140,7 +140,7 @@ function stripNoteMarkers(content) {
 
 function parseSegments(content, entityNames, entityMap, notes = []) {
   if (!content) return []
-  const tokens = []
+  const entityTokens = []
 
   if (entityNames.length > 0) {
     const escaped = entityNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -148,34 +148,48 @@ function parseSegments(content, entityNames, entityMap, notes = []) {
     let m
     while ((m = ep.exec(content)) !== null) {
       const key = Object.keys(entityMap).find(k => k.toLowerCase() === m[1].toLowerCase())
-      if (key) tokens.push({ type: 'entity', start: m.index, end: m.index + m[1].length, value: m[1], entity: entityMap[key] })
+      if (key) entityTokens.push({ type: 'entity', start: m.index, end: m.index + m[1].length, value: m[1], entity: entityMap[key] })
     }
   }
-
-  for (const note of notes) {
-    const start = Math.max(0, Math.min(note.anchorOffset ?? content.length, content.length))
-    tokens.push({ type: 'note', start, end: start, seq: note.seq })
+  entityTokens.sort((a, b) => a.start - b.start)
+  const filteredEntities = []
+  let entityLastEnd = 0
+  for (const t of entityTokens) {
+    if (t.start >= entityLastEnd) { filteredEntities.push(t); entityLastEnd = t.end }
   }
 
+  const noteTokens = []
+  for (const note of notes) {
+    const start = Math.max(0, Math.min(note.anchorOffset ?? content.length, content.length))
+    noteTokens.push({ type: 'note', start, end: start, seq: note.seq })
+  }
   NOTE_MARKER_RE.lastIndex = 0
   let m
   while ((m = NOTE_MARKER_RE.exec(content)) !== null) {
-    tokens.push({ type: 'note', start: m.index, end: m.index + m[0].length, seq: parseInt(m[1], 10) })
+    noteTokens.push({ type: 'note', start: m.index, end: m.index + m[0].length, seq: parseInt(m[1], 10) })
   }
 
-  tokens.sort((a, b) => a.start - b.start)
-  const filtered = []
-  let lastEnd = 0
-  for (const t of tokens) {
-    if (t.start >= lastEnd) { filtered.push(t); lastEnd = t.end }
-  }
+  // Notes are zero-width (a caret position, not a text range) and always win
+  // a tie against an entity match starting at that exact position — the old
+  // single merged-and-filtered pass silently dropped a note anchored right
+  // at an entity match's start (e.g. a note added before the very first
+  // word, when that word is also a character name), since the entity's
+  // wider span "won" the overlap check first. A note anchored a few
+  // characters *inside* an entity match (rather than exactly at its start)
+  // can still be dropped by the `continue` below — splitting the entity
+  // token around it would fix that too, but that's a rarer case than "added
+  // at the start of a sentence/scene" and not worth the extra complexity
+  // here.
+  const allTokens = [...filteredEntities, ...noteTokens]
+    .sort((a, b) => a.start - b.start || (a.type === 'note' ? -1 : 1))
 
   const segs = []
   let pos = 0
-  for (const t of filtered) {
+  for (const t of allTokens) {
+    if (t.start < pos) continue
     if (t.start > pos) segs.push({ type: 'text', value: content.slice(pos, t.start), start: pos, end: t.start })
     segs.push(t)
-    pos = t.end
+    pos = Math.max(pos, t.end)
   }
   if (pos < content.length) segs.push({ type: 'text', value: content.slice(pos), start: pos, end: content.length })
   return segs
@@ -266,6 +280,7 @@ const ContentPreview = ({
   content, entityMap, notesBySeq, highlightedNoteSeq,
   onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes,
   isBullets, isScript, scriptBlocks, scriptElement, projectType,
+  mode = 'edit',
 }) => {
   const entityNames = useMemo(
     () => Object.keys(entityMap).sort((a, b) => b.length - a.length),
@@ -316,6 +331,11 @@ const ContentPreview = ({
           <span key={i} className="ms-entity" data-raw-start={seg.start} data-raw-end={seg.end} onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
         )
         if (seg.type === 'note') {
+          // Write mode: notes exist only as this inline box. Edit mode: notes
+          // exist only as the gutter's floating icon (rendered by the parent,
+          // see .ms-scene-gutter below) — skip the anchor here entirely
+          // rather than show both at once.
+          if (mode !== 'write') return null
           const note = notesBySeq.get(seg.seq)
           if (!note) return null
           return (
@@ -339,6 +359,14 @@ const ContentPreview = ({
 // SceneMetaBar (POV/location/status inline row) was removed here — those
 // fields now live in the inspector's Scene tab (ManuscriptInspector.jsx); the
 // status chip alone stays inline in the scene header below.
+
+// Edit mode's gutter icon — a comment bubble, always visible per note rather
+// than only on hover, matching Write mode's always-visible inline box below.
+const NoteIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+  </svg>
+)
 
 const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDelete, onOpen }) => (
   <details
@@ -1069,7 +1097,13 @@ const SceneEditorImpl = ({
 	      notes: [...(scene.notes || []), nextNote],
 	    })
 	    focusRange(start)
-	  }, [scene, localContent, focusRange, onUpdateScene])
+	    // Write mode shows the new note inline (defaultOpen text-less <details>
+	    // right in the flow), so the cursor can stay put. Edit mode no longer
+	    // renders that inline box at all (gutter icon only, see ContentPreview
+	    // below) — open the inspector's Notes tab so there's somewhere to
+	    // actually type the text.
+	    if (mode !== 'write') onOpenNotes()
+	  }, [scene, localContent, focusRange, onUpdateScene, mode, onOpenNotes])
 
 	  const handleUpdateNote = useCallback((noteId, text) => {
 	    onUpdateScene(scene.id, {
@@ -1264,12 +1298,15 @@ const SceneEditorImpl = ({
         </div>
       </div>
 
-      {/* Prose column (620px) + note gutter (188px) — spec §4/§5.3. The
-          gutter shows a card per note in document order rather than
-          pixel-aligned to its exact line: measuring each note mark's
-          offsetTop against the prose column would mean a layout read in
-          the scene render path, exactly what useSceneWindow's
-          virtualization exists to avoid across dozens of mounted scenes.
+      {/* Prose column (620px) + note gutter (188px) — spec §4/§5.3, refined
+          per a later note: Edit and Write never show a note the same way at
+          once. Edit shows a floating icon per note in the gutter, always
+          visible, in document order rather than pixel-aligned to its exact
+          line (measuring each note mark's offsetTop against the prose
+          column would mean a layout read in the scene render path, exactly
+          what useSceneWindow's virtualization exists to avoid across dozens
+          of mounted scenes). Write shows the note only as the inline box,
+          anchored right in the text, and never renders the gutter at all.
           Container-query drop-out (per the handoff spec, not a viewport
           media query) lands in step 7 once the scroll container gets
           `container-type: inline-size`; a plain breakpoint covers it in
@@ -1277,7 +1314,7 @@ const SceneEditorImpl = ({
       <div className={`ms-scene-body${!isScript && sortedNotes.length > 0 && mode !== 'write' ? ' has-gutter' : ''}${mode === 'write' ? ' ms-scene-body--write' : ''}`}>
         <div className="ms-scene-prose-col">
 	      {focused ? (
-	        !isScript && sortedNotes.length > 0 ? (
+	        !isScript && sortedNotes.length > 0 && mode === 'write' ? (
 	          <div className="ms-block-editor">
 	            {writingBlocks.map(block => {
 	              if (block.type === 'note') {
@@ -1354,6 +1391,7 @@ const SceneEditorImpl = ({
             scriptBlocks={localScriptBlocks.length ? localScriptBlocks : scene.scriptBlocks}
             scriptElement={scriptElement}
             projectType={projectType}
+            mode={mode}
           />
 	        </div>
 	      )}
@@ -1365,11 +1403,12 @@ const SceneEditorImpl = ({
               <button
                 key={note.id}
                 type="button"
-                className={`ms-gutter-note${highlightedNoteSeq === note.seq ? ' is-highlighted' : ''}`}
+                className={`ms-gutter-note-icon${highlightedNoteSeq === note.seq ? ' is-highlighted' : ''}${note.text ? ' has-text' : ''}`}
                 onClick={() => { onNoteClick(note.seq); onOpenNotes() }}
+                title={note.text || `Note ${note.seq} — click to add text`}
+                aria-label={`Note ${note.seq}${note.text ? `: ${note.text}` : ' (empty)'}`}
               >
-                <b>Note {note.seq}</b>
-                <span>{note.text || 'Empty note — click to add text'}</span>
+                <NoteIcon />
               </button>
             ))}
           </div>
@@ -1388,17 +1427,16 @@ const SceneEditorImpl = ({
 	            className="ms-selbar font-sans"
 	            style={{ top: floatingNotePos.top, [floatingNotePos.side]: -36 }}
 	          >
-	            {/* Notes are an editing tool, not in Write — spec §5.4/§8's
-	                mode table gives Write's selection bar formatting only. */}
-	            {mode !== 'write' && (
-	              <>
-	                <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>
-	                {onAskAI && (
-	                  <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onAskAI(scene.id)} title="Ask AI about this selection">Ask AI</button>
-	                )}
-	                <span className="ms-selbar-sep" />
-	              </>
+	            {/* Note stays available in every mode -- Write just shows it
+	                inline instead of via the gutter (see handleAddNote/
+	                ContentPreview above). Ask AI is still an editing-tool-only
+	                affordance per spec §5.4/§8: Write's selection bar otherwise
+	                offers formatting only. */}
+	            <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>
+	            {mode !== 'write' && onAskAI && (
+	              <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onAskAI(scene.id)} title="Ask AI about this selection">Ask AI</button>
 	            )}
+	            <span className="ms-selbar-sep" />
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} title="Bold (Ctrl+B)"><b>B</b></button>
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} title="Italic (Ctrl+I)"><em>I</em></button>
 	          </div>
