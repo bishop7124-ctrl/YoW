@@ -15315,6 +15315,95 @@ body {
   .ms-topbar-zone-mid { display: none; }
 }
 
+/* ─── ManuscriptSurface (redesign) — one full-height right panel (AI, Search,
+   History, Finalise), one at a time, overlaying the inspector rather than
+   pushing the prose column. See handoff spec §4-5.1.
+   Requires a `position: relative` ancestor to anchor against (the body row
+   that holds the rail/sheet/inspector, not the whole page) — added when this
+   is wired into Manuscript.jsx's markup, not here. ─────────────────────────*/
+
+.ms-surface {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(520px, 100%);
+  background: var(--bg-raise);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+.ms-surface-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ms-surface-header b { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; color: var(--text-main); }
+.ms-surface-context { margin-left: auto; }
+.ms-surface-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
+.ms-surface-scroll { padding: 16px; flex: 1; }
+
+.ms-surface-card { padding: 14px; border-radius: var(--r-md); background: var(--bg-main); border: 1px solid var(--border); margin-bottom: 16px; }
+.ms-surface-card h4 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.ms-surface-card p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-main); }
+.ms-surface-card-actions { display: flex; gap: 6px; margin-top: 12px; }
+
+.ms-surface-group { margin-bottom: 20px; }
+
+/* ── ManuscriptSearch / SceneVersionHistory embedded (no fixed overlay) ── */
+.ms-search-panel--embedded,
+.ms-vh-panel--embedded {
+  position: static;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 900px) {
+  .ms-surface { width: 100%; border-left: 0; }
+}
+
+/* ─── Toast (redesign) — see Toast.jsx. One line, one Undo, 5s. ─────────────── */
+.ms-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 14px);
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 10px 10px 16px;
+  border-radius: 999px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text-main);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s, transform 0.16s;
+}
+.ms-toast.is-on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.ms-toast button {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-text);
+  background: var(--accent-fade);
+  border: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ─── Scene virtualization placeholder (see useSceneWindow.js / Manuscript.jsx's
    SceneSlot) — a scene scrolled far enough out of view renders this instead of a real
    SceneEditor. Deliberately minimal: no entity highlighting or markdown rendering, just
