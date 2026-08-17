@@ -1853,6 +1853,33 @@ textarea:focus {
   background: color-mix(in srgb, var(--accent-fade) 52%, var(--bg-nav));
 }
 
+/* Selection bar (redesign) — replaces the floating "+" note button while a
+   real (non-collapsed) selection is active. See SceneEditor.jsx. */
+.ms-selbar {
+  position: absolute;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+.ms-selbar button {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ms-selbar button:hover { background: var(--accent-fade); color: var(--accent-text); }
+.ms-selbar-sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+
 .ms-inline-notes {
   display: grid;
   gap: 8px;
@@ -15443,6 +15470,106 @@ body {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+}
+
+/* Redesign: one-line header (number · title · status, hover-reveal cluster) —
+   see SceneEditor.jsx's return. Reuses .ms-meta-chip/.ms-meta-dot/.ms-meta-words
+   above for the status chip / secondary buttons / word count, so those stay
+   visually identical to before. */
+.ms-scene-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ms-scene-n {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.ms-scene-title-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ms-scene-title-btn:hover { color: var(--accent-text); }
+.ms-scene-header-hover {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.group\/scene:hover .ms-scene-header-hover,
+.group\/scene:focus-within .ms-scene-header-hover,
+.ms-scene-header.is-visible .ms-scene-header-hover {
+  opacity: 1;
+}
+
+/* Prose column (620px) + note gutter (188px) — see SceneEditor.jsx. */
+.ms-scene-body {
+  display: grid;
+  grid-template-columns: minmax(0, 620px);
+  gap: 0 28px;
+  align-items: start;
+}
+.ms-scene-body.has-gutter {
+  grid-template-columns: minmax(0, 620px) 188px;
+}
+.ms-scene-prose-col { grid-column: 1; min-width: 0; }
+.ms-scene-gutter { grid-column: 2; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+
+.ms-gutter-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 6px 9px;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-fade);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  cursor: pointer;
+  overflow: hidden;
+}
+.ms-gutter-note span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ms-gutter-note b {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.ms-gutter-note:hover { color: var(--accent-text); }
+.ms-gutter-note.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Placeholder viewport fallback — step 7 replaces this with a container
+   query on the writing column per the handoff spec (a container query needs
+   `container-type: inline-size` on the scroll container, added then). */
+@media (max-width: 900px) {
+  .ms-scene-body.has-gutter { grid-template-columns: minmax(0, 620px); }
+  .ms-scene-gutter { display: none; }
 }
 
 .ms-scene-meta {

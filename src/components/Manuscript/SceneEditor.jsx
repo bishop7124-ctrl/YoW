@@ -336,68 +336,9 @@ const ContentPreview = ({
   )
 }
 
-// ─── Scene metadata bar ───────────────────────────────────────────────────────
-
-const SceneMetaBar = ({ scene, onUpdate, characterNames, locationNames }) => {
-  const status = scene.status || 'draft'
-  const statusCfg = SCENE_STATUSES.find(s => s.value === status) ?? SCENE_STATUSES[0]
-
-  return (
-    <div className="ms-scene-meta font-sans">
-      {/* Status chip */}
-      <button
-        className="ms-meta-chip ms-meta-status"
-        onClick={() => onUpdate({ status: nextStatus(status) })}
-        title={`Status: ${statusCfg.label} (click to change)`}
-        style={{ '--dot-color': statusCfg.color }}
-      >
-        <span className="ms-meta-dot" />
-        {statusCfg.label}
-      </button>
-
-      {/* POV */}
-      <label className="ms-meta-field" title="Point of view character">
-        <span className="ms-meta-label">POV</span>
-        <input
-          className="ms-meta-input"
-          value={scene.pov || ''}
-          onChange={e => onUpdate({ pov: e.target.value })}
-          placeholder="—"
-          list={`pov-list-${scene.id}`}
-        />
-        {characterNames?.length > 0 && (
-          <datalist id={`pov-list-${scene.id}`}>
-            {characterNames.map(n => <option key={n} value={n} />)}
-          </datalist>
-        )}
-      </label>
-
-      {/* Location */}
-      <label className="ms-meta-field" title="Scene location">
-        <span className="ms-meta-label">Location</span>
-        <input
-          className="ms-meta-input"
-          value={scene.locationTag || ''}
-          onChange={e => onUpdate({ locationTag: e.target.value })}
-          placeholder="—"
-          list={`loc-list-${scene.id}`}
-        />
-        {locationNames?.length > 0 && (
-          <datalist id={`loc-list-${scene.id}`}>
-            {locationNames.map(n => <option key={n} value={n} />)}
-          </datalist>
-        )}
-      </label>
-
-      {/* Word count for this scene */}
-      {scene.content?.trim() && (
-        <span className="ms-meta-words">
-          {scene.content.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
-        </span>
-      )}
-    </div>
-  )
-}
+// SceneMetaBar (POV/location/status inline row) was removed here — those
+// fields now live in the inspector's Scene tab (ManuscriptInspector.jsx); the
+// status chip alone stays inline in the scene header below.
 
 const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDelete, onOpen }) => (
   <details
@@ -432,14 +373,19 @@ const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDele
 // or is a per-scene closure that behaves identically as long as `scene` itself is
 // unchanged, so it's safe to leave out of the comparison.
 //
-// entityMap/characterNames/locationNames are (surprisingly) NOT reliably stable
-// references even though Manuscript.jsx memoizes them off `characters`/`locations` —
-// something elsewhere in the store re-creates those arrays every few seconds during
-// normal use (independent of anything this file controls), which was silently
-// defeating this memo entirely: every scene bailed out on `entityMap` alone, every
-// time. Compare these three by cheap shape (entry/name count) instead of reference —
-// a renamed character mid-burst going unhighlighted for a moment is a fine trade for
-// not re-running full-scene regex parsing on 38 other scenes every few seconds.
+// entityMap is (surprisingly) NOT a reliably stable reference even though
+// Manuscript.jsx memoizes it off `characters`/`locations` — something
+// elsewhere in the store re-creates those arrays every few seconds during
+// normal use (independent of anything this file controls), which was
+// silently defeating this memo entirely: every scene bailed out on
+// `entityMap` alone, every time. Compare it by cheap shape (entry count)
+// instead of reference — a renamed character mid-burst going unhighlighted
+// for a moment is a fine trade for not re-running full-scene regex parsing
+// on 38 other scenes every few seconds.
+// (characterNames/locationNames used to need the same treatment when
+// SceneMetaBar rendered its own POV/location inputs inline; that row moved
+// to the inspector's Scene tab in the redesign, so this component no longer
+// receives or compares them at all.)
 const sameShape = (a, b) => (a?.length ?? Object.keys(a || {}).length) === (b?.length ?? Object.keys(b || {}).length)
 
 const sceneEditorPropsEqual = (prev, next) => (
@@ -448,8 +394,6 @@ const sceneEditorPropsEqual = (prev, next) => (
   sameShape(prev.entityMap, next.entityMap) &&
   prev.highlightedNoteSeq === next.highlightedNoteSeq &&
   prev.formatSettings === next.formatSettings &&
-  sameShape(prev.characterNames, next.characterNames) &&
-  sameShape(prev.locationNames, next.locationNames) &&
   prev.projectType === next.projectType &&
   prev.caretFollowEnabled === next.caretFollowEnabled &&
   prev.scrollContainerRef === next.scrollContainerRef &&
@@ -464,11 +408,13 @@ const SceneEditorImpl = ({
   entityMap, onEntityClick,
   onOpenNotes, onNoteClick,
   highlightedNoteSeq = null,
-  formatSettings, characterNames, locationNames,
+  formatSettings,
   onPersistDraft,
   onLiveContentChange = () => {},
   onSelectionContextChange = () => {},
   onOpenVersionHistory,
+  onOpenSceneDetails,
+  onAskAI,
   projectType,
   caretFollowEnabled = false,
   scrollContainerRef,
@@ -517,6 +463,16 @@ const SceneEditorImpl = ({
 
   const hasMetadata = !!(scene.pov || scene.locationTag || (scene.status && scene.status !== 'draft'))
   const showSceneMeta = formatSettings.showSceneMetadata !== false
+  const statusCfg = SCENE_STATUSES.find(s => s.value === (scene.status || 'draft')) ?? SCENE_STATUSES[0]
+  // Derived from `scene.content` (the debounced store prop), not `localContent`
+  // (the live per-keystroke buffer) — same safe pattern the old SceneMetaBar's
+  // inline word count already used. Recomputing a full split/trim on every
+  // keystroke for a large scene would reintroduce exactly the typing-lag cost
+  // this file's virtualization/debouncing exists to avoid.
+  const wordCount = useMemo(() => {
+    const trimmed = scene.content?.trim()
+    return trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0
+  }, [scene.content])
   const sortedNotes = useMemo(
     () => [...(scene.notes || [])].sort((a, b) => (a.anchorOffset ?? 0) - (b.anchorOffset ?? 0) || a.seq - b.seq),
     [scene.notes]
@@ -659,6 +615,10 @@ const SceneEditorImpl = ({
     onSelectionContextChange(start === end ? '' : localContentRef.current.slice(start, end))
   }, [onSelectionContextChange])
 
+  // hasSelection here (not a separate measurement pass) is what switches the
+  // floating "+" note button into the selection bar (Note/Ask AI/B/I) below —
+  // reusing this already-debounced position sync instead of adding a second,
+  // parallel `selectionchange`-driven measurement path.
   const syncFloatingNoteButton = useCallback(() => {
     const ta = textareaRef.current
     const wrapper = wrapperRef.current
@@ -668,7 +628,7 @@ const SceneEditorImpl = ({
     const wrapperRect = wrapper.getBoundingClientRect()
     const side = caret.left - wrapperRect.left > wrapperRect.width / 2 ? 'left' : 'right'
     const top = Math.max(24, Math.min(wrapperRect.height - 34, caret.top - wrapperRect.top - 2))
-    setFloatingNotePos({ top, side })
+    setFloatingNotePos({ top, side, hasSelection: ta.selectionStart !== ta.selectionEnd })
   }, [measureCaret])
 
   // measureCaret's mirror-div technique (useTextareaCaretRect.js) has to mirror
@@ -1028,6 +988,10 @@ const SceneEditorImpl = ({
 	    if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrapSelection('**'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrapSelection('*'); return }
     if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); wrapSelection('_'); return }
+    // ⌘'/Ctrl+' — spec §5.5's keyboard shortcut for the selection bar's Note
+    // action; handleAddNote already anchors at the current selection/caret via
+    // lastSelectionRef, so this is the same code path the Note button uses.
+    if ((e.ctrlKey || e.metaKey) && e.key === "'") { e.preventDefault(); handleAddNote(); return }
 
     if (isScript && (e.ctrlKey || e.metaKey) && /^[1-6]$/.test(e.key)) {
       const next = scriptElements[Number(e.key) - 1]
@@ -1194,83 +1158,118 @@ const SceneEditorImpl = ({
 	  // scrollIntoView-by-id callers need a target that's always present.
 	  return (
 	    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`}>
-	      {/* Scene header — title + controls */}
+	      {/* Scene header — one quiet line (number · title · status) above a
+	          hairline; word count, POV, and the secondary format/history/undo
+	          controls reveal on hover or focus rather than sitting in a second
+	          row. POV/location/summary now live in the inspector's Scene tab
+	          (see ManuscriptInspector.jsx) — Details opens it there; the status
+	          chip stays here too since it's cheap to show at a glance. */}
 	      <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}`}>
-        <div className="ms-scene-header-row">
+        <div className="ms-scene-header-line">
+          <span className="ms-scene-n">Scene {sceneIndex + 1}</span>
+
           {editingTitle ? (
             <InlineInput
               value={scene.title && scene.title !== 'Scene' ? scene.title : ''}
               placeholder={`Scene ${sceneIndex + 1}`}
               onSave={t => { onUpdateScene(scene.id, { title: t || 'Scene' }); setEditingTitle(false) }}
-              className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)] w-40"
+              className="text-[13px] font-semibold text-[var(--text-main)] w-40"
             />
           ) : (
             <button
               onClick={() => setEditingTitle(true)}
-              className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+              className="ms-scene-title-btn"
               title="Click to rename scene"
             >
               {displayTitle}
             </button>
           )}
 
+          <button
+            type="button"
+            className="ms-meta-chip ms-meta-status"
+            onClick={() => onUpdateScene(scene.id, { status: nextStatus(scene.status || 'draft') })}
+            title={`Status: ${statusCfg.label} (click to change)`}
+            style={{ '--dot-color': statusCfg.color }}
+          >
+            <span className="ms-meta-dot" />
+            {statusCfg.label}
+          </button>
+
           <div className="flex-1 h-px bg-[var(--border)]" />
 
-          <div className="flex rounded overflow-hidden border border-[var(--border)] text-[9px] font-bold uppercase tracking-wider">
-            {isScript ? (
-              <select
-                value={scriptElement}
-                onChange={e => setActiveScriptElement(e.target.value)}
-                className="ms-script-select"
-                title="Script element type for the current paragraph. Tab cycles; Ctrl/Cmd+1-6 jumps directly."
-              >
-                {scriptElements.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            ) : (
-              <>
+          {showSceneMeta && (
+            <div className="ms-scene-header-hover">
+              {wordCount > 0 && <span className="ms-meta-words">{wordCount.toLocaleString()} words</span>}
+              {scene.pov && <span className="ms-chip" title={`POV: ${scene.pov}`}>{scene.pov}</span>}
+
+              <div className="flex rounded overflow-hidden border border-[var(--border)] text-[9px] font-bold uppercase tracking-wider">
+                {isScript ? (
+                  <select
+                    value={scriptElement}
+                    onChange={e => setActiveScriptElement(e.target.value)}
+                    className="ms-script-select"
+                    title="Script element type for the current paragraph. Tab cycles; Ctrl/Cmd+1-6 jumps directly."
+                  >
+                    {scriptElements.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onUpdateScene(scene.id, { textMode: 'prose' })}
+                      className={`px-2 py-0.5 transition-colors ${!isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                    >Prose</button>
+                    <button
+                      onClick={() => onUpdateScene(scene.id, { textMode: 'bullets' })}
+                      className={`px-2 py-0.5 transition-colors ${isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                    >Bullets</button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
+                <button onMouseDown={e => e.preventDefault()} onClick={handleUndo} disabled={!undoCount} className="px-2 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors disabled:opacity-30 disabled:pointer-events-none" title="Undo (Ctrl+Z)">↶</button>
+                <button onMouseDown={e => e.preventDefault()} onClick={handleRedo} disabled={!redoCount} className="px-2 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors disabled:opacity-30 disabled:pointer-events-none" title="Redo (Ctrl+Shift+Z)">↷</button>
+              </div>
+
+              <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
+                <button onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} className="px-2 py-0.5 text-[11px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Bold (Ctrl+B)">B</button>
+                <button onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} className="px-2 py-0.5 text-[11px] italic text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Italic (Ctrl+I)">I</button>
+                <button onMouseDown={e => { e.preventDefault(); wrapSelection('_') }} className="px-2 py-0.5 text-[11px] underline text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Underline (Ctrl+U)">U</button>
+              </div>
+
+              {onOpenVersionHistory && (
                 <button
-                  onClick={() => onUpdateScene(scene.id, { textMode: 'prose' })}
-                  className={`px-2 py-0.5 transition-colors ${!isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                >Prose</button>
+                  onClick={() => onOpenVersionHistory(scene.id)}
+                  className="ms-meta-chip"
+                  title="View and restore previous versions of this scene"
+                >History</button>
+              )}
+
+              {onOpenSceneDetails && (
                 <button
-                  onClick={() => onUpdateScene(scene.id, { textMode: 'bullets' })}
-                  className={`px-2 py-0.5 transition-colors ${isBullets ? 'bg-[var(--accent)] text-[var(--bg-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                >Bullets</button>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
-            <button onMouseDown={e => e.preventDefault()} onClick={handleUndo} disabled={!undoCount} className="px-2 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors disabled:opacity-30 disabled:pointer-events-none" title="Undo (Ctrl+Z)">↶</button>
-            <button onMouseDown={e => e.preventDefault()} onClick={handleRedo} disabled={!redoCount} className="px-2 py-0.5 text-[11px] text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors disabled:opacity-30 disabled:pointer-events-none" title="Redo (Ctrl+Shift+Z)">↷</button>
-          </div>
-
-          <div className="flex items-center gap-0.5 border border-[var(--border)] rounded overflow-hidden">
-            <button onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} className="px-2 py-0.5 text-[11px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Bold (Ctrl+B)">B</button>
-            <button onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} className="px-2 py-0.5 text-[11px] italic text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Italic (Ctrl+I)">I</button>
-            <button onMouseDown={e => { e.preventDefault(); wrapSelection('_') }} className="px-2 py-0.5 text-[11px] underline text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Underline (Ctrl+U)">U</button>
-          </div>
-
-	          {onOpenVersionHistory && (
-	            <button
-              onClick={() => onOpenVersionHistory(scene.id)}
-              className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border border-[var(--border)] rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
-              title="View and restore previous versions of this scene"
-            >History</button>
+                  onClick={() => onOpenSceneDetails(scene.id)}
+                  className="ms-meta-chip"
+                  title="Open this scene's details (status, POV, location, summary) in the inspector"
+                >Details</button>
+              )}
+            </div>
           )}
         </div>
-
-        {/* Scene metadata row */}
-	        {((showSceneMeta && focused) || hasMetadata) && (
-	          <SceneMetaBar
-            scene={scene}
-            onUpdate={data => onUpdateScene(scene.id, data)}
-            characterNames={characterNames}
-            locationNames={locationNames}
-          />
-        )}
       </div>
 
+      {/* Prose column (620px) + note gutter (188px) — spec §4/§5.3. The
+          gutter shows a card per note in document order rather than
+          pixel-aligned to its exact line: measuring each note mark's
+          offsetTop against the prose column would mean a layout read in
+          the scene render path, exactly what useSceneWindow's
+          virtualization exists to avoid across dozens of mounted scenes.
+          Container-query drop-out (per the handoff spec, not a viewport
+          media query) lands in step 7 once the scroll container gets
+          `container-type: inline-size`; a plain breakpoint covers it in
+          the meantime. */}
+      <div className={`ms-scene-body${!isScript && sortedNotes.length > 0 ? ' has-gutter' : ''}`}>
+        <div className="ms-scene-prose-col">
 	      {focused ? (
 	        !isScript && sortedNotes.length > 0 ? (
 	          <div className="ms-block-editor">
@@ -1352,22 +1351,61 @@ const SceneEditorImpl = ({
           />
 	        </div>
 	      )}
+        </div>
 
+        {!isScript && sortedNotes.length > 0 && (
+          <div className="ms-scene-gutter">
+            {sortedNotes.map(note => (
+              <button
+                key={note.id}
+                type="button"
+                className={`ms-gutter-note${highlightedNoteSeq === note.seq ? ' is-highlighted' : ''}`}
+                onClick={() => { onNoteClick(note.seq); onOpenNotes() }}
+              >
+                <b>Note {note.seq}</b>
+                <span>{note.text || 'Empty note — click to add text'}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+	      {/* Selecting prose expands the same floating anchor (already positioned
+	          off `measureCaret`, already debounced — see syncFloatingNoteButton
+	          above) into a small bar instead of just the "+" button: Note anchors
+	          at the selection per spec §5.3, Ask AI opens the AI surface with the
+	          selection already tracked via onSelectionContextChange, B/I reuse
+	          the exact same wrapSelection the header's B/I buttons call. */}
 	      {focused && floatingNotePos && (
-	        <button
-	          type="button"
-	          className="ms-floating-note-btn font-sans"
-	          style={{
-	            top: floatingNotePos.top,
-	            [floatingNotePos.side]: -36,
-	          }}
-	          onMouseDown={e => e.preventDefault()}
-	          onClick={handleAddNote}
-	          title="Add note at cursor"
-	          aria-label="Add note at cursor"
-	        >
-	          +
-	        </button>
+	        floatingNotePos.hasSelection ? (
+	          <div
+	            className="ms-selbar font-sans"
+	            style={{ top: floatingNotePos.top, [floatingNotePos.side]: -36 }}
+	          >
+	            <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>
+	            {onAskAI && (
+	              <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onAskAI(scene.id)} title="Ask AI about this selection">Ask AI</button>
+	            )}
+	            <span className="ms-selbar-sep" />
+	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} title="Bold (Ctrl+B)"><b>B</b></button>
+	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} title="Italic (Ctrl+I)"><em>I</em></button>
+	          </div>
+	        ) : (
+	          <button
+	            type="button"
+	            className="ms-floating-note-btn font-sans"
+	            style={{
+	              top: floatingNotePos.top,
+	              [floatingNotePos.side]: -36,
+	            }}
+	            onMouseDown={e => e.preventDefault()}
+	            onClick={handleAddNote}
+	            title="Add note at cursor"
+	            aria-label="Add note at cursor"
+	          >
+	            +
+	          </button>
+	        )
 	      )}
 
 	      {!focused && (
