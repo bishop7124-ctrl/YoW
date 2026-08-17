@@ -180,6 +180,13 @@
   --border:     #1e4a50;
   --logo-filter: none;
   --accent2:    #2a9a8c;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #1a4550;
+  --text-faint:    #4d8480;
+  --border-strong: #2a636b;
+  --accent-text:   #f39a7c;
+  --accent-2:      #6fc0a8;
+  --prose-text:    #e8f4f2;
   /* Atmosphere — jungle, ocean, dusk */
   --atmos-warm:       #1a3a40;
   --atmos-cool:       #060e10;
@@ -216,6 +223,13 @@
   --border:     #ced8ca;
   --logo-filter: brightness(0);
   --accent2:    #7aaa88;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #ffffff;
+  --text-faint:    #83968a;
+  --border-strong: #b4c2b6;
+  --accent-text:   #2f6448;
+  --accent-2:      #a8763c;
+  --prose-text:    #1a241d;
   /* Atmosphere — light, natural, airy */
   --atmos-warm:       #bcd0b4;
   --atmos-cool:       #dce8d6;
@@ -252,6 +266,13 @@
   --border:     #282c38;
   --logo-filter: none;
   --accent2:    #7888a0;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #242935;
+  --text-faint:    #5d6472;
+  --border-strong: #3a4050;
+  --accent-text:   #e5a648;
+  --accent-2:      #7f93b8;
+  --prose-text:    #e4e8f0;
   /* Atmosphere — concrete, steel, raw */
   --atmos-warm:       #1e2230;
   --atmos-cool:       #0a0c12;
@@ -288,6 +309,13 @@
   --border:     #e0c8a0;
   --logo-filter: brightness(0);
   --accent2:    #9a5a28;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #fffdf8;
+  --text-faint:    #9a8a66;
+  --border-strong: #cfae7e;
+  --accent-text:   #8a5418;
+  --accent-2:      #6f7f56;
+  --prose-text:    #241c0a;
   /* Atmosphere — warm café, caramel, beeswax */
   --atmos-warm:       #deb870;
   --atmos-cool:       #eedcbc;
@@ -324,6 +352,13 @@
   --border:     #143848;
   --logo-filter: none;
   --accent2:    #2a5888;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #143040;
+  --text-faint:    #3d6d85;
+  --border-strong: #1d5065;
+  --accent-text:   #4dc2d6;
+  --accent-2:      #7fb08a;
+  --prose-text:    #d9f0f8;
   /* Atmosphere — deep sea, bioluminescent */
   --atmos-warm:       #0a1e2c;
   --atmos-cool:       #030810;
@@ -360,6 +395,13 @@
   --border:     #e2e6ea;
   --logo-filter: brightness(0);
   --accent2:    #a0aab8;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #ffffff;
+  --text-faint:    #8b939b;
+  --border-strong: #cbd1d6;
+  --accent-text:   #4f5f73;
+  --accent-2:      #8c9c86;
+  --prose-text:    #16191d;
   /* Atmosphere — marble, pearl, clean */
   --atmos-warm:       #e4e8ec;
   --atmos-cool:       #f2f4f6;
@@ -3150,6 +3192,15 @@ textarea:focus {
   --accent: #b8aa79;
   --accent-fade: rgba(184, 170, 121, 0.13);
   --border: #2d302b;
+  /* Manuscript editor redesign tokens — hand-tuned to the existing Phase 1 palette
+     above (not the spec's literal "Dark refined" swap; see
+     docs/design/dark-refined-default-theme.md for that deferred palette). */
+  --bg-raise:      #1f221f;
+  --text-faint:    #5e615a;
+  --border-strong: #43483f;
+  --accent-text:   #b8aa79;
+  --accent-2:      #79b88a;
+  --prose-text:    #e9e5db;
   --bg: var(--bg-main);
   --rail: var(--bg-nav);
   --surface: var(--bg-nav);
