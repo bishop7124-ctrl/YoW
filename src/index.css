@@ -6787,6 +6787,98 @@ body {
   display: none;
 }
 
+/* ─── ManuscriptBookView (redesign) — Finalised mode's "Book" sub-view: a
+   two-page spread on a raised sheet, paged by translateX (never scrollLeft)
+   per the handoff spec §8. See ManuscriptBookView.jsx for the pagination
+   math. ───────────────────────────────────────────────────────────────── */
+.ms-book {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 26px 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+.ms-book-spread {
+  position: relative;
+  width: min(940px, 100%);
+  flex: 1;
+  min-height: 0;
+  max-height: 660px;
+  border-radius: var(--r-sm);
+  background: var(--bg-raise);
+  box-shadow: var(--shadow-lg);
+  padding: 46px 52px 40px;
+  overflow: hidden;
+}
+.ms-book-spread::before {
+  content: "";
+  position: absolute;
+  top: 26px;
+  bottom: 26px;
+  left: 50%;
+  width: 1px;
+  background: var(--border);
+}
+.ms-book-flow {
+  height: 100%;
+  column-count: 2;
+  column-gap: 76px;
+  column-fill: auto;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.72;
+  color: var(--prose-text, var(--text-main));
+  transition: transform 0.26s ease;
+  will-change: transform;
+}
+.ms-book-flow h2 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  margin: 0 0 18px;
+  break-after: avoid;
+  color: var(--text-main);
+}
+.ms-book-flow h3 {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  margin: 22px 0 14px;
+  break-after: avoid;
+  color: var(--text-main);
+}
+.ms-book-flow p { margin: 0 0 0.9em; text-wrap: pretty; }
+.ms-book-flow p + p { text-indent: 1.4em; }
+.ms-book-break { text-align: center; margin: 18px 0; color: var(--text-faint); letter-spacing: 0.3em; }
+.ms-book-empty { color: var(--text-faint); font-style: italic; }
+.ms-book-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ms-book-nav button {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  background: none;
+  cursor: pointer;
+}
+.ms-book-nav button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-text); }
+.ms-book-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+@media (max-width: 900px) {
+  .ms-book-spread { padding: 26px 22px; }
+  .ms-book-flow { column-count: 1; }
+}
+
 .ms-final-book {
   width: min(100%, 760px);
   min-height: 100%;
@@ -15604,6 +15696,27 @@ body {
 }
 .ms-scene-prose-col { grid-column: 1; min-width: 0; }
 .ms-scene-gutter { grid-column: 2; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+
+/* Write mode (spec §8): prose centres at 684px instead of sitting left-set
+   at 620px — no gutter column is ever rendered here (SceneEditor.jsx gates
+   that separately), this only widens and centers the single column. */
+.ms-scene-body--write {
+  grid-template-columns: minmax(0, 684px);
+  justify-content: center;
+}
+
+/* Write mode's scene header: name only, muted, no hairline — status chip,
+   the hover-reveal cluster, and the hairline spacer all hide outright
+   rather than just fading, since Write's header should read as inert. */
+.ms-scene-header--write .ms-scene-header-line { border-bottom: none; }
+.ms-scene-header--write .ms-scene-n,
+.ms-scene-header--write .ms-meta-status,
+.ms-scene-header--write .ms-scene-header-hover,
+.ms-scene-header--write .h-px { display: none; }
+.ms-scene-header--write .ms-scene-title-btn { color: var(--text-muted); font-weight: 400; }
+.ms-scene-header--write.ms-scene-header { opacity: 0.45; transition: opacity 0.15s; }
+.ms-scene-header--write.ms-scene-header:hover,
+.group\/scene:focus-within .ms-scene-header--write.ms-scene-header { opacity: 1; }
 
 .ms-gutter-note {
   display: flex;
