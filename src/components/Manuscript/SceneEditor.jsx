@@ -398,7 +398,8 @@ const sceneEditorPropsEqual = (prev, next) => (
   prev.caretFollowEnabled === next.caretFollowEnabled &&
   prev.scrollContainerRef === next.scrollContainerRef &&
   prev.pageZoom === next.pageZoom &&
-  prev.keepEditingOnExternalBlur === next.keepEditingOnExternalBlur
+  prev.keepEditingOnExternalBlur === next.keepEditingOnExternalBlur &&
+  prev.mode === next.mode
 )
 
 const SceneEditorImpl = ({
@@ -415,6 +416,11 @@ const SceneEditorImpl = ({
   onOpenVersionHistory,
   onOpenSceneDetails,
   onAskAI,
+  // 'write' | 'edit' — spec §8's mode table. Only these two matter here:
+  // Finalised mode never mounts a real SceneEditor (Manuscript.jsx swaps the
+  // whole body for a read-only render). Defaults to 'edit' so every existing
+  // caller/test that doesn't pass this keeps today's full-apparatus behavior.
+  mode = 'edit',
   projectType,
   caretFollowEnabled = false,
   scrollContainerRef,
@@ -1164,7 +1170,7 @@ const SceneEditorImpl = ({
 	          row. POV/location/summary now live in the inspector's Scene tab
 	          (see ManuscriptInspector.jsx) — Details opens it there; the status
 	          chip stays here too since it's cheap to show at a glance. */}
-	      <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}`}>
+	      <div className={`ms-scene-header ${focused || hasMetadata ? 'is-visible' : ''}${mode === 'write' ? ' ms-scene-header--write' : ''}`}>
         <div className="ms-scene-header-line">
           <span className="ms-scene-n">Scene {sceneIndex + 1}</span>
 
@@ -1268,7 +1274,7 @@ const SceneEditorImpl = ({
           media query) lands in step 7 once the scroll container gets
           `container-type: inline-size`; a plain breakpoint covers it in
           the meantime. */}
-      <div className={`ms-scene-body${!isScript && sortedNotes.length > 0 ? ' has-gutter' : ''}`}>
+      <div className={`ms-scene-body${!isScript && sortedNotes.length > 0 && mode !== 'write' ? ' has-gutter' : ''}${mode === 'write' ? ' ms-scene-body--write' : ''}`}>
         <div className="ms-scene-prose-col">
 	      {focused ? (
 	        !isScript && sortedNotes.length > 0 ? (
@@ -1353,7 +1359,7 @@ const SceneEditorImpl = ({
 	      )}
         </div>
 
-        {!isScript && sortedNotes.length > 0 && (
+        {!isScript && sortedNotes.length > 0 && mode !== 'write' && (
           <div className="ms-scene-gutter">
             {sortedNotes.map(note => (
               <button
@@ -1382,11 +1388,17 @@ const SceneEditorImpl = ({
 	            className="ms-selbar font-sans"
 	            style={{ top: floatingNotePos.top, [floatingNotePos.side]: -36 }}
 	          >
-	            <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>
-	            {onAskAI && (
-	              <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onAskAI(scene.id)} title="Ask AI about this selection">Ask AI</button>
+	            {/* Notes are an editing tool, not in Write — spec §5.4/§8's
+	                mode table gives Write's selection bar formatting only. */}
+	            {mode !== 'write' && (
+	              <>
+	                <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>
+	                {onAskAI && (
+	                  <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onAskAI(scene.id)} title="Ask AI about this selection">Ask AI</button>
+	                )}
+	                <span className="ms-selbar-sep" />
+	              </>
 	            )}
-	            <span className="ms-selbar-sep" />
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} title="Bold (Ctrl+B)"><b>B</b></button>
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} title="Italic (Ctrl+I)"><em>I</em></button>
 	          </div>

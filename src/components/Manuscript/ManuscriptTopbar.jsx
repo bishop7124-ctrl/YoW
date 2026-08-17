@@ -177,6 +177,10 @@ export default function ManuscriptTopbar({
   zoomControl,
   scriptBetaBadge,
   overflowItemTitles,
+  // Write/Finalised modes hide the AI and Inspector buttons entirely per
+  // spec §8's mode table — Edit is the only mode where either surface makes
+  // sense to open from here.
+  hideAIAndInspector = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [gotoOpen, setGotoOpen] = useState(false)
@@ -238,12 +242,16 @@ export default function ManuscriptTopbar({
 
         <div className="ms-topbar-zone ms-topbar-zone-tools">
           {zoomControl}
-          <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
-            <AIStar size={13} /> AI
-          </button>
-          <button type="button" className={`ms-topbar-btn${inspectorOpen ? ' is-on' : ''}`} onClick={onToggleInspector} aria-pressed={inspectorOpen}>
-            <InspectorIcon /> Inspector
-          </button>
+          {!hideAIAndInspector && (
+            <>
+              <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
+                <AIStar size={13} /> AI
+              </button>
+              <button type="button" className={`ms-topbar-btn${inspectorOpen ? ' is-on' : ''}`} onClick={onToggleInspector} aria-pressed={inspectorOpen}>
+                <InspectorIcon /> Inspector
+              </button>
+            </>
+          )}
           <div className="ms-topbar-sep" />
           {onOpenProject && (
             <button type="button" className="ms-topbar-btn" onClick={onOpenProject} title="Back to the project dashboard">

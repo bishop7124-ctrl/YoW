@@ -6,6 +6,7 @@ import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
 import ManuscriptTopbar from './ManuscriptTopbar.jsx'
 import ManuscriptSurface from './ManuscriptSurface.jsx'
+import ManuscriptBookView from './ManuscriptBookView.jsx'
 import { useToast } from './Toast.jsx'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
@@ -249,6 +250,35 @@ export default function Manuscript({ store, userId, membership = null }) {
       return 'ai'
     }
   })
+  // Three modes per spec §8 — persisted per project, same lazy-initializer
+  // pattern as lastSurfaceId above (reads once on mount, no hydration
+  // effect). 'edit' is the full apparatus and was this component's only
+  // behavior before this step, so it's the fallback for a first-ever visit.
+  const [mode, setMode] = useState(() => {
+    try {
+      return (activeNovel?.id && localStorage.getItem(`nf-manuscript-mode:${activeNovel.id}`)) || 'edit'
+    } catch {
+      return 'edit'
+    }
+  })
+  const modeStorageKey = activeNovel?.id ? `nf-manuscript-mode:${activeNovel.id}` : null
+  useEffect(() => {
+    if (!modeStorageKey) return
+    try { localStorage.setItem(modeStorageKey, mode) } catch { /* ignore */ }
+  }, [modeStorageKey, mode])
+  const [finalisedSubView, setFinalisedSubView] = useState('manuscript') // 'manuscript' | 'book'
+  const handleSetMode = useCallback((next) => {
+    setMode(next)
+    // Surface closed in both Write ("Surface closed; AI + Inspector buttons
+    // hidden") and Finalised ("Surface hidden") per the mode table — only
+    // Edit leaves it as the user had it.
+    if (next !== 'edit') { setSurfaceId(null) }
+    // Write's rail defaults to the spine ("collapsed to spine (expandable)"
+    // per the mode table) — a one-time default on entering the mode, not a
+    // standing restriction, so the user can still expand it afterward via
+    // the normal toggle.
+    if (next === 'write') { setRailCollapsed(true) }
+  }, [])
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [formatSettings, setFormatSettings] = useState(loadFormat)
@@ -545,6 +575,21 @@ export default function Manuscript({ store, userId, membership = null }) {
     scenes: scenes.length,
     words: totalWordCount,
   }), [acts.length, chapters.length, scenes.length, totalWordCount])
+
+  // Finalised MODE (spec §8) is a live, read-only view of the *current*
+  // manuscript — distinct from the Surface's Finalise pane / "Open reader",
+  // which shows a specific frozen buildFinalizedDraft snapshot saved to
+  // activeNovel.finalizedDrafts. This one is never persisted; it's rebuilt
+  // whenever the underlying content changes, same as everything else this
+  // component already derives live from acts/chapters/scenes.
+  const liveFinalizedDraft = useMemo(() => {
+    if (mode !== 'final' || !isNovelProject) return null
+    return buildFinalizedDraft({
+      novel: activeNovel,
+      acts, chapters, scenes, labels,
+      title: activeNovel?.title || 'Untitled',
+    })
+  }, [mode, isNovelProject, activeNovel, acts, chapters, scenes, labels])
 
   const handleRetireManuscript = useCallback((title) => {
     const copy = retireManuscript?.(title)
@@ -900,6 +945,17 @@ export default function Manuscript({ store, userId, membership = null }) {
   useEffect(() => {
     const handler = event => {
       const meta = event.metaKey || event.ctrlKey
+      // Esc chain per spec §5.5: reader → focus → surface → menu. The
+      // "reader" step is Finalised mode here (activeFinalizedDraft's
+      // full-screen swap is a separate, still-modal reader with its own
+      // handling below) — both take priority over focused-writing's own
+      // Escape effect, but that effect already bails out early whenever
+      // focusedWriting.enabled is true, so there's no double-handling.
+      if (event.key === 'Escape' && mode === 'final') {
+        event.preventDefault()
+        handleSetMode('edit')
+        return
+      }
       if (event.key === 'Escape' && !focusedWriting.enabled && surfaceId) {
         event.preventDefault()
         handleCloseSurface()
@@ -913,7 +969,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedWriting.enabled, surfaceId, activeFinalizedDraft])
+  }, [focusedWriting.enabled, surfaceId, activeFinalizedDraft, mode])
 
   if (isComicProject) return <ComicPlanner store={store} />
 
@@ -983,12 +1039,15 @@ export default function Manuscript({ store, userId, membership = null }) {
           onSelectScene={handleSelectScene}
           railCollapsed={railCollapsed}
           onToggleRail={handleToggleRail}
+          mode={mode}
+          onSetMode={handleSetMode}
           saveState={saveState}
           wordCount={totalWordCount}
           aiOpen={surfaceId === 'ai'}
           onToggleAI={() => handleToggleSurface('ai')}
           inspectorOpen={inspectorOpen}
           onToggleInspector={() => setInspectorOpen(v => !v)}
+          hideAIAndInspector={mode !== 'edit'}
           onEnterFocus={() => { setInspectorOpen(false); setSurfaceId(null); focusedWriting.setEnabled(true) }}
           onOverflowAction={handleOverflowAction}
           conflictCount={sceneConflicts.length}
@@ -1015,15 +1074,45 @@ export default function Manuscript({ store, userId, membership = null }) {
             onPageIndexChange={setFinalizedPageIndex}
           />
         </div>
+      ) : mode === 'final' ? (
+        // Finalised MODE (not activeFinalizedDraft above, a saved snapshot —
+        // this is the live current manuscript, read-only, rail/inspector/
+        // surface all hidden per the mode table). Its own Manuscript/Book
+        // switch sits next to Export, per spec §8.
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="ms-topbar font-sans">
+            <div className="ms-topbar-zone ms-topbar-zone-left">
+              <div className="ms-modes" role="group" aria-label="Finalised view">
+                <button type="button" className={finalisedSubView === 'manuscript' ? 'is-on' : ''} onClick={() => setFinalisedSubView('manuscript')}>Manuscript</button>
+                <button type="button" className={finalisedSubView === 'book' ? 'is-on' : ''} onClick={() => setFinalisedSubView('book')}>Book</button>
+              </div>
+            </div>
+            <div className="ms-topbar-zone ms-topbar-zone-tools">
+              <button type="button" className="ms-topbar-btn" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting…' : exportButtonLabel}
+              </button>
+            </div>
+          </div>
+          {!isNovelProject ? (
+            <div className="ms-insp-empty">Finalised mode's read view is available for novel-type projects.</div>
+          ) : finalisedSubView === 'book' ? (
+            <ManuscriptBookView draft={liveFinalizedDraft} projectTitle={activeNovel?.title} />
+          ) : (
+            <FinalizedReader draft={liveFinalizedDraft} viewMode="scroll" pageIndex={0} onPageIndexChange={() => {}} />
+          )}
+        </div>
       ) : (
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Left rail — hidden during focused writing per spec §5.4 ("the
-            rail, inspector and gutter hide"); the inspector below keeps
-            working there too, though, preserving the old WritingSidebar's
-            focus-mode overlay capability (FocusedWritingShell's own
-            notes/format/ai/status buttons) rather than dropping it ahead of
-            step 8's fuller mode rework. */}
+            rail, inspector and gutter hide"). Write mode's rail defaults to
+            the spine on entry (see handleSetMode) but stays user-togglable
+            ("expandable" per the mode table); Finalised hides it entirely,
+            handled by the branch above rather than a prop here. The
+            inspector below keeps working during focused writing regardless
+            of mode, preserving the old WritingSidebar's focus-mode overlay
+            capability (FocusedWritingShell's own notes/format/ai/status
+            buttons) rather than dropping it ahead of a fuller mode rework. */}
         {!focusedWriting.enabled && (
           <ManuscriptRail
             acts={acts}
@@ -1192,6 +1281,7 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onOpenVersionHistory={id => { setVersionHistorySceneId(id); handleToggleSurface('history') }}
                         onOpenSceneDetails={handleOpenSceneDetails}
                         onAskAI={handleAskAI}
+                        mode={mode === 'write' ? 'write' : 'edit'}
                         projectType={activeNovel?.type || 'novel'}
                         // Reverted: enabling the continuous per-keystroke comfort-scroll
                         // (useCaretComfortScroll's 'input'-driven centering) for the regular
@@ -1229,7 +1319,7 @@ export default function Manuscript({ store, userId, membership = null }) {
         {/* Inspector — Scene/Notes/Format/Progress. Not gated on focus mode
             (see the rail comment above): FocusedWritingShell's own
             notes/format/status/ai buttons still need somewhere to open. */}
-        {inspectorOpen && (
+        {inspectorOpen && (focusedWriting.enabled || mode !== 'write') && (
           <ManuscriptInspector
             activeTab={inspectorTab}
             onSetTab={setInspectorTab}
