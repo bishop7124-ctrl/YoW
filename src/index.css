@@ -1945,6 +1945,23 @@ textarea:focus {
   box-shadow: 0 0 0 2px color-mix(in srgb, #facc15 24%, transparent);
 }
 
+.ms-inline-note-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: color-mix(in srgb, var(--text-main) 82%, #facc15);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 2px 4px;
+  border-radius: var(--r-xs);
+}
+.ms-inline-note-title::placeholder { color: color-mix(in srgb, var(--text-muted) 85%, transparent); font-weight: 500; }
+.ms-inline-note-title:hover { background: color-mix(in srgb, #facc15 10%, transparent); }
+.ms-inline-note-title:focus { background: color-mix(in srgb, #facc15 14%, transparent); }
+
 .ms-inline-note-actions {
   display: inline-flex;
   align-items: center;
@@ -15337,7 +15354,7 @@ body {
 .ms-gutter-note-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   width: 100%;
   text-align: left;
   padding: 8px 10px;
@@ -15345,7 +15362,6 @@ body {
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-fade);
   color: var(--text-main);
-  cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
 .ms-gutter-note-card-head {
@@ -15359,14 +15375,36 @@ body {
   color: var(--accent-text);
 }
 .ms-gutter-note-card-head svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ms-gutter-note-card-title {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 2px;
+  border-radius: var(--r-xs);
+}
+.ms-gutter-note-card-title::placeholder { color: var(--text-muted); font-weight: 500; }
+.ms-gutter-note-card-title:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ms-gutter-note-card-title:focus { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .ms-gutter-note-card-body {
   display: -webkit-box;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font);
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--text-muted);
+  cursor: pointer;
 }
 .ms-gutter-note-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent-fade) 70%, var(--accent) 12%); }
 .ms-gutter-note-card.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
