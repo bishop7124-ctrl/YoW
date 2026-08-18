@@ -15330,27 +15330,46 @@ body {
 .ms-scene-header--write.ms-scene-header:hover,
 .group\/scene:focus-within .ms-scene-header--write.ms-scene-header { opacity: 1; }
 
-/* Edit mode's note gutter: a persistent (not hover-gated) comment-bubble icon
-   per note, not a text-preview card -- Write mode has the inline box for
-   reading/editing text, so the gutter only needs to say "a note is here". */
-.ms-gutter-note-icon {
+/* Edit mode's note gutter: a persistent (not hover-gated) card per note,
+   showing up to 5 lines of its text -- enough to read a note's gist
+   without opening it, while Write mode's inline box stays the place to
+   actually read/edit the full text. */
+.ms-gutter-note-card {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-fade);
-  color: var(--accent-text);
+  color: var(--text-main);
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  transition: border-color 0.12s, background 0.12s;
 }
-.ms-gutter-note-icon svg { width: 13px; height: 13px; }
-.ms-gutter-note-icon.has-text { background: color-mix(in srgb, var(--accent-fade) 70%, var(--accent) 12%); }
-.ms-gutter-note-icon:hover { transform: translateY(-1px); border-color: var(--accent); }
-.ms-gutter-note-icon.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ms-gutter-note-card-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.ms-gutter-note-card-head svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ms-gutter-note-card-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.ms-gutter-note-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent-fade) 70%, var(--accent) 12%); }
+.ms-gutter-note-card.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Container query (not a viewport media query — spec is explicit about
    this) on the writing column itself, named via container-name on

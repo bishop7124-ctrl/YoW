@@ -1435,12 +1435,12 @@ const SceneEditorImpl = ({
               <button
                 key={note.id}
                 type="button"
-                className={`ms-gutter-note-icon${highlightedNoteSeq === note.seq ? ' is-highlighted' : ''}${note.text ? ' has-text' : ''}`}
+                className={`ms-gutter-note-card${highlightedNoteSeq === note.seq ? ' is-highlighted' : ''}`}
                 onClick={() => { onNoteClick(note.seq); onOpenNotes() }}
-                title={note.text || `Note ${note.seq} — click to add text`}
                 aria-label={`Note ${note.seq}${note.text ? `: ${note.text}` : ' (empty)'}`}
               >
-                <NoteIcon />
+                <span className="ms-gutter-note-card-head"><NoteIcon /> Note {note.seq}</span>
+                <span className="ms-gutter-note-card-body">{note.text || 'Empty note — click to add text'}</span>
               </button>
             ))}
           </div>
