@@ -368,27 +368,48 @@ const NoteIcon = () => (
   </svg>
 )
 
-const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDelete, onOpen }) => (
-  <details
-    className={`ms-inline-note${embedded ? ' ms-inline-note--embedded' : ''}${highlighted ? ' is-highlighted' : ''}`}
-    defaultOpen={!note.text}
-    onClick={e => e.stopPropagation()}
-  >
-    <summary>
-      <span>Note {note.seq}</span>
-      <div className="ms-inline-note-actions">
-        <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Panel</button>
-        <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(note.id) }}>Delete</button>
-      </div>
-    </summary>
-    <textarea
-      value={note.text || ''}
-      onChange={e => onUpdate(note.id, e.target.value)}
-      placeholder="Write a manuscript note..."
-      rows={3}
-    />
-  </details>
-)
+// `defaultOpen` isn't a real React/DOM prop for <details> (only `open` is —
+// there's no uncontrolled-via-"defaultX" convention for it the way there is
+// for <input defaultValue>), so it silently did nothing: every note has
+// always mounted closed regardless of whether it had text yet, needing an
+// extra click just to start typing into a brand new note. Fixed by making
+// `open` genuinely controlled, seeded once from !note.text and then kept in
+// sync with the user's own toggling via onToggle.
+//
+// The textarea also gets its own local buffer + debounce (same pattern as
+// NotesPanel in ManuscriptToolbar.jsx, and the same reason: a fully
+// controlled textarea bound straight to the store means every keystroke
+// waits on a full onUpdateScene round-trip and re-render before the next
+// one lands, which reads as "typing into it doesn't save" on anything but
+// a trivially small project).
+const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDelete, onOpen }) => {
+  const [open, setOpen] = useState(!note.text)
+  const [text, setText] = useState(note.text || '')
+  const debouncedSave = useDebouncedCallback(value => onUpdate(note.id, value), 300)
+  return (
+    <details
+      className={`ms-inline-note${embedded ? ' ms-inline-note--embedded' : ''}${highlighted ? ' is-highlighted' : ''}`}
+      open={open}
+      onToggle={e => setOpen(e.target.open)}
+      onClick={e => e.stopPropagation()}
+    >
+      <summary>
+        <span>Note {note.seq}</span>
+        <div className="ms-inline-note-actions">
+          <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Panel</button>
+          <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(note.id) }}>Delete</button>
+        </div>
+      </summary>
+      <textarea
+        value={text}
+        onChange={e => { setText(e.target.value); debouncedSave.schedule(e.target.value) }}
+        onBlur={debouncedSave.flush}
+        placeholder="Write a manuscript note..."
+        rows={3}
+      />
+    </details>
+  )
+}
 
 // ─── Scene editor ─────────────────────────────────────────────────────────────
 
@@ -1087,32 +1108,43 @@ const SceneEditorImpl = ({
 	    }
 	  }
 
+	  // All three read/write scene.notes through sceneRef (see sceneRef above,
+	  // already the established fix for this exact class of bug elsewhere in
+	  // this file — onPersistDraft(sceneRef.current, …) below is the same
+	  // pattern). Closing over the `scene` prop directly here was a real,
+	  // pre-existing bug: two note edits fired close enough together that
+	  // React hadn't re-rendered SceneEditor with the first one's updated
+	  // `scene` prop yet would have the second edit recompute its new notes
+	  // array from the *stale* pre-first-edit notes, silently reverting it —
+	  // reachable just by typing normally into a note, not only under
+	  // synthetic/rapid input.
 	  const handleAddNote = useCallback(() => {
-	    const nextSeq = (scene.notes?.length || 0) + 1
+	    const currentNotes = sceneRef.current.notes || []
+	    const nextSeq = currentNotes.length + 1
 	    const selection = lastSelectionRef.current || { start: localContent.length, end: localContent.length }
 	    const start = Math.max(0, Math.min(selection.start, localContent.length))
 	    const nextNote = { id: uid(), seq: nextSeq, text: '', anchorOffset: start }
 	    setFocused(true)
-	    onUpdateScene(scene.id, {
-	      notes: [...(scene.notes || []), nextNote],
+	    onUpdateScene(sceneRef.current.id, {
+	      notes: [...currentNotes, nextNote],
 	    })
 	    focusRange(start)
-	    // Write mode shows the new note inline (defaultOpen text-less <details>
-	    // right in the flow), so the cursor can stay put. Edit mode no longer
-	    // renders that inline box at all (gutter icon only, see ContentPreview
-	    // below) — open the inspector's Notes tab so there's somewhere to
-	    // actually type the text.
+	    // Write mode shows the new note inline (opens itself since it starts
+	    // empty — see InlineNoteBlock's own `open` state) right in the flow,
+	    // so the cursor can stay put. Edit mode no longer renders that inline
+	    // box at all (gutter icon only, see ContentPreview below) — open the
+	    // inspector's Notes tab so there's somewhere to actually type the text.
 	    if (mode !== 'write') onOpenNotes()
-	  }, [scene, localContent, focusRange, onUpdateScene, mode, onOpenNotes])
+	  }, [localContent, focusRange, onUpdateScene, mode, onOpenNotes])
 
 	  const handleUpdateNote = useCallback((noteId, text) => {
-	    onUpdateScene(scene.id, {
-	      notes: (scene.notes || []).map(note => note.id === noteId ? { ...note, text } : note),
+	    onUpdateScene(sceneRef.current.id, {
+	      notes: (sceneRef.current.notes || []).map(note => note.id === noteId ? { ...note, text } : note),
 	    })
-	  }, [onUpdateScene, scene.id, scene.notes])
+	  }, [onUpdateScene])
 
 	  const handleDeleteNote = useCallback((noteId) => {
-	    const removed = (scene.notes || []).find(note => note.id === noteId)
+	    const removed = (sceneRef.current.notes || []).find(note => note.id === noteId)
 	    if (removed) {
 	      const marker = `[[${removed.seq}]]`
 	      const markerIndex = localContentRef.current.indexOf(marker)
@@ -1120,17 +1152,17 @@ const SceneEditorImpl = ({
 	        recordBeforeEdit(true)
 	        const nextContent = localContentRef.current.slice(0, markerIndex) + localContentRef.current.slice(markerIndex + marker.length)
 	        localContentRef.current = nextContent
-	        onPersistDraft(scene, nextContent)
-	        onLiveContentChange(scene.id, nextContent)
+	        onPersistDraft(sceneRef.current, nextContent)
+	        onLiveContentChange(sceneRef.current.id, nextContent)
 	        setLocalContent(nextContent)
 	        debouncedUpdate.schedule(nextContent)
 	        focusRange(markerIndex)
 	      }
 	    }
-	    onUpdateScene(scene.id, {
-	      notes: (scene.notes || []).filter(note => note.id !== noteId),
+	    onUpdateScene(sceneRef.current.id, {
+	      notes: (sceneRef.current.notes || []).filter(note => note.id !== noteId),
 	    })
-	  }, [debouncedUpdate, focusRange, onLiveContentChange, onPersistDraft, onUpdateScene, recordBeforeEdit, scene])
+	  }, [debouncedUpdate, focusRange, onLiveContentChange, onPersistDraft, onUpdateScene, recordBeforeEdit])
 
 	  // Clicking the preview should drop the caret exactly where the mouse landed, not at
 	  // the end of the scene. The preview's rendered spans carry data-raw-start/end (see
