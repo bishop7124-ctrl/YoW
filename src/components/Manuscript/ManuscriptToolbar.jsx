@@ -7,29 +7,40 @@ import { useDebouncedCallback } from './manuscriptUtils.js'
 
 // ─── Notes panel ──────────────────────────────────────────────────────────────
 
-// A note's own local, un-debounced buffer for its textarea, mirroring the
-// pattern the main scene content editor already uses (SceneEditor.jsx's
-// localContent + debouncedUpdate) for the same reason: binding a textarea's
-// value straight to the store (a fully controlled input with no local
-// state) means every keystroke has to round-trip through onUpdateScene and
-// a re-render before the next keystroke lands, and on a big project that
-// round-trip is exactly slow enough to read as "typing into it doesn't
-// stick" — characters visibly drop or the field appears to not save.
-// key={note.id} on the call site (below) resets this on note swap/delete,
-// the same "remount to reset local draft state" pattern already used for
-// InlineTitleField elsewhere in this redesign.
-function NoteTextarea({ note, onUpdateText }) {
+// A note's own local, un-debounced buffer for its title input + textarea,
+// mirroring the pattern the main scene content editor already uses
+// (SceneEditor.jsx's localContent + debouncedUpdate) for the same reason:
+// binding a field's value straight to the store (a fully controlled input
+// with no local state) means every keystroke has to round-trip through
+// onUpdateScene and a re-render before the next keystroke lands, and on a
+// big project that round-trip is exactly slow enough to read as "typing
+// into it doesn't stick" — characters visibly drop or the field appears to
+// not save. key={note.id} on the call site (below) resets this on note
+// swap/delete, the same "remount to reset local draft state" pattern
+// already used for InlineTitleField elsewhere in this redesign.
+function NoteFields({ note, onUpdateNote }) {
+  const [title, setTitle] = useState(note.title || '')
   const [text, setText] = useState(note.text || '')
-  const debouncedSave = useDebouncedCallback(value => onUpdateText(note.id, value), 300)
+  const debouncedSaveTitle = useDebouncedCallback(value => onUpdateNote(note.id, { title: value }), 300)
+  const debouncedSaveText = useDebouncedCallback(value => onUpdateNote(note.id, { text: value }), 300)
   return (
-    <textarea
-      value={text}
-      onChange={e => { setText(e.target.value); debouncedSave.schedule(e.target.value) }}
-      onBlur={debouncedSave.flush}
-      placeholder="Write your note here…"
-      className="w-full bg-transparent text-[var(--text-main)] text-sm outline-none resize-none min-h-[60px]"
-      rows={3}
-    />
+    <>
+      <input
+        value={title}
+        onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
+        onBlur={debouncedSaveTitle.flush}
+        placeholder="Untitled note"
+        className="w-full bg-transparent text-[var(--text-main)] text-sm font-semibold outline-none mb-1.5"
+      />
+      <textarea
+        value={text}
+        onChange={e => { setText(e.target.value); debouncedSaveText.schedule(e.target.value) }}
+        onBlur={debouncedSaveText.flush}
+        placeholder="Write your note here…"
+        className="w-full bg-transparent text-[var(--text-main)] text-sm outline-none resize-none min-h-[60px]"
+        rows={3}
+      />
+    </>
   )
 }
 
@@ -41,7 +52,7 @@ export const NotesPanel = ({ scene, onUpdateScene, highlightedSeq }) => {
   )
 
   const notes = scene.notes || []
-  const updateNoteText = (noteId, text) => onUpdateScene(scene.id, { notes: (scene.notes || []).map(n => n.id === noteId ? { ...n, text } : n) })
+  const updateNote = (noteId, data) => onUpdateScene(scene.id, { notes: (scene.notes || []).map(n => n.id === noteId ? { ...n, ...data } : n) })
   const deleteNote = noteId => onUpdateScene(scene.id, { notes: (scene.notes || []).filter(n => n.id !== noteId) })
 
   return (
@@ -58,7 +69,7 @@ export const NotesPanel = ({ scene, onUpdateScene, highlightedSeq }) => {
               <span className="text-[10px] font-bold text-[var(--accent)] uppercase tracking-wider">Note {note.seq}</span>
               <button onClick={() => deleteNote(note.id)} className="text-[var(--text-muted)] hover:text-red-400 text-xs">✕</button>
             </div>
-            <NoteTextarea key={note.id} note={note} onUpdateText={updateNoteText} />
+            <NoteFields key={note.id} note={note} onUpdateNote={updateNote} />
           </div>
         ))}
       </div>

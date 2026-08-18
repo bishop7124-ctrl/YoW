@@ -384,8 +384,10 @@ const NoteIcon = () => (
 // a trivially small project).
 const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDelete, onOpen }) => {
   const [open, setOpen] = useState(!note.text)
+  const [title, setTitle] = useState(note.title || '')
   const [text, setText] = useState(note.text || '')
-  const debouncedSave = useDebouncedCallback(value => onUpdate(note.id, value), 300)
+  const debouncedSaveText = useDebouncedCallback(value => onUpdate(note.id, { text: value }), 300)
+  const debouncedSaveTitle = useDebouncedCallback(value => onUpdate(note.id, { title: value }), 300)
   return (
     <details
       className={`ms-inline-note${embedded ? ' ms-inline-note--embedded' : ''}${highlighted ? ' is-highlighted' : ''}`}
@@ -394,7 +396,15 @@ const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDele
       onClick={e => e.stopPropagation()}
     >
       <summary>
-        <span>Note {note.seq}</span>
+        <span className="ms-inline-note-seq">Note {note.seq}</span>
+        <input
+          className="ms-inline-note-title"
+          value={title}
+          onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
+          onBlur={debouncedSaveTitle.flush}
+          onClick={e => e.stopPropagation()}
+          placeholder="Untitled note"
+        />
         <div className="ms-inline-note-actions">
           <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Panel</button>
           <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(note.id) }}>Delete</button>
@@ -402,12 +412,41 @@ const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDele
       </summary>
       <textarea
         value={text}
-        onChange={e => { setText(e.target.value); debouncedSave.schedule(e.target.value) }}
-        onBlur={debouncedSave.flush}
+        onChange={e => { setText(e.target.value); debouncedSaveText.schedule(e.target.value) }}
+        onBlur={debouncedSaveText.flush}
         placeholder="Write a manuscript note..."
         rows={3}
       />
     </details>
+  )
+}
+
+// Edit mode's gutter card (see .ms-scene-gutter below) — its own component
+// (rather than inline in the .map() below) because the title input needs
+// its own local buffer + debounce, same reasoning as InlineNoteBlock above,
+// and hooks can't live inside a .map() callback.
+function GutterNoteCard({ note, highlighted, onUpdateNote, onOpen }) {
+  const [title, setTitle] = useState(note.title || '')
+  const debouncedSaveTitle = useDebouncedCallback(value => onUpdateNote(note.id, { title: value }), 300)
+  return (
+    <div className={`ms-gutter-note-card${highlighted ? ' is-highlighted' : ''}`}>
+      <span className="ms-gutter-note-card-head"><NoteIcon /> Note {note.seq}</span>
+      <input
+        className="ms-gutter-note-card-title"
+        value={title}
+        onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
+        onBlur={debouncedSaveTitle.flush}
+        placeholder="Untitled note"
+      />
+      <button
+        type="button"
+        className="ms-gutter-note-card-body"
+        onClick={onOpen}
+        aria-label={`Note ${note.seq}${note.text ? `: ${note.text}` : ' (empty)'}`}
+      >
+        {note.text || 'Empty note — click to add text'}
+      </button>
+    </div>
   )
 }
 
@@ -1123,7 +1162,7 @@ const SceneEditorImpl = ({
 	    const nextSeq = currentNotes.length + 1
 	    const selection = lastSelectionRef.current || { start: localContent.length, end: localContent.length }
 	    const start = Math.max(0, Math.min(selection.start, localContent.length))
-	    const nextNote = { id: uid(), seq: nextSeq, text: '', anchorOffset: start }
+	    const nextNote = { id: uid(), seq: nextSeq, title: '', text: '', anchorOffset: start }
 	    setFocused(true)
 	    onUpdateScene(sceneRef.current.id, {
 	      notes: [...currentNotes, nextNote],
@@ -1137,9 +1176,14 @@ const SceneEditorImpl = ({
 	    if (mode !== 'write') onOpenNotes()
 	  }, [localContent, focusRange, onUpdateScene, mode, onOpenNotes])
 
-	  const handleUpdateNote = useCallback((noteId, text) => {
+	  // `data` is a partial note patch — {text: '...'} or {title: '...'} — so
+	  // one handler covers both the body textarea and the title input below,
+	  // each with its own local buffer/debounce (same reasoning as the text
+	  // buffering fix above: title edits go through the same store round-trip
+	  // and shouldn't fully controlled-input themselves into the same lag).
+	  const handleUpdateNote = useCallback((noteId, data) => {
 	    onUpdateScene(sceneRef.current.id, {
-	      notes: (sceneRef.current.notes || []).map(note => note.id === noteId ? { ...note, text } : note),
+	      notes: (sceneRef.current.notes || []).map(note => note.id === noteId ? { ...note, ...data } : note),
 	    })
 	  }, [onUpdateScene])
 
@@ -1432,16 +1476,13 @@ const SceneEditorImpl = ({
         {!isScript && sortedNotes.length > 0 && mode !== 'write' && (
           <div className="ms-scene-gutter">
             {sortedNotes.map(note => (
-              <button
+              <GutterNoteCard
                 key={note.id}
-                type="button"
-                className={`ms-gutter-note-card${highlightedNoteSeq === note.seq ? ' is-highlighted' : ''}`}
-                onClick={() => { onNoteClick(note.seq); onOpenNotes() }}
-                aria-label={`Note ${note.seq}${note.text ? `: ${note.text}` : ' (empty)'}`}
-              >
-                <span className="ms-gutter-note-card-head"><NoteIcon /> Note {note.seq}</span>
-                <span className="ms-gutter-note-card-body">{note.text || 'Empty note — click to add text'}</span>
-              </button>
+                note={note}
+                highlighted={highlightedNoteSeq === note.seq}
+                onUpdateNote={handleUpdateNote}
+                onOpen={() => { onNoteClick(note.seq); onOpenNotes() }}
+              />
             ))}
           </div>
         )}
