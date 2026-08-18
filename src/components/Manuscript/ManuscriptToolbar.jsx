@@ -18,20 +18,23 @@ import { useDebouncedCallback } from './manuscriptUtils.js'
 // not save. key={note.id} on the call site (below) resets this on note
 // swap/delete, the same "remount to reset local draft state" pattern
 // already used for InlineTitleField elsewhere in this redesign.
-function NoteFields({ note, onUpdateNote }) {
+function NoteFields({ note, onUpdateNote, onDelete }) {
   const [title, setTitle] = useState(note.title || '')
   const [text, setText] = useState(note.text || '')
   const debouncedSaveTitle = useDebouncedCallback(value => onUpdateNote(note.id, { title: value }), 300)
   const debouncedSaveText = useDebouncedCallback(value => onUpdateNote(note.id, { text: value }), 300)
   return (
     <>
-      <input
-        value={title}
-        onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
-        onBlur={debouncedSaveTitle.flush}
-        placeholder="Untitled note"
-        className="w-full bg-transparent text-[var(--text-main)] text-sm font-semibold outline-none mb-1.5"
-      />
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <input
+          value={title}
+          onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
+          onBlur={debouncedSaveTitle.flush}
+          placeholder={`Note ${note.seq}`}
+          className="flex-1 min-w-0 bg-transparent text-[var(--text-main)] text-sm font-semibold outline-none"
+        />
+        <button onClick={onDelete} className="flex-shrink-0 text-[var(--text-muted)] hover:text-red-400 text-xs">✕</button>
+      </div>
       <textarea
         value={text}
         onChange={e => { setText(e.target.value); debouncedSaveText.schedule(e.target.value) }}
@@ -65,11 +68,7 @@ export const NotesPanel = ({ scene, onUpdateScene, highlightedSeq }) => {
         )}
         {notes.map(note => (
           <div key={note.id} className={`rounded-lg border p-3 transition-colors ${highlightedSeq === note.seq ? 'border-[var(--accent)] bg-[var(--accent-fade)]' : 'border-[var(--border)] bg-[var(--bg-main)]'}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[var(--accent)] uppercase tracking-wider">Note {note.seq}</span>
-              <button onClick={() => deleteNote(note.id)} className="text-[var(--text-muted)] hover:text-red-400 text-xs">✕</button>
-            </div>
-            <NoteFields key={note.id} note={note} onUpdateNote={updateNote} />
+            <NoteFields key={note.id} note={note} onUpdateNote={updateNote} onDelete={() => deleteNote(note.id)} />
           </div>
         ))}
       </div>

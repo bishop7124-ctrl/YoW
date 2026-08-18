@@ -396,14 +396,13 @@ const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDele
       onClick={e => e.stopPropagation()}
     >
       <summary>
-        <span className="ms-inline-note-seq">Note {note.seq}</span>
         <input
           className="ms-inline-note-title"
           value={title}
           onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
           onBlur={debouncedSaveTitle.flush}
           onClick={e => e.stopPropagation()}
-          placeholder="Untitled note"
+          placeholder={`Note ${note.seq}`}
         />
         <div className="ms-inline-note-actions">
           <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Panel</button>
@@ -430,14 +429,16 @@ function GutterNoteCard({ note, highlighted, onUpdateNote, onOpen }) {
   const debouncedSaveTitle = useDebouncedCallback(value => onUpdateNote(note.id, { title: value }), 300)
   return (
     <div className={`ms-gutter-note-card${highlighted ? ' is-highlighted' : ''}`}>
-      <span className="ms-gutter-note-card-head"><NoteIcon /> Note {note.seq}</span>
-      <input
-        className="ms-gutter-note-card-title"
-        value={title}
-        onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
-        onBlur={debouncedSaveTitle.flush}
-        placeholder="Untitled note"
-      />
+      <div className="ms-gutter-note-card-head">
+        <NoteIcon />
+        <input
+          className="ms-gutter-note-card-title"
+          value={title}
+          onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
+          onBlur={debouncedSaveTitle.flush}
+          placeholder={`Note ${note.seq}`}
+        />
+      </div>
       <button
         type="button"
         className="ms-gutter-note-card-body"
