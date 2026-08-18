@@ -15354,15 +15354,18 @@ body {
 
 /* Container query (not a viewport media query — spec is explicit about
    this) on the writing column itself, named via container-name on
-   .ms-scroll-container above. Drops the gutter once the column can't fit
-   prose (--ms-prose-w, ~1080px) + gap (28px) + gutter (188px) comfortably —
-   which can happen at a wide viewport too, if the rail and inspector are
-   both open and eating into the column's share of it. The threshold scales
-   with the same ~1080px prose target Manuscript.jsx computes (chosen so the
-   gutter still fits next to it on a common ~1920px screen with both panels
-   open); it can't reference the custom property directly (container query
-   conditions can't use var()), so it's a plain number tuned to match. */
-@container ms-writing-column (max-width: 1320px) {
+   .ms-scroll-container above. `minmax(0, var(--ms-prose-w))` on
+   .ms-scene-body.has-gutter already lets the prose column shrink to fit
+   whatever's left once the fixed-width gutter (188px) and its gap (28px)
+   are accounted for -- this only needs to step in once that shrinking
+   would make prose too narrow to comfortably read, dropping the gutter
+   entirely rather than the column silently squeezing itself unreadable.
+   740px leaves room for ~420px of prose alongside a full gutter, deliberately
+   low: with the inspector open (320px) -- the normal state whenever notes
+   actually matter -- plus an expanded rail (268px), a common 1440px screen
+   only has ~850px left for this column, and the gutter needs to survive
+   that ordinary case, not just a wide monitor with both panels open. */
+@container ms-writing-column (max-width: 740px) {
   .ms-scene-body.has-gutter { grid-template-columns: minmax(0, var(--ms-prose-w, 620px)); }
   .ms-scene-gutter { display: none; }
 }
