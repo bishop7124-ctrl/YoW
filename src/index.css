@@ -15276,10 +15276,18 @@ body {
   opacity: 1;
 }
 
-/* Prose column (620px) + note gutter (188px) — see SceneEditor.jsx. */
+/* Prose column (620px) + note gutter (188px) — see SceneEditor.jsx.
+   justify-content: center keeps the (620px, or 620+28+188 with a gutter)
+   track-set centered within .ms-scene-body's own box rather than hugging
+   its left edge — .ms-scene-body itself stretches to fill whatever width
+   .manuscript-document gives it (up to ~960px+), which is much wider than
+   the fixed-width column on anything but a narrow viewport, so without
+   this the prose reads as jammed against the rail with a large dead gap
+   before the inspector. */
 .ms-scene-body {
   display: grid;
   grid-template-columns: minmax(0, 620px);
+  justify-content: center;
   gap: 0 28px;
   align-items: start;
 }
@@ -15291,10 +15299,10 @@ body {
 
 /* Write mode (spec §8): prose centres at 684px instead of sitting left-set
    at 620px — no gutter column is ever rendered here (SceneEditor.jsx gates
-   that separately), this only widens and centers the single column. */
+   that separately), this only widens the single column (still centered via
+   the base rule above). */
 .ms-scene-body--write {
   grid-template-columns: minmax(0, 684px);
-  justify-content: center;
 }
 
 /* Write mode's scene header: name only, muted, no hairline — status chip,
