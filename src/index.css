@@ -3915,7 +3915,13 @@ textarea:focus {
 }
 
 .manuscript-document {
-  width: min(100%, 1040px);
+  /* No explicit width here on purpose: it used to hardcode min(100%, 1040px),
+     which silently capped the document below Manuscript.jsx's own dynamic
+     max-width (--ms-prose-w-derived, see PROSE_WIDTH_BASE) the moment that
+     grew past 1040px — a stale, undocumented second width constraint
+     fighting the real one. A block element's default width already respects
+     max-width (set inline by Manuscript.jsx) plus the mx-auto centering
+     below, so this only needs to guarantee the minimum height. */
   min-height: 100%;
 }
 
@@ -6697,7 +6703,10 @@ body {
 }
 
 .manuscript-document {
-  max-width: 960px;
+  /* max-width used to be hardcoded here too (960px) -- Manuscript.jsx's own
+     inline max-width always won for that property regardless, so it wasn't
+     actively wrong, just a second stale number sitting next to the real
+     one. Dropped to avoid exactly that confusion again. */
   margin: 0 auto;
   padding-inline: clamp(26px, 5vw, 72px);
   background: color-mix(in srgb, var(--bg-nav) 44%, var(--bg-main));
@@ -15276,33 +15285,36 @@ body {
   opacity: 1;
 }
 
-/* Prose column (620px) + note gutter (188px) — see SceneEditor.jsx.
-   justify-content: center keeps the (620px, or 620+28+188 with a gutter)
-   track-set centered within .ms-scene-body's own box rather than hugging
-   its left edge — .ms-scene-body itself stretches to fill whatever width
-   .manuscript-document gives it (up to ~960px+), which is much wider than
-   the fixed-width column on anything but a narrow viewport, so without
-   this the prose reads as jammed against the rail with a large dead gap
-   before the inspector. */
+/* Prose column + note gutter (188px) — see SceneEditor.jsx. The prose
+   column's width (--ms-prose-w, set on .manuscript-document in
+   Manuscript.jsx, ~1080px at the default font size) is shared between this
+   rule and .ms-scene-body--write below, so the line length never changes
+   between Edit and Write — Edit's document is simply wider again by the
+   gutter's own footprint (see PROSE_GUTTER_RESERVE in Manuscript.jsx), and
+   that extra width belongs to the gutter column here, not the prose
+   column. justify-content: center keeps the track-set centered within
+   .ms-scene-body's own box (relevant when a scene has no gutter, since its
+   single fixed-width track is then narrower than the gutter-reserving
+   document) rather than hugging its left edge. */
 .ms-scene-body {
   display: grid;
-  grid-template-columns: minmax(0, 620px);
+  grid-template-columns: minmax(0, var(--ms-prose-w, 620px));
   justify-content: center;
   gap: 0 28px;
   align-items: start;
 }
 .ms-scene-body.has-gutter {
-  grid-template-columns: minmax(0, 620px) 188px;
+  grid-template-columns: minmax(0, var(--ms-prose-w, 620px)) 188px;
 }
 .ms-scene-prose-col { grid-column: 1; min-width: 0; }
 .ms-scene-gutter { grid-column: 2; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 
-/* Write mode (spec §8): prose centres at 684px instead of sitting left-set
-   at 620px — no gutter column is ever rendered here (SceneEditor.jsx gates
-   that separately), this only widens the single column (still centered via
-   the base rule above). */
+/* Write mode (spec §8): no gutter column is ever rendered here
+   (SceneEditor.jsx gates that separately) and the document itself is sized
+   to exactly --ms-prose-w (no gutter reserve), so filling 100% of it (1fr)
+   lands on the same width as Edit's fixed --ms-prose-w track above. */
 .ms-scene-body--write {
-  grid-template-columns: minmax(0, 684px);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* Write mode's scene header: name only, muted, no hairline — status chip,
@@ -15343,11 +15355,15 @@ body {
 /* Container query (not a viewport media query — spec is explicit about
    this) on the writing column itself, named via container-name on
    .ms-scroll-container above. Drops the gutter once the column can't fit
-   prose (620px) + gap (28px) + gutter (188px) comfortably — which can
-   happen at a wide viewport too, if the rail and inspector are both open
-   and eating into the column's share of it. */
-@container ms-writing-column (max-width: 880px) {
-  .ms-scene-body.has-gutter { grid-template-columns: minmax(0, 620px); }
+   prose (--ms-prose-w, ~1080px) + gap (28px) + gutter (188px) comfortably —
+   which can happen at a wide viewport too, if the rail and inspector are
+   both open and eating into the column's share of it. The threshold scales
+   with the same ~1080px prose target Manuscript.jsx computes (chosen so the
+   gutter still fits next to it on a common ~1920px screen with both panels
+   open); it can't reference the custom property directly (container query
+   conditions can't use var()), so it's a plain number tuned to match. */
+@container ms-writing-column (max-width: 1320px) {
+  .ms-scene-body.has-gutter { grid-template-columns: minmax(0, var(--ms-prose-w, 620px)); }
   .ms-scene-gutter { display: none; }
 }
 

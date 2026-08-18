@@ -24,6 +24,17 @@ import { useSceneWindow } from './useSceneWindow.js'
 
 const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
 
+// Prose column target width (at the default 19px font) -- shared by Write
+// and Edit mode via the --ms-prose-w custom property set below, so the line
+// length is identical in both. Edit mode's document is simply this much
+// wider again, reserved for the note gutter (.ms-scene-gutter's own 188px
+// plus its 28px gap from the prose column) -- see .ms-scene-body/
+// .ms-scene-body--write in index.css.
+const PROSE_WIDTH_BASE = 1080
+const PROSE_GUTTER_RESERVE = 216
+// Matches .manuscript-document's own md:px-12 Tailwind padding (48px each side).
+const MANUSCRIPT_DOC_PADDING = 96
+
 // Rough placeholder height for a scene that hasn't been mounted (and measured) yet —
 // see useSceneWindow.js and the SceneSlot component below. Doesn't need to be exact:
 // it only has to be close enough that scrolling past an unmounted scene doesn't cause
@@ -36,9 +47,12 @@ function estimateSceneHeight(scene, formatSettings) {
   const fontSize = formatSettings?.fontSize || 19
   const lineHeight = formatSettings?.lineHeight || 2
   const lineHeightPx = fontSize * lineHeight
-  // ~68 characters/line at the default 19px font in the ~960px column; a bigger font
-  // fits fewer characters per line, so scale the estimate down as fontSize grows.
-  const charsPerLine = Math.max(30, 68 * (19 / fontSize))
+  // ~77 characters/line at the default 19px font in the ~1080px prose column (Edit's
+  // width, and also Write's since they share --ms-prose-w — see PROSE_WIDTH_BASE); a
+  // bigger font fits fewer characters per line, so scale the estimate down as fontSize
+  // grows. This is a rough placeholder estimate either way (see SceneSlot below), not a
+  // hard layout constraint, so it doesn't need to track Write's wider 1fr fill exactly.
+  const charsPerLine = Math.max(30, 77 * (19 / fontSize))
   const estimatedLines = Math.max(2, Math.ceil(length / charsPerLine))
   return Math.round(PLACEHOLDER_HEADER_PX + estimatedLines * lineHeightPx)
 }
@@ -282,6 +296,10 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [formatSettings, setFormatSettings] = useState(loadFormat)
+  // Scales with font size like the old single-mode column used to, so a
+  // bigger font still gets a sensible measure instead of a fixed character
+  // count regardless of size.
+  const proseWidth = Math.round(Math.max(PROSE_WIDTH_BASE, PROSE_WIDTH_BASE * (formatSettings.fontSize / 19)))
   const [fullscreen, setFullscreen] = useState(false)
   const [saveState, setSaveState] = useState('saved') // 'saving' | 'saved'
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
@@ -1160,12 +1178,27 @@ export default function Manuscript({ store, userId, membership = null }) {
             className="manuscript-document mx-auto py-16 px-6 md:px-12"
             style={{
               zoom: focusedWriting.pageZoom,
-              // The base 960px column is tuned for the default 19px font. Scale it up with
-              // larger text sizes so a bigger font still gets a sensible line length instead
-              // of the column staying capped and wasting the extra width the page has to give.
-              // min(100%, …) keeps this from fighting the mobile full-width override below 640px,
-              // since inline styles otherwise take precedence over that media query.
-              maxWidth: `min(100%, ${Math.round(Math.max(960, 960 * (formatSettings.fontSize / 19)))}px)`,
+              // Prose width is shared between Write and Edit via --ms-prose-w
+              // (see .ms-scene-body/.ms-scene-body--write in index.css) so the
+              // line length never changes between modes -- Edit's document is
+              // simply PROSE_GUTTER_RESERVE px wider than Write's, and that
+              // extra width belongs to the note gutter, not the prose column.
+              // The 1080 base is tuned to read as "nearly the whole page" on a
+              // typical wide laptop/desktop screen rather than a traditional
+              // narrow reading column, per an explicit request, while still
+              // leaving enough room next to it for the gutter (see
+              // PROSE_GUTTER_RESERVE) to actually fit on a common ~1920px
+              // screen with both the rail and inspector open -- a wider base
+              // reads nicer alone but pushes the gutter's container-query
+              // drop-out threshold past what most desktop screens can offer.
+              // Still scales with font size like before so bigger text keeps
+              // a sensible measure instead of a fixed character count
+              // regardless of size.
+              // min(100%, …) keeps this from fighting the mobile full-width
+              // override below 640px, since inline styles otherwise take
+              // precedence over that media query.
+              '--ms-prose-w': `${proseWidth}px`,
+              maxWidth: `min(100%, ${proseWidth + MANUSCRIPT_DOC_PADDING + (mode === 'write' ? 0 : PROSE_GUTTER_RESERVE)}px)`,
             }}
           >
 
