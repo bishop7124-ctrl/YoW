@@ -1386,10 +1386,13 @@ export default function Manuscript({ store, userId, membership = null }) {
           />
         )}
 
-        {/* Surface — AI/Search/History/Finalise, one at a time, overlays the
-            inspector (absolutely positioned — this is why the row above got
-            `relative`). Not gated on focus mode either: AI stays reachable
-            there via FocusedWritingShell's own AI button. */}
+        {/* Surface — AI/Search/History/Finalise, one at a time. Sits in normal
+            flex flow now (see .ms-surface in index.css) rather than
+            absolutely overlaying the inspector — the two are mutually
+            exclusive (never both open, see handleToggleSurface etc. above),
+            so there's nothing left to overlay, and opening either now makes
+            room for itself the same way. Not gated on focus mode either: AI
+            stays reachable there via FocusedWritingShell's own AI button. */}
         <ManuscriptSurface
           activeSurface={surfaceId}
           onClose={handleCloseSurface}
