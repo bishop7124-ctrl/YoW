@@ -1,3 +1,10 @@
+// The fixed user id assigned to every e2e run by the VITE_OFFLINE_MODE dev-user
+// fixture (see src/utils/offlineMock.js). useTourStore keys wizard/welcome
+// dismissal per-user (`wizard_<userId>` / `welcome_<userId>`), not as a flat
+// `wizardShown` flag, so suppression here must match that shape or the
+// first-run "How would you like to begin?" wizard reappears on every run.
+export const OFFLINE_USER_ID = 'offline-dev-user'
+
 export const storageKeys = [
   'nf_activeNovel',
   'nf_acts',
@@ -28,8 +35,15 @@ export async function seedCleanStorage(page) {
       sessionStorage.setItem('yow_qa_storage_seeded', '1')
     }
     localStorage.setItem('yow_beta_acknowledged', '1')
-    // Suppress the first-run wizard and all tours so they never block button clicks
-    localStorage.setItem('yow_onboarding', JSON.stringify({ wizardShown: true, checklistDismissed: true, toursEnabled: false }))
+    // Suppress the first-run wizard and all tours so they never block button clicks.
+    // useTourStore reads these per-userId ('wizard_<id>'/'welcome_<id>'), not a flat
+    // 'wizardShown' flag — see the OFFLINE_USER_ID comment above.
+    localStorage.setItem('yow_onboarding', JSON.stringify({
+      toursEnabled: false,
+      checklistDismissed: true,
+      'wizard_offline-dev-user': true,
+      'welcome_offline-dev-user': true,
+    }))
     document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
   }, storageKeys)
 }

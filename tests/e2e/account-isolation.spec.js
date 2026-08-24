@@ -17,15 +17,21 @@ const OTHER_USER_ID = 'other-account-id-xyz'
 
 // Seed localStorage as if a *different* user owned the stored data.
 async function seedAsOtherUser(page, { novels = [], scenes = [] } = {}) {
-  await page.addInitScript(({ otherId, novelData, sceneData }) => {
+  await page.addInitScript(({ otherId, novelData, sceneData, offlineUserId }) => {
     localStorage.setItem('nf_localOwner', otherId)
     localStorage.setItem('nf_novels', JSON.stringify(novelData))
     localStorage.setItem('nf_scenes', JSON.stringify(sceneData))
-    // Wizard suppression so we can see the library clearly
-    localStorage.setItem('yow_onboarding', JSON.stringify({ wizardShown: true, checklistDismissed: true }))
+    // Wizard suppression so we can see the library clearly. useTourStore keys
+    // this per-userId ('wizard_<id>'), not a flat 'wizardShown' flag — keyed to
+    // the offline dev user (who the app actually renders as), not otherId.
+    localStorage.setItem('yow_onboarding', JSON.stringify({
+      checklistDismissed: true,
+      [`wizard_${offlineUserId}`]: true,
+      [`welcome_${offlineUserId}`]: true,
+    }))
     localStorage.setItem('yow_beta_acknowledged', '1')
     document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
-  }, { otherId: OTHER_USER_ID, novelData: novels, sceneData: scenes })
+  }, { otherId: OTHER_USER_ID, novelData: novels, sceneData: scenes, offlineUserId: OFFLINE_USER_ID })
 }
 
 test('projects owned by a different user are not loaded for the current user', async ({ page }) => {
