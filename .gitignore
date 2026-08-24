@@ -39,4 +39,5 @@ scripts/interest-sync/logs/
 *.njsproj
 *.sln
 *.sw?
-.claude/
+.claude/*
+!.claude/skills
