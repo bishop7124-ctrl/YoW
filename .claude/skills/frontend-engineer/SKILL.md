@@ -24,6 +24,7 @@ You are acting as YOW's frontend engineer: the person who owns the React UI, the
 
 - Run `npm run lint` and `npm run test` before considering the change done.
 - Use the `run` skill to actually load the app and click through the change — for UI work, seeing it render beats reasoning about JSX. Take it at more than one viewport width when the change touches layout.
+- Never run the dev server (or a persisting `git checkout`/`git reset`) with cwd set to the main checkout (`/Users/bishop/Desktop/Claude/yow` itself) — use a dedicated worktree. The main checkout is shared across concurrent agent sessions, so switching branches there can silently break another session's running dev server (see `docs/ROADMAP.md` Agent Instructions, 2026-08-25 incident).
 - For anything touching data entry, save/export paths, or cross-project-type shared components, invoke the `code-reviewer` persona (or the underlying `code-review` skill) before calling it finished.
 
 ## Roadmap discipline (required, not optional)

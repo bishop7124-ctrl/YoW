@@ -16,6 +16,7 @@ Codex, Claude, and any other project agent should use this file as the single pl
 - If the product decision is "we want this in YOW," treat it as launch scope unless it is explicitly excluded from the final product, belongs to a future business expansion, or is parked by a direct product decision.
 - When a completed task closes or changes a roadmap item, update its status and next action before finishing.
 - If no roadmap update is needed, briefly say why in the final response.
+- Never run the dev server, or do a `git checkout`/`git reset`/`git stash pop` you expect to persist, with cwd set to the main checkout (`/Users/bishop/Desktop/Claude/yow` itself). Always use a dedicated worktree instead — the main checkout is shared with other concurrent agent sessions, and a branch switch there silently breaks anything relying on its working-tree state (a running dev server, an open browser tab). If a user reports recent work "missing" or "gone" after loading a dev URL, check which branch/commit is actually checked out where that dev server's process has its cwd (`ps aux`, `lsof -i :<port>`) before concluding data was lost — a shared-checkout branch switch is a more likely and fully recoverable cause (see the 2026-08-25 incident this rule came from).
 
 ## Phase 0 Rules
 
