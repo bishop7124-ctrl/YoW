@@ -6,6 +6,12 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const PAID_STATUSES = new Set(['active', 'trialing'])
 const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder'])
 
+// Legacy Supabase plan keys mapped to the current key used for display and quotas.
+// The raw key stays in `subscriptionPlan` — it identifies live entitlements, never rename it.
+const LEGACY_PLAN_KEY_ALIASES = {
+  premium_lifetime: 'premium_plus_lifetime', // £149 Lifetime Launch plan
+}
+
 // Storage quotas in bytes per plan key.
 // These are the canonical quota values — also used by storageQuota.js.
 export const PLAN_STORAGE_BYTES = {
@@ -148,7 +154,7 @@ export function getMembership(user) {
   const plan = isPaid ? 'paid' : isTrialActive ? 'trial' : 'free'
 
   const activePlanKey = isPaid
-    ? (subscriptionPlan || 'premium_monthly')
+    ? (LEGACY_PLAN_KEY_ALIASES[subscriptionPlan] || subscriptionPlan || 'premium_monthly')
     : isTrialActive
       ? 'trial'
       : 'free'
