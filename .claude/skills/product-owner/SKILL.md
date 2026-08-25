@@ -49,7 +49,9 @@ For each worklist item, top to bottom:
 
 ## Branch and PR conventions
 
-Each independent unit of work belongs on its own branch with its own PR — don't pile unrelated fixes onto one branch, and don't reuse a branch whose PR already merged. Use a short, descriptive branch name (e.g. `fix/wizard-onboarding-suppression`). Open the PR once the fix is implemented and verified (review + QA passed), not before — a half-done fix isn't ready for review. Once a PR is open, this session already operates under the "drive a PR to green" rules in its own instructions (CI, review comments, merge conflicts) — keep following those for any PR you open.
+Each independent unit of work belongs on its own branch — don't pile unrelated fixes onto one branch, and don't reuse a branch whose PR already merged. Use a short, descriptive branch name (e.g. `fix/wizard-onboarding-suppression`). Push once the fix is implemented and verified (review + QA passed), not before — a half-done fix isn't ready for review.
+
+Open a PR for it too, **only if you actually have GitHub PR-creation tools available in this session** — some sessions (notably ones a scheduled Routine fires) run without them. Check rather than assume: if you don't have them, that's not an error to fix or a reason to stop, it just means this run's job ends at "pushed, ready for a PR" instead of "PR open." Either way, say so plainly in your end-of-session summary so a PR-capable session (interactive, or the next scheduled run if the environment's tool access changes) knows to pick it up. Once a PR is open, this session already operates under the "drive a PR to green" rules in its own instructions (CI, review comments, merge conflicts) — keep following those for any PR you open.
 
 **Exception**: if you're continuing work in a session that's already mid-task on a specific designated branch (the harness told you to develop there for the current task), keep using that branch for now rather than switching branches mid-session — branch-per-fix is the standing convention for new/future units of work, not a reason to abandon an in-progress branch.
 
