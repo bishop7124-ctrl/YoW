@@ -14420,6 +14420,45 @@ body {
   background: var(--accent-fade);
 }
 
+/* Explicit "move to..." control — same reveal-on-hover treatment as
+   .ms-sidebar-icon-btn, sized for its own text instead of a fixed icon box,
+   since (unlike the pencil/trash icon buttons) this needs to show which
+   act/chapter a scene or chapter currently belongs to. */
+.ms-sidebar-move-select {
+  max-width: 88px;
+  flex-shrink: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  padding: 1px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.62;
+  transition: opacity 0.1s, color 0.1s, background 0.1s;
+}
+.ms-sidebar-move-select:hover,
+.ms-sidebar-move-select:focus {
+  color: var(--accent);
+  background: var(--accent-fade);
+  opacity: 1;
+}
+.ms-sidebar-act:hover .ms-sidebar-move-select,
+.ms-sidebar-chapter:hover .ms-sidebar-move-select,
+.ms-sidebar-scene:hover .ms-sidebar-move-select,
+.ms-sidebar-act:focus-within .ms-sidebar-move-select,
+.ms-sidebar-chapter:focus-within .ms-sidebar-move-select,
+.ms-sidebar-scene:focus-within .ms-sidebar-move-select {
+  opacity: 1;
+}
+
 .ms-sidebar-dropzone {
   display: flex;
   align-items: center;

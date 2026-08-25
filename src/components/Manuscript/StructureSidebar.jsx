@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from 'react'
+import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ const PencilIcon = () => (
   </svg>
 )
 
+
 const isGeneratedTitle = (title, label) => {
   const clean = (title || '').trim()
   if (!clean) return true
@@ -163,6 +165,7 @@ function SceneRow({
   scene, index, sceneCount, isActive,
   onSelect, onUpdateScene, onDeleteScene, onReorderScene,
   dragRef, dragOver, setDragOver, onDropScene,
+  chapterOptions, onMoveScene, labels,
 }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const words = useMemo(() => countWords(scene.content), [scene.content])
@@ -243,6 +246,16 @@ function SceneRow({
         </button>
       )}
 
+      {chapterOptions?.length > 1 && (
+        <ParentMoveSelect
+          className="ms-sidebar-move-select"
+          value={scene.chapterId}
+          options={chapterOptions}
+          label={`Move ${(labels?.level3 || 'scene').toLowerCase()} to ${(labels?.level2 || 'chapter').toLowerCase()}`}
+          onChange={chapterId => onMoveScene(scene.id, chapterId)}
+        />
+      )}
+
       <button
         className="ms-sidebar-icon-btn"
         onClick={() => setEditingTitle(true)}
@@ -277,6 +290,7 @@ function ChapterRow({
   activeSceneId, onSelectScene, onUpdateScene, onDeleteScene, moveScene,
   labels, onMoveScene, onReorderChapter,
   dragRef, dragOver, setDragOver, onDropChapter, onDropScene,
+  chapterOptions, actOptions, onMoveChapter,
 }) {
   const [open, setOpen] = useState(true)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -357,6 +371,16 @@ function ChapterRow({
           </button>
         )}
 
+        {actOptions?.length > 1 && (
+          <ParentMoveSelect
+            className="ms-sidebar-move-select"
+            value={chap.actId}
+            options={actOptions}
+            label={`Move ${labels.level2.toLowerCase()} to ${labels.level1.toLowerCase()}`}
+            onChange={actId => onMoveChapter(chap.id, actId)}
+          />
+        )}
+
         <button
           className="ms-sidebar-icon-btn"
           onClick={() => setEditingTitle(true)}
@@ -411,6 +435,9 @@ function ChapterRow({
               dragOver={dragOver}
               setDragOver={setDragOver}
               onDropScene={onDropScene}
+              chapterOptions={chapterOptions}
+              onMoveScene={onMoveScene}
+              labels={labels}
             />
           ))}
           {chapScenes.length === 0 && (
@@ -473,6 +500,11 @@ export default function StructureSidebar({
     moveScene(sceneId, chapterId, destCount)
   }, [scenes, moveScene])
 
+  const handleMoveChapterToAct = useCallback((chapterId, actId) => {
+    const destCount = chapters.filter(c => c.actId === actId && c.id !== chapterId).length
+    moveChapter(chapterId, actId, destCount)
+  }, [chapters, moveChapter])
+
   const handleDropChapter = useCallback((dragged, toActId, targetChapId, position) => {
     if (!dragged || dragged.type !== 'chapter') return
     const actChapters = chapters.filter(c => c.actId === toActId).sort((a, b) => a.order - b.order)
@@ -500,6 +532,24 @@ export default function StructureSidebar({
     })
     return map
   }, [acts, chapters])
+
+  // Options for the explicit "move to..." selects — every act/chapter, not
+  // just empty ones (drag-and-drop is the empty-parent-only path; this
+  // control can move into a populated parent too, matching StoryOutline.jsx).
+  const actOptions = useMemo(() => acts.map((act, idx) => ({
+    id: act.id,
+    label: act.title || `${labels.level1} ${idx + 1}`,
+  })), [acts, labels.level1])
+
+  const chapterOptions = useMemo(() => (
+    acts.flatMap(act => chapters
+      .filter(c => c.actId === act.id)
+      .sort((a, b) => a.order - b.order)
+      .map(c => ({
+        id: c.id,
+        label: displayNumberedTitle(c.title, labels.level2, chapterNumbers[c.id]),
+      })))
+  ), [acts, chapters, chapterNumbers, labels.level2])
 
   const actWords = useCallback((act) => {
     const actChapIds = new Set(chapters.filter(c => c.actId === act.id).map(c => c.id))
@@ -663,6 +713,9 @@ export default function StructureSidebar({
                       setDragOver={setDragOver}
                       onDropChapter={handleDropChapter}
                       onDropScene={handleDropScene}
+                      chapterOptions={chapterOptions}
+                      actOptions={actOptions}
+                      onMoveChapter={handleMoveChapterToAct}
                     />
                   ))}
                   {actChapters.length === 0 && (
