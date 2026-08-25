@@ -1559,6 +1559,29 @@ export default function MapBuilder({ store }) {
                 )}
                 {primarySelection.type === 'location' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {(() => {
+                      const linkedId = primarySelection.metadata?.locationId
+                      const linked = linkedId ? (locations || []).find(location => location.id === linkedId) : null
+                      if (!linked) return null
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {'→'} Location: {linked.name || 'Untitled'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('yow:open-location', { detail: { locationId: linked.id, name: linked.name } }))
+                              }
+                            }}
+                            style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 6, border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer' }}
+                          >
+                            Open
+                          </button>
+                        </div>
+                      )
+                    })()}
                     <SelectInput
                       label="Linked location"
                       value={primarySelection.metadata?.locationId || ''}
