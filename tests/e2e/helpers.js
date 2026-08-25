@@ -1,3 +1,5 @@
+import { DB_NAME, DB_VERSION, STORE_NAME } from '../../src/storage/browserVaultAdapter.js'
+
 // The fixed user id assigned to every e2e run by the VITE_OFFLINE_MODE dev-user
 // fixture (see src/utils/offlineMock.js). useTourStore keys wizard/welcome
 // dismissal per-user (`wizard_<userId>` / `welcome_<userId>`), not as a flat
@@ -113,11 +115,21 @@ export async function writeInDefaultScene(page, text) {
   const editor = page.getByPlaceholder('Begin writing here…')
   await editor.fill(text)
   await editor.press('End')
-  // Wait for localStorage to reflect the written content
+  // Wait for project storage to reflect the written content. Goes through
+  // window.__yowStorageBridge (see src/storage/projectStorage.js) rather than
+  // raw localStorage — the app's active backend can be an IndexedDB-backed
+  // vault, which raw localStorage reads can't see. Content itself lives
+  // under a per-scene `nf_scene_content:<id>` key, not inline on the
+  // nf_scenes record (src/storage/sceneContentStore.js splits it out) — a
+  // scene can transiently still show inline content here too (right after
+  // the first local commit, before its content key is confirmed written),
+  // so check both rather than assuming either one is authoritative.
   await page.waitForFunction(
     (expected) => {
-      const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
-      return scenes.some(s => s.content === expected || (s.content || '').includes(expected.slice(0, 40)))
+      const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+      const scenes = JSON.parse(get('nf_scenes') || '[]')
+      const matches = (content) => content === expected || (content || '').includes(expected.slice(0, 40))
+      return scenes.some(s => matches(s.content) || matches(get(`nf_scene_content:${s.id}`)))
     },
     text,
     { timeout: 8000 },
@@ -132,8 +144,9 @@ export async function waitForStorage(page, predicate, arg, timeout = 8000) {
 }
 
 // Seed project-storage entries (nf_* keys) directly into the app's IndexedDB
-// vault (see src/storage/browserVaultAdapter.js — DB 'yow-storage', store
-// 'kv', out-of-line string keys) *before* the app boots, so
+// vault (see src/storage/browserVaultAdapter.js for the DB_NAME/DB_VERSION/
+// STORE_NAME schema, imported above rather than duplicated — out-of-line
+// string keys) *before* the app boots, so
 // initializeIndexedDbStorage()'s hydration picks them up as if they were
 // already there. This is the pre-boot equivalent of window.__yowStorageBridge
 // (which only exists once the app's JS has actually loaded) — use this from
@@ -154,24 +167,24 @@ export async function seedIndexedDbEntries(page, entries) {
   // to fetch/parse/execute than this synchronous open+put chain takes to
   // issue, so this hasn't been observed to race, but if this ever proves
   // flaky in real CI, that's the first place to look.
-  await page.addInitScript(async (data) => {
+  await page.addInitScript(async ({ data, dbName, dbVersion, storeName }) => {
     if (typeof indexedDB === 'undefined') return
     await new Promise((resolve, reject) => {
-      const req = indexedDB.open('yow-storage', 1)
+      const req = indexedDB.open(dbName, dbVersion)
       req.onupgradeneeded = () => {
-        if (!req.result.objectStoreNames.contains('kv')) req.result.createObjectStore('kv')
+        if (!req.result.objectStoreNames.contains(storeName)) req.result.createObjectStore(storeName)
       }
       req.onsuccess = () => {
         const db = req.result
-        const tx = db.transaction('kv', 'readwrite')
-        const store = tx.objectStore('kv')
+        const tx = db.transaction(storeName, 'readwrite')
+        const store = tx.objectStore(storeName)
         for (const [key, value] of Object.entries(data)) store.put(String(value), key)
         tx.oncomplete = () => resolve()
         tx.onerror = () => reject(tx.error)
       }
       req.onerror = () => reject(req.error)
     })
-  }, entries)
+  }, { data: entries, dbName: DB_NAME, dbVersion: DB_VERSION, storeName: STORE_NAME })
 }
 
 // Read a project-storage key and JSON-parse it. Goes through
@@ -186,4 +199,33 @@ export async function readStorage(page, key) {
     const raw = window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
     try { return raw ? JSON.parse(raw) : null } catch { return raw }
   }, key)
+}
+
+// Read `nf_scenes` and merge each scene's prose back in from its own
+// `nf_scene_content:<id>` key (see src/storage/sceneContentStore.js — a
+// 2026-08 perf refactor strips `.content` out of the nf_scenes metadata
+// array unconditionally and stores it per-scene instead, exactly the way
+// the app's own hydrateScenesFromStorage() does for React state). A plain
+// `readStorage(page, 'nf_scenes')` scene will never have `.content` — use
+// this instead for any assertion that needs to see what was actually typed.
+// Mirrors hydrateScenesFromStorage()'s own precedence exactly, not the
+// reverse: prefers the metadata record's own inline `.content` when it's a
+// non-empty string (right after the very first local commit for a scene,
+// the content key can transiently lag behind the metadata — see
+// writeInDefaultScene's wait for the same check), only falling back to the
+// content key when inline content is empty/missing. Getting this backwards
+// would make a test trust a stale/empty content key over the scene's real
+// current content — the same class of bug as the 2026-08-09 data-loss
+// incident sceneContentStore.js's own comments describe.
+export async function readScenesWithContent(page) {
+  return page.evaluate(() => {
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    const scenes = JSON.parse(get('nf_scenes') || '[]')
+    return scenes.map(scene => ({
+      ...scene,
+      content: (typeof scene.content === 'string' && scene.content.length > 0)
+        ? scene.content
+        : (get(`nf_scene_content:${scene.id}`) || ''),
+    }))
+  })
 }

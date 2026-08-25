@@ -47,7 +47,10 @@ test('rename a project via project settings', async ({ page }) => {
   await page.getByRole('button', { name: 'Done' }).first().click()
 
   await page.waitForFunction(
-    (t) => JSON.parse(localStorage.getItem('nf_novels') || '[]').some(n => n.title === t),
+    (t) => {
+      const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
+      return JSON.parse(raw || '[]').some(n => n.title === t)
+    },
     renamed,
     { timeout: 8000 },
   )
@@ -67,7 +70,14 @@ test('project word count appears in overview', async ({ page }) => {
   await page.getByPlaceholder('Begin writing here…').fill('One two three four five six seven eight nine ten')
 
   await page.waitForFunction(
-    () => JSON.parse(localStorage.getItem('nf_scenes') || '[]').some(s => (s.content || '').includes('ten')),
+    () => {
+      // Scene prose lives under its own nf_scene_content:<id> key, not
+      // inline on the nf_scenes record (src/storage/sceneContentStore.js) —
+      // check both, see the equivalent check in autosave.spec.js.
+      const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+      const scenes = JSON.parse(get('nf_scenes') || '[]')
+      return scenes.some(s => (s.content || '').includes('ten') || (get(`nf_scene_content:${s.id}`) || '').includes('ten'))
+    },
     undefined,
     { timeout: 8000 },
   )
@@ -120,7 +130,10 @@ test('delete a project and confirm it is removed from storage', async ({ page })
   await deleteBtn.click()
 
   await page.waitForFunction(
-    (t) => !JSON.parse(localStorage.getItem('nf_novels') || '[]').some(n => n.title === t),
+    (t) => {
+      const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
+      return !JSON.parse(raw || '[]').some(n => n.title === t)
+    },
     title,
     { timeout: 8000 },
   )

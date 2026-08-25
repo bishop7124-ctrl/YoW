@@ -2,9 +2,13 @@ import { createIndexedDbBackend } from './indexedDbBackend.js'
 import { setStorageBackend } from './projectStorage.js'
 import { isDesktopAppRuntime } from '../utils/runtime.js'
 
-const DB_NAME = 'yow-storage'
-const DB_VERSION = 1
-const STORE_NAME = 'kv'
+// Exported so anything that needs to talk to this database directly (e.g.
+// tests/e2e/helpers.js's seedIndexedDbEntries, which seeds pre-boot data via
+// a raw indexedDB.open before the app's own JS has loaded) stays in sync
+// with this module's schema instead of duplicating it as drift-prone literals.
+export const DB_NAME = 'yow-storage'
+export const DB_VERSION = 1
+export const STORE_NAME = 'kv'
 const SYNC_CHANNEL_NAME = 'yow-storage-sync'
 
 let activeIndexedDbBackend = null

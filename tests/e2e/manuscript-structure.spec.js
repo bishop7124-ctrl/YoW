@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readStorage,
+  createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
   seedCleanStorage, waitForStorage,
 } from './helpers.js'
 
@@ -18,11 +18,14 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
   await page.locator('.ms-sidebar-add-btn').first().click()
 
   await waitForStorage(page, () => {
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
+    const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
+    const scenes = JSON.parse(raw || '[]')
     return scenes.length >= 2
   })
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await page.getByRole('button', { name: 'Write' }).waitFor()
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.length).toBeGreaterThanOrEqual(2)
 })
@@ -46,11 +49,14 @@ test('rename a scene and verify it persists', async ({ page }) => {
 
   const prefix = newName.slice(0, 15)
   await waitForStorage(page, (p) => {
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
+    const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
+    const scenes = JSON.parse(raw || '[]')
     return scenes.some(s => (s.title || '').includes(p))
   }, prefix)
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await page.getByRole('button', { name: 'Write' }).waitFor()
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.some(s => (s.title || '').includes(prefix))).toBe(true)
 })
@@ -68,7 +74,9 @@ test('word count updates when content is added', async ({ page }) => {
     // Acceptable if count is rendered elsewhere; core test is storage below
   })
 
-  const scenes = await readStorage(page, 'nf_scenes')
+  // readScenesWithContent, not readStorage — scene prose lives under its own
+  // nf_scene_content:<id> key, not inline on the nf_scenes record.
+  const scenes = await readScenesWithContent(page)
   const scene = scenes.find(s => (s.content || '').includes('One two three'))
   expect(scene).toBeTruthy()
 })
@@ -80,11 +88,14 @@ test('add a chapter and verify it appears and persists', async ({ page }) => {
   await page.locator('.ms-sidebar-add-chapter').first().click()
 
   await waitForStorage(page, () => {
-    const chapters = JSON.parse(localStorage.getItem('nf_chapters') || '[]')
+    const raw = window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')
+    const chapters = JSON.parse(raw || '[]')
     return chapters.length >= 2
   })
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await page.getByRole('button', { name: 'Write' }).waitFor()
   const chapters = await readStorage(page, 'nf_chapters')
   expect(chapters.length).toBeGreaterThanOrEqual(2)
 })
@@ -114,7 +125,9 @@ test('scene status cycles and persists', async ({ page }) => {
   const after = await statusBtn.textContent()
   expect(after).not.toBe(before)
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await page.getByRole('button', { name: 'Write' }).waitFor()
   const scenes = await readStorage(page, 'nf_scenes')
   // At least one scene should have a non-default status
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
@@ -129,8 +142,13 @@ test('finalized draft can be created and viewed', async ({ page }) => {
   await page.getByPlaceholder('Begin writing here…').fill('Draft content for finalization.')
 
   await waitForStorage(page, () => {
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
-    return scenes.some(s => (s.content || '').includes('Draft content'))
+    // Scene prose lives under its own nf_scene_content:<id> key, not inline
+    // on the nf_scenes record (src/storage/sceneContentStore.js) — a scene
+    // can transiently still show inline content right after the first local
+    // commit though, so check both rather than assuming either is authoritative.
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    const scenes = JSON.parse(get('nf_scenes') || '[]')
+    return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
   // Look for Finalize / Final Draft button

@@ -94,8 +94,11 @@ export function loadValue(key, def = null) {
 // the IndexedDB migration (see docs/ROADMAP.md's Bugs table). Expose the
 // same abstraction the app itself uses so tests read/write through whatever
 // backend is actually active, not a hardcoded assumption about which one.
-// DEV-only: this must never ship in a production bundle.
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+// DEV-only: this must never ship in a production bundle. Optional chaining
+// on import.meta.env: this module now also gets loaded outside Vite (see
+// runtime.js's equivalent comment) — no behavior change under a real Vite
+// build, where import.meta.env is always defined.
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__yowStorageBridge = {
     // Waits for any in-flight async persistence (IndexedDB backend only —
     // real localStorage is already synchronous) to actually land before a
