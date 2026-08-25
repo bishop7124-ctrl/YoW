@@ -131,10 +131,59 @@ export async function waitForStorage(page, predicate, arg, timeout = 8000) {
   await page.waitForFunction(predicate, arg, { timeout })
 }
 
-// Read a localStorage key and JSON-parse it.
+// Seed project-storage entries (nf_* keys) directly into the app's IndexedDB
+// vault (see src/storage/browserVaultAdapter.js — DB 'yow-storage', store
+// 'kv', out-of-line string keys) *before* the app boots, so
+// initializeIndexedDbStorage()'s hydration picks them up as if they were
+// already there. This is the pre-boot equivalent of window.__yowStorageBridge
+// (which only exists once the app's JS has actually loaded) — use this from
+// page.addInitScript for "arrange as if this data already existed" seeding,
+// and the bridge for writes made to an already-running page mid-test.
+// Falls back to a no-op if IndexedDB is unavailable (matches the app's own
+// fallback-to-localStorage behavior — real localStorage seeding still works
+// as a last resort since that's projectStorage.js's default backend too).
+export async function seedIndexedDbEntries(page, entries) {
+  // Async and awaits the write transaction's actual completion (not just each
+  // put() request firing) before resolving — addInitScript's injected code
+  // still runs before the page's own scripts regardless, but this at least
+  // ensures our writes are fully committed relative to each other rather than
+  // racing our own open()/put() calls internally. It can't guarantee ordering
+  // against the app's *own* later indexedDB.open('yow-storage') call in
+  // main.jsx (Playwright doesn't block navigation on an init script's
+  // returned promise) — in practice the app's module scripts take far longer
+  // to fetch/parse/execute than this synchronous open+put chain takes to
+  // issue, so this hasn't been observed to race, but if this ever proves
+  // flaky in real CI, that's the first place to look.
+  await page.addInitScript(async (data) => {
+    if (typeof indexedDB === 'undefined') return
+    await new Promise((resolve, reject) => {
+      const req = indexedDB.open('yow-storage', 1)
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains('kv')) req.result.createObjectStore('kv')
+      }
+      req.onsuccess = () => {
+        const db = req.result
+        const tx = db.transaction('kv', 'readwrite')
+        const store = tx.objectStore('kv')
+        for (const [key, value] of Object.entries(data)) store.put(String(value), key)
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      }
+      req.onerror = () => reject(req.error)
+    })
+  }, entries)
+}
+
+// Read a project-storage key and JSON-parse it. Goes through
+// window.__yowStorageBridge (see src/storage/projectStorage.js) when present,
+// since the app's active backend can be real localStorage or an IndexedDB-
+// backed vault depending on runtime — reading raw `localStorage` directly
+// silently sees nothing once IndexedDB is active. Falls back to raw
+// localStorage for keys the app never routes through that abstraction (e.g.
+// onboarding/consent flags this test suite sets directly).
 export async function readStorage(page, key) {
   return page.evaluate((k) => {
-    const raw = localStorage.getItem(k)
+    const raw = window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
     try { return raw ? JSON.parse(raw) : null } catch { return raw }
   }, key)
 }
