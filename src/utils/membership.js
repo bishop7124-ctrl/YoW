@@ -26,6 +26,12 @@ const BETA_TESTER_PLAN = {
   highlight: false,
 }
 
+// Legacy Supabase plan keys mapped to the current key used for display and quotas.
+// The raw key stays in `subscriptionPlan` — it identifies live entitlements, never rename it.
+const LEGACY_PLAN_KEY_ALIASES = {
+  premium_lifetime: 'premium_plus_lifetime', // £149 Lifetime Launch plan
+}
+
 // Storage quotas in bytes per plan key.
 // These are the canonical quota values — also used by storageQuota.js.
 //
@@ -175,7 +181,7 @@ export function getMembership(user) {
   const activePlanKey = isBetaTester
     ? BETA_TESTER_PLAN_KEY
     : isPaid
-      ? (subscriptionPlan || 'premium_monthly')
+      ? (LEGACY_PLAN_KEY_ALIASES[subscriptionPlan] || subscriptionPlan || 'premium_monthly')
     : isTrialActive
       ? 'trial'
       : 'free'
