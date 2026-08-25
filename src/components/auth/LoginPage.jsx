@@ -361,7 +361,7 @@ export default function LoginPage({
                       required
                       minLength={8}
                       aria-describedby="new-password-requirements"
-                      className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
+                      className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
                     <PasswordRequirements id="new-password-requirements" value={newPwd} />
                     <input
@@ -370,7 +370,7 @@ export default function LoginPage({
                       value={confirmPwd}
                       onChange={e => setConfirmPwd(e.target.value)}
                       required
-                      className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
+                      className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
                     {error && (
                       <p className="text-red-400 text-sm text-center bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">
@@ -501,7 +501,7 @@ export default function LoginPage({
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       required
-                      className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
+                      className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
                     {error && (
                       <p className="text-red-400 text-sm text-center bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">
@@ -524,7 +524,7 @@ export default function LoginPage({
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       required
-                      className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
+                      className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
                     <input
                       type="password"
@@ -534,7 +534,7 @@ export default function LoginPage({
                       required
                       minLength={mode === 'signup' ? 8 : undefined}
                       aria-describedby={mode === 'signup' ? 'signup-password-requirements' : undefined}
-                      className="field w-full px-4 py-3 text-sm placeholder:text-[var(--text-muted)]"
+                      className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
                     {mode === 'signup' && (
                       <PasswordRequirements id="signup-password-requirements" value={password} />

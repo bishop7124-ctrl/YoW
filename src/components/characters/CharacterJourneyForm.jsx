@@ -3,7 +3,7 @@ import Modal from '../shared/Modal'
 import { StudioButton } from '../presentation/Studio'
 import { ARC_TYPE_OPTIONS, normalizeJourney } from '../../utils/characterJourney'
 
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const groups = [

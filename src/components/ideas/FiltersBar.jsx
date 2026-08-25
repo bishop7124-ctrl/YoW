@@ -55,7 +55,7 @@ export default function FiltersBar({
           borderRadius: 8,
           padding: '3px 8px',
           color: 'var(--text-muted)',
-          fontSize: 11,
+          fontSize: 16,
           fontFamily: 'inherit',
           cursor: 'pointer',
           outline: 'none',

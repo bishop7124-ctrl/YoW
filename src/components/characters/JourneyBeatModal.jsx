@@ -3,7 +3,7 @@ import Modal from '../shared/Modal'
 import { StudioButton } from '../presentation/Studio'
 import { STORY_PHASE_OPTIONS } from '../../utils/characterJourney'
 
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const emptyBeat = {

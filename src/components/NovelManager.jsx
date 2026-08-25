@@ -654,7 +654,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
             value={form.name}
             onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
             required
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
           />
 
           <textarea
@@ -662,7 +662,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
             value={form.summary}
             onChange={e => setForm(p => ({ ...p, summary: e.target.value }))}
             rows={4}
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
           />
 
           <div>
@@ -720,7 +720,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
                 onKeyDown={handleTagKey}
                 onBlur={commitTag}
                 placeholder={form.tags.length ? '' : 'fantasy, sci-fi… (Enter or comma to add)'}
-                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: 'var(--text-main)', padding: '1px 0' }}
+                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--text-main)', padding: '1px 0' }}
               />
             </div>
           </div>
@@ -935,7 +935,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
             value={form.title}
             onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
             required
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, fontWeight: 600, color: 'var(--text-main)', outline: 'none' }}
           />
 
           <textarea
@@ -943,7 +943,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
             value={form.description}
             onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
             rows={4}
-            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
+            style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', resize: 'vertical', outline: 'none', lineHeight: 1.55, minHeight: 88, flexShrink: 0 }}
           />
 
           <div className="project-settings-grid">
@@ -1063,7 +1063,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
                 onKeyDown={handleTagKey}
                 onBlur={commitTag}
                 placeholder={form.tags.length ? '' : 'fantasy, sci-fi... (Enter or comma to add)'}
-                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: 'var(--text-main)', padding: '1px 0' }}
+                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--text-main)', padding: '1px 0' }}
               />
             </div>
           </div>
@@ -1661,7 +1661,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               value={seriesName}
               onChange={e => setSeriesName(e.target.value)}
               required
-              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, color: 'var(--text-main)', outline: 'none' }}
+              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', outline: 'none' }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <button type="submit"
@@ -1716,7 +1716,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               value={form.title}
               onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
               required
-              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 14, color: 'var(--text-main)', outline: 'none' }}
+              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', outline: 'none' }}
             />
 
             <textarea
@@ -1724,7 +1724,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               value={form.description}
               onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
               rows={2}
-              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', resize: 'none', outline: 'none' }}
+              style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', resize: 'none', outline: 'none' }}
             />
 
             {store.series.length > 0 && (
@@ -1733,7 +1733,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                 <select
                   value={form.seriesId}
                   onChange={e => setForm(p => ({ ...p, seriesId: e.target.value }))}
-                  style={{ width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: 'var(--text-main)', outline: 'none' }}
+                  style={{ width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 16, color: 'var(--text-main)', outline: 'none' }}
                 >
                   <option value="">Standalone</option>
                   {store.series.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

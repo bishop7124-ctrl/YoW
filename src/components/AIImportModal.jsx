@@ -946,7 +946,7 @@ function TypeSelect({ value, onChange }) {
           id="import-type-select"
           value={value}
           onChange={e => onChange(e.target.value)}
-          style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 16, fontWeight: 600, cursor: 'pointer' }}
         >
           {Object.entries(PROJECT_TYPES).map(([key, cfg]) => (
             <option key={key} value={key}>{cfg.label}</option>

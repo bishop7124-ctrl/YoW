@@ -262,7 +262,7 @@ function AddProjectModal({ store, seriesId, onClose }) {
                   <select
                     value={selectedId}
                     onChange={e => setSelectedId(e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 13, marginBottom: 16 }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 16, marginBottom: 16 }}
                   >
                     <option value="">Select a project…</option>
                     {unassigned.map(n => (
@@ -284,7 +284,7 @@ function AddProjectModal({ store, seriesId, onClose }) {
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
                 placeholder="Project title…"
-                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 16, marginBottom: 16, boxSizing: 'border-box' }}
               />
               <button type="submit" disabled={!newTitle.trim()} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontWeight: 700, fontSize: 13, cursor: newTitle.trim() ? 'pointer' : 'not-allowed', opacity: newTitle.trim() ? 1 : .5 }}>
                 Create Project

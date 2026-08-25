@@ -616,7 +616,7 @@ function DesktopVaultPanel() {
             onChange={event => setSelectedSnapshot(event.target.value)}
             disabled={!!busy || snapshots.length === 0}
             className="field"
-            style={{ minWidth: 0, fontSize: 12 }}
+            style={{ minWidth: 0, fontSize: 16 }}
             aria-label="Vault snapshot to restore"
           >
             {snapshots.length === 0 ? (
@@ -2256,7 +2256,7 @@ function DeleteAccountModal({ novels, store, onClose }) {
                 style={{
                   width: '100%', padding: '10px 14px', borderRadius: 8,
                   background: 'var(--bg-main)', border: '1.5px solid var(--border)',
-                  fontSize: 14, color: 'var(--text-main)',
+                  fontSize: 16, color: 'var(--text-main)',
                   marginBottom: error ? 8 : 0, boxSizing: 'border-box',
                   outline: 'none',
                 }}

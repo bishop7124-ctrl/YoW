@@ -15,7 +15,7 @@ import { AIToolsUpgradeWall } from '../aitools/AITools'
 import AIStar from '../ai/AIStar'
 
 // The Fix: uses theme variables so all 4 themes apply correctly
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 const CHECKBOX_LABEL = 'flex items-center gap-2 text-[var(--text-main)]'
 const SECTION_HEAD = 'text-[10px] text-[var(--text-muted)] uppercase tracking-widest pb-2 mb-3 border-b border-[var(--border)]'
@@ -1052,9 +1052,9 @@ export default function Characters({ store, userId, membership }) {
       >
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search..." className="field w-full px-2 py-1.5 text-xs placeholder:text-[var(--text-muted)]"
+          placeholder="Search..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]"
         />
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-xs">
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
           <option value="name-asc">Name A→Z</option>
           <option value="name-desc">Name Z→A</option>
           <option value="role">Role</option>
@@ -1063,7 +1063,7 @@ export default function Characters({ store, userId, membership }) {
 
         {/* Family group filter */}
         {familyGroups.length > 0 && (
-          <select value={filterFamily} onChange={e => setFilterFamily(e.target.value)} className="field w-full px-2 py-1.5 text-xs">
+          <select value={filterFamily} onChange={e => setFilterFamily(e.target.value)} className="field w-full px-2 py-1.5 text-base">
             <option value="">All families</option>
             {familyGroups.map(fg => (
               <option key={fg} value={fg}>{fg}</option>
@@ -1073,7 +1073,7 @@ export default function Characters({ store, userId, membership }) {
 
         {/* Faction filter */}
         {factions.length > 0 && (
-          <select value={filterFaction} onChange={e => setFilterFaction(e.target.value)} className="field w-full px-2 py-1.5 text-xs">
+          <select value={filterFaction} onChange={e => setFilterFaction(e.target.value)} className="field w-full px-2 py-1.5 text-base">
             <option value="">All factions</option>
             <option value="__none__">No faction</option>
             {factions.map(f => (
