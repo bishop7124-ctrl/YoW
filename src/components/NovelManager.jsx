@@ -738,7 +738,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
                 onKeyDown={handleTagKey}
                 onBlur={commitTag}
                 placeholder={form.tags.length ? '' : 'fantasy, sci-fi… (Enter or comma to add)'}
-                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: 'var(--text-main)', padding: '1px 0' }}
+                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--text-main)', padding: '1px 0' }}
               />
             </div>
           </div>
@@ -1081,7 +1081,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
                 onKeyDown={handleTagKey}
                 onBlur={commitTag}
                 placeholder={form.tags.length ? '' : 'fantasy, sci-fi... (Enter or comma to add)'}
-                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: 'var(--text-main)', padding: '1px 0' }}
+                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--text-main)', padding: '1px 0' }}
               />
             </div>
           </div>

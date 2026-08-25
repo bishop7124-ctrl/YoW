@@ -4,7 +4,7 @@ import FactionLogo from './FactionLogo'
 import LogoEditorModal from './LogoEditorModal'
 import { deleteUserMedia } from '../../utils/uploadUserMedia'
 
-const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text-main)] focus:border-[var(--accent)] outline-none transition-colors'
+const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-base text-[var(--text-main)] focus:border-[var(--accent)] outline-none transition-colors'
 const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-1.5'
 
 const emptyForm = () => ({ name: '', logo: [], description: '' })
@@ -108,7 +108,7 @@ export default function Factions({ store }) {
         {!selectedFactionId ? (
           <>
             <div className="mb-4">
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field px-2 py-1.5 text-xs">
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field px-2 py-1.5 text-base">
                 <option value="name-asc">Name A→Z</option>
                 <option value="name-desc">Name Z→A</option>
                 <option value="members-desc">Most Members</option>

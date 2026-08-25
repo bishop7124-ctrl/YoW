@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1'
 
 export default function EraManager({ eras = [], addEra, updateEra, deleteEra }) {

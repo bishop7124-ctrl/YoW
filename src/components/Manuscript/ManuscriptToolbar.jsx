@@ -139,7 +139,7 @@ export const NotesPanel = ({ scene, onUpdateScene, highlightedSeq }) => {
               value={note.text}
               onChange={e => updateNoteText(note.id, e.target.value)}
               placeholder="Write your note here…"
-              className="w-full bg-transparent text-[var(--text-main)] text-sm outline-none resize-none min-h-[60px]"
+              className="w-full bg-transparent text-[var(--text-main)] text-base outline-none resize-none min-h-[60px]"
               rows={3}
             />
           </div>

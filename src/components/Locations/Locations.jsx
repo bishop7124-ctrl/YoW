@@ -23,7 +23,7 @@ function removeLocationFromAllMaps(locationId) {
 
 // The Fix: uses theme variables so all 4 themes apply correctly
 const CATS = ['Kingdom/Region', 'City', 'Town', 'Village', 'Landmark', 'Ruins', 'Feature', 'Other']
-const IN = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const IN = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 
 function LocationForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState({
@@ -112,8 +112,8 @@ export default function Locations({ store }) {
         title="Locations"
         tools={<StudioButton tone="primary" size="sm" onClick={()=>{setEditTarget(null);setShowForm(true)}}>New</StudioButton>}
       >
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." className="field w-full px-2 py-1.5 text-xs placeholder:text-[var(--text-muted)]" />
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-xs">
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]" />
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
             <option value="name-asc">Name A→Z</option>
             <option value="name-desc">Name Z→A</option>
             <option value="category">Category</option>

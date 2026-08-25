@@ -435,7 +435,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send() } }}
           placeholder={isLoading ? 'Thinking…' : cfg.placeholder}
           disabled={isLoading}
-          className="flex-1 bg-transparent text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none min-w-0 disabled:opacity-40 transition-opacity"
+          className="flex-1 bg-transparent text-base text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none min-w-0 disabled:opacity-40 transition-opacity"
         />
         {isLoading ? (
           <span className="w-4 h-4 border-2 border-[var(--border)] border-t-[var(--accent)] rounded-full animate-spin flex-shrink-0" />

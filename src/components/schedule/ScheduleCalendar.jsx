@@ -25,7 +25,7 @@ const getScheduleCategories = project => {
 
 const INPUT_STYLE = {
   width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)',
-  borderRadius: 8, padding: '8px 10px', color: 'var(--text-main)', fontSize: 14,
+  borderRadius: 8, padding: '8px 10px', color: 'var(--text-main)', fontSize: 16,
   boxSizing: 'border-box', fontFamily: 'inherit',
 }
 
@@ -377,10 +377,10 @@ export default function ScheduleCalendar({ store }) {
         <button onClick={prevMonth} title="Previous month" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>←</button>
 
         <div className="schedule-date-controls">
-          <select value={month} onChange={e => setViewMonth(Number(e.target.value))} className="field px-2 py-1.5 text-xs">
+          <select value={month} onChange={e => setViewMonth(Number(e.target.value))} className="field px-2 py-1.5 text-base">
             {calendar.months.map((m, index) => <option key={index} value={index + 1}>{m.name}</option>)}
           </select>
-          <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || 1)} className="field px-2 py-1.5 text-xs" aria-label="Year" />
+          <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || 1)} className="field px-2 py-1.5 text-base" aria-label="Year" />
           <button type="button" onClick={goToday} className="btn btn-secondary btn-sm">Today</button>
         </div>
 

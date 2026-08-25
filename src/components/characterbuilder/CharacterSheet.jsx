@@ -135,7 +135,7 @@ function HPWidget({ character, onChange }) {
           <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
             Temp HP:
             <input type="number" min={0} value={hp.temp || 0} onChange={e => onChange({ hp: { ...hp, temp: Number(e.target.value) } })}
-              style={{ width: 50, padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 12, textAlign: 'center' }} />
+              style={{ width: 50, padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 16, textAlign: 'center' }} />
           </label>
           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
             {[['Heal', v => Math.min(hp.max, hp.current + v), '#22c55e'], ['Damage', v => Math.max(0, hp.current - v), '#ef4444']].map(([label, fn, color]) => (
@@ -403,7 +403,7 @@ function TabEquipment({ character, onChange }) {
                 type="number" min={0} value={currency[key] || 0}
                 onChange={e => onChange({ currency: { ...currency, [key]: Math.max(0, Number(e.target.value)) } })}
                 className="field"
-                style={{ width: '100%', textAlign: 'center', fontSize: 14, fontWeight: 700, padding: '5px 4px' }}
+                style={{ width: '100%', textAlign: 'center', fontSize: 16, fontWeight: 700, padding: '5px 4px' }}
               />
             </label>
           ))}
@@ -416,12 +416,12 @@ function TabEquipment({ character, onChange }) {
           className="field" placeholder="Item name…" value={newItem.name}
           onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && addItem()}
-          style={{ flex: 1, minWidth: 140, padding: '7px 10px', fontSize: 13 }}
+          style={{ flex: 1, minWidth: 140, padding: '7px 10px', fontSize: 16 }}
         />
-        <select className="field" value={newItem.type} onChange={e => setNewItem(p => ({ ...p, type: e.target.value }))} style={{ padding: '7px 10px', fontSize: 12 }}>
+        <select className="field" value={newItem.type} onChange={e => setNewItem(p => ({ ...p, type: e.target.value }))} style={{ padding: '7px 10px', fontSize: 16 }}>
           {['weapon', 'armor', 'gear', 'magic', 'consumable', 'tool', 'ammo', 'other'].map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
         </select>
-        <input type="number" min={1} value={newItem.quantity} onChange={e => setNewItem(p => ({ ...p, quantity: Number(e.target.value) }))} className="field" style={{ width: 60, padding: '7px 8px', fontSize: 13, textAlign: 'center' }} title="Quantity" />
+        <input type="number" min={1} value={newItem.quantity} onChange={e => setNewItem(p => ({ ...p, quantity: Number(e.target.value) }))} className="field" style={{ width: 60, padding: '7px 8px', fontSize: 16, textAlign: 'center' }} title="Quantity" />
         <button onClick={addItem} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
       </div>
 
@@ -449,7 +449,7 @@ function TabEquipment({ character, onChange }) {
                 }}>{item.type}</span>
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--text-main)', fontWeight: 500 }}>{item.name}</span>
                 <input type="number" min={1} value={item.quantity} onChange={e => updateItem(item.id, { quantity: Number(e.target.value) })}
-                  style={{ width: 46, padding: '3px 5px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 12, textAlign: 'center' }} />
+                  style={{ width: 46, padding: '3px 5px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 16, textAlign: 'center' }} />
                 <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '0 4px', flexShrink: 0 }}>✕</button>
               </div>
             ))}
@@ -537,7 +537,7 @@ function TabSpells({ character, onChange }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
         <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'color-mix(in srgb, var(--bg-nav) 80%, transparent)', textAlign: 'center' }}>
           <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Ability</p>
-          <select value={spellcastingAbility} onChange={e => onChange({ spells: { ...spells, spellcastingAbility: e.target.value } })} className="field" style={{ textAlign: 'center', fontSize: 13, fontWeight: 700, padding: '3px 6px' }}>
+          <select value={spellcastingAbility} onChange={e => onChange({ spells: { ...spells, spellcastingAbility: e.target.value } })} className="field" style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, padding: '3px 6px' }}>
             {ABILITY_KEYS.map(k => <option key={k} value={k}>{ABILITY_SHORT[k]}</option>)}
           </select>
         </div>
@@ -614,7 +614,7 @@ function TabSpells({ character, onChange }) {
         <div style={{ display: 'grid', gap: 8 }}>
           {cantripOptions.length > 0 && cantrips.length < cantripLimit && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select className="field" value={pickCantrip} onChange={e => setPickCantrip(e.target.value)} style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13 }}>
+              <select className="field" value={pickCantrip} onChange={e => setPickCantrip(e.target.value)} style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 16 }}>
                 <option value="">Add a cantrip…</option>
                 {cantripOptions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
               </select>
@@ -623,7 +623,7 @@ function TabSpells({ character, onChange }) {
           )}
           {spellOptions.length > 0 && (spellLimit === null || spellList.length < spellLimit) && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select className="field" value={pickSpell} onChange={e => setPickSpell(e.target.value)} style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 13 }}>
+              <select className="field" value={pickSpell} onChange={e => setPickSpell(e.target.value)} style={{ flex: 1, minWidth: 160, padding: '7px 10px', fontSize: 16 }}>
                 <option value="">Add a spell…</option>
                 {spellOptions.map(s => <option key={s.name} value={s.name}>Lvl {s.level} · {s.name}</option>)}
               </select>
@@ -639,12 +639,12 @@ function TabSpells({ character, onChange }) {
       </button>
       {showCustom && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input className="field" placeholder="Spell name…" value={newSpell.name} onChange={e => setNewSpell(p => ({ ...p, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addSpell()} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 13 }} />
-          <select className="field" value={newSpell.level} onChange={e => setNewSpell(p => ({ ...p, level: Number(e.target.value) }))} style={{ padding: '7px 10px', fontSize: 12 }}>
+          <input className="field" placeholder="Spell name…" value={newSpell.name} onChange={e => setNewSpell(p => ({ ...p, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addSpell()} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 16 }} />
+          <select className="field" value={newSpell.level} onChange={e => setNewSpell(p => ({ ...p, level: Number(e.target.value) }))} style={{ padding: '7px 10px', fontSize: 16 }}>
             <option value={0}>Cantrip</option>
             {[1,2,3,4,5,6,7,8,9].map(l => <option key={l} value={l}>Level {l}</option>)}
           </select>
-          <select className="field" value={newSpell.school} onChange={e => setNewSpell(p => ({ ...p, school: e.target.value }))} style={{ padding: '7px 10px', fontSize: 12 }}>
+          <select className="field" value={newSpell.school} onChange={e => setNewSpell(p => ({ ...p, school: e.target.value }))} style={{ padding: '7px 10px', fontSize: 16 }}>
             {SPELL_SCHOOLS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <button onClick={addSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
@@ -709,8 +709,8 @@ function TabFeatures({ character, onChange }) {
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <input className="field" placeholder="Feature / trait name…" value={newFeat.name} onChange={e => setNewFeat(p => ({ ...p, name: e.target.value }))} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 13 }} />
-        <input className="field" placeholder="Source (Class, Race…)" value={newFeat.source} onChange={e => setNewFeat(p => ({ ...p, source: e.target.value }))} style={{ width: 160, padding: '7px 10px', fontSize: 13 }} />
+        <input className="field" placeholder="Feature / trait name…" value={newFeat.name} onChange={e => setNewFeat(p => ({ ...p, name: e.target.value }))} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 16 }} />
+        <input className="field" placeholder="Source (Class, Race…)" value={newFeat.source} onChange={e => setNewFeat(p => ({ ...p, source: e.target.value }))} style={{ width: 160, padding: '7px 10px', fontSize: 16 }} />
         <button onClick={addFeature} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
       </div>
 
@@ -735,7 +735,7 @@ function TabFeatures({ character, onChange }) {
                       onChange={e => onChange({ features: features.map(f => f.id === feat.id ? { ...f, description: e.target.value } : f) })}
                       rows={2}
                       className="field"
-                      style={{ width: '100%', marginTop: 6, fontSize: 12, padding: '5px 8px', resize: 'vertical' }}
+                      style={{ width: '100%', marginTop: 6, fontSize: 16, padding: '5px 8px', resize: 'vertical' }}
                     />
                 }
               </div>
@@ -781,7 +781,7 @@ function TabNotes({ character, onChange }) {
         onChange={e => onChange({ [noteTab]: e.target.value })}
         placeholder={`Write ${noteTabs.find(t => t[0] === noteTab)?.[1].toLowerCase()} here…`}
         className="field"
-        style={{ minHeight: 320, padding: '12px 14px', fontSize: 13, resize: 'vertical', lineHeight: 1.6 }}
+        style={{ minHeight: 320, padding: '12px 14px', fontSize: 16, resize: 'vertical', lineHeight: 1.6 }}
       />
     </div>
   )
@@ -808,11 +808,11 @@ function TabCampaign({ character, onChange, store }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <label style={{ display: 'grid', gap: 5 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Current Location</span>
-          <input className="field" value={character.currentLocation || ''} onChange={e => onChange({ currentLocation: e.target.value })} placeholder="Where are they now?" style={{ padding: '7px 10px', fontSize: 13 }} />
+          <input className="field" value={character.currentLocation || ''} onChange={e => onChange({ currentLocation: e.target.value })} placeholder="Where are they now?" style={{ padding: '7px 10px', fontSize: 16 }} />
         </label>
         <label style={{ display: 'grid', gap: 5 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>Home Location</span>
-          <input className="field" value={character.homeLocation || ''} onChange={e => onChange({ homeLocation: e.target.value })} placeholder="Where are they from?" style={{ padding: '7px 10px', fontSize: 13 }} />
+          <input className="field" value={character.homeLocation || ''} onChange={e => onChange({ homeLocation: e.target.value })} placeholder="Where are they from?" style={{ padding: '7px 10px', fontSize: 16 }} />
         </label>
       </div>
 
@@ -848,15 +848,15 @@ function TabCampaign({ character, onChange, store }) {
         <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 10 }}>NPC Relationships</p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           {storyChars.length > 0 && (
-            <select className="field" value={newRel.characterId} onChange={e => setNewRel(p => ({ ...p, characterId: e.target.value }))} style={{ flex: 1, minWidth: 120, padding: '6px 8px', fontSize: 12 }}>
+            <select className="field" value={newRel.characterId} onChange={e => setNewRel(p => ({ ...p, characterId: e.target.value }))} style={{ flex: 1, minWidth: 120, padding: '6px 8px', fontSize: 16 }}>
               <option value="">Select character…</option>
               {storyChars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          <select className="field" value={newRel.type} onChange={e => setNewRel(p => ({ ...p, type: e.target.value }))} style={{ padding: '6px 8px', fontSize: 12 }}>
+          <select className="field" value={newRel.type} onChange={e => setNewRel(p => ({ ...p, type: e.target.value }))} style={{ padding: '6px 8px', fontSize: 16 }}>
             {NPC_RELATIONSHIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <input className="field" placeholder="Notes…" value={newRel.notes} onChange={e => setNewRel(p => ({ ...p, notes: e.target.value }))} style={{ flex: 1, minWidth: 100, padding: '6px 8px', fontSize: 12 }} />
+          <input className="field" placeholder="Notes…" value={newRel.notes} onChange={e => setNewRel(p => ({ ...p, notes: e.target.value }))} style={{ flex: 1, minWidth: 100, padding: '6px 8px', fontSize: 16 }} />
           <button onClick={addRelationship} style={{ padding: '6px 14px', borderRadius: 7, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
         </div>
         {relationships.length === 0
@@ -1034,22 +1034,22 @@ function LevelUpModal({ character, onConfirm, onClose }) {
               ))}
             </div>
             {asiChoice === 'two' && (
-              <select className="field" value={asiPrimary} onChange={e => setAsiPrimary(e.target.value)} style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}>
+              <select className="field" value={asiPrimary} onChange={e => setAsiPrimary(e.target.value)} style={{ width: '100%', padding: '6px 8px', fontSize: 16 }}>
                 {ABILITY_KEYS.map(k => <option key={k} value={k}>+2 {ABILITY_LABELS[k]}</option>)}
               </select>
             )}
             {asiChoice === 'one' && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <select className="field" value={asiPrimary} onChange={e => setAsiPrimary(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 13 }}>
+                <select className="field" value={asiPrimary} onChange={e => setAsiPrimary(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 16 }}>
                   {ABILITY_KEYS.map(k => <option key={k} value={k}>+1 {ABILITY_LABELS[k]}</option>)}
                 </select>
-                <select className="field" value={asiSecondary} onChange={e => setAsiSecondary(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 13 }}>
+                <select className="field" value={asiSecondary} onChange={e => setAsiSecondary(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 16 }}>
                   {ABILITY_KEYS.map(k => <option key={k} value={k}>+1 {ABILITY_LABELS[k]}</option>)}
                 </select>
               </div>
             )}
             {asiChoice === 'feat' && (
-              <input className="field" value={featText} onChange={e => setFeatText(e.target.value)} placeholder="Feat name…" style={{ width: '100%', padding: '6px 8px', fontSize: 13 }} />
+              <input className="field" value={featText} onChange={e => setFeatText(e.target.value)} placeholder="Feat name…" style={{ width: '100%', padding: '6px 8px', fontSize: 16 }} />
             )}
           </div>
         )}
