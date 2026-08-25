@@ -614,6 +614,9 @@ function AppInner() {
       return
     }
     if (!user && authRouteMode) return
+    // Public standalone pages own the URL; don't rewrite it out from under them
+    // when auth/data loading changes the app-side navigation state.
+    if (showPricing || showFeatures || showFAQ || showFounders || founderProfileSlug) return
     const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, {
       accountOpen,
       accountTab,
@@ -621,7 +624,7 @@ function AppInner() {
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode, showPricing, showFeatures, showFAQ, showFounders, founderProfileSlug])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
