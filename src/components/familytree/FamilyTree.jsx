@@ -440,7 +440,7 @@ export default function FamilyTree({ store }) {
                 <select
                   value={focusCharacterId}
                   onChange={(event) => setSelectedCharacterId(event.target.value)}
-                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
+                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)]"
                 >
                   {characters.map(character => <option key={character.id} value={character.id}>{character.name || "Unnamed character"}</option>)}
                 </select>
@@ -450,7 +450,7 @@ export default function FamilyTree({ store }) {
                 <select
                   value={filters.scope}
                   onChange={(event) => updateFilter("scope", event.target.value)}
-                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
+                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)]"
                 >
                   <option value="direct">Direct lineage</option>
                   <option value="immediate">Immediate family</option>
@@ -721,7 +721,7 @@ export default function FamilyTree({ store }) {
                       <select
                         value={connectionForm.role}
                         onChange={(event) => updateConnectionForm("role", event.target.value)}
-                        className="field text-xs px-2 py-1.5"
+                        className="field text-base px-2 py-1.5"
                         aria-label={`Relationship to ${selectedCharacter.name}`}
                       >
                         {RELATIVE_ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -729,7 +729,7 @@ export default function FamilyTree({ store }) {
                       <select
                         value={connectionForm.targetCharacterId}
                         onChange={(event) => updateConnectionForm("targetCharacterId", event.target.value)}
-                        className="field text-xs px-2 py-1.5"
+                        className="field text-base px-2 py-1.5"
                         aria-label="Relative"
                       >
                         <option value="">Choose character</option>
@@ -744,19 +744,19 @@ export default function FamilyTree({ store }) {
                     <details className="rounded-lg border border-[var(--border)] bg-[var(--bg-main)] px-2 py-1.5">
                       <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Details</summary>
                       <div className="mt-2 grid grid-cols-2 gap-2">
-                        <select value={connectionForm.type} onChange={(event) => updateConnectionForm("type", event.target.value)} className="field text-xs px-2 py-1.5">
+                        <select value={connectionForm.type} onChange={(event) => updateConnectionForm("type", event.target.value)} className="field text-base px-2 py-1.5">
                           {FAMILY_TYPE_OPTIONS.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
                         </select>
-                        <select value={connectionForm.status} onChange={(event) => updateConnectionForm("status", event.target.value)} className="field text-xs px-2 py-1.5">
+                        <select value={connectionForm.status} onChange={(event) => updateConnectionForm("status", event.target.value)} className="field text-base px-2 py-1.5">
                           {FAMILY_STATUS_OPTIONS.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
                         </select>
                         <label className="col-span-2 flex items-center gap-2 text-xs text-[var(--text-main)]">
                           <input type="checkbox" checked={connectionForm.knownPublicly} onChange={(event) => updateConnectionForm("knownPublicly", event.target.checked)} className="accent-[var(--accent)]" />
                           Publicly known
                         </label>
-                        <input value={connectionForm.startDate} onChange={(event) => updateConnectionForm("startDate", event.target.value)} className="field text-xs px-2 py-1.5" placeholder="Start date" />
-                        <input value={connectionForm.endDate} onChange={(event) => updateConnectionForm("endDate", event.target.value)} className="field text-xs px-2 py-1.5" placeholder="End date" />
-                        <textarea value={connectionForm.notes} onChange={(event) => updateConnectionForm("notes", event.target.value)} className="field text-xs px-2 py-1.5 col-span-2 min-h-14 resize-y" placeholder="Notes" />
+                        <input value={connectionForm.startDate} onChange={(event) => updateConnectionForm("startDate", event.target.value)} className="field text-base px-2 py-1.5" placeholder="Start date" />
+                        <input value={connectionForm.endDate} onChange={(event) => updateConnectionForm("endDate", event.target.value)} className="field text-base px-2 py-1.5" placeholder="End date" />
+                        <textarea value={connectionForm.notes} onChange={(event) => updateConnectionForm("notes", event.target.value)} className="field text-base px-2 py-1.5 col-span-2 min-h-14 resize-y" placeholder="Notes" />
                       </div>
                     </details>
                     {connectionWarnings.length > 0 && (

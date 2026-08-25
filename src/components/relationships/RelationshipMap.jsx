@@ -185,7 +185,7 @@ export default function RelationshipMap({ store }) {
               <select
                 value={focalCharacter?.id || ''}
                 onChange={event => setSelectedCharacterId(event.target.value)}
-                className="block mt-1 min-w-56 bg-[var(--bg-nav)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
+                className="block mt-1 min-w-56 bg-[var(--bg-nav)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)]"
               >
                 {characters.map(character => <option key={character.id} value={character.id}>{character.name || 'Unnamed character'}</option>)}
               </select>
@@ -272,11 +272,11 @@ export default function RelationshipMap({ store }) {
 
               <div className="border-t border-[var(--border)] pt-4 space-y-2">
                 <h3 className="text-xs font-bold text-[var(--text-main)]">Add a connection</h3>
-                <select value={targetId} onChange={event => setTargetId(event.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2 text-xs text-[var(--text-main)]">
+                <select value={targetId} onChange={event => setTargetId(event.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2 text-base text-[var(--text-main)]">
                   <option value="">Choose character…</option>
                   {availableTargets.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
                 </select>
-                <select value={relationshipType} onChange={event => setRelationshipType(event.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2 text-xs text-[var(--text-main)]">
+                <select value={relationshipType} onChange={event => setRelationshipType(event.target.value)} className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-2 py-2 text-base text-[var(--text-main)]">
                   {CHARACTER_LINK_REL_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
                 </select>
                 <button disabled={!targetId} onClick={addConnection} className="w-full bg-[var(--accent)] disabled:opacity-40 text-[var(--bg-main)] text-xs font-bold py-2 rounded-lg">Add Connection</button>

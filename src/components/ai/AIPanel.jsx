@@ -322,7 +322,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
             onChange={e => setCtx(prev => ({ ...prev, customInstruction: e.target.value }))}
             placeholder="Tell the AI anything extra — tone, style, what you're working on…"
             rows={4}
-            className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-2 py-1.5 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-none"
+            className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-2 py-1.5 text-base text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-none"
           />
         </Section>
       </div>
@@ -919,7 +919,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             placeholder="Ask the AI…  (Shift+Enter for new line)"
             rows={1}
             disabled={streaming}
-            className="ai-chat-input flex-1 min-h-10 max-h-36 bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-none disabled:opacity-50 transition-colors"
+            className="ai-chat-input flex-1 min-h-10 max-h-36 bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-none disabled:opacity-50 transition-colors"
           />
           {streaming && (
             <button

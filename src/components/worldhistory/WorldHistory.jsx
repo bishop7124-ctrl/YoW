@@ -96,7 +96,7 @@ export default function WorldHistory({ store }) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search…"
-          className="field w-full px-2.5 py-1.5 text-xs placeholder:text-[var(--text-muted)]"
+          className="field w-full px-2.5 py-1.5 text-base placeholder:text-[var(--text-muted)]"
         />
 
         {filtered.length === 0 && (timeline || []).length === 0 && (

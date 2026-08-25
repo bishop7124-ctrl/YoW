@@ -85,7 +85,7 @@ function IdeaCreateModal({ status, onClose, onAdd }) {
               borderRadius: 10,
               padding: '10px 14px',
               color: 'var(--text-main)',
-              fontSize: 14,
+              fontSize: 16,
               fontFamily: 'inherit',
               outline: 'none',
               boxSizing: 'border-box',
@@ -397,7 +397,7 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
                 resize: 'none',
                 overflowY: 'auto',
                 fontFamily: 'var(--font-sans, inherit)',
-                fontSize: 15,
+                fontSize: 16,
                 color: 'var(--text-main)',
                 lineHeight: 1.75,
                 padding: 0,
@@ -469,7 +469,7 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
                       if (e.key === 'Backspace' && !tagDraft) onUpdate(idea.id, { tags: (idea.tags || []).slice(0, -1) })
                     }}
                     placeholder="+ add tag"
-                    style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 10, fontFamily: 'inherit', padding: '2px 0', minWidth: 50 }}
+                    style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 16, fontFamily: 'inherit', padding: '2px 0', minWidth: 50 }}
                   />
                 )}
               </div>
@@ -490,7 +490,7 @@ function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, o
                     value={linkSearch}
                     onChange={e => setLinkSearch(e.target.value)}
                     placeholder="Search…"
-                    style={{ width: '100%', background: 'color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main))', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-main)', fontSize: 11, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', background: 'color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main))', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-main)', fontSize: 16, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
                   />
                   {linkResults.length > 0 && (
                     <div style={{ marginTop: 4, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>

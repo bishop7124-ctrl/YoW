@@ -91,38 +91,38 @@ function StepBasics({ data, onChange, store, pendingUploadRef }) {
       {/* Fields */}
       <div style={{ display: 'grid', gap: 12 }}>
         <Field label="Character Name *">
-          <input className="field" value={data.name} onChange={e => onChange({ name: e.target.value })} placeholder="e.g. Aethon Brightblade" style={{ padding: '8px 10px', fontSize: 13 }} />
+          <input className="field" value={data.name} onChange={e => onChange({ name: e.target.value })} placeholder="e.g. Aethon Brightblade" style={{ padding: '8px 10px', fontSize: 16 }} />
         </Field>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Field label="Age">
-            <input className="field" value={data.age} onChange={e => onChange({ age: e.target.value })} placeholder="e.g. 24" style={{ padding: '8px 10px', fontSize: 13 }} />
+            <input className="field" value={data.age} onChange={e => onChange({ age: e.target.value })} placeholder="e.g. 24" style={{ padding: '8px 10px', fontSize: 16 }} />
           </Field>
           <Field label="Gender">
-            <input className="field" value={data.gender} onChange={e => onChange({ gender: e.target.value })} placeholder="e.g. Non-binary" style={{ padding: '8px 10px', fontSize: 13 }} />
+            <input className="field" value={data.gender} onChange={e => onChange({ gender: e.target.value })} placeholder="e.g. Non-binary" style={{ padding: '8px 10px', fontSize: 16 }} />
           </Field>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Field label="Pronouns">
-            <input className="field" value={data.pronouns} onChange={e => onChange({ pronouns: e.target.value })} placeholder="e.g. they/them" style={{ padding: '8px 10px', fontSize: 13 }} />
+            <input className="field" value={data.pronouns} onChange={e => onChange({ pronouns: e.target.value })} placeholder="e.g. they/them" style={{ padding: '8px 10px', fontSize: 16 }} />
           </Field>
           <Field label="Alignment">
-            <select className="field" value={data.alignment} onChange={e => onChange({ alignment: e.target.value })} style={{ padding: '8px 10px', fontSize: 13 }}>
+            <select className="field" value={data.alignment} onChange={e => onChange({ alignment: e.target.value })} style={{ padding: '8px 10px', fontSize: 16 }}>
               {ALIGNMENTS.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </Field>
         </div>
         <Field label="Background">
-          <select className="field" value={data.background} onChange={e => onChange({ background: e.target.value })} style={{ padding: '8px 10px', fontSize: 13 }}>
+          <select className="field" value={data.background} onChange={e => onChange({ background: e.target.value })} style={{ padding: '8px 10px', fontSize: 16 }}>
             {BACKGROUNDS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
           </select>
         </Field>
         {data.background === 'custom' && (
           <Field label="Custom Background Name">
-            <input className="field" value={data.customBackground || ''} onChange={e => onChange({ customBackground: e.target.value })} placeholder="Enter background name" style={{ padding: '8px 10px', fontSize: 13 }} />
+            <input className="field" value={data.customBackground || ''} onChange={e => onChange({ customBackground: e.target.value })} placeholder="Enter background name" style={{ padding: '8px 10px', fontSize: 16 }} />
           </Field>
         )}
         <Field label="Backstory (optional)">
-          <textarea className="field" rows={3} value={data.backstory || ''} onChange={e => onChange({ backstory: e.target.value })} placeholder="A brief origin story..." style={{ padding: '8px 10px', fontSize: 13, resize: 'vertical' }} />
+          <textarea className="field" rows={3} value={data.backstory || ''} onChange={e => onChange({ backstory: e.target.value })} placeholder="A brief origin story..." style={{ padding: '8px 10px', fontSize: 16, resize: 'vertical' }} />
         </Field>
       </div>
     </div>
@@ -159,7 +159,7 @@ function StepRace({ data, onChange }) {
 
       {data.race === 'custom' && (
         <Field label="Custom Race Name">
-          <input className="field" value={data.customRace || ''} onChange={e => onChange({ customRace: e.target.value })} placeholder="Enter race name" style={{ padding: '8px 10px', fontSize: 13 }} />
+          <input className="field" value={data.customRace || ''} onChange={e => onChange({ customRace: e.target.value })} placeholder="Enter race name" style={{ padding: '8px 10px', fontSize: 16 }} />
         </Field>
       )}
 
@@ -208,7 +208,7 @@ function StepClass({ data, onChange }) {
 
       {data.class === 'custom' && (
         <Field label="Custom Class Name">
-          <input className="field" value={data.customClass || ''} onChange={e => onChange({ customClass: e.target.value })} placeholder="Enter class name" style={{ padding: '8px 10px', fontSize: 13 }} />
+          <input className="field" value={data.customClass || ''} onChange={e => onChange({ customClass: e.target.value })} placeholder="Enter class name" style={{ padding: '8px 10px', fontSize: 16 }} />
         </Field>
       )}
 
@@ -229,7 +229,7 @@ function StepClass({ data, onChange }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label="Starting Level">
-          <input type="number" min={1} max={20} className="field" value={data.level} onChange={e => onChange({ level: Math.max(1, Math.min(20, Number(e.target.value))) })} style={{ padding: '8px 10px', fontSize: 13 }} />
+          <input type="number" min={1} max={20} className="field" value={data.level} onChange={e => onChange({ level: Math.max(1, Math.min(20, Number(e.target.value))) })} style={{ padding: '8px 10px', fontSize: 16 }} />
         </Field>
         <Field label="Subclass / Archetype">
           {subclassOptions.length > 0 ? (
@@ -240,13 +240,13 @@ function StepClass({ data, onChange }) {
                 const opt = subclassOptions.find(o => o.id === e.target.value)
                 onChange({ subclassId: opt?.id || '', subclass: opt?.label || '' })
               }}
-              style={{ padding: '8px 10px', fontSize: 13 }}
+              style={{ padding: '8px 10px', fontSize: 16 }}
             >
               <option value="">Choose later…</option>
               {subclassOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           ) : (
-            <input className="field" value={data.subclass || ''} onChange={e => onChange({ subclass: e.target.value, subclassId: '' })} placeholder="e.g. Champion, Thief…" style={{ padding: '8px 10px', fontSize: 13 }} />
+            <input className="field" value={data.subclass || ''} onChange={e => onChange({ subclass: e.target.value, subclassId: '' })} placeholder="e.g. Champion, Thief…" style={{ padding: '8px 10px', fontSize: 16 }} />
           )}
         </Field>
       </div>
@@ -504,7 +504,7 @@ function StepSpells({ data, onChange }) {
           className="field"
           value={abilityKey}
           onChange={e => onChange({ spells: { ...spells, spellcastingAbility: e.target.value } })}
-          style={{ padding: '4px 8px', fontSize: 12 }}
+          style={{ padding: '4px 8px', fontSize: 16 }}
         >
           {ABILITY_KEYS.map(k => <option key={k} value={k}>{ABILITY_SHORT[k]}</option>)}
         </select>
@@ -615,7 +615,7 @@ function StepEquipment({ data, onChange }) {
           onChange={e => setCustom(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && addCustom()}
           placeholder="Add custom item…"
-          style={{ flex: 1, padding: '8px 10px', fontSize: 13 }}
+          style={{ flex: 1, padding: '8px 10px', fontSize: 16 }}
         />
         <button onClick={addCustom} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
       </div>

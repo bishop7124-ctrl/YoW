@@ -145,9 +145,9 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
         <input
           className="field" placeholder="Search characters…" value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: 140, padding: '6px 10px', fontSize: 12 }}
+          style={{ flex: 1, minWidth: 140, padding: '6px 10px', fontSize: 16 }}
         />
-        <select className="field" value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px 10px', fontSize: 12 }}>
+        <select className="field" value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px 10px', fontSize: 16 }}>
           <option value="all">All Characters</option>
           <option value="party">Party Only</option>
           <option value="active">Active</option>
