@@ -80,3 +80,32 @@ export function loadValue(key, def = null) {
   try { return JSON.parse(activeBackend.getItem(key)) ?? def }
   catch { return def }
 }
+
+// ── Test-only bridge ──────────────────────────────────────────────────────
+//
+// The active backend can be real localStorage or an IndexedDB-backed vault
+// (see browserVaultAdapter.js / tauriVaultAdapter.js) depending on runtime —
+// app code never needs to know which, because it always goes through
+// readItem/writeItem/removeItem above. Anything reaching into storage from
+// *outside* the app (e2e tests using `page.evaluate`) doesn't have that
+// luxury: reading `window.localStorage` directly only sees real localStorage,
+// which silently stops reflecting app state the moment a different backend
+// is active — exactly what broke tests/e2e/account-isolation.spec.js after
+// the IndexedDB migration (see docs/ROADMAP.md's Bugs table). Expose the
+// same abstraction the app itself uses so tests read/write through whatever
+// backend is actually active, not a hardcoded assumption about which one.
+// DEV-only: this must never ship in a production bundle.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__yowStorageBridge = {
+    // Waits for any in-flight async persistence (IndexedDB backend only —
+    // real localStorage is already synchronous) to actually land before a
+    // test navigates/reloads. Without this a fast reload right after a write
+    // can race the backend's fire-and-forget persist queue and lose it —
+    // resolves instantly on backends with no flush method (e.g. real
+    // localStorage) since there's nothing to wait for.
+    flush: () => activeBackend.flush?.() ?? Promise.resolve(),
+    getItem: readItem,
+    setItem: writeItem,
+    removeItem,
+  }
+}
