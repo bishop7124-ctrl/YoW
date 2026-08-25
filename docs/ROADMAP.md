@@ -1121,6 +1121,14 @@ The biggest issues are interaction quality and output quality: zoom is too sensi
 | 6. Responsive safety | Desktop editing pass plus tablet/mobile view/edit-lite behavior. | The map builder is either usable or clearly constrained on each supported viewport, with no broken layout. |
 | 7. Grid and movement planning | Optional grid overlay, movement scale, snap-to-grid, persisted grid settings, and visual/export support. | Required for final launch because tabletop GMs need movement/planning guidance. Square grid is required; hex grid is optional if low-risk. |
 
+## Needs Product Decision
+
+Blocking questions the `product-owner` skill (or any agent) found mid-work that need the user's call before that specific item can proceed — distinct from Icebox, which is new ideas nobody has started on yet. An item here is otherwise-scoped, in-progress or ready-to-start work that hit a genuine product/UX/business fork, or needs credentials/external setup only the user can provide. Remove a row once the user has answered and the work has resumed or been redirected.
+
+| Item | Blocking Question | Found While | Status |
+| --- | --- | --- | --- |
+| No open questions | — | — | — |
+
 ## Icebox
 
 New ideas start here unless they are accepted into final launch scope through the Final Product Scope Discipline rules.
