@@ -54,7 +54,7 @@ describe('StructureSidebar', () => {
   it('shows custom chapter names even when they start with the structure label', () => {
     renderSidebar()
 
-    expect(screen.getByText('Chapter 1: Chapter Deleted')).toBeTruthy()
+    expect(screen.getByText('Chapter 1: Chapter Deleted', { selector: '.ms-sidebar-chapter-title' })).toBeTruthy()
   })
 
   it('renames a scene directly from the structure tree', () => {
@@ -84,7 +84,7 @@ describe('StructureSidebar', () => {
   it('moves a chapter into an empty act by dragging onto the empty act', () => {
     const props = renderSidebar()
     const dataTransfer = { effectAllowed: '' }
-    const chapterRow = screen.getByText('Chapter 1: Chapter Deleted').closest('.ms-sidebar-chapter')
+    const chapterRow = screen.getByText('Chapter 1: Chapter Deleted', { selector: '.ms-sidebar-chapter-title' }).closest('.ms-sidebar-chapter')
     const emptyActDropzone = screen.getByText('Drop chapter here')
 
     fireEvent.dragStart(chapterRow, { dataTransfer })
@@ -92,5 +92,39 @@ describe('StructureSidebar', () => {
     fireEvent.drop(emptyActDropzone, { dataTransfer })
 
     expect(props.moveChapter).toHaveBeenCalledWith('chap-1', 'act-empty', 0)
+  })
+
+  it('moves a scene into a populated chapter via the explicit move-to control', () => {
+    // Unlike drag-and-drop (empty parents only), this should work even
+    // though chap-1 already has a scene — matches StoryOutline.jsx's own
+    // move-to-any-parent behavior.
+    const props = renderSidebar()
+
+    const moveSelect = screen.getByLabelText('Move scene to chapter')
+    fireEvent.change(moveSelect, { target: { value: 'chap-empty' } })
+
+    expect(props.moveScene).toHaveBeenCalledWith('scene-1', 'chap-empty', 0)
+  })
+
+  it('moves a chapter into another act via the explicit move-to control', () => {
+    const props = renderSidebar()
+
+    const moveSelect = screen.getAllByLabelText('Move chapter to act')[0]
+    fireEvent.change(moveSelect, { target: { value: 'act-empty' } })
+
+    expect(props.moveChapter).toHaveBeenCalledWith('chap-1', 'act-empty', 0)
+  })
+
+  it('does not show the move-to control when there is only one destination', () => {
+    // Single-act, single-chapter project — nowhere to move to, so the
+    // control (which would otherwise always list at least the current
+    // parent) should not render at all rather than offering a no-op choice.
+    renderSidebar({
+      acts: [{ id: 'act-1', title: 'Act 1', order: 0 }],
+      chapters: [{ id: 'chap-1', actId: 'act-1', title: 'Chapter 1', order: 0 }],
+      scenes: [],
+    })
+
+    expect(screen.queryByLabelText('Move chapter to act')).toBeNull()
   })
 })

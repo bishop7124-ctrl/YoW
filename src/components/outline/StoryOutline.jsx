@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { getProjectType, getStoryEventIndicators } from '../../constants/projectTypes'
 import { useIsMobile } from '../../utils/useMediaQuery'
+import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
 
 const ChevronIcon = ({ open }) => (
   <svg
@@ -77,17 +78,13 @@ const MoveBtn = ({ onClick, title, disabled, children }) => {
 const ParentSelect = ({ value, options, label, onChange }) => {
   const isMobile = useIsMobile()
   return (
-    <select
+    <ParentMoveSelect
       value={value}
-      onChange={e => onChange(e.target.value)}
-      title={label}
-      aria-label={label}
+      options={options}
+      label={label}
+      onChange={onChange}
       className={`max-w-36 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] outline-none transition-all hover:border-[var(--border)] hover:bg-[var(--bg-main)] hover:text-[var(--accent)] focus:border-[var(--accent)] focus:bg-[var(--bg-main)] focus:opacity-100 ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-    >
-      {options.map(option => (
-        <option key={option.id} value={option.id}>{option.label}</option>
-      ))}
-    </select>
+    />
   )
 }
 
