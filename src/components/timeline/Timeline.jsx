@@ -146,7 +146,7 @@ export default function Timeline({ store }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search events…"
-            className="field px-3 py-1.5 text-xs w-44 placeholder:text-[var(--text-muted)]"
+            className="field px-3 py-1.5 text-base w-44 placeholder:text-[var(--text-muted)]"
           />
           <button onClick={() => setFormState({ type: 'new' })} className="btn btn-primary btn-sm">New Event</button>
         </div>

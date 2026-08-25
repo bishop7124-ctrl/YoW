@@ -12118,7 +12118,7 @@ body {
   min-height: 32px;
   padding: 6px 8px;
   color: var(--text-main);
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   box-sizing: border-box;
 }
@@ -12277,7 +12277,7 @@ body {
   min-height: 34px;
   padding: 8px 10px;
   color: var(--text-main);
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 650;
   box-sizing: border-box;
 }

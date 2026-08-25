@@ -247,7 +247,7 @@ function MapDashboard({ project, addMap, selectMap, deleteMap, renameMap }) {
                     onChange={e => setRenameVal(e.target.value)}
                     onBlur={() => { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) }}
                     onKeyDown={e => { if (e.key === 'Enter') { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) } if (e.key === 'Escape') setRenamingId(null) }}
-                    style={{ border: '1px solid var(--accent)', borderRadius: 5, padding: '4px 7px', background: 'var(--surface2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, width: '100%' }}
+                    style={{ border: '1px solid var(--accent)', borderRadius: 5, padding: '4px 7px', background: 'var(--surface2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 16, fontWeight: 600, width: '100%' }}
                   />
                 ) : (
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', cursor: 'pointer' }} onDoubleClick={() => { setRenamingId(map.id); setRenameVal(map.name || '') }}>
@@ -296,7 +296,7 @@ function NewMapModal({ onClose, onCreate }) {
         </div>
 
         <Field label="Map name">
-          <input autoFocus value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="Untitled Map" style={{ ...inputStyle, fontSize: 14, padding: '10px 12px' }} />
+          <input autoFocus value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="Untitled Map" style={{ ...inputStyle, fontSize: 16, padding: '10px 12px' }} />
         </Field>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1789,7 +1789,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           <select
             value={activeMap.id}
             onChange={e => selectMap(e.target.value)}
-            style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontFamily: 'inherit', fontWeight: 600, maxWidth: 160 }}
+            style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '4px 8px', fontSize: 16, fontFamily: 'inherit', fontWeight: 600, maxWidth: 160 }}
           >
             {(project.maps || []).map(m => <option key={m.id} value={m.id}>{m.name || 'Untitled'}</option>)}
           </select>
@@ -1808,7 +1808,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         <select
           value={stylePreset}
           onChange={e => persistMeta({ stylePreset: e.target.value })}
-          style={{ height: 28, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '0 8px', fontSize: 12, fontFamily: 'inherit' }}
+          style={{ height: 28, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '0 8px', fontSize: 16, fontFamily: 'inherit' }}
         >
           {STYLE_PRESETS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -1995,7 +1995,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                     <select
                       value={localWallMaterial}
                       onChange={e => setLocalWallMaterial(e.target.value)}
-                      style={{ ...inputStyle, width: '100%', minWidth: 0, fontSize: 12, padding: '5px 8px' }}
+                      style={{ ...inputStyle, width: '100%', minWidth: 0, fontSize: 16, padding: '5px 8px' }}
                     >
                       {LOCAL_WALL_MATERIALS.map(material => <option key={material.value} value={material.value}>{material.label}</option>)}
                     </select>
@@ -2098,8 +2098,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           {mode === 'stamp' && (
             <div style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 236, maxWidth: 'calc(100vw - 112px)', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'var(--shadow-md)', maxHeight: '80vh', overflow: 'hidden' }}>
               <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Stamps</div>
-              <input value={stampSearch} onChange={e => setStampSearch(e.target.value)} placeholder="Search stamps" style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 12, padding: '5px 8px' }} />
-              <select value={stampCategory} onChange={e => setStampCategory(e.target.value)} style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 12, padding: '5px 8px' }}>
+              <input value={stampSearch} onChange={e => setStampSearch(e.target.value)} placeholder="Search stamps" style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 16, padding: '5px 8px' }} />
+              <select value={stampCategory} onChange={e => setStampCategory(e.target.value)} style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 16, padding: '5px 8px' }}>
                 {allStampCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(58px, 1fr))', gap: 5, overflowX: 'hidden', overflowY: 'auto', flex: 1, minWidth: 0 }}>
@@ -2301,7 +2301,7 @@ function SliderInput({ value, min, max, step = 1, onChange, numWidth = 54 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `1fr ${numWidth}px`, gap: 8, alignItems: 'center' }}>
       <input type="range" min={min} max={max} step={step} value={value} onChange={onChange} style={{ width: '100%' }} />
-      <input type="number" min={min} max={max} step={step} value={value} onChange={onChange} style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }} />
+      <input type="number" min={min} max={max} step={step} value={value} onChange={onChange} style={{ ...inputStyle, padding: '5px 6px', fontSize: 16 }} />
     </div>
   )
 }
@@ -2494,7 +2494,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
                 step="5"
                 value={round((prop('terrainSymbolScale') || 1) * 100, 0)}
                 onChange={e => setProp('terrainSymbolScale', clamp(Number(e.target.value) / 100, 0.55, 1.8))}
-                style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }}
+                style={{ ...inputStyle, padding: '5px 6px', fontSize: 16 }}
               />
             </div>
           </Field>
@@ -2867,7 +2867,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
                   const size = clamp(Number(e.target.value) || 80, MIN_SIZE, 320)
                   patchSelected({ width: size, height: size })
                 }}
-                style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }}
+                style={{ ...inputStyle, padding: '5px 6px', fontSize: 16 }}
               />
             </div>
           </Field>
@@ -3129,7 +3129,7 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
                     onBlur={saveGroupRename}
                     onKeyDown={e => { if (e.key === 'Enter') saveGroupRename(); if (e.key === 'Escape') setRenamingGroupId(null) }}
                     onClick={e => e.stopPropagation()}
-                    style={{ ...inputStyle, fontSize: 11, padding: '2px 5px', height: 22 }}
+                    style={{ ...inputStyle, fontSize: 16, padding: '2px 5px', height: 22 }}
                   />
                 ) : (
                   <span
@@ -3307,7 +3307,7 @@ function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspect
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search places…"
-          style={{ ...inputStyle, fontSize: 12, padding: '5px 8px' }}
+          style={{ ...inputStyle, fontSize: 16, padding: '5px 8px' }}
         />
         <div style={{ display: 'grid', gridTemplateColumns: isInteriorMap ? '1fr' : 'repeat(3, 1fr)', gap: 4 }}>
           {(isInteriorMap
@@ -3432,7 +3432,7 @@ function MapInspector({ activeMap, project, stylePreset, gridSettings, baseLayer
             <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
               onBlur={() => { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) }}
               onKeyDown={e => { if (e.key === 'Enter') { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) } if (e.key === 'Escape') setRenamingId(null) }}
-              style={{ ...inputStyle, flex: 1, fontSize: 12 }} />
+              style={{ ...inputStyle, flex: 1, fontSize: 16 }} />
           ) : (
             <button onClick={() => selectMap(map.id)} onDoubleClick={() => { setRenamingId(map.id); setRenameVal(map.name || '') }}
               style={{ flex: 1, textAlign: 'left', background: map.id === activeMap.id ? 'var(--accent)' : 'var(--surface2)', color: map.id === activeMap.id ? '#fff' : 'var(--muted)', border: `1px solid ${map.id === activeMap.id ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 6, padding: '5px 8px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -3654,7 +3654,7 @@ function Field({ label, children }) {
 
 const inputStyle = {
   width: '100%', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)',
-  borderRadius: 6, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12, boxSizing: 'border-box',
+  borderRadius: 6, padding: '6px 9px', fontFamily: 'inherit', fontSize: 16, boxSizing: 'border-box',
 }
 
 function tabStyle(active) {

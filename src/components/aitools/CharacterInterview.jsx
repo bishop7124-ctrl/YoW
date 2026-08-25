@@ -407,7 +407,7 @@ export default function CharacterInterview({ store, userId }) {
           style={{
             flex: 1, resize: 'none', background: 'color-mix(in srgb, var(--bg-main) 60%, transparent)',
             border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px',
-            fontSize: 13, color: 'var(--text-main)', outline: 'none', lineHeight: 1.5,
+            fontSize: 16, color: 'var(--text-main)', outline: 'none', lineHeight: 1.5,
             fontFamily: 'inherit',
           }}
         />

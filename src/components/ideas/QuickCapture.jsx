@@ -86,7 +86,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
             border: 'none',
             outline: 'none',
             color: 'var(--text-main)',
-            fontSize: 14,
+            fontSize: 16,
             fontFamily: 'inherit',
           }}
         />
@@ -172,7 +172,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
               border: 'none',
               outline: 'none',
               color: 'var(--text-muted)',
-              fontSize: 12,
+              fontSize: 16,
               fontFamily: 'inherit',
             }}
           />

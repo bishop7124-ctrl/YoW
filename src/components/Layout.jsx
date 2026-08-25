@@ -507,7 +507,7 @@ function ProjectSettings({ store, onClose }) {
                   value={details.title}
                   onChange={e => updateDetail('title', e.target.value)}
                   className="field"
-                  style={{ padding: '8px 10px', fontSize: 13 }}
+                  style={{ padding: '8px 10px', fontSize: 16 }}
                 />
               </label>
 
@@ -518,7 +518,7 @@ function ProjectSettings({ store, onClose }) {
                   onChange={e => updateDetail('description', e.target.value)}
                   rows={5}
                   className="field"
-                  style={{ padding: '8px 10px', fontSize: 13, resize: 'vertical', minHeight: 96 }}
+                  style={{ padding: '8px 10px', fontSize: 16, resize: 'vertical', minHeight: 96 }}
                 />
               </label>
 
@@ -529,7 +529,7 @@ function ProjectSettings({ store, onClose }) {
                     value={details.seriesId}
                     onChange={e => updateDetail('seriesId', e.target.value)}
                     className="field"
-                    style={{ padding: '8px 10px', fontSize: 13 }}
+                    style={{ padding: '8px 10px', fontSize: 16 }}
                   >
                     <option value="">No series</option>
                     {store.series.map(series => (
@@ -590,7 +590,7 @@ function ProjectSettings({ store, onClose }) {
                     onChange={e => updateDetail('progress', e.target.value)}
                     placeholder="—"
                     className="field"
-                    style={{ padding: '8px 10px', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
+                    style={{ padding: '8px 10px', fontSize: 16, fontVariantNumeric: 'tabular-nums' }}
                   />
                 </label>
               )}

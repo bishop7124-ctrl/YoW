@@ -6,7 +6,7 @@ import {
 
 const INPUT_STYLE = {
   width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)',
-  borderRadius: 8, padding: '7px 10px', color: 'var(--text-main)', fontSize: 13,
+  borderRadius: 8, padding: '7px 10px', color: 'var(--text-main)', fontSize: 16,
   boxSizing: 'border-box', fontFamily: 'inherit',
 }
 

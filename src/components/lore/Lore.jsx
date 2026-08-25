@@ -3,7 +3,7 @@ import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { loreRefsFor } from '../../utils/worldLinks'
 
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const SUGGESTED_CATEGORIES = ['Magic System', 'Religion', 'History', 'Politics', 'Geography', 'Culture', 'Technology', 'Prophecy', 'Mythology', 'Other']
@@ -217,19 +217,19 @@ export default function Lore({ store }) {
         title="Notebook"
         tools={<StudioButton tone="primary" size="sm" onClick={handleNew}>New</StudioButton>}
       >
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search lore..." className="field w-full px-2 py-1.5 text-xs placeholder:text-[var(--text-muted)]" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search lore..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]" />
           <div data-tour="lore-categories" className="grid grid-cols-2 gap-2">
-            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="field px-2 py-1.5 text-xs">
+            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="field px-2 py-1.5 text-base">
               <option>All</option>
               <option>Uncategorized</option>
               {existingCategories.map(c => <option key={c}>{c}</option>)}
             </select>
-            <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="field px-2 py-1.5 text-xs">
+            <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="field px-2 py-1.5 text-base">
               <option value="">All Tags</option>
               {existingTags.map(t => <option key={t} value={t}>#{t}</option>)}
             </select>
           </div>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-xs">
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
             <option value="title-asc">Title A→Z</option>
             <option value="title-desc">Title Z→A</option>
             <option value="category-asc">Category A→Z</option>

@@ -255,7 +255,7 @@ export default function ConvertModal({ idea, store, onClose, onConverted }) {
                   borderRadius: 8,
                   padding: '10px 14px',
                   color: 'var(--text-main)',
-                  fontSize: 14,
+                  fontSize: 16,
                   fontFamily: 'inherit',
                   outline: 'none',
                   boxSizing: 'border-box',

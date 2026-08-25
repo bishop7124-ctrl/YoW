@@ -134,7 +134,7 @@ export default function IdeaCard({
                   border: 'none',
                   outline: 'none',
                   color: 'var(--text-main)',
-                  fontSize: 13,
+                  fontSize: 16,
                   fontWeight: 600,
                   fontFamily: 'inherit',
                   padding: 0,
