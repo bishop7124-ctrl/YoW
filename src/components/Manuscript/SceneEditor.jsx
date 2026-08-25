@@ -1101,11 +1101,18 @@ const SceneEditorImpl = ({
 	    focusRange(start)
 	  }, [scene, localContent, focusRange, onUpdateScene])
 
+	  // Pass an updater (prevNotes => nextNotes) rather than a precomputed array, and
+	  // keep this callback's identity stable (no `scene.notes` dep) — see the comment
+	  // on updateScene's function-valued-field handling in useStore.js. Without both of
+	  // those, a fast typing burst into the note textarea can fire multiple onChange
+	  // calls against the same stale closure before React re-renders, and each call's
+	  // single-character update overwrites (instead of building on) the previous one,
+	  // silently losing keystrokes.
 	  const handleUpdateNote = useCallback((noteId, text) => {
 	    onUpdateScene(scene.id, {
-	      notes: (scene.notes || []).map(note => note.id === noteId ? { ...note, text } : note),
+	      notes: prevNotes => (prevNotes || []).map(note => note.id === noteId ? { ...note, text } : note),
 	    })
-	  }, [onUpdateScene, scene.id, scene.notes])
+	  }, [onUpdateScene, scene.id])
 
 	  const handleDeleteNote = useCallback((noteId) => {
 	    const removed = (scene.notes || []).find(note => note.id === noteId)

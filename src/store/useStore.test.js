@@ -492,6 +492,80 @@ describe('novel CRUD', () => {
   })
 })
 
+// ─── scene notes: racing updateScene calls from a shared stale snapshot ────
+// Regression coverage for a bug in SceneEditor's handleUpdateNote / NotesPanel's
+// updateNoteText: both used to compute the WHOLE next `notes` array up front from a
+// `scene.notes` value closed over at render time, then hand that finished array to
+// updateScene. If two such calls fire before React refreshes the closure (e.g. a
+// fast typing burst outpacing the render/commit cycle), BOTH calls derive their
+// replacement array from the same pre-burst snapshot — so the second call's write
+// doesn't build on the first call's result, it silently reverts it, because the
+// snapshot it was computed from never saw the first call's change.
+//
+// updateScene now also accepts a function for any field (prevValue => nextValue),
+// resolved against the true latest scene at the moment each call actually runs (see
+// the comment above `resolvedData` in useStore.js), so calls compose correctly
+// regardless of how stale the closure that produced them was.
+describe('scene notes — racing updates from a shared stale snapshot', () => {
+  const seedTwoNotes = () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'Draft House', type: 'novel' }) })
+    const sceneId = result.current.scenes[0].id
+    act(() => {
+      result.current.updateScene(sceneId, {
+        notes: [
+          { id: 'n1', seq: 1, text: '', anchorOffset: 0 },
+          { id: 'n2', seq: 2, text: '', anchorOffset: 10 },
+        ],
+      })
+    })
+    return { result, sceneId }
+  }
+
+  it('composes function-valued updates instead of one clobbering the other', () => {
+    const { result, sceneId } = seedTwoNotes()
+
+    // Two updates, as if produced by two different stale closures (order-independent
+    // by construction — each resolves against whatever the store's true current notes
+    // are when it actually runs, not against a value captured up front).
+    act(() => {
+      result.current.updateScene(sceneId, {
+        notes: prevNotes => (prevNotes || []).map(n => n.id === 'n1' ? { ...n, text: 'hello' } : n),
+      })
+      result.current.updateScene(sceneId, {
+        notes: prevNotes => (prevNotes || []).map(n => n.id === 'n2' ? { ...n, text: 'world' } : n),
+      })
+    })
+
+    const notes = result.current.scenes.find(s => s.id === sceneId).notes
+    expect(notes.find(n => n.id === 'n1').text).toBe('hello')
+    expect(notes.find(n => n.id === 'n2').text).toBe('world')
+  })
+
+  it('reproduces the stale-closure data loss when notes are precomputed against a snapshot', () => {
+    const { result, sceneId } = seedTwoNotes()
+
+    // The old buggy shape: both calls map over the SAME closed-over `staleNotes`
+    // snapshot — as `scene.notes` would have been throughout a fast burst — the way
+    // handleUpdateNote/updateNoteText used to before the fix.
+    const staleNotes = result.current.scenes.find(s => s.id === sceneId).notes
+    act(() => {
+      result.current.updateScene(sceneId, {
+        notes: staleNotes.map(n => n.id === 'n1' ? { ...n, text: 'hello' } : n),
+      })
+      result.current.updateScene(sceneId, {
+        notes: staleNotes.map(n => n.id === 'n2' ? { ...n, text: 'world' } : n),
+      })
+    })
+
+    // The second call's replacement array was derived from the pre-burst snapshot, so
+    // it silently reverts the first call's change even though it never touched n1.
+    const notes = result.current.scenes.find(s => s.id === sceneId).notes
+    expect(notes.find(n => n.id === 'n1').text).toBe('') // lost
+    expect(notes.find(n => n.id === 'n2').text).toBe('world')
+  })
+})
+
 describe('getProjectExportData', () => {
   it('seeds The Last Ember as a full connected sample project', () => {
     const { result } = renderHook(() => useStore('sample-user'))
