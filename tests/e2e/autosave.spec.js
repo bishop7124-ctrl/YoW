@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readStorage,
+  createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
   seedCleanStorage, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
@@ -15,6 +15,9 @@ test('content survives an immediate page reload', async ({ page }) => {
   await createProject(page, { title: 'Autosave Reload Test' })
   await writeInDefaultScene(page, text)
 
+  // Flush before reload — the IndexedDB backend persists asynchronously, so
+  // reloading immediately after a write can race it and lose the write.
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
 
   await expect(page.locator('.ms-preview').filter({ hasText: text })).toBeVisible({ timeout: 10_000 })
@@ -46,9 +49,15 @@ test('multi-scene: scenes written in different chapters are isolated in localSto
   // textB is unused here but kept as a named variable for future expansion.
   void textB
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  // Wait for real hydration before reading storage — a read right after
+  // page.reload can race the app's own async backend-swap in main.jsx.
+  await page.getByRole('button', { name: 'Write' }).waitFor()
 
-  const scenes = await readStorage(page, 'nf_scenes')
+  // readScenesWithContent, not readStorage — scene prose lives under its own
+  // nf_scene_content:<id> key, not inline on the nf_scenes record.
+  const scenes = await readScenesWithContent(page)
   expect(scenes.some(s => (s.content || '').includes(textA.slice(0, 20)))).toBe(true)
   // Confirm the scene store has at least 1 entry for this project
   const novels = await readStorage(page, 'nf_novels')
@@ -71,12 +80,19 @@ test('rapid typing is fully captured before reload', async ({ page }) => {
   await editor.pressSequentially(' — end.', { delay: 20 })
 
   const fullText = `${words} — end.`
+  void fullText
 
   await waitForStorage(page, () => {
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
-    return scenes.some(s => (s.content || '').includes('end.'))
+    // Scene prose lives under its own nf_scene_content:<id> key, not inline
+    // on the nf_scenes record (src/storage/sceneContentStore.js) — a scene
+    // can transiently still show inline content right after the first local
+    // commit though, so check both rather than assuming either is authoritative.
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    const scenes = JSON.parse(get('nf_scenes') || '[]')
+    return scenes.some(s => (s.content || '').includes('end.') || (get(`nf_scene_content:${s.id}`) || '').includes('end.'))
   })
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
   await expect(page.locator('.ms-preview').filter({ hasText: 'end.' })).toBeVisible({ timeout: 10_000 })
 })
@@ -87,11 +103,13 @@ test('content survives logout then login (localStorage round-trip)', async ({ pa
   await writeInDefaultScene(page, text)
 
   // In offline mode there is no real auth, so we simulate by reloading
-  // after confirming localStorage holds the data — same guarantee as logout/login
-  const scenes = await readStorage(page, 'nf_scenes')
+  // after confirming project storage holds the data — same guarantee as logout/login
+  const scenes = await readScenesWithContent(page)
   expect(scenes.some(s => (s.content || '').includes(text.slice(0, 20)))).toBe(true)
 
-  // Hard reload (clears React state, re-reads from localStorage like a fresh login)
+  // Hard reload (clears React state, re-reads from storage like a fresh login).
+  // Flush first — see the flush comment on the earlier reload in this file.
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
   await expect(page.locator('.ms-preview').filter({ hasText: text.slice(0, 20) })).toBeVisible({ timeout: 10_000 })
 })
@@ -101,6 +119,6 @@ test('autosave timestamp is written to nf_localWriteAt', async ({ page }) => {
   await createProject(page, { title: 'Timestamp Test' })
   await writeInDefaultScene(page, `Timestamp check ${Date.now()}`)
 
-  const ts = await page.evaluate(() => Number(localStorage.getItem('nf_localWriteAt') || '0'))
+  const ts = await readStorage(page, 'nf_localWriteAt')
   expect(ts).toBeGreaterThanOrEqual(before)
 })

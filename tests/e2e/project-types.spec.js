@@ -29,10 +29,11 @@ test('all configured project types can be created with starter structure', async
     await expect(page.getByText(title).first()).toBeVisible()
 
     await expect.poll(async () => page.evaluate(({ title: expectedTitle }) => {
-      const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-      const acts = JSON.parse(localStorage.getItem('nf_acts') || '[]')
-      const chapters = JSON.parse(localStorage.getItem('nf_chapters') || '[]')
-      const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
+      const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+      const novels = JSON.parse(get('nf_novels') || '[]')
+      const acts = JSON.parse(get('nf_acts') || '[]')
+      const chapters = JSON.parse(get('nf_chapters') || '[]')
+      const scenes = JSON.parse(get('nf_scenes') || '[]')
       const project = novels.find(item => item.title === expectedTitle)
       if (!project) return null
       return {

@@ -1,8 +1,16 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, openImportZip, readStorage,
-  seedCleanStorage, waitForStorage, writeInDefaultScene,
+  seedCleanStorage, seedIndexedDbEntries, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
+
+// Every browser-context callback below (page.evaluate/waitForFunction) reads
+// project storage via `window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)`
+// rather than raw localStorage — the app's active backend can be an
+// IndexedDB-backed vault (src/storage/browserVaultAdapter.js) that raw
+// localStorage reads can't see. Inlined at each call site rather than a
+// shared helper since these callbacks are serialized into the browser and
+// can't close over a Node-side function.
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -27,7 +35,7 @@ test('deleting a project removes its acts, chapters, and scenes', async ({ page 
   await page.getByRole('button', { name: 'Delete project' }).click()
 
   await waitForStorage(page, (id) => {
-    const storedNovels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
+    const storedNovels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
     return !storedNovels.some(n => n.id === id)
   }, projectId)
 
@@ -51,7 +59,7 @@ test('deleting a character removes it from relationship lists', async ({ page })
     await page.locator('[role="dialog"] input[required]').first().fill(charName)
     await page.getByRole('button', { name: 'Save Character' }).click()
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, charName)
   }
@@ -64,7 +72,7 @@ test('deleting a character removes it from relationship lists', async ({ page })
   await page.getByRole('button', { name: /Delete/i }).first().click()
 
   await waitForStorage(page, () => {
-    const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+    const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return !chars.some(c => c.name === 'Alice')
   })
 
@@ -85,7 +93,7 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   await page.locator('[role="dialog"] input[required]').first().fill('Project A Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
-    const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+    const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return chars.some(c => c.name === 'Project A Character')
   })
   const novelsAfterA = await readStorage(page, 'nf_novels')
@@ -98,7 +106,7 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
   await page.locator('[role="dialog"] input[required]').first().fill('Project B Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
-    const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+    const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return chars.some(c => c.name === 'Project B Character')
   })
 
@@ -113,27 +121,29 @@ test('worldbuilding data is isolated between projects', async ({ page }) => {
 test('dashboard and writing remain usable with 10 projects in storage', async ({ page }) => {
   test.setTimeout(120_000)
 
-  // Seed via addInitScript so it runs AFTER seedCleanStorage on the next navigation,
-  // guaranteeing data survives regardless of sessionStorage preservation.
-  await page.addInitScript(() => {
-    const novels = []
-    const acts = []
-    const chapters = []
-    const scenes = []
-    for (let i = 0; i < 10; i++) {
-      const novelId = `stress-novel-${i}`
-      const actId = `stress-act-${i}`
-      const chapterId = `stress-chapter-${i}`
-      const sceneId = `stress-scene-${i}`
-      novels.push({ id: novelId, title: `Stress Project ${i}`, type: 'novel', createdAt: Date.now() - i * 1000 })
-      acts.push({ id: actId, novelId, title: `Act ${i}`, order: 0 })
-      chapters.push({ id: chapterId, novelId, actId, title: `Chapter ${i}`, order: 0 })
-      scenes.push({ id: sceneId, novelId, chapterId, actId, title: `Scene ${i}`, content: `Content for stress project ${i}. `.repeat(50), order: 0 })
-    }
-    localStorage.setItem('nf_novels', JSON.stringify(novels))
-    localStorage.setItem('nf_acts', JSON.stringify(acts))
-    localStorage.setItem('nf_chapters', JSON.stringify(chapters))
-    localStorage.setItem('nf_scenes', JSON.stringify(scenes))
+  // Seed directly into the app's storage backend (see seedIndexedDbEntries —
+  // raw localStorage seeding here would be invisible to the app once the
+  // IndexedDB-backed vault is active) so it's present before the app boots
+  // on the next navigation.
+  const novels = []
+  const acts = []
+  const chapters = []
+  const scenes = []
+  for (let i = 0; i < 10; i++) {
+    const novelId = `stress-novel-${i}`
+    const actId = `stress-act-${i}`
+    const chapterId = `stress-chapter-${i}`
+    const sceneId = `stress-scene-${i}`
+    novels.push({ id: novelId, title: `Stress Project ${i}`, type: 'novel', createdAt: Date.now() - i * 1000 })
+    acts.push({ id: actId, novelId, title: `Act ${i}`, order: 0 })
+    chapters.push({ id: chapterId, novelId, actId, title: `Chapter ${i}`, order: 0 })
+    scenes.push({ id: sceneId, novelId, chapterId, actId, title: `Scene ${i}`, content: `Content for stress project ${i}. `.repeat(50), order: 0 })
+  }
+  await seedIndexedDbEntries(page, {
+    nf_novels: JSON.stringify(novels),
+    nf_acts: JSON.stringify(acts),
+    nf_chapters: JSON.stringify(chapters),
+    nf_scenes: JSON.stringify(scenes),
   })
 
   // Use goto instead of reload to reliably trigger addInitScript
@@ -150,17 +160,24 @@ test('large scene content (>10k words) loads without crash', async ({ page }) =>
   await createProject(page, { title: 'Large Scene Test' })
 
   await page.evaluate(() => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
     const novel = novels[0]
     if (!novel) return
-    const scenes = JSON.parse(localStorage.getItem('nf_scenes') || '[]')
+    const scenes = JSON.parse((window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')) || '[]')
     const scene = scenes.find(s => s.novelId === novel.id)
     if (scene) {
       scene.content = 'The quick brown fox jumps over the lazy dog. '.repeat(500)
-      localStorage.setItem('nf_scenes', JSON.stringify(scenes))
+      // hydrateScenesFromStorage (src/storage/sceneContentStore.js) uses a
+      // scene's own inline .content when present rather than requiring the
+      // separate nf_scene_content:<id> key, so writing it inline here (as
+      // this test already did) is fine — just needs to go through the
+      // bridge like every other write.
+      const write = (k, v) => { if (window.__yowStorageBridge) window.__yowStorageBridge.setItem(k, v); else localStorage.setItem(k, v) }
+      write('nf_scenes', JSON.stringify(scenes))
     }
   })
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
   await page.getByRole('button', { name: 'Write' }).click()
   await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
@@ -177,7 +194,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await page.locator('[role="dialog"] input[required]').first().fill('Restore Test Character')
   await page.getByRole('button', { name: 'Save Character' }).click()
   await waitForStorage(page, () => {
-    const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+    const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return chars.some(c => c.name === 'Restore Test Character')
   })
 
@@ -195,7 +212,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await page.locator('.dash-card-settings-button').first().click()
   await page.getByRole('button', { name: 'Delete project' }).click()
   await waitForStorage(page, (t) => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
     return !novels.some(n => n.title === t)
   }, projectTitle)
 
@@ -215,8 +232,8 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await page.getByRole('button', { name: 'Create Project' }).click()
 
   await waitForStorage(page, (t) => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
-    const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return novels.some(n => n.title === t)
       && chars.some(c => c.name === 'Restore Test Character')
   }, projectTitle, 20_000)
