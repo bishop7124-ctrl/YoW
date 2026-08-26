@@ -25,7 +25,7 @@ function removeLocationFromAllMaps(locationId) {
 
 // The Fix: uses theme variables so all 4 themes apply correctly
 const CATS = ['Kingdom/Region', 'City', 'Town', 'Village', 'Landmark', 'Ruins', 'Feature', 'Other']
-const IN = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
+const IN = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
 
 // Left-nav redesign, Phase 2/Locations (2026-08-19): photo support, per the
 // mockup's "photo slot" (mockups/Locations Mockup.dc.html, image-slot.js —

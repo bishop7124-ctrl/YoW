@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, openImportZip, openProjectSettings, readStorage, seedCleanStorage } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -43,7 +43,7 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
-  await page.getByRole('button', { name: 'Done' }).click()
+  await page.getByRole('dialog', { name: 'Project Settings' }).getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
   // 'Import ▾' dropdown replaced the old bare 'Restore' button
@@ -57,8 +57,8 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await page.getByRole('button', { name: 'Create Project' }).click({ timeout: 15_000 })
 
   // After import, storage should have 2 projects (original + restored copy)
-  await expect.poll(async () => page.evaluate(() => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
+  await expect.poll(async () => {
+    const novels = await readStorage(page, 'nf_novels')
     return novels.length
-  }), { timeout: 20_000 }).toBe(2)
+  }, { timeout: 20_000 }).toBe(2)
 })

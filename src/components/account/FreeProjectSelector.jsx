@@ -110,7 +110,7 @@ export default function FreeProjectSelector({ novels, onConfirm, busy }) {
           disabled={!selectedId || busy}
           style={{
             width: '100%', padding: '12px 20px',
-            background: 'var(--accent)', color: 'var(--bg-main)',
+            background: 'var(--accent)', color: 'var(--accent-contrast)',
             border: 'none', borderRadius: 8, cursor: selectedId && !busy ? 'pointer' : 'not-allowed',
             fontSize: 14, fontWeight: 800, fontFamily: 'inherit',
             opacity: !selectedId || busy ? 0.5 : 1,

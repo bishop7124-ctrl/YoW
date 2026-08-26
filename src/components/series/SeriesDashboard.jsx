@@ -272,7 +272,7 @@ function AddProjectModal({ store, seriesId, onClose }) {
                       </option>
                     ))}
                   </select>
-                  <button onClick={handleAssign} disabled={!selectedId} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontWeight: 700, fontSize: 13, cursor: selectedId ? 'pointer' : 'not-allowed', opacity: selectedId ? 1 : .5 }}>
+                  <button onClick={handleAssign} disabled={!selectedId} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontWeight: 700, fontSize: 13, cursor: selectedId ? 'pointer' : 'not-allowed', opacity: selectedId ? 1 : .5 }}>
                     Add to Series
                   </button>
                 </>
@@ -287,7 +287,7 @@ function AddProjectModal({ store, seriesId, onClose }) {
                 placeholder="Project title…"
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}
               />
-              <button type="submit" disabled={!newTitle.trim()} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontWeight: 700, fontSize: 13, cursor: newTitle.trim() ? 'pointer' : 'not-allowed', opacity: newTitle.trim() ? 1 : .5 }}>
+              <button type="submit" disabled={!newTitle.trim()} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontWeight: 700, fontSize: 13, cursor: newTitle.trim() ? 'pointer' : 'not-allowed', opacity: newTitle.trim() ? 1 : .5 }}>
                 Create Project
               </button>
             </form>
@@ -584,7 +584,7 @@ function SettingsTab({ series, store, onDelete }) {
           >
             Delete Series
           </button>
-          <button type="submit" style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: saved ? '#5dc878' : 'var(--accent)', color: 'var(--bg-main)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background .2s' }}>
+          <button type="submit" style={{ padding: '8px 22px', borderRadius: 8, border: 'none', background: saved ? '#5dc878' : 'var(--accent)', color: saved ? '#151713' : 'var(--accent-contrast)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background .2s' }}>
             {saved ? 'Saved ✓' : 'Save Changes'}
           </button>
         </div>

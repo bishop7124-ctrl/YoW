@@ -12,7 +12,7 @@
 export const BUILT_IN_THEMES = [
   {
     id: 'dark-refined',
-    label: 'Nocturne Grove',
+    label: 'Dark Refined',
     description: 'Deep green-black studio — coral accent & muted sage',
     radiusUnit: 9,
     visualStrength: 1.25,
@@ -25,15 +25,15 @@ export const BUILT_IN_THEMES = [
   },
   {
     id: 'light-refined',
-    label: 'Parchment Dawn',
-    description: 'Pale green-black studio — coral accent & muted sage',
+    label: 'Light Refined',
+    description: 'Soft parchment studio — coral accent & quiet sage',
     radiusUnit: 9,
     visualStrength: 0.82,
     glowIntensity: 4,
     glowPos: '78% 8%',
     swatches: {
-      bgMain: '#eef4ee', bgNav: '#dfe9e2', textMain: '#1b2924',
-      textMuted: '#5b6f68', accent: '#9c4935', border: 'rgba(27, 41, 36, 0.14)',
+      bgMain: '#f5f2ea', bgNav: '#e9eee7', textMain: '#1f2a25',
+      textMuted: '#52645c', accent: '#a84f32', border: 'rgba(31, 42, 37, 0.13)',
     },
   },
   {
@@ -47,6 +47,58 @@ export const BUILT_IN_THEMES = [
     swatches: {
       bgMain: '#0d282e', bgNav: '#133840', textMain: '#e2f0ee',
       textMuted: '#7ab8b4', accent: '#e8724e', border: '#1e4a50',
+    },
+  },
+  {
+    id: 'sage-modern',
+    label: 'Sage Modern',
+    description: 'Natural light studio — sage green & soft white',
+    radiusUnit: 6,
+    visualStrength: 0.75,
+    glowIntensity: 4,
+    glowPos: '80% 90%',
+    swatches: {
+      bgMain: '#f5f8f3', bgNav: '#eaeee6', textMain: '#1e2922',
+      textMuted: '#5a7060', accent: '#4a8c68', border: '#ced8ca',
+    },
+  },
+  {
+    id: 'industrial-loft',
+    label: 'Industrial Loft',
+    description: 'Concrete & steel — amber & dark slate',
+    radiusUnit: 3,
+    visualStrength: 1.15,
+    glowIntensity: 2,
+    glowPos: '50% 50%',
+    swatches: {
+      bgMain: '#141720', bgNav: '#1c2028', textMain: '#dce0e8',
+      textMuted: '#6a7282', accent: '#d08820', border: '#282c38',
+    },
+  },
+  {
+    id: 'caramel-latte',
+    label: 'Caramel Latte',
+    description: 'Warm café afternoon — caramel & cream',
+    radiusUnit: 10,
+    visualStrength: 0.9,
+    glowIntensity: 5,
+    glowPos: '80% 90%',
+    swatches: {
+      bgMain: '#fef8f0', bgNav: '#f4e8d8', textMain: '#28200c',
+      textMuted: '#7a6840', accent: '#b87830', border: '#e0c8a0',
+    },
+  },
+  {
+    id: 'ocean-depth',
+    label: 'Ocean Depth',
+    description: 'Bioluminescent deep sea — teal & midnight navy',
+    radiusUnit: 5,
+    visualStrength: 1.45,
+    glowIntensity: 7,
+    glowPos: '88% 12%',
+    swatches: {
+      bgMain: '#07151c', bgNav: '#0e2432', textMain: '#d4eef8',
+      textMuted: '#4888a8', accent: '#189ab0', border: '#143848',
     },
   },
   {
@@ -66,37 +118,10 @@ export const BUILT_IN_THEMES = [
 
 export const QUICK_PALETTES = []
 
-export const SYSTEM_THEME = 'system'
-export const SYSTEM_LIGHT_THEME = 'light-refined'
-export const SYSTEM_DARK_THEME = 'dark-refined'
-export const DEFAULT_THEME = SYSTEM_THEME
-
-export const getSystemResolvedTheme = () => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return SYSTEM_LIGHT_THEME
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? SYSTEM_DARK_THEME : SYSTEM_LIGHT_THEME
-}
-
-export const resolveThemeChoice = (theme) => theme === SYSTEM_THEME ? getSystemResolvedTheme() : theme
-
-export const SYSTEM_THEME_OPTION = {
-  id: SYSTEM_THEME,
-  label: 'Match system',
-  description: 'Uses Parchment Dawn in light mode and Nocturne Grove in dark mode',
-  radiusUnit: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.radiusUnit ?? 9,
-  visualStrength: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.visualStrength ?? 0.82,
-  swatches: {
-    bgMain: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches.bgMain ?? '#eef4ee',
-    bgNav: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_DARK_THEME)?.swatches.bgNav ?? '#132220',
-    textMain: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_DARK_THEME)?.swatches.textMain ?? '#ece6da',
-    textMuted: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches.textMuted ?? '#5b6f68',
-    accent: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_DARK_THEME)?.swatches.accent ?? '#9c4935',
-    border: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches.border ?? 'rgba(27, 41, 36, 0.14)',
-  },
-}
-
-export const DEFAULT_CUSTOM_COLORS = BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches || BUILT_IN_THEMES[0].swatches
+export const DEFAULT_THEME = BUILT_IN_THEMES[0].id
+export const DEFAULT_CUSTOM_COLORS = BUILT_IN_THEMES[0].swatches
 export const DEFAULT_THEME_TUNING = {
-  radiusUnit: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.radiusUnit || BUILT_IN_THEMES[0].radiusUnit,
+  radiusUnit: BUILT_IN_THEMES[0].radiusUnit,
   visualStrength: 1,
 }
 
@@ -115,7 +140,7 @@ const THEME_OPTIONS = [...BUILT_IN_THEMES, ...QUICK_PALETTES]
 const THEME_IDS = new Set(THEME_OPTIONS.map(t => t.id))
 
 export const normalizeThemeChoice = (theme) => (
-  THEME_IDS.has(theme) || theme === SYSTEM_THEME || theme === 'custom' ? theme : DEFAULT_THEME
+  THEME_IDS.has(theme) || theme === 'custom' ? theme : DEFAULT_THEME
 )
 
 export const loadThemeChoice = () => normalizeThemeChoice(localStorage.getItem('nf-theme'))
@@ -125,11 +150,11 @@ export const getThemeOption = (theme) => THEME_OPTIONS.find(option => option.id 
 export const getThemeColors = (theme, customColors = {}) => {
   const normalized = normalizeThemeChoice(theme)
   if (normalized === 'custom') return { ...DEFAULT_CUSTOM_COLORS, ...customColors }
-  return getThemeOption(resolveThemeChoice(normalized))?.swatches || DEFAULT_CUSTOM_COLORS
+  return getThemeOption(normalized)?.swatches || DEFAULT_CUSTOM_COLORS
 }
 
 export const getThemeTuning = (theme, fallback = DEFAULT_THEME_TUNING) => {
-  const option = getThemeOption(resolveThemeChoice(normalizeThemeChoice(theme)))
+  const option = getThemeOption(theme)
   if (!option) return fallback
   return {
     radiusUnit: option.radiusUnit ?? fallback.radiusUnit,
@@ -243,6 +268,7 @@ export const applyThemeTuning = (tuning = {}, colors = DEFAULT_CUSTOM_COLORS) =>
   const visualStrength = clamp(Number(tuning.visualStrength) || DEFAULT_THEME_TUNING.visualStrength, 0.45, 1.7)
   const bg = hexToRgb(colors.bgMain)
   const isLight = bg ? (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 > 0.58 : false
+  const base = isLight ? 0.075 : 0.22
   const shadowTone = isLight ? '20,24,28' : '0,0,0'
 
   root.style.setProperty('--radius-unit', `${radiusUnit}px`)
@@ -250,15 +276,6 @@ export const applyThemeTuning = (tuning = {}, colors = DEFAULT_CUSTOM_COLORS) =>
   root.style.setProperty('--accent-fade', rgbaFromHex(colors.accent, clamp(0.08 + visualStrength * 0.08, 0.08, 0.24)))
   root.style.setProperty('--bg-hover', rgbaFromHex(colors.textMain, clamp(0.025 + visualStrength * 0.035, 0.03, 0.09)))
   root.style.setProperty('--atmos-glow-intensity', `${Math.round(visualStrength * 7)}%`)
-  if (isLight) {
-    root.style.setProperty('--shadow-sm', `0 4px 12px rgba(${shadowTone},${clamp(0.11 * visualStrength, 0.06, 0.2)}), 0 1px 1px rgba(255,255,255,.68) inset`)
-    root.style.setProperty('--shadow-md', `0 14px 34px rgba(${shadowTone},${clamp(0.17 * visualStrength, 0.1, 0.3)}), 0 2px 8px rgba(${shadowTone},${clamp(0.07 * visualStrength, 0.04, 0.16)})`)
-    root.style.setProperty('--shadow-lg', `0 30px 68px rgba(${shadowTone},${clamp(0.22 * visualStrength, 0.13, 0.38)}), 0 10px 24px rgba(${shadowTone},${clamp(0.09 * visualStrength, 0.05, 0.18)})`)
-    root.style.setProperty('--shadow-overlay', `0 34px 86px rgba(${shadowTone},${clamp(0.36 * visualStrength, 0.2, 0.52)}), 0 10px 28px rgba(${shadowTone},${clamp(0.14 * visualStrength, 0.08, 0.26)})`)
-    return
-  }
-
-  const base = 0.22
   root.style.setProperty('--shadow-sm', `0 2px 8px rgba(${shadowTone},${clamp(base * visualStrength, 0.04, 0.45)})`)
   root.style.setProperty('--shadow-md', `0 10px 28px rgba(${shadowTone},${clamp((base + 0.08) * visualStrength, 0.08, 0.6)})`)
   root.style.setProperty('--shadow-lg', `0 24px 62px rgba(${shadowTone},${clamp((base + 0.16) * visualStrength, 0.12, 0.72)})`)
@@ -289,11 +306,9 @@ const syncThemeColorMeta = (bgMain) => {
 export const applyThemeToDocument = (theme, customColors = {}) => {
   const root = document.documentElement
   const normalized = normalizeThemeChoice(theme)
-  const resolved = resolveThemeChoice(normalized)
 
   if (normalized === 'custom') {
     root.setAttribute('data-theme', 'custom')
-    root.setAttribute('data-theme-choice', 'custom')
     const colors = { ...DEFAULT_CUSTOM_COLORS, ...customColors }
     const tokens = deriveCustomThemeTokens(colors, loadThemeTuning())
     Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value))
@@ -307,7 +322,6 @@ export const applyThemeToDocument = (theme, customColors = {}) => {
   const quickPalette = QUICK_PALETTES.find(option => option.id === normalized)
   if (quickPalette) {
     root.setAttribute('data-theme', normalized)
-    root.setAttribute('data-theme-choice', normalized)
     setThemeVars(root, quickPalette.swatches)
     syncThemeColorMeta(quickPalette.swatches.bgMain)
     return normalized
@@ -315,9 +329,8 @@ export const applyThemeToDocument = (theme, customColors = {}) => {
 
   // Built-in theme — remove any inline overrides and let the CSS block handle everything
   ALL_CSS_VARS.forEach(variable => root.style.removeProperty(variable))
-  root.setAttribute('data-theme', resolved)
-  root.setAttribute('data-theme-choice', normalized)
-  syncThemeColorMeta(getThemeOption(resolved)?.swatches?.bgMain)
+  root.setAttribute('data-theme', normalized)
+  syncThemeColorMeta(getThemeOption(normalized)?.swatches?.bgMain)
   return normalized
 }
 

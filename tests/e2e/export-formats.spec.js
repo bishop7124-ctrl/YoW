@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, openProjectSettings, seedCleanStorage } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
 })
 
-test('project settings exports DOCX and visual PDF', async ({ page }) => {
+test('project settings exports Word-docs ZIP and visual PDF', async ({ page }) => {
   test.setTimeout(90_000)
 
   const projectTitle = `Export Smoke ${Date.now()}`
@@ -24,18 +24,19 @@ test('project settings exports DOCX and visual PDF', async ({ page }) => {
   await page.getByPlaceholder('Begin writing here…').fill(sentence)
   await expect(page.getByPlaceholder('Begin writing here…')).toHaveValue(sentence)
 
-  await page.getByRole('button', { name: 'Project settings' }).click()
+  await openProjectSettings(page)
+  const settingsDialog = page.getByRole('dialog', { name: 'Project Settings' })
 
   const docxDownloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Word document/ }).click()
+  await settingsDialog.getByRole('button', { name: /Word docs ZIP/ }).click()
   const docxDownload = await docxDownloadPromise
-  expect(docxDownload.suggestedFilename()).toMatch(/\.docx$/)
+  expect(docxDownload.suggestedFilename()).toMatch(/\.zip$/)
   const docxPath = await docxDownload.path()
   expect(docxPath).toBeTruthy()
   expect(fs.statSync(docxPath).size).toBeGreaterThan(100)
 
   const pdfDownloadPromise = page.waitForEvent('download')
-  await page.locator('.project-settings-theme-button').first().click()
+  await settingsDialog.getByRole('button', { name: 'Nocturne Grove' }).click()
   const pdfDownload = await pdfDownloadPromise
   expect(pdfDownload.suggestedFilename()).toMatch(/\.pdf$/)
   const pdfPath = await pdfDownload.path()

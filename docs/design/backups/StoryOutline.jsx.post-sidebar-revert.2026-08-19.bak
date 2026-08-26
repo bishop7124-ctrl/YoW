@@ -154,7 +154,7 @@ const AutoTextarea = ({ value, onChange, placeholder, className }) => {
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       rows={1}
-      className={`outline-description-field w-full resize-none outline-none text-base text-[var(--text-main)] placeholder-[var(--text-muted)] placeholder-opacity-50 ${className || ''}`}
+      className={`outline-description-field w-full resize-none outline-none text-sm text-[var(--text-main)] placeholder-[var(--text-muted)] placeholder-opacity-50 ${className || ''}`}
     />
   )
 }

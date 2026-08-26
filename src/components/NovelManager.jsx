@@ -819,7 +819,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
             Cancel
           </button>
           <button type="submit"
-            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
             Save
           </button>
         </div>
@@ -1099,7 +1099,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
             Cancel
           </button>
           <button type="submit"
-            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
             Save
           </button>
         </div>
@@ -1736,7 +1736,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               <button type="submit"
                 style={{
                   flex: 1, padding: '10px 0', borderRadius: 7, border: 'none',
-                  background: 'var(--accent)', color: 'var(--bg-main)',
+                  background: 'var(--accent)', color: 'var(--accent-contrast)',
                   fontSize: 13, fontWeight: 800, cursor: 'pointer',
                 }}>
                 Create
@@ -1841,7 +1841,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               <button type="submit"
                 style={{
                   flex: 1, padding: '10px 0', borderRadius: 7, border: 'none',
-                  background: 'var(--accent)', color: 'var(--bg-main)',
+                  background: 'var(--accent)', color: 'var(--accent-contrast)',
                   fontSize: 13, fontWeight: 800, cursor: 'pointer',
                 }}>
                 Create

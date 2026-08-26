@@ -70,7 +70,7 @@ export function AIToolsUpgradeWall() {
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))}
         style={{
-          marginTop: 8, background: 'var(--accent)', color: 'var(--bg-main)',
+          marginTop: 8, background: 'var(--accent)', color: 'var(--accent-contrast)',
           fontWeight: 800, fontSize: 13, padding: '9px 20px', borderRadius: 8,
           border: 'none', cursor: 'pointer',
         }}

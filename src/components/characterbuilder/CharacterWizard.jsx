@@ -617,7 +617,7 @@ function StepEquipment({ data, onChange }) {
           placeholder="Add custom item…"
           style={{ flex: 1, padding: '8px 10px', fontSize: 13 }}
         />
-        <button onClick={addCustom} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
+        <button onClick={addCustom} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
       </div>
 
       {equipment.length > 0 && (
@@ -935,7 +935,7 @@ export default function CharacterWizard({ novelId, onSave, onCancel, store }) {
                 disabled={saving}
                 style={{
                   padding: '8px 20px', borderRadius: 9,
-                  background: 'var(--accent)', color: 'var(--bg-main)',
+                  background: 'var(--accent)', color: 'var(--accent-contrast)',
                   border: 'none', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer',
                   opacity: saving ? 0.7 : 1,
                 }}

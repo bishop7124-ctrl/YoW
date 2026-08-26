@@ -26,7 +26,11 @@ for (const viewport of viewports) {
     await expect(page).toHaveURL(/\/project\//)
     await expect(page.getByRole('heading', { name: projectTitle })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Write' }).click()
+    await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).click()
+    const closeInspector = page.getByRole('button', { name: 'Close inspector' })
+    if (await closeInspector.isVisible().catch(() => false)) {
+      await closeInspector.click()
+    }
     await page.getByText('Begin writing here…').click()
     const editor = page.getByPlaceholder('Begin writing here…')
     await expect(editor).toBeVisible()
