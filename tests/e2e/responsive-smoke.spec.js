@@ -26,7 +26,11 @@ for (const viewport of viewports) {
     await expect(page).toHaveURL(/\/project\//)
     await expect(page.getByRole('heading', { name: projectTitle })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Write' }).click()
+    // At mobile/tablet widths the persistent top-nav "Write" tab collapses
+    // into the hamburger menu, but the Overview page's own "Open manuscript"
+    // hero CTA (ProjectDashboard.jsx) stays reachable and opens the same
+    // editor — accept either, matching whichever this viewport shows.
+    await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).click()
     await page.getByText('Begin writing here…').click()
     const editor = page.getByPlaceholder('Begin writing here…')
     await expect(editor).toBeVisible()
