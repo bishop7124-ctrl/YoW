@@ -56,9 +56,12 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   // The modal moves to a preview phase showing the YOW export; click "Create Project" to confirm
   await page.getByRole('button', { name: 'Create Project' }).click({ timeout: 15_000 })
 
-  // After import, storage should have 2 projects (original + restored copy)
+  // After import, storage should have 2 projects (original + restored copy).
+  // Goes through window.__yowStorageBridge — the app's active backend can be
+  // an IndexedDB-backed vault, which raw localStorage reads can't see.
   await expect.poll(async () => page.evaluate(() => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
+    const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
+    const novels = JSON.parse(raw || '[]')
     return novels.length
   }), { timeout: 20_000 }).toBe(2)
 })

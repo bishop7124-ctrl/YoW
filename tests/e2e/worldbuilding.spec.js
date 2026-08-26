@@ -29,10 +29,11 @@ test.describe('Characters', () => {
 
     // Pass charName as arg so it's available in the browser context
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, charName)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(true)
@@ -47,7 +48,7 @@ test.describe('Characters', () => {
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, originalName)
 
@@ -57,10 +58,11 @@ test.describe('Characters', () => {
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, updatedName)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === updatedName)).toBe(true)
@@ -75,7 +77,7 @@ test.describe('Characters', () => {
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, charName)
 
@@ -91,10 +93,11 @@ test.describe('Characters', () => {
     await page.locator('.studio-page-actions').getByRole('button', { name: 'Delete' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return !chars.some(c => c.name === n)
     }, charName, 15_000)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(false)
@@ -109,7 +112,7 @@ test.describe('Characters', () => {
       await page.locator('[role="dialog"] input[required]').first().fill(charName)
       await page.getByRole('button', { name: 'Save Character' }).click()
       await waitForStorage(page, (n) => {
-        const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+        const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
         return chars.some(c => c.name === n)
       }, charName)
     }
@@ -144,10 +147,11 @@ test.describe('Locations', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (n) => {
-      const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
+      const locs = JSON.parse((window.__yowStorageBridge?.getItem('nf_locations') ?? localStorage.getItem('nf_locations')) || '[]')
       return locs.some(l => l.name === n)
     }, locName)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const locs = await readStorage(page, 'nf_locations')
     expect(locs.some(l => l.name === locName)).toBe(true)
@@ -162,7 +166,7 @@ test.describe('Locations', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (n) => {
-      const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
+      const locs = JSON.parse((window.__yowStorageBridge?.getItem('nf_locations') ?? localStorage.getItem('nf_locations')) || '[]')
       return locs.some(l => l.name === n)
     }, original)
 
@@ -172,7 +176,7 @@ test.describe('Locations', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (n) => {
-      const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
+      const locs = JSON.parse((window.__yowStorageBridge?.getItem('nf_locations') ?? localStorage.getItem('nf_locations')) || '[]')
       return locs.some(l => l.name === n)
     }, updated)
 
@@ -199,17 +203,18 @@ test.describe('Lore', () => {
     await page.getByRole('button', { name: 'Save Entry' }).click()
 
     await waitForStorage(page, (t) => {
-      const lore = JSON.parse(localStorage.getItem('nf_loreEntries') || '[]')
+      const lore = JSON.parse((window.__yowStorageBridge?.getItem('nf_loreEntries') ?? localStorage.getItem('nf_loreEntries')) || '[]')
       return lore.some(e => e.title === t || e.name === t)
     }, loreTitle)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const lore = await readStorage(page, 'nf_loreEntries')
     expect(lore.some(e => e.title === loreTitle || e.name === loreTitle)).toBe(true)
   })
 
   test('lore entries are scoped to the active project', async ({ page }) => {
-    const activeId = await page.evaluate(() => localStorage.getItem('nf_activeNovel'))
+    const activeId = await page.evaluate(() => (window.__yowStorageBridge?.getItem('nf_activeNovel') ?? localStorage.getItem('nf_activeNovel')))
     const lore = await readStorage(page, 'nf_loreEntries')
     const scoped = lore.filter(e => e.novelId === activeId)
     expect(scoped.length).toBe(lore.filter(e => e.novelId).length)
@@ -234,10 +239,11 @@ test.describe('Timeline', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (t) => {
-      const timeline = JSON.parse(localStorage.getItem('nf_timeline') || '[]')
+      const timeline = JSON.parse((window.__yowStorageBridge?.getItem('nf_timeline') ?? localStorage.getItem('nf_timeline')) || '[]')
       return timeline.some(e => e.title === t || e.name === t)
     }, eventTitle)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const timeline = await readStorage(page, 'nf_timeline')
     expect(timeline.some(e => e.title === eventTitle || e.name === eventTitle)).toBe(true)
@@ -266,10 +272,11 @@ test.describe('Ideas', () => {
 
     const prefix = ideaText.slice(0, 15)
     await waitForStorage(page, (p) => {
-      const ideas = JSON.parse(localStorage.getItem('nf_ideaEntries') || '[]')
+      const ideas = JSON.parse((window.__yowStorageBridge?.getItem('nf_ideaEntries') ?? localStorage.getItem('nf_ideaEntries')) || '[]')
       return ideas.some(e => (e.title || e.text || e.content || '').includes(p))
     }, prefix)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     const ideas = await readStorage(page, 'nf_ideaEntries')
     expect(ideas.some(e =>
