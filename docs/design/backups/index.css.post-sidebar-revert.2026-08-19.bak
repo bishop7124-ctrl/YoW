@@ -5,22 +5,22 @@
 /* ── Global design tokens — apply to all themes ─────────────────────────── */
 :root {
   /* ── Core palette (overridden per theme) ────────────────────────────────── */
-  --bg-main:    #eef4ee;
-  --bg-nav:     #dfe9e2;
-  --bg-raise:   #fbfff8;
-  --bg-hover:   rgba(27, 41, 36, 0.05);
-  --text-main:  #1b2924;
-  --text-muted: #5b6f68;
-  --text-faint: #82938d;
+  --bg-main:    #0e1a18;
+  --bg-nav:     #132220;
+  --bg-raise:   #1a2b28;
+  --bg-hover:   rgba(236, 230, 218, 0.06);
+  --text-main:  #ece6da;
+  --text-muted: #8ea19b;
+  --text-faint: #5c706b;
   --accent:     #9c4935;
-  --accent-fade: rgba(156, 73, 53, 0.13);
-  --accent-text: #7d3924;
-  --accent-2:   #5f744d;
-  --accent-contrast: #fffaf4;
-  --border:     rgba(27, 41, 36, 0.14);
-  --border-strong: rgba(27, 41, 36, 0.26);
-  --prose-text: #17231e;
-  --logo-filter: brightness(0);
+  --accent-fade: rgba(156, 73, 53, 0.14);
+  --accent-text: #d99a7d;
+  --accent-2:   #9db07a;
+  --accent-contrast: #1a1210;
+  --border:     rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --prose-text: #f2ece0;
+  --logo-filter: none;
 
   /* ── Semantic aliases (backward-compat) ─────────────────────────────────── */
   --bg:       var(--bg-main);
@@ -38,33 +38,24 @@
   --danger:  #ef4444;
   --success: #22c55e;
 
-  /* Shared controls: pages inherit button color, depth, and corner decisions. */
-  --button-primary-bg: var(--accent);
-  --button-primary-text: var(--accent-contrast);
-  --button-primary-border: color-mix(in srgb, var(--accent) 72%, #fff 16%);
-  --button-secondary-bg: color-mix(in srgb, var(--bg-nav) 52%, transparent);
-  --button-secondary-text: var(--text-muted);
-  --button-secondary-hover-bg: var(--bg-hover);
-  --control-radius: var(--r-md);
-
   /* ── Atmosphere tokens (drive gradients, textures & materials) ──────────── */
   /* Each theme overrides these to create a radically distinct environment.    */
-  --atmos-warm:       #d8e1d7;   /* warm material tint for wood/surfaces    */
-  --atmos-cool:       #e6eee7;   /* cool depth tint for shadows             */
-  --atmos-paper:      #e9f0e4;   /* parchment surface colour                */
-  --atmos-paper-line: #b8c8bc;   /* ruling line colour                      */
-  --atmos-wood:       #a8b995;   /* primary material (wood/leather/stone)   */
-  --atmos-cork:       #c3d0b4;   /* secondary material (cork/felt/fabric)   */
-  --atmos-spine-tint: #d7e4d9;   /* spine navigation rail tint              */
-  --atmos-glow-pos:   78% 8%;    /* ambient accent glow position            */
-  --atmos-glow-size:  28%;       /* ambient glow falloff radius             */
-  --atmos-glow-intensity: 4%;    /* ambient glow strength                   */
+  --atmos-warm:       #263933;   /* warm material tint for wood/surfaces    */
+  --atmos-cool:       #07110f;   /* cool depth tint for shadows             */
+  --atmos-paper:      #385047;   /* parchment surface colour                */
+  --atmos-paper-line: #50665d;   /* ruling line colour                      */
+  --atmos-wood:       #192822;   /* primary material (wood/leather/stone)   */
+  --atmos-cork:       #2e453b;   /* secondary material (cork/felt/fabric)   */
+  --atmos-spine-tint: #142620;   /* spine navigation rail tint              */
+  --atmos-glow-pos:   82% 9%;    /* ambient accent glow position            */
+  --atmos-glow-size:  32%;       /* ambient glow falloff radius             */
+  --atmos-glow-intensity: 7%;    /* ambient glow strength                   */
 
   /* ── Elevation & shadow ─────────────────────────────────────────────────── */
-  --shadow-sm:      0 4px 12px rgba(27,41,36,.12), 0 1px 1px rgba(255,255,255,.66) inset;
-  --shadow-md:      0 14px 34px rgba(27,41,36,.18), 0 2px 6px rgba(27,41,36,.08);
-  --shadow-lg:      0 30px 68px rgba(27,41,36,.24), 0 10px 24px rgba(27,41,36,.10);
-  --shadow-overlay: 0 34px 86px rgba(17,29,24,.40), 0 10px 28px rgba(17,29,24,.16);
+  --shadow-sm:      0 3px 10px rgba(0,0,0,.20);
+  --shadow-md:      0 12px 32px rgba(0,0,0,.28);
+  --shadow-lg:      0 26px 65px rgba(0,0,0,.34);
+  --shadow-overlay: 0 28px 70px rgba(0,0,0,.55);
   --shadow-soft:    var(--shadow-md);      /* legacy alias */
   --shadow-modal:   var(--shadow-overlay); /* legacy alias */
 
@@ -94,7 +85,7 @@
   --font-mono:  "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 
   /* ── Geometry ───────────────────────────────────────────────────────────── */
-  --radius-unit:  9px;
+  --radius-unit:  7px;
 
   /* Radius scale — all sizes derive from --radius-unit so themes just set one var */
   --r-xs:     max(2px, calc(var(--radius-unit) * 0.5));   /* 3.5px @ 7px base */
@@ -176,7 +167,7 @@
    because CSS custom properties resolve var() references at use-time.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Nocturne Grove ─ deep, dramatic option ─────────────────────────────────
+/* ── Dark Refined ─ default ─────────────────────────────────────────────────
    Deep green-black base, warm coral accent, muted sage secondary. */
 [data-theme="dark-refined"] {
   /* Core */
@@ -187,7 +178,7 @@
   --text-muted: #8ea19b;
   --accent:     #9c4935;
   --accent-fade: rgba(156, 73, 53, 0.14);
-  --accent-contrast: #fffaf4;
+  --accent-contrast: #1a1210;
   --border:     rgba(255, 255, 255, 0.09);
   --logo-filter: none;
   --accent2:    #9db07a;
@@ -217,44 +208,44 @@
   --radius-unit: 9px;
 }
 
-/* ── Parchment Dawn ─ soft light counterpart ────────────────────────────────
-   Pale green-black base, coral accent, muted sage secondary. */
+/* ── Light Refined ─ counterpart ────────────────────────────────────────────
+   Soft parchment-green base, warm coral accent, quiet sage secondary. */
 [data-theme="light-refined"] {
   /* Core */
-  --bg-main:    #eef4ee;
-  --bg-nav:     #dfe9e2;
-  --bg-hover:   rgba(27, 41, 36, 0.05);
-  --text-main:  #1b2924;
-  --text-muted: #5b6f68;
-  --accent:     #9c4935;
-  --accent-fade: rgba(156, 73, 53, 0.13);
+  --bg-main:    #f5f2ea;
+  --bg-nav:     #e9eee7;
+  --bg-hover:   rgba(31, 42, 37, 0.05);
+  --text-main:  #1f2a25;
+  --text-muted: #52645c;
+  --accent:     #a84f32;
+  --accent-fade: rgba(168, 79, 50, 0.13);
   --accent-contrast: #fffaf4;
-  --border:     rgba(27, 41, 36, 0.14);
+  --border:     rgba(31, 42, 37, 0.13);
   --logo-filter: brightness(0);
-  --accent2:    #5f744d;
-  --bg-raise:      #fbfff8;
-  --text-faint:    #82938d;
-  --border-strong: rgba(27, 41, 36, 0.26);
+  --accent2:    #66784d;
+  --bg-raise:      #fffdf7;
+  --text-faint:    #819188;
+  --border-strong: rgba(31, 42, 37, 0.24);
   --accent-text:   #7d3924;
-  --accent-2:      #5f744d;
+  --accent-2:      #66784d;
   --prose-text:    #17231e;
-  /* Atmosphere — lightened Nocturne materials */
-  --atmos-warm:       #d8e1d7;
-  --atmos-cool:       #e6eee7;
-  --atmos-paper:      #e9f0e4;
-  --atmos-paper-line: #b8c8bc;
-  --atmos-wood:       #a8b995;
-  --atmos-cork:       #c3d0b4;
-  --atmos-spine-tint: #d7e4d9;
+  /* Atmosphere — pale ink, sage linen, warm page light */
+  --atmos-warm:       #d9d7c8;
+  --atmos-cool:       #e7ece5;
+  --atmos-paper:      #efe7d7;
+  --atmos-paper-line: #b7b6a3;
+  --atmos-wood:       #b7aa88;
+  --atmos-cork:       #c6c4a8;
+  --atmos-spine-tint: #dce5dc;
   --atmos-glow-pos:   78% 8%;
   --atmos-glow-size:  28%;
   --atmos-glow-intensity: 4%;
   /* Elevation */
-  --shadow-sm:      0 4px 12px rgba(27,41,36,.12), 0 1px 1px rgba(255,255,255,.66) inset;
-  --shadow-md:      0 14px 34px rgba(27,41,36,.18), 0 2px 6px rgba(27,41,36,.08);
-  --shadow-lg:      0 30px 68px rgba(27,41,36,.24), 0 10px 24px rgba(27,41,36,.10);
-  --shadow-overlay: 0 34px 86px rgba(17,29,24,.40), 0 10px 28px rgba(17,29,24,.16);
-  /* Geometry — paired with Nocturne Grove */
+  --shadow-sm:      0 2px 8px rgba(31,42,37,.10);
+  --shadow-md:      0 9px 26px rgba(31,42,37,.16);
+  --shadow-lg:      0 22px 54px rgba(31,42,37,.22);
+  --shadow-overlay: 0 28px 70px rgba(23,35,30,.38);
+  /* Geometry — paired with Dark Refined */
   --radius-unit: 9px;
 }
 
@@ -300,6 +291,178 @@
   --radius-unit: 9px;
 }
 
+/* ── Sage Modern ─ nature studio ────────────────────────────────────────────
+   Light sage & white base, muted green accent. Clean, minimal, organic.
+   Bright design studio — plants, natural light, linen surfaces. */
+[data-theme="sage-modern"] {
+  /* Core */
+  --bg-main:    #f5f8f3;
+  --bg-nav:     #eaeee6;
+  --bg-hover:   rgba(20, 32, 24, 0.05);
+  --text-main:  #1e2922;
+  --text-muted: #5a7060;
+  --accent:     #4a8c68;
+  --accent-fade: rgba(74, 140, 104, 0.13);
+  --accent-contrast: #151713;
+  --border:     #ced8ca;
+  --logo-filter: brightness(0);
+  --accent2:    #7aaa88;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #ffffff;
+  --text-faint:    #83968a;
+  --border-strong: #b4c2b6;
+  --accent-text:   #2f6448;
+  --accent-2:      #a8763c;
+  --prose-text:    #1a241d;
+  /* Atmosphere — light, natural, airy */
+  --atmos-warm:       #bcd0b4;
+  --atmos-cool:       #dce8d6;
+  --atmos-paper:      #e8ece4;
+  --atmos-paper-line: #a4bca0;
+  --atmos-wood:       #6a8c60;
+  --atmos-cork:       #9ab890;
+  --atmos-spine-tint: #b8ccb0;
+  --atmos-glow-pos:   80% 90%;
+  --atmos-glow-size:  28%;
+  --atmos-glow-intensity: 4%;
+  /* Elevation — soft, paper-press */
+  --shadow-sm:      0 2px 8px rgba(28,42,26,.10);
+  --shadow-md:      0 8px 24px rgba(28,42,26,.16);
+  --shadow-lg:      0 20px 50px rgba(28,42,26,.22);
+  --shadow-overlay: 0 24px 60px rgba(18,28,16,.38);
+  /* Geometry — soft, minimal */
+  --radius-unit: 6px;
+}
+
+/* ── Industrial Loft ─ concrete studio ──────────────────────────────────────
+   Dark slate base, amber accent. Raw, modern, functional.
+   Exposed concrete, metal fixtures, amber work lights. */
+[data-theme="industrial-loft"] {
+  /* Core */
+  --bg-main:    #141720;
+  --bg-nav:     #1c2028;
+  --bg-hover:   rgba(220, 224, 234, 0.05);
+  --text-main:  #dce0e8;
+  --text-muted: #828996;
+  --accent:     #d08820;
+  --accent-fade: rgba(208, 136, 32, 0.14);
+  --accent-contrast: #151713;
+  --border:     #282c38;
+  --logo-filter: none;
+  --accent2:    #7888a0;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #242935;
+  --text-faint:    #5d6472;
+  --border-strong: #3a4050;
+  --accent-text:   #e5a648;
+  --accent-2:      #7f93b8;
+  --prose-text:    #e4e8f0;
+  /* Atmosphere — concrete, steel, raw */
+  --atmos-warm:       #1e2230;
+  --atmos-cool:       #0a0c12;
+  --atmos-paper:      #222630;
+  --atmos-paper-line: #2a303c;
+  --atmos-wood:       #181c24;
+  --atmos-cork:       #262c38;
+  --atmos-spine-tint: #141820;
+  --atmos-glow-pos:   50% 50%;
+  --atmos-glow-size:  18%;
+  --atmos-glow-intensity: 2%;
+  /* Elevation — stark, utilitarian */
+  --shadow-sm:      0 2px 8px rgba(0,0,0,.36);
+  --shadow-md:      0 10px 26px rgba(0,0,0,.44);
+  --shadow-lg:      0 22px 54px rgba(0,0,0,.52);
+  --shadow-overlay: 0 28px 70px rgba(0,0,0,.66);
+  /* Geometry — sharp, engineered */
+  --radius-unit: 3px;
+}
+
+/* ── Caramel Latte ─ warm café ──────────────────────────────────────────────
+   Warm cream base, caramel accent. Inviting, soft, familiar.
+   Afternoon light through a café window, hands wrapped around a cup. */
+[data-theme="caramel-latte"] {
+  /* Core */
+  --bg-main:    #fef8f0;
+  --bg-nav:     #f4e8d8;
+  --bg-hover:   rgba(30, 20, 8, 0.05);
+  --text-main:  #28200c;
+  --text-muted: #78663f;
+  --accent:     #b87830;
+  --accent-fade: rgba(184, 120, 48, 0.14);
+  --accent-contrast: #151713;
+  --border:     #e0c8a0;
+  --logo-filter: brightness(0);
+  --accent2:    #9a5a28;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #fffdf8;
+  --text-faint:    #9a8a66;
+  --border-strong: #cfae7e;
+  --accent-text:   #8a5418;
+  --accent-2:      #6f7f56;
+  --prose-text:    #241c0a;
+  /* Atmosphere — warm café, caramel, beeswax */
+  --atmos-warm:       #deb870;
+  --atmos-cool:       #eedcbc;
+  --atmos-paper:      #f0d8b4;
+  --atmos-paper-line: #c09050;
+  --atmos-wood:       #a87838;
+  --atmos-cork:       #c89848;
+  --atmos-spine-tint: #d4a850;
+  --atmos-glow-pos:   80% 90%;
+  --atmos-glow-size:  30%;
+  --atmos-glow-intensity: 5%;
+  /* Elevation — warm, soft */
+  --shadow-sm:      0 2px 8px rgba(48,26,6,.12);
+  --shadow-md:      0 8px 24px rgba(48,26,6,.18);
+  --shadow-lg:      0 20px 50px rgba(48,26,6,.24);
+  --shadow-overlay: 0 24px 60px rgba(32,16,4,.42);
+  /* Geometry — soft, inviting */
+  --radius-unit: 10px;
+}
+
+/* ── Ocean Depth ─ deep sea ─────────────────────────────────────────────────
+   Very dark navy base, cool teal accent. Vast, mysterious, precise.
+   Bioluminescence in deep water — cold, calm, other-worldly. */
+[data-theme="ocean-depth"] {
+  /* Core */
+  --bg-main:    #07151c;
+  --bg-nav:     #0e2432;
+  --bg-hover:   rgba(212, 238, 250, 0.05);
+  --text-main:  #d4eef8;
+  --text-muted: #5792af;
+  --accent:     #189ab0;
+  --accent-fade: rgba(24, 154, 176, 0.14);
+  --accent-contrast: #151713;
+  --border:     #143848;
+  --logo-filter: none;
+  --accent2:    #2a5888;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #143040;
+  --text-faint:    #3d6d85;
+  --border-strong: #1d5065;
+  --accent-text:   #4dc2d6;
+  --accent-2:      #7fb08a;
+  --prose-text:    #d9f0f8;
+  /* Atmosphere — deep sea, bioluminescent */
+  --atmos-warm:       #0a1e2c;
+  --atmos-cool:       #030810;
+  --atmos-paper:      #0e2638;
+  --atmos-paper-line: #143248;
+  --atmos-wood:       #081620;
+  --atmos-cork:       #0e2030;
+  --atmos-spine-tint: #081a2a;
+  --atmos-glow-pos:   88% 12%;
+  --atmos-glow-size:  30%;
+  --atmos-glow-intensity: 7%;
+  /* Elevation — cold, deep */
+  --shadow-sm:      0 2px 8px rgba(0,6,18,.44);
+  --shadow-md:      0 10px 28px rgba(0,6,18,.54);
+  --shadow-lg:      0 22px 56px rgba(0,6,18,.64);
+  --shadow-overlay: 0 28px 72px rgba(0,4,12,.78);
+  /* Geometry — precise, technical */
+  --radius-unit: 5px;
+}
+
 /* ── Pearl Minimal ─ blank page ─────────────────────────────────────────────
    Near-white base, cool grey-blue accent. Pure, timeless, calm.
    The cleanest possible surface — like expensive paper, unmarked. */
@@ -334,11 +497,11 @@
   --atmos-glow-pos:   50% 50%;
   --atmos-glow-size:  0%;
   --atmos-glow-intensity: 0%;
-  /* Elevation — clean, visible depth on light surfaces */
-  --shadow-sm:      0 3px 10px rgba(20,24,28,.10), 0 1px 1px rgba(255,255,255,.72) inset;
-  --shadow-md:      0 12px 30px rgba(20,24,28,.15), 0 2px 8px rgba(20,24,28,.06);
-  --shadow-lg:      0 28px 64px rgba(20,24,28,.20), 0 10px 22px rgba(20,24,28,.08);
-  --shadow-overlay: 0 34px 82px rgba(14,18,22,.34), 0 10px 28px rgba(14,18,22,.12);
+  /* Elevation — barely-there */
+  --shadow-sm:      0 1px 4px rgba(20,24,28,.08);
+  --shadow-md:      0 6px 18px rgba(20,24,28,.12);
+  --shadow-lg:      0 16px 40px rgba(20,24,28,.16);
+  --shadow-overlay: 0 20px 50px rgba(14,18,22,.30);
   /* Geometry — minimal, clean */
   --radius-unit: 5px;
 }
@@ -415,7 +578,7 @@ body {
   letter-spacing: .01em;
 }
 .btn:hover { transform: translateY(-1px); }
-.btn-primary { background: var(--button-primary-bg); color: var(--button-primary-text); border-color: var(--button-primary-border); }
+.btn-primary { background: var(--accent); color: var(--accent-contrast); border-color: color-mix(in srgb, var(--accent) 72%, #fff 18%); }
 .btn-primary:hover { filter: brightness(1.06); }
 .btn-secondary {
   background: var(--surface2);
@@ -1123,9 +1286,9 @@ body {
 .studio-button-sm { padding: 6px 10px; font-size: 11px; }
 .studio-button-primary,
 .btn-primary {
-  background: var(--button-primary-bg);
-  color: var(--button-primary-text);
-  border-color: var(--button-primary-border);
+  background: var(--accent);
+  color: #181008;
+  border-color: color-mix(in srgb, var(--accent) 72%, #fff 16%);
 }
 .studio-button-secondary,
 .btn-secondary {
@@ -2387,7 +2550,7 @@ textarea:focus {
 
   .desk-switcher button.is-active {
     background: var(--accent);
-    color: var(--accent-contrast);
+    color: #17110a;
   }
 
   .desk-tab-drawer {
@@ -3143,37 +3306,33 @@ textarea:focus {
   }
 }
 
-/* Parchment Dawn: light fallback before the system preference resolves */
+/* Dark refined: site-wide default theme */
 :root:not([data-theme]) {
-  --bg-main: #eef4ee;
-  --bg-nav: #dfe9e2;
-  --bg-raise: #fbfff8;
-  --bg-hover: rgba(27, 41, 36, 0.05);
-  --text-main: #1b2924;
-  --text-muted: #5b6f68;
-  --text-faint: #82938d;
+  --bg-main: #0e1a18;
+  --bg-nav: #132220;
+  --bg-raise: #1a2b28;
+  --bg-hover: rgba(236, 230, 218, 0.06);
+  --text-main: #ece6da;
+  --text-muted: #8ea19b;
+  --text-faint: #5c706b;
   --accent: #9c4935;
-  --accent-fade: rgba(156, 73, 53, 0.13);
-  --accent-text: #7d3924;
-  --accent-2: #5f744d;
-  --accent-contrast: #fffaf4;
-  --border: rgba(27, 41, 36, 0.14);
-  --border-strong: rgba(27, 41, 36, 0.26);
-  --prose-text: #17231e;
-  --atmos-warm: #d8e1d7;
-  --atmos-cool: #e6eee7;
-  --atmos-paper: #e9f0e4;
-  --atmos-paper-line: #b8c8bc;
-  --atmos-wood: #a8b995;
-  --atmos-cork: #c3d0b4;
-  --atmos-spine-tint: #d7e4d9;
-  --atmos-glow-pos: 78% 8%;
-  --atmos-glow-size: 28%;
-  --atmos-glow-intensity: 4%;
-  --shadow-sm: 0 4px 12px rgba(27,41,36,.12), 0 1px 1px rgba(255,255,255,.66) inset;
-  --shadow-md: 0 14px 34px rgba(27,41,36,.18), 0 2px 6px rgba(27,41,36,.08);
-  --shadow-lg: 0 30px 68px rgba(27,41,36,.24), 0 10px 24px rgba(27,41,36,.10);
-  --shadow-overlay: 0 34px 86px rgba(17,29,24,.40), 0 10px 28px rgba(17,29,24,.16);
+  --accent-fade: rgba(156, 73, 53, 0.14);
+  --accent-text: #d99a7d;
+  --accent-2: #9db07a;
+  --accent-contrast: #1a1210;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --prose-text: #f2ece0;
+  --atmos-warm: #263933;
+  --atmos-cool: #07110f;
+  --atmos-paper: #385047;
+  --atmos-paper-line: #50665d;
+  --atmos-wood: #192822;
+  --atmos-cork: #2e453b;
+  --atmos-spine-tint: #142620;
+  --atmos-glow-pos: 82% 9%;
+  --atmos-glow-size: 32%;
+  --atmos-glow-intensity: 7%;
   --bg: var(--bg-main);
   --rail: var(--bg-nav);
   --surface: var(--bg-nav);
@@ -3194,9 +3353,9 @@ textarea:focus {
   --studio-cork: color-mix(in srgb, var(--bg-nav) 62%, var(--atmos-cork) 38%);
   --studio-ink: var(--text-main);
   --studio-muted: var(--text-muted);
-  --studio-radius: var(--radius-unit);
-  --studio-shadow: var(--shadow-lg);
-  --studio-page-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,.04);
+  --studio-radius: 8px;
+  --studio-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
+  --studio-page-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
 }
 
 body {
@@ -3681,15 +3840,15 @@ body {
 
 .studio-button-primary,
 .btn-primary {
-  background: var(--button-primary-bg);
-  color: var(--button-primary-text);
-  border-color: var(--button-primary-border);
+  background: var(--accent);
+  color: #12120f;
+  border-color: transparent;
 }
 
 .studio-button-secondary,
 .btn-secondary {
-  background: var(--button-secondary-bg);
-  color: var(--button-secondary-text);
+  background: color-mix(in srgb, var(--bg-nav) 52%, transparent);
+  color: var(--text-muted);
   border-color: var(--border);
 }
 
@@ -4183,7 +4342,6 @@ textarea:focus {
   min-height: 100vh;
   padding: 0 clamp(18px, 3vw, 34px) clamp(18px, 3vw, 34px);
   overflow-x: clip;
-  background: var(--bg-main);
 }
 
 .marketing-nav {
@@ -4319,7 +4477,6 @@ textarea:focus {
 .yow-home-main {
   width: min(1180px, 100%);
   margin: 0 auto;
-  background: var(--bg-main);
 }
 
 .yow-home-hero {
@@ -4328,7 +4485,6 @@ textarea:focus {
   overflow: hidden;
   display: flex;
   align-items: center;
-  background: var(--bg-main);
   /* break out of .yow-home padding to reach viewport edges */
   margin-inline: calc(-1 * clamp(18px, 3vw, 34px));
   padding-block: clamp(56px, 8vw, 100px) clamp(48px, 7vw, 80px);
@@ -4339,28 +4495,7 @@ textarea:focus {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background:
-    radial-gradient(ellipse 74% 68% at 50% 46%,
-      color-mix(in srgb, var(--bg-main) 72%, transparent) 0%,
-      color-mix(in srgb, var(--bg-main) 46%, transparent) 48%,
-      color-mix(in srgb, var(--bg-main) 18%, transparent) 74%,
-      transparent 100%),
-    linear-gradient(180deg,
-      color-mix(in srgb, var(--bg-main) 32%, transparent) 0%,
-      color-mix(in srgb, var(--bg-main) 16%, transparent) 52%,
-      color-mix(in srgb, var(--bg-main) 38%, transparent) 100%);
-}
-
-.yow-home-hero::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-  height: clamp(180px, 28vw, 340px);
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--bg-main) 60%, transparent) 38%, var(--bg-main) 82%, var(--bg-main) 100%);
+  background: color-mix(in srgb, var(--bg-main) 52%, transparent);
 }
 
 .yow-hero-inner {
@@ -4378,20 +4513,34 @@ textarea:focus {
   object-fit: cover;
   object-position: center 28%;
   z-index: 0;
-  opacity: 0.85;
+  opacity: 0.68;
   mask-image:
-    linear-gradient(180deg, transparent 0%, black 12%, black 58%, transparent 100%),
-    linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%);
+    radial-gradient(ellipse 92% 88% at 52% 50%, black 28%, transparent 72%),
+    radial-gradient(ellipse 38% 55% at 0% 18%, transparent 40%, black 80%),
+    radial-gradient(ellipse 30% 40% at 100% 8%, transparent 35%, black 75%),
+    radial-gradient(ellipse 42% 38% at 8% 100%, transparent 38%, black 78%),
+    radial-gradient(ellipse 35% 42% at 96% 90%, transparent 35%, black 72%),
+    radial-gradient(ellipse 28% 32% at 48% 0%, transparent 30%, black 70%),
+    radial-gradient(ellipse 22% 36% at 0% 55%, transparent 28%, black 68%),
+    radial-gradient(ellipse 20% 30% at 100% 50%, transparent 28%, black 65%),
+    radial-gradient(ellipse 32% 22% at 55% 100%, transparent 32%, black 70%);
   mask-composite: intersect;
   -webkit-mask-image:
-    linear-gradient(180deg, transparent 0%, black 12%, black 58%, transparent 100%),
-    linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%);
+    radial-gradient(ellipse 92% 88% at 52% 50%, black 28%, transparent 72%),
+    radial-gradient(ellipse 38% 55% at 0% 18%, transparent 40%, black 80%),
+    radial-gradient(ellipse 30% 40% at 100% 8%, transparent 35%, black 75%),
+    radial-gradient(ellipse 42% 38% at 8% 100%, transparent 38%, black 78%),
+    radial-gradient(ellipse 35% 42% at 96% 90%, transparent 35%, black 72%),
+    radial-gradient(ellipse 28% 32% at 48% 0%, transparent 30%, black 70%),
+    radial-gradient(ellipse 22% 36% at 0% 55%, transparent 28%, black 68%),
+    radial-gradient(ellipse 20% 30% at 100% 50%, transparent 28%, black 65%),
+    radial-gradient(ellipse 32% 22% at 55% 100%, transparent 32%, black 70%);
   -webkit-mask-composite: source-in;
 }
 
 .yow-home-copy {
   text-align: center;
-  text-shadow: 0 1px 18px color-mix(in srgb, var(--bg-main) 72%, transparent);
+  text-shadow: none;
 }
 
 .yow-home-copy h1 {
@@ -5125,7 +5274,7 @@ textarea:focus {
 }
 
 .timeline-segmented button.is-active {
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   background: var(--accent);
 }
 
@@ -6587,7 +6736,7 @@ body {
   display: grid;
   place-items: center;
   border-radius: var(--r-pill);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   background: var(--accent);
   font-size: 11px;
   font-weight: 900;
@@ -9801,7 +9950,7 @@ body {
   font-weight: 800;
   letter-spacing: .04em;
   text-transform: uppercase;
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   background: var(--accent);
   border-radius: 4px;
   padding: 2px 6px;
@@ -10200,9 +10349,9 @@ body {
   flex: none;
   min-height: 34px;
   border: 0;
-  border-radius: var(--control-radius);
-  background: var(--button-primary-bg);
-  color: var(--button-primary-text);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--bg-main);
   cursor: pointer;
   font-size: 12px;
   font-weight: 900;
@@ -10827,7 +10976,7 @@ body {
 .account-primary-button {
   border: 0;
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
 }
 
 .account-secondary-button {
@@ -12970,7 +13119,7 @@ body {
   min-height: 34px;
   padding: 8px 10px;
   color: var(--text-main);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 650;
   box-sizing: border-box;
 }
@@ -13797,7 +13946,7 @@ body {
 .cookie-btn-primary {
   border: none;
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   font-weight: 800;
 }
 
@@ -15947,7 +16096,7 @@ body {
   width: 100%;
   padding: 10px 20px;
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   border: none;
   border-radius: var(--r-md);
   font-size: 13px;
@@ -16264,7 +16413,7 @@ body {
 .ms-catalogue-primary {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   padding: 8px 12px;
 }
 
@@ -16528,7 +16677,7 @@ body {
   border-radius: var(--r-sm);
   border: none;
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
@@ -16607,7 +16756,7 @@ body {
   transition: all .12s;
 }
 .ai-btn:hover { color: var(--text-main); border-color: color-mix(in srgb, var(--text-main) 35%, transparent); }
-.ai-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--button-primary-text); }
+.ai-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--bg-main); }
 .ai-btn--primary:hover { opacity: .85; }
 .ai-btn--primary:disabled { opacity: .4; cursor: not-allowed; }
 .ai-btn--muted:hover { color: #f87171; border-color: rgba(248, 113, 113, .4); }
@@ -16769,7 +16918,7 @@ body {
 }
 .ms-vh-badge {
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   font-size: 9px;
   font-weight: 700;
   padding: 1px 5px;
@@ -16814,7 +16963,7 @@ body {
   border-radius: var(--r-sm);
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -17534,7 +17683,7 @@ body {
   border-radius: var(--r-lg);
   padding: clamp(18px, 2.4vw, 28px);
   background:
-    linear-gradient(150deg, color-mix(in srgb, var(--project-panel-raised) 88%, var(--atmos-wood) 12%), color-mix(in srgb, var(--project-panel-soft) 78%, var(--atmos-wood) 22%));
+    linear-gradient(150deg, color-mix(in srgb, var(--project-panel-raised) 88%, #3a2416 12%), color-mix(in srgb, var(--project-panel-soft) 78%, #674119 22%));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent),
     0 18px 48px color-mix(in srgb, var(--accent) 14%, transparent);
@@ -17851,7 +18000,7 @@ body {
   border-radius: 0;
   padding: clamp(26px, 3vw, 44px) clamp(18px, 3vw, 42px) 16px;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 38%, var(--atmos-cool) 22%), color-mix(in srgb, var(--bg-main) 62%, transparent) 39%, var(--bg-main) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 38%, #000 22%), color-mix(in srgb, var(--bg-main) 62%, transparent) 39%, var(--bg-main) 100%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-main) 18%, transparent), var(--bg-main) 100%),
     var(--overview-cover-art, var(--overview-cover-fallback));
   background-size: cover;
@@ -17861,7 +18010,7 @@ body {
 
 .overview-hero::before {
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 72%, var(--atmos-cool) 18%) 0%, color-mix(in srgb, var(--bg-main) 36%, transparent) 38%, transparent 72%),
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 72%, #000 18%) 0%, color-mix(in srgb, var(--bg-main) 36%, transparent) 38%, transparent 72%),
     linear-gradient(180deg, transparent 58%, var(--bg-main) 100%);
   opacity: .96;
 }
@@ -17936,11 +18085,11 @@ body {
   border-radius: var(--r-lg);
   padding: clamp(22px, 2.8vw, 34px);
   background:
-    linear-gradient(120deg, color-mix(in srgb, var(--bg-main) 48%, var(--atmos-cool) 28%), color-mix(in srgb, var(--project-panel) 70%, var(--atmos-wood) 30%) 58%, color-mix(in srgb, var(--project-panel) 82%, var(--atmos-cool) 18%)),
+    linear-gradient(120deg, color-mix(in srgb, var(--bg-main) 48%, #030405 28%), color-mix(in srgb, var(--project-panel) 70%, #4b271d 30%) 58%, color-mix(in srgb, var(--project-panel) 82%, #16120c 18%)),
     var(--project-panel);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent),
-    0 22px 66px rgba(0, 0, 0, 0.28),
+    0 22px 66px color-mix(in srgb, #000 28%, transparent),
     0 0 54px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
@@ -18681,9 +18830,9 @@ body {
 .series-cta-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
 }
-.series-cta-btn--primary:hover { opacity: .9; color: var(--button-primary-text); }
+.series-cta-btn--primary:hover { opacity: .9; color: var(--bg-main); }
 
 /* ── Tab nav ── */
 .series-tab-nav {
@@ -18944,7 +19093,7 @@ body {
   border-radius: 7px;
   border: none;
   background: var(--accent);
-  color: var(--button-primary-text);
+  color: var(--bg-main);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -19939,6 +20088,7 @@ body {
 /* ── Sections ── */
 .yow-section {
   padding: clamp(48px, 8vw, 96px) 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 
 .yow-section-header {
@@ -20980,39 +21130,6 @@ body {
   font-size: 28px;
   font-weight: 900;
   color: var(--accent);
-}
-
-/* Left-nav redesign, Phase 2/Locations (2026-08-19): same treatment as
-   .character-cover-placeholder above (reused rather than duplicated —
-   only the selector differs), for the location dossier's new photo slot. */
-.location-cover-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-main));
-  color: color-mix(in srgb, var(--text-main) 88%, var(--accent));
-  text-align: center;
-  cursor: pointer;
-}
-
-.location-cover-placeholder span {
-  font-size: 28px;
-  font-weight: 900;
-  color: var(--accent);
-}
-
-.location-cover-placeholder small {
-  max-width: 90%;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--text-main);
 }
 
 @media (max-width: 700px) {

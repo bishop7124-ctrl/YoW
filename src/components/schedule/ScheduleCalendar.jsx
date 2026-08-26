@@ -207,7 +207,7 @@ function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categ
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
-          <button onClick={save} style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--bg-main)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
+          <button onClick={save} style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
             {isEdit ? 'Save Changes' : 'Add Event'}
           </button>
         </div>
@@ -270,7 +270,7 @@ function EventPopover({ event, store, categoriesById, calendar, onEdit, onClose 
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={onEdit} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--bg-main)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
+          <button onClick={onEdit} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
             Edit
           </button>
         </div>
@@ -414,7 +414,7 @@ export default function ScheduleCalendar({ store }) {
 
         <button
           onClick={() => openCreate(1)}
-          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--bg-main)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
+          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
         >
           + Add Event
         </button>
@@ -520,7 +520,7 @@ export default function ScheduleCalendar({ store }) {
                 </p>
                 <button
                   onClick={() => openCreate(1)}
-                  style={{ padding: '8px 20px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--bg-main)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ padding: '8px 20px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
                 >
                   Add the first event
                 </button>

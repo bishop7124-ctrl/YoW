@@ -1521,7 +1521,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
             })()}
             {phase === 'preview' && (
               <button type="button" onClick={handleCreate}
-                style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
                 Create Project
               </button>
             )}

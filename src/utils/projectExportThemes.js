@@ -1,4 +1,4 @@
-import { BUILT_IN_THEMES, DEFAULT_THEME } from './theme.js'
+import { BUILT_IN_THEMES, SYSTEM_LIGHT_THEME, SYSTEM_THEME } from './theme.js'
 
 const serifStack = 'Georgia, "Times New Roman", serif'
 const sansStack = 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
@@ -82,14 +82,15 @@ export const EXPORT_PDF_THEMES = BUILT_IN_THEMES.reduce((themes, theme) => {
 }, {})
 
 const LEGACY_THEME_ALIASES = {
-  obsidian: 'industrial-loft',
-  royal: 'ocean-depth',
+  [SYSTEM_THEME]: SYSTEM_LIGHT_THEME,
+  obsidian: 'dark-refined',
+  royal: 'tropical',
   verdant: 'tropical',
-  ivory: 'caramel-latte',
+  ivory: 'light-refined',
   crimson: 'tropical',
 }
 
-export const DEFAULT_EXPORT_PDF_THEME_ID = DEFAULT_THEME
+export const DEFAULT_EXPORT_PDF_THEME_ID = SYSTEM_LIGHT_THEME
 
 export const EXPORT_PDF_THEME_OPTIONS = BUILT_IN_THEMES.map(theme => ({
   id: theme.id,

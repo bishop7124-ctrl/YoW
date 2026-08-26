@@ -55,7 +55,13 @@ export const NotesPanel = ({ scene, onUpdateScene, highlightedSeq }) => {
   )
 
   const notes = scene.notes || []
-  const updateNote = (noteId, data) => onUpdateScene(scene.id, { notes: (scene.notes || []).map(n => n.id === noteId ? { ...n, ...data } : n) })
+  // Function-valued `notes` (prevNotes => nextNotes) instead of a precomputed array —
+  // this component isn't memoized, so `updateNote` is a fresh closure over `notes`
+  // every render anyway; a fast typing burst can still fire several onChange calls
+  // against the same render's closure before React re-renders, and each call's
+  // result would otherwise overwrite the previous one. See updateScene's
+  // function-valued-field handling in useStore.js.
+  const updateNote = (noteId, data) => onUpdateScene(scene.id, { notes: prevNotes => (prevNotes || []).map(n => n.id === noteId ? { ...n, ...data } : n) })
   const deleteNote = noteId => onUpdateScene(scene.id, { notes: (scene.notes || []).filter(n => n.id !== noteId) })
 
   return (

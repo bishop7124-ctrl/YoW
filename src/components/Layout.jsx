@@ -480,7 +480,7 @@ function ProjectSettings({ store, onClose }) {
               onClick={onClose}
               style={{
                 height: 28, padding: '0 14px', border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', borderRadius: 8,
-                background: 'var(--accent)', color: 'var(--bg-main)',
+                background: 'var(--accent)', color: 'var(--accent-contrast)',
                 fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer',
               }}
             >Done</button>

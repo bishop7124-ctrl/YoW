@@ -166,7 +166,7 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
         </button>
         <button
           onClick={onNew}
-          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
         >+ New Character</button>
       </div>
 
@@ -210,7 +210,7 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
               <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 300, margin: '0 auto 18px' }}>Create your first character to start building your party.</p>
               <button
                 onClick={onNew}
-                style={{ padding: '9px 22px', borderRadius: 10, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                style={{ padding: '9px 22px', borderRadius: 10, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
               >Create First Character</button>
             </div>
           </div>
