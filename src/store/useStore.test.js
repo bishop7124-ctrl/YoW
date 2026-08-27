@@ -415,6 +415,33 @@ describe('novel CRUD', () => {
     })
   })
 
+  it('resolves a function-valued field in updateScene against the latest known value instead of writing the function itself', () => {
+    // Regression test for a real crash: NotesPanel's updateNote (ManuscriptToolbar.jsx)
+    // calls onUpdateScene(id, { notes: prevNotes => ... }) so a fast burst of note
+    // edits each resolve against the latest committed value rather than a stale
+    // closure overwriting a sibling call's result. If updateScene ever merges that
+    // function value straight into the scene record (instead of resolving it first),
+    // scene.notes becomes a function — later reads like `[...(scene.notes || [])]`
+    // then throw "is not iterable" and crash the whole Manuscript section.
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'Draft House', type: 'novel' }) })
+    const sceneId = result.current.scenes[0].id
+
+    act(() => {
+      result.current.updateScene(sceneId, { notes: [{ id: 'n1', seq: 1, title: '', text: '' }] })
+    })
+    act(() => {
+      result.current.updateScene(sceneId, {
+        notes: prevNotes => (prevNotes || []).map(n => n.id === 'n1' ? { ...n, title: 'Pacing check' } : n),
+      })
+    })
+
+    const scene = result.current.scenes.find(s => s.id === sceneId)
+    expect(typeof scene.notes).not.toBe('function')
+    expect(scene.notes).toEqual([{ id: 'n1', seq: 1, title: 'Pacing check', text: '' }])
+  })
+
   it('retires the current manuscript and outline, then starts a fresh manuscript', () => {
     const { result } = renderHook(() => useStore(null))
 

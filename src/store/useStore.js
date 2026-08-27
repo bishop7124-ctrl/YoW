@@ -2084,10 +2084,21 @@ export function useStore(userId = null, options = {}) {
   const updateScene = (id, data) => {
     const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return mergeSceneUpdateWithPersistedCopy(prev, id, s => {
-        const hasContent = Object.prototype.hasOwnProperty.call(data, 'content')
-        const updated = hasContent && data.content !== s.content
-          ? withSceneContentHistory({ ...s, ...data }, data.content)
-          : { ...s, ...data }
+        // A field's value in `data` may itself be a function (prevValue => nextValue)
+        // instead of a precomputed value — callers use this (e.g. NotesPanel's
+        // updateNote in ManuscriptToolbar.jsx) so a fast burst of calls each resolve
+        // against the latest known value of that field rather than a stale closure
+        // overwriting a sibling call's result. Resolve those here, against `s` (the
+        // freshest source scene mergeSceneUpdateWithPersistedCopy already picked),
+        // before merging — otherwise the function itself gets written into the
+        // scene record verbatim, corrupting that field for every later reader.
+        const resolvedData = Object.fromEntries(
+          Object.entries(data).map(([key, value]) => [key, typeof value === 'function' ? value(s[key]) : value])
+        )
+        const hasContent = Object.prototype.hasOwnProperty.call(resolvedData, 'content')
+        const updated = hasContent && resolvedData.content !== s.content
+          ? withSceneContentHistory({ ...s, ...resolvedData }, resolvedData.content)
+          : { ...s, ...resolvedData }
         if (canSyncCloud) debouncedSaveScene(id, userId, updated)
         return updated
       })
