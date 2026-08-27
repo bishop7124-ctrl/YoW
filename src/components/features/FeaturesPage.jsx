@@ -476,13 +476,13 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {UNIQUE_CALLOUTS.map(col => (
               <div key={col.type} style={{
-                border: `1px solid ${col.color}33`,
+                border: `1px solid ${col.color}40`,
                 borderTop: `3px solid ${col.color}`,
                 borderRadius: 12, padding: '20px 22px',
-                background: 'var(--bg-card)',
+                background: `linear-gradient(160deg, ${col.color}1c, var(--bg-raise) 55%)`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  <span style={{ fontWeight: 800, fontSize: 14 }}>{col.type}</span>
+                  <span style={{ fontWeight: 800, fontSize: 14, color: col.color }}>{col.type}</span>
                   {col.badge && (
                     <span style={{
                       fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,

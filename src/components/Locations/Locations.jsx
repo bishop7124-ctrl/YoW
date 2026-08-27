@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { loreRefsFor, timelineRefsFor } from '../../utils/worldLinks'
 import { loadValue, writeItem } from '../../storage/projectStorage'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import { UserMediaImage } from '../shared/UserMedia'
 
 function removeLocationFromAllMaps(locationId) {
   const maps = loadValue('nf_maps_list', []);
@@ -25,14 +27,28 @@ function removeLocationFromAllMaps(locationId) {
 const CATS = ['Kingdom/Region', 'City', 'Town', 'Village', 'Landmark', 'Ruins', 'Feature', 'Other']
 const IN = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 
-function LocationForm({ initial, onSave, onCancel }) {
+// Left-nav redesign, Phase 2/Locations (2026-08-19): photo support, per the
+// mockup's "photo slot" (mockups/Locations Mockup.dc.html, image-slot.js —
+// that file is a placeholder for reference only per the handoff README;
+// this uses YOW's own uploadUserMedia/UserMediaImage flow instead, the
+// same primitives Characters' portraits already use). Deliberately does
+// NOT replicate Characters' full focal-point/zoom PhotoEditorModal — that's
+// a lot of machinery for what the mockup only asks to be a plain photo,
+// and a simple upload/preview/remove is enough to match it.
+function LocationForm({ initial, onSave, onCancel, store }) {
   const [form, setForm] = useState({
     name: initial?.name ?? '',
     category: initial?.category ?? '',
     description: initial?.description ?? '',
     tags: initial?.tags ?? [],
+    image: initial?.image ?? '',
   })
   const [tagInput, setTagInput] = useState('')
+  const [imageError, setImageError] = useState('')
+  // Tracks a freshly uploaded-but-unsaved photo so it can be cleaned up from
+  // Storage if it's replaced again or the form is cancelled — same pattern
+  // as CharacterForm's pendingUploadRef.
+  const pendingUploadRef = useRef(null)
 
   const addTag = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
@@ -43,8 +59,63 @@ function LocationForm({ initial, onSave, onCancel }) {
     }
   }
 
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      setImageError('')
+      const image = await uploadUserMedia(file, {
+        userId: store?.userId,
+        category: 'locations',
+        currentUsedBytes: store?.storageUsedBytes,
+        quotaBytes: store?.storageQuotaBytes,
+      })
+      if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = image
+      store?.refreshStorageUsedBytes?.().catch(console.error)
+      setForm(prev => ({ ...prev, image }))
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Could not use that image.')
+    }
+  }
+
+  const handleRemoveImage = () => {
+    if (pendingUploadRef.current) {
+      deleteUserMedia(pendingUploadRef.current).catch(console.error)
+      pendingUploadRef.current = null
+      store?.refreshStorageUsedBytes?.().catch(console.error)
+    }
+    setForm(prev => ({ ...prev, image: '' }))
+  }
+
+  const handleCancel = () => {
+    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+    onCancel()
+  }
+
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSave(form) }} className="space-y-4 text-left">
+      <div>
+        <label className="form-label">Photo</label>
+        {form.image ? (
+          <div className="flex items-center gap-3">
+            <UserMediaImage src={form.image} alt="" className="w-20 h-20 rounded-lg object-cover border border-[var(--border)]" />
+            <div className="flex flex-col gap-1">
+              <label htmlFor="loc-image-upload" className="cursor-pointer text-xs text-[var(--accent)] border border-[var(--accent)]/30 hover:border-[var(--accent)] px-3 py-1.5 rounded transition-colors text-center">
+                Change photo
+              </label>
+              <button type="button" onClick={handleRemoveImage} className="text-xs text-[var(--text-muted)] hover:text-red-400 px-3 py-1.5">Remove</button>
+            </div>
+          </div>
+        ) : (
+          <label htmlFor="loc-image-upload" className="cursor-pointer flex items-center justify-center w-20 h-20 rounded-lg border border-dashed border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors text-xs text-center">
+            + Photo
+          </label>
+        )}
+        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="loc-image-upload" />
+        {imageError && <p className="text-xs text-red-400 mt-1">{imageError}</p>}
+      </div>
       <div>
         <label className="form-label">Name</label>
         <input value={form.name} onChange={e=>setForm(p=>({...p, name:e.target.value}))} className={IN} required />
@@ -73,7 +144,7 @@ function LocationForm({ initial, onSave, onCancel }) {
       </div>
       <div className="flex gap-2 pt-4 border-t border-[var(--border)]">
         <button type="submit" className="btn btn-primary flex-1 justify-center">Save</button>
-        <button type="button" onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)]">Cancel</button>
+        <button type="button" onClick={handleCancel} className="px-4 py-2 text-[var(--text-muted)]">Cancel</button>
       </div>
     </form>
   )
@@ -85,9 +156,20 @@ export default function Locations({ store }) {
   const [sortBy, setSortBy] = useState('name-asc')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  // Left-nav redesign, Phase 2/Locations (2026-08-19): category filter
+  // chips, per the mockup's "search + category filter chips" index column
+  // (mockups/Locations Mockup.dc.html) — there was no category filter at
+  // all before, only search + sort.
+  const [filterCategory, setFilterCategory] = useState('')
+
+  const categoriesInUse = useMemo(
+    () => CATS.filter(cat => (locations || []).some(l => l.category === cat)),
+    [locations]
+  )
 
   const filtered = (locations || [])
     .filter(l => l.name.toLowerCase().includes(search.toLowerCase()))
+    .filter(l => !filterCategory || l.category === filterCategory)
     .sort((a, b) => {
       if (sortBy === 'name-asc') return (a.name || '').localeCompare(b.name || '')
       if (sortBy === 'name-desc') return (b.name || '').localeCompare(a.name || '')
@@ -118,6 +200,27 @@ export default function Locations({ store }) {
             <option value="name-desc">Name Z→A</option>
             <option value="category">Category</option>
           </select>
+          {categoriesInUse.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setFilterCategory('')}
+                className={`chip ${filterCategory === '' ? 'chip-accent' : ''}`}
+              >
+                All
+              </button>
+              {categoriesInUse.map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setFilterCategory(cat)}
+                  className={`chip ${filterCategory === cat ? 'chip-accent' : ''}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
           {(locations || []).length === 0 && (
             <div className="px-4 py-6 text-center space-y-1">
               <p className="text-sm text-[var(--text-main)]">No locations yet.</p>
@@ -136,8 +239,19 @@ export default function Locations({ store }) {
               onClick={()=>setSelectedLocationId(l.id)}
               active={selectedLocationId===l.id}
             >
-              <div className="text-sm font-medium text-[var(--text-main)]">{l.name}</div>
-              <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{l.category}</div>
+              <div className="flex items-center gap-2.5">
+                {l.image ? (
+                  <UserMediaImage src={l.image} alt="" className="w-8 h-8 rounded-lg object-cover border border-[var(--border)] flex-shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-[var(--accent-fade)] border border-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-[var(--accent)]">{l.name.charAt(0)}</span>
+                  </div>
+                )}
+                <div>
+                  <div className="text-sm font-medium text-[var(--text-main)]">{l.name}</div>
+                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{l.category}</div>
+                </div>
+              </div>
             </StudioRecord>
           ))}
       </StudioIndex>
@@ -167,7 +281,26 @@ export default function Locations({ store }) {
                 </>
               )}
             >
-              <span className="chip chip-accent mt-3">{selected.category}</span>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                {selected.image ? (
+                  <UserMediaImage
+                    src={selected.image}
+                    alt=""
+                    className="w-24 h-24 rounded-xl object-cover border border-[var(--border)]"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setEditTarget(selected); setShowForm(true) }}
+                    className="location-cover-placeholder"
+                    aria-label={`Add a photo for ${selected.name}`}
+                  >
+                    <span>{selected.name?.[0]?.toUpperCase() || '?'}</span>
+                    <small>Add photo</small>
+                  </button>
+                )}
+                <span className="chip chip-accent">{selected.category}</span>
+              </div>
             </StudioPageHeader>
             <StudioNote className="text-[var(--text-main)] whitespace-pre-wrap leading-relaxed">{selected.description || 'No description provided yet.'}</StudioNote>
 
@@ -214,7 +347,7 @@ export default function Locations({ store }) {
 
       {showForm && (
         <Modal title={editTarget ? "Edit Location" : "New Location"} onClose={() => setShowForm(false)} wide>
-          <LocationForm initial={editTarget} onSave={(d) => {
+          <LocationForm initial={editTarget} store={store} onSave={(d) => {
             const location = saveLocation(d, editTarget?.id)
             if (!location) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
             setSelectedLocationId(location.id)

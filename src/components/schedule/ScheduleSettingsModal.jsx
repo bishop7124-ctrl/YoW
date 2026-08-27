@@ -152,7 +152,7 @@ export default function ScheduleSettingsModal({ store, onClose }) {
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
-          <button onClick={save} style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--bg-main)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
+          <button onClick={save} style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
             Save calendar
           </button>
         </div>

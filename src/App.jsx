@@ -45,6 +45,7 @@ import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
   DEFAULT_THEME_TUNING,
+  SYSTEM_THEME,
   applyThemeToDocument,
   applyThemeTuning,
   getThemeColors,
@@ -737,14 +738,17 @@ function AppInner() {
     setReadOnlyNotice(null)
   }, [userId])
 
-  // Force default theme on all public/marketing pages so user theme choices
+  // Use the product default on public/marketing pages so user theme choices
   // never leak into the landing experience.
   const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || showDownload || !!founderProfileSlug || !user
   useEffect(() => {
-    if (isPublicPage) {
-      applyThemeToDocument(DEFAULT_THEME, {})
-      applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
-    } else {
+    const applyCurrentTheme = () => {
+      if (isPublicPage) {
+        applyThemeToDocument(DEFAULT_THEME, {})
+        applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
+        return
+      }
+
       const savedTheme = loadThemeChoice()
       const customColors = (() => {
         try { return JSON.parse(localStorage.getItem('nf-custom-colors') || '{}') }
@@ -753,7 +757,41 @@ function AppInner() {
       applyThemeToDocument(savedTheme, customColors)
       applyThemeTuning(loadThemeTuning(), getThemeColors(savedTheme, customColors))
     }
-  }, [isPublicPage]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    applyCurrentTheme()
+  }, [isPublicPage])
+
+  useEffect(() => {
+    const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : null
+    if (!media) return undefined
+
+    const handleSystemThemeChange = () => {
+      const activeTheme = isPublicPage ? DEFAULT_THEME : loadThemeChoice()
+      if (activeTheme !== SYSTEM_THEME) return
+
+      if (isPublicPage) {
+        applyThemeToDocument(DEFAULT_THEME, {})
+        applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
+        return
+      }
+
+      const customColors = (() => {
+        try { return JSON.parse(localStorage.getItem('nf-custom-colors') || '{}') }
+        catch { return {} }
+      })()
+      applyThemeToDocument(activeTheme, customColors)
+      applyThemeTuning(loadThemeTuning(), getThemeColors(activeTheme, customColors))
+    }
+
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', handleSystemThemeChange)
+    else if (typeof media.addListener === 'function') media.addListener(handleSystemThemeChange)
+    return () => {
+      if (typeof media.removeEventListener === 'function') media.removeEventListener('change', handleSystemThemeChange)
+      else if (typeof media.removeListener === 'function') media.removeListener(handleSystemThemeChange)
+    }
+  }, [isPublicPage])
 
   // Apply account-owned appearance on login. New accounts should not inherit
   // a previous user's browser-local theme choice.
