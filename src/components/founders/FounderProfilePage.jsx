@@ -7,7 +7,7 @@ const FOUNDER_PROFILES = {
     name: 'Morgan Bishop',
     genre: 'Fantasy · World-builder',
     location: 'England (originally from the US)',
-    avatar: null,
+    avatar: '/founders/morgan-bishop/pencil-sketch.png',
     emoji: '🌍',
     bio: [
       "Morgan Bishop is an American writer living in England, working on a three-part fantasy series that has been quietly consuming her spare hours for longer than she'd care to admit.",
