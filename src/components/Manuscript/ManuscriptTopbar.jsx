@@ -31,7 +31,15 @@ const MODES = [
 // list, but the old toolbar's working fullscreen toggle has to land
 // *somewhere*, and burying it in "View" here is lower-cost than inventing a
 // new always-visible button the spec's three-zone layout doesn't have room for.
-const buildOverflowSections = (fullscreen, itemTitles = {}) => [
+// `hasFocus` mirrors the ".ms-topbar-zone-tools" Focus button's own
+// `{onEnterFocus && ...}` guard: that whole zone (Focus included) is
+// CSS-hidden below the tablet breakpoint (~1024px, the same rule that hides
+// AI/Inspector there), which otherwise left Focus mode completely
+// unreachable on mobile/tablet — no bottom-nav entry and no overflow-menu
+// entry existed for it, confirmed live at 375px and 768px (2026-08-27 QA
+// pass). Surfacing it here fixes that without touching the always-visible
+// desktop button or its own CSS.
+const buildOverflowSections = (fullscreen, itemTitles = {}, hasFocus = false) => [
   {
     heading: 'Find',
     items: [
@@ -59,6 +67,7 @@ const buildOverflowSections = (fullscreen, itemTitles = {}) => [
   {
     heading: 'View',
     items: [
+      ...(hasFocus ? [{ id: 'focus', label: 'Focus' }] : []),
       { id: 'fullscreen', label: fullscreen ? 'Exit fullscreen' : 'Fullscreen' },
     ],
   },
@@ -130,7 +139,7 @@ function GoToScenePalette({ onClose, acts, chapters, scenes, labels, onSelectSce
 
 // ─── Overflow menu ──────────────────────────────────────────────────────────
 
-function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
+function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles, hasFocus }) {
   const ref = useRef(null)
   useEffect(() => {
     if (!open) return undefined
@@ -140,7 +149,7 @@ function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
   }, [open, onClose])
 
   if (!open) return null
-  const sections = buildOverflowSections(fullscreen, itemTitles)
+  const sections = buildOverflowSections(fullscreen, itemTitles, hasFocus)
   return (
     <div className="ms-topbar-menu" ref={ref} role="menu">
       {sections.map(section => (
@@ -185,16 +194,18 @@ export default function ManuscriptTopbar({
   const [menuOpen, setMenuOpen] = useState(false)
   const [gotoOpen, setGotoOpen] = useState(false)
 
-  // 'goto-scene' opens this component's own local palette state and
-  // 'fullscreen' calls the dedicated toggle prop, rather than bubbling to
-  // onOverflowAction like every other item — Manuscript.jsx owns fullscreen
-  // state (this component only renders the current label) and never sees
+  // 'goto-scene' opens this component's own local palette state, 'fullscreen'
+  // calls the dedicated toggle prop, and 'focus' calls the dedicated
+  // onEnterFocus prop — none of these three bubble to onOverflowAction like
+  // every other item, since Manuscript.jsx owns that state directly (this
+  // component only renders the current label/availability) and never sees
   // the palette's open state at all.
   const handleOverflowAction = useCallback((actionId) => {
     if (actionId === 'goto-scene') { setGotoOpen(true); return }
     if (actionId === 'fullscreen') { onToggleFullscreen?.(); return }
+    if (actionId === 'focus') { onEnterFocus?.(); return }
     onOverflowAction?.(actionId)
-  }, [onOverflowAction, onToggleFullscreen])
+  }, [onOverflowAction, onToggleFullscreen, onEnterFocus])
 
   return (
     <>
@@ -273,6 +284,7 @@ export default function ManuscriptTopbar({
               onAction={handleOverflowAction}
               fullscreen={fullscreen}
               itemTitles={overflowItemTitles}
+              hasFocus={Boolean(onEnterFocus)}
             />
           </div>
         </div>
