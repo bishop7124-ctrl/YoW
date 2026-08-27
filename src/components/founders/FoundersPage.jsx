@@ -9,7 +9,7 @@ const FOUNDERS = [
     genre: 'Fantasy · World-builder',
     bio: 'American writer based in England. Degree in English Literature, background in tech. Currently building a three-part fantasy series with a world big enough to get lost in — which is exactly why she made this tool. Wife, mum, dog owner. Writes late.',
     works: 'Trilogy in progress',
-    avatar: null,
+    avatar: '/founders/morgan-bishop/pencil-sketch.png',
     emoji: '🌍',
   },
 ]
