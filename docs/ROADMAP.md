@@ -1132,7 +1132,7 @@ Blocking questions the `product-owner` skill (or any agent) found mid-work that 
 
 | Item | Blocking Question | Found While | Status |
 | --- | --- | --- | --- |
-| No open questions | — | — | — |
+| Bugs table: "2026-08-04: Uploaded user-media images were reachable by anyone with the public Storage URL" — apply `supabase/migrations/20260804_private_user_media.sql` to production | Who/which session has production Supabase credentials (project service-role key or dashboard SQL editor access) to apply this migration and flip the `user-media` bucket to private? This scheduled/unattended session has no Supabase env vars or credentials available in its sandbox (`.env.example` only, no `.env`), so it cannot apply the migration or confirm the bucket's current production `public` flag. | 2026-08-27 scheduled product-owner run, working the Bugs table top-down (`release-engineer` step) | Open — needs a session with production Supabase access to run the migration, then a `qa-engineer` pass per the Bugs row's own Next Action (old public object URLs should 403 in a private browser; signed-in app still renders legacy + new images; delete/replace still decrements storage; PDF export still includes private images). Until then, the `user-media` bucket remains public-read in production. |
 
 ## Icebox
 
