@@ -4,52 +4,83 @@
 
 /* ── Global design tokens — apply to all themes ─────────────────────────── */
 :root {
-  /* ── Core palette (overridden per theme) ────────────────────────────────── */
-  --bg-main:    #0d282e;
-  --bg-nav:     #133840;
-  --bg-hover:   rgba(226, 240, 238, 0.06);
-  --text-main:  #e2f0ee;
-  --text-muted: #7ab8b4;
-  --accent:     #e8724e;
-  --accent-fade: rgba(232, 114, 78, 0.16);
-  --accent-contrast: #ffffff;
-  --border:     #1e4a50;
-  --logo-filter: none;
+  /* ── Semantic palette (overridden per theme) ────────────────────────────── */
+  --color-canvas:         #e8f3ec;
+  --color-surface:        #dceae2;
+  --color-surface-muted:  #e2eee7;
+  --color-surface-raised: #f6fbf7;
+  --color-surface-hover:  rgba(22, 38, 31, 0.05);
+  --color-text:           #16261f;
+  --color-text-muted:     #51675c;
+  --color-text-faint:     #7d9086;
+  --color-prose:          #14221c;
+  --color-accent:         #8f3f2d;
+  --color-accent-soft:    rgba(143, 63, 45, 0.13);
+  --color-accent-text:    #743221;
+  --color-accent-secondary: #58704f;
+  --color-accent-contrast: #fffaf4;
+  --color-line:           rgba(22, 38, 31, 0.16);
+  --color-line-strong:    rgba(22, 38, 31, 0.28);
+  --logo-filter: brightness(0);
 
   /* ── Semantic aliases (backward-compat) ─────────────────────────────────── */
-  --bg:       var(--bg-main);
-  --rail:     var(--bg-nav);
-  --surface:  var(--bg-nav);
-  --surface2: color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main));
-  --surface3: var(--bg-main);
-  --text:     var(--text-main);
-  --muted:    var(--text-muted);
-  --faint:    color-mix(in srgb, var(--text-muted) 42%, transparent);
-  --ink-soft: color-mix(in srgb, var(--text-main) 84%, var(--text-muted));
-  --accent2:  #7aa89f;
+  --bg-main:    var(--color-canvas);
+  --bg-nav:     var(--color-surface);
+  --bg-raise:   var(--color-surface-raised);
+  --bg-hover:   var(--color-surface-hover);
+  --text-main:  var(--color-text);
+  --text-muted: var(--color-text-muted);
+  --text-faint: var(--color-text-faint);
+  --prose-text: var(--color-prose);
+  --accent:     var(--color-accent);
+  --accent-fade: var(--color-accent-soft);
+  --accent-text: var(--color-accent-text);
+  --accent-2:   var(--color-accent-secondary);
+  --accent-contrast: var(--color-accent-contrast);
+  --border:     var(--color-line);
+  --border-strong: var(--color-line-strong);
+  --bg:       var(--color-canvas);
+  --rail:     var(--color-surface);
+  --surface:  var(--color-surface);
+  --surface2: var(--color-surface-muted);
+  --surface3: var(--color-canvas);
+  --text:     var(--color-text);
+  --muted:    var(--color-text-muted);
+  --faint:    var(--color-text-faint);
+  --ink-soft: color-mix(in srgb, var(--color-text) 84%, var(--color-text-muted));
+  --accent2:  var(--color-accent-secondary);
 
   /* ── Semantic feedback ──────────────────────────────────────────────────── */
   --danger:  #ef4444;
   --success: #22c55e;
 
+  /* Shared controls: pages inherit button color, depth, and corner decisions. */
+  --button-primary-bg: var(--accent);
+  --button-primary-text: var(--accent-contrast);
+  --button-primary-border: color-mix(in srgb, var(--accent) 72%, #fff 16%);
+  --button-secondary-bg: color-mix(in srgb, var(--color-surface) 52%, transparent);
+  --button-secondary-text: var(--color-text-muted);
+  --button-secondary-hover-bg: var(--color-surface-hover);
+  --control-radius: var(--r-md);
+
   /* ── Atmosphere tokens (drive gradients, textures & materials) ──────────── */
   /* Each theme overrides these to create a radically distinct environment.    */
-  --atmos-warm:       #1a3a40;   /* warm material tint for wood/surfaces    */
-  --atmos-cool:       #060e10;   /* cool depth tint for shadows             */
-  --atmos-paper:      #246468;   /* parchment surface colour                */
-  --atmos-paper-line: #1a4a4c;   /* ruling line colour                      */
-  --atmos-wood:       #0f2e34;   /* primary material (wood/leather/stone)   */
-  --atmos-cork:       #1c4a4c;   /* secondary material (cork/felt/fabric)   */
-  --atmos-spine-tint: #0d2e36;   /* spine navigation rail tint              */
-  --atmos-glow-pos:   85% 8%;    /* ambient accent glow position            */
-  --atmos-glow-size:  34%;       /* ambient glow falloff radius             */
-  --atmos-glow-intensity: 8%;    /* ambient glow strength                   */
+  --atmos-warm:       #ceddce;   /* warm material tint for wood/surfaces    */
+  --atmos-cool:       #dcebe2;   /* cool depth tint for shadows             */
+  --atmos-paper:      #e1eee4;   /* reading/editor surface colour           */
+  --atmos-paper-line: #a9beb2;   /* ruling line colour                      */
+  --atmos-wood:       #91aa8d;   /* primary material (wood/leather/stone)   */
+  --atmos-cork:       #b6caaa;   /* secondary material (cork/felt/fabric)   */
+  --atmos-spine-tint: #cde0d2;   /* spine navigation rail tint              */
+  --atmos-glow-pos:   78% 8%;    /* ambient accent glow position            */
+  --atmos-glow-size:  28%;       /* ambient glow falloff radius             */
+  --atmos-glow-intensity: 4%;    /* ambient glow strength                   */
 
   /* ── Elevation & shadow ─────────────────────────────────────────────────── */
-  --shadow-sm:      0 3px 10px rgba(0,0,0,.20);
-  --shadow-md:      0 12px 32px rgba(0,0,0,.28);
-  --shadow-lg:      0 26px 65px rgba(0,0,0,.34);
-  --shadow-overlay: 0 28px 70px rgba(0,0,0,.55);
+  --shadow-sm:      0 4px 12px rgba(22,38,31,.12), 0 1px 1px rgba(255,255,255,.66) inset;
+  --shadow-md:      0 14px 34px rgba(22,38,31,.18), 0 2px 6px rgba(22,38,31,.08);
+  --shadow-lg:      0 30px 68px rgba(22,38,31,.24), 0 10px 24px rgba(22,38,31,.10);
+  --shadow-overlay: 0 34px 86px rgba(14,28,21,.40), 0 10px 28px rgba(14,28,21,.16);
   --shadow-soft:    var(--shadow-md);      /* legacy alias */
   --shadow-modal:   var(--shadow-overlay); /* legacy alias */
 
@@ -79,7 +110,7 @@
   --font-mono:  "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 
   /* ── Geometry ───────────────────────────────────────────────────────────── */
-  --radius-unit:  7px;
+  --radius-unit:  9px;
 
   /* Radius scale — all sizes derive from --radius-unit so themes just set one var */
   --r-xs:     max(2px, calc(var(--radius-unit) * 0.5));   /* 3.5px @ 7px base */
@@ -123,9 +154,6 @@
   .relationship-node-enter { animation: none; }
 }
 
-/* Fallback: un-themed root inherits the Tropical palette */
-:root:not([data-theme]) {}
-
 [data-radius="sharp"] {
   --radius-btn: 2px;
   --radius-modal: 4px;
@@ -164,11 +192,141 @@
    because CSS custom properties resolve var() references at use-time.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Tropical ─ default ─ deep rainforest at dusk ──────────────────────────
+/* ── Nocturne Grove ─ deep, dramatic option ─────────────────────────────────
+   Deep green-black base, warm coral accent, muted sage secondary. */
+[data-theme="dark-refined"] {
+  /* Core */
+  --color-canvas: #0e1a18;
+  --color-surface: #132220;
+  --color-surface-muted: #172925;
+  --color-surface-raised: #1a2b28;
+  --color-surface-hover: rgba(236, 230, 218, 0.06);
+  --color-text: #ece6da;
+  --color-text-muted: #8ea19b;
+  --color-text-faint: #5c706b;
+  --color-prose: #f2ece0;
+  --color-accent: #9c4935;
+  --color-accent-soft: rgba(156, 73, 53, 0.14);
+  --color-accent-text: #d99a7d;
+  --color-accent-secondary: #9db07a;
+  --color-accent-contrast: #fffaf4;
+  --color-line: rgba(255, 255, 255, 0.09);
+  --color-line-strong: rgba(255, 255, 255, 0.16);
+  --bg-main:    #0e1a18;
+  --bg-nav:     #132220;
+  --bg-hover:   rgba(236, 230, 218, 0.06);
+  --text-main:  #ece6da;
+  --text-muted: #8ea19b;
+  --accent:     #9c4935;
+  --accent-fade: rgba(156, 73, 53, 0.14);
+  --accent-contrast: #fffaf4;
+  --border:     rgba(255, 255, 255, 0.09);
+  --logo-filter: none;
+  --accent2:    #9db07a;
+  --bg-raise:      #1a2b28;
+  --text-faint:    #5c706b;
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --accent-text:   #d99a7d;
+  --accent-2:      #9db07a;
+  --prose-text:    #f2ece0;
+  /* Atmosphere — refined ink, moss, warm page light */
+  --atmos-warm:       #263933;
+  --atmos-cool:       #07110f;
+  --atmos-paper:      #385047;
+  --atmos-paper-line: #50665d;
+  --atmos-wood:       #192822;
+  --atmos-cork:       #2e453b;
+  --atmos-spine-tint: #142620;
+  --atmos-glow-pos:   82% 9%;
+  --atmos-glow-size:  32%;
+  --atmos-glow-intensity: 7%;
+  /* Elevation */
+  --shadow-sm:      0 3px 10px rgba(0,14,10,.30);
+  --shadow-md:      0 14px 38px rgba(0,14,10,.38);
+  --shadow-lg:      0 28px 68px rgba(0,14,10,.46);
+  --shadow-overlay: 0 32px 80px rgba(0,8,6,.62);
+  /* Geometry — organic, generous */
+  --radius-unit: 9px;
+}
+
+/* ── Sage Grove ─ green-based light signature ───────────────────────────────
+   Leafy sage base, deep green ink, terracotta action colour. */
+[data-theme="light-refined"] {
+  /* Core */
+  --color-canvas: #e8f3ec;
+  --color-surface: #dceae2;
+  --color-surface-muted: #e2eee7;
+  --color-surface-raised: #f6fbf7;
+  --color-surface-hover: rgba(22, 38, 31, 0.05);
+  --color-text: #16261f;
+  --color-text-muted: #51675c;
+  --color-text-faint: #7d9086;
+  --color-prose: #14221c;
+  --color-accent: #8f3f2d;
+  --color-accent-soft: rgba(143, 63, 45, 0.13);
+  --color-accent-text: #743221;
+  --color-accent-secondary: #58704f;
+  --color-accent-contrast: #fffaf4;
+  --color-line: rgba(22, 38, 31, 0.16);
+  --color-line-strong: rgba(22, 38, 31, 0.28);
+  --bg-main:    #e8f3ec;
+  --bg-nav:     #dceae2;
+  --bg-hover:   rgba(22, 38, 31, 0.05);
+  --text-main:  #16261f;
+  --text-muted: #51675c;
+  --accent:     #8f3f2d;
+  --accent-fade: rgba(143, 63, 45, 0.13);
+  --accent-contrast: #fffaf4;
+  --border:     rgba(22, 38, 31, 0.16);
+  --logo-filter: brightness(0);
+  --accent2:    #58704f;
+  --bg-raise:      #f6fbf7;
+  --text-faint:    #7d9086;
+  --border-strong: rgba(22, 38, 31, 0.28);
+  --accent-text:   #743221;
+  --accent-2:      #58704f;
+  --prose-text:    #14221c;
+  /* Atmosphere — green materials without parchment warmth */
+  --atmos-warm:       #ceddce;
+  --atmos-cool:       #dcebe2;
+  --atmos-paper:      #e1eee4;
+  --atmos-paper-line: #a9beb2;
+  --atmos-wood:       #91aa8d;
+  --atmos-cork:       #b6caaa;
+  --atmos-spine-tint: #cde0d2;
+  --atmos-glow-pos:   78% 8%;
+  --atmos-glow-size:  28%;
+  --atmos-glow-intensity: 4%;
+  /* Elevation */
+  --shadow-sm:      0 4px 12px rgba(22,38,31,.12), 0 1px 1px rgba(255,255,255,.66) inset;
+  --shadow-md:      0 14px 34px rgba(22,38,31,.18), 0 2px 6px rgba(22,38,31,.08);
+  --shadow-lg:      0 30px 68px rgba(22,38,31,.24), 0 10px 24px rgba(22,38,31,.10);
+  --shadow-overlay: 0 34px 86px rgba(14,28,21,.40), 0 10px 28px rgba(14,28,21,.16);
+  /* Geometry — paired with Nocturne Grove */
+  --radius-unit: 9px;
+}
+
+/* ── Tropical ─ deep rainforest at dusk ────────────────────────────────────
    Dark teal base, coral accent. Lush, warm, alive.
-   Immersive like a writing retreat — the default YOW experience. */
+   Immersive like a writing retreat. */
 [data-theme="tropical"] {
   /* Core */
+  --color-canvas: #0d282e;
+  --color-surface: #133840;
+  --color-surface-muted: #173f46;
+  --color-surface-raised: #1a4550;
+  --color-surface-hover: rgba(226, 240, 238, 0.06);
+  --color-text: #e2f0ee;
+  --color-text-muted: #7ab8b4;
+  --color-text-faint: #4d8480;
+  --color-prose: #e8f4f2;
+  --color-accent: #e8724e;
+  --color-accent-soft: rgba(232, 114, 78, 0.16);
+  --color-accent-text: #f39a7c;
+  --color-accent-secondary: #6fc0a8;
+  --color-accent-contrast: #151713;
+  --color-line: #1e4a50;
+  --color-line-strong: #2a636b;
   --bg-main:    #0d282e;
   --bg-nav:     #133840;
   --bg-hover:   rgba(226, 240, 238, 0.06);
@@ -180,6 +338,12 @@
   --border:     #1e4a50;
   --logo-filter: none;
   --accent2:    #2a9a8c;
+  --bg-raise:      #1a4550;
+  --text-faint:    #4d8480;
+  --border-strong: #2a636b;
+  --accent-text:   #f39a7c;
+  --accent-2:      #6fc0a8;
+  --prose-text:    #e8f4f2;
   /* Atmosphere — jungle, ocean, dusk */
   --atmos-warm:       #1a3a40;
   --atmos-cool:       #060e10;
@@ -200,155 +364,27 @@
   --radius-unit: 9px;
 }
 
-/* ── Sage Modern ─ nature studio ────────────────────────────────────────────
-   Light sage & white base, muted green accent. Clean, minimal, organic.
-   Bright design studio — plants, natural light, linen surfaces. */
-[data-theme="sage-modern"] {
-  /* Core */
-  --bg-main:    #f5f8f3;
-  --bg-nav:     #eaeee6;
-  --bg-hover:   rgba(20, 32, 24, 0.05);
-  --text-main:  #1e2922;
-  --text-muted: #5a7060;
-  --accent:     #4a8c68;
-  --accent-fade: rgba(74, 140, 104, 0.13);
-  --accent-contrast: #151713;
-  --border:     #ced8ca;
-  --logo-filter: brightness(0);
-  --accent2:    #7aaa88;
-  /* Atmosphere — light, natural, airy */
-  --atmos-warm:       #bcd0b4;
-  --atmos-cool:       #dce8d6;
-  --atmos-paper:      #e8ece4;
-  --atmos-paper-line: #a4bca0;
-  --atmos-wood:       #6a8c60;
-  --atmos-cork:       #9ab890;
-  --atmos-spine-tint: #b8ccb0;
-  --atmos-glow-pos:   80% 90%;
-  --atmos-glow-size:  28%;
-  --atmos-glow-intensity: 4%;
-  /* Elevation — soft, paper-press */
-  --shadow-sm:      0 2px 8px rgba(28,42,26,.10);
-  --shadow-md:      0 8px 24px rgba(28,42,26,.16);
-  --shadow-lg:      0 20px 50px rgba(28,42,26,.22);
-  --shadow-overlay: 0 24px 60px rgba(18,28,16,.38);
-  /* Geometry — soft, minimal */
-  --radius-unit: 6px;
-}
-
-/* ── Industrial Loft ─ concrete studio ──────────────────────────────────────
-   Dark slate base, amber accent. Raw, modern, functional.
-   Exposed concrete, metal fixtures, amber work lights. */
-[data-theme="industrial-loft"] {
-  /* Core */
-  --bg-main:    #141720;
-  --bg-nav:     #1c2028;
-  --bg-hover:   rgba(220, 224, 234, 0.05);
-  --text-main:  #dce0e8;
-  --text-muted: #828996;
-  --accent:     #d08820;
-  --accent-fade: rgba(208, 136, 32, 0.14);
-  --accent-contrast: #151713;
-  --border:     #282c38;
-  --logo-filter: none;
-  --accent2:    #7888a0;
-  /* Atmosphere — concrete, steel, raw */
-  --atmos-warm:       #1e2230;
-  --atmos-cool:       #0a0c12;
-  --atmos-paper:      #222630;
-  --atmos-paper-line: #2a303c;
-  --atmos-wood:       #181c24;
-  --atmos-cork:       #262c38;
-  --atmos-spine-tint: #141820;
-  --atmos-glow-pos:   50% 50%;
-  --atmos-glow-size:  18%;
-  --atmos-glow-intensity: 2%;
-  /* Elevation — stark, utilitarian */
-  --shadow-sm:      0 2px 8px rgba(0,0,0,.36);
-  --shadow-md:      0 10px 26px rgba(0,0,0,.44);
-  --shadow-lg:      0 22px 54px rgba(0,0,0,.52);
-  --shadow-overlay: 0 28px 70px rgba(0,0,0,.66);
-  /* Geometry — sharp, engineered */
-  --radius-unit: 3px;
-}
-
-/* ── Caramel Latte ─ warm café ──────────────────────────────────────────────
-   Warm cream base, caramel accent. Inviting, soft, familiar.
-   Afternoon light through a café window, hands wrapped around a cup. */
-[data-theme="caramel-latte"] {
-  /* Core */
-  --bg-main:    #fef8f0;
-  --bg-nav:     #f4e8d8;
-  --bg-hover:   rgba(30, 20, 8, 0.05);
-  --text-main:  #28200c;
-  --text-muted: #78663f;
-  --accent:     #b87830;
-  --accent-fade: rgba(184, 120, 48, 0.14);
-  --accent-contrast: #151713;
-  --border:     #e0c8a0;
-  --logo-filter: brightness(0);
-  --accent2:    #9a5a28;
-  /* Atmosphere — warm café, caramel, beeswax */
-  --atmos-warm:       #deb870;
-  --atmos-cool:       #eedcbc;
-  --atmos-paper:      #f0d8b4;
-  --atmos-paper-line: #c09050;
-  --atmos-wood:       #a87838;
-  --atmos-cork:       #c89848;
-  --atmos-spine-tint: #d4a850;
-  --atmos-glow-pos:   80% 90%;
-  --atmos-glow-size:  30%;
-  --atmos-glow-intensity: 5%;
-  /* Elevation — warm, soft */
-  --shadow-sm:      0 2px 8px rgba(48,26,6,.12);
-  --shadow-md:      0 8px 24px rgba(48,26,6,.18);
-  --shadow-lg:      0 20px 50px rgba(48,26,6,.24);
-  --shadow-overlay: 0 24px 60px rgba(32,16,4,.42);
-  /* Geometry — soft, inviting */
-  --radius-unit: 10px;
-}
-
-/* ── Ocean Depth ─ deep sea ─────────────────────────────────────────────────
-   Very dark navy base, cool teal accent. Vast, mysterious, precise.
-   Bioluminescence in deep water — cold, calm, other-worldly. */
-[data-theme="ocean-depth"] {
-  /* Core */
-  --bg-main:    #07151c;
-  --bg-nav:     #0e2432;
-  --bg-hover:   rgba(212, 238, 250, 0.05);
-  --text-main:  #d4eef8;
-  --text-muted: #5792af;
-  --accent:     #189ab0;
-  --accent-fade: rgba(24, 154, 176, 0.14);
-  --accent-contrast: #151713;
-  --border:     #143848;
-  --logo-filter: none;
-  --accent2:    #2a5888;
-  /* Atmosphere — deep sea, bioluminescent */
-  --atmos-warm:       #0a1e2c;
-  --atmos-cool:       #030810;
-  --atmos-paper:      #0e2638;
-  --atmos-paper-line: #143248;
-  --atmos-wood:       #081620;
-  --atmos-cork:       #0e2030;
-  --atmos-spine-tint: #081a2a;
-  --atmos-glow-pos:   88% 12%;
-  --atmos-glow-size:  30%;
-  --atmos-glow-intensity: 7%;
-  /* Elevation — cold, deep */
-  --shadow-sm:      0 2px 8px rgba(0,6,18,.44);
-  --shadow-md:      0 10px 28px rgba(0,6,18,.54);
-  --shadow-lg:      0 22px 56px rgba(0,6,18,.64);
-  --shadow-overlay: 0 28px 72px rgba(0,4,12,.78);
-  /* Geometry — precise, technical */
-  --radius-unit: 5px;
-}
-
 /* ── Pearl Minimal ─ blank page ─────────────────────────────────────────────
    Near-white base, cool grey-blue accent. Pure, timeless, calm.
    The cleanest possible surface — like expensive paper, unmarked. */
 [data-theme="pearl-minimal"] {
   /* Core */
+  --color-canvas: #fafaf9;
+  --color-surface: #f0f2f1;
+  --color-surface-muted: #f4f5f4;
+  --color-surface-raised: #ffffff;
+  --color-surface-hover: rgba(20, 24, 28, 0.04);
+  --color-text: #1c1f23;
+  --color-text-muted: #656e77;
+  --color-text-faint: #8b939b;
+  --color-prose: #16191d;
+  --color-accent: #7a8a9c;
+  --color-accent-soft: rgba(122, 138, 156, 0.12);
+  --color-accent-text: #4f5f73;
+  --color-accent-secondary: #8c9c86;
+  --color-accent-contrast: #151713;
+  --color-line: #e2e6ea;
+  --color-line-strong: #cbd1d6;
   --bg-main:    #fafaf9;
   --bg-nav:     #f0f2f1;
   --bg-hover:   rgba(20, 24, 28, 0.04);
@@ -360,6 +396,13 @@
   --border:     #e2e6ea;
   --logo-filter: brightness(0);
   --accent2:    #a0aab8;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #ffffff;
+  --text-faint:    #8b939b;
+  --border-strong: #cbd1d6;
+  --accent-text:   #4f5f73;
+  --accent-2:      #8c9c86;
+  --prose-text:    #16191d;
   /* Atmosphere — marble, pearl, clean */
   --atmos-warm:       #e4e8ec;
   --atmos-cool:       #f2f4f6;
@@ -371,11 +414,11 @@
   --atmos-glow-pos:   50% 50%;
   --atmos-glow-size:  0%;
   --atmos-glow-intensity: 0%;
-  /* Elevation — barely-there */
-  --shadow-sm:      0 1px 4px rgba(20,24,28,.08);
-  --shadow-md:      0 6px 18px rgba(20,24,28,.12);
-  --shadow-lg:      0 16px 40px rgba(20,24,28,.16);
-  --shadow-overlay: 0 20px 50px rgba(14,18,22,.30);
+  /* Elevation — clean, visible depth on light surfaces */
+  --shadow-sm:      0 3px 10px rgba(20,24,28,.10), 0 1px 1px rgba(255,255,255,.72) inset;
+  --shadow-md:      0 12px 30px rgba(20,24,28,.15), 0 2px 8px rgba(20,24,28,.06);
+  --shadow-lg:      0 28px 64px rgba(20,24,28,.20), 0 10px 22px rgba(20,24,28,.08);
+  --shadow-overlay: 0 34px 82px rgba(14,18,22,.34), 0 10px 28px rgba(14,18,22,.12);
   /* Geometry — minimal, clean */
   --radius-unit: 5px;
 }
@@ -452,7 +495,7 @@ body {
   letter-spacing: .01em;
 }
 .btn:hover { transform: translateY(-1px); }
-.btn-primary { background: var(--accent); color: var(--accent-contrast); border-color: color-mix(in srgb, var(--accent) 72%, #fff 18%); }
+.btn-primary { background: var(--button-primary-bg); color: var(--button-primary-text); border-color: var(--button-primary-border); }
 .btn-primary:hover { filter: brightness(1.06); }
 .btn-secondary {
   background: var(--surface2);
@@ -1160,9 +1203,9 @@ body {
 .studio-button-sm { padding: 6px 10px; font-size: 11px; }
 .studio-button-primary,
 .btn-primary {
-  background: var(--accent);
-  color: #181008;
-  border-color: color-mix(in srgb, var(--accent) 72%, #fff 16%);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  border-color: var(--button-primary-border);
 }
 .studio-button-secondary,
 .btn-secondary {
@@ -1811,6 +1854,33 @@ textarea:focus {
   background: color-mix(in srgb, var(--accent-fade) 52%, var(--bg-nav));
 }
 
+/* Selection bar (redesign) — replaces the floating "+" note button while a
+   real (non-collapsed) selection is active. See SceneEditor.jsx. */
+.ms-selbar {
+  position: absolute;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+.ms-selbar button {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ms-selbar button:hover { background: var(--accent-fade); color: var(--accent-text); }
+.ms-selbar-sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+
 .ms-inline-notes {
   display: grid;
   gap: 8px;
@@ -1858,23 +1928,36 @@ textarea:focus {
   display: none;
 }
 
-.ms-inline-note summary > span {
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.ms-inline-note summary > span::before {
+/* The note-indicator dot, formerly ::before on a fixed "Note N" <span> —
+   moved onto <summary> itself (a real element, unlike <input>, which can't
+   take a ::before) now that the title input replaces that span outright. */
+.ms-inline-note summary::before {
   content: "";
   display: inline-block;
   width: 7px;
   height: 7px;
-  margin-right: 7px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: #facc15;
   box-shadow: 0 0 0 2px color-mix(in srgb, #facc15 24%, transparent);
 }
+
+.ms-inline-note-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: color-mix(in srgb, var(--text-main) 82%, #facc15);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 2px 4px;
+  border-radius: var(--r-xs);
+}
+.ms-inline-note-title::placeholder { color: color-mix(in srgb, var(--text-muted) 85%, transparent); font-weight: 500; }
+.ms-inline-note-title:hover { background: color-mix(in srgb, #facc15 10%, transparent); }
+.ms-inline-note-title:focus { background: color-mix(in srgb, #facc15 14%, transparent); }
 
 .ms-inline-note-actions {
   display: inline-flex;
@@ -2384,7 +2467,7 @@ textarea:focus {
 
   .desk-switcher button.is-active {
     background: var(--accent);
-    color: #17110a;
+    color: var(--accent-contrast);
   }
 
   .desk-tab-drawer {
@@ -3140,16 +3223,53 @@ textarea:focus {
   }
 }
 
-/* Phase 1: Calm literary operating system */
+/* Sage Grove: light fallback before the system preference resolves */
 :root:not([data-theme]) {
-  --bg-main: #101211;
-  --bg-nav: #171918;
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --text-main: #e4dfd2;
-  --text-muted: #8f9288;
-  --accent: #b8aa79;
-  --accent-fade: rgba(184, 170, 121, 0.13);
-  --border: #2d302b;
+  --color-canvas: #e8f3ec;
+  --color-surface: #dceae2;
+  --color-surface-muted: #e2eee7;
+  --color-surface-raised: #f6fbf7;
+  --color-surface-hover: rgba(22, 38, 31, 0.05);
+  --color-text: #16261f;
+  --color-text-muted: #51675c;
+  --color-text-faint: #7d9086;
+  --color-prose: #14221c;
+  --color-accent: #8f3f2d;
+  --color-accent-soft: rgba(143, 63, 45, 0.13);
+  --color-accent-text: #743221;
+  --color-accent-secondary: #58704f;
+  --color-accent-contrast: #fffaf4;
+  --color-line: rgba(22, 38, 31, 0.16);
+  --color-line-strong: rgba(22, 38, 31, 0.28);
+  --bg-main: #e8f3ec;
+  --bg-nav: #dceae2;
+  --bg-raise: #f6fbf7;
+  --bg-hover: rgba(22, 38, 31, 0.05);
+  --text-main: #16261f;
+  --text-muted: #51675c;
+  --text-faint: #7d9086;
+  --accent: #8f3f2d;
+  --accent-fade: rgba(143, 63, 45, 0.13);
+  --accent-text: #743221;
+  --accent-2: #58704f;
+  --accent-contrast: #fffaf4;
+  --border: rgba(22, 38, 31, 0.16);
+  --border-strong: rgba(22, 38, 31, 0.28);
+  --prose-text: #14221c;
+  --atmos-warm: #ceddce;
+  --atmos-cool: #dcebe2;
+  --atmos-paper: #e1eee4;
+  --atmos-paper-line: #a9beb2;
+  --atmos-wood: #91aa8d;
+  --atmos-cork: #b6caaa;
+  --atmos-spine-tint: #cde0d2;
+  --atmos-glow-pos: 78% 8%;
+  --atmos-glow-size: 28%;
+  --atmos-glow-intensity: 4%;
+  --shadow-sm: 0 4px 12px rgba(22,38,31,.12), 0 1px 1px rgba(255,255,255,.66) inset;
+  --shadow-md: 0 14px 34px rgba(22,38,31,.18), 0 2px 6px rgba(22,38,31,.08);
+  --shadow-lg: 0 30px 68px rgba(22,38,31,.24), 0 10px 24px rgba(22,38,31,.10);
+  --shadow-overlay: 0 34px 86px rgba(14,28,21,.40), 0 10px 28px rgba(14,28,21,.16);
   --bg: var(--bg-main);
   --rail: var(--bg-nav);
   --surface: var(--bg-nav);
@@ -3157,21 +3277,22 @@ textarea:focus {
   --surface3: var(--bg-main);
   --text: var(--text-main);
   --muted: var(--text-muted);
-  --faint: color-mix(in srgb, var(--text-muted) 42%, transparent);
-  --paper: color-mix(in srgb, var(--bg-nav) 74%, #6e593d 26%);
-  --paper-soft: color-mix(in srgb, var(--bg-main) 78%, #6e593d 22%);
+  --faint: var(--text-faint);
+  --accent2: var(--accent-2);
+  --paper: color-mix(in srgb, var(--bg-nav) 74%, var(--atmos-paper) 26%);
+  --paper-soft: color-mix(in srgb, var(--bg-main) 78%, var(--atmos-paper) 22%);
   --ink-soft: color-mix(in srgb, var(--text-main) 84%, var(--text-muted));
-  --studio-wood: color-mix(in srgb, var(--bg-main) 76%, #2b2117 24%);
-  --studio-wood-dark: color-mix(in srgb, var(--bg-main) 84%, #070504 16%);
-  --studio-paper: color-mix(in srgb, var(--bg-nav) 62%, #d6c0a0 38%);
-  --studio-paper-strong: color-mix(in srgb, var(--bg-nav) 44%, #ead9bd 56%);
-  --studio-paper-line: color-mix(in srgb, var(--border) 64%, #8a7154 36%);
-  --studio-cork: color-mix(in srgb, var(--bg-nav) 62%, #8b6034 38%);
+  --studio-wood: color-mix(in srgb, var(--bg-main) 76%, var(--atmos-wood) 24%);
+  --studio-wood-dark: color-mix(in srgb, var(--bg-main) 84%, var(--atmos-cool) 16%);
+  --studio-paper: color-mix(in srgb, var(--bg-nav) 62%, var(--atmos-paper) 38%);
+  --studio-paper-strong: color-mix(in srgb, var(--bg-nav) 44%, var(--atmos-paper) 56%);
+  --studio-paper-line: color-mix(in srgb, var(--border) 64%, var(--atmos-paper-line) 36%);
+  --studio-cork: color-mix(in srgb, var(--bg-nav) 62%, var(--atmos-cork) 38%);
   --studio-ink: var(--text-main);
   --studio-muted: var(--text-muted);
-  --studio-radius: 8px;
-  --studio-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
-  --studio-page-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+  --studio-radius: var(--radius-unit);
+  --studio-shadow: var(--shadow-lg);
+  --studio-page-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
 body {
@@ -3656,15 +3777,15 @@ body {
 
 .studio-button-primary,
 .btn-primary {
-  background: var(--accent);
-  color: #12120f;
-  border-color: transparent;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  border-color: var(--button-primary-border);
 }
 
 .studio-button-secondary,
 .btn-secondary {
-  background: color-mix(in srgb, var(--bg-nav) 52%, transparent);
-  color: var(--text-muted);
+  background: var(--button-secondary-bg);
+  color: var(--button-secondary-text);
   border-color: var(--border);
 }
 
@@ -3826,10 +3947,24 @@ textarea:focus {
  */
 .ms-scroll-container {
   overflow-anchor: none;
+  /* Lets .ms-scene-body's note-gutter drop-out below query against the
+     writing column's own width (per the handoff spec's explicit "not a
+     viewport media query" requirement) rather than the full window —
+     matters once the rail/inspector share the window with the prose column,
+     since a wide window with both panels open can leave the column itself
+     too narrow for a gutter even though the viewport isn't "mobile". */
+  container-type: inline-size;
+  container-name: ms-writing-column;
 }
 
 .manuscript-document {
-  width: min(100%, 1040px);
+  /* No explicit width here on purpose: it used to hardcode min(100%, 1040px),
+     which silently capped the document below Manuscript.jsx's own dynamic
+     max-width (--ms-prose-w-derived, see PROSE_WIDTH_BASE) the moment that
+     grew past 1040px — a stale, undocumented second width constraint
+     fighting the real one. A block element's default width already respects
+     max-width (set inline by Manuscript.jsx) plus the mx-auto centering
+     below, so this only needs to guarantee the minimum height. */
   min-height: 100%;
 }
 
@@ -4144,6 +4279,7 @@ textarea:focus {
   min-height: 100vh;
   padding: 0 clamp(18px, 3vw, 34px) clamp(18px, 3vw, 34px);
   overflow-x: clip;
+  background: var(--bg-main);
 }
 
 .marketing-nav {
@@ -4279,6 +4415,7 @@ textarea:focus {
 .yow-home-main {
   width: min(1180px, 100%);
   margin: 0 auto;
+  background: var(--bg-main);
 }
 
 .yow-home-hero {
@@ -4287,6 +4424,7 @@ textarea:focus {
   overflow: hidden;
   display: flex;
   align-items: center;
+  background: var(--bg-main);
   /* break out of .yow-home padding to reach viewport edges */
   margin-inline: calc(-1 * clamp(18px, 3vw, 34px));
   padding-block: clamp(56px, 8vw, 100px) clamp(48px, 7vw, 80px);
@@ -4297,7 +4435,28 @@ textarea:focus {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: color-mix(in srgb, var(--bg-main) 52%, transparent);
+  background:
+    radial-gradient(ellipse 74% 68% at 50% 46%,
+      color-mix(in srgb, var(--bg-main) 72%, transparent) 0%,
+      color-mix(in srgb, var(--bg-main) 46%, transparent) 48%,
+      color-mix(in srgb, var(--bg-main) 18%, transparent) 74%,
+      transparent 100%),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-main) 32%, transparent) 0%,
+      color-mix(in srgb, var(--bg-main) 16%, transparent) 52%,
+      color-mix(in srgb, var(--bg-main) 38%, transparent) 100%);
+}
+
+.yow-home-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: clamp(180px, 28vw, 340px);
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--bg-main) 60%, transparent) 38%, var(--bg-main) 82%, var(--bg-main) 100%);
 }
 
 .yow-hero-inner {
@@ -4315,34 +4474,20 @@ textarea:focus {
   object-fit: cover;
   object-position: center 28%;
   z-index: 0;
-  opacity: 0.68;
+  opacity: 0.85;
   mask-image:
-    radial-gradient(ellipse 92% 88% at 52% 50%, black 28%, transparent 72%),
-    radial-gradient(ellipse 38% 55% at 0% 18%, transparent 40%, black 80%),
-    radial-gradient(ellipse 30% 40% at 100% 8%, transparent 35%, black 75%),
-    radial-gradient(ellipse 42% 38% at 8% 100%, transparent 38%, black 78%),
-    radial-gradient(ellipse 35% 42% at 96% 90%, transparent 35%, black 72%),
-    radial-gradient(ellipse 28% 32% at 48% 0%, transparent 30%, black 70%),
-    radial-gradient(ellipse 22% 36% at 0% 55%, transparent 28%, black 68%),
-    radial-gradient(ellipse 20% 30% at 100% 50%, transparent 28%, black 65%),
-    radial-gradient(ellipse 32% 22% at 55% 100%, transparent 32%, black 70%);
+    linear-gradient(180deg, transparent 0%, black 12%, black 58%, transparent 100%),
+    linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%);
   mask-composite: intersect;
   -webkit-mask-image:
-    radial-gradient(ellipse 92% 88% at 52% 50%, black 28%, transparent 72%),
-    radial-gradient(ellipse 38% 55% at 0% 18%, transparent 40%, black 80%),
-    radial-gradient(ellipse 30% 40% at 100% 8%, transparent 35%, black 75%),
-    radial-gradient(ellipse 42% 38% at 8% 100%, transparent 38%, black 78%),
-    radial-gradient(ellipse 35% 42% at 96% 90%, transparent 35%, black 72%),
-    radial-gradient(ellipse 28% 32% at 48% 0%, transparent 30%, black 70%),
-    radial-gradient(ellipse 22% 36% at 0% 55%, transparent 28%, black 68%),
-    radial-gradient(ellipse 20% 30% at 100% 50%, transparent 28%, black 65%),
-    radial-gradient(ellipse 32% 22% at 55% 100%, transparent 32%, black 70%);
+    linear-gradient(180deg, transparent 0%, black 12%, black 58%, transparent 100%),
+    linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%);
   -webkit-mask-composite: source-in;
 }
 
 .yow-home-copy {
   text-align: center;
-  text-shadow: none;
+  text-shadow: 0 1px 18px color-mix(in srgb, var(--bg-main) 72%, transparent);
 }
 
 .yow-home-copy h1 {
@@ -5076,7 +5221,7 @@ textarea:focus {
 }
 
 .timeline-segmented button.is-active {
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   background: var(--accent);
 }
 
@@ -6538,7 +6683,7 @@ body {
   display: grid;
   place-items: center;
   border-radius: var(--r-pill);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   background: var(--accent);
   font-size: 11px;
   font-weight: 900;
@@ -6611,7 +6756,10 @@ body {
 }
 
 .manuscript-document {
-  max-width: 960px;
+  /* max-width used to be hardcoded here too (960px) -- Manuscript.jsx's own
+     inline max-width always won for that property regardless, so it wasn't
+     actively wrong, just a second stale number sitting next to the real
+     one. Dropped to avoid exactly that confusion again. */
   margin: 0 auto;
   padding-inline: clamp(26px, 5vw, 72px);
   background: color-mix(in srgb, var(--bg-nav) 44%, var(--bg-main));
@@ -6699,6 +6847,132 @@ body {
 
 .studio-workspace:has(.ms-final-reader) .studio-workspace-footer {
   display: none;
+}
+
+/* ─── ManuscriptBookView (redesign) — Finalised mode's "Book" sub-view: a
+   two-page spread on a raised sheet, paged by translateX (never scrollLeft)
+   per the handoff spec §8. See ManuscriptBookView.jsx for the pagination
+   math. ───────────────────────────────────────────────────────────────── */
+.ms-book {
+  /* UK B-format trade paperback: 129mm x 198mm trim. Margins are a single
+     symmetric approximation of a real book's alternating inner (gutter)/
+     outer margins -- close enough that the line/word count per page is
+     genuinely print-accurate, without the complexity of separate recto/
+     verso layouts. Body type 10.5pt on 14pt leading is a standard UK
+     fiction trade-paperback spec (~32 lines/page on this text block).
+     These are laid out in real mm/pt, at the browser's nominal 96px/inch
+     reference -- the same fixed mapping print-preview uses -- so the page
+     is never bigger or smaller than an actual printed page; only the
+     wrapper's transform (see ManuscriptBookView.jsx's `scale`) shrinks it
+     to fit a small viewport, which never changes the reflow underneath. */
+  --ms-page-w: 99mm;
+  --ms-page-h: 160mm;
+  --ms-page-margin-x: 15mm;
+  --ms-page-margin-top: 18mm;
+  --ms-page-margin-bottom: 20mm;
+  --ms-spine-gap: 28mm;
+  --ms-page-font: 10.5pt;
+  --ms-page-leading: 14pt;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 26px 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+.ms-book-viewport {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.ms-book-spread {
+  position: relative;
+  flex-shrink: 0;
+  width: calc(2 * var(--ms-page-w) + var(--ms-spine-gap) + 2 * var(--ms-page-margin-x));
+  height: calc(var(--ms-page-h) + var(--ms-page-margin-top) + var(--ms-page-margin-bottom));
+  border-radius: var(--r-sm);
+  background: var(--bg-raise);
+  box-shadow: var(--shadow-lg);
+  padding: var(--ms-page-margin-top) var(--ms-page-margin-x) var(--ms-page-margin-bottom);
+  overflow: hidden;
+}
+.ms-book-spread::before {
+  content: "";
+  position: absolute;
+  top: var(--ms-page-margin-top);
+  bottom: var(--ms-page-margin-bottom);
+  left: 50%;
+  width: 1px;
+  background: var(--border);
+}
+.ms-book-flow {
+  height: var(--ms-page-h);
+  column-width: var(--ms-page-w);
+  column-count: 2;
+  column-gap: var(--ms-spine-gap);
+  column-fill: auto;
+  font-family: var(--font-serif);
+  font-size: var(--ms-page-font);
+  line-height: var(--ms-page-leading);
+  color: var(--prose-text, var(--text-main));
+  transition: transform 0.26s ease;
+  will-change: transform;
+}
+.ms-book-flow h2 {
+  font-family: var(--font-serif);
+  font-size: 15pt;
+  margin: 0 0 14pt;
+  break-after: avoid;
+  color: var(--text-main);
+}
+.ms-book-flow h3 {
+  font-family: var(--font-serif);
+  font-size: 12.5pt;
+  margin: 16pt 0 10pt;
+  break-after: avoid;
+  color: var(--text-main);
+}
+.ms-book-flow p { margin: 0 0 0.9em; text-wrap: pretty; }
+.ms-book-flow p + p { text-indent: 1.4em; }
+.ms-book-break { text-align: center; margin: 18px 0; color: var(--text-faint); letter-spacing: 0.3em; }
+.ms-book-empty { color: var(--text-faint); font-style: italic; }
+.ms-book-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ms-book-nav button {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  background: none;
+  cursor: pointer;
+}
+.ms-book-nav button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-text); }
+.ms-book-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+@media (max-width: 900px) {
+  /* A single physical page rather than a two-page spread -- still true
+     B-format size, just not shown side by side (there isn't room to shrink
+     a whole spread and keep the text legible on a small screen). */
+  .ms-book-spread {
+    width: calc(var(--ms-page-w) + 2 * var(--ms-page-margin-x));
+  }
+  .ms-book-spread::before { display: none; }
+  .ms-book-flow { column-count: 1; }
 }
 
 .ms-final-book {
@@ -9623,7 +9897,7 @@ body {
   font-weight: 800;
   letter-spacing: .04em;
   text-transform: uppercase;
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   background: var(--accent);
   border-radius: 4px;
   padding: 2px 6px;
@@ -10022,9 +10296,9 @@ body {
   flex: none;
   min-height: 34px;
   border: 0;
-  border-radius: var(--r-md);
-  background: var(--accent);
-  color: var(--bg-main);
+  border-radius: var(--control-radius);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
   cursor: pointer;
   font-size: 12px;
   font-weight: 900;
@@ -10649,7 +10923,7 @@ body {
 .account-primary-button {
   border: 0;
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
 }
 
 .account-secondary-button {
@@ -13619,7 +13893,7 @@ body {
 .cookie-btn-primary {
   border: none;
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   font-weight: 800;
 }
 
@@ -14138,485 +14412,869 @@ body {
   50%       { opacity: 1;   transform: scale(1); }
 }
 
-/* ─── Structure Sidebar ──────────────────────────────────────────────────── */
+/* ─── ManuscriptRail (redesign) — left rail lifted from StructureSidebar, now a
+   sibling of <main> instead of a panel inside the right sidebar. Collapses to a
+   44px "spine" of ticks. See docs/design/Manuscript Editor Handoff Spec.md §4. ── */
 
-.ms-sidebar {
-  width: 232px;
-  flex-shrink: 0;
+.ms-rail {
+  --ms-rail-w: 268px;
+  width: var(--ms-rail-w);
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-nav);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  background: color-mix(in srgb, var(--bg-nav) 70%, var(--bg-main));
-  overflow: hidden;
+  min-height: 0;
+  transition: width 0.18s ease;
+}
+.ms-rail.is-collapsed { width: 44px; }
+
+/* ≤900px: off-canvas sheet instead of an in-flow column — see the
+   mobileSheetOpen prop in ManuscriptRail.jsx and the bottom tab bar below. */
+@media (max-width: 900px) {
+  .ms-rail {
+    position: absolute;
+    z-index: 25;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(85vw, var(--ms-rail-w));
+    transform: translateX(-101%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  .ms-rail.is-collapsed { width: min(85vw, var(--ms-rail-w)); }
+  .ms-rail.is-sheet-open { transform: none; }
 }
 
-.ms-sidebar-header {
+.ms-rail-h {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  gap: 6px;
+  padding: 12px 12px 8px;
   flex-shrink: 0;
 }
-
-.ms-sidebar-title {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.ms-sidebar-total-words {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
-.ms-sidebar-tree {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px 6px 48px;
-}
-
-/* Act */
-.ms-sidebar-act-block {
-  margin-bottom: 2px;
-}
-
-.ms-sidebar-act {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 28px;
-  padding: 0 4px 0 2px;
-  border-radius: var(--r-sm);
-  cursor: default;
-  transition: background 0.1s;
-}
-.ms-sidebar-act:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-.ms-sidebar-act.is-dragging { opacity: 0.4; }
-
-.ms-sidebar-act-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0 2px;
-  color: var(--text-main);
-  text-align: left;
-  border-radius: var(--r-sm);
-}
-.ms-sidebar-act-title {
+.ms-rail.is-collapsed .ms-rail-h { justify-content: center; padding: 12px 0 0; }
+.ms-rail-h-label {
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Chapter */
-.ms-sidebar-act-children {
-  padding-left: 10px;
-  border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-  margin-left: 12px;
-  margin-top: 1px;
-  margin-bottom: 4px;
-}
-
-.ms-sidebar-chapter-block {
-  margin-bottom: 1px;
-}
-
-.ms-sidebar-chapter {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 26px;
-  padding: 0 4px 0 2px;
-  border-radius: var(--r-sm);
-  cursor: default;
-  transition: background 0.1s;
-}
-.ms-sidebar-chapter:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-.ms-sidebar-chapter.is-dragging { opacity: 0.4; }
-
-.ms-sidebar-chapter-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0 2px;
-  color: var(--text-muted);
-  text-align: left;
-  border-radius: var(--r-sm);
-}
-.ms-sidebar-chapter-title {
-  font-size: 10.5px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Chapter children */
-.ms-sidebar-chapter-children {
-  padding-left: 8px;
-  border-left: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-  margin-left: 10px;
-  margin-top: 1px;
-  margin-bottom: 4px;
-}
-
-/* Scene */
-.ms-sidebar-scene {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 24px;
-  padding: 0 2px;
-  border-radius: var(--r-sm);
-  cursor: default;
-  transition: background 0.1s;
-  position: relative;
-}
-.ms-sidebar-scene:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-.ms-sidebar-scene.is-active {
-  background: var(--accent-fade);
-}
-.ms-sidebar-scene.is-dragging { opacity: 0.35; }
-
-.ms-sidebar-scene-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0 2px;
-  color: var(--text-muted);
-  text-align: left;
-  border-radius: var(--r-xs);
-}
-.ms-sidebar-scene.is-active .ms-sidebar-scene-btn {
-  color: var(--accent);
-}
-
-.ms-sidebar-scene-title {
-  font-size: 10px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.ms-sidebar-scene-pov {
-  font-size: 9px;
-  color: var(--text-muted);
-  opacity: 0.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 48px;
-  flex-shrink: 0;
-}
-
-/* Status dot */
-.ms-sidebar-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-.ms-sidebar-status-dot:hover {
-  transform: scale(1.5);
-}
-
-.ms-sidebar-rename-input {
-  flex: 1;
-  min-width: 0;
-  height: 20px;
-  padding: 0 5px;
-  border: 1px solid var(--accent);
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--bg-main) 92%, var(--accent));
-  color: var(--text-main);
-  font-family: var(--font);
-  font-size: 10px;
-  font-weight: 600;
-  outline: none;
-}
-
-.ms-sidebar-icon-btn {
-  opacity: 0.62;
-  transition: opacity 0.1s, color 0.1s, background 0.1s, border-color 0.1s;
-}
-
-.ms-sidebar-reorder-group {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.ms-sidebar-reorder-btn:disabled {
-  opacity: 0.25 !important;
-  cursor: default;
-}
-
-.ms-sidebar-act:hover .ms-sidebar-icon-btn,
-.ms-sidebar-chapter:hover .ms-sidebar-icon-btn,
-.ms-sidebar-scene:hover .ms-sidebar-icon-btn,
-.ms-sidebar-act:focus-within .ms-sidebar-icon-btn,
-.ms-sidebar-chapter:focus-within .ms-sidebar-icon-btn,
-.ms-sidebar-scene:focus-within .ms-sidebar-icon-btn {
-  opacity: 1;
-}
-
-.ms-sidebar-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--r-xs);
-  padding: 0;
-}
-.ms-sidebar-icon-btn:hover {
-  color: var(--accent);
-  background: var(--accent-fade);
-}
-
-/* Explicit "move to..." control — same reveal-on-hover treatment as
-   .ms-sidebar-icon-btn, sized for its own text instead of a fixed icon box,
-   since (unlike the pencil/trash icon buttons) this needs to show which
-   act/chapter a scene or chapter currently belongs to. */
-.ms-sidebar-move-select {
-  max-width: 88px;
-  flex-shrink: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--r-xs);
-  padding: 1px 2px;
-  font-size: 9px;
-  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  opacity: 0.62;
-  transition: opacity 0.1s, color 0.1s, background 0.1s;
-}
-.ms-sidebar-move-select:hover,
-.ms-sidebar-move-select:focus {
-  color: var(--accent);
-  background: var(--accent-fade);
-  opacity: 1;
-}
-.ms-sidebar-act:hover .ms-sidebar-move-select,
-.ms-sidebar-chapter:hover .ms-sidebar-move-select,
-.ms-sidebar-scene:hover .ms-sidebar-move-select,
-.ms-sidebar-act:focus-within .ms-sidebar-move-select,
-.ms-sidebar-chapter:focus-within .ms-sidebar-move-select,
-.ms-sidebar-scene:focus-within .ms-sidebar-move-select {
-  opacity: 1;
-}
-
-.ms-sidebar-dropzone {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  margin: 2px 0;
-  border: 1px dashed color-mix(in srgb, var(--border) 55%, transparent);
-  border-radius: var(--r-sm);
-  color: var(--text-muted);
-  font-size: 9px;
+  color: var(--text-faint);
   font-weight: 700;
-  opacity: 0.65;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
-.ms-sidebar-act-children.is-drop-target,
-.ms-sidebar-chapter-children.is-drop-target {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border-color: var(--accent);
-}
-
-/* Word count */
-.ms-sidebar-wordcount {
-  font-size: 9px;
-  color: var(--text-muted);
-  opacity: 0.55;
-  flex-shrink: 0;
+.ms-rail.is-collapsed .ms-rail-h-label { display: none; }
+.ms-rail-h-words {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+.ms-rail-collapse-btn { margin-left: auto; }
+.ms-rail.is-collapsed .ms-rail-collapse-btn { margin: 0; }
 
-/* Grip / chevron / delete */
-.ms-sidebar-grip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  flex-shrink: 0;
+.ms-rail-icon-btn {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
   color: var(--text-muted);
-  opacity: 0;
-  cursor: grab;
-}
-.ms-sidebar-act:hover .ms-sidebar-grip,
-.ms-sidebar-chapter:hover .ms-sidebar-grip,
-.ms-sidebar-scene:hover .ms-sidebar-grip {
-  opacity: 1;
-}
-
-.ms-sidebar-chevron {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
   background: none;
-  border: none;
-  color: var(--text-muted);
+  border: 0;
   cursor: pointer;
-  border-radius: var(--r-xs);
-  padding: 0;
-  transition: background 0.1s;
+  transition: background 0.12s, color 0.12s;
 }
-.ms-sidebar-chevron:hover {
-  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+.ms-rail-icon-btn:hover { background: var(--accent-fade); color: var(--accent-text); }
+
+/* ── Collapsed spine ── */
+.ms-rail-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 14px 0;
+  overflow: hidden;
+  flex: 1;
+}
+.ms-rail-spine-tick {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ms-rail-spine-tick:hover { background: var(--text-faint); }
+.ms-rail-spine-tick.is-active { background: var(--accent); width: 20px; }
+
+/* ── Tree ── */
+.ms-rail-tree { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+
+.ms-rail-act { margin-top: 10px; }
+.ms-rail-act:first-child { margin-top: 0; }
+.ms-rail-act-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.ms-rail-act-h.is-dragging { opacity: 0.4; }
+.ms-rail-act-btn {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ms-rail-act-btn:hover { color: var(--text-main); }
+.ms-rail-act-n {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.ms-rail-act-h:hover .ms-rail-act-n { margin-right: 4px; }
+
+.ms-rail-chapters.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: var(--r-sm); }
+
+.ms-rail-chapter { margin: 2px 0 6px; }
+.ms-rail-chapter-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.ms-rail-chapter-h:hover { background: var(--bg-hover); }
+.ms-rail-chapter-h.is-dragging { opacity: 0.4; }
+.ms-rail-caret { color: var(--text-faint); background: none; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center; transition: transform 0.15s; flex-shrink: 0; }
+.ms-rail-chapter-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-main);
 }
+.ms-rail-chapter-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ms-rail-chapter-n { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--text-faint); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
-.ms-sidebar-delete-btn {
+.ms-rail-scenes {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text-muted);
+  flex-direction: column;
+  padding-left: 8px;
+  margin-left: 11px;
+  border-left: 1px solid var(--border);
+}
+.ms-rail-scenes.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+.ms-rail-addrow { display: flex; justify-content: center; height: 6px; margin: 0 8px; opacity: 0; transition: opacity 0.12s; }
+.ms-rail-addrow:hover, .ms-rail-scenes:hover .ms-rail-addrow { opacity: 1; }
+.ms-rail-addrow-end { height: auto; opacity: 1; margin: 2px 0 0; }
+.ms-rail-addrow button {
+  height: 16px;
+  margin-top: -5px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-faint);
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
   cursor: pointer;
-  border-radius: var(--r-xs);
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.1s, color 0.1s, background 0.1s;
-}
-.ms-sidebar-act:hover .ms-sidebar-delete-btn,
-.ms-sidebar-chapter:hover .ms-sidebar-delete-btn,
-.ms-sidebar-scene:hover .ms-sidebar-delete-btn,
-.ms-sidebar-act:focus-within .ms-sidebar-delete-btn,
-.ms-sidebar-chapter:focus-within .ms-sidebar-delete-btn,
-.ms-sidebar-scene:focus-within .ms-sidebar-delete-btn {
-  opacity: 1;
-}
-.ms-sidebar-delete-btn:hover {
-  color: #f87171;
-  background: color-mix(in srgb, #f87171 12%, transparent);
-}
-
-/* Touch devices have no hover state to reveal these on — show them plainly
-   instead of only on :hover/:focus-within. */
-@media (hover: none) {
-  .ms-sidebar-icon-btn,
-  .ms-sidebar-delete-btn,
-  .ms-sidebar-reorder-btn {
-    opacity: 1;
-  }
-}
-
-/* Add buttons */
-.ms-sidebar-add-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+.ms-rail-addrow-end button {
   height: 22px;
-  padding: 0 6px;
-  margin: 2px 0;
-  background: none;
-  border: 1px dashed color-mix(in srgb, var(--border) 55%, transparent);
-  border-radius: var(--r-sm);
-  color: var(--text-muted);
-  font-size: 9.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  margin-top: 2px;
   width: 100%;
   justify-content: center;
+  border-style: dashed;
 }
-.ms-sidebar-add-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-fade);
-}
+.ms-rail-addrow button:hover { color: var(--accent-text); border-color: var(--accent); }
 
-.ms-sidebar-add-chapter {
-  margin-top: 3px;
-}
-
-.ms-sidebar-add-act-btn {
+.ms-rail-scene {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 100%;
-  height: 28px;
-  margin-top: 8px;
-  background: none;
-  border: 1px dashed color-mix(in srgb, var(--border) 50%, transparent);
+  gap: 4px;
+  padding: 6px 8px;
   border-radius: var(--r-sm);
   color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 13px;
+}
+.ms-rail-scene:hover { background: var(--bg-hover); color: var(--text-main); }
+.ms-rail-scene.is-active { background: var(--accent-fade); color: var(--accent-text); font-weight: 600; }
+.ms-rail-scene.is-dragging { opacity: 0.35; }
+.ms-rail-scene-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.ms-rail-sq { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto; cursor: pointer; }
+.ms-rail-scene-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-rail-scene-words { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.ms-rail-row-actions { display: none; align-items: center; gap: 1px; flex-shrink: 0; }
+.ms-rail-act-h:hover .ms-rail-row-actions,
+.ms-rail-act-h:focus-within .ms-rail-row-actions,
+.ms-rail-chapter-h:hover .ms-rail-row-actions,
+.ms-rail-chapter-h:focus-within .ms-rail-row-actions,
+.ms-rail-scene:hover .ms-rail-row-actions,
+.ms-rail-scene:focus-within .ms-rail-row-actions {
+  display: flex;
+}
+.ms-rail-row-actions .ms-rail-icon-btn { width: 20px; height: 20px; }
+.ms-rail-delete-btn:hover { color: var(--danger, #ef4444); background: color-mix(in srgb, var(--danger, #ef4444) 14%, transparent); }
+
+.ms-rail-grip {
+  display: none;
+  color: var(--text-faint);
+  cursor: grab;
+  flex-shrink: 0;
+  align-items: center;
+}
+.ms-rail-act-h:hover .ms-rail-grip,
+.ms-rail-chapter-h:hover .ms-rail-grip,
+.ms-rail-scene:hover .ms-rail-grip {
+  display: flex;
+}
+
+.ms-rail-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  color: var(--text-main);
+  font: inherit;
+  padding: 0;
+}
+
+.ms-rail-dropzone {
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+  margin: 2px 0;
+}
+
+.ms-rail-f { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.ms-rail-f-btn {
+  flex: 1 1 72px;
+  justify-content: center;
+  white-space: nowrap;
+  padding: 7px 8px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
-.ms-sidebar-add-act-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+.ms-rail-f-btn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent); background: var(--accent-fade); }
+.ms-rail-f-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ─── ManuscriptInspector (redesign) — one four-tab panel (Scene, Notes, Format,
+   Progress) replacing WritingSidebar's six-tab strip + separate panel chrome.
+   See docs/design/Manuscript Editor Handoff Spec.md §4. ─────────────────────── */
+
+.ms-insp {
+  --ms-insp-w: 320px;
+  width: var(--ms-insp-w);
+  flex: 0 0 auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-nav);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ms-insp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ms-insp-tabs button {
+  flex: 1;
+  padding: 7px 4px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-insp-tabs button:hover { background: var(--bg-hover); color: var(--text-main); }
+.ms-insp-tabs button.is-on { background: var(--accent-fade); color: var(--accent-text); font-weight: 700; }
+.ms-insp-close {
+  flex: 0 0 auto !important;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.ms-insp-close:hover { background: var(--bg-hover); color: var(--text-main); }
+
+.ms-insp-body { flex: 1; overflow-y: auto; }
+.ms-insp-scroll { padding: 16px; }
+.ms-insp-empty { padding: 28px 16px; text-align: center; font-size: 12px; color: var(--text-faint); }
+
+.ms-insp-group { margin-bottom: 22px; }
+.ms-insp-group:last-child { margin-bottom: 0; }
+.ms-insp-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+.ms-insp-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ms-opt {
+  padding: 6px 11px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.ms-opt:hover { border-color: var(--border-strong); color: var(--text-main); }
+.ms-opt.is-on { background: var(--accent-fade); border-color: transparent; color: var(--accent-text); font-weight: 700; }
+
+.ms-insp-field { display: block; margin-bottom: 12px; }
+.ms-insp-field span { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.ms-insp-field input,
+.ms-insp-field textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font: 13px var(--font);
+}
+.ms-insp-field textarea { border-radius: var(--r-md); resize: vertical; min-height: 60px; }
+.ms-insp-field input:focus, .ms-insp-field textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 0;
+  cursor: pointer;
+}
+.ms-chip:hover { color: var(--text-main); background: var(--accent-fade); }
+
+.ms-insp-reset {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  width: 100%;
+  text-align: left;
+}
+.ms-insp-reset:hover { color: var(--accent-text); }
+
+/* ── Progress tab ── */
+.ms-insp-goal { margin-bottom: 22px; }
+.ms-insp-goal-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.ms-insp-goal-top b { font-size: 24px; line-height: 1; font-weight: 700; color: var(--text-main); }
+.ms-insp-goal-top small { color: var(--text-muted); font-size: 12px; }
+.ms-insp-goal-top button {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent-text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ms-insp-goal-input {
+  margin-left: auto;
+  width: 64px;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 12px;
+}
+.ms-insp-bar { height: 7px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+.ms-insp-bar > div { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.2s ease; }
+.ms-insp-goal-meta { display: flex; justify-content: space-between; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--text-faint); }
+
+.ms-insp-spark { display: flex; align-items: flex-end; gap: 5px; height: 44px; margin: 10px 0 4px; }
+.ms-insp-spark-bar { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--bg-hover); }
+.ms-insp-spark-bar.is-now { background: var(--accent); }
+.ms-insp-spark-x { display: flex; gap: 5px; font-size: 10px; color: var(--text-faint); }
+.ms-insp-spark-x span { flex: 1; text-align: center; }
+
+.ms-insp-tgt { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 12px; }
+.ms-insp-tgt b { font-weight: 600; color: var(--text-main); }
+.ms-insp-tgt-n {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ms-insp-tgt-n:hover { color: var(--accent-text); }
+
+@media (min-width: 901px) and (max-width: 1250px) {
+  .ms-insp { width: min(320px, 34vw); }
+}
+
+/* ≤900px: bottom sheet instead of a persistent side column — controlled by
+   the same inspectorOpen state as desktop, just rendered differently. */
+@media (max-width: 900px) {
+  .ms-insp {
+    position: absolute;
+    z-index: 25;
+    inset: auto 0 0 0;
+    width: 100%;
+    height: 62vh;
+    border-left: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 18px 18px 0 0;
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* ─── ManuscriptTopbar (redesign) — three zones replacing the old flat
+   ms-toolbar row of ~12 buttons. See handoff spec §4. ───────────────────────── */
+
+.ms-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-nav);
+  position: relative;
+  z-index: 30;
+}
+.ms-topbar-zone { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ms-topbar-zone-left { flex: 0 1 auto; overflow: hidden; }
+.ms-topbar-zone-tools { flex: 0 0 auto; }
+.ms-topbar-zone-mid { flex: 1; justify-content: center; min-width: 0; gap: 12px; }
+
+.ms-topbar-iconbtn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-topbar-iconbtn:hover { background: var(--accent-fade); color: var(--accent-text); }
+.ms-topbar-iconbtn[aria-pressed="true"] { background: var(--accent-fade); color: var(--accent-text); }
+
+.ms-topbar-crumb {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: var(--r-pill);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.ms-topbar-crumb:hover { background: var(--accent-fade); }
+.ms-topbar-crumb-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.ms-topbar-crumb-path { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+.ms-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  flex: 0 0 auto;
+}
+.ms-modes button {
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ms-modes button:hover { color: var(--text-main); }
+.ms-modes button.is-on { background: var(--accent-fade); color: var(--accent-text); font-weight: 700; }
+
+.ms-topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+}
+.ms-topbar-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); flex: 0 0 auto; }
+.ms-topbar-status-sep { color: var(--text-faint); }
+.ms-topbar-status-long { color: var(--text-faint); }
+.ms-topbar-conflict-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--r-pill);
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ms-topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.ms-topbar-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+.ms-topbar-btn.is-on { background: var(--accent-fade); color: var(--accent-text); }
+.ms-topbar-btn-primary { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
+.ms-topbar-btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #000); color: var(--accent-contrast); }
+
+.ms-topbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex: 0 0 auto; }
+
+.ms-topbar-menu-wrap { position: relative; }
+.ms-topbar-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: 236px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: 40;
+}
+.ms-topbar-menu-h {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 8px 10px 4px;
+}
+.ms-topbar-menu-i {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-main);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ms-topbar-menu-i:hover { background: var(--accent-fade); color: var(--accent-text); }
+.ms-topbar-menu-i kbd { margin-left: auto; font: 11px var(--font); color: var(--text-faint); }
+
+/* ── Go-to-scene palette ── */
+.ms-goto-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(10, 14, 13, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 24px 24px;
+}
+.ms-goto-box {
+  width: min(480px, 100%);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  background: var(--bg-raise);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.ms-goto-input {
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 15px;
+  outline: none;
+}
+.ms-goto-list { overflow-y: auto; padding: 6px; }
+.ms-goto-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.ms-goto-item:hover { background: var(--accent-fade); }
+.ms-goto-item-title { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.ms-goto-item-path { font-size: 11px; color: var(--text-faint); }
+
+@media (max-width: 900px) {
+  .ms-topbar-zone-mid { display: none; }
+  /* AI/Inspector/Project/Focus/zoom all duplicate the mobile bottom tab bar
+     (Outline/Write/Inspector/AI) or don't fit — only the overflow menu
+     (search, pacing, template, import, history, finalise, export,
+     catalogue, fullscreen) stays reachable from the top bar itself. The
+     rail toggle is redundant with the bottom bar's Outline tab too. */
+  .ms-topbar-zone-left .ms-topbar-iconbtn { display: none; }
+  .ms-topbar-zone-tools > *:not(.ms-topbar-menu-wrap) { display: none; }
+}
+
+/* ─── Mobile bottom tab bar (redesign) — Outline/Write/Inspector/AI drives
+   all four surfaces at ≤900px instead of the desktop rail+topbar buttons.
+   See Manuscript.jsx's handleMobileTab. ─────────────────────────────────── */
+.ms-tabbar { display: none; }
+@media (max-width: 900px) {
+  .ms-tabbar {
+    display: flex;
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border);
+    background: var(--bg-nav);
+  }
+  .ms-tabbar button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 9px 0 11px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .ms-tabbar button.is-on { color: var(--accent-text); }
+}
+
+/* ─── ManuscriptSurface (redesign) — one full-height right panel (AI, Search,
+   History, Finalise), one at a time, overlaying the inspector rather than
+   pushing the prose column. See handoff spec §4-5.1.
+   Requires a `position: relative` ancestor to anchor against (the body row
+   that holds the rail/sheet/inspector, not the whole page) — added when this
+   is wired into Manuscript.jsx's markup, not here. ─────────────────────────*/
+
+/* Used to be position: absolute -- a real overlay floating on top of the
+   inspector's own space, back when both could be open together. Now that
+   the AI surface and the inspector are mutually exclusive (never both
+   open at once), there's nothing left for it to overlay, and the
+   difference just read as "the AI panel doesn't work like the inspector":
+   different width, different background/border, and it covered manuscript
+   text instead of making room for itself the way the inspector does. Same
+   flex/width/color treatment as .ms-insp below now, so opening either one
+   behaves identically from the writing area's point of view. */
+.ms-surface {
+  flex: 0 0 auto;
+  /* Matches .ms-insp's own --ms-insp-w literal -- not a var() reference to
+     it, since that custom property is scoped to .ms-insp's subtree and
+     .ms-surface is a sibling, not a descendant, so it wouldn't inherit. */
+  width: 320px;
+  background: var(--bg-nav);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Same medium-viewport narrowing as .ms-insp's own min(320px, 34vw) rule. */
+@media (min-width: 901px) and (max-width: 1250px) {
+  .ms-surface { width: min(320px, 34vw); }
+}
+
+.ms-surface-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ms-surface-header b { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; color: var(--text-main); }
+.ms-surface-context { margin-left: auto; }
+.ms-surface-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
+.ms-surface-scroll { padding: 16px; flex: 1; }
+
+.ms-surface-card { padding: 14px; border-radius: var(--r-md); background: var(--bg-main); border: 1px solid var(--border); margin-bottom: 16px; }
+.ms-surface-card h4 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.ms-surface-card p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-main); }
+.ms-surface-card-actions { display: flex; gap: 6px; margin-top: 12px; }
+
+.ms-surface-group { margin-bottom: 20px; }
+
+/* ── ManuscriptSearch / SceneVersionHistory embedded (no fixed overlay) ── */
+.ms-search-panel--embedded,
+.ms-vh-panel--embedded {
+  position: static;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ≤900px: same bottom-sheet treatment as .ms-insp above (it used to rely on
+   the base rule's position: absolute for this, which moved to a normal
+   flex child above — needs its own copy of the sheet positioning now). */
+@media (max-width: 900px) {
+  .ms-surface {
+    position: absolute;
+    z-index: 25;
+    inset: auto 0 0 0;
+    width: 100%;
+    height: 62vh;
+    border-left: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 18px 18px 0 0;
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* ─── Toast (redesign) — see Toast.jsx. One line, one Undo, 5s. ─────────────── */
+.ms-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 14px);
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 10px 10px 16px;
+  border-radius: 999px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text-main);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s, transform 0.16s;
+}
+.ms-toast.is-on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.ms-toast button {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-text);
   background: var(--accent-fade);
+  border: 0;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 /* ─── Scene virtualization placeholder (see useSceneWindow.js / Manuscript.jsx's
@@ -14660,12 +15318,175 @@ body {
   margin-bottom: 6px;
 }
 
-.ms-scene-meta {
+/* Redesign: one-line header (number · title · status, hover-reveal cluster) —
+   see SceneEditor.jsx's return. Reuses .ms-meta-chip/.ms-meta-dot/.ms-meta-words
+   above for the status chip / secondary buttons / word count, so those stay
+   visually identical to before. */
+.ms-scene-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ms-scene-n {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.ms-scene-title-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ms-scene-title-btn:hover { color: var(--accent-text); }
+.ms-scene-header-hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
-  padding-bottom: 6px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.group\/scene:hover .ms-scene-header-hover,
+.group\/scene:focus-within .ms-scene-header-hover,
+.ms-scene-header.is-visible .ms-scene-header-hover {
+  opacity: 1;
+}
+
+/* Prose column + note gutter (188px) — see SceneEditor.jsx. The prose
+   column's width (--ms-prose-w, set on .manuscript-document in
+   Manuscript.jsx, ~1080px at the default font size) is shared between this
+   rule and .ms-scene-body--write below, so the line length never changes
+   between Edit and Write — Edit's document is simply wider again by the
+   gutter's own footprint (see PROSE_GUTTER_RESERVE in Manuscript.jsx), and
+   that extra width belongs to the gutter column here, not the prose
+   column. justify-content: center keeps the track-set centered within
+   .ms-scene-body's own box (relevant when a scene has no gutter, since its
+   single fixed-width track is then narrower than the gutter-reserving
+   document) rather than hugging its left edge. */
+.ms-scene-body {
+  display: grid;
+  grid-template-columns: minmax(0, var(--ms-prose-w, 620px));
+  justify-content: center;
+  gap: 0 28px;
+  align-items: start;
+}
+.ms-scene-body.has-gutter {
+  grid-template-columns: minmax(0, var(--ms-prose-w, 620px)) 188px;
+}
+.ms-scene-prose-col { grid-column: 1; min-width: 0; }
+.ms-scene-gutter { grid-column: 2; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+
+/* Write mode (spec §8): no gutter column is ever rendered here
+   (SceneEditor.jsx gates that separately) and the document itself is sized
+   to exactly --ms-prose-w (no gutter reserve), so filling 100% of it (1fr)
+   lands on the same width as Edit's fixed --ms-prose-w track above. */
+.ms-scene-body--write {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Write mode's scene header: name only, muted, no hairline — status chip,
+   the hover-reveal cluster, and the hairline spacer all hide outright
+   rather than just fading, since Write's header should read as inert. */
+.ms-scene-header--write .ms-scene-header-line { border-bottom: none; }
+.ms-scene-header--write .ms-scene-n,
+.ms-scene-header--write .ms-meta-status,
+.ms-scene-header--write .ms-scene-header-hover,
+.ms-scene-header--write .h-px { display: none; }
+.ms-scene-header--write .ms-scene-title-btn { color: var(--text-muted); font-weight: 400; }
+.ms-scene-header--write.ms-scene-header { opacity: 0.45; transition: opacity 0.15s; }
+.ms-scene-header--write.ms-scene-header:hover,
+.group\/scene:focus-within .ms-scene-header--write.ms-scene-header { opacity: 1; }
+
+/* Edit mode's note gutter: a persistent (not hover-gated) card per note,
+   showing up to 5 lines of its text -- enough to read a note's gist
+   without opening it, while Write mode's inline box stays the place to
+   actually read/edit the full text. */
+.ms-gutter-note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-fade);
+  color: var(--text-main);
+  transition: border-color 0.12s, background 0.12s;
+}
+.ms-gutter-note-card-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  color: var(--accent-text);
+}
+.ms-gutter-note-card-head svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ms-gutter-note-card-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 2px;
+  border-radius: var(--r-xs);
+}
+.ms-gutter-note-card-title::placeholder { color: var(--text-muted); font-weight: 500; }
+.ms-gutter-note-card-title:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ms-gutter-note-card-title:focus { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.ms-gutter-note-card-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ms-gutter-note-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent-fade) 70%, var(--accent) 12%); }
+.ms-gutter-note-card.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Container query (not a viewport media query — spec is explicit about
+   this) on the writing column itself, named via container-name on
+   .ms-scroll-container above. `minmax(0, var(--ms-prose-w))` on
+   .ms-scene-body.has-gutter already lets the prose column shrink to fit
+   whatever's left once the fixed-width gutter (188px) and its gap (28px)
+   are accounted for -- this only needs to step in once that shrinking
+   would make prose too narrow to comfortably read, dropping the gutter
+   entirely rather than the column silently squeezing itself unreadable.
+   740px leaves room for ~420px of prose alongside a full gutter, deliberately
+   low: with the inspector open (320px) -- the normal state whenever notes
+   actually matter -- plus an expanded rail (268px), a common 1440px screen
+   only has ~850px left for this column, and the gutter needs to survive
+   that ordinary case, not just a wide monitor with both panels open. */
+@container ms-writing-column (max-width: 740px) {
+  .ms-scene-body.has-gutter { grid-template-columns: minmax(0, var(--ms-prose-w, 620px)); }
+  .ms-scene-gutter { display: none; }
 }
 
 .ms-meta-chip {
@@ -14699,45 +15520,6 @@ body {
   background: var(--dot-color);
   flex-shrink: 0;
 }
-
-.ms-meta-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--r-md);
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-nav) 60%, transparent);
-  cursor: text;
-  transition: border-color 0.12s;
-}
-.ms-meta-field:focus-within {
-  border-color: var(--accent);
-}
-
-.ms-meta-label {
-  font-size: 8.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  opacity: 0.65;
-  flex-shrink: 0;
-}
-
-.ms-meta-input {
-  width: 70px;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 500;
-  font-family: var(--font);
-}
-.ms-meta-input::placeholder { color: var(--text-muted); opacity: 0.45; }
-.ms-meta-input:focus { color: var(--text-main); }
 
 .ms-meta-words {
   font-size: 9.5px;
@@ -14861,779 +15643,6 @@ body {
   color: color-mix(in srgb, var(--text-muted) 70%, transparent);
 }
 
-/* ─── Manuscript reference panel ─────────────────────────────────────────── */
-
-.ms-reference-panel {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--bg-nav) 54%, var(--bg-main));
-}
-
-.ms-reference-search-row {
-  flex-shrink: 0;
-  padding: 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-}
-
-.ms-reference-search {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: var(--r-sm);
-  padding: 0 10px;
-  background: color-mix(in srgb, var(--bg-main) 82%, transparent);
-  color: var(--text-main);
-  font-size: 12px;
-  outline: none;
-}
-
-.ms-reference-search:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.ms-reference-search::placeholder {
-  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
-}
-
-.ms-reference-type-strip {
-  flex-shrink: 0;
-  display: flex;
-  gap: 6px;
-  padding: 8px 10px 10px;
-  overflow-x: auto;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
-}
-
-.ms-reference-type {
-  min-height: 26px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: var(--r-sm);
-  padding: 0 8px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.ms-reference-type span {
-  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
-  font-variant-numeric: tabular-nums;
-}
-
-.ms-reference-type:hover,
-.ms-reference-type.is-active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.ms-reference-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-}
-
-.ms-reference-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 10px 10px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ms-reference-card {
-  width: 100%;
-  display: grid;
-  gap: 4px;
-  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
-  border-radius: var(--r-sm);
-  padding: 10px;
-  background: color-mix(in srgb, var(--bg-main) 68%, transparent);
-  color: var(--text-main);
-  text-align: left;
-}
-
-.ms-reference-card-main {
-  width: 100%;
-  display: grid;
-  gap: 4px;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ms-reference-card:hover,
-.ms-reference-card.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-main));
-}
-
-.ms-reference-card strong {
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 850;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.ms-reference-card p {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.ms-reference-kicker {
-  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.ms-reference-badge {
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: var(--r-xs);
-  padding: 2px 6px;
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-nav) 70%, transparent);
-  font-size: 8.5px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.ms-reference-badge.type-character { color: #38bdf8; border-color: color-mix(in srgb, #38bdf8 44%, var(--border)); }
-.ms-reference-badge.type-location { color: #22c55e; border-color: color-mix(in srgb, #22c55e 42%, var(--border)); }
-.ms-reference-badge.type-lore { color: #c084fc; border-color: color-mix(in srgb, #c084fc 42%, var(--border)); }
-.ms-reference-badge.type-faction { color: #f97316; border-color: color-mix(in srgb, #f97316 42%, var(--border)); }
-.ms-reference-badge.type-timeline { color: #facc15; border-color: color-mix(in srgb, #facc15 40%, var(--border)); }
-.ms-reference-badge.type-history { color: #f59e0b; border-color: color-mix(in srgb, #f59e0b 40%, var(--border)); }
-.ms-reference-badge.type-idea { color: #fb7185; border-color: color-mix(in srgb, #fb7185 40%, var(--border)); }
-.ms-reference-badge.type-schedule { color: #2dd4bf; border-color: color-mix(in srgb, #2dd4bf 40%, var(--border)); }
-.ms-reference-badge.type-rpg { color: #a3e635; border-color: color-mix(in srgb, #a3e635 40%, var(--border)); }
-
-.ms-reference-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.ms-reference-tags span {
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: var(--r-xs);
-  padding: 2px 6px;
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.ms-reference-float-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 9300;
-  pointer-events: none;
-}
-
-.ms-reference-modal {
-  position: fixed;
-  top: 154px;
-  right: min(394px, calc(100vw - 360px));
-  width: min(460px, calc(100vw - 430px));
-  min-width: 340px;
-  max-height: min(620px, calc(100dvh - 188px));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: var(--r-md);
-  background: var(--bg-nav);
-  color: var(--text-main);
-  box-shadow: 0 22px 70px rgba(0, 0, 0, .46);
-  font-family: var(--font-sans, system-ui, sans-serif);
-  pointer-events: auto;
-}
-
-.ms-reference-modal.is-positioned {
-  right: auto;
-  bottom: auto;
-}
-
-.ms-reference-modal-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  cursor: move;
-  touch-action: none;
-}
-
-.ms-reference-modal-header h3 {
-  margin: 8px 0 4px;
-  color: var(--text-main);
-  font-size: 19px;
-  font-weight: 900;
-  line-height: 1.16;
-  overflow-wrap: anywhere;
-}
-
-.ms-reference-modal-header p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.ms-reference-modal-close {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.ms-reference-modal-close:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.ms-reference-modal-tabs {
-  flex-shrink: 0;
-  display: flex;
-  gap: 6px;
-  padding: 10px 18px 0;
-  overflow-x: auto;
-}
-
-.ms-reference-modal-tabs button {
-  min-height: 28px;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 850;
-  cursor: pointer;
-}
-
-.ms-reference-modal-tabs button:hover,
-.ms-reference-modal-tabs button.is-active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.ms-reference-modal-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 16px 18px 18px;
-}
-
-.ms-reference-modal-overview {
-  display: grid;
-  gap: 12px;
-}
-
-.ms-reference-modal-overview p {
-  margin: 0;
-  color: var(--text-main);
-  font-size: 13px;
-  line-height: 1.58;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.ms-reference-field-list {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-}
-
-.ms-reference-field-list div {
-  display: grid;
-  gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius: var(--r-sm);
-  padding: 10px;
-  background: color-mix(in srgb, var(--bg-main) 64%, transparent);
-}
-
-.ms-reference-field-list dt,
-.ms-reference-link-list h4 {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.ms-reference-field-list dd {
-  margin: 0;
-  color: var(--text-main);
-  font-size: 12px;
-  line-height: 1.48;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.ms-reference-field-list dd p,
-.ms-reference-value-stack p {
-  margin: 0;
-}
-
-.ms-reference-value-stack {
-  display: grid;
-  gap: 8px;
-}
-
-.ms-reference-nested-list,
-.ms-reference-nested-card {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--bg-nav) 64%, transparent);
-}
-
-.ms-reference-nested-list div,
-.ms-reference-nested-card div {
-  display: grid;
-  gap: 3px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.ms-reference-nested-list dt,
-.ms-reference-nested-card dt {
-  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.ms-reference-nested-list dd,
-.ms-reference-nested-card dd {
-  margin: 0;
-  color: var(--text-main);
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.ms-reference-link-list {
-  display: grid;
-  gap: 14px;
-}
-
-.ms-reference-link-list section {
-  display: grid;
-  gap: 8px;
-}
-
-.ms-reference-modal-actions {
-  flex-shrink: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 12px 18px 18px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-}
-
-.ms-reference-modal-actions button {
-  min-height: 34px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.ms-reference-modal-actions button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.ms-reference-modal-actions button.is-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--bg-main);
-}
-
-.ms-reference-empty {
-  margin: 14px;
-  border: 1px dashed color-mix(in srgb, var(--border) 74%, transparent);
-  border-radius: var(--r-sm);
-  padding: 18px 14px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.45;
-  text-align: center;
-}
-
-@media (max-width: 640px) {
-  .ms-reference-modal {
-    top: auto;
-    right: 10px;
-    bottom: calc(72px + env(safe-area-inset-bottom));
-    left: 10px;
-    width: auto;
-    min-width: 0;
-    max-height: min(56dvh, calc(100dvh - 110px));
-  }
-
-  .ms-reference-modal-header,
-  .ms-reference-modal-content,
-  .ms-reference-modal-actions {
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-}
-
-/* ─── Notes panel ────────────────────────────────────────────────────────── */
-
-.ms-notes-panel {
-  width: 240px;
-  flex-shrink: 0;
-  border-left: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  background: color-mix(in srgb, var(--bg-nav) 60%, var(--bg-main));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ─── Fullscreen refinements ─────────────────────────────────────────────── */
-
-.manuscript-processor.is-fullscreen .ms-sidebar {
-  width: 200px;
-}
-
-/* ─── Responsive: narrow sidebar on small viewports ─────────────────────── */
-
-@media (max-width: 860px) {
-  .ms-sidebar {
-    width: 180px;
-  }
-  .ms-sidebar-scene-pov,
-  .ms-sidebar-wordcount {
-    display: none;
-  }
-}
-
-/* ─── Format settings panel (moved from inline styles) ───────────────────── */
-
-.ms-format-panel {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  z-index: 100;
-  width: min(300px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-  max-height: min(520px, calc(100dvh - 72px));
-  overflow-y: auto;
-  background: var(--bg-nav);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-@media (max-width: 640px) {
-  .ms-format-panel {
-    position: fixed;
-    inset: auto 12px calc(52px + env(safe-area-inset-bottom)) 12px;
-    width: auto;
-    max-width: none;
-    max-height: min(58dvh, calc(100dvh - 96px));
-  }
-}
-.ms-format-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-.ms-format-section {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-.ms-format-label {
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ms-format-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  min-width: 0;
-}
-.ms-format-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  font-size: 11px;
-  color: var(--text-muted);
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.12s;
-  white-space: nowrap;
-}
-.ms-format-chip:hover { border-color: var(--accent); color: var(--text-main); }
-.ms-format-chip.active { background: var(--accent); border-color: var(--accent); color: var(--bg-main); }
-.ms-format-chip:disabled { opacity: 0.35; cursor: not-allowed; }
-.ms-format-indent-row {
-  flex-wrap: wrap;
-  align-items: stretch;
-}
-.ms-format-indent-row .ms-format-chip {
-  flex: 1 1 calc(50% - 4px);
-  min-width: 84px;
-}
-.ms-range {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 3px;
-  background: var(--border);
-  border-radius: var(--r-xs);
-  outline: none;
-  cursor: pointer;
-}
-.ms-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-}
-.ms-range::-moz-range-thumb {
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: none;
-  cursor: pointer;
-}
-.ms-toggle {
-  position: relative;
-  width: 28px; height: 16px;
-  border-radius: var(--r-md);
-  background: var(--border);
-  border: none;
-  cursor: pointer;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-.ms-toggle.active { background: var(--accent); }
-.ms-toggle-thumb {
-  position: absolute;
-  top: 2px; left: 2px;
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  background: var(--text-main);
-  transition: transform 0.2s;
-}
-.ms-toggle.active .ms-toggle-thumb { transform: translateX(12px); }
-
-/* ═══════════════════════════════════════════════════════════════════════════════
-   PHASE 2 — WritingSidebar, Goals, Progress, Template Modal
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-/* ─── WritingSidebar shell ────────────────────────────────────────────────── */
-
-.ms-writing-sidebar {
-  display: flex;
-  flex-direction: row;
-  flex-shrink: 0;
-  border-left: 1px solid var(--border);
-  background: var(--bg-main);
-  overflow: hidden;
-  width: 64px;
-  transition: width 0.2s cubic-bezier(.4,0,.2,1);
-}
-.ms-writing-sidebar.is-open {
-  width: 340px;
-}
-
-/* Tab strip */
-.ms-writing-tab-strip {
-  width: 64px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 5px;
-  gap: 5px;
-}
-.ms-writing-tab-btn {
-  width: 54px;
-  height: 44px;
-  border-radius: var(--r-sm);
-  border: none;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  gap: 3px;
-  transition: color 0.15s, background 0.15s;
-  flex-shrink: 0;
-}
-.ms-writing-tab-label {
-  max-width: 48px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1;
-}
-.ms-writing-tab-btn:hover {
-  color: var(--text-main);
-  background: var(--accent-fade);
-}
-.ms-writing-tab-btn.is-active {
-  color: var(--accent);
-  background: var(--accent-fade);
-}
-
-/* Panel content area */
-.ms-writing-panel {
-  width: 276px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  height: 100%;
-}
-
-/* Panel top bar */
-.ms-panel-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px 0 12px;
-  min-height: 44px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.ms-panel-heading {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.ms-panel-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.ms-panel-subtitle {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ms-panel-close-btn {
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 11px;
-  cursor: pointer;
-  border-radius: var(--r-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, background 0.15s;
-}
-.ms-panel-close-btn:hover {
-  color: var(--text-main);
-  background: var(--accent-fade);
-}
-
-/* Structure tab — embed StructureSidebar, strip its own frame */
-.ms-writing-structure-wrap {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.ms-writing-structure-wrap .ms-sidebar {
-  min-width: 0;
-  max-width: none;
-  width: 100%;
-  border-left: none;
-  flex: 1;
-}
-
 /* ─── Shared panel scroll container ──────────────────────────────────────── */
 
 .ms-panel-scroll {
@@ -15675,254 +15684,6 @@ body {
 .ms-status-panel > .ms-panel-scroll + .ms-panel-scroll {
   border-top: 1px solid var(--border);
   padding-top: 14px;
-}
-
-/* ─── Goal rows ──────────────────────────────────────────────────────────── */
-
-.ms-goal-row {
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
-}
-.ms-goal-row:last-child { border-bottom: none; }
-
-.ms-goal-row-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.ms-goal-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-main);
-  line-height: 1.2;
-}
-.ms-goal-sublabel {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-.ms-goal-nums {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  font-size: 11px;
-}
-.ms-goal-current {
-  font-weight: 700;
-  color: var(--text-main);
-  font-variant-numeric: tabular-nums;
-}
-.ms-goal-sep { color: var(--text-muted); }
-.ms-goal-target-btn {
-  background: none;
-  border: none;
-  padding: 1px 4px;
-  border-radius: var(--r-sm);
-  font-size: 11px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-  font-variant-numeric: tabular-nums;
-}
-.ms-goal-target-btn:hover {
-  color: var(--accent);
-  background: var(--accent-fade);
-}
-.ms-goal-inline-input {
-  width: 64px;
-  background: var(--accent-fade);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-sm);
-  color: var(--text-main);
-  font-size: 11px;
-  padding: 1px 4px;
-  outline: none;
-}
-.ms-goal-bar-track {
-  height: 3px;
-  border-radius: var(--r-xs);
-  background: var(--border);
-  overflow: hidden;
-  margin: 4px 0;
-}
-.ms-goal-bar-fill {
-  height: 100%;
-  border-radius: var(--r-xs);
-  background: var(--accent);
-  transition: width 0.4s ease;
-}
-.ms-goal-footer {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-/* Compact goal row (for act/chapter breakdowns) */
-.ms-goal-compact {
-  padding: 6px 0 4px;
-  border-bottom: 1px solid var(--border);
-}
-.ms-goal-compact:last-child { border-bottom: none; }
-.ms-goal-compact-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.ms-goal-compact-label {
-  font-size: 11px;
-  color: var(--text-main);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100px;
-}
-.ms-goal-compact-nums {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-/* Accordion sections (chapter/act target groups) */
-.ms-panel-accordion {
-  margin-top: 8px;
-}
-.ms-panel-accordion-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 4px 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-top: 1px solid var(--border);
-  transition: color 0.15s;
-}
-.ms-panel-accordion-toggle:hover { color: var(--text-main); }
-.ms-accordion-chevron { font-size: 9px; }
-.ms-panel-accordion-body { padding: 4px 0 0; }
-
-/* ─── Progress panel ─────────────────────────────────────────────────────── */
-
-.ms-progress-today {
-  text-align: center;
-  padding: 12px 0 8px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-.ms-progress-big-num {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text-main);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-.ms-progress-big-label {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 3px;
-  margin-bottom: 4px;
-}
-.ms-progress-daily-label {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.ms-progress-stats-row {
-  display: flex;
-  gap: 4px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-.ms-progress-stat-block {
-  flex: 1;
-  text-align: center;
-  padding: 6px 4px;
-  background: var(--bg-offset, rgba(0,0,0,0.04));
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-}
-.ms-progress-stat-value {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--text-main);
-  font-variant-numeric: tabular-nums;
-  display: block;
-  line-height: 1;
-  margin-bottom: 3px;
-}
-.ms-progress-stat-label {
-  font-size: 9px;
-  color: var(--text-muted);
-  text-align: center;
-  line-height: 1.2;
-}
-
-/* Sparkline */
-.ms-sparkline-wrap { padding: 4px 0 8px; }
-.ms-sparkline-bars {
-  display: flex;
-  gap: 3px;
-  align-items: flex-end;
-  height: 56px;
-}
-.ms-sparkline-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  height: 100%;
-}
-.ms-sparkline-bar-wrap {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-}
-.ms-sparkline-bar {
-  width: 100%;
-  border-radius: var(--r-xs) var(--r-xs) 0 0;
-  min-height: 2px;
-  transition: height 0.3s ease;
-  opacity: 0.8;
-}
-.ms-sparkline-date {
-  font-size: 8px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  line-height: 1;
-}
-.ms-sparkline-date.is-today {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-/* Pacing */
-.ms-progress-pacing {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 8px 0;
-  line-height: 1.5;
-}
-.ms-pacing-days {
-  font-weight: 700;
-  color: var(--text-main);
 }
 
 /* ─── Template modal ─────────────────────────────────────────────────────── */
@@ -16282,7 +16043,7 @@ body {
   width: 100%;
   padding: 10px 20px;
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   border: none;
   border-radius: var(--r-md);
   font-size: 13px;
@@ -16599,7 +16360,7 @@ body {
 .ms-catalogue-primary {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   padding: 8px 12px;
 }
 
@@ -16649,67 +16410,10 @@ body {
 /* ─── Mobile Manuscript (≤ 640px) ────────────────────────────────────────── */
 
 @media (max-width: 640px) {
-  /* Pull sidebar out of flex row; fix it to the bottom of the viewport */
-  .ms-writing-sidebar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: auto !important;
-    max-height: min(62dvh, 440px);
-    flex-direction: column-reverse;
-    border-left: none;
-    border-top: 1px solid var(--border);
-    background: var(--bg-nav);
-    z-index: 200;
-    transition: none;
-    overflow: visible;
-  }
-
-  .ms-writing-sidebar.is-open {
-    box-shadow: 0 -18px 42px rgba(0, 0, 0, .28);
-  }
-
-  /* Tab strip becomes a horizontal row at the bottom */
-  .ms-writing-tab-strip {
-    flex-direction: row;
-    width: 100%;
-    height: 52px;
-    justify-content: space-evenly;
-    padding: 0 12px max(0px, env(safe-area-inset-bottom));
-    border-bottom: none;
-  }
-
-  .ms-writing-tab-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: var(--r-md);
-  }
-
-  /* Panel opens above the tab strip */
-  .ms-writing-panel {
-    width: 100%;
-    height: min(58vh, calc(100dvh - 72px));
-    max-height: min(58vh, calc(100dvh - 72px));
-    border-left: none;
-    border-bottom: 1px solid var(--border);
-  }
 
   /* Writing area: full width + space for bottom bar */
   .manuscript-page.ms-scroll-container {
     padding-bottom: calc(60px + env(safe-area-inset-bottom));
-  }
-
-  /* Toolbar: compact on mobile */
-  .ms-toolbar {
-    padding: 0 8px;
-    gap: 4px;
-    height: auto;
-    min-height: 40px;
-    max-width: 100%;
-    flex-wrap: wrap;
-    overflow: hidden;
-    align-content: center;
   }
 
   .ms-toolbar > .flex-1 {
@@ -16748,16 +16452,6 @@ body {
   .ms-toolbar .ms-toolbar-btn[aria-label="Enter fullscreen"],
   .ms-toolbar .ms-toolbar-btn[aria-label="Exit fullscreen"] {
     display: none;
-  }
-
-  /* Format panel: full width on mobile */
-  .ms-format-panel {
-    position: fixed;
-    bottom: calc(52px + env(safe-area-inset-bottom));
-    left: 8px;
-    right: 8px;
-    min-width: 0;
-    max-height: min(58dvh, calc(100dvh - 96px));
   }
 
 	  /* Scene header: simplify on mobile */
@@ -16930,7 +16624,7 @@ body {
   border-radius: var(--r-sm);
   border: none;
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
@@ -17009,7 +16703,7 @@ body {
   transition: all .12s;
 }
 .ai-btn:hover { color: var(--text-main); border-color: color-mix(in srgb, var(--text-main) 35%, transparent); }
-.ai-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--bg-main); }
+.ai-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--button-primary-text); }
 .ai-btn--primary:hover { opacity: .85; }
 .ai-btn--primary:disabled { opacity: .4; cursor: not-allowed; }
 .ai-btn--muted:hover { color: #f87171; border-color: rgba(248, 113, 113, .4); }
@@ -17171,7 +16865,7 @@ body {
 }
 .ms-vh-badge {
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   font-size: 9px;
   font-weight: 700;
   padding: 1px 5px;
@@ -17216,7 +16910,7 @@ body {
   border-radius: var(--r-sm);
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -17936,7 +17630,7 @@ body {
   border-radius: var(--r-lg);
   padding: clamp(18px, 2.4vw, 28px);
   background:
-    linear-gradient(150deg, color-mix(in srgb, var(--project-panel-raised) 88%, #3a2416 12%), color-mix(in srgb, var(--project-panel-soft) 78%, #674119 22%));
+    linear-gradient(150deg, color-mix(in srgb, var(--project-panel-raised) 88%, var(--atmos-wood) 12%), color-mix(in srgb, var(--project-panel-soft) 78%, var(--atmos-wood) 22%));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent),
     0 18px 48px color-mix(in srgb, var(--accent) 14%, transparent);
@@ -18253,7 +17947,7 @@ body {
   border-radius: 0;
   padding: clamp(26px, 3vw, 44px) clamp(18px, 3vw, 42px) 16px;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 38%, #000 22%), color-mix(in srgb, var(--bg-main) 62%, transparent) 39%, var(--bg-main) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 38%, var(--atmos-cool) 22%), color-mix(in srgb, var(--bg-main) 62%, transparent) 39%, var(--bg-main) 100%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-main) 18%, transparent), var(--bg-main) 100%),
     var(--overview-cover-art, var(--overview-cover-fallback));
   background-size: cover;
@@ -18263,7 +17957,7 @@ body {
 
 .overview-hero::before {
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 72%, #000 18%) 0%, color-mix(in srgb, var(--bg-main) 36%, transparent) 38%, transparent 72%),
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-main) 72%, var(--atmos-cool) 18%) 0%, color-mix(in srgb, var(--bg-main) 36%, transparent) 38%, transparent 72%),
     linear-gradient(180deg, transparent 58%, var(--bg-main) 100%);
   opacity: .96;
 }
@@ -18338,11 +18032,11 @@ body {
   border-radius: var(--r-lg);
   padding: clamp(22px, 2.8vw, 34px);
   background:
-    linear-gradient(120deg, color-mix(in srgb, var(--bg-main) 48%, #030405 28%), color-mix(in srgb, var(--project-panel) 70%, #4b271d 30%) 58%, color-mix(in srgb, var(--project-panel) 82%, #16120c 18%)),
+    linear-gradient(120deg, color-mix(in srgb, var(--bg-main) 48%, var(--atmos-cool) 28%), color-mix(in srgb, var(--project-panel) 70%, var(--atmos-wood) 30%) 58%, color-mix(in srgb, var(--project-panel) 82%, var(--atmos-cool) 18%)),
     var(--project-panel);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent),
-    0 22px 66px color-mix(in srgb, #000 28%, transparent),
+    0 22px 66px rgba(0, 0, 0, 0.28),
     0 0 54px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
@@ -19083,9 +18777,9 @@ body {
 .series-cta-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
 }
-.series-cta-btn--primary:hover { opacity: .9; color: var(--bg-main); }
+.series-cta-btn--primary:hover { opacity: .9; color: var(--button-primary-text); }
 
 /* ── Tab nav ── */
 .series-tab-nav {
@@ -19346,7 +19040,7 @@ body {
   border-radius: 7px;
   border: none;
   background: var(--accent);
-  color: var(--bg-main);
+  color: var(--button-primary-text);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -20341,7 +20035,6 @@ body {
 /* ── Sections ── */
 .yow-section {
   padding: clamp(48px, 8vw, 96px) 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 
 .yow-section-header {
@@ -21383,6 +21076,39 @@ body {
   font-size: 28px;
   font-weight: 900;
   color: var(--accent);
+}
+
+/* Left-nav redesign, Phase 2/Locations (2026-08-19): same treatment as
+   .character-cover-placeholder above (reused rather than duplicated —
+   only the selector differs), for the location dossier's new photo slot. */
+.location-cover-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-main));
+  color: color-mix(in srgb, var(--text-main) 88%, var(--accent));
+  text-align: center;
+  cursor: pointer;
+}
+
+.location-cover-placeholder span {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.location-cover-placeholder small {
+  max-width: 90%;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-main);
 }
 
 @media (max-width: 700px) {
@@ -22572,35 +22298,6 @@ body {
   opacity: 1;
 }
 
-.ms-writing-sidebar.is-focused-mode {
-  position: absolute;
-  inset: 0 0 0 auto;
-  z-index: 225;
-  width: 0;
-  border-left: 0;
-  background: transparent;
-  overflow: visible;
-  transition: none;
-}
-
-.ms-writing-sidebar.is-focused-mode.is-open {
-  width: min(360px, 42vw);
-  background: var(--bg-main);
-  border-left: 1px solid var(--border);
-  box-shadow: -18px 0 42px rgba(0, 0, 0, .25);
-}
-
-.ms-writing-sidebar.is-focused-mode .ms-writing-tab-strip {
-  display: none;
-}
-
-.ms-writing-sidebar.is-focused-mode .ms-writing-panel {
-  width: 100%;
-  height: 100%;
-  border-left: 0;
-  background: var(--bg-main);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .manuscript-processor.is-focused-writing *,
   .manuscript-processor.is-focused-writing *::before,
@@ -22653,30 +22350,6 @@ body {
     padding: 28px 18px 0;
   }
 
-  .ms-writing-sidebar.is-focused-mode,
-  .ms-writing-sidebar.is-focused-mode.is-open {
-    position: fixed;
-    inset: auto 0 0;
-    display: block;
-    width: 100% !important;
-    height: auto;
-    max-height: min(68dvh, calc(100dvh - 44px));
-    border: 0;
-    border-top: 1px solid var(--border);
-    background: var(--bg-main);
-    box-shadow: 0 -18px 42px rgba(0, 0, 0, .3);
-    z-index: 250;
-  }
-
-  .ms-writing-sidebar.is-focused-mode:not(.is-open) {
-    display: none;
-  }
-
-  .ms-writing-sidebar.is-focused-mode .ms-writing-panel {
-    height: min(68dvh, calc(100dvh - 44px));
-    max-height: none;
-    border-bottom: 0;
-  }
 }
 
 /* Project section switcher (Overview/Characters/AI Tools/etc.) as a hamburger menu
@@ -23023,4 +22696,216 @@ body {
   .studio-page-actions {
     align-self: flex-start;
   }
+}
+
+/* ══ Left-nav redesign, Phase 1c (2026-08-18): pill-shaped section tabs ═══
+   The room's sub-section strip (e.g. Characters / Relationship Map / Family
+   Tree / Factions) already existed via StudioWorkspace's `tabs` prop /
+   .studio-section-tabs / <StudioTab> — no structural change needed, just
+   the fully-rounded pill shape + solid-fill active state the mockups use,
+   in place of the smaller --r-sm corner radius. Not width/breakpoint
+   scoped — applies everywhere this strip renders, including mobile, since
+   the mockups don't call for a different mobile treatment and a pill tab
+   reads fine at any width. */
+.studio-tab {
+  border-radius: var(--r-pill);
+}
+
+.studio-tab.is-current {
+  background: var(--accent);
+  color: var(--accent-contrast, var(--bg-main));
+}
+
+.studio-tab.is-current span:first-child {
+  color: inherit;
+  opacity: 1;
+}
+
+/* ══ Left-nav redesign, Phase 2 (2026-08-18): Dashboard "front door" ═══════
+   New stat row / writing-streak card / recent-activity card, matching the
+   Dashboard mockup at
+   /Users/bishop/Downloads/docs/design_handoff_left_nav_redesign/mockups/Dashboard Mockup.dc.html
+   Appended per this file's convention. See ProjectDashboard.jsx for the
+   components (StatTile, WritingStreakCard, RecentActivityCard) and
+   NavCard's restyle (eyebrow/title/detail instead of icon+label+summary+
+   link-style cta). The existing Story Snapshot/Manuscript Shape/
+   Worldbuilding ledger panels (.overview-section / .overview-columns,
+   defined earlier in this file) are unchanged and still render below this
+   — they're not part of the mockup but cover detail this simpler row
+   doesn't, so they stay rather than being removed. */
+
+.overview-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview-stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-nav) 54%, transparent);
+}
+
+.overview-stat-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.overview-stat-value {
+  color: var(--text-main);
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.overview-stat-meter {
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg-main) 46%, transparent);
+}
+
+.overview-stat-meter span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #f5b16e);
+}
+
+.overview-stat-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.overview-momentum-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+}
+
+.overview-streak-card,
+.overview-activity-card {
+  padding: 18px 20px;
+}
+
+.overview-streak-range {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 680;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+/* Reuses .analytics-heatmap's per-cell coloring (span[data-level]); only the
+   container geometry differs — a single 14-wide row instead of the 35-day
+   7-column block used in the Insights tab. */
+.overview-streak-heatmap {
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  max-width: 100%;
+  margin: 10px 0;
+}
+
+.overview-streak-caption {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.overview-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.overview-activity-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.overview-activity-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.overview-activity-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.overview-activity-row strong {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.overview-activity-row small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.overview-activity-row > small {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* NavCard restyle: eyebrow ("Continue") sitting inside the existing label
+   stack instead of as a separate full-width row — reuses
+   .overview-nav-card-label's flex-column layout, just adds a third child. */
+.overview-nav-card-eyebrow {
+  color: color-mix(in srgb, var(--nav-accent, var(--accent)) 78%, var(--text-main));
+  font-size: 11px;
+  font-weight: 820;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 860px) {
+  .overview-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-momentum-row {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-streak-heatmap {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ══ Left-nav redesign, Phase 2 (2026-08-18): Outline ═══════════════════
+   Per the mockup at mockups/Outline Mockup.dc.html. This screen's existing
+   structure (collapsible Act cards, indented chapters/scenes, right-
+   aligned word counts via .outline-word-count, always-visible colored
+   story-event tags, hover-revealed drag/move/delete controls) already
+   matched the mockup's design closely — no structural change was needed,
+   just this one typography tweak: Act titles were small tracked-out
+   uppercase labels (text-xs uppercase tracking-widest), reading as a
+   minor eyebrow rather than the section heading the mockup treats them as
+   ("Act I — The Beacon Goes Dark" as a real, readable heading). The
+   left-hand "Outline Flow" map panel (sticky mini-map + drag hint) isn't
+   in the mockup at all but stays — it's a real navigation aid the mockup
+   doesn't cover one way or the other, same reasoning as keeping
+   Dashboard's Insights tab. */
+.outline-act-title {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-main);
 }

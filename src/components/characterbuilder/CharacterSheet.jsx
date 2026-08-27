@@ -422,7 +422,7 @@ function TabEquipment({ character, onChange }) {
           {['weapon', 'armor', 'gear', 'magic', 'consumable', 'tool', 'ammo', 'other'].map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
         </select>
         <input type="number" min={1} value={newItem.quantity} onChange={e => setNewItem(p => ({ ...p, quantity: Number(e.target.value) }))} className="field" style={{ width: 60, padding: '7px 8px', fontSize: 16, textAlign: 'center' }} title="Quantity" />
-        <button onClick={addItem} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
+        <button onClick={addItem} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
       </div>
 
       {/* Equipment list */}
@@ -618,7 +618,7 @@ function TabSpells({ character, onChange }) {
                 <option value="">Add a cantrip…</option>
                 {cantripOptions.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
               </select>
-              <button onClick={addCantripFromCompendium} disabled={!pickCantrip} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: pickCantrip ? 'pointer' : 'default', opacity: pickCantrip ? 1 : 0.5, flexShrink: 0 }}>Add</button>
+              <button onClick={addCantripFromCompendium} disabled={!pickCantrip} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: pickCantrip ? 'pointer' : 'default', opacity: pickCantrip ? 1 : 0.5, flexShrink: 0 }}>Add</button>
             </div>
           )}
           {spellOptions.length > 0 && (spellLimit === null || spellList.length < spellLimit) && (
@@ -627,7 +627,7 @@ function TabSpells({ character, onChange }) {
                 <option value="">Add a spell…</option>
                 {spellOptions.map(s => <option key={s.name} value={s.name}>Lvl {s.level} · {s.name}</option>)}
               </select>
-              <button onClick={addSpellFromCompendium} disabled={!pickSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: pickSpell ? 'pointer' : 'default', opacity: pickSpell ? 1 : 0.5, flexShrink: 0 }}>Add</button>
+              <button onClick={addSpellFromCompendium} disabled={!pickSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: pickSpell ? 'pointer' : 'default', opacity: pickSpell ? 1 : 0.5, flexShrink: 0 }}>Add</button>
             </div>
           )}
         </div>
@@ -647,7 +647,7 @@ function TabSpells({ character, onChange }) {
           <select className="field" value={newSpell.school} onChange={e => setNewSpell(p => ({ ...p, school: e.target.value }))} style={{ padding: '7px 10px', fontSize: 16 }}>
             {SPELL_SCHOOLS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <button onClick={addSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
+          <button onClick={addSpell} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
         </div>
       )}
 
@@ -711,7 +711,7 @@ function TabFeatures({ character, onChange }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input className="field" placeholder="Feature / trait name…" value={newFeat.name} onChange={e => setNewFeat(p => ({ ...p, name: e.target.value }))} style={{ flex: 1, minWidth: 120, padding: '7px 10px', fontSize: 16 }} />
         <input className="field" placeholder="Source (Class, Race…)" value={newFeat.source} onChange={e => setNewFeat(p => ({ ...p, source: e.target.value }))} style={{ width: 160, padding: '7px 10px', fontSize: 16 }} />
-        <button onClick={addFeature} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
+        <button onClick={addFeature} style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
       </div>
 
       {features.length === 0
@@ -857,7 +857,7 @@ function TabCampaign({ character, onChange, store }) {
             {NPC_RELATIONSHIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <input className="field" placeholder="Notes…" value={newRel.notes} onChange={e => setNewRel(p => ({ ...p, notes: e.target.value }))} style={{ flex: 1, minWidth: 100, padding: '6px 8px', fontSize: 16 }} />
-          <button onClick={addRelationship} style={{ padding: '6px 14px', borderRadius: 7, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
+          <button onClick={addRelationship} style={{ padding: '6px 14px', borderRadius: 7, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Add</button>
         </div>
         {relationships.length === 0
           ? <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No relationships defined yet.</p>
@@ -1068,7 +1068,7 @@ function LevelUpModal({ character, onConfirm, onClose }) {
           <button
             onClick={handleConfirm}
             disabled={!canConfirm || !spellChoicesComplete}
-            style={{ padding: '8px 22px', borderRadius: 9, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 13, fontWeight: 800, cursor: (canConfirm && spellChoicesComplete) ? 'pointer' : 'default', opacity: (canConfirm && spellChoicesComplete) ? 1 : 0.5 }}
+            style={{ padding: '8px 22px', borderRadius: 9, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 13, fontWeight: 800, cursor: (canConfirm && spellChoicesComplete) ? 'pointer' : 'default', opacity: (canConfirm && spellChoicesComplete) ? 1 : 0.5 }}
           >Confirm Level Up</button>
         </div>
       </div>

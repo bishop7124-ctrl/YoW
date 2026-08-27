@@ -518,7 +518,7 @@ const ActCard = ({ act, actOptions, chapterOptions, chapterGlobalNums, chapters,
             <InlineTitle
               value={act.title}
               onSave={t => updateAct(act.id, { title: t })}
-              className="text-xs font-black text-[var(--text-main)] uppercase tracking-widest"
+              className="outline-act-title"
             />
             <span className="text-[10px] text-[var(--text-muted)] opacity-60">{actChapters.length} {labels.level2.toLowerCase().slice(0,3)}</span>
             </div>

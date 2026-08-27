@@ -257,7 +257,7 @@ function CookiePrefInline() {
         <button
           type="button"
           onClick={save}
-          style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+          style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
         >
           Save preferences
         </button>

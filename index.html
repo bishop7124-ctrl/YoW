@@ -4,10 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" sizes="512x512" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0d282e" />
+    <meta name="theme-color" content="#e8f3ec" />
 
     <!-- Applies the saved theme to <html> before first paint, so the page never
-         flashes the default (Tropical) theme before switching to the user's
+         flashes the default theme before switching to the user's
          actual choice. Mirrors applyThemeToDocument in src/utils/theme.js, but
          must run synchronously here since that module only executes after
          React mounts. -->
@@ -15,17 +15,32 @@
       (function () {
         try {
           var root = document.documentElement
-          var theme = localStorage.getItem('nf-theme')
-          var builtIn = ['tropical', 'sage-modern', 'industrial-loft', 'caramel-latte', 'ocean-depth', 'pearl-minimal']
+          var theme = localStorage.getItem('nf-theme') || 'system'
+          var builtIn = ['dark-refined', 'light-refined', 'tropical', 'pearl-minimal']
+          var themeColors = {
+            'dark-refined': '#0e1a18',
+            'light-refined': '#e8f3ec',
+            tropical: '#0d282e',
+            'pearl-minimal': '#fafaf9'
+          }
+          var systemTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark-refined' : 'light-refined'
+          var resolvedTheme = theme === 'system' ? systemTheme : theme
           if (theme === 'custom') {
             root.setAttribute('data-theme', 'custom')
+            root.setAttribute('data-theme-choice', 'custom')
             var tokens = JSON.parse(localStorage.getItem('nf-custom-computed') || 'null')
             if (tokens) {
               for (var prop in tokens) root.style.setProperty(prop, tokens[prop])
             }
+          } else if (theme === 'system') {
+            root.setAttribute('data-theme', systemTheme)
+            root.setAttribute('data-theme-choice', 'system')
           } else if (builtIn.indexOf(theme) !== -1) {
             root.setAttribute('data-theme', theme)
+            root.setAttribute('data-theme-choice', theme)
           }
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta && themeColors[resolvedTheme]) meta.setAttribute('content', themeColors[resolvedTheme])
         } catch (e) { /* localStorage unavailable — fall back to default theme */ }
       })()
     </script>
@@ -201,8 +216,8 @@
          from position:fixed/sticky elements near the viewport edges, not from the
          theme-color meta tag or the body background. These sliver elements exist purely
          to give it something to sample so the chrome matches the app instead of staying white. -->
-    <div aria-hidden="true" style="position:fixed; top:0; left:0; width:100%; height:6px; background-color:var(--bg-main, #0d282e); pointer-events:none; z-index:1;"></div>
-    <div aria-hidden="true" style="position:fixed; bottom:0; left:0; width:100%; height:6px; background-color:var(--bg-main, #0d282e); pointer-events:none; z-index:1;"></div>
+    <div aria-hidden="true" style="position:fixed; top:0; left:0; width:100%; height:6px; background-color:var(--bg-main, #e8f3ec); pointer-events:none; z-index:1;"></div>
+    <div aria-hidden="true" style="position:fixed; bottom:0; left:0; width:100%; height:6px; background-color:var(--bg-main, #e8f3ec); pointer-events:none; z-index:1;"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

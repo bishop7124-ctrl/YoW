@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" sizes="512x512" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1a18" />
+
+    <!-- Applies the saved theme to <html> before first paint, so the page never
+         flashes the default (Dark Refined) theme before switching to the user's
+         actual choice. Mirrors applyThemeToDocument in src/utils/theme.js, but
+         must run synchronously here since that module only executes after
+         React mounts. -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement
+          var theme = localStorage.getItem('nf-theme')
+          var builtIn = ['dark-refined', 'light-refined', 'tropical', 'sage-modern', 'industrial-loft', 'caramel-latte', 'ocean-depth', 'pearl-minimal']
+          if (theme === 'custom') {
+            root.setAttribute('data-theme', 'custom')
+            var tokens = JSON.parse(localStorage.getItem('nf-custom-computed') || 'null')
+            if (tokens) {
+              for (var prop in tokens) root.style.setProperty(prop, tokens[prop])
+            }
+          } else if (builtIn.indexOf(theme) !== -1) {
+            root.setAttribute('data-theme', theme)
+          }
+        } catch (e) { /* localStorage unavailable — fall back to default theme */ }
+      })()
+    </script>
+
+    <!-- ga:start: Google tag (gtag.js) — web only; stripped from the desktop
+         build by vite.config.mjs (we don't track desktop app users). -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-L1BT87PKXV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-L1BT87PKXV');
+  </script>
+  <!-- ga:end -->
+  <title>Your Own World — Worldbuilding & Writing Software for Authors</title>
+    <meta name="description" content="Your Own World is an all-in-one worldbuilding and writing platform for authors, novelists, and tabletop game masters. Manage characters, lore, timelines, maps, and your manuscript in one focused workspace." />
+    <link rel="canonical" href="https://www.yourownworld.co.uk/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Your Own World" />
+    <meta property="og:title" content="Your Own World — Worldbuilding &amp; Writing Software for Authors" />
+    <meta property="og:description" content="All-in-one worldbuilding and writing platform. Manage characters, lore, timelines, maps, family trees, and your manuscript in one place. Built first for novelists and fantasy writers." />
+    <meta property="og:url" content="https://www.yourownworld.co.uk/" />
+    <meta property="og:image" content="https://www.yourownworld.co.uk/hero-illustration.png" />
+    <meta property="og:image:alt" content="Your Own World — worldbuilding and writing workspace" />
+    <meta property="og:locale" content="en_GB" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Your Own World — Worldbuilding &amp; Writing Software for Authors" />
+    <meta name="twitter:description" content="All-in-one worldbuilding and writing platform for novelists and fantasy writers. Characters, lore, timelines, maps, and manuscript in one workspace." />
+    <meta name="twitter:image" content="https://www.yourownworld.co.uk/hero-illustration.png" />
+
+    <!-- Additional SEO -->
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="worldbuilding software, worldbuilding app, writing software for writers, fantasy writing tool, lore management, novel planning software, story planning app, worldbuilding platform, map building for writers, character manager, timeline tool" />
+    <meta name="author" content="Your Own World" />
+    <meta name="application-name" content="Your Own World" />
+
+    <!-- JSON-LD: WebSite -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Your Own World",
+      "alternateName": "YOW",
+      "url": "https://www.yourownworld.co.uk/",
+      "description": "All-in-one worldbuilding and writing platform for novelists, fantasy writers, and storytellers.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://www.yourownworld.co.uk/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <!-- JSON-LD: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Your Own World",
+      "alternateName": "YOW",
+      "url": "https://www.yourownworld.co.uk/",
+      "logo": "https://www.yourownworld.co.uk/yow-logo.png",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "support@yourownworld.co.uk",
+        "contactType": "customer support"
+      },
+      "sameAs": []
+    }
+    </script>
+
+    <!-- JSON-LD: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Your Own World",
+      "alternateName": "YOW",
+      "url": "https://www.yourownworld.co.uk/",
+      "applicationCategory": "WritingApplication",
+      "applicationSubCategory": "WorldbuildingApplication",
+      "operatingSystem": "Web",
+      "description": "Your Own World is an all-in-one worldbuilding and writing platform for authors, novelists, fantasy writers, and storytellers. Manage characters, relationships, family trees, lore, timelines, world history, maps, manuscripts, outlines, and notes in one focused creative workspace.",
+      "screenshot": "https://www.yourownworld.co.uk/hero-illustration.png",
+      "featureList": [
+        "Manuscript editor with chapters, scenes, and acts",
+        "Character profiles and relationship mapping",
+        "Family tree builder",
+        "Lore encyclopedia and entry management",
+        "Timeline builder and world history",
+        "Interactive map builder",
+        "Story outline and beat planning",
+        "Ideas board and writing schedule",
+        "Project dashboard with word count tracking",
+        "AI writing assistant with project context",
+        "Factions and organisation management",
+        "Location manager",
+        "Multi-project support",
+        "Custom themes and appearance settings",
+        "Writing goals and progress tracking"
+      ],
+      "audience": {
+        "@type": "Audience",
+        "audienceType": [
+          "Novelists",
+          "Fantasy writers",
+          "Lore creators",
+          "Worldbuilders",
+          "Storytellers"
+        ]
+      },
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Free Plan",
+          "price": "0",
+          "priceCurrency": "GBP",
+          "availability": "https://schema.org/InStock",
+          "description": "Free plan with one active project, 250 MB storage, and bring-your-own-key AI support"
+        },
+        {
+          "@type": "Offer",
+          "name": "Lifetime Launch",
+          "price": "149",
+          "priceCurrency": "GBP",
+          "availability": "https://schema.org/InStock",
+          "description": "Lifetime access to the fully stacked launch version of Your Own World. Unlimited projects, 5 GB storage, premium exports. One-time payment."
+        },
+        {
+          "@type": "Offer",
+          "name": "Premium Plus",
+          "price": "249",
+          "priceCurrency": "GBP",
+          "availability": "https://schema.org/InStock",
+          "description": "Lifetime access with all future platform updates included. Unlimited projects, 10 GB storage, advanced exports. One-time payment."
+        },
+        {
+          "@type": "Offer",
+          "name": "Founder",
+          "price": "399",
+          "priceCurrency": "GBP",
+          "availability": "https://schema.org/InStock",
+          "description": "Limited Founder membership. Everything in Premium Plus plus 25 GB storage, Founder badge, and the ability to feature your debut work on the YOW website. One-time payment."
+        },
+        {
+          "@type": "Offer",
+          "name": "Monthly",
+          "price": "10",
+          "priceCurrency": "GBP",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "10",
+            "priceCurrency": "GBP",
+            "unitCode": "MON"
+          },
+          "availability": "https://schema.org/InStock",
+          "description": "Full platform access on a monthly subscription. 10 GB storage, cancel any time."
+        }
+      ],
+      "genre": ["Fantasy", "Science Fiction", "Creative Writing", "Worldbuilding"],
+      "keywords": "worldbuilding software, worldbuilding app, writing software, fantasy writing tool, novel planning software, story planning app, lore management, map builder for writers, character manager, timeline tool, worldbuilding platform"
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- iOS 26 Safari tints the status bar / bottom toolbar by sampling background-color
+         from position:fixed/sticky elements near the viewport edges, not from the
+         theme-color meta tag or the body background. These sliver elements exist purely
+         to give it something to sample so the chrome matches the app instead of staying white. -->
+    <div aria-hidden="true" style="position:fixed; top:0; left:0; width:100%; height:6px; background-color:var(--bg-main, #0e1a18); pointer-events:none; z-index:1;"></div>
+    <div aria-hidden="true" style="position:fixed; bottom:0; left:0; width:100%; height:6px; background-color:var(--bg-main, #0e1a18); pointer-events:none; z-index:1;"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

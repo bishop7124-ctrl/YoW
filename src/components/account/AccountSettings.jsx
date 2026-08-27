@@ -39,16 +39,19 @@ import {
 import { deactivateDesktopDevice, listDesktopDevices } from '../../utils/desktopEntitlement'
 import {
   BUILT_IN_THEMES,
-  DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
   DEFAULT_THEME_TUNING,
   QUICK_PALETTES,
+  SYSTEM_DARK_THEME,
+  SYSTEM_LIGHT_THEME,
+  SYSTEM_THEME_OPTION,
   applyThemeToDocument,
   applyThemeTuning,
   deriveCustomThemeTokens,
   getAccentContrast,
   getThemeColors,
   getThemeTuning,
+  normalizeThemeChoice,
   rgbaFromHex,
   saveThemeChoice,
   saveThemeTuning,
@@ -62,12 +65,12 @@ const FONT_OPTIONS = [
 ]
 
 const CUSTOM_COLOR_FIELDS = [
-  { key: 'bgMain', label: 'Workspace', hint: 'Page background, editor depth, large empty areas' },
-  { key: 'bgNav', label: 'Panels', hint: 'Sidebars, cards, modals, toolbar surfaces' },
-  { key: 'textMain', label: 'Main text', hint: 'Headings, body copy, active controls' },
-  { key: 'textMuted', label: 'Muted text', hint: 'Labels, helper copy, secondary navigation' },
-  { key: 'accent', label: 'Accent', hint: 'Primary buttons, selected states, focus rings' },
-  { key: 'border', label: 'Borders', hint: 'Dividers, input outlines, card edges' },
+  { key: 'bgMain', label: 'Canvas', hint: 'Main workspace background and editor depth' },
+  { key: 'bgNav', label: 'Surface', hint: 'Sidebars, panels, cards, modals, and toolbars' },
+  { key: 'textMain', label: 'Ink', hint: 'Headings, body copy, active controls' },
+  { key: 'textMuted', label: 'Muted ink', hint: 'Labels, helper copy, secondary navigation' },
+  { key: 'accent', label: 'Action', hint: 'Primary buttons, selected states, focus rings' },
+  { key: 'border', label: 'Line', hint: 'Dividers, input outlines, card edges' },
 ]
 
 export function MaintenancePayButton({ style }) {
@@ -103,7 +106,7 @@ const loadSavedPresets = () => {
 
 const isFiniteNumber = (value) => Number.isFinite(Number(value))
 
-const getAccountTheme = (user) => user?.user_metadata?.theme || DEFAULT_THEME
+const getAccountTheme = (user) => normalizeThemeChoice(user?.user_metadata?.theme || DEFAULT_THEME)
 
 const getAccountCustomColors = (user) => user?.user_metadata?.theme === 'custom'
   ? (user?.user_metadata?.custom_theme_colors || {})
@@ -119,15 +122,6 @@ function applyFontChoice(fontChoice) {
   const font = FONT_OPTIONS.find(option => option.id === fontChoice) || FONT_OPTIONS[0]
   localStorage.setItem('nf-font', font.id)
   document.documentElement.style.setProperty('--font', font.value)
-}
-
-const getLuminance = (hex) => {
-  if (!hex) return 0
-  const clean = hex.replace('#', '')
-  if (clean.length !== 6) return 0
-  const v = parseInt(clean, 16)
-  if (isNaN(v)) return 0
-  return (0.2126 * ((v >> 16) & 255) + 0.7152 * ((v >> 8) & 255) + 0.0722 * (v & 255)) / 255
 }
 
 function ThemeChoiceButton({ theme: p, active, onClick }) {
@@ -1517,20 +1511,19 @@ function AppearancePanel({ user, updateProfile }) {
   const [savePresetName, setSavePresetName] = useState('')
   const [profileSaved, setProfileSaved] = useState(false)
 
-  const themeOptions = [...BUILT_IN_THEMES, ...QUICK_PALETTES]
+  const themeOptions = [SYSTEM_THEME_OPTION, ...BUILT_IN_THEMES, ...QUICK_PALETTES]
   const selectedThemeOption = themeOptions.find(t => t.id === theme)
   const effectiveColors = useMemo(() => getThemeColors(theme, customColors), [theme, customColors])
   const effectiveRadius = themeTuning.radiusUnit || selectedThemeOption?.radiusUnit || 7
   const effectiveStrength = themeTuning.visualStrength || 1
   const groupedThemes = useMemo(() => {
-    const builtIns = BUILT_IN_THEMES.reduce((groups, option) => {
-      const key = getLuminance(option.swatches.bgMain) > 0.55 ? 'Light' : 'Dark'
-      groups[key].push(option)
-      return groups
-    }, { Dark: [], Light: [] })
+    const byId = id => BUILT_IN_THEMES.find(option => option.id === id)
+    const primaryPair = [byId(SYSTEM_LIGHT_THEME), byId(SYSTEM_DARK_THEME)].filter(Boolean)
+    const alternatives = BUILT_IN_THEMES.filter(option => !primaryPair.some(primary => primary.id === option.id))
     return [
-      { label: 'Dark themes', options: builtIns.Dark },
-      { label: 'Light themes', options: builtIns.Light },
+      { label: 'Automatic', options: [SYSTEM_THEME_OPTION] },
+      { label: 'Light & dark', options: primaryPair },
+      { label: 'Alternatives', options: alternatives },
     ]
   }, [])
 
@@ -1726,7 +1719,7 @@ function AppearancePanel({ user, updateProfile }) {
                           const v = e.target.value
                           setCustomColors(() => {
                             const base = theme !== 'custom'
-                              ? { ...(themeOptions.find(t => t.id === theme)?.swatches || DEFAULT_CUSTOM_COLORS) }
+                              ? { ...effectiveColors }
                               : { ...effectiveColors }
                             return { ...base, [key]: v }
                           })
@@ -1739,7 +1732,7 @@ function AppearancePanel({ user, updateProfile }) {
                           const v = e.target.value
                           setCustomColors(() => {
                             const base = theme !== 'custom'
-                              ? { ...(themeOptions.find(t => t.id === theme)?.swatches || DEFAULT_CUSTOM_COLORS) }
+                              ? { ...effectiveColors }
                               : { ...effectiveColors }
                             return { ...base, [key]: v }
                           })

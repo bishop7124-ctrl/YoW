@@ -446,7 +446,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               onClick={onGetStarted}
               style={{
                 background: 'var(--accent)', border: 'none',
-                color: 'var(--bg-main)', borderRadius: 9,
+                color: 'var(--accent-contrast)', borderRadius: 9,
                 padding: '13px 28px', fontSize: 15, fontWeight: 800, cursor: 'pointer',
               }}
             >
@@ -720,7 +720,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             onClick={onGetStarted}
             style={{
               background: 'var(--accent)', border: 'none',
-              color: 'var(--bg-main)', borderRadius: 9,
+              color: 'var(--accent-contrast)', borderRadius: 9,
               padding: '14px 36px', fontSize: 16, fontWeight: 900, cursor: 'pointer',
             }}
           >

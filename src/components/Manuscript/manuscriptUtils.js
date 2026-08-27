@@ -275,6 +275,78 @@ export function wordCountForScenes(scenes) {
   return scenes.reduce((sum, scene) => sum + countWords(scene.content || ''), 0)
 }
 
+// ─── Writing-progress helpers ─────────────────────────────────────────────────
+// Pure date/word-history math shared by anything that renders a streak, a
+// per-day word count, or a sparkline. WritingSidebar.jsx's ProgressPanel/
+// GoalsPanel predate this file and keep their own private, functionally
+// identical copies — deliberately left alone rather than refactored to import
+// from here, since that component is slated for deletion once the redesign's
+// ManuscriptInspector fully replaces it (see docs/design/Manuscript Editor
+// Handoff Spec.md §7 step 9). New code should use these instead of
+// re-duplicating them a third time.
+
+export function todayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export function subtractDays(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() - n)
+  return d.toISOString().slice(0, 10)
+}
+
+export function formatShortDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// Net words added per date for a scene (wordHistory is a cumulative daily log).
+export function sceneNetByDate(scene) {
+  const history = scene.wordHistory ?? []
+  if (!history.length) return {}
+  const byDate = {}
+  history.forEach(h => {
+    if (!byDate[h.date] || h.timestamp > byDate[h.date].timestamp) {
+      byDate[h.date] = h
+    }
+  })
+  const sorted = Object.keys(byDate).sort()
+  const net = {}
+  sorted.forEach((date, i) => {
+    const cur = byDate[date].words
+    const prev = i > 0 ? byDate[sorted[i - 1]].words : 0
+    net[date] = Math.max(0, cur - prev)
+  })
+  return net
+}
+
+export function totalWordsOnDate(scenes, date) {
+  return scenes.reduce((sum, s) => sum + (sceneNetByDate(s)[date] ?? 0), 0)
+}
+
+export function computeStreak(scenes) {
+  const today = todayKey()
+  let streak = 0
+  let date = today
+  for (let i = 0; i < 365; i++) {
+    if (totalWordsOnDate(scenes, date) > 0) {
+      streak++
+      date = subtractDays(date, 1)
+    } else {
+      break
+    }
+  }
+  return streak
+}
+
+export function lastNDays(scenes, n) {
+  const today = todayKey()
+  return Array.from({ length: n }, (_, i) => {
+    const date = subtractDays(today, n - 1 - i)
+    return { date, words: totalWordsOnDate(scenes, date) }
+  })
+}
+
 // Content can pick up literal HTML entities (e.g. "don&apos;t") from DOCX/AI import
 // sources that escape text without ever decoding it back. Finalized drafts are a
 // permanent read-only snapshot, so decode once here rather than leaving entities

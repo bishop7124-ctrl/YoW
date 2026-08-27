@@ -119,7 +119,7 @@ export default function StorageCard({ usedBytes = 0, quotaBytes, planLabel, limi
               style={{
                 flexShrink: 0,
                 background: 'var(--accent)',
-                color: 'var(--bg-main)',
+                color: 'var(--accent-contrast)',
                 border: 'none',
                 borderRadius: 6,
                 padding: '6px 14px',

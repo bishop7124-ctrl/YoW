@@ -2084,18 +2084,13 @@ export function useStore(userId = null, options = {}) {
   const updateScene = (id, data) => {
     const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return mergeSceneUpdateWithPersistedCopy(prev, id, s => {
-        // A field's value may be a function (prevValue => nextValue) instead of a
-        // precomputed value. Callers that derive a field FROM the scene's existing
-        // value (e.g. mapping over scene.notes to update one note's text) close over
-        // that existing value at the moment they build `data` — if several such calls
-        // fire back-to-back faster than React re-renders (a fast paste/typing burst
-        // into a controlled input), every closure captures the SAME stale snapshot and
-        // each call's result overwrites the previous one instead of building on it,
-        // silently dropping keystrokes. Resolving function-valued fields against `s`
-        // here — always the true latest scene, per mergeSceneUpdateWithPersistedCopy's
-        // ref-backed `prev` — makes each call compose onto whatever the real current
-        // value is regardless of closure staleness. Plain (non-function) values keep
-        // working exactly as before.
+        // A field's value in `data` may itself be a function (prevValue => nextValue)
+        // instead of a precomputed value. Note editors use this so rapid field
+        // updates resolve against the latest known scene instead of stale render
+        // closures overwriting sibling edits. Resolve those here, against `s` (the
+        // freshest source scene mergeSceneUpdateWithPersistedCopy already picked),
+        // before merging; otherwise the function itself gets written into the scene
+        // record and corrupts that field for later readers.
         const resolvedData = Object.fromEntries(
           Object.entries(data).map(([key, value]) => [key, typeof value === 'function' ? value(s[key]) : value])
         )
