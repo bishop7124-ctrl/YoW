@@ -129,3 +129,105 @@ describe('useCaretComfortScroll throttling', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 })
+
+// A regression guard for the 2026-08-27 ROADMAP row, pass 8: the regular
+// (non-Focused-Writing) editor had zero correction of any kind outside the
+// one-shot `immediate` calls focusRange already makes — confirmed live that
+// typing a burst near the end of a long scene left the native browser
+// "scroll caret into view" pinning the caret hard against the viewport edge,
+// with nothing ever nudging it back. `focused` (separate from `enabled`)
+// gates a much narrower effect that fixes this with a wide "gentle" comfort
+// band, reusing the exact same throttled/accurate machinery already proven
+// correct for Focused Writing — see the long comment above that effect in
+// useCaretComfortScroll.js for why it's deliberately *not* the same broad
+// listener set pass 6 tried (and regressed with).
+describe('useCaretComfortScroll regular-editor gentle correction', () => {
+  let textarea, container
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] })
+    container = document.createElement('div')
+    container.className = 'ms-scroll-container'
+    container.scrollTo = () => {}
+    textarea = document.createElement('textarea')
+    container.appendChild(textarea)
+    document.body.appendChild(container)
+    textarea.focus()
+  })
+
+  afterEach(() => {
+    document.body.removeChild(container)
+    vi.useRealTimers()
+  })
+
+  function flushRaf() {
+    act(() => { vi.advanceTimersByTime(32) })
+  }
+
+  it('does nothing when focused but not enabled and no DOM event fires (no continuous polling)', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: false,
+      focused: true,
+    }))
+
+    flushRaf()
+    act(() => { vi.advanceTimersByTime(500) })
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('corrects on a real "input" event when focused but not enabled, using the throttled path', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: false,
+      focused: true,
+    }))
+
+    act(() => { textarea.dispatchEvent(new Event('input', { bubbles: true })) })
+    flushRaf()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('never attaches its listeners at all when not focused (no scene actively being edited)', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: false,
+      focused: false,
+    }))
+
+    act(() => { textarea.dispatchEvent(new Event('input', { bubbles: true })) })
+    flushRaf()
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+})
+
+// getCaretScrollDelta's own topFraction/bottomFraction options (used by the
+// regular editor's wide "gentle" band above) — a plain-function guard that a
+// caret position outside the tight 35/65 default band, but inside a wider
+// custom band, correctly does *not* trigger a correction.
+describe('getCaretScrollDelta with a custom comfort-zone band', () => {
+  const viewport = { containerTop: 100, containerHeight: 1000, caretHeight: 24 }
+
+  it('does not scroll inside a wide 8%-92% band even where the default 35%-65% band would', () => {
+    // caretTop at 80% down the container: outside the default band (would
+    // return a nonzero delta) but inside an 8%-92% band.
+    const caretTop = 100 + 1000 * 0.80
+    expect(getCaretScrollDelta({ ...viewport, caretTop })).not.toBe(0)
+    expect(getCaretScrollDelta({ ...viewport, caretTop, topFraction: 0.08, bottomFraction: 0.92 })).toBe(0)
+  })
+
+  it('still scrolls once the caret is genuinely past a wide band', () => {
+    const caretTop = 100 + 1000 * 0.97
+    expect(getCaretScrollDelta({ ...viewport, caretTop, topFraction: 0.08, bottomFraction: 0.92 })).not.toBe(0)
+  })
+})

@@ -668,6 +668,11 @@ const SceneEditorImpl = ({
     textareaRef,
     scrollContainerRef,
     enabled: caretFollowEnabled && focused,
+    // Also gates the hook's separate, much gentler regular-editor correction
+    // (see the comment above that effect in useCaretComfortScroll.js) — that
+    // one runs whenever this scene is actively being edited, regardless of
+    // caretFollowEnabled/Focused Writing.
+    focused,
     scale: pageZoom,
   })
 

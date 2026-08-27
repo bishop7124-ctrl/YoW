@@ -1,14 +1,27 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
 
-export function getCaretScrollDelta({ caretTop, caretHeight, containerTop, containerHeight }) {
-  const topBoundary = containerTop + containerHeight * 0.35
-  const bottomBoundary = containerTop + containerHeight * 0.65
+export function getCaretScrollDelta({
+  caretTop, caretHeight, containerTop, containerHeight,
+  topFraction = 0.35, bottomFraction = 0.65,
+}) {
+  const topBoundary = containerTop + containerHeight * topFraction
+  const bottomBoundary = containerTop + containerHeight * bottomFraction
   const caretBottom = caretTop + caretHeight
   if (caretTop < topBoundary) return caretTop - topBoundary
   if (caretBottom > bottomBoundary) return caretBottom - bottomBoundary
   return 0
 }
+
+// Used only by the regular (non-Focused-Writing) editor's `gentle` correction
+// below — deliberately much wider than the 35/65 band above so it only fires
+// when the caret is genuinely near/off the edge (a safety net for gaps in the
+// browser's own native "scroll caret into view," see the effect below), never
+// to recenter. Pass 4 (2026-08-07 ROADMAP row) regressed by turning on the
+// *tight* band's continuous correction broadly — reusing that band here for
+// every keystroke in the regular editor would be the same mistake again.
+const GENTLE_TOP_FRACTION = 0.08
+const GENTLE_BOTTOM_FRACTION = 0.92
 
 // measureCaret (useTextareaCaretRect.js) mirrors every character before the
 // caret into a hidden div and reads its layout back — the same full-document
@@ -27,7 +40,7 @@ export function getCaretScrollDelta({ caretTop, caretHeight, containerTop, conta
 // stale once typing stops.
 const THROTTLE_MS = 120
 
-export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled, scale = 1 }) {
+export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled, focused = false, scale = 1 }) {
   const measureCaret = useTextareaCaretRect(textareaRef, scale)
   const frameRef = useRef(null)
   const composingRef = useRef(false)
@@ -35,7 +48,7 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
   const lastRunAtRef = useRef(0)
   const trailingTimerRef = useRef(null)
 
-  const applyCorrection = useCallback(() => {
+  const applyCorrection = useCallback((options) => {
     lastRunAtRef.current = Date.now()
     const textarea = textareaRef.current
     const container = scrollContainerRef.current || textarea?.closest('.ms-scroll-container')
@@ -49,6 +62,7 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
       caretHeight: caret.height,
       containerTop: containerRect.top,
       containerHeight: container.clientHeight,
+      ...(options?.gentle ? { topFraction: GENTLE_TOP_FRACTION, bottomFraction: GENTLE_BOTTOM_FRACTION } : {}),
     })
 
     if (Math.abs(delta) > 1) {
@@ -68,12 +82,12 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
     }
   }, [measureCaret, scrollContainerRef, textareaRef])
 
-  const runDeferred = useCallback(() => {
+  const runDeferred = useCallback((options) => {
     if (frameRef.current) cancelAnimationFrame(frameRef.current)
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = requestAnimationFrame(() => {
         frameRef.current = null
-        applyCorrection()
+        applyCorrection(options)
       })
     })
   }, [applyCorrection])
@@ -100,20 +114,24 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
   // already-infrequent action (a click, Enter, undo/redo, a note insert) isn't
   // that feature; it's a fix for a real browser glitch, so it needs to run in
   // *every* mode regardless of the caret-follow preference.
+  // `gentle` (like `immediate`) deliberately bypasses `enabled` — it's the
+  // regular editor's wide-comfort-zone correction (see the effect below), a
+  // different feature from Focused Writing's continuous tight-band centering
+  // that `enabled` gates, not a relaxation of that gate.
   const schedule = useCallback((options) => {
     if (composingRef.current || selectingRef.current) return
-    if (!options?.immediate && !enabled) return
+    if (!options?.immediate && !options?.gentle && !enabled) return
     clearTimeout(trailingTimerRef.current)
     if (options?.immediate) {
       if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = null }
-      applyCorrection()
+      applyCorrection(options)
       return
     }
     const elapsed = Date.now() - lastRunAtRef.current
     if (elapsed >= THROTTLE_MS) {
-      runDeferred()
+      runDeferred(options)
     } else {
-      trailingTimerRef.current = setTimeout(runDeferred, THROTTLE_MS - elapsed)
+      trailingTimerRef.current = setTimeout(() => runDeferred(options), THROTTLE_MS - elapsed)
     }
   }, [enabled, runDeferred, applyCorrection])
 
@@ -170,6 +188,78 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
       container?.removeEventListener('scroll', onContainerScroll)
     }
   }, [enabled, schedule, textareaRef, scrollContainerRef])
+
+  // The regular (non-Focused-Writing) editor: everything above is gated
+  // behind `enabled` (Focused Writing's continuous tight-band centering), so
+  // historically the regular editor got *no* correction of any kind outside
+  // the one-shot `immediate` calls `focusRange` already makes after a click,
+  // Enter, undo/redo, or a note insert. The browser's own native "scroll the
+  // caret into view" still runs on every keystroke and on keyboard
+  // navigation (Home/End/PageUp/PageDown/arrows) regardless — confirmed live
+  // (2026-08-27, this ROADMAP row's pass 8) that it pins the caret hard
+  // against the bottom edge of the viewport while typing a burst near the
+  // end of a long scene (~96% down, essentially the edge, not a comfortable
+  // margin) and leaves it there for every subsequent keystroke since nothing
+  // ever nudges it back — a real, distinct gap from the click/Enter jump
+  // passes 1-5 already fixed, and a plausible root cause of "typing brings
+  // the cursor to the bottom of the page."
+  //
+  // This is a separate, deliberately much narrower effect than the one
+  // above rather than just widening that effect's own `enabled` gate — pass
+  // 6 (2026-08-25, documented on this same ROADMAP row) tried exactly that
+  // (attach the *same* full listener set — `selectionchange`, the
+  // container-scroll settle-timer, `click`/`mouseup` — broadly to the
+  // regular editor) and it measurably regressed: laggier typing and
+  // "glitchy moments where the whole manuscript disappears." This effect
+  // differs on purpose:
+  //  - only 'input'/'keyup'/'paste' schedule a correction — those are the
+  //    three actions that can trigger the browser's native scroll-into-view
+  //    in the first place. No `selectionchange` (fires on essentially every
+  //    caret move, including a plain click that's already on screen, and
+  //    was very likely most of pass 6's added cost) and no container-scroll
+  //    settle-timer (that one exists specifically to catch a native scroll
+  //    racing *after* an `immediate` correction — reacting to it here too
+  //    would fire on a user's own deliberate manual scroll-to-reread and
+  //    silently yank them back to the caret, which is a real, separate
+  //    complaint pass 6's own comments already flagged as a risk).
+  //  - uses the wide `GENTLE_*` comfort band (see above) via `applyCorrection`'s
+  //    `gentle` option, not the tight 35/65 band, so it only fires when the
+  //    caret is genuinely near/past the edge — a safety net, not a
+  //    recentering feature. Reusing the tight band broadly is exactly pass
+  //    4's regression ("way, way worse" — recentering on every keystroke).
+  //  - reuses the same accurate mirror-div `measureCaret` (via the shared
+  //    `applyCorrection`) already proven correct for Focused Writing and for
+  //    every `immediate` correction, not a cheap approximation — pass 7
+  //    (2026-08-25) traced its own regression (the editor losing focus,
+  //    `selectionEnd` resetting to 0, a jump to the end of the manuscript)
+  //    back to exactly that kind of shortcut going wrong once a scene's
+  //    textarea height was being grown via the cheap buffer path (see
+  //    RESIZE_GROWTH_BUFFER_PX in SceneEditor.jsx) rather than measured
+  //    precisely — `measureCaret` anchors off the textarea's own *top* and a
+  //    separately-laid-out mirror, not its (possibly inflated) height, so it
+  //    stays accurate regardless of that resize path.
+  useEffect(() => {
+    if (enabled || !focused) return undefined
+    const textarea = textareaRef.current
+    if (!textarea) return undefined
+
+    const onCompositionStart = () => { composingRef.current = true }
+    const onCompositionEnd = () => { composingRef.current = false; schedule({ gentle: true }) }
+    const gentleSchedule = () => schedule({ gentle: true })
+
+    const events = ['input', 'keyup', 'paste']
+    events.forEach(event => textarea.addEventListener(event, gentleSchedule))
+    textarea.addEventListener('compositionstart', onCompositionStart)
+    textarea.addEventListener('compositionend', onCompositionEnd)
+
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current)
+      clearTimeout(trailingTimerRef.current)
+      events.forEach(event => textarea.removeEventListener(event, gentleSchedule))
+      textarea.removeEventListener('compositionstart', onCompositionStart)
+      textarea.removeEventListener('compositionend', onCompositionEnd)
+    }
+  }, [enabled, focused, schedule, textareaRef])
 
   return schedule
 }
