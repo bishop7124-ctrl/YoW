@@ -31,7 +31,7 @@ function NoteFields({ note, onUpdateNote, onDelete }) {
           onChange={e => { setTitle(e.target.value); debouncedSaveTitle.schedule(e.target.value) }}
           onBlur={debouncedSaveTitle.flush}
           placeholder={`Note ${note.seq}`}
-          className="flex-1 min-w-0 bg-transparent text-[var(--text-main)] text-sm font-semibold outline-none"
+          className="flex-1 min-w-0 bg-transparent text-[var(--text-main)] text-base font-semibold outline-none"
         />
         <button onClick={onDelete} className="flex-shrink-0 text-[var(--text-muted)] hover:text-red-400 text-xs">✕</button>
       </div>
@@ -40,7 +40,7 @@ function NoteFields({ note, onUpdateNote, onDelete }) {
         onChange={e => { setText(e.target.value); debouncedSaveText.schedule(e.target.value) }}
         onBlur={debouncedSaveText.flush}
         placeholder="Write your note here…"
-        className="w-full bg-transparent text-[var(--text-main)] text-sm outline-none resize-none min-h-[60px]"
+        className="w-full bg-transparent text-[var(--text-main)] text-base outline-none resize-none min-h-[60px]"
         rows={3}
       />
     </>

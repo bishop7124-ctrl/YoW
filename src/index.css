@@ -14659,6 +14659,35 @@ body {
 .ms-rail-row-actions .ms-rail-icon-btn { width: 20px; height: 20px; }
 .ms-rail-delete-btn:hover { color: var(--danger, #ef4444); background: color-mix(in srgb, var(--danger, #ef4444) 14%, transparent); }
 
+/* Explicit "move to..." control — ported from the pre-redesign StructureSidebar's
+   .ms-sidebar-move-select (2026-08-25 product decision: drag-and-drop alone can only
+   target an empty act/chapter, this can target any parent). Lives inside
+   .ms-rail-row-actions so it gets that container's existing reveal-on-hover/focus
+   treatment for free, rather than duplicating separate visibility rules here. */
+.ms-rail-move-select {
+  max-width: 84px;
+  flex-shrink: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  padding: 1px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ms-rail-move-select:hover,
+.ms-rail-move-select:focus {
+  color: var(--accent);
+  background: var(--accent-fade);
+}
+
 .ms-rail-grip {
   display: none;
   color: var(--text-faint);
