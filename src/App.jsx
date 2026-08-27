@@ -615,7 +615,16 @@ function AppInner() {
       }
       return
     }
-    if (!user && authRouteMode) return
+    // Logged-out visitors (marketing home, /login, /signup, or a bookmarked deep
+    // link that lands on the sign-in form) are shown by <LoginPage>, not the
+    // authenticated app shell this route sync targets. buildRoute() below has
+    // no "logged out" case and defaults to '/dashboard' for the manager view,
+    // so letting this run while !user rewrites a plain "/" visit to
+    // "/dashboard" out from under the marketing homepage. Deep-link URLs are
+    // already correct on load (viewMode is derived from the URL itself), so
+    // bailing out here for every logged-out state is safe, not just the
+    // authRouteMode case.
+    if (!user) return
     // Public standalone pages own the URL; don't rewrite it out from under them
     // when auth/data loading changes the app-side navigation state.
     if (showPricing || showFeatures || showFAQ || showFounders || founderProfileSlug) return
@@ -626,7 +635,7 @@ function AppInner() {
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode, showPricing, showFeatures, showFAQ, showFounders, founderProfileSlug])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, showPricing, showFeatures, showFAQ, showFounders, founderProfileSlug])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
