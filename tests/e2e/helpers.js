@@ -119,6 +119,20 @@ export async function openImportZip(page) {
   return page.locator('input[type="file"]').first()
 }
 
+// Wait for the manuscript/writing view to be hydrated and ready after a
+// reload — e.g. before reading persisted storage back out. A bare
+// `getByRole('button', { name: 'Write' })` is ambiguous once already on the
+// writing route: the redesigned editor's own Write/Edit mode toggle
+// (ManuscriptTopbar.jsx, `aria-label="Editor mode"`) is also labeled
+// "Write", alongside the persistent Studio nav's own "Write" room button
+// (Studio.jsx, `aria-label="Studio navigation"`) — a strict-mode violation
+// (2 elements) rather than the single match this used to be pre-redesign.
+// Scope to the Studio nav one specifically, matching this call's original
+// intent (confirm navigation/hydration is stable after reload).
+export async function waitForManuscriptReady(page) {
+  await page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' }).waitFor()
+}
+
 // Navigate to writing and fill the default scene, waiting for autosave to localStorage.
 export async function writeInDefaultScene(page, text) {
   await enterWritingMode(page)

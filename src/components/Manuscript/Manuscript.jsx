@@ -251,9 +251,15 @@ export default function Manuscript({ store, userId, membership = null }) {
     railUserToggledRef.current = true
     setRailCollapsed(v => !v)
   }, [isMobileBand])
-  const [inspectorOpen, setInspectorOpen] = useState(() => (
-    typeof window !== 'undefined' ? window.innerWidth > 900 : true
-  ))
+  // Matches `isMobileBand` (900px), not `isPhoneViewport` (640px) — below
+  // 900px the inspector renders as an absolute-positioned, 62vh bottom-sheet
+  // overlay (.ms-insp's own `@media (max-width: 900px)` rule in index.css),
+  // not a side panel. Defaulting this to the phone-only breakpoint meant it
+  // opened eagerly on tablet widths (641-900px) as that overlay, covering
+  // the writing area's own placeholder/content underneath it on first load
+  // (2026-08-27 manuscript-editor-redesign regression, caught by CI's
+  // responsive-smoke spec failing at 768px — see docs/ROADMAP.md Bugs table).
+  const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
   // Lazy initializer (not an effect) so this reads localStorage once, on
@@ -1331,13 +1337,15 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onAskAI={handleAskAI}
                         mode={mode === 'write' ? 'write' : 'edit'}
                         projectType={activeNovel?.type || 'novel'}
-                        // Reverted: enabling the continuous per-keystroke comfort-scroll
-                        // (useCaretComfortScroll's 'input'-driven centering) for the regular
-                        // editor made things *worse*, not better — it re-centers on every
-                        // keystroke during completely normal typing, not just after a
-                        // click/Enter jump, which read as constant unwanted scrolling. Back to
-                        // Focused-Writing-only for the continuous behavior; the click/Enter
-                        // jump itself is being root-caused separately (see SceneEditor.jsx).
+                        // `caretFollowEnabled` only controls Focused Writing's tight,
+                        // actively-centering 35/65 comfort band. Turning that tight band on
+                        // broadly for the regular editor made things worse, not better — it
+                        // re-centered on every keystroke during completely normal typing
+                        // (2026-08-07 pass 4). The regular editor still gets its own,
+                        // much wider GENTLE_ZONE correction regardless of this flag —
+                        // SceneEditor.jsx passes its own `focused` state into
+                        // useCaretComfortScroll for that — this prop only chooses which
+                        // band applies, not whether any correction runs at all.
                         caretFollowEnabled={focusedWriting.enabled && focusedWriting.caretFollow}
                         scrollContainerRef={scrollContainerRef}
                         pageZoom={focusedWriting.pageZoom}

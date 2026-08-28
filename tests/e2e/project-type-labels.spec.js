@@ -55,7 +55,12 @@ for (const typeId of LABEL_TYPES) {
       const title = `WordTarget ${cfg.label} ${Date.now()}`
       await createProject(page, { title, type: typeId })
 
-      const novels = await readStorage(page, 'nf_novels')
+      // Raw `localStorage` isn't where the app actually writes `nf_novels`
+      // once the IndexedDB-backed vault is active (window.__yowStorageBridge,
+      // src/storage/browserVaultAdapter.js) — same root cause already fixed
+      // in other e2e specs (see docs/ROADMAP.md's 2026-08-24 CI-red row) but
+      // missed here.
+      const novels = (await readStorage(page, 'nf_novels')) || []
       const project = novels.find(n => n.title === title)
 
       expect(project).toBeTruthy()
