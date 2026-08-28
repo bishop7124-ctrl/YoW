@@ -136,6 +136,61 @@ export async function writeInDefaultScene(page, text) {
   )
 }
 
+// Wait, after a navigation/reload, until reads through the storage bridge will
+// actually see the IndexedDB-backed data rather than an empty localStorage.
+//
+// `flush()` before a reload is only half the job, and the missing half is what
+// made worldbuilding.spec.js flaky for so long. The two are different races:
+// flush covers "the write hadn't landed yet"; this covers "the read went to the
+// wrong backend". `window.__yowStorageBridge` is installed at projectStorage.js
+// *module* evaluation, but `activeBackend` starts as localStorage and is only
+// swapped for the IndexedDB vault when main.jsx's `boot()` awaits
+// `initializeIndexedDbStorage()`. So immediately after a reload the bridge is
+// already present and already answering `getItem()` — from the default
+// localStorage backend, where the app's nf_* keys do not live. Every such read
+// returns `null`, silently and plausibly, which is exactly the failure
+// signature that spec showed: a different subset of tests failing each run on
+// `readStorage` returning null, masked in CI by playwright.config.mjs's
+// `retries: 1`.
+//
+// Measured directly (2026-08-28): over five reloads, `__yowStorageBridge` was
+// truthy immediately in 5/5 — so its presence is *not* a usable readiness
+// signal — while `getItem('nf_novels')` returned null in 2/5, in exactly the
+// samples where `#root` had not yet rendered.
+//
+// `boot()` renders React strictly *after* awaiting the backend swap, so "#root
+// has any children" is a sufficient and reliable signal that the swap is done.
+// It is also deliberately not a UI-specific locator: waiting on a named button
+// (what the same fix reached for in autosave.spec.js and
+// account-isolation.spec.js) re-couples storage readiness to whatever the
+// current design calls that control, which is the exact failure mode that let
+// focused-writing.spec.js rot to 4/4 failing across the editor redesign.
+// The backend-name check below is not belt-and-braces: `boot()` wraps the vault
+// init in a try/catch and `initializeIndexedDbStorage` returns null when
+// IndexedDB is unavailable or its open/read throws, and React renders either
+// way. So "#root has children" alone is also satisfied when the swap never
+// happened — leaving every nf_* read null and the tests reporting "the data was
+// never saved" for what is actually "the vault failed to start". Naming that
+// distinction here keeps it from costing another debugging pass.
+export async function waitForStorageHydration(page, timeout = 10000) {
+  await page.waitForFunction(
+    () => Boolean(window.__yowStorageBridge)
+      && (document.getElementById('root')?.children.length ?? 0) > 0,
+    undefined,
+    { timeout },
+  )
+  // Optional-chained so this helper still works against a build predating
+  // `backendName` on the bridge; only a positive mismatch is treated as fatal.
+  const backendName = await page.evaluate(() => window.__yowStorageBridge?.backendName?.() ?? null)
+  if (backendName !== null && backendName !== 'indexeddb') {
+    throw new Error(
+      `storage vault did not initialise: the bridge is answering reads from the "${backendName}" `
+      + 'backend, so every nf_* key will read as null no matter what the app saved. '
+      + 'This is an environment/boot failure, not a persistence bug in the code under test.',
+    )
+  }
+}
+
 // Poll localStorage until predicate returns truthy, or throw on timeout.
 // Pass `arg` as the third param to forward a value into the browser predicate.
 export async function waitForStorage(page, predicate, arg, timeout = 8000) {
