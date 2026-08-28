@@ -31,9 +31,9 @@ for (const viewport of viewports) {
     // hero CTA (ProjectDashboard.jsx) stays reachable and opens the same
     // editor — accept either, matching whichever this viewport shows.
     await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).click()
-    await page.getByText('Begin writing here…').click()
-    const editor = page.getByPlaceholder('Begin writing here…')
+    const editor = page.locator('.ms-textarea').first()
     await expect(editor).toBeVisible()
+    await editor.click()
     await editor.fill(sentence)
     await expect(editor).toHaveValue(sentence)
 

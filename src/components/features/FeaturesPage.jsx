@@ -326,11 +326,15 @@ const FEATURE_MATRIX = [
   },
 ]
 
+// Muted accents chosen to sit alongside the app's forest-green/ivory/
+// terracotta palette rather than a stock UI-kit rainbow. Used sparingly —
+// top border, title, bullets, and a very faint background glow — so every
+// card still reads as the same dark surface (see the card render below).
 const COLS = [
-  { id: 'prose',  label: 'Prose Fiction',        sub: 'Novel · Novella · Short Story', color: '#6366f1' },
-  { id: 'comic',  label: 'Comic / Graphic Novel', sub: 'Beta',                          color: '#ec4899', badge: 'Beta' },
-  { id: 'ttrpg',  label: 'Tabletop Campaign',     sub: 'System-neutral',               color: '#10b981' },
-  { id: 'dnd',    label: 'D&D Campaign',           sub: 'D&D-flavoured',                color: '#f59e0b' },
+  { id: 'prose',  label: 'Prose Fiction',        sub: 'Novel · Novella · Short Story', color: '#C87855' }, // muted terracotta
+  { id: 'comic',  label: 'Comic / Graphic Novel', sub: 'Beta',                          color: '#B96762', badge: 'Beta' }, // dusty rose
+  { id: 'ttrpg',  label: 'Tabletop Campaign',     sub: 'System-neutral',               color: '#7FA47C' }, // muted sage
+  { id: 'dnd',    label: 'D&D Campaign',           sub: 'D&D-flavoured',                color: '#C29A52' }, // antique ochre
 ]
 
 function CellVal({ val, colId, uniqueCol }) {
@@ -390,10 +394,12 @@ function FeatureRow({ feature }) {
   )
 }
 
+// Colours are sourced from COLS (single source of truth) so the callout
+// cards and the comparison table below always stay in sync.
 const UNIQUE_CALLOUTS = [
   {
     type: 'Prose Fiction',
-    color: '#6366f1',
+    color: COLS.find(c => c.id === 'prose').color,
     items: [
       'Word count targets calibrated per format (80k / 30k / 5k)',
       'Acts, Parts, or Sections structure depending on length',
@@ -403,7 +409,7 @@ const UNIQUE_CALLOUTS = [
   },
   {
     type: 'Comic / Graphic Novel',
-    color: '#ec4899',
+    color: COLS.find(c => c.id === 'comic').color,
     badge: 'Beta',
     items: [
       'Volume → Issue → Page structure purpose-built for sequential art',
@@ -414,7 +420,7 @@ const UNIQUE_CALLOUTS = [
   },
   {
     type: 'Tabletop Campaign',
-    color: '#10b981',
+    color: COLS.find(c => c.id === 'ttrpg').color,
     items: [
       'RPG character sheet builder — ability scores, class, level, gear, and spells',
       'Session → Encounter structure with campaign arc planning',
@@ -425,7 +431,7 @@ const UNIQUE_CALLOUTS = [
   },
   {
     type: 'D&D Campaign',
-    color: '#f59e0b',
+    color: COLS.find(c => c.id === 'dnd').color,
     items: [
       'D&D-flavoured character builder with classes, stats, spell slots, and inventory',
       'Story events use D&D language: Quest hook, Dungeon reveal, Boss battle, Arc climax',
@@ -476,10 +482,12 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {UNIQUE_CALLOUTS.map(col => (
               <div key={col.type} style={{
-                border: `1px solid ${col.color}40`,
-                borderTop: `3px solid ${col.color}`,
+                border: '1px solid var(--border)',
+                borderTop: `2px solid ${col.color}`,
                 borderRadius: 12, padding: '20px 22px',
-                background: `linear-gradient(160deg, ${col.color}1c, var(--bg-raise) 55%)`,
+                // Same dark surface on every card — colour is a top-border
+                // accent plus a faint corner glow, not a tinted background.
+                background: `radial-gradient(120% 100% at 14% -12%, ${col.color}14, transparent 55%), var(--bg-raise)`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                   <span style={{ fontWeight: 800, fontSize: 14, color: col.color }}>{col.type}</span>

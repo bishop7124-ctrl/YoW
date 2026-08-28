@@ -39,6 +39,7 @@ import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
 import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
+import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
 import {
@@ -1391,6 +1392,8 @@ function AppInner() {
   }
 
   const handleOpenProject = (id) => {
+    const project = store.novels.find(item => item.id === id)
+    trackEvent('project_opened', { source: 'library_or_onboarding', project_type: project?.type || 'unknown' })
     store.setActiveNovelId(id)
     setSection('dashboard')
     setViewMode('editor')
@@ -1423,7 +1426,10 @@ function AppInner() {
       : ensureSampleProject?.()
     tourStore.markWizardShown(userId)
     tourStore.markWelcomeShown(userId)
-    if (sample?.id) handleOpenProject(sample.id)
+    if (sample?.id) {
+      trackEvent('sample_project_opened', { source: existingSample ? 'existing_sample' : 'created_sample' })
+      handleOpenProject(sample.id)
+    }
     window.setTimeout(maybeOpenAiSetupPrompt, 0)
   }
 
@@ -1438,6 +1444,8 @@ function AppInner() {
 
   // Open a book from within a Series Dashboard — remembers which series to return to
   const handleOpenBookFromSeries = (novelId, target = {}) => {
+    const project = store.novels.find(item => item.id === novelId)
+    trackEvent('project_opened', { source: 'series_dashboard', project_type: project?.type || 'unknown', target: target?.type || 'dashboard' })
     setSeriesEntryNovelId(activeSeriesId)
     applyProjectEntryTarget(target)
     store.setActiveNovelId(novelId)

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, enterWritingMode, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -21,7 +21,7 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await expect(page).toHaveURL(/\/project\//)
   await expect(page.getByText(projectTitle).first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
   await page.getByText('Begin writing here…').click()
   const editor = page.getByPlaceholder('Begin writing here…')
   await expect(editor).toBeVisible()
@@ -43,7 +43,7 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
-  await page.getByRole('button', { name: 'Done' }).click()
+  await page.getByRole('dialog', { name: 'Project Settings' }).getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
   // 'Import ▾' dropdown replaced the old bare 'Restore' button

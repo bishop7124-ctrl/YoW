@@ -315,6 +315,13 @@ function cellClass(val) {
   return ''
 }
 
+function getInterestPlanFromLocation() {
+  const params = new URLSearchParams(window.location.search)
+  const requestedPlanKey = params.get('interest')
+  if (!requestedPlanKey) return null
+  return PLANS.find(plan => plan.key === requestedPlanKey && plan.key !== 'free') || null
+}
+
 // --------------------------------------------------------------------------
 // Main page
 // --------------------------------------------------------------------------
@@ -322,7 +329,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const founderSlots = useFounderSlots()
   const [openFaq, setOpenFaq]   = useState(null)
   const [billingError, setBillingError] = useState('')
-  const [interestPlan, setInterestPlan] = useState(null)
+  const [interestPlan, setInterestPlan] = useState(() => getInterestPlanFromLocation())
 
   usePageMeta({
     path: '/pricing/',
@@ -392,7 +399,20 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const handleSelect = async (planKey) => {
     if (!planKey) return
     setBillingError('')
+    const params = new URLSearchParams(window.location.search)
+    params.set('interest', planKey)
+    const nextUrl = `${window.location.pathname}?${params.toString()}`
+    window.history.replaceState(null, '', nextUrl)
     setInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
+  }
+
+  const closeInterest = () => {
+    setInterestPlan(null)
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('interest')) return
+    params.delete('interest')
+    const query = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
   }
 
   const displayPlans = [freePlanDef, monthlyPlanDef, lifetimePlanDef, founderPlanDef].filter(Boolean)
@@ -735,7 +755,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         user={user}
         planKey={interestPlan?.key}
         planLabel={interestPlan?.label}
-        onClose={() => setInterestPlan(null)}
+        onClose={closeInterest}
+        onCreateAccount={!user ? (email) => { closeInterest(); onGetStarted?.(email) } : undefined}
       />
     </div>
   )

@@ -5,6 +5,8 @@ import { deleteAllUserData } from '../utils/firestoreSync'
 import { runSyncFlush } from '../store/syncFlushRegistry'
 import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSettings'
 import { trackEvent, identifyUser } from '../utils/analytics'
+import { isDesktopAppRuntime } from '../utils/runtime'
+import { clearLastWebActivity, isWebSessionIdleExpired, writeLastWebActivity } from '../utils/sessionActivity'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -12,6 +14,7 @@ const AuthContext = createContext({ user: null, loading: false, recoveryMode: fa
 // renders immediately on return visits without waiting for a network round-trip.
 function readCachedUser() {
   try {
+    if (!isDesktopAppRuntime() && isWebSessionIdleExpired()) return null
     const key = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
     if (!key) return null
     const { user, expires_at } = JSON.parse(localStorage.getItem(key)) ?? {}
@@ -29,6 +32,18 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (OFFLINE_MODE) return
+    const desktopApp = isDesktopAppRuntime()
+    let idleSignOutStarted = false
+
+    const idleSignOut = async () => {
+      if (idleSignOutStarted) return
+      idleSignOutStarted = true
+      trackEvent('auto_logout_idle', { idle_hours: 24, platform: 'web' })
+      clearAiSettings()
+      clearLastWebActivity()
+      setUser(null)
+      await supabase.auth.signOut().catch(() => null)
+    }
 
     // Exchange PKCE code from email confirmation/magic links before reading session
     const code = new URLSearchParams(window.location.search).get('code')
@@ -39,12 +54,25 @@ export function AuthProvider({ children }) {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user && !desktopApp && isWebSessionIdleExpired()) {
+        idleSignOut()
+        return
+      }
       clearAiSettingsForOtherUser(session?.user?.id || null)
       identifyUser(session?.user?.id || null)
       setUser(session?.user ?? null)
+      if (session?.user?.id) {
+        if (!desktopApp) writeLastWebActivity()
+        trackEvent('session_restored', { platform: desktopApp ? 'desktop' : 'web' })
+        trackEvent('authenticated_app_open', { platform: desktopApp ? 'desktop' : 'web', auth_source: 'stored_session' })
+      }
     }).catch(console.warn)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user && !desktopApp && isWebSessionIdleExpired()) {
+        idleSignOut()
+        return
+      }
       if (event === 'PASSWORD_RECOVERY') {
         setRecoveryMode(true)
         setUser(session?.user ?? null)
@@ -57,23 +85,55 @@ export function AuthProvider({ children }) {
         clearAiSettingsForOtherUser(session?.user?.id || null)
         identifyUser(session?.user?.id || null)
         setUser(session?.user ?? null)
+        if (session?.user?.id && !desktopApp) writeLastWebActivity()
         // Fire welcome email after email confirmation is complete (PKCE flow)
         if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at && session.user.id) {
           const confirmedJustNow = new Date(session.user.email_confirmed_at) > new Date(Date.now() - 30_000)
           if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email)
         }
-        // GA4 "returning user" signal — fires on every resumed/sign-in session,
-        // separate from the one-time sign_up event fired at signUp() time.
-        if (event === 'SIGNED_IN' && session?.user?.id) {
-          trackEvent('login', { method: 'password' })
+        if (event === 'SIGNED_IN' && session?.user?.id && sessionStorage.getItem('yow_oauth_login_pending') === 'google') {
+          sessionStorage.removeItem('yow_oauth_login_pending')
+          trackEvent('explicit_login', { method: 'google', platform: desktopApp ? 'desktop' : 'web' })
+          trackEvent('login', { method: 'google' })
+          trackEvent('authenticated_app_open', { platform: desktopApp ? 'desktop' : 'web', auth_source: 'explicit_login' })
         }
       }
     })
 
-    return () => subscription.unsubscribe()
+    if (desktopApp) return () => subscription.unsubscribe()
+
+    let lastActivityWrite = 0
+    const recordActivity = () => {
+      const now = Date.now()
+      if (now - lastActivityWrite < 60_000) return
+      lastActivityWrite = writeLastWebActivity(now)
+    }
+    const checkIdleExpiry = () => {
+      if (isWebSessionIdleExpired()) idleSignOut()
+    }
+    const handleVisibilityOrFocus = () => {
+      if (isWebSessionIdleExpired()) {
+        idleSignOut()
+        return
+      }
+      recordActivity()
+    }
+    const events = ['pointerdown', 'keydown', 'scroll', 'touchstart']
+    events.forEach(eventName => window.addEventListener(eventName, recordActivity, { passive: true }))
+    window.addEventListener('focus', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+    const idleTimer = window.setInterval(checkIdleExpiry, 60_000)
+
+    return () => {
+      subscription.unsubscribe()
+      events.forEach(eventName => window.removeEventListener(eventName, recordActivity))
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      window.clearInterval(idleTimer)
+    }
   }, [])
 
-  const sendWelcomeEmail = async (userId, email) => {
+  async function sendWelcomeEmail(userId, email) {
     if (OFFLINE_MODE) return
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -104,11 +164,28 @@ export function AuthProvider({ children }) {
 
   const signIn = OFFLINE_MODE
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: { user: OFFLINE_USER }, error: null }) }
-    : (email, password) => supabase.auth.signInWithPassword({ email, password })
+    : async (email, password) => {
+        sessionStorage.removeItem('yow_oauth_login_pending')
+        const result = await supabase.auth.signInWithPassword({ email, password })
+        if (!result.error && result.data?.user?.id) {
+          if (!isDesktopAppRuntime()) writeLastWebActivity()
+          trackEvent('explicit_login', { method: 'password', platform: isDesktopAppRuntime() ? 'desktop' : 'web' })
+          trackEvent('login', { method: 'password' })
+          trackEvent('authenticated_app_open', { platform: isDesktopAppRuntime() ? 'desktop' : 'web', auth_source: 'explicit_login' })
+        }
+        return result
+      }
 
   const signInWithGoogle = OFFLINE_MODE
     ? () => { setUser(OFFLINE_USER); return Promise.resolve({ data: {}, error: null }) }
-    : () => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+    : () => {
+        sessionStorage.setItem('yow_oauth_login_pending', 'google')
+        return supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+          .then(result => {
+            if (result.error) sessionStorage.removeItem('yow_oauth_login_pending')
+            return result
+          })
+      }
 
   const signOut = OFFLINE_MODE
     ? () => { clearAiSettings(); setUser(null); return Promise.resolve() }
@@ -119,6 +196,7 @@ export function AuthProvider({ children }) {
         // unauthenticated and be silently dropped, losing the edit for good.
         await runSyncFlush()
         clearAiSettings()
+        if (!isDesktopAppRuntime()) clearLastWebActivity()
         const { error } = await supabase.auth.signOut().catch(() => ({ error: true }))
         if (error) {
           // Network timeout or error — clear session locally so the UI still signs out
@@ -126,6 +204,7 @@ export function AuthProvider({ children }) {
           if (storageKey) localStorage.removeItem(storageKey)
           setUser(null)
         }
+        trackEvent('manual_logout', { platform: isDesktopAppRuntime() ? 'desktop' : 'web' })
       }
 
   const resetPassword = OFFLINE_MODE

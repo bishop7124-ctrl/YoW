@@ -4276,8 +4276,9 @@ textarea:focus {
 }
 
 .yow-home {
+  --yow-home-px: clamp(18px, 3vw, 34px);
   min-height: 100vh;
-  padding: 0 clamp(18px, 3vw, 34px) clamp(18px, 3vw, 34px);
+  padding: 0 var(--yow-home-px) var(--yow-home-px);
   overflow-x: clip;
   background: var(--bg-main);
 }
@@ -4289,6 +4290,15 @@ textarea:focus {
   background: color-mix(in srgb, var(--bg-main) 94%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   backdrop-filter: blur(16px);
+}
+
+/* .yow-home (Home, Features, FAQ, Founders, Download) puts horizontal page
+ * padding on its own root element, which would otherwise inset the sticky
+ * nav's background/logo from the true edge. Pull the nav back out to full
+ * viewport width; .marketing-nav-wrap still centers its own content. */
+.yow-home > .marketing-nav {
+  margin-left: calc(-1 * var(--yow-home-px));
+  margin-right: calc(-1 * var(--yow-home-px));
 }
 
 .marketing-nav-wrap {
@@ -4574,6 +4584,7 @@ textarea:focus {
 
 @media (max-width: 900px) {
   .yow-home {
+    --yow-home-px: 16px;
     padding: 16px;
   }
 
@@ -11463,6 +11474,7 @@ body {
 
 @media (max-width: 420px) {
   .yow-home {
+    --yow-home-px: 14px;
     padding: 14px;
   }
 

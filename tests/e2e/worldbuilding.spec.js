@@ -278,7 +278,7 @@ test.describe('Ideas', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    const ideas = await readStorage(page, 'nf_ideaEntries')
+    const ideas = await readStorage(page, 'nf_ideaEntries') || []
     expect(ideas.some(e =>
       (e.title || e.text || e.content || '').includes(prefix),
     )).toBe(true)

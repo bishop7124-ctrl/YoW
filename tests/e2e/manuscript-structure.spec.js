@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
-  seedCleanStorage, waitForStorage,
+  createProject, dismissLaunchPrompts, enterWritingMode, readScenesWithContent, readStorage,
+  seedCleanStorage, waitForStorage, waitForWritingMode,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -9,13 +9,13 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await dismissLaunchPrompts(page)
   await createProject(page, { title: 'Manuscript Structure Test' })
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 })
 
 // ─── Scene CRUD ───────────────────────────────────────────────────────────────
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
-  await page.locator('.ms-sidebar-add-btn').first().click()
+  await page.locator('.ms-rail-f').getByRole('button', { name: /\+\s*Scene/i }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
@@ -25,7 +25,7 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForWritingMode(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.length).toBeGreaterThanOrEqual(2)
 })
@@ -56,7 +56,7 @@ test('rename a scene and verify it persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForWritingMode(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.some(s => (s.title || '').includes(prefix))).toBe(true)
 })
@@ -85,7 +85,7 @@ test('word count updates when content is added', async ({ page }) => {
 
 test('add a chapter and verify it appears and persists', async ({ page }) => {
   // Use the sidebar add-chapter button (text is the level2 label, e.g. "Chapter")
-  await page.locator('.ms-sidebar-add-chapter').first().click()
+  await page.locator('.ms-rail-f').getByRole('button', { name: /\+\s*Chapter/i }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')
@@ -95,7 +95,7 @@ test('add a chapter and verify it appears and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForWritingMode(page)
   const chapters = await readStorage(page, 'nf_chapters')
   expect(chapters.length).toBeGreaterThanOrEqual(2)
 })
@@ -127,7 +127,7 @@ test('scene status cycles and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForWritingMode(page)
   const scenes = await readStorage(page, 'nf_scenes')
   // At least one scene should have a non-default status
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)

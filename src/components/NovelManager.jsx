@@ -1337,6 +1337,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     const type = isProjectTypeSelectable(form.type) ? form.type : DEFAULT_TYPE
     const typeCfg = getProjectType(type)
     const sessionTarget = getDefaultSessionTarget(type)
+    trackEvent('project_create_started', { source: 'library', project_type: type })
     const novel = store.addNovel({
       ...form,
       type,
@@ -1349,6 +1350,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     setForm({ title: '', description: '', type: DEFAULT_TYPE, seriesId: '' })
     setShowForm(false)
     if (novel) onOpenProject(novel.id)
+    else trackEvent('project_create_error', { source: 'library', project_type: type })
   }
 
   const handleCloseProjectForm = () => {

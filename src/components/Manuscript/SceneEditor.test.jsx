@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { afterEach, describe, it, expect } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
 import { SceneEditor } from './SceneEditor.jsx'
 import { DEFAULT_FORMAT } from './manuscriptUtils.js'
 
@@ -31,6 +31,10 @@ function renderScene(content) {
     />
   )
 }
+
+afterEach(() => {
+  cleanup()
+})
 
 describe('SceneEditor content preview — mismatched markdown emphasis', () => {
   it('renders unbalanced bold/italic asterisks without crashing (regression: m[2] undefined on wrong-branch match)', () => {
