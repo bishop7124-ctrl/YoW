@@ -42,3 +42,25 @@ for (const viewport of viewports) {
     await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()
   })
 }
+
+test('rotating a tablet into portrait does not leave a panel covering the editor', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await page.goto('/')
+  await dismissLaunchPrompts(page)
+
+  await page.getByRole('button', { name: 'New Project' }).first().click()
+  await page.getByPlaceholder('Title *').fill(`Rotate ${Date.now()}`)
+  await page.getByRole('button', { name: 'Create' }).click()
+  await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).first().click()
+
+  const placeholder = page.getByText('Begin writing here…')
+  await expect(placeholder).toBeVisible()
+
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await placeholder.click()
+
+  const editor = page.getByPlaceholder('Begin writing here…')
+  const sentence = `Rotated and still writable ${Date.now()}`
+  await editor.fill(sentence)
+  await expect(editor).toHaveValue(sentence)
+})
