@@ -7,7 +7,7 @@
  */
 import { expect, test } from '@playwright/test'
 import { PROJECT_TYPES } from '../../src/constants/projectTypes.js'
-import { createProject, dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
+import { createProject, dismissLaunchPrompts, readStorage, seedCleanStorage } from './helpers.js'
 
 // Types that have non-Novel structure labels — the ones QA_PLAN flags as needing verification.
 const LABEL_TYPES = [
@@ -55,7 +55,10 @@ for (const typeId of LABEL_TYPES) {
       const title = `WordTarget ${cfg.label} ${Date.now()}`
       await createProject(page, { title, type: typeId })
 
-      const novels = await page.evaluate(() => JSON.parse(localStorage.getItem('nf_novels') || '[]'))
+      // readStorage, not a raw localStorage read — the app's real storage
+      // backend is the IndexedDB-backed browser vault (window.__yowStorageBridge),
+      // which a plain localStorage.getItem call can't see.
+      const novels = await readStorage(page, 'nf_novels')
       const project = novels.find(n => n.title === title)
 
       expect(project).toBeTruthy()
