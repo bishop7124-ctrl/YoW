@@ -218,6 +218,50 @@ export function persistSceneDraftToLocalStorage(scene, content, { immediate = fa
   return runPersistSceneDraft(scene, content)
 }
 
+// ─── Clipboard ────────────────────────────────────────────────────────────────
+
+// Copy plain text to the clipboard. Prefers the async Clipboard API (works
+// everywhere modern and needs no DOM node of its own); falls back to the
+// classic hidden-textarea + execCommand('copy') trick for contexts where the
+// Clipboard API is unavailable or denied (older WebViews, non-secure/http
+// embeddings, permission prompts the user dismissed). Same fallback shape
+// AIPanel.jsx's message-copy button already uses.
+//
+// Deliberately content-agnostic: the "copy whole scene" action (SceneEditor's
+// header toolbar) passes it the full in-memory `localContent` string directly,
+// not anything read back out of the DOM. That's what makes it work as the
+// accepted product decision for the single-very-large-scene case (2026-08-08,
+// see docs/ROADMAP.md's typing-lag row): a giant scene's native `<textarea>`
+// can make Ctrl+A/drag-select slow or unreliable, but the underlying content
+// model is just a string regardless of scene length, so copying it never has
+// to touch native selection at all.
+export async function copyTextToClipboard(text) {
+  if (!text) return false
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // fall through to the execCommand fallback below
+    }
+  }
+  if (typeof document === 'undefined') return false
+  try {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.setAttribute('readonly', '')
+    textArea.style.position = 'fixed'
+    textArea.style.opacity = '0'
+    document.body.appendChild(textArea)
+    textArea.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 // ─── Format settings ──────────────────────────────────────────────────────────
 
 export const FONTS = [
