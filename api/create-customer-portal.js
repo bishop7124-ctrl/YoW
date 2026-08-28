@@ -27,7 +27,14 @@ export default async function handler(req, res) {
 
     const customerId = user.app_metadata?.stripe_customer_id
     if (!customerId) {
-      return res.status(404).json({ error: 'No Stripe customer found. Complete a checkout first.' })
+      // No real Stripe customer on this account — most commonly a plan that
+      // was granted manually (e.g. via direct SQL) rather than through a
+      // real checkout. The Stripe billing portal has nothing to manage for
+      // this account; callers should fall back to api/downgrade-to-free.js.
+      return res.status(404).json({
+        error: 'No Stripe customer found. Complete a checkout first.',
+        code: 'no_stripe_customer',
+      })
     }
 
     const siteUrl = process.env.SITE_URL || 'http://localhost:5173'
