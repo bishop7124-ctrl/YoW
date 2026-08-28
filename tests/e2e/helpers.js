@@ -89,6 +89,18 @@ export async function createProject(page, { title, type = 'novel' } = {}) {
   return projectTitle
 }
 
+export function writingNavButton(page) {
+  return page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' })
+}
+
+export async function enterWritingMode(page) {
+  await writingNavButton(page).click()
+}
+
+export async function waitForWritingMode(page) {
+  await page.locator('.manuscript-processor').waitFor({ state: 'visible', timeout: 10_000 })
+}
+
 // Click the studio "Project settings" gear button (aria-label, not the library card text button).
 export async function openProjectSettings(page) {
   await page.getByLabel('Project settings').first().click()
@@ -109,7 +121,7 @@ export async function openImportZip(page) {
 
 // Navigate to writing and fill the default scene, waiting for autosave to localStorage.
 export async function writeInDefaultScene(page, text) {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
   const placeholder = page.getByText('Begin writing here…')
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
   const editor = page.getByPlaceholder('Begin writing here…')

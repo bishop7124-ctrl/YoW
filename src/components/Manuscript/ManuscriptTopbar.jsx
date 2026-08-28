@@ -270,7 +270,12 @@ export default function ManuscriptTopbar({
             </button>
           )}
           {onEnterFocus && (
-            <button type="button" className="ms-topbar-btn ms-topbar-btn-primary" onClick={onEnterFocus}>
+            <button
+              type="button"
+              className="ms-topbar-btn ms-topbar-btn-primary"
+              onClick={onEnterFocus}
+              aria-label="Enter focused writing mode"
+            >
               Focus
             </button>
           )}

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { isPhoneViewport, useMediaQuery } from '../../utils/useMediaQuery'
+import { useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
 import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
@@ -251,7 +251,9 @@ export default function Manuscript({ store, userId, membership = null }) {
     railUserToggledRef.current = true
     setRailCollapsed(v => !v)
   }, [isMobileBand])
-  const [inspectorOpen, setInspectorOpen] = useState(() => !isPhoneViewport())
+  const [inspectorOpen, setInspectorOpen] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth > 900 : true
+  ))
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
   // Lazy initializer (not an effect) so this reads localStorage once, on

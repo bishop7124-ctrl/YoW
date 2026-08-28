@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { PASSWORD_REQUIREMENTS_LIST, validatePassword } from '../../utils/passwordValidation'
+import { trackEvent } from '../../utils/analytics'
 import YOWLogo from '../brand/YOWLogo'
 import HomePage from './HomePage'
 
@@ -149,15 +150,28 @@ export default function LoginPage({
     }
   }, [recoveryMode])
 
+  useEffect(() => {
+    if (screen !== 'auth') return
+    if (mode === 'signup') trackEvent('signup_page_view', { source: 'auth_screen', platform: isDesktop ? 'desktop' : 'web' })
+    if (mode === 'login') trackEvent('login_page_view', { source: 'auth_screen', platform: isDesktop ? 'desktop' : 'web' })
+  }, [screen, mode, isDesktop])
+
   const handleReset = async (e) => {
     e.preventDefault()
     setError('')
+    trackEvent('password_reset_submit', { platform: isDesktop ? 'desktop' : 'web' })
     setLoading(true)
     try {
       const { error: err } = await resetPassword(email)
-      if (err) setError(err.message)
-      else setResetSent(true)
+      if (err) {
+        trackEvent('password_reset_error', { platform: isDesktop ? 'desktop' : 'web' })
+        setError(err.message)
+      } else {
+        trackEvent('password_reset_success', { platform: isDesktop ? 'desktop' : 'web' })
+        setResetSent(true)
+      }
     } catch (err) {
+      trackEvent('password_reset_error', { reason: 'exception', platform: isDesktop ? 'desktop' : 'web' })
       setError(err.message || 'Something went wrong.')
     } finally {
       setLoading(false)
@@ -206,9 +220,11 @@ export default function LoginPage({
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    trackEvent(mode === 'signup' ? 'signup_submit' : 'login_submit', { method: 'password', platform: isDesktop ? 'desktop' : 'web' })
     if (mode === 'signup') {
       const validation = validatePassword(password)
       if (!validation.valid) {
+        trackEvent('signup_error', { reason: 'password_requirements', platform: isDesktop ? 'desktop' : 'web' })
         setError('')
         return
       }
@@ -217,14 +233,21 @@ export default function LoginPage({
     try {
       if (mode === 'login') {
         const { error: err } = await signIn(email, password)
-        if (err) setError(
-          /invalid.*(login|credential)|wrong.*password|invalid.*password/i.test(err.message)
-            ? 'Incorrect username or password.'
-            : err.message
-        )
+        if (err) {
+          trackEvent('login_error', { method: 'password', platform: isDesktop ? 'desktop' : 'web' })
+          setError(
+            /invalid.*(login|credential)|wrong.*password|invalid.*password/i.test(err.message)
+              ? 'Incorrect username or password.'
+              : err.message
+          )
+        }
       } else {
         const { data, error: err } = await signUp(email, password)
         if (err) {
+          trackEvent('signup_error', {
+            reason: /already registered|already.*exists|user.*exists|email.*taken/i.test(err.message) ? 'existing_email' : 'auth_error',
+            platform: isDesktop ? 'desktop' : 'web',
+          })
           setError(
             /already registered|already.*exists|user.*exists|email.*taken/i.test(err.message)
               ? 'An account with this email already exists. Try logging in instead.'
@@ -232,16 +255,20 @@ export default function LoginPage({
           )
         } else if (data?.user && data.user.identities?.length === 0) {
           // Supabase silently "succeeds" for existing emails when confirmation is on
+          trackEvent('signup_error', { reason: 'existing_email_silent', platform: isDesktop ? 'desktop' : 'web' })
           setError('An account with this email already exists. Try logging in instead.')
         } else if (!data?.session) {
           // Email confirmation required — session won't exist until the link is clicked
+          trackEvent('signup_success', { method: 'password', confirmation_required: true, platform: isDesktop ? 'desktop' : 'web' })
           setSent(true)
         } else {
           // Auto-confirm: session created immediately — notify parent to show welcome toast
+          trackEvent('signup_success', { method: 'password', confirmation_required: false, platform: isDesktop ? 'desktop' : 'web' })
           onSignedUp?.()
         }
       }
     } catch (e) {
+      trackEvent(mode === 'signup' ? 'signup_error' : 'login_error', { reason: 'exception', platform: isDesktop ? 'desktop' : 'web' })
       setError(e.message || 'Something went wrong.')
     } finally {
       setLoading(false)
@@ -252,8 +279,8 @@ export default function LoginPage({
     return (
       <div className="auth-shell">
         <HomePage
-          onGetStarted={() => openAuth('signup')}
-          onLogin={() => openAuth('login')}
+              onGetStarted={() => { trackEvent('signup_cta_clicked', { source: 'home' }); openAuth('signup') }}
+              onLogin={() => { trackEvent('login_cta_clicked', { source: 'home' }); openAuth('login') }}
           onOpenAbout={onOpenAbout}
           onOpenLegal={onOpenLegal}
         />
@@ -583,10 +610,10 @@ export default function LoginPage({
 
                 {mode === 'login' && (
                   <p className="mt-3 text-center text-sm text-[var(--text-muted)]">
-                    <button
-                      onClick={() => { setMode('reset'); setError('') }}
-                      className="text-[var(--accent)] hover:underline font-medium"
-                    >
+	                    <button
+	                      onClick={() => { trackEvent('password_reset_cta_clicked', { source: 'login' }); setMode('reset'); setError('') }}
+	                      className="text-[var(--accent)] hover:underline font-medium"
+	                    >
                       Forgot password?
                     </button>
                   </p>
@@ -596,10 +623,10 @@ export default function LoginPage({
                   {mode === 'reset' ? (
                     <>
                       Remembered it?{' '}
-                      <button
-                        onClick={() => { openAuth('login'); setError('') }}
-                        className="text-[var(--accent)] hover:underline font-medium"
-                      >
+	                      <button
+	                        onClick={() => { trackEvent('login_cta_clicked', { source: 'reset_switch' }); openAuth('login'); setError('') }}
+	                        className="text-[var(--accent)] hover:underline font-medium"
+	                      >
                         Back to login
                       </button>
                     </>
@@ -607,7 +634,7 @@ export default function LoginPage({
                     <>
                       Don&apos;t have an account?{' '}
                       <button
-                        onClick={() => { openAuth('signup'); setError(''); setSent(false) }}
+                        onClick={() => { trackEvent('signup_cta_clicked', { source: 'login_switch' }); openAuth('signup'); setError(''); setSent(false) }}
                         className="text-[var(--accent)] hover:underline font-medium"
                       >
                         Sign up
@@ -616,10 +643,10 @@ export default function LoginPage({
                   ) : (
                     <>
                       Already have an account?{' '}
-                      <button
-                        onClick={() => { openAuth('login'); setError(''); setSent(false) }}
-                        className="text-[var(--accent)] hover:underline font-medium"
-                      >
+	                      <button
+	                        onClick={() => { trackEvent('login_cta_clicked', { source: 'signup_switch' }); openAuth('login'); setError(''); setSent(false) }}
+	                        className="text-[var(--accent)] hover:underline font-medium"
+	                      >
                         Sign in
                       </button>
                     </>

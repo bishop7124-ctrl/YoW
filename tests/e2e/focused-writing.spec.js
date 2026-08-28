@@ -1,12 +1,22 @@
 import { expect, test } from '@playwright/test'
-import { createProject, dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
+import { createProject, dismissLaunchPrompts, enterWritingMode, seedCleanStorage } from './helpers.js'
+
+async function enterFocusedWriting(page) {
+  const directButton = page.getByRole('button', { name: 'Enter focused writing mode' })
+  if (await directButton.isVisible().catch(() => false)) {
+    await directButton.click()
+    return
+  }
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menuitem', { name: 'Focus' }).or(page.getByRole('button', { name: 'Focus' })).first().click()
+}
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
   await page.goto('/')
   await dismissLaunchPrompts(page)
   await createProject(page, { title: 'Focused Writing Test' })
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 })
 
 test('focused mode is independent, keeps tools available, and Escape closes in layers', async ({ page }) => {
@@ -14,7 +24,7 @@ test('focused mode is independent, keeps tools available, and Escape closes in l
   await page.getByRole('button', { name: 'Zoom manuscript page in' }).click()
   await expect(page.locator('.manuscript-document')).toHaveCSS('zoom', '1.1')
 
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await enterFocusedWriting(page)
 
   await expect(page.locator('.manuscript-processor')).toHaveClass(/is-focused-writing/)
   // The studio nav banner's <h1> also shows the project title and stays
@@ -27,11 +37,11 @@ test('focused mode is independent, keeps tools available, and Escape closes in l
   await page.getByRole('button', { name: 'Zoom manuscript page in' }).click()
   await expect(page.locator('.manuscript-document')).toHaveCSS('zoom', '1.2')
 
-  await page.getByRole('button', { name: 'Structure', exact: true }).click()
-  await expect(page.locator('.ms-writing-sidebar.is-focused-mode.is-open')).toBeVisible()
+  await page.getByRole('button', { name: 'Notes', exact: true }).click()
+  await expect(page.getByRole('complementary', { name: 'Scene inspector' })).toBeVisible()
 
   await page.keyboard.press('Escape')
-  await expect(page.locator('.ms-writing-sidebar.is-focused-mode.is-open')).toHaveCount(0)
+  await expect(page.getByRole('complementary', { name: 'Scene inspector' })).toHaveCount(0)
   await expect(page.locator('.manuscript-processor')).toHaveClass(/is-focused-writing/)
 
   await page.keyboard.press('Escape')
@@ -39,7 +49,7 @@ test('focused mode is independent, keeps tools available, and Escape closes in l
 })
 
 test('focused preference survives reload only while explicitly left enabled', async ({ page }) => {
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await enterFocusedWriting(page)
   await page.reload()
   await expect(page.locator('.manuscript-processor')).toHaveClass(/is-focused-writing/)
 
@@ -49,9 +59,9 @@ test('focused preference survives reload only while explicitly left enabled', as
 })
 
 test('long wrapped prose keeps the caret inside the calm comfort zone', async ({ page }) => {
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
-  await page.getByText('Begin writing here…').click()
-  const editor = page.getByPlaceholder('Begin writing here…')
+  await enterFocusedWriting(page)
+  const editor = page.locator('.ms-textarea').first()
+  await editor.click()
   const longParagraph = Array.from({ length: 260 }, (_, index) => `wrapped${index}`).join(' ')
   await editor.fill(longParagraph)
   await editor.press('End')
@@ -69,10 +79,10 @@ test('long wrapped prose keeps the caret inside the calm comfort zone', async ({
 
 test('mobile focused tools open as a bottom sheet', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 720 })
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await enterFocusedWriting(page)
   await page.getByRole('button', { name: 'Notes', exact: true }).click()
 
-  const sheet = page.locator('.ms-writing-sidebar.is-focused-mode.is-open')
+  const sheet = page.getByRole('complementary', { name: 'Scene inspector' })
   await expect(sheet).toBeVisible()
   const box = await sheet.boundingBox()
   expect(box?.width).toBeGreaterThanOrEqual(370)
