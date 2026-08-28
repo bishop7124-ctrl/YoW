@@ -18,7 +18,12 @@ Deno.serve(async (req) => {
   if (error || !user) return jsonResponse({ error: 'Unauthorized' }, 401)
 
   const customerId = user.app_metadata?.stripe_customer_id
-  if (!customerId) return jsonResponse({ error: 'No Stripe customer for this account yet.' }, 404)
+  if (!customerId) {
+    // No real Stripe customer on this account (e.g. a plan granted manually
+    // via direct SQL rather than a real checkout) — nothing for the portal
+    // to manage. Callers should fall back to the downgrade-to-free function.
+    return jsonResponse({ error: 'No Stripe customer for this account yet.', code: 'no_stripe_customer' }, 404)
+  }
 
   const siteUrl = Deno.env.get('SITE_URL') || 'http://localhost:5173'
   const session = await stripe.billingPortal.sessions.create({
