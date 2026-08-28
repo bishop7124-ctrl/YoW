@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { isPhoneViewport, useMediaQuery } from '../../utils/useMediaQuery'
+import { useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
 import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
@@ -251,7 +251,15 @@ export default function Manuscript({ store, userId, membership = null }) {
     railUserToggledRef.current = true
     setRailCollapsed(v => !v)
   }, [isMobileBand])
-  const [inspectorOpen, setInspectorOpen] = useState(() => !isPhoneViewport())
+  // Default-open threshold must match the CSS breakpoint that turns .ms-insp
+  // into a full-width, viewport-covering bottom sheet (max-width: 900px) —
+  // reusing isMobileBand (same 900px query, already computed above) rather
+  // than the narrower 640px "phone" cutoff. Before this fix, a first-ever
+  // visit to a project at a tablet width (e.g. 768px) defaulted the
+  // Inspector open with no scene selected, and the CSS bottom sheet then
+  // covered the writing surface with an unclosable-looking empty panel —
+  // confirmed live via tests/e2e/responsive-smoke.spec.js's tablet case.
+  const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
   // Lazy initializer (not an effect) so this reads localStorage once, on

@@ -43,7 +43,11 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
-  await page.getByRole('button', { name: 'Done' }).click()
+  // Scoped to the Project Settings dialog specifically — the Scene inspector
+  // panel (still open from the earlier Write step) also carries its own
+  // "Done" button and precedes this one in DOM order, so a bare/`.first()`
+  // locator would close the wrong panel and leave Project Settings open.
+  await page.getByLabel('Project Settings', { exact: true }).getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
   // 'Import ▾' dropdown replaced the old bare 'Restore' button
