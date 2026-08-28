@@ -14,7 +14,7 @@ test('focused mode is independent, keeps tools available, and Escape closes in l
   await page.getByRole('button', { name: 'Zoom manuscript page in' }).click()
   await expect(page.locator('.manuscript-document')).toHaveCSS('zoom', '1.1')
 
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await page.getByRole('button', { name: 'Focus', exact: true }).click()
 
   await expect(page.locator('.manuscript-processor')).toHaveClass(/is-focused-writing/)
   // The studio nav banner's <h1> also shows the project title and stays
@@ -39,7 +39,7 @@ test('focused mode is independent, keeps tools available, and Escape closes in l
 })
 
 test('focused preference survives reload only while explicitly left enabled', async ({ page }) => {
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await page.getByRole('button', { name: 'Focus', exact: true }).click()
   await page.reload()
   await expect(page.locator('.manuscript-processor')).toHaveClass(/is-focused-writing/)
 
@@ -49,7 +49,7 @@ test('focused preference survives reload only while explicitly left enabled', as
 })
 
 test('long wrapped prose keeps the caret inside the calm comfort zone', async ({ page }) => {
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await page.getByRole('button', { name: 'Focus', exact: true }).click()
   await page.getByText('Begin writing here…').click()
   const editor = page.getByPlaceholder('Begin writing here…')
   const longParagraph = Array.from({ length: 260 }, (_, index) => `wrapped${index}`).join(' ')
@@ -69,7 +69,7 @@ test('long wrapped prose keeps the caret inside the calm comfort zone', async ({
 
 test('mobile focused tools open as a bottom sheet', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 720 })
-  await page.getByRole('button', { name: 'Enter focused writing mode' }).click()
+  await page.getByRole('button', { name: 'Focus', exact: true }).click()
   await page.getByRole('button', { name: 'Notes', exact: true }).click()
 
   const sheet = page.locator('.ms-writing-sidebar.is-focused-mode.is-open')
