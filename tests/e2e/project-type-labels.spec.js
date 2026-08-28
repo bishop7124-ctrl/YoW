@@ -7,15 +7,25 @@
  */
 import { expect, test } from '@playwright/test'
 import { PROJECT_TYPES } from '../../src/constants/projectTypes.js'
-import { createProject, dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
+import { createProject, dismissLaunchPrompts, readStorage, seedCleanStorage } from './helpers.js'
 
 // Types that have non-Novel structure labels — the ones QA_PLAN flags as needing verification.
 const LABEL_TYPES = [
   'novella',        // Part / Chapter / Scene
   'short_story',    // Part / Section / Scene
   'dnd_campaign',   // Story Arc / Session / Encounter
-  'ttrpg_campaign', // Campaign Arc / Session / Encounter
+  'tabletop_rpg',   // Campaign Arc / Session / Encounter
 ]
+
+// Guard against the silent-skip that hid the TTRPG case: this list previously
+// said 'ttrpg_campaign', which is not a key in PROJECT_TYPES (the real key is
+// 'tabletop_rpg'), so the `if (!cfg) continue` below dropped that project type's
+// coverage entirely while QA_PLAN Priority 6 recorded it as covered.
+for (const typeId of LABEL_TYPES) {
+  if (!PROJECT_TYPES[typeId]) {
+    throw new Error(`LABEL_TYPES contains unknown project type "${typeId}" — coverage would be silently skipped`)
+  }
+}
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -55,7 +65,13 @@ for (const typeId of LABEL_TYPES) {
       const title = `WordTarget ${cfg.label} ${Date.now()}`
       await createProject(page, { title, type: typeId })
 
-      const novels = await page.evaluate(() => JSON.parse(localStorage.getItem('nf_novels') || '[]'))
+      // Must go through readStorage (window.__yowStorageBridge), not raw
+      // localStorage: the app's active backend for a regular browser session is
+      // the IndexedDB-backed vault (src/storage/browserVaultAdapter.js), so
+      // `localStorage.getItem('nf_novels')` is null for *every* project type —
+      // see the 2026-08-25 storage-migration row in docs/ROADMAP.md's Bugs
+      // table. This file was the last spec still reading raw localStorage.
+      const novels = (await readStorage(page, 'nf_novels')) || []
       const project = novels.find(n => n.title === title)
 
       expect(project).toBeTruthy()
