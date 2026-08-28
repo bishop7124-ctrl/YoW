@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import { useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
@@ -262,6 +262,38 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
+  // `inspectorOpen`'s initializer above only covers first *render*. Crossing
+  // *into* the overlay band later — rotating an iPad from landscape (1024px,
+  // where the inspector is a harmless in-flow side column) to portrait (768px),
+  // or narrowing a desktop window — would otherwise leave it open while the CSS
+  // has already turned it into an absolutely-positioned 62vh sheet on top of the
+  // prose, reproducing at resize the exact obstruction the initializer prevents
+  // at mount (unusable-editor launch-blocker category).
+  //
+  // Scoped deliberately to the inspector. The two sibling panels that get the
+  // same ≤900px overlay treatment are NOT cleared here, for reasons worth
+  // recording (see docs/ROADMAP.md for the full write-up):
+  //   * `.ms-surface` (AI/Search/History/Finalise) is only ever open because
+  //     the user explicitly opened it, and `AISuggestionPanel` keeps its typed
+  //     prompt and streamed suggestion in unpersisted local state with no
+  //     unmount cleanup — so closing it on rotation would silently destroy work
+  //     in progress. At ≤900px it is also a first-class mobile surface with a
+  //     visible bottom-tab-bar affordance to dismiss it, so it is not the
+  //     "obstruction the user never asked for" this effect exists to prevent.
+  //   * `.ms-rail.is-sheet-open` has a real but distinct stale-flag bug (it can
+  //     only be set inside the band and is never cleared on leaving, so a round
+  //     trip out and back re-reveals it) that needs its own fix and test.
+  //
+  // useLayoutEffect, not useEffect: the matchMedia change fires after the
+  // browser has already re-laid out under the ≤900px rules, so a plain effect
+  // would leave one painted frame in which the still-open inspector really is
+  // a sheet over the prose and can swallow a tap mid-rotation.
+  useLayoutEffect(() => {
+    if (!isMobileBand) return
+    // Functional form so this is a no-op re-render when it's already closed
+    // (the common case: entering the band from a viewport where it was shut).
+    setInspectorOpen(prev => (prev ? false : prev))
+  }, [isMobileBand])
   // Lazy initializer (not an effect) so this reads localStorage once, on
   // first render, rather than mounting with 'ai' and then correcting itself
   // a tick later via a setState-in-effect.
