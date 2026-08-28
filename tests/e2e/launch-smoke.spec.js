@@ -43,7 +43,10 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
-  await page.getByRole('button', { name: 'Done' }).click()
+  // Scoped to the Project Settings dialog specifically — the redesigned
+  // Scene Inspector's own Format-tab "Done" button (`.ms-opt`) coincidentally
+  // shares this label and can be present at the same time.
+  await page.getByLabel('Project Settings', { exact: true }).getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
   // 'Import ▾' dropdown replaced the old bare 'Restore' button

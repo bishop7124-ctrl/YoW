@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { isPhoneViewport, useMediaQuery } from '../../utils/useMediaQuery'
+import { useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
 import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
@@ -251,7 +251,15 @@ export default function Manuscript({ store, userId, membership = null }) {
     railUserToggledRef.current = true
     setRailCollapsed(v => !v)
   }, [isMobileBand])
-  const [inspectorOpen, setInspectorOpen] = useState(() => !isPhoneViewport())
+  // Matches `isMobileBand` (900px), not `isPhoneViewport` (640px) — below
+  // 900px the inspector renders as an absolute-positioned, 62vh bottom-sheet
+  // overlay (.ms-insp's own `@media (max-width: 900px)` rule in index.css),
+  // not a side panel. Defaulting this to the phone-only breakpoint meant it
+  // opened eagerly on tablet widths (641-900px) as that overlay, covering
+  // the writing area's own placeholder/content underneath it on first load
+  // (2026-08-27 manuscript-editor-redesign regression, caught by CI's
+  // responsive-smoke spec failing at 768px — see docs/ROADMAP.md Bugs table).
+  const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
   // Lazy initializer (not an effect) so this reads localStorage once, on
