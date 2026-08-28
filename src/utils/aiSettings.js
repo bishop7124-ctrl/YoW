@@ -12,7 +12,7 @@ const PROVIDER_IDS = ['google', 'anthropic', 'openrouter', 'openai']
 
 export const DEFAULT_AI_SETTINGS = {
   activeProvider: 'openrouter',
-  google:     { apiKey: '', model: 'gemini-2.0-flash' },
+  google:     { apiKey: '', model: 'gemini-2.5-flash' },
   anthropic:  { apiKey: '', model: 'claude-sonnet-4-6' },
   openrouter: { apiKey: '', model: 'google/gemma-3-27b-it' },
   openai:     { apiKey: '', model: '', baseUrl: 'https://api.openai.com/v1' },

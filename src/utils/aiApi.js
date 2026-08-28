@@ -15,16 +15,21 @@ export const PROVIDERS = {
   google: {
     name: 'Google AI Studio',
     keyPlaceholder: 'AIza...',
+    // Starter/fallback list only — Google retires Gemini model IDs on a few
+    // months' notice (2.0 Flash and Flash-Lite were shut down June 2026; the
+    // 2.5 line is slated for October 2026) and ships new ones just as fast.
+    // fetchGoogleModels() below pulls the real, current, key-scoped catalog;
+    // this list is what renders before that resolves or if it fails.
     models: [
-      { id: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
-      { id: 'gemini-1.5-pro',        label: 'Gemini 1.5 Pro' },
-      { id: 'gemini-1.5-flash',      label: 'Gemini 1.5 Flash' },
-      { id: 'gemma-3-27b-it',        label: 'Gemma 3 27B' },
-      { id: 'gemma-3-12b-it',        label: 'Gemma 3 12B' },
-      { id: 'gemma-3-4b-it',         label: 'Gemma 3 4B' },
+      { id: 'gemini-3.5-flash',           label: 'Gemini 3.5 Flash' },
+      { id: 'gemini-2.5-pro',             label: 'Gemini 2.5 Pro' },
+      { id: 'gemini-2.5-flash',           label: 'Gemini 2.5 Flash' },
+      { id: 'gemini-2.5-flash-lite',      label: 'Gemini 2.5 Flash Lite' },
+      { id: 'gemma-3-27b-it',             label: 'Gemma 3 27B' },
+      { id: 'gemma-3-12b-it',             label: 'Gemma 3 12B' },
+      { id: 'gemma-3-4b-it',              label: 'Gemma 3 4B' },
     ],
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-2.5-flash',
   },
   openrouter: {
     name: 'OpenRouter',
@@ -67,33 +72,104 @@ export const PROVIDERS = {
   },
 }
 
-// ── OpenRouter live model catalog ───────────────────────────────────────────
-// OpenRouter hosts 300+ models and adds/retires them continuously — the
-// hardcoded PROVIDERS.openrouter.models list above is just a curated starter
-// set, not a reflection of any given account. This fetches the real, current
-// catalog from OpenRouter's public models endpoint (no API key required,
-// CORS-enabled) so the settings UI can show what's actually available.
-let openRouterModelsCache = null
-let openRouterModelsPromise = null
+// ── Live model catalogs ──────────────────────────────────────────────────────
+// Every provider here retires and ships model IDs faster than this file gets
+// edited (OpenRouter alone hosts 300+ and churns continuously; Google has
+// shut down or renamed a whole model generation more than once this year).
+// The PROVIDERS[...].models lists above are just curated starter/fallback
+// sets — these functions fetch each provider's real, current catalog so the
+// settings UI reflects what's actually callable right now. Results are
+// cached per cache key (provider, plus API key/base URL for providers whose
+// catalog depends on the account) so re-rendering the settings panel doesn't
+// re-fetch on every keystroke.
+const modelCatalogCache = new Map() // cacheKey -> models[] | Promise<models[]>
 
+function cachedModelFetch(cacheKey, fetcher) {
+  const cached = modelCatalogCache.get(cacheKey)
+  if (cached) return Promise.resolve(cached)
+  const promise = fetcher()
+    .then(list => { modelCatalogCache.set(cacheKey, list); return list })
+    .catch(err => { modelCatalogCache.delete(cacheKey); throw err })
+  modelCatalogCache.set(cacheKey, promise)
+  return promise
+}
+
+// OpenRouter: public, key-less, CORS-enabled — same catalog for everyone.
 export function fetchOpenRouterModels() {
-  if (openRouterModelsCache) return Promise.resolve(openRouterModelsCache)
-  if (openRouterModelsPromise) return openRouterModelsPromise
-  openRouterModelsPromise = fetch('https://openrouter.ai/api/v1/models')
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json()
+  return cachedModelFetch('openrouter', async () => {
+    const res = await fetch('https://openrouter.ai/api/v1/models')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    return (data?.data || [])
+      .map(m => ({ id: m.id, label: m.name || m.id, contextLength: m.context_length }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// Google AI Studio: ListModels requires the caller's own key and only
+// returns models that key can actually use, so cache per key.
+export function fetchGoogleModels(apiKey) {
+  if (!apiKey) return Promise.reject(new Error('An API key is required to load Google\'s live model list.'))
+  return cachedModelFetch(`google:${apiKey}`, async () => {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${encodeURIComponent(apiKey)}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    return (data?.models || [])
+      .filter(m => m.supportedGenerationMethods?.some(g => g === 'generateContent' || g === 'streamGenerateContent'))
+      .map(m => ({ id: (m.name || '').replace(/^models\//, ''), label: m.displayName || m.name, contextLength: m.inputTokenLimit }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// Anthropic: /v1/models needs the same direct-browser-access header the
+// streaming call below uses; cache per key since access varies by account.
+export function fetchAnthropicModels(apiKey) {
+  if (!apiKey) return Promise.reject(new Error('An API key is required to load Anthropic\'s live model list.'))
+  return cachedModelFetch(`anthropic:${apiKey}`, async () => {
+    const res = await fetch('https://api.anthropic.com/v1/models?limit=1000', {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
     })
-    .then(data => {
-      const list = (data?.data || [])
-        .map(m => ({ id: m.id, label: m.name || m.id, contextLength: m.context_length }))
-        .filter(m => m.id)
-        .sort((a, b) => a.label.localeCompare(b.label))
-      openRouterModelsCache = list
-      return list
-    })
-    .catch(err => { openRouterModelsPromise = null; throw err })
-  return openRouterModelsPromise
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    return (data?.data || [])
+      .map(m => ({ id: m.id, label: m.display_name || m.id }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// OpenAI-compatible: the /models list endpoint is part of the OpenAI spec
+// most compatible backends (Groq, Together, Mistral, Ollama, ...) implement,
+// but not all do — callers should fall back to the curated list on failure.
+export function fetchOpenAIModels(apiKey, baseUrl) {
+  if (!apiKey) return Promise.reject(new Error('An API key is required to load the live model list.'))
+  const url = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/models`
+  return cachedModelFetch(`openai:${url}:${apiKey}`, async () => {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    return (data?.data || [])
+      .map(m => ({ id: m.id, label: m.id }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// Single entry point the settings UI calls regardless of which provider is
+// active, so it doesn't need a per-provider branch for "how do I refresh
+// this catalog".
+export function fetchLiveModels(provider, { apiKey, baseUrl } = {}) {
+  if (provider === 'openrouter') return fetchOpenRouterModels()
+  if (provider === 'google')     return fetchGoogleModels(apiKey)
+  if (provider === 'anthropic')  return fetchAnthropicModels(apiKey)
+  if (provider === 'openai')     return fetchOpenAIModels(apiKey, baseUrl)
+  return Promise.reject(new Error(`No live model catalog for provider: ${provider}`))
 }
 
 // ── Error messages ────────────────────────────────────────────────────────────
