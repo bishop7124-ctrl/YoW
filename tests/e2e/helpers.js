@@ -107,6 +107,18 @@ export async function openImportZip(page) {
   return page.locator('input[type="file"]').first()
 }
 
+// After a reload while already inside the manuscript editor, both the
+// Studio nav's persistent "Write" tab and the Editor-mode toolbar's "Write"
+// mode toggle are visible simultaneously, so a bare
+// getByRole('button', { name: 'Write' }) hits Playwright's strict-mode
+// ambiguity ("resolved to 2 elements"). Use this to wait for post-reload
+// hydration from inside the manuscript; a bare Write-button locator is
+// still fine for navigating INTO the manuscript for the first time (e.g.
+// writeInDefaultScene below), where only the Studio nav button exists yet.
+export async function waitForManuscriptHydrated(page) {
+  await page.getByRole('button', { name: 'Write' }).first().waitFor()
+}
+
 // Navigate to writing and fill the default scene, waiting for autosave to localStorage.
 export async function writeInDefaultScene(page, text) {
   await page.getByRole('button', { name: 'Write' }).click()
