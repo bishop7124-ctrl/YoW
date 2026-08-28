@@ -2126,9 +2126,10 @@ const formatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'sho
 const billingEndpoints = {
   checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL,
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL,
+  downgrade: import.meta.env.VITE_DOWNGRADE_TO_FREE_URL,
 }
 
-async function requestBillingUrl(endpoint, accessToken, body) {
+async function postBilling(endpoint, accessToken, body) {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -2137,11 +2138,29 @@ async function requestBillingUrl(endpoint, accessToken, body) {
     },
     body: JSON.stringify(body),
   })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    const error = new Error(data?.error || 'Billing could not be opened right now.')
+    error.code = data?.code
+    throw error
+  }
+  return data
+}
 
-  if (!response.ok) throw new Error('Billing could not be opened right now.')
-  const data = await response.json()
+async function requestBillingUrl(endpoint, accessToken, body) {
+  const data = await postBilling(endpoint, accessToken, body)
   if (!data?.url) throw new Error('Billing did not return a destination URL.')
   return data.url
+}
+
+// Accounts with a plan granted manually (e.g. via direct SQL) have no real
+// Stripe customer, so the billing portal above has nothing to manage — fall
+// back to resetting the plan directly. api/downgrade-to-free.js refuses any
+// account that *does* have a real Stripe customer/subscription, so this is
+// safe to attempt whenever the portal reports 'no_stripe_customer'.
+async function requestDirectDowngrade(endpoint, accessToken, body) {
+  const data = await postBilling(endpoint, accessToken, body)
+  if (!data?.ok) throw new Error('Could not downgrade this account. Please try again.')
 }
 
 function PlanBadge({ membership }) {
@@ -2228,7 +2247,7 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
                 type="button"
                 className="account-secondary-button"
                 style={{ fontSize: 12, padding: '0 12px', minHeight: 32 }}
-                onClick={() => onSelect(null)}
+                onClick={() => onSelect(null, 'cancel')}
                 disabled={anyBusy}
               >
                 {anyBusy ? 'Opening...' : 'Cancel plan'}
@@ -2761,8 +2780,13 @@ export default function AccountSettings({
 
   if (!open || !user) return null
 
-  const openBilling = async (planKey) => {
-    // planKey = null → open customer portal; otherwise open checkout for that plan
+  const openBilling = async (planKey, intent) => {
+    // planKey = null → open customer portal; otherwise open checkout for that plan.
+    // intent = 'cancel' only for the Free-plan card's "Cancel plan" button — the
+    // no-Stripe-customer fallback below must NOT fire for the separate "Manage
+    // subscription & billing"/"Billing history & receipts" button, which Lifetime
+    // and Founder purchasers (who have no subscription to cancel) also use just
+    // to view billing history, not to downgrade.
     if (planKey) {
       setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
       return
@@ -2787,7 +2811,18 @@ export default function AccountSettings({
       })
       window.location.assign(url)
     } catch (error) {
-      setBillingError(error.message || 'Billing could not be opened right now.')
+      if (error.code === 'no_stripe_customer' && intent === 'cancel' && billingEndpoints.downgrade) {
+        try {
+          const accessToken = await getAccessToken()
+          await requestDirectDowngrade(billingEndpoints.downgrade, accessToken, { userId: user.id })
+          setBillingMessage('Your plan has been moved to Free.')
+          await refreshUser()
+        } catch (downgradeError) {
+          setBillingError(downgradeError.message || 'Billing could not be opened right now.')
+        }
+      } else {
+        setBillingError(error.message || 'Billing could not be opened right now.')
+      }
     } finally {
       setBillingBusy('')
     }
