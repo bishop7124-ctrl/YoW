@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForManuscriptReady, waitForStorage,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -15,7 +15,13 @@ test.beforeEach(async ({ page }) => {
 // ─── Scene CRUD ───────────────────────────────────────────────────────────────
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
-  await page.locator('.ms-sidebar-add-btn').first().click()
+  // StructureSidebar (`.ms-sidebar-*`) was replaced by ManuscriptRail in the
+  // 2026-08-27 redesign. Its footer "+ Scene" button (`.ms-rail-f-btn`) adds
+  // to the end of the manuscript regardless of which chapter is selected —
+  // scoped to that class since "+ Scene" text alone also matches the
+  // per-chapter inline row button and the empty-manuscript "add first
+  // scene" CTA (`.manuscript-add-scene`).
+  await page.locator('.ms-rail-f-btn', { hasText: '+ Scene' }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
@@ -25,7 +31,7 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.length).toBeGreaterThanOrEqual(2)
 })
@@ -56,7 +62,7 @@ test('rename a scene and verify it persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.some(s => (s.title || '').includes(prefix))).toBe(true)
 })
@@ -84,8 +90,8 @@ test('word count updates when content is added', async ({ page }) => {
 // ─── Chapter CRUD ─────────────────────────────────────────────────────────────
 
 test('add a chapter and verify it appears and persists', async ({ page }) => {
-  // Use the sidebar add-chapter button (text is the level2 label, e.g. "Chapter")
-  await page.locator('.ms-sidebar-add-chapter').first().click()
+  // ManuscriptRail's footer "+ Chapter" button (see the scene-add comment above).
+  await page.locator('.ms-rail-f-btn', { hasText: '+ Chapter' }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')
@@ -95,7 +101,7 @@ test('add a chapter and verify it appears and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const chapters = await readStorage(page, 'nf_chapters')
   expect(chapters.length).toBeGreaterThanOrEqual(2)
 })
@@ -127,7 +133,7 @@ test('scene status cycles and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const scenes = await readStorage(page, 'nf_scenes')
   // At least one scene should have a non-default status
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
