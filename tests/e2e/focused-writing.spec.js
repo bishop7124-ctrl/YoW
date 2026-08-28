@@ -60,8 +60,9 @@ test('focused preference survives reload only while explicitly left enabled', as
 
 test('long wrapped prose keeps the caret inside the calm comfort zone', async ({ page }) => {
   await enterFocusedWriting(page)
-  const editor = page.locator('.ms-textarea').first()
-  await editor.click()
+  const placeholder = page.getByText('Begin writing here…')
+  if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
+  const editor = page.getByPlaceholder('Begin writing here…')
   const longParagraph = Array.from({ length: 260 }, (_, index) => `wrapped${index}`).join(' ')
   await editor.fill(longParagraph)
   await editor.press('End')
