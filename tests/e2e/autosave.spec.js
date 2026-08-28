@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
-  seedCleanStorage, waitForStorage, writeInDefaultScene,
+  seedCleanStorage, waitForManuscriptHydrated, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -53,7 +53,7 @@ test('multi-scene: scenes written in different chapters are isolated in localSto
   await page.reload()
   // Wait for real hydration before reading storage — a read right after
   // page.reload can race the app's own async backend-swap in main.jsx.
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptHydrated(page)
 
   // readScenesWithContent, not readStorage — scene prose lives under its own
   // nf_scene_content:<id> key, not inline on the nf_scenes record.
