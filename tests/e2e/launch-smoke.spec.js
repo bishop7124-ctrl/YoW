@@ -43,7 +43,17 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
-  await page.getByRole('button', { name: 'Done' }).click()
+  // Scope to the Project Settings dialog: post-redesign the Scene Inspector
+  // stays mounted behind the modal and has its own "Done" button (its scene
+  // status chip), so a bare getByRole('button', { name: 'Done' }) is a
+  // strict-mode violation. Scoped by the dialog's own id-based selector — the
+  // same one openProjectSettings() waits on — rather than by accessible name:
+  // that name comes from a heading styled `text-transform: uppercase`, and
+  // engines disagree on whether text-transform applies to the computed
+  // accessible name (WebKit does, Chromium doesn't), so a name-based locator
+  // would quietly match nothing if this matrix ever gains a non-Chromium project.
+  await page.locator('[role="dialog"][aria-labelledby="project-settings-title"]')
+    .getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
   // 'Import ▾' dropdown replaced the old bare 'Restore' button

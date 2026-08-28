@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { isPhoneViewport, useMediaQuery } from '../../utils/useMediaQuery'
+import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
 import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
@@ -231,7 +231,11 @@ export default function Manuscript({ store, userId, membership = null }) {
   // railUserToggledRef below), ≤900px rail becomes an off-canvas sheet
   // (railSheetOpen) instead of collapsing at all.
   const isNarrowBand = useMediaQuery(1250)
-  const isMobileBand = useMediaQuery(900)
+  // Same 900px threshold as the `.ms-insp` / `.ms-surface` / `.ms-tabbar`
+  // overlay rules in index.css — see BREAKPOINT_MS_OVERLAY's comment. Named
+  // rather than a bare literal so this and the inspector default below can't
+  // drift apart from the CSS independently.
+  const isMobileBand = useMediaQuery(BREAKPOINT_MS_OVERLAY)
   const [railCollapsed, setRailCollapsed] = useState(() => (
     typeof window !== 'undefined' && window.innerWidth <= 1250
   ))
@@ -251,7 +255,27 @@ export default function Manuscript({ store, userId, membership = null }) {
     railUserToggledRef.current = true
     setRailCollapsed(v => !v)
   }, [isMobileBand])
-  const [inspectorOpen, setInspectorOpen] = useState(() => !isPhoneViewport())
+  // Only open the inspector by default where it renders as a side column beside
+  // the prose (>900px). At or below that width it's an absolutely-positioned
+  // bottom sheet layered over the writing surface, so opening it by default put
+  // a panel on top of the editor the instant the manuscript opened — the whole
+  // 641-900px tablet band, iPad portrait (768px) included. This previously
+  // keyed off isPhoneViewport() (640px), which only covered phones.
+  const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
+  // The default above only covers first render. Crossing *into* the overlay
+  // band later — rotating an iPad from landscape (1024px, inspector open as a
+  // harmless side column) to portrait (768px), or narrowing a desktop window —
+  // would otherwise leave inspectorOpen true while the CSS has already turned
+  // the panel into a 62vh sheet on top of the prose, reproducing the exact
+  // obstruction the default fixes at mount. Only ever closes, and only on a
+  // band change: deps are [isMobileBand] alone, so a tablet user who
+  // deliberately opens the inspector at 768px is not fought by this effect.
+  useEffect(() => {
+    if (!isMobileBand) return
+    // Functional form so this is a no-op re-render when it's already closed
+    // (the common case: entering the band from a viewport where it was shut).
+    setInspectorOpen(prev => (prev ? false : prev))
+  }, [isMobileBand])
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
   // Lazy initializer (not an effect) so this reads localStorage once, on

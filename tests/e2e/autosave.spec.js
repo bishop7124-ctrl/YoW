@@ -53,7 +53,12 @@ test('multi-scene: scenes written in different chapters are isolated in localSto
   await page.reload()
   // Wait for real hydration before reading storage — a read right after
   // page.reload can race the app's own async backend-swap in main.jsx.
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  // Scoped to the redesign's `Editor mode` Write/Edit/Finalised tab group:
+  // the reload lands back inside the editor, where the Studio nav CTA also
+  // renders a "Write" button, so an unscoped locator is ambiguous. The mode
+  // tabs only exist once ManuscriptTopbar has mounted, which is the stronger
+  // hydration signal anyway.
+  await page.getByLabel('Editor mode').getByRole('button', { name: 'Write' }).waitFor()
 
   // readScenesWithContent, not readStorage — scene prose lives under its own
   // nf_scene_content:<id> key, not inline on the nf_scenes record.

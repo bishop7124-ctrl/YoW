@@ -4,6 +4,26 @@ import {
   seedCleanStorage, waitForStorage,
 } from './helpers.js'
 
+// The 2026-08-27 manuscript-editor-redesign merge replaced StructureSidebar.jsx
+// with ManuscriptRail.jsx, so the old `.ms-sidebar-add-btn` / `.ms-sidebar-add-chapter`
+// classes no longer exist anywhere in the app. The equivalent controls are the
+// three `.ms-rail-f-btn` buttons in the rail footer ("+ Scene" / "+ Chapter" /
+// "+ Act", labelled per project type). Scoped to `.ms-rail-f` with an exact name
+// so it can't match the lowercase inline "+ scene" add-rows between scene rows.
+function addFromRailFooter(page, label) {
+  return page.locator('.ms-rail-f').getByRole('button', { name: `+ ${label}`, exact: true }).click()
+}
+
+// After a reload inside the editor there are two "Write" buttons in the a11y
+// tree — the Studio nav CTA (`Studio navigation`) and the redesign's Write/Edit/
+// Finalised mode tabs (`Editor mode`) — so a bare getByRole('button', {name:'Write'})
+// is a strict-mode violation. `Editor mode` only renders once ManuscriptTopbar has
+// mounted, which is the hydration signal these tests actually want before reading
+// storage back.
+function editorHydrated(page) {
+  return page.getByLabel('Editor mode').getByRole('button', { name: 'Write' }).waitFor()
+}
+
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
   await page.goto('/')
@@ -15,7 +35,7 @@ test.beforeEach(async ({ page }) => {
 // ─── Scene CRUD ───────────────────────────────────────────────────────────────
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
-  await page.locator('.ms-sidebar-add-btn').first().click()
+  await addFromRailFooter(page, 'Scene')
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
@@ -25,7 +45,7 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await editorHydrated(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.length).toBeGreaterThanOrEqual(2)
 })
@@ -56,7 +76,7 @@ test('rename a scene and verify it persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await editorHydrated(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.some(s => (s.title || '').includes(prefix))).toBe(true)
 })
@@ -84,8 +104,8 @@ test('word count updates when content is added', async ({ page }) => {
 // ─── Chapter CRUD ─────────────────────────────────────────────────────────────
 
 test('add a chapter and verify it appears and persists', async ({ page }) => {
-  // Use the sidebar add-chapter button (text is the level2 label, e.g. "Chapter")
-  await page.locator('.ms-sidebar-add-chapter').first().click()
+  // Rail footer add-chapter button (text is the level2 label, e.g. "Chapter")
+  await addFromRailFooter(page, 'Chapter')
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')
@@ -95,7 +115,7 @@ test('add a chapter and verify it appears and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await editorHydrated(page)
   const chapters = await readStorage(page, 'nf_chapters')
   expect(chapters.length).toBeGreaterThanOrEqual(2)
 })
@@ -127,7 +147,7 @@ test('scene status cycles and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await editorHydrated(page)
   const scenes = await readStorage(page, 'nf_scenes')
   // At least one scene should have a non-default status
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)

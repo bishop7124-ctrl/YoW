@@ -6,6 +6,18 @@ import { useEffect, useState } from 'react'
 export const BREAKPOINT_TABLET = 860
 export const BREAKPOINT_PHONE = 640
 
+// The width at or below which the Manuscript Scene Inspector / AI surface stops
+// being a side column in normal flow and becomes an absolutely-positioned
+// bottom sheet layered over the writing surface. This is NOT a new ad hoc value:
+// it mirrors the existing `@media (max-width: 900px)` rules for `.ms-insp`,
+// `.ms-surface` and `.ms-tabbar` in src/index.css, and is named here so the JS
+// that reacts to that band and the CSS that defines it can't drift apart. They
+// already had: the inspector's open-by-default check used BREAKPOINT_PHONE
+// (640), so every width in the 641-900px tablet band — iPad portrait at 768px
+// included — opened the editor with the inspector sheet covering the prose.
+// Keep this in sync with those media queries.
+export const BREAKPOINT_MS_OVERLAY = 900
+
 function matchesMaxWidth(maxWidth) {
   if (typeof window === 'undefined') return false
   // jsdom (used by the test suite) doesn't implement matchMedia — fall back
