@@ -1,9 +1,15 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
+// Every persistence test here follows the same three-step shape around its
+// reload: flush() so the write has landed, reload, then waitForStorageHydration()
+// so the *read* goes to the IndexedDB vault rather than the default localStorage
+// backend the bridge answers from until main.jsx finishes swapping it. Only the
+// first of those was present before 2026-08-28, which is what made this spec
+// flaky — see waitForStorageHydration in helpers.js for the full trace.
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
   await page.goto('/')
@@ -35,6 +41,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(true)
   })
@@ -64,6 +71,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === updatedName)).toBe(true)
     expect(chars.some(c => c.name === originalName)).toBe(false)
@@ -99,6 +107,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(false)
   })
@@ -153,6 +162,7 @@ test.describe('Locations', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const locs = await readStorage(page, 'nf_locations')
     expect(locs.some(l => l.name === locName)).toBe(true)
   })
@@ -209,6 +219,7 @@ test.describe('Lore', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const lore = await readStorage(page, 'nf_loreEntries')
     expect(lore.some(e => e.title === loreTitle || e.name === loreTitle)).toBe(true)
   })
@@ -245,6 +256,7 @@ test.describe('Timeline', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const timeline = await readStorage(page, 'nf_timeline')
     expect(timeline.some(e => e.title === eventTitle || e.name === eventTitle)).toBe(true)
   })
@@ -278,6 +290,7 @@ test.describe('Ideas', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydration(page)
     const ideas = await readStorage(page, 'nf_ideaEntries')
     expect(ideas.some(e =>
       (e.title || e.text || e.content || '').includes(prefix),
