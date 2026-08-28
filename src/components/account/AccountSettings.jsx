@@ -13,7 +13,7 @@ import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
-import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
+import { PROVIDERS, fetchLiveModels } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
   deleteSyncedAiSettings,
@@ -1814,8 +1814,9 @@ function AISettingsPanel({ userId, membership }) {
   const [syncAcrossDevices, setSyncAcrossDevices] = useState(() => loadAiSettingsSyncEnabled())
   const [syncError, setSyncError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [openRouterModels, setOpenRouterModels] = useState(null) // null until loaded
-  const [openRouterModelsFailed, setOpenRouterModelsFailed] = useState(false)
+  // provider -> { forKey: string, models: [] | null, failed: boolean } — the live
+  // catalog fetched for whichever API key/base URL combo was last tried.
+  const [liveCatalogs, setLiveCatalogs] = useState({})
 
   useEffect(() => {
     setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
@@ -1835,17 +1836,32 @@ function AISettingsPanel({ userId, membership }) {
   const prov = PROVIDERS[active]
   const cfg = settings[active] || {}
 
-  // OpenRouter's hardcoded starter list above doesn't reflect the 300+
-  // models actually on the platform (or which ones a given account can use)
-  // — fetch the live, current catalog instead once the provider is selected.
+  // The hardcoded PROVIDERS[...].models lists are just curated starter sets —
+  // every provider here retires/ships model IDs faster than this app gets
+  // updated. Fetch each provider's real, current catalog once its key (and,
+  // for OpenAI-compatible, base URL) is known. OpenRouter's catalog is public
+  // and key-less; the others are scoped to the account, so wait for a key
+  // and debounce so we don't fire a request on every keystroke while typing one.
+  const draftKey = keyDrafts[active]
+  const activeApiKey = (draftKey ?? cfg.apiKey ?? '').trim()
+  const activeBaseUrl = cfg.baseUrl || ''
   useEffect(() => {
-    if (active !== 'openrouter' || openRouterModels || openRouterModelsFailed) return
+    if (active !== 'openrouter' && !activeApiKey) return
+    const forKey = `${activeApiKey}::${activeBaseUrl}`
+    if (liveCatalogs[active]?.forKey === forKey) return // already have/attempted this exact combo
+
     let cancelled = false
-    fetchOpenRouterModels()
-      .then(list => { if (!cancelled) setOpenRouterModels(list) })
-      .catch(() => { if (!cancelled) setOpenRouterModelsFailed(true) })
-    return () => { cancelled = true }
-  }, [active, openRouterModels, openRouterModelsFailed])
+    const timer = setTimeout(() => {
+      fetchLiveModels(active, { apiKey: activeApiKey, baseUrl: activeBaseUrl })
+        .then(models => { if (!cancelled) setLiveCatalogs(prev => ({ ...prev, [active]: { forKey, models, failed: false } })) })
+        .catch(() => { if (!cancelled) setLiveCatalogs(prev => ({ ...prev, [active]: { forKey, models: null, failed: true } })) })
+    }, active === 'openrouter' ? 0 : 500)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [active, activeApiKey, activeBaseUrl, liveCatalogs])
+
+  const activeCatalog = liveCatalogs[active]
+  const liveModels = activeCatalog?.forKey === `${activeApiKey}::${activeBaseUrl}` ? activeCatalog.models : null
+  const liveModelsFailed = activeCatalog?.forKey === `${activeApiKey}::${activeBaseUrl}` && activeCatalog?.failed
 
   const update = (field, val) =>
     setSettings(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
@@ -1886,7 +1902,7 @@ function AISettingsPanel({ userId, membership }) {
 
   const activeModelLabel = (() => {
     const model = cfg.model || prov?.defaultModel || ''
-    const catalog = active === 'openrouter' && openRouterModels ? openRouterModels : prov?.models
+    const catalog = liveModels || prov?.models
     const found = catalog?.find(m => m.id === model)
     return found ? found.label : model || 'Not set'
   })()
@@ -1998,52 +2014,28 @@ function AISettingsPanel({ userId, membership }) {
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
           Model — {prov?.name}
         </p>
-        {active === 'openrouter' ? (
-          <>
-            <input
-              list="openrouter-model-options"
-              value={cfg.model || prov?.defaultModel || ''}
-              onChange={e => update('model', e.target.value)}
-              placeholder="Search OpenRouter models, or paste any model id…"
-              className="account-appearance-input"
-              style={{ width: '100%' }}
-            />
-            <datalist id="openrouter-model-options">
-              {(openRouterModels || prov.models).map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </datalist>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              {openRouterModels
-                ? `Live catalog — ${openRouterModels.length} models currently on OpenRouter. Type to search, or paste any model id directly.`
-                : openRouterModelsFailed
-                  ? "Couldn't load OpenRouter's live model list — type or paste any model id from your account directly."
-                  : 'Loading the current model list from OpenRouter…'}
-            </p>
-          </>
-        ) : (
-          <>
-            <select
-              value={cfg.model || prov?.defaultModel || ''}
-              onChange={e => update('model', e.target.value)}
-              className="account-appearance-input"
-              style={{ width: '100%' }}
-            >
-              {prov?.models?.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-            {prov?.models?.length === 0 && (
-              <input
-                value={cfg.model || ''}
-                onChange={e => update('model', e.target.value)}
-                placeholder={`e.g. ${prov?.defaultModel}`}
-                className="account-appearance-input"
-                style={{ width: '100%', marginTop: 4 }}
-              />
-            )}
-          </>
-        )}
+        <input
+          list={`${active}-model-options`}
+          value={cfg.model || prov?.defaultModel || ''}
+          onChange={e => update('model', e.target.value)}
+          placeholder={active === 'openrouter' ? 'Search OpenRouter models, or paste any model id…' : `Search ${prov?.name} models, or paste any model id…`}
+          className="account-appearance-input"
+          style={{ width: '100%' }}
+        />
+        <datalist id={`${active}-model-options`}>
+          {(liveModels || prov?.models || []).map(m => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </datalist>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+          {liveModels
+            ? `Live catalog — ${liveModels.length} models currently available${active === 'openrouter' ? ' on OpenRouter' : ' for this key'}. Type to search, or paste any model id directly.`
+            : liveModelsFailed
+              ? `Couldn't load ${prov?.name}'s live model list — showing the built-in list. Type or paste any model id directly.`
+              : active !== 'openrouter' && !activeApiKey
+                ? `Enter your API key below to load ${prov?.name}'s live, current model list.`
+                : `Loading the current model list from ${prov?.name}…`}
+        </p>
       </div>
 
       {/* Base URL for OpenAI-compatible */}
