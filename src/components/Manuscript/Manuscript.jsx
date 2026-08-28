@@ -1329,13 +1329,15 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onAskAI={handleAskAI}
                         mode={mode === 'write' ? 'write' : 'edit'}
                         projectType={activeNovel?.type || 'novel'}
-                        // Reverted: enabling the continuous per-keystroke comfort-scroll
-                        // (useCaretComfortScroll's 'input'-driven centering) for the regular
-                        // editor made things *worse*, not better — it re-centers on every
-                        // keystroke during completely normal typing, not just after a
-                        // click/Enter jump, which read as constant unwanted scrolling. Back to
-                        // Focused-Writing-only for the continuous behavior; the click/Enter
-                        // jump itself is being root-caused separately (see SceneEditor.jsx).
+                        // `caretFollowEnabled` only controls Focused Writing's tight,
+                        // actively-centering 35/65 comfort band. Turning that tight band on
+                        // broadly for the regular editor made things worse, not better — it
+                        // re-centered on every keystroke during completely normal typing
+                        // (2026-08-07 pass 4). The regular editor still gets its own,
+                        // much wider GENTLE_ZONE correction regardless of this flag —
+                        // SceneEditor.jsx passes its own `focused` state into
+                        // useCaretComfortScroll for that — this prop only chooses which
+                        // band applies, not whether any correction runs at all.
                         caretFollowEnabled={focusedWriting.enabled && focusedWriting.caretFollow}
                         scrollContainerRef={scrollContainerRef}
                         pageZoom={focusedWriting.pageZoom}

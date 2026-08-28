@@ -668,11 +668,12 @@ const SceneEditorImpl = ({
     textareaRef,
     scrollContainerRef,
     enabled: caretFollowEnabled && focused,
+    focused,
     scale: pageZoom,
   })
 
   useLayoutEffect(() => {
-    if (caretFollowEnabled && focused) scheduleCaretFollow()
+    if (focused) scheduleCaretFollow()
   }, [caretFollowEnabled, focused, localContent, formatSettings, pageZoom, scheduleCaretFollow])
 
   // The store's own conflict detection (mergeSceneUpdateWithPersistedCopy in
