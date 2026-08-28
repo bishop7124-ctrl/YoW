@@ -17,6 +17,19 @@ describe('getCaretScrollDelta', () => {
   it('moves downward only as far as the bottom boundary', () => {
     expect(getCaretScrollDelta({ ...viewport, caretTop: 760 })).toBe(34)
   })
+
+  // 2026-08-2x: the regular editor uses a wide (8%/92%) "gentle zone" instead
+  // of the tight 35/65 band Focused Writing uses — see GENTLE_ZONE's own
+  // comment in useCaretComfortScroll.js for why a tight band there caused a
+  // real, previously-shipped-then-reverted regression.
+  it('supports a wider comfort band via topFraction/bottomFraction', () => {
+    const wide = { topFraction: 0.08, bottomFraction: 0.92 }
+    // Inside the tight 35–65% band but still inside the wide 8–92% one:
+    // the wide band leaves it alone.
+    expect(getCaretScrollDelta({ ...viewport, caretTop: 760, ...wide })).toBe(0)
+    // Only once the caret passes the wide band's own boundary does it correct.
+    expect(getCaretScrollDelta({ ...viewport, caretTop: 1050, ...wide })).toBe(54)
+  })
 })
 
 // A regression guard for the 2026-08-07 ROADMAP row: `schedule()` used to run
@@ -125,6 +138,115 @@ describe('useCaretComfortScroll throttling', () => {
     // Well within THROTTLE_MS of the previous call — a regular schedule()
     // here would be deferred to a trailing timer, not run right away.
     act(() => { result.current({ immediate: true }) })
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+})
+
+// A regression guard for the reopened 2026-08-07 ROADMAP row: passes 1-5 only
+// ever gated the throttled per-keystroke listener setup (and the settle-timer
+// that catches a delayed native scroll after a discrete action's `immediate`
+// correction) on `enabled` — a Focused Writing-only preference. The regular
+// editor therefore had *zero* comfort correction of any kind: nothing ever
+// ran during ordinary typing ("cursor brought to the bottom"), and nothing
+// caught a native scroll racing in after Enter's correction ("Enter doesn't
+// recenter"). `focused` now gates the same effect in addition to `enabled`,
+// using GENTLE_ZONE (see getCaretScrollDelta tests above) instead of the tight
+// band so this doesn't repeat pass 4's "way, way worse — recentering on every
+// keystroke during completely normal typing" regression.
+describe('useCaretComfortScroll regular-editor (non-Focused-Writing) correction', () => {
+  let textarea, container
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] })
+    container = document.createElement('div')
+    container.className = 'ms-scroll-container'
+    container.scrollTo = () => {}
+    textarea = document.createElement('textarea')
+    container.appendChild(textarea)
+    document.body.appendChild(container)
+    textarea.focus()
+  })
+
+  afterEach(() => {
+    document.body.removeChild(container)
+    vi.useRealTimers()
+  })
+
+  function flushRaf() {
+    act(() => { vi.advanceTimersByTime(32) })
+  }
+
+  it('attaches the throttled correction listeners when focused, even with the Focused Writing preference off', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: false,
+      focused: true,
+    }))
+
+    act(() => { textarea.dispatchEvent(new Event('input')) })
+    flushRaf()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not attach any listeners when neither enabled nor focused', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: false,
+      focused: false,
+    }))
+
+    act(() => { textarea.dispatchEvent(new Event('input')) })
+    flushRaf()
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // A regression guard raised in this fix's own code review: the container-
+  // scroll settle-timer can't tell a native "scroll the selection into view"
+  // apart from the user just scrolling the manuscript with the mouse wheel to
+  // reread earlier text while the textarea stays focused. Widening it to
+  // `focused` (like the rest of this effect) would yank the view back to the
+  // caret 180ms after the user stops scrolling to read — exactly what pass 6
+  // deliberately avoided (see the 2026-08-07 ROADMAP row). It must stay
+  // scoped to `enabled` (Focused Writing) specifically.
+  it('does NOT attach the container settle-timer when only focused, not enabled — avoids hijacking a manual reread scroll', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: false,
+      focused: true,
+    }))
+    flushRaf()
+    spy.mockClear()
+
+    act(() => { container.dispatchEvent(new Event('scroll')) })
+    act(() => { vi.advanceTimersByTime(180) })
+    flushRaf()
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('does attach the container settle-timer when enabled (Focused Writing)', () => {
+    const spy = vi.spyOn(container, 'scrollTo')
+    renderHook(() => useCaretComfortScroll({
+      textareaRef: { current: textarea },
+      scrollContainerRef: { current: container },
+      enabled: true,
+      focused: true,
+    }))
+    flushRaf()
+    spy.mockClear()
+
+    act(() => { container.dispatchEvent(new Event('scroll')) })
+    act(() => { vi.advanceTimersByTime(180) })
+    flushRaf()
 
     expect(spy).toHaveBeenCalledTimes(1)
   })
