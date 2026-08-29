@@ -1835,6 +1835,8 @@ function AISettingsPanel({ userId, membership }) {
   const active = settings.activeProvider
   const prov = PROVIDERS[active]
   const cfg = settings[active] || {}
+  const activeHasKeyAfterDraft = !!((keyDrafts[active] ?? cfg.apiKey ?? '').trim())
+  const googleBillingConfirmationRequired = active === 'google' && activeHasKeyAfterDraft && cfg.billingConfirmed !== true
 
   // The hardcoded PROVIDERS[...].models lists are just curated starter sets —
   // every provider here retires/ships model IDs faster than this app gets
@@ -1870,6 +1872,10 @@ function AISettingsPanel({ userId, membership }) {
 
   const handleSave = async () => {
     if (saving) return
+    if (googleBillingConfirmationRequired) {
+      setSyncError('Please confirm the Gemini billing requirement before saving this Google Gemini key.')
+      return
+    }
     const settingsToSave = { ...settings }
     Object.entries(keyDrafts).forEach(([provider, value]) => {
       if (!value?.trim()) return
@@ -1936,6 +1942,24 @@ function AISettingsPanel({ userId, membership }) {
           </button>
           {saved && <span className="account-inline-success">Saved</span>}
         </div>
+      </div>
+
+      <div style={{
+        padding: '12px 14px',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        background: 'var(--bg-main)',
+        marginBottom: 18,
+      }}>
+        <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.55, margin: '0 0 8px', fontWeight: 700 }}>
+          AI features send request context to your selected provider
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
+          When you use AI features, YOW may send the information needed to fulfil your request, including relevant project content, to your selected AI provider. Your use of that provider is also subject to its own terms, privacy policy, pricing, and usage limits.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, margin: '8px 0 0' }}>
+          YOW does not operate or control third-party AI providers. Model availability, pricing, limits, and data practices are determined by your selected provider and may change.
+        </p>
       </div>
 
       {/* Active model callout */}
@@ -2009,6 +2033,26 @@ function AISettingsPanel({ userId, membership }) {
         </div>
       </div>
 
+      <div style={{
+        marginBottom: 18,
+        padding: '12px 14px',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        background: 'var(--bg-nav)',
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '0 0 8px' }}>Provider setup</p>
+        <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.55, margin: '0 0 6px' }}>
+          <strong>{prov?.name}</strong>: {prov?.bestFor}
+        </p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.freeUsage}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.billing}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 8px' }}>{prov?.limitations}</p>
+        <a href={prov?.setupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent)' }}>Get an API key</a>
+        <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.45, margin: '8px 0 0' }}>
+          Provider availability, pricing, model access, and limits can change. YOW is not partnered with or endorsed by these providers unless explicitly stated elsewhere.
+        </p>
+      </div>
+
       {/* Model selector for active provider */}
       <div style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
@@ -2037,6 +2081,35 @@ function AISettingsPanel({ userId, membership }) {
                 : `Loading the current model list from ${prov?.name}…`}
         </p>
       </div>
+
+      {active === 'google' && (
+        <label style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          padding: '12px 14px',
+          border: `1px solid ${googleBillingConfirmationRequired ? '#f59e0b' : 'var(--border)'}`,
+          borderRadius: 8,
+          background: 'var(--bg-main)',
+          cursor: 'pointer',
+          marginBottom: 16,
+        }}>
+          <input
+            type="checkbox"
+            checked={cfg.billingConfirmed === true}
+            onChange={e => update('billingConfirmed', e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-main)' }}>
+              Gemini billing confirmation
+            </span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.5 }}>
+              I confirm that the Google Cloud project associated with this Gemini API key has billing enabled where required by Google's terms. Users in the UK, EEA, and Switzerland must use Gemini Paid Services for API clients made available to them.
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* Base URL for OpenAI-compatible */}
       {prov?.hasBaseUrl && (
@@ -2074,7 +2147,14 @@ function AISettingsPanel({ userId, membership }) {
           {cfg.apiKey?.trim() && (
             <button
               type="button"
-              onClick={() => setSettings(prev => ({ ...prev, [active]: { ...prev[active], apiKey: '' } }))}
+              onClick={() => setSettings(prev => ({
+                ...prev,
+                [active]: {
+                  ...prev[active],
+                  apiKey: '',
+                  ...(active === 'google' ? { billingConfirmed: false } : {}),
+                },
+              }))}
               style={{ flexShrink: 0, border: 'none', background: 'none', color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >
               Remove key

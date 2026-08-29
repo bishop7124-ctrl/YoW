@@ -10,6 +10,10 @@ export const MAX_MONTHS = 24
 export const MAX_DAYS_PER_MONTH = 99
 export const MAX_WEEK_LENGTH = 14
 export const MAX_LABEL_LENGTH = 40
+export const SCHEDULE_OPEN_MODES = {
+  FIXED: 'fixed',
+  LAST_VIEWED: 'lastViewed',
+}
 
 export const DEFAULT_MONTH_NAMES = [
   'First Month', 'Second Month', 'Third Month', 'Fourth Month',
@@ -63,6 +67,37 @@ export function getScheduleCalendar(novel) {
   for (const m of months) { monthStarts.push(offset); offset += m.days }
 
   return { months, weekLength, dayNames, monthStarts, daysInYear: offset }
+}
+
+const cleanYear = (value, fallback = 1) => {
+  const n = parseInt(value, 10)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const cleanMonth = (calendar, value, fallback = 1) =>
+  clampInt(value, 1, calendar.months.length, fallback)
+
+export function getScheduleViewSettings(novel, calendar = getScheduleCalendar(novel)) {
+  const raw = novel?.scheduleViewSettings
+  const openMode = raw?.openMode === SCHEDULE_OPEN_MODES.LAST_VIEWED
+    ? SCHEDULE_OPEN_MODES.LAST_VIEWED
+    : SCHEDULE_OPEN_MODES.FIXED
+  const defaultYear = cleanYear(raw?.defaultYear, 1)
+  const defaultMonth = cleanMonth(calendar, raw?.defaultMonth, 1)
+  const lastViewedYear = cleanYear(raw?.lastViewedYear, defaultYear)
+  const lastViewedMonth = cleanMonth(calendar, raw?.lastViewedMonth, defaultMonth)
+  const openYear = openMode === SCHEDULE_OPEN_MODES.LAST_VIEWED ? lastViewedYear : defaultYear
+  const openMonth = openMode === SCHEDULE_OPEN_MODES.LAST_VIEWED ? lastViewedMonth : defaultMonth
+
+  return {
+    openMode,
+    defaultYear,
+    defaultMonth,
+    lastViewedYear,
+    lastViewedMonth,
+    openYear,
+    openMonth,
+  }
 }
 
 export const monthName = (calendar, month) =>

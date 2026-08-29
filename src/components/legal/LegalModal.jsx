@@ -18,7 +18,7 @@ const Accent = ({ children }) => <strong style={{ color: 'var(--text-main)' }}>{
 const CONTENT = {
   privacy: {
     title: 'Privacy Policy',
-    sub: 'Last updated May 2026',
+    sub: 'Last updated August 2026',
     body: (
       <>
         <Section title="Who we are">
@@ -38,7 +38,13 @@ const CONTENT = {
             <Li>To manage your account and subscription.</Li>
             <Li>To send transactional emails (account confirmation, password reset).</Li>
           </Ul>
-          <P>We do <Accent>not</Accent> sell your data, share it with advertisers, or use it to train AI models.</P>
+          <P>We do <Accent>not</Accent> sell your data, share it with advertisers, or use it to train YOW-owned AI models.</P>
+        </Section>
+        <Section title="AI features and third-party AI providers">
+          <P>AI features are optional. If you use them, you choose which supported third-party AI provider to connect with your own API key.</P>
+          <P>When you use AI features, YOW may send the information needed to fulfil your request to the provider you selected. Depending on the feature and context you choose, this may include manuscript text, characters, lore, locations, notes, timeline information, comic page or panel details, campaign/session material, or other relevant project content.</P>
+          <P>Third-party AI providers process data under their own terms, privacy policies, pricing, limits, data-handling, storage, training, and retention practices. YOW does not operate or control those external providers, and those practices may differ by provider or account configuration. You should review the applicable provider terms and privacy policy before connecting a key.</P>
+          <P>API keys are stored only to enable the integration you choose. Keys are hidden after saving, stored locally for your account, and, if sync is enabled, stored in encrypted form in your YOW account so your signed-in devices can use the same provider. You can remove a saved key or disconnect synced AI settings from Account Settings.</P>
         </Section>
         <Section title="Your rights">
           <Ul>
@@ -58,7 +64,7 @@ const CONTENT = {
   },
   terms: {
     title: 'Terms of Service',
-    sub: 'Last updated May 2026',
+    sub: 'Last updated August 2026',
     body: (
       <>
         <Section title="Using the service">
@@ -66,6 +72,12 @@ const CONTENT = {
         </Section>
         <Section title="Your content">
           <P>Everything you write <Accent>remains yours</Accent>. Your Own World claims no ownership of your stories, characters, world notes, or manuscripts. You grant us a limited, non-exclusive licence to store and deliver your content as part of providing the Service to you.</P>
+        </Section>
+        <Section title="AI features">
+          <P>AI functionality is provided through third-party providers selected by you. Use of those services is also subject to the selected provider's own terms, privacy policies, acceptable-use rules, pricing, limits, and restrictions.</P>
+          <P>You are responsible for ensuring you have the rights and permissions needed to submit content through AI features. You must not use YOW AI integrations in a way that violates applicable law or the selected provider's acceptable-use policies.</P>
+          <P>YOW does not guarantee model availability, uptime, output quality, accuracy, pricing, limits, or continued availability of any third-party provider or model. AI outputs may be inaccurate, incomplete, repetitive, or similar to outputs generated for other users.</P>
+          <P>YOW does not claim ownership of your project content. YOW also does not claim ownership over AI-generated outputs, subject to applicable law and the selected provider's terms. You remain responsible for reviewing, editing, and deciding how to use any AI-generated output.</P>
         </Section>
         <Section title="Subscriptions and billing">
           <Ul>
@@ -102,7 +114,7 @@ const CONTENT = {
           <P>The AI tools in Your Own World are designed to <Accent>assist</Accent> your creative process — generating ideas, suggesting options, helping with research. AI does not replace your voice or authorship. We will always be transparent about where AI is involved and will never present AI output as your own work without your direction.</P>
         </Section>
         <Section title="Your data is not training data">
-          <P>Your writing content is <Accent>never</Accent> used to train AI models — ours or anyone else's — without your explicit opt-in consent. This is a hard commitment, not a legal hedge.</P>
+          <P>YOW does not use your writing content to train YOW-owned AI models. If you choose to connect a third-party AI provider, that provider's own data practices, retention settings, and training policies apply to requests sent to it.</P>
         </Section>
         <Section title="No dark patterns">
           <P>We will never use manipulative design to confuse you about pricing, make cancellation difficult, obscure your data rights, or create false urgency. If something costs money, we'll say so clearly before you pay.</P>
