@@ -16,11 +16,19 @@ export const PROVIDERS = {
     name: 'Google AI Studio',
     keyPlaceholder: 'AIza...',
     // Starter/fallback list only — Google retires Gemini model IDs on a few
-    // months' notice (2.0 Flash and Flash-Lite were shut down June 2026; the
-    // 2.5 line is slated for October 2026) and ships new ones just as fast.
-    // fetchGoogleModels() below pulls the real, current, key-scoped catalog;
-    // this list is what renders before that resolves or if it fails.
+    // months' notice, and has been cutting new-user access to old IDs even
+    // faster than its own published shutdown dates (2.0 Flash/Flash-Lite:
+    // shut down June 2026; 2.5 Pro/Flash/Flash-Lite: still listed by
+    // ListModels but already 404ing for new keys as "no longer available to
+    // new users", well ahead of their October 2026 shutdown date). Because
+    // ListModels can say a model is available when generateContent will
+    // reject it, the live catalog from fetchGoogleModels() below is
+    // necessary but not sufficient — friendlyErrorMessage() below also
+    // special-cases that rejection so switching models is a one-message fix
+    // instead of a mystery. This list is what renders before the live
+    // catalog resolves, or if it fails.
     models: [
+      { id: 'gemini-3.6-flash',           label: 'Gemini 3.6 Flash' },
       { id: 'gemini-3.5-flash',           label: 'Gemini 3.5 Flash' },
       { id: 'gemini-2.5-pro',             label: 'Gemini 2.5 Pro' },
       { id: 'gemini-2.5-flash',           label: 'Gemini 2.5 Flash' },
@@ -29,7 +37,7 @@ export const PROVIDERS = {
       { id: 'gemma-3-12b-it',             label: 'Gemma 3 12B' },
       { id: 'gemma-3-4b-it',              label: 'Gemma 3 4B' },
     ],
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.6-flash',
   },
   openrouter: {
     name: 'OpenRouter',
@@ -177,17 +185,58 @@ export function fetchLiveModels(provider, { apiKey, baseUrl } = {}) {
 // a bad key, a rate limit, and a provider outage all rendered as the same
 // generic red box with whatever raw string the provider happened to send.
 
-export function friendlyErrorMessage(status, rawMessage) {
+export function friendlyErrorMessage(status, rawMessage, options = {}) {
+  const { provider, metadata = {}, retryAfter } = options
+  const errorType = metadata.error_type || metadata.errorType
+  const providerCode = metadata.provider_code || metadata.providerCode
+  const waitText = retryAfter ? ` Wait ${retryAfter} second${Number(retryAfter) === 1 ? '' : 's'} before retrying.` : ''
+  const isOpenRouter = provider === 'openrouter'
+  const openRouterSuffix = isOpenRouter
+    ? ' For OpenRouter free models, try a different model ending in :free, wait for the quota window to reset, add OpenRouter credits, or switch to a paid model variant.'
+    : ''
+
+  // Providers retire model IDs faster than users update their settings —
+  // and Google in particular has been cutting new-key access to a model
+  // before its own published shutdown date, so this isn't even rare. Catch
+  // it by phrasing rather than status code since providers don't agree on
+  // one (Google: 404 "no longer available to new users"; others: 400/410).
+  if (/no longer available|has been (deprecated|retired|removed|shut ?down)|model not found/i.test(rawMessage || '')) {
+    return `This model isn't available anymore. Open AI Settings and pick another from the live model list. (${rawMessage})`
+  }
   if (status === 401 || status === 403) {
     return `Your API key looks invalid or doesn't have permission for this model. Check it in AI Settings. (${rawMessage})`
   }
+  if (status === 402 || errorType === 'payment_required') {
+    return `Your AI provider account or API key is out of credits. Check the provider billing/limits page or choose a free model your key can use. (${rawMessage})`
+  }
   if (status === 429) {
-    return `The AI provider is rate-limiting requests — wait a moment and try again. (${rawMessage})`
+    if (isOpenRouter && (providerCode || /provider returned error|upstream|provider/i.test(rawMessage || ''))) {
+      return `OpenRouter reached the selected model, but the upstream provider is rate-limiting or at capacity.${waitText}${openRouterSuffix} (${rawMessage})`
+    }
+    return `The AI provider is rate-limiting requests.${waitText || ' Wait a moment and try again.'}${openRouterSuffix} (${rawMessage})`
+  }
+  if (errorType === 'provider_overloaded' || errorType === 'provider_unavailable') {
+    return `OpenRouter couldn't get a usable response from the selected model provider.${waitText} Try another model or a paid model variant if this keeps happening. (${rawMessage})`
   }
   if (status >= 500) {
     return `The AI provider is having issues right now — this isn't something you can fix, try again shortly. (${rawMessage})`
   }
   return rawMessage
+}
+
+function readRetryAfter(res) {
+  const value = res.headers?.get?.('Retry-After')
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null
+}
+
+function parseProviderError(status, data) {
+  const error = data?.error || {}
+  return {
+    status: Number(error.code) || status,
+    message: error.message || `HTTP ${status}`,
+    metadata: error.metadata || {},
+  }
 }
 
 // ── Shared SSE reader ─────────────────────────────────────────────────────────
@@ -230,9 +279,9 @@ async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk,
       signal,
     })
     if (!res.ok) {
-      let msg = `HTTP ${res.status}`
-      try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(res.status, msg))
+      let err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} }
+      try { err = parseProviderError(res.status, await res.json()) } catch { /* ignore */ }
+      return onError(friendlyErrorMessage(err.status, err.message, { metadata: err.metadata }))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
@@ -263,9 +312,9 @@ async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, on
       signal,
     })
     if (!res.ok) {
-      let msg = `HTTP ${res.status}`
-      try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(res.status, msg))
+      let err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} }
+      try { err = parseProviderError(res.status, await res.json()) } catch { /* ignore */ }
+      return onError(friendlyErrorMessage(err.status, err.message, { metadata: err.metadata }))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
@@ -278,7 +327,7 @@ async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, on
   } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
 }
 
-async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
+async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
   try {
     const url        = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/chat/completions`
     const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages]
@@ -289,18 +338,24 @@ async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt
       signal,
     })
     if (!res.ok) {
-      let msg = `HTTP ${res.status}`
-      try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(res.status, msg))
+      let err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} }
+      try { err = parseProviderError(res.status, await res.json()) } catch { /* ignore */ }
+      return onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata, retryAfter: readRetryAfter(res) }))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
     await readSSE(res.body, (parsed) => {
+      if (parsed.error) {
+        const err = parseProviderError(parsed.error.code || 500, parsed)
+        onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata }))
+        done = true
+        return true
+      }
       const text = parsed.choices?.[0]?.delta?.content
       if (text) onChunk(text)
       if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
     })
-    onceDone()
+    if (!done) onceDone()
   } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
 }
 
@@ -316,9 +371,10 @@ export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, 
   if (provider === 'openrouter')  return streamOpenAI({
     apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal,
     baseUrl: 'https://openrouter.ai/api/v1',
+    provider: 'openrouter',
     extraHeaders: { 'HTTP-Referer': 'https://yow.app', 'X-Title': 'Your Own World' },
   })
-  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
+  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, provider: 'openai', systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
   onError(`Unknown provider: ${provider}`)
 }
 
