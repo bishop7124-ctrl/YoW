@@ -228,13 +228,13 @@ export default function CharacterInterview({ store, userId }) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '20px' }}>
         <div style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-main)', margin: '0 0 4px' }}>Character Interview</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Chat with an AI roleplaying as one of your characters to develop voice, motivation, and backstory.</p>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-main)', margin: '0 0 4px' }}>AI Character Simulation</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Chat with an AI-generated roleplay of one of your characters to develop voice, motivation, and backstory.</p>
         </div>
 
         <div style={{ background: 'color-mix(in srgb, #f59e0b 8%, transparent)', border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)', borderRadius: 8, padding: '8px 12px', marginBottom: 20 }}>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            ⚠️ Interview responses are exploratory and <strong style={{ color: 'var(--text-main)' }}>not automatically canon</strong>. Save useful answers as raw ideas.
+            AI simulation responses are exploratory and <strong style={{ color: 'var(--text-main)' }}>not automatically canon</strong>. Save useful answers as raw ideas.
           </p>
         </div>
 

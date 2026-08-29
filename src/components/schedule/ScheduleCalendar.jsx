@@ -1,5 +1,8 @@
-import { useState, useMemo, useEffect } from 'react'
-import { getScheduleCalendar, monthName, daysInMonth, absoluteDay } from '../../utils/scheduleCalendar'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import {
+  getScheduleCalendar, getScheduleViewSettings, monthName, daysInMonth, absoluteDay,
+  SCHEDULE_OPEN_MODES,
+} from '../../utils/scheduleCalendar'
 import ScheduleSettingsModal from './ScheduleSettingsModal'
 
 const CATEGORIES = [
@@ -286,11 +289,13 @@ export default function ScheduleCalendar({ store }) {
   const [viewMonth, setViewMonth] = useState(1)
   const [viewMode, setViewMode] = useState('month')
   const [modal, setModal] = useState(null)
+  const loadedProjectIdRef = useRef(null)
 
   const events = useMemo(() => store.storySchedule ?? [], [store.storySchedule])
   const categories = useMemo(() => getScheduleCategories(store.activeNovel), [store.activeNovel])
   const categoriesById = useMemo(() => Object.fromEntries(categories.map(cat => [cat.id, cat])), [categories])
   const calendar = useMemo(() => getScheduleCalendar(store.activeNovel), [store.activeNovel])
+  const viewSettings = useMemo(() => getScheduleViewSettings(store.activeNovel, calendar), [store.activeNovel, calendar])
 
   const monthCount = calendar.months.length
   const weekLength = calendar.weekLength
@@ -307,11 +312,32 @@ export default function ScheduleCalendar({ store }) {
     if (month === monthCount) { setViewMonth(1); setViewYear(y => y + 1) }
     else setViewMonth(month + 1)
   }
-  const goToday = () => {
-    const year = store.activeNovel?.currentYear || 1
-    setViewYear(year)
-    setViewMonth(1)
-  }
+
+  useEffect(() => {
+    if (!store.activeNovelId) return
+    const projectChanged = loadedProjectIdRef.current !== store.activeNovelId
+    loadedProjectIdRef.current = store.activeNovelId
+    if (projectChanged) {
+      setViewYear(viewSettings.openYear)
+      setViewMonth(viewSettings.openMonth)
+      return
+    }
+    setViewMonth(current => Math.min(current, monthCount))
+  }, [store.activeNovelId, viewSettings.openYear, viewSettings.openMonth, monthCount])
+
+  useEffect(() => {
+    if (!store.activeNovelId || viewSettings.openMode !== SCHEDULE_OPEN_MODES.LAST_VIEWED) return
+    if (viewSettings.lastViewedYear === viewYear && viewSettings.lastViewedMonth === month) return
+    store.updateNovel(store.activeNovelId, {
+      scheduleViewSettings: {
+        openMode: viewSettings.openMode,
+        defaultYear: viewSettings.defaultYear,
+        defaultMonth: viewSettings.defaultMonth,
+        lastViewedYear: viewYear,
+        lastViewedMonth: month,
+      },
+    })
+  }, [store, store.activeNovelId, viewSettings, viewYear, month])
 
   const monthEvents = useMemo(() => {
     const mAbsStart = calendar.monthStarts[month - 1]
@@ -374,50 +400,51 @@ export default function ScheduleCalendar({ store }) {
 
       {/* ── Header ── */}
       <div className="schedule-header">
-        <button onClick={prevMonth} title="Previous month" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>←</button>
+        <button onClick={prevMonth} title="Previous month" className="schedule-icon-button">←</button>
 
         <div className="schedule-date-controls">
-          <select value={month} onChange={e => setViewMonth(Number(e.target.value))} className="field px-2 py-1.5 text-base">
-            {calendar.months.map((m, index) => <option key={index} value={index + 1}>{m.name}</option>)}
-          </select>
-          <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || 1)} className="field px-2 py-1.5 text-base" aria-label="Year" />
-          <button type="button" onClick={goToday} className="btn btn-secondary btn-sm">Today</button>
+          <label className="schedule-date-field schedule-date-field--month">
+            <span>Month</span>
+            <select value={month} onChange={e => setViewMonth(Number(e.target.value))} className="field" aria-label="Schedule month">
+              {calendar.months.map((m, index) => <option key={index} value={index + 1}>{m.name}</option>)}
+            </select>
+          </label>
+          <label className="schedule-date-field schedule-date-field--year">
+            <span>Year</span>
+            <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || 1)} className="field" aria-label="Schedule year" />
+          </label>
         </div>
 
-        <button onClick={nextMonth} title="Next month" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>→</button>
+        <button onClick={nextMonth} title="Next month" className="schedule-icon-button">→</button>
 
-        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          {['month', 'list'].map(mode => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              style={{
-                padding: '5px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                border: '1px solid var(--border)',
-                background: viewMode === mode ? 'var(--accent)' : 'transparent',
-                color: viewMode === mode ? 'var(--bg-main)' : 'var(--text-muted)',
-                textTransform: 'capitalize',
-              }}
-            >
-              {mode}
-            </button>
-          ))}
+        <div className="schedule-toolbar-actions">
+          <div className="schedule-view-toggle">
+            {['month', 'list'].map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={viewMode === mode ? 'is-active' : ''}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setModal({ type: 'settings' })}
+            title="Calendar settings — months, week length, day labels"
+            className="schedule-secondary-button"
+          >
+            ⚙ Calendar
+          </button>
+
+          <button
+            onClick={() => openCreate(1)}
+            className="schedule-primary-button"
+          >
+            + Add Event
+          </button>
         </div>
-
-        <button
-          onClick={() => setModal({ type: 'settings' })}
-          title="Calendar settings — months, week length, day labels"
-          style={{ padding: '5px 12px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginLeft: 4 }}
-        >
-          ⚙ Calendar
-        </button>
-
-        <button
-          onClick={() => openCreate(1)}
-          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
-        >
-          + Add Event
-        </button>
       </div>
 
       {/* ── Body ── */}
@@ -496,7 +523,7 @@ export default function ScheduleCalendar({ store }) {
             {monthEvents.length === 0 && (
               <div className="schedule-empty-month">
                 <p>No events in {monthName(calendar, month)}, Year {viewYear}</p>
-                <button onClick={() => openCreate(1)} className="btn btn-primary btn-sm">Add event</button>
+                <button onClick={() => openCreate(1)} className="schedule-primary-button">Add event</button>
               </div>
             )}
 

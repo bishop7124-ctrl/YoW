@@ -459,8 +459,8 @@ const AI_FEATURES = [
     benefit: 'Keep your magic system, world history, and internal rules consistent across hundreds of pages.',
   },
   {
-    name: 'Character Interview Mode',
-    desc: 'Have a real conversation with any character in your project. The AI responds as that character, informed by their full profile, history, and relationships.',
+    name: 'AI Character Simulation',
+    desc: 'Explore an AI-generated roleplay of any character in your project, informed by their profile, history, and relationships.',
     benefit: 'Find authentic character voice, unlock natural dialogue, and understand how your character would genuinely react to your plot.',
   },
   {

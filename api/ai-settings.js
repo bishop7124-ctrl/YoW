@@ -70,6 +70,9 @@ function sanitizeSettings(input = {}) {
     if (provider === 'openai') {
       sanitized[provider].baseUrl = String(cfg.baseUrl || '').trim().slice(0, 500)
     }
+    if (provider === 'google') {
+      sanitized[provider].billingConfirmed = cfg.billingConfirmed === true
+    }
   }
 
   if (JSON.stringify(sanitized).length > MAX_BODY_BYTES) {

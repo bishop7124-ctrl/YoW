@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getScheduleCalendar, defaultScheduleCalendar, monthName, daysInMonth, absoluteDay,
+  getScheduleViewSettings, SCHEDULE_OPEN_MODES,
 } from './scheduleCalendar.js'
 
 describe('getScheduleCalendar', () => {
@@ -91,5 +92,48 @@ describe('calendar math', () => {
     const def = getScheduleCalendar({ scheduleCalendar: defaultScheduleCalendar() })
     expect(def.daysInYear).toBe(360)
     expect(absoluteDay(def, 5, 3)).toBe((5 - 1) * 30 + 2)
+  })
+})
+
+describe('getScheduleViewSettings', () => {
+  const calendar = getScheduleCalendar({
+    scheduleCalendar: { months: [{ name: 'A', days: 20 }, { name: 'B', days: 10 }] },
+  })
+
+  it('defaults to opening the first month of year one', () => {
+    expect(getScheduleViewSettings({}, calendar)).toMatchObject({
+      openMode: SCHEDULE_OPEN_MODES.FIXED,
+      defaultYear: 1,
+      defaultMonth: 1,
+      openYear: 1,
+      openMonth: 1,
+    })
+  })
+
+  it('opens to the fixed configured month and year', () => {
+    expect(getScheduleViewSettings({
+      scheduleViewSettings: { openMode: SCHEDULE_OPEN_MODES.FIXED, defaultYear: 9, defaultMonth: 2, lastViewedYear: 12, lastViewedMonth: 1 },
+    }, calendar)).toMatchObject({
+      openYear: 9,
+      openMonth: 2,
+    })
+  })
+
+  it('opens to the preserved last viewed month and year', () => {
+    expect(getScheduleViewSettings({
+      scheduleViewSettings: { openMode: SCHEDULE_OPEN_MODES.LAST_VIEWED, defaultYear: 9, defaultMonth: 2, lastViewedYear: 12, lastViewedMonth: 1 },
+    }, calendar)).toMatchObject({
+      openYear: 12,
+      openMonth: 1,
+    })
+  })
+
+  it('clamps configured months to the project calendar', () => {
+    expect(getScheduleViewSettings({
+      scheduleViewSettings: { defaultMonth: 9, lastViewedMonth: 8 },
+    }, calendar)).toMatchObject({
+      defaultMonth: 2,
+      lastViewedMonth: 2,
+    })
   })
 })

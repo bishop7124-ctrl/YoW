@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-  getScheduleCalendar, defaultScheduleCalendar,
+  getScheduleCalendar, getScheduleViewSettings, defaultScheduleCalendar,
+  SCHEDULE_OPEN_MODES,
   MAX_MONTHS, MAX_DAYS_PER_MONTH, MAX_WEEK_LENGTH,
 } from '../../utils/scheduleCalendar'
 
@@ -22,9 +23,13 @@ const SECTION_TITLE = {
 // partial or odd values here can never break the calendar.
 export default function ScheduleSettingsModal({ store, onClose }) {
   const calendar = getScheduleCalendar(store.activeNovel)
+  const viewSettings = getScheduleViewSettings(store.activeNovel, calendar)
   const [months, setMonths] = useState(() => calendar.months.map(m => ({ ...m })))
   const [weekLength, setWeekLength] = useState(calendar.weekLength)
   const [dayNames, setDayNames] = useState(() => [...calendar.dayNames])
+  const [openMode, setOpenMode] = useState(viewSettings.openMode)
+  const [defaultYear, setDefaultYear] = useState(viewSettings.defaultYear)
+  const [defaultMonth, setDefaultMonth] = useState(viewSettings.defaultMonth)
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -60,11 +65,27 @@ export default function ScheduleSettingsModal({ store, onClose }) {
     const normalized = getScheduleCalendar({
       scheduleCalendar: { months, weekLength, dayNames: dayNames.slice(0, weekLength) },
     })
+    const normalizedView = getScheduleViewSettings({
+      scheduleViewSettings: {
+        openMode,
+        defaultYear,
+        defaultMonth,
+        lastViewedYear: viewSettings.lastViewedYear,
+        lastViewedMonth: viewSettings.lastViewedMonth,
+      },
+    }, normalized)
     store.updateNovel(store.activeNovelId, {
       scheduleCalendar: {
         months: normalized.months,
         weekLength: normalized.weekLength,
         dayNames: normalized.dayNames,
+      },
+      scheduleViewSettings: {
+        openMode: normalizedView.openMode,
+        defaultYear: normalizedView.defaultYear,
+        defaultMonth: normalizedView.defaultMonth,
+        lastViewedYear: normalizedView.lastViewedYear,
+        lastViewedMonth: normalizedView.lastViewedMonth,
       },
     })
     onClose()
@@ -84,6 +105,52 @@ export default function ScheduleSettingsModal({ store, onClose }) {
           Shape this project's story calendar — month names and lengths, week length, and day labels.
           Existing events keep their dates; anything outside the new calendar stays visible in the List view.
         </p>
+
+        {/* Opening view */}
+        <p style={SECTION_TITLE}>Opening view</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-main)', fontSize: 13 }}>
+            <input
+              type="radio"
+              name="schedule-open-mode"
+              checked={openMode === SCHEDULE_OPEN_MODES.FIXED}
+              onChange={() => setOpenMode(SCHEDULE_OPEN_MODES.FIXED)}
+            />
+            Open to a chosen month and year
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', gap: 10, marginLeft: 24, opacity: openMode === SCHEDULE_OPEN_MODES.FIXED ? 1 : 0.55 }}>
+            <div>
+              <label style={LABEL_STYLE}>Month</label>
+              <select
+                value={Math.min(parseInt(defaultMonth, 10) || 1, months.length)}
+                onChange={e => setDefaultMonth(parseInt(e.target.value, 10) || 1)}
+                disabled={openMode !== SCHEDULE_OPEN_MODES.FIXED}
+                style={INPUT_STYLE}
+              >
+                {months.map((m, i) => <option key={i} value={i + 1}>{m.name || `Month ${i + 1}`}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={LABEL_STYLE}>Year</label>
+              <input
+                type="number"
+                value={defaultYear}
+                onChange={e => setDefaultYear(e.target.value)}
+                disabled={openMode !== SCHEDULE_OPEN_MODES.FIXED}
+                style={INPUT_STYLE}
+              />
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-main)', fontSize: 13 }}>
+            <input
+              type="radio"
+              name="schedule-open-mode"
+              checked={openMode === SCHEDULE_OPEN_MODES.LAST_VIEWED}
+              onChange={() => setOpenMode(SCHEDULE_OPEN_MODES.LAST_VIEWED)}
+            />
+            Preserve the last viewed month and year
+          </label>
+        </div>
 
         {/* Months */}
         <p style={SECTION_TITLE}>Months ({months.length})</p>

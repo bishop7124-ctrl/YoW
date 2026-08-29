@@ -56,7 +56,15 @@ describe('friendlyErrorMessage', () => {
     expect(msg).toContain('Service unavailable')
   })
 
-  it('passes through the raw message for other status codes unchanged', () => {
-    expect(friendlyErrorMessage(400, 'Bad request: missing field')).toBe('Bad request: missing field')
+  it('flags malformed or oversized requests without blaming the API key', () => {
+    const msg = friendlyErrorMessage(400, 'Bad request: missing field')
+    expect(msg).toContain('too large or malformed')
+    expect(msg).not.toContain('API key looks invalid')
+  })
+
+  it('redacts API-looking secrets from provider messages', () => {
+    const msg = friendlyErrorMessage(401, 'Incorrect API key AIza123456789012345678901234567890 in request URL')
+    expect(msg).toContain('[redacted API key]')
+    expect(msg).not.toContain('AIza123456789012345678901234567890')
   })
 })
