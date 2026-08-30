@@ -996,11 +996,10 @@ export default function Layout({
   }, [section, viewMode])
 
   const initialContext = useMemo(() => {
-    if (viewMode === 'writing') return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: store.chapters.map(c => c.id), ideaEntryIds: [], customInstruction: '' }
-    if (section === 'characters' && store.selectedCharacterId) return { characterIds: [store.selectedCharacterId], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
-    if (section === 'locations' && store.selectedLocationId) return { characterIds: [], locationIds: [store.selectedLocationId], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
-    return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
-  }, [viewMode, section, store.selectedCharacterId, store.selectedLocationId, store.chapters])
+    if (viewMode === 'writing') return { mode: 'current_chapter', customInstruction: '' }
+    if (section === 'characters' && store.selectedCharacterId) return { mode: 'current_character', customInstruction: '' }
+    return { mode: 'smart', customInstruction: '' }
+  }, [viewMode, section, store.selectedCharacterId])
 
   const databaseContent = {
     dashboard:    <ProjectDashboard store={store} />,

@@ -432,6 +432,14 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
     agentDirective?.trim() || DEFAULT_CREATIVE_CHAT_DIRECTIVE,
   ].filter(Boolean)
 
+  if (context?.builtContext) {
+    lines.push(`\n--- PROJECT CONTEXT ---\n${context.builtContext}`)
+    if (context.customInstruction?.trim()) {
+      lines.push(`\n--- ADDITIONAL CONTEXT ---\n${context.customInstruction.trim()}`)
+    }
+    return lines.join('\n')
+  }
+
   const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, ideaEntryIds, customInstruction } = context
 
   if (characterIds?.length) {

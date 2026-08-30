@@ -28,7 +28,7 @@ export function normalizeAiChatSessions(sessions, novelId) {
     .map(session => ({
       ...session,
       novelId: session.novelId ?? novelId,
-      context: session.context || {},
+      context: { mode: 'smart', ...(session.context || {}) },
       messages: Array.isArray(session.messages) ? session.messages : [],
     }))
 }
@@ -48,11 +48,7 @@ export function appendAiBarExchangeToSessions(sessions, { novelId, section, user
   const userMessage = { id: uid(), role: 'user', content: userText, createdAt: now }
   const assistantMessage = { id: uid(), role: 'assistant', content: assistantText, createdAt: now }
   const context = {
-    characterIds: [],
-    locationIds: [],
-    loreEntryIds: [],
-    worldHistoryIds: [],
-    chapterIds: [],
+    mode: 'smart',
     customInstruction: `Saved from the bottom AI bar${section ? ` in ${section}` : ''}.`,
   }
 

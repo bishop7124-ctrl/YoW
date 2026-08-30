@@ -3,6 +3,7 @@ import { streamMessage, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, appendAiBarExchange, appendAiBarExchangeToSessions, getAiChatStorageKey } from '../../utils/aiChatHistory'
 import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
+import { buildAIContext } from '../../utils/aiContext'
 import { AI_CONFIG_REQUIRED_TEXT, AiSettingsLink } from './AiConfigRequired'
 import AIStar from './AIStar'
 
@@ -44,10 +45,19 @@ const CREATE_SCHEMAS = {
 
 // ── System prompt builder ─────────────────────────────────────────────────────
 
-function buildSystemPrompt(section, store) {
+function buildSystemPrompt(section, store, options = {}) {
   const cfg   = SECTION_CONFIG[section] || {}
   const novel = store.activeNovel
   const createType = cfg.createType
+  const projectContext = buildAIContext({
+    projectId: store.activeNovelId || novel?.id,
+    mode: 'smart',
+    userPrompt: options.userPrompt,
+    activeCharacterId: store.selectedCharacterId,
+    provider: options.provider,
+    model: options.model,
+    store,
+  })
 
   const lines = [
     'You are an AI assistant embedded in Your Own World, a creative writing platform.',
@@ -70,7 +80,7 @@ function buildSystemPrompt(section, store) {
     '',
   )
 
-  const ctx = buildContext(section, store)
+  const ctx = projectContext.context || buildContext(section, store)
   if (ctx) lines.push(ctx)
 
   return lines.filter(l => l !== null).join('\n')
@@ -294,15 +304,17 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
     setStatus('loading')
     setInput('')
     setParsed(null)
+    setErrMsg('')
 
-    const systemPrompt = buildSystemPrompt(section, store)
+    const model = provCfg.model || PROVIDERS[provider]?.defaultModel
+    const systemPrompt = buildSystemPrompt(section, store, { userPrompt: text, provider, model })
     const isGoogle = provider === 'google'
     let accumulated = ''
 
     streamMessage({
       provider,
       apiKey:   provCfg.apiKey,
-      model:    provCfg.model || PROVIDERS[provider]?.defaultModel,
+      model,
       baseUrl:  provCfg.baseUrl,
       systemPrompt,
       messages: [{ role: 'user', content: text }],
@@ -348,6 +360,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
             setStatus('answer')
           } else {
             setErrMsg(`No response. ${AI_CONFIG_REQUIRED_TEXT}`)
+            setInput(text)
             setStatus('error')
           }
         }
@@ -355,6 +368,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
       },
       onError: (err) => {
         setErrMsg(err)
+        setInput(text)
         setStatus('error')
         inputRef.current?.focus()
       },
