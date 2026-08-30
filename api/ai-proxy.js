@@ -1,4 +1,6 @@
 /* global process, Buffer */
+import { buildOpenAiTokenLimit } from '../src/utils/aiTokenParams.js'
+
 const PROVIDER_IDS = new Set(['google', 'anthropic', 'openrouter', 'openai'])
 const MAX_BODY_BYTES = 2_000_000
 const ALLOWED_OPENAI_BASE_URLS = new Set([
@@ -169,7 +171,7 @@ async function handleStream(req, res, body) {
         Authorization: `Bearer ${apiKey}`,
         ...(provider === 'openrouter' ? { 'HTTP-Referer': 'https://www.yourownworld.co.uk', 'X-Title': 'Your Own World' } : {}),
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, stream_options: { include_usage: true }, messages: [{ role: 'system', content: systemPrompt || '' }, ...messages] }),
+      body: JSON.stringify({ model, ...buildOpenAiTokenLimit(provider, model, maxTokens), stream: true, stream_options: { include_usage: true }, messages: [{ role: 'system', content: systemPrompt || '' }, ...messages] }),
     })
   } else {
     return res.status(400).json({ error: { code: 400, message: 'Unknown AI provider.' } })

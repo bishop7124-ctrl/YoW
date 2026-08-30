@@ -2,6 +2,7 @@ import { buildProjectTypePromptContext } from './aiToolPrompts'
 import { isDesktopAppRuntime } from './runtime.js'
 import { OFFLINE_MODE, mockStreamMessage } from './offlineMock'
 import { normalizeAiUsage } from './aiUsage'
+import { buildOpenAiTokenLimit } from './aiTokenParams'
 
 export const DEFAULT_CREATIVE_CHAT_DIRECTIVE = `Help with writing, plot, character development, world-building, and creative problem-solving.
 
@@ -349,7 +350,7 @@ async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, sy
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, ...(includeUsage ? { stream_options: { include_usage: true } } : {}), messages: apiMessages }),
+      body: JSON.stringify({ model, ...buildOpenAiTokenLimit(provider, model, maxTokens), stream: true, ...(includeUsage ? { stream_options: { include_usage: true } } : {}), messages: apiMessages }),
       signal,
     })
     if (!res.ok) {
