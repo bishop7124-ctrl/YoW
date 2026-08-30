@@ -1,6 +1,7 @@
 import { buildProjectTypePromptContext } from './aiToolPrompts'
 import { isDesktopAppRuntime } from './runtime.js'
 import { OFFLINE_MODE, mockStreamMessage } from './offlineMock'
+import { normalizeAiUsage } from './aiUsage'
 
 export const DEFAULT_CREATIVE_CHAT_DIRECTIVE = `Help with writing, plot, character development, world-building, and creative problem-solving.
 
@@ -339,14 +340,16 @@ async function readSSE(body, onEvent) {
 
 // ── Provider implementations ──────────────────────────────────────────────────
 
-async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
+async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, onUsage, maxTokens = 4096, signal, promptMetadata }) {
   try {
     const url        = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/chat/completions`
     const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages]
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+    const includeUsage = normalizedBaseUrl === 'https://api.openai.com/v1' || normalizedBaseUrl === 'https://api.groq.com/openai/v1'
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, messages: apiMessages }),
+      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, ...(includeUsage ? { stream_options: { include_usage: true } } : {}), messages: apiMessages }),
       signal,
     })
     if (!res.ok) {
@@ -363,6 +366,7 @@ async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, sy
         done = true
         return true
       }
+      if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
       const text = parsed.choices?.[0]?.delta?.content
       if (text) onChunk(text)
       if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
@@ -373,18 +377,28 @@ async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, sy
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens = 4096, signal }) {
+async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens = 4096, signal, promptMetadata, cacheControl }) {
   try {
-    const res = await fetch(aiProxyEndpoint(), {
+    const makeRequest = (nextCacheControl) => fetch(aiProxyEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'stream', provider, apiKey, model, baseUrl, systemPrompt, messages, jsonMode, maxTokens }),
+      body: JSON.stringify({ action: 'stream', provider, apiKey, model, baseUrl, systemPrompt, messages, jsonMode, maxTokens, promptMetadata, cacheControl: nextCacheControl }),
       signal,
     })
+    let res = await makeRequest(cacheControl)
     if (!res.ok) {
       let err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} }
       try { err = parseProviderError(res.status, await res.json()) } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata, retryAfter: readRetryAfter(res) }))
+      if (cacheControl?.eligible && /cache|cached|cache_control|cacheControl/i.test(err.message)) {
+        res = await makeRequest({ ...cacheControl, eligible: false, fallbackReason: err.message })
+        if (res.ok) {
+          // Continue with the normal stream reader below using the successful
+          // uncached response. Do not issue a second provider request.
+        } else {
+        try { err = parseProviderError(res.status, await res.json()) } catch { err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} } }
+        }
+      }
+      if (!res.ok) return onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata, retryAfter: readRetryAfter(res) }))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
@@ -392,11 +406,14 @@ async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, 
       if (provider === 'google') {
         const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text
         if (text) onChunk(text)
+        if (parsed.usageMetadata) onUsage?.(normalizeAiUsage(provider, parsed.usageMetadata, { model, contextMode: promptMetadata?.contextMode }))
         if (parsed.candidates?.[0]?.finishReason === 'STOP') { onceDone(); return true }
         return false
       }
       if (provider === 'anthropic') {
         if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') onChunk(parsed.delta.text)
+        if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
+        if (parsed.type === 'message_delta' && parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
         if (parsed.type === 'message_stop') { onceDone(); return true }
         return false
       }
@@ -406,6 +423,7 @@ async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, 
         done = true
         return true
       }
+      if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
       const text = parsed.choices?.[0]?.delta?.content
       if (text) onChunk(text)
       if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
@@ -417,11 +435,11 @@ async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, 
   }
 }
 
-export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens, signal }) {
+export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl }) {
   if (OFFLINE_MODE)         return mockStreamMessage({ onChunk, onDone, onError })
   if (!apiKey)              return onError('No API key configured.')
-  if (canProxyProvider(provider, baseUrl)) return streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens, signal })
-  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, provider: 'openai', systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
+  if (canProxyProvider(provider, baseUrl)) return streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl })
+  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, provider: 'openai', systemPrompt, messages, onChunk, onDone, onError, onUsage, maxTokens, signal, promptMetadata })
   onError(`Unknown provider: ${provider}`)
 }
 
@@ -432,8 +450,10 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
     agentDirective?.trim() || DEFAULT_CREATIVE_CHAT_DIRECTIVE,
   ].filter(Boolean)
 
-  if (context?.builtContext) {
-    lines.push(`\n--- PROJECT CONTEXT ---\n${context.builtContext}`)
+  if (context?.builtContext || context?.stableContext || context?.requestContext) {
+    if (context.stableContext) lines.push(`\n--- STABLE PROJECT CONTEXT ---\n${context.stableContext}`)
+    if (context.requestContext) lines.push(`\n--- SELECTED REQUEST CONTEXT ---\n${context.requestContext}`)
+    if (!context.stableContext && context.builtContext) lines.push(`\n--- PROJECT CONTEXT ---\n${context.builtContext}`)
     if (context.customInstruction?.trim()) {
       lines.push(`\n--- ADDITIONAL CONTEXT ---\n${context.customInstruction.trim()}`)
     }

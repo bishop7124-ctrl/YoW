@@ -1,5 +1,5 @@
 import { getProjectType } from '../constants/projectTypes'
-import { estimateTokens, getSafeInputBudget } from './aiModelCapabilities'
+import { estimateInputCost, estimateTokens, getContextUsageLevel, getModelCapabilities, getSafeInputBudget } from './aiModelCapabilities'
 
 export const AI_CHAT_CONTEXT_MODE_KEY = 'nf_ai_context_mode'
 
@@ -69,6 +69,16 @@ const linkedIds = item => [
 
 function projectStore(store, projectId) {
   return store?.getProjectContextData?.(projectId) ?? store ?? {}
+}
+
+export function fingerprintText(value = '') {
+  let hash = 2166136261
+  const text = String(value || '')
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function getActiveChapterId(store, explicitId) {
@@ -224,8 +234,7 @@ function selectRecords(store, mode, userPrompt, activeCharacterId, activeChapter
   return selected
 }
 
-function formatRecords(store, selected, mode) {
-  const limits = SECTION_LIMITS[mode] || SECTION_LIMITS.smart
+function formatProjectSummary(store) {
   const novel = store.activeNovel || {}
   const typeCfg = getProjectType(novel.type)
   const lines = [
@@ -235,6 +244,12 @@ function formatRecords(store, selected, mode) {
   ]
   if (novel.description) lines.push(`Premise: ${truncate(novel.description, 900)}`)
   if (novel.tags?.length) lines.push(`Tags: ${novel.tags.join(', ')}`)
+  return lines.join('\n')
+}
+
+function formatRecords(store, selected, mode) {
+  const limits = SECTION_LIMITS[mode] || SECTION_LIMITS.smart
+  const lines = []
 
   if (selected.chapters.length) {
     lines.push('', 'OUTLINE DATA')
@@ -304,18 +319,59 @@ export function buildAIContext({
   const requestedMode = normalizeAiContextMode(mode)
   const chapterId = getActiveChapterId(scopedStore, activeChapterId)
   const budget = getSafeInputBudget(provider, model)
+  const capabilities = getModelCapabilities(provider, model)
   const warnings = []
   const selected = selectRecords(scopedStore, requestedMode, userPrompt, activeCharacterId ?? scopedStore.selectedCharacterId, chapterId)
   if (selected.fallbackReason) warnings.push(selected.fallbackReason)
-  const sections = [formatRecords(scopedStore, selected, selected.effectiveMode)]
+  const projectSummary = formatProjectSummary(scopedStore)
+  const selectedContext = formatRecords(scopedStore, selected, selected.effectiveMode)
+  const stableContext = selected.effectiveMode === 'smart'
+    ? projectSummary
+    : [projectSummary, selectedContext].filter(Boolean).join('\n\n')
+  const requestContext = selected.effectiveMode === 'smart' ? selectedContext : ''
+  const sections = [stableContext, requestContext]
   if (customInstruction?.trim()) sections.push(`ADDITIONAL USER CONTEXT\n${customInstruction.trim()}`)
   const capped = capContext(sections.filter(Boolean).join('\n\n'), budget.safeInputBudget, warnings)
+  const contextLevel = getContextUsageLevel(capped.estimatedTokens, budget.contextWindow)
+  const estimatedInputCost = estimateInputCost({
+    provider,
+    model,
+    inputTokens: capped.estimatedTokens,
+    cachedInputTokens: 0,
+  })
   if (budget.limitsKnown && capped.estimatedTokens > budget.safeInputBudget * 0.65) {
     warnings.push('Large context - this request may use a significant portion of your provider\'s rate limit.')
   }
+  if (selected.effectiveMode === 'entire_project' && budget.limitsKnown && capped.estimatedTokens > budget.safeInputBudget * 0.82) {
+    warnings.push('Your project is close to this model\'s context limit. YOW will reserve space for the AI response.')
+  }
+  const sourceLabels = [
+    ...selected.characters.map(item => item.name && `Character: ${item.name}`),
+    ...relationshipRows(scopedStore.characters, selected.characters.map(c => c.id)).slice(0, 6).map(row => `Relationship: ${row}`),
+    ...selected.locations.map(item => item.name && `Location: ${item.name}`),
+    ...selected.lore.map(item => item.title && `Lore: ${item.title}`),
+    ...selected.timeline.map(item => item.title && `Timeline: ${item.title}`),
+    ...selected.ideas.map(item => item.title && `Idea: ${item.title}`),
+    ...selected.chapters.map(item => item.title && `Chapter: ${item.title}`),
+    ...selected.scenes.map(item => item.title && `Excerpt: ${item.title}`),
+  ].filter(Boolean)
+  const stableFingerprint = fingerprintText(`${provider}:${model}:${selected.effectiveMode}:${stableContext}`)
+  const contextFingerprint = fingerprintText(`${stableFingerprint}:${requestContext}:${customInstruction || ''}`)
   return {
     context: capped.text,
+    stableContext,
+    requestContext,
+    stableFirst: true,
+    stableFingerprint,
+    contextFingerprint,
+    cache: {
+      eligible: capabilities.supportsPromptCaching && estimateTokens(stableContext) >= capabilities.cacheMinTokens,
+      behavior: capabilities.cacheBehavior,
+      minTokens: capabilities.cacheMinTokens,
+    },
     estimatedTokens: capped.estimatedTokens,
+    contextLevel,
+    estimatedInputCost,
     includedSources: {
       mode: selected.effectiveMode,
       characters: selected.characters.map(item => item.id),
@@ -325,6 +381,7 @@ export function buildAIContext({
       ideas: selected.ideas.map(item => item.id),
       chapters: selected.chapters.map(item => item.id),
       scenes: selected.scenes.map(item => item.id),
+      labels: sourceLabels,
     },
     truncated: capped.truncated,
     warnings: unique(warnings),
