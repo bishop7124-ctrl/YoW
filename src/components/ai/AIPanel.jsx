@@ -3,10 +3,11 @@ import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, createAiChatDocxBlob, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
+import { AI_CHAT_CONTEXT_MODES, buildAIContext, loadAiContextMode, normalizeAiContextMode, saveAiContextMode } from '../../utils/aiContext'
+import { estimateTokens } from '../../utils/aiModelCapabilities'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
 import Modal from '../shared/Modal'
-import { UserMediaImage } from '../shared/UserMedia'
 import { downloadBlob, sanitizeFilename } from '../../utils/projectExportHelpers'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -64,25 +65,6 @@ function Section({ title, children, defaultOpen = false }) {
   )
 }
 
-function CheckItem({ label, sub, checked, onChange, image }) {
-  return (
-    <label className="flex items-center gap-2 cursor-pointer group py-0.5">
-      <input type="checkbox" checked={checked} onChange={onChange} className="accent-[var(--accent)] flex-shrink-0" />
-      {image ? (
-        <UserMediaImage src={image} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
-      ) : sub !== undefined && (
-        <div className="w-5 h-5 rounded-full bg-[var(--accent-fade)] border border-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
-          <span className="text-[8px] font-bold text-[var(--accent)]">{label.charAt(0)}</span>
-        </div>
-      )}
-      <span className="text-sm text-[var(--text-main)] group-hover:text-[var(--accent)] transition-colors leading-tight">
-        {label}
-        {sub && <span className="block text-[11px] text-[var(--text-muted)]">{sub}</span>}
-      </span>
-    </label>
-  )
-}
-
 function AgentCard({ agent, selected, onSelect }) {
   return (
     <button
@@ -119,77 +101,64 @@ function FreedomCard({ level, selected, onSelect }) {
   )
 }
 
-function ContextSelector({ store, onStart, onCancel, initialContext, initialAgentId, initialFreedomLevel }) {
+function ContextModeCard({ option, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+        selected
+          ? 'border-[var(--accent)] bg-[var(--accent-fade)]'
+          : 'border-[var(--border)] bg-[var(--bg-nav)] hover:border-[var(--accent)]/50'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className={`text-xs font-bold ${selected ? 'text-[var(--accent)]' : 'text-[var(--text-main)]'}`}>
+          <span aria-hidden="true">{option.icon}</span> {option.label}
+        </span>
+        {option.badge && (
+          <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent)] border border-[var(--accent)]/30 rounded px-1.5 py-0.5">
+            {option.badge}
+          </span>
+        )}
+      </div>
+      <div className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug">{option.helper}</div>
+    </button>
+  )
+}
+
+function formatTokenCount(value) {
+  const rounded = value >= 1000 ? Math.round(value / 100) * 100 : value
+  return rounded.toLocaleString()
+}
+
+function ContextSelector({ store, aiSettings, onStart, onCancel, initialContext, initialAgentId, initialFreedomLevel }) {
   const defaultContext = {
-    characterIds: [], locationIds: [], loreEntryIds: [], worldHistoryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '',
+    mode: loadAiContextMode(), customInstruction: '',
   }
   const [ctx, setCtx] = useState({ ...defaultContext, ...(initialContext || {}) })
   const [agentId, setAgentId] = useState(initialAgentId || DEFAULT_AGENT_ID)
   const [freedomLevel, setFreedomLevel] = useState(initialFreedomLevel || DEFAULT_AI_FREEDOM_LEVEL)
+  const mode = normalizeAiContextMode(ctx.mode)
+  const provider = aiSettings.activeProvider
+  const model = aiSettings[provider]?.model || PROVIDERS[provider]?.defaultModel
+  const preview = useMemo(() => buildAIContext({
+    projectId: store.activeNovelId || store.activeNovel?.id,
+    mode,
+    userPrompt: '',
+    activeCharacterId: store.selectedCharacterId,
+    provider,
+    model,
+    store,
+    customInstruction: ctx.customInstruction,
+  }), [store, mode, provider, model, ctx.customInstruction])
 
-  const toggle = (field, id) => setCtx(prev => {
-    const arr = prev[field] || []
-    return { ...prev, [field]: arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id] }
-  })
-  const selectAll = (field, ids) => setCtx(prev => ({ ...prev, [field]: ids }))
-  const clearAll  = (field)      => setCtx(prev => ({ ...prev, [field]: [] }))
-
-  const {
-    characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [], ideaEntries = [],
-  } = store
-
-  const allContextIds = useMemo(() => ({
-    characterIds: characters.map(c => c.id),
-    locationIds: locations.map(l => l.id),
-    loreEntryIds: loreEntries.map(e => e.id),
-    worldHistoryIds: worldHistory.map(h => h.id),
-    chapterIds: chapters.map(c => c.id),
-    ideaEntryIds: ideaEntries.map(i => i.id),
-  }), [characters, locations, loreEntries, worldHistory, chapters, ideaEntries])
-
-  const selectAllRecords = () => setCtx(prev => ({ ...prev, ...allContextIds }))
-  const clearAllRecords = () => setCtx(prev => ({
-    ...prev,
-    characterIds: [],
-    locationIds: [],
-    loreEntryIds: [],
-    worldHistoryIds: [],
-    chapterIds: [],
-    ideaEntryIds: [],
-  }))
-
-  const chaptersByAct = useMemo(() => {
-    const map = {}
-    acts.forEach(act => { map[act.id] = { act, chapters: chapters.filter(c => c.actId === act.id) } })
-    return map
-  }, [acts, chapters])
-
-  const loreByCategory = useMemo(() => {
-    const map = {}
-    loreEntries.forEach(e => {
-      const cat = e.category || 'Uncategorized'
-      if (!map[cat]) map[cat] = []
-      map[cat].push(e)
-    })
-    return map
-  }, [loreEntries])
-
-  const historyByEra = useMemo(() => {
-    const map = {}
-    worldHistory.forEach(entry => {
-      const era = entry.era || entry.dateRange || 'Unassigned'
-      if (!map[era]) map[era] = []
-      map[era].push(entry)
-    })
-    return map
-  }, [worldHistory])
-
-  const total = ctx.characterIds.length + ctx.locationIds.length + ctx.loreEntryIds.length +
-    ctx.worldHistoryIds.length + ctx.chapterIds.length + ctx.ideaEntryIds.length
-  const availableTotal = Object.values(allContextIds).reduce((sum, ids) => sum + ids.length, 0)
-  const allRecordsSelected = availableTotal > 0 && Object.entries(allContextIds).every(([field, ids]) =>
-    ids.every(id => (ctx[field] || []).includes(id))
-  )
+  const selectMode = nextMode => {
+    const normalized = normalizeAiContextMode(nextMode)
+    saveAiContextMode(normalized)
+    setCtx(prev => ({ ...prev, mode: normalized }))
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -217,104 +186,34 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
           </div>
         </div>
 
-        {availableTotal > 0 && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-nav)] px-3 py-2">
-            <div className="min-w-0">
-              <div className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">Context records</div>
-              <div className="text-[11px] text-[var(--text-muted)]">{total} of {availableTotal} selected</div>
-            </div>
-            <button
-              type="button"
-              onClick={allRecordsSelected ? clearAllRecords : selectAllRecords}
-              className="flex-shrink-0 rounded border border-[var(--accent)]/40 px-2.5 py-1 text-xs font-bold text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors"
-            >
-              {allRecordsSelected ? 'Clear all' : 'Select all'}
-            </button>
-          </div>
-        )}
-
-        {characters.length > 0 && (
-          <Section title={`Characters${ctx.characterIds.length ? ` (${ctx.characterIds.length})` : ''}`} defaultOpen={ctx.characterIds.length > 0}>
-            <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => selectAll('characterIds', characters.map(c => c.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
-              <button type="button" onClick={() => clearAll('characterIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
-            </div>
-            {characters.map(c => <CheckItem key={c.id} label={c.name} sub={c.role} image={c.image} checked={ctx.characterIds.includes(c.id)} onChange={() => toggle('characterIds', c.id)} />)}
-          </Section>
-        )}
-
-        {locations.length > 0 && (
-          <Section title={`Locations${ctx.locationIds.length ? ` (${ctx.locationIds.length})` : ''}`} defaultOpen={ctx.locationIds.length > 0}>
-            <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => selectAll('locationIds', locations.map(l => l.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
-              <button type="button" onClick={() => clearAll('locationIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
-            </div>
-            {locations.map(l => <CheckItem key={l.id} label={l.name} sub={l.category} checked={ctx.locationIds.includes(l.id)} onChange={() => toggle('locationIds', l.id)} />)}
-          </Section>
-        )}
-
-        {loreEntries.length > 0 && (
-          <Section title={`Lore${ctx.loreEntryIds.length ? ` (${ctx.loreEntryIds.length})` : ''}`} defaultOpen={ctx.loreEntryIds.length > 0}>
-            <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => selectAll('loreEntryIds', loreEntries.map(e => e.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
-              <button type="button" onClick={() => clearAll('loreEntryIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
-            </div>
-            {Object.entries(loreByCategory).map(([cat, entries]) => (
-              <div key={cat}>
-                <div className="text-[10px] text-[var(--accent)] uppercase tracking-wider mb-1 mt-2">{cat}</div>
-                {entries.map(e => <CheckItem key={e.id} label={e.title} checked={ctx.loreEntryIds.includes(e.id)} onChange={() => toggle('loreEntryIds', e.id)} />)}
-              </div>
+        <div>
+          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Context</label>
+          <div className="grid gap-2">
+            {AI_CHAT_CONTEXT_MODES.map(option => (
+              <ContextModeCard
+                key={option.id}
+                option={option}
+                selected={mode === option.id}
+                onSelect={() => selectMode(option.id)}
+              />
             ))}
-          </Section>
-        )}
-
-        {worldHistory.length > 0 && (
-          <Section title={`History${ctx.worldHistoryIds.length ? ` (${ctx.worldHistoryIds.length})` : ''}`} defaultOpen={ctx.worldHistoryIds.length > 0}>
-            <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => selectAll('worldHistoryIds', worldHistory.map(h => h.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
-              <button type="button" onClick={() => clearAll('worldHistoryIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
+          </div>
+          <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] px-3 py-2">
+            <div className="text-xs font-bold text-[var(--text-main)]">
+              Estimated context: ~{formatTokenCount(preview.estimatedTokens)} tokens
+              {preview.limitsKnown && preview.contextWindow ? (
+                <span className="text-[var(--text-muted)] font-semibold"> / {formatTokenCount(preview.contextWindow)}</span>
+              ) : null}
             </div>
-            {Object.entries(historyByEra).map(([era, entries]) => (
-              <div key={era}>
-                <div className="text-[10px] text-[var(--accent)] uppercase tracking-wider mb-1 mt-2">{era}</div>
-                {entries.map(entry => (
-                  <CheckItem
-                    key={entry.id}
-                    label={entry.title}
-                    sub={entry.startYear || entry.endYear ? [entry.startYear, entry.endYear].filter(Boolean).join(' - ') : entry.dateRange}
-                    checked={ctx.worldHistoryIds.includes(entry.id)}
-                    onChange={() => toggle('worldHistoryIds', entry.id)}
-                  />
+            {preview.warnings.length > 0 && (
+              <div className="mt-1 space-y-1">
+                {preview.warnings.map(warning => (
+                  <p key={warning} className="text-[11px] text-amber-400 leading-snug">{warning}</p>
                 ))}
               </div>
-            ))}
-          </Section>
-        )}
-
-        {ideaEntries.length > 0 && (
-          <Section title={`Ideas${ctx.ideaEntryIds.length ? ` (${ctx.ideaEntryIds.length})` : ''}`} defaultOpen={ctx.ideaEntryIds.length > 0}>
-            <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => selectAll('ideaEntryIds', ideaEntries.map(i => i.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
-              <button type="button" onClick={() => clearAll('ideaEntryIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
-            </div>
-            {ideaEntries.map(i => <CheckItem key={i.id} label={i.title || '(untitled)'} sub={i.group} checked={ctx.ideaEntryIds.includes(i.id)} onChange={() => toggle('ideaEntryIds', i.id)} />)}
-          </Section>
-        )}
-
-        {chapters.length > 0 && (
-          <Section title={`Manuscript${ctx.chapterIds.length ? ` (${ctx.chapterIds.length} chapters)` : ''}`} defaultOpen={ctx.chapterIds.length > 0}>
-            <div className="flex gap-2 mb-2">
-              <button type="button" onClick={() => selectAll('chapterIds', chapters.map(c => c.id))} className="text-[10px] text-[var(--accent)] hover:underline">All</button>
-              <button type="button" onClick={() => clearAll('chapterIds')} className="text-[10px] text-[var(--text-muted)] hover:underline">None</button>
-            </div>
-            {Object.values(chaptersByAct).map(({ act, chapters: actChaps }) => (
-              <div key={act.id}>
-                <div className="text-[10px] text-[var(--accent)] uppercase tracking-wider mb-1 mt-2">{act.title}</div>
-                {actChaps.map((ch, i) => <CheckItem key={ch.id} label={ch.title || `Chapter ${i + 1}`} checked={ctx.chapterIds.includes(ch.id)} onChange={() => toggle('chapterIds', ch.id)} />)}
-              </div>
-            ))}
-          </Section>
-        )}
+            )}
+          </div>
+        </div>
 
         <Section title="Custom instruction" defaultOpen={!!ctx.customInstruction}>
           <textarea
@@ -332,7 +231,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
           onClick={() => onStart(ctx, agentId, freedomLevel)}
           className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded text-sm hover:opacity-90"
         >
-          Start Chat{total > 0 ? ` · ${total} item${total !== 1 ? 's' : ''}` : ''}
+          Start Chat
         </button>
         <button onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)] text-sm hover:text-[var(--text-main)]">Cancel</button>
       </div>
@@ -348,6 +247,20 @@ function responseTitle(content, fallback = 'AI response') {
     .replace(/^#+\s*/, '')
     .replace(/^[-*]+\s*/, '')
     .slice(0, 72)
+}
+
+function fitMessagesToInputBudget(messages, systemPrompt, safeInputBudget) {
+  const budget = Math.max(1000, safeInputBudget || 48000)
+  let used = estimateTokens(systemPrompt)
+  const kept = []
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    const cost = estimateTokens(message.content) + 8
+    if (kept.length > 0 && used + cost > budget) continue
+    kept.unshift(message)
+    used += cost
+  }
+  return kept.length ? kept : messages.slice(-1)
 }
 
 function Message({ msg, onRequestSave, onRetry, streaming }) {
@@ -637,16 +550,45 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
   const freedom = getFreedomLevel(session.freedomLevel)
 
-  const systemPrompt = useMemo(
-    () => buildSystemPrompt(promptStore.activeNovel, session.context, promptStore, buildAiBehaviorDirective(session.agentId, session.freedomLevel)),
-    [promptStore, session.context, session.agentId, session.freedomLevel]
-  )
-
   // Shared by send() (appends a new user+assistant pair) and retry() (replaces
   // a failed assistant reply in place) — nextMessages is the full messages
   // array to write, already containing the fresh streaming placeholder.
-  const runAssistantStream = (nextMessages, assistantMsgId, apiMessages) => {
-    onUpdate(session.id, { messages: nextMessages, updatedAt: Date.now() })
+  const runAssistantStream = (nextMessages, assistantMsgId, apiMessages, userPrompt) => {
+    const model = provCfg.model || PROVIDERS[provider]?.defaultModel
+    const builtContext = buildAIContext({
+      projectId: session.novelId,
+      mode: session.context?.mode,
+      userPrompt,
+      activeCharacterId: store.selectedCharacterId,
+      provider,
+      model,
+      store,
+      customInstruction: session.context?.customInstruction,
+    })
+    const systemPrompt = buildSystemPrompt(
+      promptStore.activeNovel,
+      { ...session.context, builtContext: builtContext.context },
+      promptStore,
+      buildAiBehaviorDirective(session.agentId, session.freedomLevel)
+    )
+    const fittedMessages = fitMessagesToInputBudget(apiMessages, systemPrompt, builtContext.safeInputBudget)
+    const contextWarnings = fittedMessages.length < apiMessages.length
+      ? [...builtContext.warnings, 'Older chat history was omitted so this request stays within the selected model budget.']
+      : builtContext.warnings
+
+    onUpdate(session.id, {
+      messages: nextMessages,
+      context: { ...session.context, mode: builtContext.includedSources.mode },
+      contextStats: {
+        estimatedTokens: builtContext.estimatedTokens,
+        safeInputBudget: builtContext.safeInputBudget,
+        contextWindow: builtContext.contextWindow,
+        truncated: builtContext.truncated,
+        warnings: contextWarnings,
+        includedSources: builtContext.includedSources,
+      },
+      updatedAt: Date.now(),
+    })
     setStreaming(true)
     setLiveMessage({ id: assistantMsgId, content: '' })
     lastFlushRef.current = Date.now()
@@ -656,10 +598,10 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     streamMessage({
       provider,
       apiKey:  provCfg.apiKey,
-      model:   provCfg.model || PROVIDERS[provider]?.defaultModel,
+      model,
       baseUrl: provCfg.baseUrl,
       systemPrompt,
-      messages: apiMessages,
+      messages: fittedMessages,
       onChunk: (chunk) => {
         if (abortRef.current) return
         accumulated += chunk
@@ -710,7 +652,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
     const nextMessages = [...messages, userMsg, assistantMsg]
     const apiMessages  = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-    runAssistantStream(nextMessages, assistantMsg.id, apiMessages)
+    runAssistantStream(nextMessages, assistantMsg.id, apiMessages, text)
   }
 
   // Re-send a failed request: reuses the conversation up to (but not
@@ -730,7 +672,8 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
     const nextMessages = [...priorMessages, assistantMsg, ...messages.slice(idx + 1)]
     const apiMessages  = priorMessages.map(m => ({ role: m.role, content: m.content }))
-    runAssistantStream(nextMessages, assistantMsg.id, apiMessages)
+    const lastUserPrompt = [...priorMessages].reverse().find(m => m.role === 'user')?.content || ''
+    runAssistantStream(nextMessages, assistantMsg.id, apiMessages, lastUserPrompt)
   }
 
   const stop = () => {
@@ -774,9 +717,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     'Give me three scene ideas.',
   ]
 
-  const contextCount = (session.context.characterIds?.length || 0) + (session.context.locationIds?.length || 0) +
-    (session.context.loreEntryIds?.length || 0) + (session.context.worldHistoryIds?.length || 0) +
-    (session.context.chapterIds?.length || 0) + (session.context.ideaEntryIds?.length || 0)
+  const contextMode = AI_CHAT_CONTEXT_MODES.find(item => item.id === normalizeAiContextMode(session.context?.mode)) || AI_CHAT_CONTEXT_MODES[0]
 
   return (
     <>
@@ -822,9 +763,10 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             >
               {AI_FREEDOM_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
             </select>
-            {contextCount > 0 && (
-              <span className="text-[10px] text-[var(--accent)]">{contextCount} context item{contextCount !== 1 ? 's' : ''}</span>
-            )}
+            <span className="text-[10px] text-[var(--accent)]">
+              <span aria-hidden="true">{contextMode.icon}</span> {contextMode.label}
+              {session.contextStats?.estimatedTokens ? ` · ~${formatTokenCount(session.contextStats.estimatedTokens)} tokens` : ''}
+            </span>
             {editingCategory ? (
               <input
                 ref={categoryInputRef}
@@ -1065,9 +1007,7 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
           const sMessages = Array.isArray(s.messages) ? s.messages : []
           const lastMsg = sMessages[sMessages.length - 1]
           const preview = lastMsg?.content?.slice(0, 70) || 'No messages yet'
-          const total   = (s.context.characterIds?.length || 0) + (s.context.locationIds?.length || 0) +
-            (s.context.loreEntryIds?.length || 0) + (s.context.worldHistoryIds?.length || 0) +
-            (s.context.chapterIds?.length || 0) + (s.context.ideaEntryIds?.length || 0)
+          const mode = AI_CHAT_CONTEXT_MODES.find(item => item.id === normalizeAiContextMode(s.context?.mode)) || AI_CHAT_CONTEXT_MODES[0]
           const isEditingCat = editingCategoryFor === s.id
 
           return (
@@ -1094,7 +1034,10 @@ function SessionList({ sessions, aiSettings, onSelect, onNew, onDelete, onPin, o
                     {s.freedomLevel && s.freedomLevel !== DEFAULT_AI_FREEDOM_LEVEL && (
                       <div className="text-[10px] text-[var(--text-muted)]">{getFreedomLevel(s.freedomLevel).label}</div>
                     )}
-                    {total > 0 && <div className="text-[10px] text-[var(--accent)]">{total} context item{total !== 1 ? 's' : ''}</div>}
+                    <div className="text-[10px] text-[var(--accent)]">
+                      <span aria-hidden="true">{mode.icon}</span> {mode.label}
+                      {s.contextStats?.estimatedTokens ? ` · ~${formatTokenCount(s.contextStats.estimatedTokens)} tokens` : ''}
+                    </div>
                     {isEditingCat ? (
                       <input
                         ref={categoryInputRef}
@@ -1272,11 +1215,6 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [open, docked, fullscreen])
-
-  const projectStore = useMemo(
-    () => store.getProjectContextData?.(novelId) ?? store,
-    [store, novelId]
-  )
 
   const activeProvider = aiSettings.activeProvider
 
@@ -1474,7 +1412,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
         <div className="flex-1 overflow-hidden">
           {view === 'context' && (
             <ContextSelector
-              store={projectStore}
+              store={store}
               initialContext={initialContext}
               initialFreedomLevel={DEFAULT_AI_FREEDOM_LEVEL}
               onStart={handleContextConfirm}
