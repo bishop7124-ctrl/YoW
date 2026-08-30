@@ -1,3 +1,4 @@
+/* global process, Buffer */
 const PROVIDER_IDS = new Set(['google', 'anthropic', 'openrouter', 'openai'])
 const MAX_BODY_BYTES = 2_000_000
 const ALLOWED_OPENAI_BASE_URLS = new Set([
@@ -114,8 +115,14 @@ async function handleModels(req, res, body) {
   return res.status(400).json({ error: { code: 400, message: 'Unknown AI provider.' } })
 }
 
+function anthropicSystemPrompt(systemPrompt, cacheControl) {
+  const text = String(systemPrompt || '')
+  if (!text || cacheControl?.behavior !== 'anthropic_ephemeral' || !cacheControl?.eligible) return text
+  return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }]
+}
+
 async function handleStream(req, res, body) {
-  const { provider, apiKey, model, baseUrl, systemPrompt, messages = [], jsonMode, maxTokens = 4096 } = body
+  const { provider, apiKey, model, baseUrl, systemPrompt, messages = [], jsonMode, maxTokens = 4096, cacheControl } = body
   if (!apiKey) return res.status(400).json({ error: { code: 400, message: 'An API key is required.' } })
   if (!model) return res.status(400).json({ error: { code: 400, message: 'A model is required.' } })
 
@@ -146,7 +153,7 @@ async function handleStream(req, res, body) {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: systemPrompt, messages }),
+      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: anthropicSystemPrompt(systemPrompt, cacheControl), messages }),
     })
   } else if (provider === 'openrouter' || provider === 'openai') {
     const normalized = provider === 'openrouter'
@@ -162,7 +169,7 @@ async function handleStream(req, res, body) {
         Authorization: `Bearer ${apiKey}`,
         ...(provider === 'openrouter' ? { 'HTTP-Referer': 'https://www.yourownworld.co.uk', 'X-Title': 'Your Own World' } : {}),
       },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, messages: [{ role: 'system', content: systemPrompt || '' }, ...messages] }),
+      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, stream_options: { include_usage: true }, messages: [{ role: 'system', content: systemPrompt || '' }, ...messages] }),
     })
   } else {
     return res.status(400).json({ error: { code: 400, message: 'Unknown AI provider.' } })

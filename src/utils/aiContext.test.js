@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAIContext, normalizeAiContextMode } from './aiContext'
+import { buildAIContext, fingerprintText, normalizeAiContextMode } from './aiContext'
 import { getSafeInputBudget } from './aiModelCapabilities'
 
 const makeStore = (overrides = {}) => ({
@@ -96,5 +96,32 @@ describe('buildAIContext', () => {
     const small = getSafeInputBudget('openrouter', 'deepseek/deepseek-r1').safeInputBudget
     const large = getSafeInputBudget('anthropic', 'claude-sonnet-4-6').safeInputBudget
     expect(large).toBeGreaterThan(small)
+  })
+
+  it('orders stable project context before request-specific context', () => {
+    const result = buildAIContext({ store: makeStore(), userPrompt: 'What does Mira know about the orchard?' })
+    expect(result.stableFirst).toBe(true)
+    expect(result.context.indexOf('PROJECT SUMMARY')).toBeLessThan(result.context.indexOf('RELEVANT CHARACTERS'))
+  })
+
+  it('produces identical fingerprints for identical context', () => {
+    const first = buildAIContext({ store: makeStore(), userPrompt: 'Mira orchard' })
+    const second = buildAIContext({ store: makeStore(), userPrompt: 'Mira orchard' })
+    expect(first.contextFingerprint).toBe(second.contextFingerprint)
+    expect(first.stableFingerprint).toBe(second.stableFingerprint)
+  })
+
+  it('changes fingerprints when relevant context changes', () => {
+    const first = buildAIContext({ store: makeStore(), userPrompt: 'Mira orchard' })
+    const second = buildAIContext({
+      store: makeStore({ characters: [{ id: 'char-1', name: 'Mira Vale', bio: 'A changed biography about the orchard.' }] }),
+      userPrompt: 'Mira orchard',
+    })
+    expect(first.contextFingerprint).not.toBe(second.contextFingerprint)
+  })
+
+  it('hashes deterministic context without exposing the context itself', () => {
+    expect(fingerprintText('secret manuscript text')).toBe(fingerprintText('secret manuscript text'))
+    expect(fingerprintText('secret manuscript text')).not.toContain('secret')
   })
 })
