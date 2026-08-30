@@ -202,13 +202,13 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="min-h-screen bg-[#0f1115] flex flex-col items-center justify-center gap-4 p-8 text-center">
-          <span className="w-12 h-12 text-[#f59e0b]"><YOWLogo /></span>
-          <p className="text-[#f8fafc] font-semibold">Something went wrong.</p>
-          <p className="text-[#64748b] text-sm max-w-sm">{this.state.error?.message}</p>
+        <div className="min-h-screen bg-[var(--bg-main)] flex flex-col items-center justify-center gap-4 p-8 text-center">
+          <span className="w-12 h-12 text-[var(--accent)]"><YOWLogo /></span>
+          <p className="text-[var(--text-main)] font-semibold">Something went wrong.</p>
+          <p className="text-[var(--text-muted)] text-sm max-w-sm">{this.state.error?.message}</p>
           <button
             onClick={() => { this.setState({ error: null }); window.location.reload() }}
-            className="mt-2 px-4 py-2 rounded-lg bg-[#f59e0b] text-[#0f1115] font-bold text-sm"
+            className="mt-2 px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-contrast,var(--bg-main))] font-bold text-sm hover:opacity-90 transition-opacity"
           >
             Reload
           </button>

@@ -161,8 +161,9 @@ function ContextSelector({ store, aiSettings, onStart, onCancel, initialContext,
   const [agentId, setAgentId] = useState(initialAgentId || DEFAULT_AGENT_ID)
   const [freedomLevel, setFreedomLevel] = useState(initialFreedomLevel || DEFAULT_AI_FREEDOM_LEVEL)
   const mode = normalizeAiContextMode(ctx.mode)
-  const provider = aiSettings.activeProvider
-  const model = aiSettings[provider]?.model || PROVIDERS[provider]?.defaultModel
+  const safeAiSettings = aiSettings || DEFAULT_SETTINGS
+  const provider = safeAiSettings.activeProvider || DEFAULT_SETTINGS.activeProvider
+  const model = safeAiSettings[provider]?.model || PROVIDERS[provider]?.defaultModel
   const preview = useMemo(() => buildAIContext({
     projectId: store.activeNovelId || store.activeNovel?.id,
     mode,
@@ -1525,6 +1526,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
           {view === 'context' && (
             <ContextSelector
               store={store}
+              aiSettings={aiSettings}
               initialContext={initialContext}
               initialFreedomLevel={DEFAULT_AI_FREEDOM_LEVEL}
               onStart={handleContextConfirm}
