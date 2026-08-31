@@ -4,6 +4,7 @@ import {
   buildScriptBlocks, getScriptElements, getScriptElementLabel, getNextScriptElementAfterEnter,
   getScriptBlockIndexAtOffset, syncScriptBlocks,
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
+  copyTextToClipboard,
 } from './manuscriptUtils.js'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
@@ -551,6 +552,7 @@ const SceneEditorImpl = ({
   const burstTimeoutRef = useRef(null)
   const [undoCount, setUndoCount] = useState(0)
   const [redoCount, setRedoCount] = useState(0)
+  const [sceneCopied, setSceneCopied] = useState(false)
   const isScript = SCRIPT_TYPES.has(projectType)
   const isBullets = !isScript && scene.textMode === 'bullets'
   const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
@@ -856,6 +858,25 @@ const SceneEditorImpl = ({
     setUndoCount(undoStackRef.current.length)
     setRedoCount(redoStackRef.current.length)
   }, [applySnapshot, snapshotNow])
+
+  // "Copy whole scene" — the accepted product decision (2026-08-08, see
+  // docs/ROADMAP.md's single-very-large-scene typing-lag row) for scenes big
+  // enough that the browser's own native `<textarea>` selection (drag-select,
+  // Shift-click, Ctrl+A) can get slow or unreliable. Reads `localContentRef`
+  // directly — the in-memory content model is a single string regardless of
+  // scene length or how it's rendered — so this never touches native DOM
+  // selection at all, sidestepping that cost entirely rather than trying to
+  // work around it. Harmless (just copies a short string) for ordinary scenes.
+  const copyFeedbackTimeoutRef = useRef(null)
+  const handleCopyWholeScene = useCallback(async () => {
+    const ok = await copyTextToClipboard(localContentRef.current)
+    if (!ok) return
+    setSceneCopied(true)
+    clearTimeout(copyFeedbackTimeoutRef.current)
+    copyFeedbackTimeoutRef.current = window.setTimeout(() => setSceneCopied(false), 1500)
+  }, [])
+
+  useEffect(() => () => clearTimeout(copyFeedbackTimeoutRef.current), [])
 
   useEffect(() => {
     if (!innerRef) return
@@ -1358,6 +1379,13 @@ const SceneEditorImpl = ({
                 <button onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} className="px-2 py-0.5 text-[11px] italic text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Italic (Ctrl+I)">I</button>
                 <button onMouseDown={e => { e.preventDefault(); wrapSelection('_') }} className="px-2 py-0.5 text-[11px] underline text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Underline (Ctrl+U)">U</button>
               </div>
+
+              <button
+                type="button"
+                onClick={handleCopyWholeScene}
+                className="ms-meta-chip"
+                title="Copy this scene's full text to the clipboard — reliable even on very long scenes where native Select All can be slow or fail to grab everything"
+              >{sceneCopied ? 'Copied!' : 'Copy scene'}</button>
 
               {onOpenVersionHistory && (
                 <button
