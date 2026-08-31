@@ -40,7 +40,7 @@ Note (2026-07-28): the formal Stripe test-mode API checklist below (test-mode se
 - ✅ (accepted without formal test-mode run) Founder checkout: complete a £399 one-time test purchase and verify Stripe session success, webhook delivery, Supabase metadata (`subscription_plan: founder`, Founder status, lifetime Cloud Mode/fair-use cap), and YOW access as Founder.
 - ✅ (accepted without formal test-mode run) Hosting renewal checkout: complete a £6 test purchase for hosting renewal and verify webhook delivery, `cloud_hosting_expires_at` / `maintenance_expires_at` extension, Cloud Mode restoration, and correct account messaging.
 - ⬜ Failure/cancel checks: test checkout cancellation, failed payment where feasible, and monthly cancellation/expiry behavior; verify the app does not grant paid access unless the webhook metadata confirms entitlement. Not verified.
-- 🐛 Known bug: downgrading a plan on an account that was manually upgraded via direct SQL (not through a real Stripe checkout) fails — no Stripe subscription/customer record exists for the downgrade path to act on.
+- ⬜ 2026-08-28: fixed in code (see docs/ROADMAP.md Bugs table) — an account manually upgraded via direct SQL (no real Stripe subscription/customer record) can now downgrade to Free through a new fallback path instead of 404ing against the Stripe customer portal. Needs live-mode re-verification: downgrade a real SQL-only-upgraded account and confirm it lands on Free; confirm a real paying subscriber's billing-portal path is unaffected.
 - ⬜ Return-to-live checklist: after test QA passes, restore live Stripe secrets/price IDs/webhook secret before accepting real payments, and rerun one final live-mode configuration review without making a real purchase.
 
 ## Priority 1: Data Safety And Auth
