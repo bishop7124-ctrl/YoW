@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react'
 // ad hoc pixel values.
 export const BREAKPOINT_TABLET = 860
 export const BREAKPOINT_PHONE = 640
+// Mirrors the Manuscript overlay CSS at `@media (max-width: 900px)`, where the
+// inspector/surface stop being side columns and become bottom sheets.
+export const BREAKPOINT_MS_OVERLAY = 900
 
 function matchesMaxWidth(maxWidth) {
   if (typeof window === 'undefined') return false
