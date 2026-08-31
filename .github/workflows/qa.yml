@@ -77,6 +77,8 @@ jobs:
             spec: tests/e2e/account-isolation.spec.js
           - name: project-type-labels
             spec: tests/e2e/project-type-labels.spec.js
+          - name: import-into-existing-project
+            spec: tests/e2e/import-into-existing-project.spec.js
 
     steps:
       - name: Check out repository
