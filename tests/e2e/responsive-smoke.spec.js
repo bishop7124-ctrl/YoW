@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, readScenesWithContent, seedCleanStorage } from './helpers.js'
 
 const viewports = [
   { name: 'mobile', width: 390, height: 844 },
@@ -31,15 +31,28 @@ for (const viewport of viewports) {
     // hero CTA (ProjectDashboard.jsx) stays reachable and opens the same
     // editor — accept either, matching whichever this viewport shows.
     await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).click()
-    const editor = page.locator('.ms-textarea').first()
+    await page.getByText('Begin writing here…').click()
+    const editor = page.locator('main textarea').first()
     await expect(editor).toBeVisible()
     await editor.click()
     await editor.fill(sentence)
     await expect(editor).toHaveValue(sentence)
+    await page.waitForFunction(
+      (expected) => {
+        const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+        const scenes = JSON.parse(get('nf_scenes') || '[]')
+        return scenes.some(s => s.content === expected || get(`nf_scene_content:${s.id}`) === expected)
+      },
+      sentence,
+      { timeout: 8000 },
+    )
 
     await page.reload()
     await expect(page).toHaveURL(/\/project\/.+\/writing/)
-    await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()
+    await expect.poll(async () => {
+      const scenes = await readScenesWithContent(page)
+      return scenes.some(scene => scene.content === sentence)
+    }).toBe(true)
   })
 }
 
