@@ -79,6 +79,16 @@ jobs:
             spec: tests/e2e/project-type-labels.spec.js
           - name: import-into-existing-project
             spec: tests/e2e/import-into-existing-project.spec.js
+          # Added 2026-08-28. This spec existed in tests/e2e/ from the start but
+          # was never listed here, so CI ran 13 of the directory's 14 files and
+          # nothing flagged the gap — it had rotted to 4/4 failing against the
+          # manuscript-editor-redesign toolbar entirely unnoticed. This list is
+          # now checked against `tests/e2e/*.spec.js` by `npm run check:e2e-matrix`
+          # (part of `npm run qa`, which the static-qa job above runs and which
+          # this job depends on), so adding a spec without adding it here fails
+          # the build rather than going silently unrun.
+          - name: focused-writing
+            spec: tests/e2e/focused-writing.spec.js
 
     steps:
       - name: Check out repository
