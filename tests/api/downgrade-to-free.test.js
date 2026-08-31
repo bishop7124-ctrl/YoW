@@ -20,7 +20,7 @@ const makeReq = (overrides = {}) => ({
   ...overrides,
 })
 
-describe('downgrade-to-free handler', () => {
+describe('create-customer-portal downgrade_to_free action', () => {
   let handler
 
   beforeEach(async () => {
@@ -30,14 +30,14 @@ describe('downgrade-to-free handler', () => {
     updateUserById.mockReset()
     updateUserById.mockResolvedValue({ error: null })
     vi.resetModules()
-    const mod = await import('../../api/downgrade-to-free.js')
+    const mod = await import('../../api/create-customer-portal.js')
     handler = mod.default
   })
 
   it('rejects unauthenticated requests', async () => {
     getUser.mockResolvedValue({ data: { user: null }, error: new Error('bad token') })
     const res = makeRes()
-    await handler(makeReq(), res)
+    await handler(makeReq({ body: { action: 'downgrade_to_free' } }), res)
     expect(res.status).toHaveBeenCalledWith(401)
     expect(updateUserById).not.toHaveBeenCalled()
   })
@@ -48,7 +48,7 @@ describe('downgrade-to-free handler', () => {
       error: null,
     })
     const res = makeRes()
-    await handler(makeReq(), res)
+    await handler(makeReq({ body: { action: 'downgrade_to_free' } }), res)
     expect(res.status).toHaveBeenCalledWith(400)
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'has_stripe_subscription' }))
     expect(updateUserById).not.toHaveBeenCalled()
@@ -60,7 +60,7 @@ describe('downgrade-to-free handler', () => {
       error: null,
     })
     const res = makeRes()
-    await handler(makeReq(), res)
+    await handler(makeReq({ body: { action: 'downgrade_to_free' } }), res)
     expect(res.status).toHaveBeenCalledWith(400)
     expect(updateUserById).not.toHaveBeenCalled()
   })
@@ -71,7 +71,7 @@ describe('downgrade-to-free handler', () => {
       error: null,
     })
     const res = makeRes()
-    await handler(makeReq(), res)
+    await handler(makeReq({ body: { action: 'downgrade_to_free' } }), res)
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, alreadyFree: true }))
     expect(updateUserById).not.toHaveBeenCalled()
@@ -89,7 +89,7 @@ describe('downgrade-to-free handler', () => {
       error: null,
     })
     const res = makeRes()
-    await handler(makeReq(), res)
+    await handler(makeReq({ body: { action: 'downgrade_to_free' } }), res)
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith({ ok: true })
     expect(updateUserById).toHaveBeenCalledWith('user-1', {
@@ -105,7 +105,7 @@ describe('downgrade-to-free handler', () => {
     })
     updateUserById.mockResolvedValue({ error: new Error('db down') })
     const res = makeRes()
-    await handler(makeReq(), res)
+    await handler(makeReq({ body: { action: 'downgrade_to_free' } }), res)
     expect(res.status).toHaveBeenCalledWith(500)
   })
 })

@@ -1,7 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts'
 
-// Edge-function counterpart of api/downgrade-to-free.js — keep both in sync.
+// Edge-function counterpart of create-customer-portal's downgrade_to_free action.
+// Kept for direct Supabase deployments that already reference this function.
 // Direct plan reset to Free for accounts with no real Stripe subscription to
 // cancel (e.g. a plan granted manually via direct SQL). Accounts with a real
 // stripe_customer_id or stripe_subscription_id are refused and must cancel

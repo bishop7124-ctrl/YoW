@@ -2198,7 +2198,6 @@ const formatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'sho
 const billingEndpoints = {
   checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL,
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL,
-  downgrade: import.meta.env.VITE_DOWNGRADE_TO_FREE_URL,
 }
 
 async function postBilling(endpoint, accessToken, body) {
@@ -2226,10 +2225,9 @@ async function requestBillingUrl(endpoint, accessToken, body) {
 }
 
 // Accounts with a plan granted manually (e.g. via direct SQL) have no real
-// Stripe customer, so the billing portal above has nothing to manage — fall
-// back to resetting the plan directly. api/downgrade-to-free.js refuses any
-// account that *does* have a real Stripe customer/subscription, so this is
-// safe to attempt whenever the portal reports 'no_stripe_customer'.
+// Stripe customer, so the billing portal has nothing to manage. The portal
+// endpoint also owns a tightly-scoped fallback action for those SQL-only
+// grants; it refuses any account that has a real Stripe customer/subscription.
 async function requestDirectDowngrade(endpoint, accessToken, body) {
   const data = await postBilling(endpoint, accessToken, body)
   if (!data?.ok) throw new Error('Could not downgrade this account. Please try again.')
@@ -2883,10 +2881,10 @@ export default function AccountSettings({
       })
       window.location.assign(url)
     } catch (error) {
-      if (error.code === 'no_stripe_customer' && intent === 'cancel' && billingEndpoints.downgrade) {
+      if (error.code === 'no_stripe_customer' && intent === 'cancel') {
         try {
           const accessToken = await getAccessToken()
-          await requestDirectDowngrade(billingEndpoints.downgrade, accessToken, { userId: user.id })
+          await requestDirectDowngrade(endpoint, accessToken, { userId: user.id, action: 'downgrade_to_free' })
           setBillingMessage('Your plan has been moved to Free.')
           await refreshUser()
         } catch (downgradeError) {
