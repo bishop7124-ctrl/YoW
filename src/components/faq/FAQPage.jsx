@@ -66,7 +66,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Do monthly subscribers pay a cloud hosting renewal?',
-        a: 'No. Monthly subscribers pay £12/month, which includes Cloud Mode while subscribed. The annual renewal only applies to Lifetime plan holders after their included hosting period.',
+        a: 'No. Monthly subscribers pay £10/month, which includes Cloud Mode while subscribed. The annual renewal only applies to Lifetime plan holders after their included hosting period.',
       },
       {
         q: 'How many Founder slots are there?',
