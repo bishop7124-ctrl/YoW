@@ -107,6 +107,16 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
     // resolves instantly on backends with no flush method (e.g. real
     // localStorage) since there's nothing to wait for.
     flush: () => activeBackend.flush?.() ?? Promise.resolve(),
+    // Which backend reads are currently being answered from ('indexeddb',
+    // 'browser-local', or 'memory'). The bridge object itself is installed at
+    // module evaluation, well before main.jsx's boot() swaps the IndexedDB
+    // vault in, so its mere presence says nothing about whether a read will
+    // find the app's data — during that window getItem() answers from
+    // localStorage and returns null for every nf_* key. Tests use this to tell
+    // "the vault is up" from "the vault never initialised", which otherwise
+    // both present identically as null reads. See waitForStorageHydration in
+    // tests/e2e/helpers.js.
+    backendName: () => activeBackend?.name ?? 'unknown',
     getItem: readItem,
     setItem: writeItem,
     removeItem,
