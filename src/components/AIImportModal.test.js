@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
+import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 function mockStore() {
@@ -384,6 +384,82 @@ describe('countLabel', () => {
   it('keeps lore as "entries"/"entry"', () => {
     expect(countLabel({ lore: Array(7).fill({}) }, 'lore')).toBe('7 entries')
     expect(countLabel({ lore: [{}] }, 'lore')).toBe('1 entry')
+  })
+})
+
+describe('isNewProjectImport (import-into-existing-project rollback guard)', () => {
+  // This guard decides whether a failed import population is allowed to
+  // delete the project it was populating — it must NEVER return true for an
+  // existing project the user chose as an import destination, since a false
+  // positive here would delete real, pre-existing user data on an import
+  // failure that has nothing to do with that project's other content.
+  it('says "safe to delete" for a brand-new project created by this import', () => {
+    expect(isNewProjectImport({ novelId: 'n1', isNewProject: true })).toBe(true)
+  })
+
+  it('says "do not delete" for an existing project chosen as the destination', () => {
+    expect(isNewProjectImport({ novelId: 'existing-1', isNewProject: false })).toBe(false)
+  })
+
+  it('defaults to "safe to delete" (matches pre-existing create-new-project behavior) when isNewProject is absent', () => {
+    expect(isNewProjectImport({ novelId: 'n1' })).toBe(true)
+  })
+})
+
+describe('filterYowCompatibleDestinations', () => {
+  // populateYowProject() (unlike populateProject) is not destination-type-aware:
+  // it writes acts/chapters/scenes and comicPages/comicPanels purely based on what
+  // the source export contains. A comic project's workspace only ever renders Comic
+  // Pages and a non-comic project's workspace only ever renders Manuscript scenes,
+  // so a cross-type "import into" would silently write content nowhere the user can
+  // see it. The destination list must exclude those mismatched projects.
+  const novels = [
+    { id: 'novel-1', type: 'novel' },
+    { id: 'dnd-1', type: 'dnd_campaign' },
+    { id: 'comic-1', type: 'comic' },
+    { id: 'comic-2', type: 'comic' },
+  ]
+
+  it('keeps only non-comic destinations for a non-comic source export', () => {
+    const result = filterYowCompatibleDestinations(novels, { project: { type: 'novel' } })
+    expect(result.map(n => n.id)).toEqual(['novel-1', 'dnd-1'])
+  })
+
+  it('keeps only comic destinations for a comic source export', () => {
+    const result = filterYowCompatibleDestinations(novels, { project: { type: 'comic' } })
+    expect(result.map(n => n.id)).toEqual(['comic-1', 'comic-2'])
+  })
+
+  it('treats a missing/unknown source type as non-comic', () => {
+    expect(filterYowCompatibleDestinations(novels, {}).map(n => n.id)).toEqual(['novel-1', 'dnd-1'])
+    expect(filterYowCompatibleDestinations(novels, null).map(n => n.id)).toEqual(['novel-1', 'dnd-1'])
+  })
+
+  it('handles an empty/missing novel list', () => {
+    expect(filterYowCompatibleDestinations(null, { project: { type: 'novel' } })).toEqual([])
+    expect(filterYowCompatibleDestinations([], { project: { type: 'novel' } })).toEqual([])
+  })
+})
+
+describe('filterImportableNovels (Free-plan single-editable-project lock)', () => {
+  // A Free account can only edit membership.freeProjectId — every other project is
+  // view-only elsewhere in the app (NovelManager.jsx ProjectCard, useStore.js
+  // isFreeLockedProject). "Import into" must never let a Free user write new
+  // records into a project the rest of the app treats as locked/view-only.
+  const novels = [{ id: 'novel-1' }, { id: 'novel-2' }, { id: 'novel-3' }]
+
+  it('allows every project when there is no membership / no free lock', () => {
+    expect(filterImportableNovels(novels, null).map(n => n.id)).toEqual(['novel-1', 'novel-2', 'novel-3'])
+    expect(filterImportableNovels(novels, {}).map(n => n.id)).toEqual(['novel-1', 'novel-2', 'novel-3'])
+  })
+
+  it('restricts to only the free-locked project when freeProjectId is set', () => {
+    expect(filterImportableNovels(novels, { freeProjectId: 'novel-2' }).map(n => n.id)).toEqual(['novel-2'])
+  })
+
+  it('handles an empty/missing novel list', () => {
+    expect(filterImportableNovels(null, { freeProjectId: 'novel-2' })).toEqual([])
+    expect(filterImportableNovels([], { freeProjectId: 'novel-2' })).toEqual([])
   })
 })
 
