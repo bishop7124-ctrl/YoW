@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { SCENE_STATUSES, nextStatus } from './manuscriptUtils.js'
+import { formatOutlineChapterTitle, getOutlineSceneTitle, sortOutlineItems } from '../../utils/outlineDisplay.js'
 import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
 
 // ─── Word count helpers ───────────────────────────────────────────────────────
@@ -76,9 +77,6 @@ const isGeneratedTitle = (title, label) => {
   return new RegExp(`^${escaped}(\\s+\\d+)?$`, 'i').test(clean)
 }
 
-const displayNumberedTitle = (title, label, num) =>
-  isGeneratedTitle(title, label) ? `${label} ${num}` : `${label} ${num}: ${title}`
-
 function InlineRename({ value, fallback, generatedLabel, onSave }) {
   const [draft, setDraft] = useState(isGeneratedTitle(value, generatedLabel || fallback) ? '' : (value || ''))
   const saved = useRef(false)
@@ -123,6 +121,7 @@ function SceneRow({
   const isDropTarget = dragOver?.id === scene.id && dragOver?.type === 'scene'
   const status = scene.status || 'draft'
   const statusLabel = SCENE_STATUSES.find(s => s.value === status)?.label ?? 'Draft'
+  const displayTitle = getOutlineSceneTitle(scene, labels.level3, index + 1)
 
   const handleDragStart = (e) => {
     dragRef.current = { type: 'scene', id: scene.id, chapterId: scene.chapterId }
@@ -142,8 +141,6 @@ function SceneRow({
     dragRef.current = null
     setDragOver(null)
   }
-
-  const displayTitle = scene.title && scene.title !== 'Scene' ? scene.title : `Scene ${index + 1}`
 
   return (
     <>
@@ -165,25 +162,34 @@ function SceneRow({
       >
         <span className="ms-rail-grip" aria-hidden="true"><GripIcon /></span>
 
-        {editingTitle ? (
-          <InlineRename
-            value={scene.title}
-            fallback={`Scene ${index + 1}`}
-            generatedLabel="Scene"
-            onSave={title => { onUpdateScene(scene.id, { title }); setEditingTitle(false) }}
-          />
-        ) : (
-          <button type="button" className="ms-rail-scene-btn" onClick={() => onSelect(scene.id)} title={displayTitle}>
-            <span
-              className="ms-rail-sq"
-              style={{ background: squareColor(status) }}
-              title={`Status: ${statusLabel} (click to change)`}
-              onClick={e => { e.stopPropagation(); onUpdateScene(scene.id, { status: nextStatus(status) }) }}
+        <div className="ms-rail-scene-content">
+          {editingTitle ? (
+            <InlineRename
+              value={scene.title}
+              fallback={labels.level3}
+              generatedLabel={labels.level3}
+              onSave={title => { onUpdateScene(scene.id, { title }); setEditingTitle(false) }}
             />
-            <span className="ms-rail-scene-title">{displayTitle}</span>
-            {words > 0 && <span className="ms-rail-scene-words">{fmtWords(words)}</span>}
-          </button>
-        )}
+          ) : (
+            <button
+              type="button"
+              className="ms-rail-scene-btn"
+              onClick={() => onSelect(scene.id)}
+              title={[displayTitle.number, displayTitle.title].filter(Boolean).join(': ')}
+            >
+              <span
+                className="ms-rail-sq"
+                style={{ background: squareColor(status) }}
+                title={`Status: ${statusLabel} (click to change)`}
+                onClick={e => { e.stopPropagation(); onUpdateScene(scene.id, { status: nextStatus(status) }) }}
+              />
+              <span className="ms-rail-scene-label">{displayTitle.number}</span>
+              {displayTitle.title && <span className="ms-rail-scene-title">{displayTitle.title}</span>}
+              {words > 0 && <span className="ms-rail-scene-words">{fmtWords(words)}</span>}
+            </button>
+          )}
+          {scene.synopsis?.trim() && <p className="ms-rail-synopsis">{scene.synopsis}</p>}
+        </div>
 
         <span className="ms-rail-row-actions">
           {chapterOptions?.length > 1 && (
@@ -201,7 +207,7 @@ function SceneRow({
           <button
             type="button"
             className="ms-rail-icon-btn ms-rail-delete-btn"
-            onClick={() => { if (window.confirm(`Delete "${displayTitle}"? This cannot be undone.`)) onDeleteScene(scene.id) }}
+            onClick={() => { if (window.confirm(`Delete "${displayTitle.title || displayTitle.number}"? This cannot be undone.`)) onDeleteScene(scene.id) }}
             title="Delete scene"
             aria-label="Delete scene"
           >
@@ -233,7 +239,7 @@ function ChapterRow({
   const totalWords = useMemo(() => chapScenes.reduce((acc, s) => acc + countWords(s.content), 0), [chapScenes])
   const isDragging = dragRef.current?.id === chap.id
   const isDropTarget = dragOver?.id === chap.id && dragOver?.type === 'chapter'
-  const displayTitle = displayNumberedTitle(chap.title, labels.level2, chapNum)
+  const displayTitle = formatOutlineChapterTitle(chap, labels.level2, chapNum)
 
   const handleDragStart = (e) => {
     dragRef.current = { type: 'chapter', id: chap.id, actId: chap.actId }
@@ -316,6 +322,8 @@ function ChapterRow({
         </span>
       </div>
 
+      {chap.synopsis?.trim() && <p className="ms-rail-synopsis ms-rail-chapter-synopsis">{chap.synopsis}</p>}
+
       {open && (
         <div
           className={`ms-rail-scenes${dragOver?.id === chap.id && dragOver?.type === 'chapter-empty' ? ' is-drop-target' : ''}`}
@@ -367,7 +375,7 @@ function ChapterRow({
 
 function RailSpine({ flatScenes, activeSceneId, onSelectScene }) {
   return (
-    <div className="ms-rail-spine" role="navigation" aria-label="Manuscript position">
+    <div className="ms-rail-spine" role="navigation" aria-label="Outline position">
       {flatScenes.map(scene => (
         <button
           key={scene.id}
@@ -403,6 +411,7 @@ export default function ManuscriptRail({
   const [renamingActId, setRenamingActId] = useState(null)
   const [dragOver, setDragOver] = useState(null)
   const dragRef = useRef(null)
+  const sortedActs = useMemo(() => sortOutlineItems(acts), [acts])
 
   const handleAddScene = useCallback((chapId) => {
     const newScene = addScene(chapId, labels.level3)
@@ -444,29 +453,29 @@ export default function ManuscriptRail({
   const chapterNumbers = useMemo(() => {
     const map = {}
     let count = 1
-    acts.forEach(act => {
+    sortedActs.forEach(act => {
       chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order).forEach(c => { map[c.id] = count++ })
     })
     return map
-  }, [acts, chapters])
+  }, [sortedActs, chapters])
 
   // Options for the explicit "move to..." selects — every act/chapter, not
   // just empty ones (drag-and-drop is the empty-parent-only path; this
   // control can move into a populated parent too, matching StoryOutline.jsx).
-  const actOptions = useMemo(() => acts.map((act, idx) => ({
+  const actOptions = useMemo(() => sortedActs.map((act, idx) => ({
     id: act.id,
     label: act.title || `${labels.level1} ${idx + 1}`,
-  })), [acts, labels.level1])
+  })), [sortedActs, labels.level1])
 
   const chapterOptions = useMemo(() => (
-    acts.flatMap(act => chapters
+    sortedActs.flatMap(act => chapters
       .filter(c => c.actId === act.id)
       .sort((a, b) => a.order - b.order)
       .map(c => ({
         id: c.id,
-        label: displayNumberedTitle(c.title, labels.level2, chapterNumbers[c.id]),
+        label: formatOutlineChapterTitle(c, labels.level2, chapterNumbers[c.id]),
       })))
-  ), [acts, chapters, chapterNumbers, labels.level2])
+  ), [sortedActs, chapters, chapterNumbers, labels.level2])
 
   const actWords = useCallback((act) => {
     const actChapIds = new Set(chapters.filter(c => c.actId === act.id).map(c => c.id))
@@ -476,24 +485,24 @@ export default function ManuscriptRail({
   // Flat, document-ordered scene list — only needed for the collapsed spine view.
   const flatScenes = useMemo(() => {
     const out = []
-    acts.forEach(act => {
+    sortedActs.forEach(act => {
       chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order).forEach(chap => {
         scenes.filter(s => s.chapterId === chap.id).sort((a, b) => a.order - b.order).forEach(s => out.push(s))
       })
     })
     return out
-  }, [acts, chapters, scenes])
+  }, [sortedActs, chapters, scenes])
 
   return (
     <aside data-tour="manuscript-structure" className={`ms-rail font-sans${collapsed ? ' is-collapsed' : ''}${mobileSheetOpen ? ' is-sheet-open' : ''}`}>
       <div className="ms-rail-h">
-        <span className="ms-rail-h-label">Manuscript</span>
+        <span className="ms-rail-h-label">Outline</span>
         {totalWordCount > 0 && !collapsed && <span className="ms-rail-h-words">{totalWordCount.toLocaleString()}w</span>}
         <button
           type="button"
           className="ms-rail-icon-btn ms-rail-collapse-btn"
           onClick={onToggleCollapsed}
-          title={collapsed ? 'Expand manuscript structure (⌘\\)' : 'Collapse manuscript structure (⌘\\)'}
+          title={collapsed ? 'Expand outline (⌘\\)' : 'Collapse outline (⌘\\)'}
           aria-pressed={!collapsed}
         >
           {collapsed ? <ExpandIcon /> : <CollapseIcon />}
@@ -505,7 +514,7 @@ export default function ManuscriptRail({
       ) : (
         <>
           <nav className="ms-rail-tree">
-            {acts.map((act, actIndex) => {
+            {sortedActs.map((act, actIndex) => {
               const actChapters = chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order)
               const words = actWords(act)
               const isActDragging = dragRef.current?.id === act.id
@@ -525,7 +534,7 @@ export default function ManuscriptRail({
               const handleActDrop = (e) => {
                 e.preventDefault()
                 if (!dragRef.current || dragRef.current.type !== 'act') return
-                const targetIdx = acts.findIndex(a => a.id === act.id)
+                const targetIdx = sortedActs.findIndex(a => a.id === act.id)
                 const toIndex = dragOver?.position === 'after' ? targetIdx + 1 : targetIdx
                 moveAct(dragRef.current.id, toIndex)
                 dragRef.current = null
@@ -582,6 +591,8 @@ export default function ManuscriptRail({
                     </span>
                   </div>
 
+                  {act.synopsis?.trim() && <p className="ms-rail-synopsis ms-rail-act-synopsis">{act.synopsis}</p>}
+
                   <div
                     className={`ms-rail-chapters${dragOver?.id === act.id && dragOver?.type === 'act-empty' ? ' is-drop-target' : ''}`}
                     onDragOver={e => {
@@ -637,7 +648,7 @@ export default function ManuscriptRail({
               type="button"
               className="ms-rail-f-btn"
               onClick={() => {
-                const lastAct = acts[acts.length - 1]
+                const lastAct = sortedActs[sortedActs.length - 1]
                 const lastChap = lastAct
                   ? chapters.filter(c => c.actId === lastAct.id).sort((a, b) => a.order - b.order).slice(-1)[0]
                   : null
@@ -652,7 +663,7 @@ export default function ManuscriptRail({
               type="button"
               className="ms-rail-f-btn"
               onClick={() => {
-                const act = acts[acts.length - 1]
+                const act = sortedActs[sortedActs.length - 1]
                 if (act) handleAddChapter(act.id)
               }}
               disabled={acts.length === 0}

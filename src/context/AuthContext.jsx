@@ -7,6 +7,7 @@ import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSetting
 import { trackEvent, identifyUser } from '../utils/analytics'
 import { isDesktopAppRuntime } from '../utils/runtime'
 import { clearLastWebActivity, isWebSessionIdleExpired, writeLastWebActivity } from '../utils/sessionActivity'
+import { sanitizeEditableProfileMetadata } from '../utils/profileMetadata'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -233,12 +234,14 @@ export function AuthProvider({ children }) {
 
   const updateProfile = OFFLINE_MODE
     ? (profile) => {
-        const updated = { ...user, user_metadata: { ...(user?.user_metadata ?? {}), ...profile } }
+        const safeProfile = sanitizeEditableProfileMetadata(profile)
+        const updated = { ...user, user_metadata: { ...(user?.user_metadata ?? {}), ...safeProfile } }
         setUser(updated)
         return Promise.resolve(updated)
       }
     : async (profile) => {
-        const { data, error } = await supabase.auth.updateUser({ data: profile })
+        const safeProfile = sanitizeEditableProfileMetadata(profile)
+        const { data, error } = await supabase.auth.updateUser({ data: safeProfile })
         if (error) throw error
         setUser(data.user ?? null)
         return data.user

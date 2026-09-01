@@ -1931,9 +1931,63 @@ textarea:focus {
   caret-color: color-mix(in srgb, var(--studio-ink) 92%, #000);
 }
 
+/* WebKit paints a textarea caret at the full line-height (nearly twice the
+   manuscript type size). Once SceneEditor has positioned the preview-backed
+   caret, hide that oversized native bar and show a one-em caret instead. */
+.ms-textarea--rich.ms-textarea--custom-caret,
+.manuscript-processor .ms-textarea.ms-textarea--rich.ms-textarea--custom-caret {
+  caret-color: transparent !important;
+}
+
+.ms-editor-caret {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  width: 1px;
+  opacity: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--studio-ink) 92%, #000);
+}
+
+.ms-editor-caret.is-visible {
+  opacity: 1;
+  animation: ms-editor-caret-blink 1.05s steps(1, end) infinite;
+}
+
+@keyframes ms-editor-caret-blink {
+  0%, 52% { opacity: 1; }
+  53%, 100% { opacity: 0; }
+}
+
 .ms-textarea--rich::placeholder {
   color: var(--studio-muted);
   -webkit-text-fill-color: var(--studio-muted);
+}
+
+/* Paragraph indentation is presentation, never literal whitespace in scene.content.
+   `each-line` keeps the transparent textarea's caret aligned with the rich preview
+   after forced line breaks; the first declaration is a safe older-browser fallback. */
+.ms-prose-auto-indent {
+  text-indent: var(--ms-paragraph-indent, 4ch);
+  text-indent: var(--ms-paragraph-indent, 4ch) each-line;
+}
+
+.ms-prose-paragraphs {
+  text-indent: 0;
+}
+
+.ms-prose-paragraph {
+  margin: 0;
+  min-height: 1lh;
+  text-indent: var(--ms-paragraph-indent, 4ch);
+  text-indent: var(--ms-paragraph-indent, 4ch) each-line;
+}
+
+/* While the transparent textarea is active, its semantic `\n\n` separator
+   occupies one blank line. Mirror that line in the overlay so text and caret
+   stay vertically aligned; read-only/final views keep book-style tight paragraphs. */
+.ms-rich-preview .ms-prose-paragraph + .ms-prose-paragraph {
+  margin-top: var(--ms-paragraph-edit-gap, 2em);
 }
 
 .ms-note-marker {
@@ -14917,8 +14971,31 @@ body {
   font: inherit;
 }
 .ms-rail-sq { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto; cursor: pointer; }
+.ms-rail-scene-content { flex: 1; min-width: 0; }
+.ms-rail-scene-content .ms-rail-rename-input { width: 100%; }
+.ms-rail-scene-label {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .ms-rail-scene-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms-rail-scene-words { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.ms-rail-synopsis {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ms-rail-act-synopsis { margin: -2px 8px 6px 20px; }
+.ms-rail-chapter-synopsis { margin: -2px 8px 6px 35px; }
+.ms-rail-scene .ms-rail-synopsis { padding-left: 15px; }
 
 .ms-rail-row-actions { display: none; align-items: center; gap: 1px; flex-shrink: 0; }
 .ms-rail-act-h:hover .ms-rail-row-actions,

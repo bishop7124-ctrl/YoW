@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { getProjectType, getStoryEventIndicators } from '../../constants/projectTypes'
 import { useIsMobile } from '../../utils/useMediaQuery'
+import { formatOutlineChapterTitle, sortOutlineItems } from '../../utils/outlineDisplay.js'
 import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
 
 const ChevronIcon = ({ open }) => (
@@ -363,10 +364,7 @@ const ChapterCard = ({ chapter, chapterNum, actOptions, chapterOptions, scenes, 
   const chapterScenes = useMemo(() => scenes.filter(s => s.chapterId === chapter.id).sort((a, b) => a.order - b.order), [scenes, chapter.id])
   const wordCount = useMemo(() => chapterScenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [chapterScenes])
 
-  const l2lower = labels.level2.toLowerCase()
-  const title = !chapter.title || chapter.title.toLowerCase().startsWith(l2lower)
-    ? `${labels.level2} ${chapterNum}`
-    : `${labels.level2} ${chapterNum}: ${chapter.title}`
+  const title = formatOutlineChapterTitle(chapter, labels.level2, chapterNum)
 
   const moveToAct = (actId) => {
     if (!actId || actId === chapter.actId) return
@@ -622,13 +620,13 @@ export default function StoryOutline({ store }) {
   const totalWords = useMemo(() => scenes.reduce((n, s) => n + (s.content?.trim().split(/\s+/).filter(Boolean).length || 0), 0), [scenes])
   const totalScenes = scenes.length
   const totalChapters = chapters.length
-  const sortedActs = useMemo(() => acts.slice().sort((a, b) => a.order - b.order), [acts])
+  const sortedActs = useMemo(() => sortOutlineItems(acts), [acts])
 
   const chapterGlobalNums = useMemo(() => {
     const map = {}
     let count = 1
     sortedActs.forEach(act => {
-      chapters.filter(c => c.actId === act.id).sort((a, b) => a.order - b.order).forEach(chap => { map[chap.id] = count++ })
+      sortOutlineItems(chapters.filter(c => c.actId === act.id)).forEach(chap => { map[chap.id] = count++ })
     })
     return map
   }, [sortedActs, chapters])
@@ -646,11 +644,11 @@ export default function StoryOutline({ store }) {
     sortedActs
       .flatMap(act => chapters
         .filter(chap => chap.actId === act.id)
-        .sort((a, b) => a.order - b.order)
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
         .map(chap => ({
           id: chap.id,
           label: chapterGlobalNums[chap.id]
-            ? `${labels.level2} ${chapterGlobalNums[chap.id]}${chap.title && !chap.title.toLowerCase().startsWith(labels.level2.toLowerCase()) ? `: ${chap.title}` : ''}`
+            ? formatOutlineChapterTitle(chap, labels.level2, chapterGlobalNums[chap.id])
             : chap.title || labels.level2,
           sceneCount: scenes.filter(scene => scene.chapterId === chap.id).length,
         })))

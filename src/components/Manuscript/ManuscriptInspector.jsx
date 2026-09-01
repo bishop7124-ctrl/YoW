@@ -238,7 +238,7 @@ function FormatTab({ settings, onChange }) {
         {settings.autoIndent && (
           <div className="ms-insp-row" style={{ marginTop: 6 }}>
             {INDENT_SIZES.map(n => (
-              <button key={n} type="button" className={`ms-opt${settings.indentSize === n ? ' is-on' : ''}`} onClick={() => set('indentSize', n)}>{n} spaces</button>
+              <button key={n} type="button" className={`ms-opt${settings.indentSize === n ? ' is-on' : ''}`} onClick={() => set('indentSize', n)}>{n} characters</button>
             ))}
           </div>
         )}

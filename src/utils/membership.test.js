@@ -67,4 +67,29 @@ describe('membership plan limits', () => {
     expect(membership.isDesktopEntitled).toBe(true)
     expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.beta_tester)
   })
+
+  it('ignores paid, beta, and trial claims in browser-editable user metadata', () => {
+    const membership = getMembership(makeUser({
+      user_metadata: {
+        subscription_plan: 'founder',
+        subscription_status: 'active',
+        beta_tester: true,
+        trial_started_at: '2099-01-01T00:00:00.000Z',
+      },
+    }))
+
+    expect(membership.subscriptionPlan).toBeNull()
+    expect(membership.subscriptionStatus).toBe('none')
+    expect(membership.isPaid).toBe(false)
+    expect(membership.isBetaTester).toBe(false)
+    expect(membership.isLifetime).toBe(false)
+    expect(membership.isTrialActive).toBe(false)
+    expect(membership.isFree).toBe(true)
+    expect(membership.isDesktopEntitled).toBe(false)
+  })
+
+  it('reads downgraded-monthly state only from server metadata', () => {
+    expect(getMembership(makeUser({ user_metadata: { was_monthly: true } })).wasMonthly).toBe(false)
+    expect(getMembership(makeUser({ app_metadata: { was_monthly: true } })).wasMonthly).toBe(true)
+  })
 })

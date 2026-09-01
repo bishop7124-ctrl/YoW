@@ -157,13 +157,16 @@ const dateFrom = (value) => {
 
 export function getMembership(user) {
   const createdAt = dateFrom(user?.created_at || user?.createdAt)
-  const trialStartedAt = dateFrom(user?.user_metadata?.trial_started_at) || createdAt || new Date()
+  const serverMetadata = user?.app_metadata || {}
+  const trialStartedAt = dateFrom(serverMetadata.trial_started_at) || createdAt || new Date()
   const trialEndsAt = new Date(trialStartedAt.getTime() + TRIAL_DAYS * DAY_MS)
   const now = new Date()
 
-  const subscriptionStatus = user?.app_metadata?.subscription_status || user?.user_metadata?.subscription_status || 'none'
-  const subscriptionPlan = user?.app_metadata?.subscription_plan || user?.user_metadata?.subscription_plan || null
-  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || user?.app_metadata?.beta_tester === true || user?.user_metadata?.beta_tester === true
+  // Entitlement data is server-controlled. Supabase user_metadata is editable
+  // by the signed-in browser client and must never grant paid or beta access.
+  const subscriptionStatus = serverMetadata.subscription_status || 'none'
+  const subscriptionPlan = serverMetadata.subscription_plan || null
+  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || serverMetadata.beta_tester === true
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
   const isFounder = subscriptionPlan === 'founder'
 
@@ -173,7 +176,7 @@ export function getMembership(user) {
   const isFree = !isPaid && !isTrialActive
 
   // wasMonthly: downgraded from a monthly subscription — active project is locked
-  const wasMonthly = isFree && (user?.user_metadata?.was_monthly === true)
+  const wasMonthly = isFree && (serverMetadata.was_monthly === true)
 
   // 'plan' is the tier category used for CSS badge classes
   const plan = isPaid ? 'paid' : isTrialActive ? 'trial' : 'free'

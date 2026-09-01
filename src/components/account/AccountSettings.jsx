@@ -1608,7 +1608,6 @@ function AppearancePanel({ user, updateProfile }) {
 
     try {
       await updateProfile({
-        ...(user.user_metadata || {}),
         theme: appliedTheme,
         custom_theme_colors: appliedTheme === 'custom' ? { ...customColors } : undefined,
         theme_radius_unit: themeTuning.radiusUnit,
@@ -2435,7 +2434,6 @@ function ProfileDetails({ user, updateProfile, localProfileOnly = false, storage
       setProfileMessage('')
       setProfileError('')
       const nextProfile = {
-        ...(user.user_metadata || {}),
         full_name: profileDraft.fullName.trim(),
         name: profileDraft.fullName.trim(),
         alias: profileDraft.alias.trim(),

@@ -93,7 +93,6 @@ export default async function handler(req, res) {
     if (!error && data?.user) {
       authedUser = data.user
       const existingAppMeta = authedUser.app_metadata || {}
-      const existingUserMeta = authedUser.user_metadata || {}
       const now = new Date().toISOString()
       const { error: updateError } = await supabase.auth.admin.updateUserById(authedUser.id, {
         app_metadata: {
@@ -103,11 +102,6 @@ export default async function handler(req, res) {
           beta_tester: true,
           beta_tester_started_at: existingAppMeta.beta_tester_started_at || now,
           beta_tester_source: 'paid_plan_interest',
-          beta_tester_requested_plan: plan || null,
-        },
-        user_metadata: {
-          ...existingUserMeta,
-          beta_tester: true,
           beta_tester_requested_plan: plan || null,
         },
       })
