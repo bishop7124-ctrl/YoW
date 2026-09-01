@@ -17,9 +17,72 @@ Use this file when QA is intentionally postponed so development can continue. Ev
   - [Interactive QA checklist](qa-checklist.html)
   - [Data Safety QA checklist](data-safety-qa-checklist.html)
 
+## Priority -1: 2026-09-01 Whole-Codebase Audit Blocker Closure
+
+Status: **Deferred — all checks below are required after remediation; paid/public launch and unrestricted public beta remain blocked.**
+
+Evidence and implementation findings: [YOW_CODE_AUDIT_2026-09-01.md](YOW_CODE_AUDIT_2026-09-01.md). Copy source and conflict pack: [marketing-copy-review/](marketing-copy-review/README.md).
+
+### Secrets and authorization
+
+- ⬜ Rotate the committed test-account credential, remove it from all tracked source/docs/backups, verify the old credential no longer signs in, review account/security logs, and decide whether history rewriting is required. Run the new CI secret scan against the complete git history and retain its passing artifact.
+- ⬜ Entitlement negative matrix: as a normal Free user, attempt to write `subscription_status`, `subscription_plan`, `beta_tester`, Founder, Lifetime, Stripe customer/subscription IDs, maintenance dates, desktop flags, and free-project fields through every profile-update path and direct Supabase user-metadata update. Confirm no UI, API, download, device, quota, project, AI, or desktop entitlement changes. Confirm server-controlled entitlement still works for legitimate Monthly/Lifetime/Founder/Beta fixtures.
+- ⬜ AI proxy authorization: without a token, with an expired token, another user's token, a Free user, a non-AI plan, an invalid Origin, an oversized body, unsupported provider/base URL/model, excessive `maxTokens`, and a rate-limited account/IP, confirm the request fails before provider contact. With an entitled user, test each approved provider and verify keys/prompts never appear in URLs, responses, logs, analytics, or error traces.
+- ⬜ Cron/re-engagement: deploy with `CRON_SECRET` missing and confirm the route fails closed. Test missing/wrong/correct bearer secret; duplicate scheduler invocation; target deduplication; opt-out; bounced/failed send; and durable audit counts. No bulk email may send on an unauthenticated call.
+- ⬜ Welcome/reset/re-engagement Edge Functions: verify JWT/service authorization policy from committed Supabase config; reject arbitrary third-party target email/user/stage/redirect submissions; allow only approved self-service or scheduler paths; enforce durable rate limits; escape all template values; remove provider-key fragments and sensitive details from logs.
+- ⬜ Signed unsubscribe/reset actions: test expiry, tamper, replay, link-scanner prefetch, wrong user, disallowed redirect, and single-use behavior.
+
+### Billing and entitlement fulfillment
+
+- ⬜ Add a durable unique Stripe event ledger and replay every supported event at least three times; verify entitlements, dates, Founder counts, and email side effects change exactly once.
+- ⬜ For Monthly first payment, prove `checkout.session.completed` plus the first `invoice.paid` grants one subscription state and does not extend maintenance twice. Repeat renewal, failed invoice, recovery, cancellation-at-period-end, immediate cancellation, deleted subscription, delayed payment, and webhook-out-of-order sequences.
+- ⬜ For Lifetime and Founder one-time payments, test paid, unpaid, asynchronous-success, failed, expired session, refund, dispute, and replay. No entitlement before confirmed payment.
+- ⬜ Founder concurrency: open more simultaneous successful test checkouts than remaining slots and prove the database atomically allocates no more than the approved cap. Verify oversubscription/refund messaging and cancellation/refund slot policy.
+- ⬜ Approve one price/quota matrix, create matching Stripe test Price objects, and assert Checkout line items against £10/£150/£300/£6 (or the newly approved replacement). Search the repository for every old price/quota and confirm remaining matches are explicitly historical only.
+- ⬜ Remove/migrate the paid-interest automatic Beta entitlement. Test signed-in and signed-out interest submission and confirm it records exactly the approved interest/waitlist state without purchase, reservation, or paid access.
+
+### Data durability, restore, and deletion
+
+- ⬜ Queued storage fault injection: fail IndexedDB/SQLite open, transaction, set, delete, quota, disk-full, corruption, blocked upgrade, close during write, close during scene-content/metadata split, and recovery/retry. The UI must not say Saved until durable acknowledgement; no prose may disappear or stale prose resurrect; a recovery journal/export must remain available.
+- ⬜ Legacy migration: seed localStorage-only data newer than IndexedDB, IndexedDB-only data, divergent data, intentionally empty scenes, orphan per-scene keys, deleted keys/tombstones, auth tokens, AI credentials, and unrelated keys. Browser and desktop upgrades must migrate only approved project data, preserve newest legitimate edits, and never copy credentials into vault/snapshots.
+- ⬜ Project archive identity matrix: export then import into the same account beside the original, another account, an account containing some matching IDs, and every project type. Verify every entity ID and every relationship/reference is remapped consistently; original and imported projects remain independent locally and in Supabase after editing/deleting either one.
+- ⬜ Corrupt/hostile imports: excessive file count, huge compressed ratio, huge uncompressed content, nested archives, malformed DOCX/PDF/JSON, oversized PDF restore marker, unsupported schema version, duplicate IDs, missing parents, and circular references. Confirm bounded memory/time, useful errors, and no partial mutation.
+- ⬜ Replace/restore transaction tests: inject failure at every table boundary and prove original state remains recoverable, cloud/local state agree, stale rows do not remain, and the user gets a precise result. Test a fresher local snapshot versus an explicitly selected backup; the selected restore must not be silently ignored.
+- ⬜ Account deletion: use a disposable account containing every normalized table, scene content, settings, feedback, AI settings, user-media object, device record, backup, and Stripe metadata. Verify server-owned deletion receipt, defined retained legal records, auth removal, Storage cleanup, failure/retry, and inability to access/export afterward.
+- ⬜ Quota enforcement: bypass the UI and upload arbitrary MIME types/sizes concurrently through Supabase. Verify server-side aggregate quota, per-object limits, allowed types, race handling, deletion accounting, and plan downgrade/renewal behavior.
+- ⬜ PDF privacy: create a project with disabled sections and private notes, export/share the PDF, and verify either no hidden complete payload exists or a conspicuous opt-in disclosure accurately lists what is embedded. Test restore separately from a visible-only/share-safe export.
+
+### Database and server continuity
+
+- ⬜ From an empty Supabase project, apply every committed migration in order with no manual SQL. Verify `scenes`, every normalized table/index/function/trigger/RLS policy, storage buckets/policies, Edge Function JWT policy, billing config, and deletion path. Then run the full test/seed/teardown flow.
+- ⬜ Reconcile local and production migration histories using the documented Supabase process; run `db push` dry run and actual disposable-environment push without repair errors. Record the expected migration list/checksum.
+- ⬜ Test two-account global-ID collision attempts directly against every normalized table. Final schema must scope durable IDs by owner or guarantee remapped globally unique IDs with foreign keys/cascades.
+- ⬜ Deploy only the chosen authoritative billing/API stack. Verify no client or webhook calls the retired Vercel/Edge duplicate and that removing it does not break Checkout/Portal/renewal.
+- ⬜ Verify `.env.example` plus committed runbook is sufficient to build/deploy a disposable environment without tribal knowledge or browser-exposed private provider keys.
+
+### Desktop product and release
+
+- ⬜ Product-scope gate: on signed-in Lifetime and Founder accounts, install release builds on supported Mac and Windows machines and complete library, project create/import, manuscript write/reload, all promised studio rooms, exports, Local Mode, vault relocate, snapshots, restore, cloud sync, expiry, renewal, device management, sign-out/login, offline relaunch, and upgrade. Account Settings alone is not a pass.
+- ⬜ Verify Free/Monthly/Beta desktop behavior exactly matches the approved entitlement matrix and cannot be changed by editing cache/localStorage/user metadata. Enforce device cap rather than showing only a dismissible toast.
+- ⬜ Platform-native commands: links open in the default browser and vault reveal opens Finder on macOS and Explorer on Windows; unsupported platforms fail clearly.
+- ⬜ Produce signed/notarized Mac packages and signed Windows installer. Install without bypass instructions, verify publisher identity, uninstall/upgrade preservation, malware/reputation checks, and rollback.
+- ⬜ Publish an updater manifest containing every supported platform/architecture with correct version, signature, URL, notes, and hash. Test update from the previous release, offline/error/retry, missing platform, bad signature, and interrupted update.
+- ⬜ Desktop vault privacy: inspect `vault.db` and every snapshot after normal use, fallback, retry, relocation, and restore. Confirm no Supabase session, AI/provider key, desktop entitlement secret, or unrelated browser key is present. Verify the documented encryption-at-rest decision.
+- ⬜ Rust gate: add unit/integration tests for FFI error paths, busy database, snapshot consistency/restore validation, platform commands, and path safety; then require `cargo fmt --check`, strict Clippy, and tests in CI.
+
+### Marketing, legal, responsive, performance, and quality
+
+- ⬜ Resolve every item in `marketing-copy-review/COPY_CONFLICTS.md`, then verify Homepage, Pricing, Features, FAQ, Download, Founders, all static SEO pages, Account Settings, upgrade/expiry/beta banners, onboarding, emails, legal modal, `llms.txt`, metadata, schema, and Stripe Checkout show the same approved facts.
+- ⬜ Remove player/public-discovery implications from D&D/TTRPG copy unless a player-view product decision is made and implemented. Verify no marketing source claims excluded collaboration, sharing, player portals, live VTT, or mobile apps.
+- ⬜ Repair responsive smoke locators around semantic editor roles instead of `.ms-textarea`; rerun all 64 tests and convert the four skipped tests (comic dialogue/page delete, manuscript status/finalized draft) into active passing coverage.
+- ⬜ Test at 375px, 768px, and desktop in Chromium, Safari, and Firefox plus at least one physical phone/tablet: write/edit/finalise, outline/inspector/AI, project management, every worldbuilding room, maps, settings, pricing/legal, imports, exports, and modals. Include keyboard-only and screen-reader passes.
+- ⬜ Add automated accessibility checks, focus-order/dialog-trap checks, contrast across every theme, reduced motion, 200% zoom/reflow, and form/error announcement tests.
+- ⬜ Set and meet route/bundle budgets. Measure cold/warm load and interaction on representative low/mid hardware with a realistic 80k+ manuscript, rich worldbuilding, images/maps, search, dashboard, AI context building, DOCX/PDF/ZIP, and full restore.
+- ⬜ Make JavaScript type checking real (`checkJs` or migration to TypeScript), lint/type-check APIs, scripts, tests, and Edge Functions, clear React compiler warnings, and require the full gates in CI.
+
 ## Priority 0: Stripe Test Mode Billing QA
 
-Status: Passed by product decision 2026-07-28 — see note below; one known bug open; **new launch blocker added 2026-08-08, see note directly below**
+Status: **Blocked by the 2026-09-01 whole-codebase audit.** The earlier 2026-07-28 real-flow product acceptance remains historical evidence only; it does not pass the current gate. In addition to the 2026-08-08 price mismatch below, editable `user_metadata` can grant paid/desktop entitlement, webhook fulfillment is not idempotent and can extend maintenance through both Checkout and first Invoice events, and Founder allocation is not atomic. Complete Priority -1's entitlement/billing checks before reconsidering this section.
 
 🚫 **Launch blocker — price mismatch (2026-08-08 pricing overhaul):** `src/utils/billingConfig.js` `BILLING.monthlyPrice/lifetimePrice/founderPrice` changed from 12/179/399 to **10/150/300** as part of the pricing page redesign, at the user's explicit instruction to also update these client-side constants. This only changes what the site *displays* — the actual Stripe Price objects referenced by `STRIPE_PRICE_ID_PREMIUM_MONTHLY`/`STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME`/`STRIPE_PRICE_ID_FOUNDER` still charge the old amounts until someone updates them on the Stripe side. **Do not accept real payments on these plans until both sides agree.** To fix: in the Stripe Dashboard, either edit the existing Price objects' amounts (if no active subscriptions reference them yet) or create new £10/£150/£300 Prices and point the `STRIPE_PRICE_ID_*` env vars at them, then rerun the Monthly/Lifetime/Founder checkout checks below with the new amounts before going live. The hosting renewal price (£6/yr) and its Stripe price ID are unchanged.
 
@@ -308,7 +371,7 @@ Status: Deferred
 
 Status: Deferred
 
-- Pricing and purchase flow: confirm Free, Monthly (£12/month), Lifetime (£179 once), and Founder (£399 once) plan copy is accurate; checkout links work; cancellation language is clear; and paid/final-launch promises do not overstate beta workflows. Verify Stripe products/prices, checkout success/cancel states, and SEO schema all match the final approved decision.
+- Pricing and purchase flow: approve one matrix first, then confirm Free, Monthly, Lifetime, Founder, and £6 renewal copy, Stripe Price objects, Checkout amounts, cancellation language, and SEO schema all match it. The client currently displays £10/£150/£300, while this plan's older £12/£179/£399 checks and a migration's £10/£199/£499 seed are drift evidence, not approved launch values.
 - Pricing plan interaction: verify no plan card or comparison-table column appears selected at desktop or mobile widths, the Lifetime plan is never labelled Creator, clicking card content does nothing, and only the signup/upgrade CTA buttons initiate plan selection.
 - Lifetime/cloud-hosting copy: verify pricing, FAQ, checkout, account settings, renewal, expiry, and legal copy clearly distinguish lifetime app access from cloud hosting, never imply indefinite free Supabase hosting for Lifetime users, and never say the lifetime app licence expires.
 - Hosting renewal flow: verify Lifetime users approaching expiry, in grace, and lapsed can reach the renewal checkout; successful renewal restores Cloud Mode immediately and sets the next hosting expiry date. **2026-08-05 regression check needed**: production checkout for this button previously failed outright with "Unknown plan: hosting_renewal" (fixed same day in `api/create-checkout-session.js` + `api/stripe-webhook.js`) — re-verify a real Stripe test-mode "Renew Cloud Mode" click actually reaches Stripe Checkout and, after a test payment, that the webhook extends `maintenance_expires_at` correctly.

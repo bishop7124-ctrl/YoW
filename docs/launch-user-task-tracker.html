@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YOW Launch User Task Tracker</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f3ec;
+      --panel: #fffaf2;
+      --ink: #1e2724;
+      --muted: #62716b;
+      --line: #d8d0c3;
+      --accent: #1f6f6b;
+      --accent-soft: #e0efec;
+      --warn: #a5532f;
+      --ok: #277a55;
+      --shadow: 0 16px 42px rgba(46, 38, 25, .10);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, rgba(31, 111, 107, .10), transparent 340px),
+        var(--bg);
+    }
+
+    header {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 34px 20px 22px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    p { line-height: 1.55; }
+    .lede {
+      max-width: 800px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto 48px;
+      padding: 0 20px;
+    }
+
+    .toolbar,
+    .summary,
+    .task-card,
+    details {
+      background: color-mix(in srgb, var(--panel) 94%, white);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: 8px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) repeat(4, max-content);
+      gap: 10px;
+      align-items: center;
+      padding: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    input[type="search"],
+    select,
+    textarea,
+    input[type="text"] {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: white;
+      color: var(--ink);
+      padding: 9px 10px;
+      font: inherit;
+      font-size: 16px;
+    }
+
+    button {
+      min-height: 40px;
+      border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--line));
+      border-radius: 7px;
+      background: var(--accent);
+      color: white;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: white;
+      color: var(--accent);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      margin: 18px 0;
+      padding: 0;
+    }
+
+    .summary div {
+      padding: 16px;
+      background: rgba(255, 255, 255, .62);
+    }
+
+    .summary strong {
+      display: block;
+      font-size: 1.55rem;
+      line-height: 1.1;
+    }
+
+    .summary span {
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 28px 0 12px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+
+    .section-title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: .95rem;
+    }
+
+    .task-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .task-card {
+      padding: 16px;
+    }
+
+    .task-head {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr) 170px;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .task-card h3 {
+      margin: 0 0 5px;
+      font-size: 1.08rem;
+    }
+
+    .task-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: var(--muted);
+      background: white;
+      font-size: .78rem;
+      font-weight: 750;
+    }
+
+    .priority-critical { color: #7a231d; border-color: #d8aaa1; background: #fff1ee; }
+    .priority-high { color: #744016; border-color: #dfbd95; background: #fff7e8; }
+    .priority-medium { color: #265e5b; border-color: #a9d4d0; background: var(--accent-soft); }
+
+    .task-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, .75fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .steps,
+    .acceptance {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--muted);
+    }
+
+    .steps li,
+    .acceptance li {
+      margin: 6px 0;
+      line-height: 1.45;
+    }
+
+    .notes-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: .84rem;
+      font-weight: 750;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .done-toggle {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      margin-top: 2px;
+      accent-color: var(--accent);
+    }
+
+    .task-card.is-passed {
+      border-color: color-mix(in srgb, var(--ok) 48%, var(--line));
+      background: color-mix(in srgb, white 78%, #e9f6ee);
+    }
+
+    .task-card.is-failed,
+    .task-card.is-blocked {
+      border-color: color-mix(in srgb, var(--warn) 52%, var(--line));
+    }
+
+    details {
+      margin-top: 24px;
+      padding: 14px 16px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 850;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 860px) {
+      .toolbar {
+        grid-template-columns: 1fr;
+        position: static;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .task-head,
+      .task-body {
+        grid-template-columns: 1fr;
+      }
+
+      .done-toggle {
+        place-self: start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Launch User Task Tracker</h1>
+    <p class="lede">A focused checklist for the launch-readiness items that need owner action, live-account verification, or notes from real devices. Beta-interest stays in place until the final pre-launch checkout switch.</p>
+  </header>
+
+  <main>
+    <section class="toolbar" aria-label="Tracker controls">
+      <input id="search" type="search" placeholder="Search tasks">
+      <select id="statusFilter" aria-label="Filter by status">
+        <option value="all">All statuses</option>
+        <option value="not-started">Not started</option>
+        <option value="in-progress">In progress</option>
+        <option value="blocked">Blocked</option>
+        <option value="passed">Passed</option>
+        <option value="failed">Failed</option>
+        <option value="not-applicable">Not applicable</option>
+      </select>
+      <button type="button" class="secondary" id="exportJson">Export JSON</button>
+      <button type="button" class="secondary" id="importJson">Import JSON</button>
+      <button type="button" id="resetProgress">Reset</button>
+      <input id="importFile" type="file" accept="application/json" class="hidden">
+    </section>
+
+    <section class="summary" aria-label="Progress summary">
+      <div><strong id="summaryDone">0</strong><span>passed</span></div>
+      <div><strong id="summaryActive">0</strong><span>in progress</span></div>
+      <div><strong id="summaryBlocked">0</strong><span>blocked or failed</span></div>
+      <div><strong id="summaryTotal">0</strong><span>total tasks</span></div>
+    </section>
+
+    <section aria-labelledby="now-title">
+      <div class="section-title">
+        <h2 id="now-title">Start Here</h2>
+        <p>Do these first. They reduce the most launch risk.</p>
+      </div>
+      <div class="task-list">
+        <article class="task-card" data-task data-id="account-isolation" data-group="Start Here" data-priority="critical">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark account isolation as passed">
+            <div>
+              <h3>Real two-account isolation</h3>
+              <p class="small">Verify account B never sees or overwrites account A data after switching accounts in the same browser session.</p>
+              <div class="task-meta">
+                <span class="pill priority-critical">Critical</span>
+                <span class="pill">Data safety gate</span>
+                <span class="pill">Needs two real accounts</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Use production and sign into account A.</li>
+                <li>Create or identify a clearly named project in account A and add a unique sentence to a scene.</li>
+                <li>Sign out, then sign into account B without restarting the browser.</li>
+                <li>Confirm account B does not show account A projects, scenes, theme, AI settings, or storage state.</li>
+                <li>Create or edit one small account B project, refresh, and confirm it persists.</li>
+                <li>Sign back into account A and confirm account A still has its project and unique sentence.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence" placeholder="Screenshot, account names, project names, run notes">
+              </label>
+              <label>Notes
+                <textarea data-field="notes" placeholder="What happened? Any weird loading, stale data, or confusion?"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="multi-tab-conflict" data-group="Start Here" data-priority="critical">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark multi-tab conflict QA as passed">
+            <div>
+              <h3>Two-tab overwrite and warning check</h3>
+              <p class="small">Verify two open tabs on the same account do not silently lose edits, and same-scene editing warns proactively.</p>
+              <div class="task-meta">
+                <span class="pill priority-critical">Critical</span>
+                <span class="pill">Data safety gate</span>
+                <span class="pill">Production browser</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Open the same signed-in account in two browser tabs.</li>
+                <li>Edit different records, such as one character in tab 1 and one location in tab 2; refresh both and confirm both survive.</li>
+                <li>Edit different fields on the same record in two tabs; refresh both and confirm both fields survive.</li>
+                <li>Open the same scene in both tabs; confirm the second tab shows an "also open" warning before editing.</li>
+                <li>Choose "Edit anyway", make distinct scene edits, wait for "Saved", refresh both tabs, and confirm no edit silently disappears.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence" placeholder="Project/scene names, screenshots, anything odd">
+              </label>
+              <label>Notes
+                <textarea data-field="notes" placeholder="Record exact repro steps if anything fails."></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="data-title">
+      <div class="section-title">
+        <h2 id="data-title">Data Safety</h2>
+        <p>Real accounts, storage, exports, and cloud behavior.</p>
+      </div>
+      <div class="task-list">
+        <article class="task-card" data-task data-id="new-account-onboarding" data-group="Data Safety" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark new account onboarding as passed">
+            <div>
+              <h3>Fresh account sample and first-project flow</h3>
+              <p class="small">Check a genuinely new account sees the correct first-run choices, sample project behavior, and AI setup prompt.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Auth</span>
+                <span class="pill">Onboarding</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Create a new account in a clean browser profile or private window.</li>
+                <li>Choose the sample tour; confirm exactly one editable Sample Project opens with linked writing/worldbuilding content.</li>
+                <li>Confirm the AI setup prompt appears before any product tour.</li>
+                <li>Delete the sample, refresh and re-login, and confirm the sample is not recreated.</li>
+                <li>Create a second fresh account, choose "Start my own project", and confirm the AI setup prompt appears after the first project is created.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="ai-key-isolation" data-group="Data Safety" data-priority="critical">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark AI key isolation as passed">
+            <div>
+              <h3>AI key sync and isolation</h3>
+              <p class="small">Confirm synced AI provider keys follow only the intended account and are never visible in another account or logs.</p>
+              <div class="task-meta">
+                <span class="pill priority-critical">Critical</span>
+                <span class="pill">Security</span>
+                <span class="pill">Needs provider key</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>In account A, save an AI provider key with sync enabled.</li>
+                <li>Open account A in a clean browser profile and confirm AI settings/tools can use the synced provider without re-entry.</li>
+                <li>Sign into account B in the original browser and confirm account B cannot see or use account A's key/settings.</li>
+                <li>Disable sync in account A, save, then open account A in a clean profile and confirm the key no longer follows the account.</li>
+                <li>Use browser network/devtools while making one AI request and confirm the key is not visible in URLs, responses, console logs, or analytics.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="free-plan-storage" data-group="Data Safety" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark free plan storage as passed">
+            <div>
+              <h3>Free plan map, AI lock, and storage cap</h3>
+              <p class="small">Confirm Free users get the promised 250 MB cloud storage, Map Builder access, and AI lock behavior.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Legal promise</span>
+                <span class="pill">Free account</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Use a real Free account with one active project.</li>
+                <li>Open Map Builder on desktop or tablet, draw one object, refresh, and confirm it persists.</li>
+                <li>Open AI Tools and confirm it shows the upgrade/access wall rather than attempting a request.</li>
+                <li>Confirm account storage UI says 250 MB for Free.</li>
+                <li>Confirm a Monthly or beta tester account shows the current higher quota, not the old 5 GB value.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="live-media-upload" data-group="Data Safety" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark live media upload as passed">
+            <div>
+              <h3>Live media upload and cleanup</h3>
+              <p class="small">Verify real Supabase Storage writes, quota updates, replacement cleanup, and delete cleanup.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Storage</span>
+                <span class="pill">Real account</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Upload a small image as a project cover or character portrait in a real signed-in account.</li>
+                <li>Refresh and confirm the image remains visible.</li>
+                <li>Replace it with a second image, then confirm the old object is removed from Storage if you have Supabase access.</li>
+                <li>Delete the record or remove the image and confirm the current object is cleaned up.</li>
+                <li>Confirm storage-used numbers increase/decrease reasonably.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="delete-project-scene-cleanup" data-group="Data Safety" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark project delete cleanup as passed">
+            <div>
+              <h3>Project delete cleans scene rows</h3>
+              <p class="small">Delete a throwaway project and confirm no orphan scene rows remain for that project id.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Supabase check</span>
+                <span class="pill">Destructive QA</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Create a throwaway project and add two scenes with unique text.</li>
+                <li>Record the project id if available.</li>
+                <li>Delete the project from the app.</li>
+                <li>Query Supabase scenes for that project id and confirm zero rows remain.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="desktop-title">
+      <div class="section-title">
+        <h2 id="desktop-title">Desktop And Local Mode</h2>
+        <p>Only run these when the desktop build is ready to test.</p>
+      </div>
+      <div class="task-list">
+        <article class="task-card" data-task data-id="desktop-account-surface" data-group="Desktop And Local Mode" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark desktop account surface as passed">
+            <div>
+              <h3>Desktop account-only surface</h3>
+              <p class="small">Desktop should show account settings and device management, not the full web workspace.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Desktop</span>
+                <span class="pill">Entitlement</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Launch desktop signed out and confirm the compact login/auth screen appears.</li>
+                <li>Sign in with Free, Monthly, Lifetime, and Founder accounts as available.</li>
+                <li>Confirm every plan lands in Account Settings only, with no project library/editor or marketing pages.</li>
+                <li>For entitled accounts, verify Membership shows desktop device information.</li>
+                <li>Test sign-out and, if possible, device cap/deactivation behavior.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="desktop-vault-local-mode" data-group="Desktop And Local Mode" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark desktop vault local mode as passed">
+            <div>
+              <h3>Desktop vault, Local-first, and sync status</h3>
+              <p class="small">Verify local vault relocation, local persistence, cloud-sync paused states, and recovery messaging.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Desktop</span>
+                <span class="pill">Local Mode</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Move the vault to an empty folder and confirm projects/backups remain after reload.</li>
+                <li>Cancel the folder picker and confirm nothing changes.</li>
+                <li>Enable Local-first, edit writing and worldbuilding records, quit/reopen, and confirm changes remain.</li>
+                <li>Confirm automatic cloud sync is paused while Local-first is on.</li>
+                <li>Force a sync failure and confirm the UI shows retryable error messaging without blocking editing.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="promise-title">
+      <div class="section-title">
+        <h2 id="promise-title">Promise And Final Switch</h2>
+        <p>Run after the core safety checks, with checkout still parked until last.</p>
+      </div>
+      <div class="task-list">
+        <article class="task-card" data-task data-id="pricing-beta-interest" data-group="Promise And Final Switch" data-priority="medium">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark pricing and beta interest QA as passed">
+            <div>
+              <h3>Pricing page and beta-interest flow</h3>
+              <p class="small">Confirm public prices are correct and beta-interest captures signed-in and signed-out users without enabling checkout.</p>
+              <div class="task-meta">
+                <span class="pill priority-medium">Medium</span>
+                <span class="pill">Beta-interest stays</span>
+                <span class="pill">Payment promise</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Hard refresh production Pricing and FAQ.</li>
+                <li>Confirm Monthly GBP10, Lifetime GBP99, Founder GBP299, and hosting renewal GBP6/year copy.</li>
+                <li>Click each paid CTA and confirm the beta-interest modal opens, not Stripe Checkout.</li>
+                <li>Submit once signed in and confirm email plus beta_tester metadata if you have dashboard access.</li>
+                <li>Submit once signed out and confirm it records interest without granting account access.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="marketing-truth" data-group="Promise And Final Switch" data-priority="medium">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark marketing truth pass as passed">
+            <div>
+              <h3>Marketing truth pass</h3>
+              <p class="small">Confirm public pages do not promise excluded launch features or overstate D&D/TTRPG use cases.</p>
+              <div class="task-meta">
+                <span class="pill priority-medium">Medium</span>
+                <span class="pill">Marketing gate</span>
+                <span class="pill">Copy review</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Review Home, Features, FAQ, Pricing, About, AI Overview, and feature landing pages.</li>
+                <li>Flag any wording that implies collaboration, public sharing, player portals, mobile apps, marketplace/community, publishing integrations, advanced fantasy calendars, or live VTT play.</li>
+                <li>Confirm D&D/TTRPG copy reads as private GM prep and campaign planning.</li>
+                <li>Check pages at desktop, tablet, and phone widths for obvious broken layout.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="final-checkout-switch" data-group="Promise And Final Switch" data-priority="critical">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark final checkout switch as passed">
+            <div>
+              <h3>Final checkout switch</h3>
+              <p class="small">This stays last: remove/migrate beta-interest and re-enable real checkout only when every other gate is ready.</p>
+              <div class="task-meta">
+                <span class="pill priority-critical">Critical</span>
+                <span class="pill">Do last</span>
+                <span class="pill">Payment gate</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Confirm every other launch gate is passed or explicitly deferred by product decision.</li>
+                <li>Decide how to handle beta_tester accounts: migrate, expire, or keep manually entitled.</li>
+                <li>Re-enable paid checkout CTAs.</li>
+                <li>Verify live Stripe products, prices, webhooks, success URLs, cancel URLs, portal URLs, and metadata updates.</li>
+                <li>Run success, cancel, failed-payment, cancellation, and downgrade checks.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <details>
+      <summary>How to use this tracker</summary>
+      <p class="small">Progress is stored in this browser's localStorage. Use Export JSON after each QA session if you want a portable backup or want to share notes back into the repo. This file is intentionally smaller than the full QA plan: it only tracks tasks that require a human, live accounts, dashboards, devices, or judgement.</p>
+    </details>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'yow-launch-user-task-tracker-v1'
+    const tasks = [...document.querySelectorAll('[data-task]')]
+    const search = document.querySelector('#search')
+    const statusFilter = document.querySelector('#statusFilter')
+    const importFile = document.querySelector('#importFile')
+
+    function readState() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+      } catch {
+        return {}
+      }
+    }
+
+    function writeState(state) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    }
+
+    function taskData(card) {
+      const id = card.dataset.id
+      return {
+        status: card.querySelector('[data-field="status"]').value,
+        evidence: card.querySelector('[data-field="evidence"]').value,
+        notes: card.querySelector('[data-field="notes"]').value
+      }
+    }
+
+    function saveCard(card) {
+      const state = readState()
+      state[card.dataset.id] = taskData(card)
+      writeState(state)
+      render()
+    }
+
+    function setCardStatus(card, status) {
+      card.querySelector('[data-field="status"]').value = status
+      card.querySelector('.done-toggle').checked = status === 'passed'
+      card.classList.toggle('is-passed', status === 'passed')
+      card.classList.toggle('is-failed', status === 'failed')
+      card.classList.toggle('is-blocked', status === 'blocked')
+    }
+
+    function restore() {
+      const state = readState()
+      tasks.forEach(card => {
+        const saved = state[card.dataset.id] || {}
+        setCardStatus(card, saved.status || 'not-started')
+        card.querySelector('[data-field="evidence"]').value = saved.evidence || ''
+        card.querySelector('[data-field="notes"]').value = saved.notes || ''
+      })
+      render()
+    }
+
+    function render() {
+      const q = search.value.trim().toLowerCase()
+      const filter = statusFilter.value
+      let passed = 0
+      let active = 0
+      let blocked = 0
+
+      tasks.forEach(card => {
+        const data = taskData(card)
+        const text = card.innerText.toLowerCase()
+        const matchesSearch = !q || text.includes(q)
+        const matchesStatus = filter === 'all' || data.status === filter
+        const visible = matchesSearch && matchesStatus
+        card.classList.toggle('hidden', !visible)
+        setCardStatus(card, data.status)
+        if (data.status === 'passed') passed += 1
+        if (data.status === 'in-progress') active += 1
+        if (data.status === 'blocked' || data.status === 'failed') blocked += 1
+      })
+
+      document.querySelector('#summaryDone').textContent = passed
+      document.querySelector('#summaryActive').textContent = active
+      document.querySelector('#summaryBlocked').textContent = blocked
+      document.querySelector('#summaryTotal').textContent = tasks.length
+    }
+
+    tasks.forEach(card => {
+      card.querySelector('[data-field="status"]').addEventListener('change', () => saveCard(card))
+      card.querySelector('.done-toggle').addEventListener('change', event => {
+        setCardStatus(card, event.target.checked ? 'passed' : 'not-started')
+        saveCard(card)
+      })
+      card.querySelectorAll('[data-field="evidence"], [data-field="notes"]').forEach(input => {
+        input.addEventListener('input', () => saveCard(card))
+      })
+    })
+
+    search.addEventListener('input', render)
+    statusFilter.addEventListener('change', render)
+
+    document.querySelector('#exportJson').addEventListener('click', () => {
+      const state = readState()
+      state.__exportedAt = new Date().toISOString()
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'yow-launch-user-task-progress.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+
+    document.querySelector('#importJson').addEventListener('click', () => importFile.click())
+    importFile.addEventListener('change', async event => {
+      const file = event.target.files && event.target.files[0]
+      if (!file) return
+      try {
+        const imported = JSON.parse(await file.text())
+        delete imported.__exportedAt
+        writeState(imported)
+        restore()
+      } catch {
+        alert('Could not import that JSON file.')
+      } finally {
+        importFile.value = ''
+      }
+    })
+
+    document.querySelector('#resetProgress').addEventListener('click', () => {
+      if (!confirm('Reset all local progress in this tracker?')) return
+      localStorage.removeItem(STORAGE_KEY)
+      restore()
+    })
+
+    restore()
+  </script>
+</body>
+</html>
