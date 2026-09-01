@@ -1,7 +1,19 @@
+import { createHmac } from 'node:crypto'
 import { jsonResponse } from '../_shared/cors.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+const REENGAGEMENT_UNSUBSCRIBE_SECRET = Deno.env.get('REENGAGEMENT_UNSUBSCRIBE_SECRET') || ''
 const APP_URL = 'https://www.yourownworld.co.uk'
+
+// Matches api/reengagement-unsubscribe.js's signUnsubscribeLink() exactly —
+// same algorithm (HMAC-SHA256 over the user id), same secret, so a link
+// generated here verifies there. node:crypto is used on both sides (Deno's
+// Node-compat module here) specifically so the two independent runtimes
+// produce byte-identical signatures for the same input.
+function signUnsubscribeLink(userId: string, secret: string) {
+  return createHmac('sha256', secret).update(userId).digest('hex')
+}
 
 type Stage = 'day1' | 'day3' | 'day7'
 
@@ -144,6 +156,25 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } })
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
 
+  // Only the trusted scheduler (api/send-reengagement-emails.js, the Vercel
+  // Cron target) may call this — it's the only legitimate caller, and it
+  // already authenticates to Supabase with the service-role key to do its
+  // own work. Audit finding P0-03: this previously accepted any
+  // caller-supplied user/email/stage with no verification of the caller at
+  // all, letting anyone make YOW send arbitrary branded email to arbitrary
+  // addresses. Fail closed if the secret itself isn't configured.
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[send-reengagement-email] SUPABASE_SERVICE_ROLE_KEY is not configured')
+    return jsonResponse({ error: 'Not configured' }, 500)
+  }
+  if (req.headers.get('Authorization') !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) {
+    return jsonResponse({ error: 'Unauthorized' }, 401)
+  }
+  if (!REENGAGEMENT_UNSUBSCRIBE_SECRET) {
+    console.error('[send-reengagement-email] REENGAGEMENT_UNSUBSCRIBE_SECRET is not configured')
+    return jsonResponse({ error: 'Not configured' }, 500)
+  }
+
   let payload: Record<string, unknown>
   try {
     payload = await req.json()
@@ -161,7 +192,8 @@ Deno.serve(async (req) => {
   }
 
   const copy = COPY[`${stage}_${hasProject ? 'active' : 'new'}`]
-  const unsubscribeUrl = `${APP_URL}/api/reengagement-unsubscribe?u=${encodeURIComponent(userId)}`
+  const unsubscribeSig = signUnsubscribeLink(userId, REENGAGEMENT_UNSUBSCRIBE_SECRET)
+  const unsubscribeUrl = `${APP_URL}/api/reengagement-unsubscribe?u=${encodeURIComponent(userId)}&sig=${unsubscribeSig}`
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -179,7 +211,7 @@ Deno.serve(async (req) => {
 
   if (!res.ok) {
     const body = await res.text()
-    console.error('Resend error:', body, 'key prefix:', RESEND_API_KEY.slice(0, 8))
+    console.error('Resend error:', body)
     return jsonResponse({ error: 'Failed to send email', detail: body }, 500)
   }
 
