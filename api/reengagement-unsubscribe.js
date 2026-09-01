@@ -16,8 +16,18 @@ import { createClient } from '@supabase/supabase-js'
 // mail can no longer trigger this action, since they can't produce a valid
 // signature.
 
+// Signs a scoped string ("reengagement-unsubscribe:<userId>"), not a bare
+// user id — security review flagged that signing just the id would let the
+// same signature be replayed against any other action that happened to
+// reuse this secret and this exact HMAC-over-a-user-id shape in the future.
+// No such reuse exists today (REENGAGEMENT_UNSUBSCRIBE_SECRET is dedicated
+// to this one purpose), but the scope prefix costs nothing and closes the
+// gap permanently rather than relying on "don't reuse this secret" staying
+// true forever.
+const SIGNATURE_SCOPE = 'reengagement-unsubscribe'
+
 export function signUnsubscribeLink(userId, secret) {
-  return crypto.createHmac('sha256', secret).update(userId).digest('hex')
+  return crypto.createHmac('sha256', secret).update(`${SIGNATURE_SCOPE}:${userId}`).digest('hex')
 }
 
 function verifySignature(userId, signature, secret) {
