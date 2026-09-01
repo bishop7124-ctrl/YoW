@@ -9,6 +9,7 @@ import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
 import { useTabPresence } from '../../utils/useTabPresence.js'
 import EditingElsewhereWarning from '../shared/EditingElsewhereWarning.jsx'
+import Modal from '../shared/Modal.jsx'
 
 const InlineInput = ({ value, onSave, className, placeholder }) => {
   const [temp, setTemp] = useState(value)
@@ -161,7 +162,14 @@ function parseSegments(content, entityNames, entityMap, notes = []) {
   const noteTokens = []
   for (const note of notes) {
     const start = Math.max(0, Math.min(note.anchorOffset ?? content.length, content.length))
-    noteTokens.push({ type: 'note', start, end: start, seq: note.seq })
+    const rawEnd = note.anchorEndOffset ?? note.anchorOffset
+    const end = Math.max(start, Math.min(rawEnd ?? start, content.length))
+    if (end > start) {
+      noteTokens.push({ type: 'noteRange', start, end, note })
+      noteTokens.push({ type: 'note', start: end, end, seq: note.seq })
+    } else {
+      noteTokens.push({ type: 'note', start, end: start, seq: note.seq })
+    }
   }
   NOTE_MARKER_RE.lastIndex = 0
   let m
@@ -248,9 +256,7 @@ const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames,
             <span className="ms-script-block-label">{getScriptElementLabel(projectType, type)}</span>
             <p>
               {segs.map((seg, i) => {
-                if (seg.type === 'entity') return (
-                  <span key={i} className="ms-entity" data-raw-start={blockStart + seg.start} data-raw-end={blockStart + seg.end} onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
-                )
+                if (seg.type === 'entity') return <EntityLink key={i} seg={{ ...seg, start: blockStart + seg.start, end: blockStart + seg.end }} onOpen={onEntityClick} />
                 if (seg.type === 'note') {
                   const note = notesBySeq.get(seg.seq)
                   if (!note) return null
@@ -266,6 +272,7 @@ const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames,
                     />
                   )
                 }
+                if (seg.type === 'noteRange') return <span key={i} className={`ms-note-highlight${highlightedNoteSeq === seg.note.seq ? ' is-highlighted' : ''}`} data-raw-start={blockStart + seg.start} data-raw-end={blockStart + seg.end}>{renderInlineMarkdown(seg.value ?? block.text.slice(seg.start, seg.end), `sr${index}-${i}`, blockStart + seg.start)}</span>
                 return <span key={i}>{renderInlineMarkdown(seg.value, `sb${index}-${i}`, blockStart + seg.start)}</span>
               })}
             </p>
@@ -273,6 +280,37 @@ const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames,
         )
       })}
     </div>
+  )
+}
+
+function EntityLink({ seg, onOpen }) {
+  const entity = seg.entity
+  const label = entity?.name || seg.value
+  const preview = entity?.preview || 'No preview yet.'
+  const openEntity = event => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (entity) onOpen(entity)
+  }
+  return (
+    <span className="ms-entity-wrap" onClick={openEntity}>
+      <span
+        className="ms-entity"
+        data-raw-start={seg.start}
+        data-raw-end={seg.end}
+        role="button"
+        tabIndex={0}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openEntity(event) }}
+      >
+        {seg.value}
+      </span>
+      <span className="ms-entity-popover font-sans">
+        <b>{label}</b>
+        <small>{entity?.sectionLabel || entity?.section}</small>
+        <span>{preview}</span>
+        <button type="button" onClick={openEntity}>Open in side panel</button>
+      </span>
+    </span>
   )
 }
 
@@ -327,9 +365,7 @@ const ContentPreview = ({
   return (
     <>
       {segs.map((seg, i) => {
-        if (seg.type === 'entity') return (
-          <span key={i} className="ms-entity" data-raw-start={seg.start} data-raw-end={seg.end} onClick={e => { e.stopPropagation(); onEntityClick(seg.entity) }} title={`${seg.entity.section}: ${seg.value}`}>{seg.value}</span>
-        )
+        if (seg.type === 'entity') return <EntityLink key={i} seg={seg} onOpen={onEntityClick} />
         if (seg.type === 'note') {
           // Write mode: notes exist only as this inline box. Edit mode: notes
           // exist only as the gutter's floating icon (rendered by the parent,
@@ -348,6 +384,19 @@ const ContentPreview = ({
               onDelete={onDeleteNote}
               onOpen={seq => { onNoteClick(seq); onOpenNotes() }}
             />
+          )
+        }
+        if (seg.type === 'noteRange') {
+          return (
+            <span
+              key={i}
+              className={`ms-note-highlight${highlightedNoteSeq === seg.note.seq ? ' is-highlighted' : ''}`}
+              data-raw-start={seg.start}
+              data-raw-end={seg.end}
+              title={`Note ${seg.note.seq}`}
+            >
+              {renderInlineMarkdown(content.slice(seg.start, seg.end), `nr${i}`, seg.start)}
+            </span>
           )
         }
         return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`, seg.start)}</span>
@@ -405,7 +454,7 @@ const InlineNoteBlock = ({ note, embedded = false, highlighted, onUpdate, onDele
           placeholder={`Note ${note.seq}`}
         />
         <div className="ms-inline-note-actions">
-          <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Panel</button>
+          <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onOpen(note.seq) }}>Open</button>
           <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(note.id) }}>Delete</button>
         </div>
       </summary>
@@ -451,6 +500,36 @@ function GutterNoteCard({ note, highlighted, onUpdateNote, onOpen }) {
   )
 }
 
+function NoteModal({ note, onUpdate, onDelete, onClose }) {
+  const [title, setTitle] = useState(note.title || '')
+  const [text, setText] = useState(note.text || '')
+  const saveAndClose = () => {
+    onUpdate(note.id, { title, text })
+    onClose()
+  }
+  return (
+    <Modal title={title || `Note ${note.seq}`} onClose={saveAndClose} wide={false}>
+      <div className="ms-note-modal">
+        {note.selectedText && (
+          <blockquote>{note.selectedText}</blockquote>
+        )}
+        <label>
+          <span>Title</span>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder={`Note ${note.seq}`} />
+        </label>
+        <label>
+          <span>Note</span>
+          <textarea value={text} onChange={e => setText(e.target.value)} rows={8} placeholder="Write a manuscript note..." />
+        </label>
+        <div className="ms-note-modal-actions">
+          <button type="button" className="ai-btn ai-btn--muted" onClick={() => { onDelete(note.id); onClose() }}>Delete</button>
+          <button type="button" className="ai-btn ai-btn--primary" onClick={saveAndClose}>Save</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ─── Scene editor ─────────────────────────────────────────────────────────────
 
 // Every keystroke in any one scene touches manuscript-wide state (live word count,
@@ -476,6 +555,17 @@ function GutterNoteCard({ note, highlighted, onUpdateNote, onOpen }) {
 // to the inspector's Scene tab in the redesign, so this component no longer
 // receives or compares them at all.)
 const sameShape = (a, b) => (a?.length ?? Object.keys(a || {}).length) === (b?.length ?? Object.keys(b || {}).length)
+
+function shiftNoteForEdit(note, editStart, editEnd, delta, previousLength) {
+  const anchor = note.anchorOffset ?? previousLength
+  const anchorEnd = note.anchorEndOffset ?? anchor
+  const shift = value => {
+    if (value >= editEnd && !(editEnd === editStart && value === editStart)) return Math.max(0, value + delta)
+    if (value > editStart && value < editEnd) return editStart
+    return value
+  }
+  return { ...note, anchorOffset: shift(anchor), anchorEndOffset: Math.max(shift(anchor), shift(anchorEnd)) }
+}
 
 const sceneEditorPropsEqual = (prev, next) => (
   prev.scene === next.scene &&
@@ -524,6 +614,7 @@ const SceneEditorImpl = ({
   const [focused, setFocused] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [floatingNotePos, setFloatingNotePos] = useState(null)
+  const [openNoteId, setOpenNoteId] = useState(null)
   // Warn up front rather than reconcile after the fact — see
   // EditingElsewhereWarning and the 2026-08-02/03 Bugs table row in
   // docs/ROADMAP.md for why silent post-hoc merging kept finding new gaps.
@@ -575,6 +666,10 @@ const SceneEditorImpl = ({
   const notesBySeq = useMemo(
     () => new Map((scene.notes || []).map(note => [note.seq, note])),
     [scene.notes]
+  )
+  const openNote = useMemo(
+    () => (scene.notes || []).find(note => note.id === openNoteId) || null,
+    [openNoteId, scene.notes]
   )
   const writingBlocks = useMemo(
     () => buildWritingBlocks(localContent, sortedNotes),
@@ -901,7 +996,9 @@ const SceneEditorImpl = ({
 	          onUpdateScene(scene.id, {
 	            notes: scene.notes.map(note => {
 	              const anchor = note.anchorOffset ?? cur.length
-	              return anchor >= insertAt ? { ...note, anchorOffset: anchor + insertion.length } : note
+	              return anchor >= insertAt
+	                ? { ...note, anchorOffset: anchor + insertion.length, anchorEndOffset: (note.anchorEndOffset ?? anchor) + insertion.length }
+	                : note
 	            }),
 	          })
 	        }
@@ -909,6 +1006,29 @@ const SceneEditorImpl = ({
 	        setLocalContent(next)
 	        debouncedUpdate.schedule(next)
 	        focusRange(insertedStart, insertedEnd)
+	      },
+	      replaceSelection: (text) => {
+	        recordBeforeEdit(true)
+	        const cur = localContentRef.current ?? ''
+	        const selection = lastSelectionRef.current || { start: cur.length, end: cur.length }
+	        const rawStart = Number.isFinite(selection.start) ? selection.start : cur.length
+	        const rawEnd = Number.isFinite(selection.end) ? selection.end : rawStart
+	        const selectionStart = Math.max(0, Math.min(rawStart, cur.length))
+	        const selectionEnd = Math.max(selectionStart, Math.min(rawEnd, cur.length))
+	        const next = cur.slice(0, selectionStart) + text + cur.slice(selectionEnd)
+	        const delta = text.length - (selectionEnd - selectionStart)
+	        localContentRef.current = next
+	        onPersistDraft(scene, next)
+	        onLiveContentChange(scene.id, next)
+	        if (scene.notes?.length) {
+	          onUpdateScene(scene.id, {
+	            notes: scene.notes.map(note => shiftNoteForEdit(note, selectionStart, selectionEnd, delta, cur.length)),
+	          })
+	        }
+	        setFocused(true)
+	        setLocalContent(next)
+	        debouncedUpdate.schedule(next)
+	        focusRange(selectionStart, selectionStart + text.length)
 	      },
 	    })
 	    // Manuscript.jsx's scene-virtualization (useSceneWindow.js) mounts/unmounts
@@ -919,7 +1039,7 @@ const SceneEditorImpl = ({
 	    // detached textarea — harmless (a silent no-op if ever called) but worth
 	    // clearing so a re-mount always gets a fresh object.
 	    return () => innerRef?.(null)
-	  }, [innerRef, scene, debouncedUpdate, focusRange, onLiveContentChange, onUpdateScene, syncFloatingNoteButton, recordBeforeEdit])
+	  }, [innerRef, scene, debouncedUpdate, focusRange, onLiveContentChange, onUpdateScene, onPersistDraft, syncFloatingNoteButton, recordBeforeEdit])
 
   useEffect(() => {
     localContentRef.current = localContent
@@ -972,7 +1092,7 @@ const SceneEditorImpl = ({
 	        notes: scene.notes.map(note => {
 	          const anchor = note.anchorOffset ?? localContent.length
 	          const shouldShift = anchor >= oldEnd && !(oldEnd === base && anchor === base)
-	          return shouldShift ? { ...note, anchorOffset: Math.max(0, anchor + delta) } : note
+	          return shouldShift ? shiftNoteForEdit(note, base, oldEnd, delta, localContent.length) : note
 	        }),
 	      })
 	    }
@@ -1141,7 +1261,7 @@ const SceneEditorImpl = ({
 	          notes: scene.notes.map(note => {
 	            const anchor = note.anchorOffset ?? localContent.length
 	            const shouldShift = anchor >= end && !(end === base && anchor === base)
-	            return shouldShift ? { ...note, anchorOffset: Math.max(0, anchor + insertion.length - (end - start)) } : note
+	            return shouldShift ? shiftNoteForEdit(note, start, end, insertion.length - (end - start), localContent.length) : note
 	          }),
 	        })
 	      }
@@ -1164,7 +1284,16 @@ const SceneEditorImpl = ({
 	    const nextSeq = currentNotes.length + 1
 	    const selection = lastSelectionRef.current || { start: localContent.length, end: localContent.length }
 	    const start = Math.max(0, Math.min(selection.start, localContent.length))
-	    const nextNote = { id: uid(), seq: nextSeq, title: '', text: '', anchorOffset: start }
+	    const end = Math.max(start, Math.min(selection.end ?? start, localContent.length))
+	    const nextNote = {
+	      id: uid(),
+	      seq: nextSeq,
+	      title: '',
+	      text: '',
+	      anchorOffset: start,
+	      anchorEndOffset: end,
+	      selectedText: end > start ? localContent.slice(start, end) : '',
+	    }
 	    setFocused(true)
 	    onUpdateScene(sceneRef.current.id, {
 	      notes: [...currentNotes, nextNote],
@@ -1406,54 +1535,79 @@ const SceneEditorImpl = ({
 	                    highlighted={highlightedNoteSeq === block.note.seq}
 	                    onUpdate={handleUpdateNote}
 	                    onDelete={handleDeleteNote}
-	                    onOpen={seq => { onNoteClick(seq); onOpenNotes() }}
+	                onOpen={seq => { onNoteClick(seq); setOpenNoteId(block.note.id) }}
 	                  />
 	                )
 	              }
-	              return (
-	                <textarea
-	                  key={block.key}
-	                  ref={node => {
-	                    if (node && (!textareaRef.current || document.activeElement === node)) textareaRef.current = node
-	                  }}
-	                  value={localContent.slice(block.start, block.end)}
-	                  data-ms-start={block.start}
-	                  data-ms-end={block.end}
-	                  onFocus={e => { textareaRef.current = e.currentTarget; setFocused(true); onFocusExternal(); window.requestAnimationFrame(syncCursorTools) }}
-	                  onBlur={handleEditorBlur}
-	                  onChange={handleChange}
-	                  onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
-	                  onClick={syncActiveScriptBlock}
-	                  onKeyUp={syncActiveScriptBlock}
-	                  onSelect={syncActiveScriptBlock}
-	                  placeholder={isBullets ? 'One item per line...' : 'Begin writing here...'}
-	                  spellCheck
-	                  rows={1}
-	                  className="ms-textarea ms-textarea-block"
-	                  style={textStyle}
-	                />
+	                return (
+	                  <div key={block.key} className="ms-rich-edit">
+	                    <div className="ms-rich-preview ms-preview" aria-hidden="true" style={textStyle}>
+	                      {renderInlineMarkdown(localContent.slice(block.start, block.end), `edit-${block.key}`, block.start)}
+	                    </div>
+	                    <textarea
+	                      ref={node => {
+	                        if (node && (!textareaRef.current || document.activeElement === node)) textareaRef.current = node
+	                      }}
+	                      value={localContent.slice(block.start, block.end)}
+	                      data-ms-start={block.start}
+	                      data-ms-end={block.end}
+	                      onFocus={e => { textareaRef.current = e.currentTarget; setFocused(true); onFocusExternal(); window.requestAnimationFrame(syncCursorTools) }}
+	                      onBlur={handleEditorBlur}
+	                      onChange={handleChange}
+	                      onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
+	                      onClick={syncActiveScriptBlock}
+	                      onKeyUp={syncActiveScriptBlock}
+	                      onSelect={syncActiveScriptBlock}
+	                      placeholder={isBullets ? 'One item per line...' : 'Begin writing here...'}
+	                      spellCheck
+	                      rows={1}
+	                      className="ms-textarea ms-textarea-block ms-textarea--rich"
+	                      style={textStyle}
+	                    />
+	                  </div>
 	              )
 	            })}
 	          </div>
 	        ) : (
-	          <textarea
-	            ref={textareaRef}
-	            value={localContent}
-	            data-ms-start={0}
-	            data-ms-end={localContent.length}
-	            onFocus={e => { textareaRef.current = e.currentTarget; setFocused(true); onFocusExternal(); window.requestAnimationFrame(syncCursorTools) }}
-	            onBlur={handleEditorBlur}
-	            onChange={handleChange}
-	            onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
-	            onClick={syncActiveScriptBlock}
-	            onKeyUp={syncActiveScriptBlock}
-	            onSelect={syncActiveScriptBlock}
-	            placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
-	            spellCheck
-	            rows={1}
-	            className="ms-textarea"
-	            style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
-	          />
+	          <div className="ms-rich-edit">
+	            <div className={`ms-rich-preview ms-preview${isScript ? ' ms-script-mode' : ''}`} aria-hidden="true" style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}>
+	              <ContentPreview
+	                content={localContent}
+	                entityMap={entityMap}
+	                notesBySeq={notesBySeq}
+	                highlightedNoteSeq={highlightedNoteSeq}
+	                onEntityClick={onEntityClick}
+	                onNoteClick={() => {}}
+	                onUpdateNote={handleUpdateNote}
+	                onDeleteNote={handleDeleteNote}
+	                onOpenNotes={onOpenNotes}
+	                isBullets={isBullets}
+	                isScript={isScript}
+	                scriptBlocks={localScriptBlocks.length ? localScriptBlocks : scene.scriptBlocks}
+	                scriptElement={scriptElement}
+	                projectType={projectType}
+	                mode={mode}
+	              />
+	            </div>
+	            <textarea
+	              ref={textareaRef}
+	              value={localContent}
+	              data-ms-start={0}
+	              data-ms-end={localContent.length}
+	              onFocus={e => { textareaRef.current = e.currentTarget; setFocused(true); onFocusExternal(); window.requestAnimationFrame(syncCursorTools) }}
+	              onBlur={handleEditorBlur}
+	              onChange={handleChange}
+	              onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
+	              onClick={syncActiveScriptBlock}
+	              onKeyUp={syncActiveScriptBlock}
+	              onSelect={syncActiveScriptBlock}
+	              placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
+	              spellCheck
+	              rows={1}
+	              className="ms-textarea ms-textarea--rich"
+	              style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
+	            />
+	          </div>
 	        )
 	      ) : (
         <div className={`ms-preview${isScript ? ' ms-script-mode' : ''}`} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle} onClick={activateAt}>
@@ -1463,7 +1617,7 @@ const SceneEditorImpl = ({
 	            notesBySeq={notesBySeq}
 	            highlightedNoteSeq={highlightedNoteSeq}
 	            onEntityClick={onEntityClick}
-	            onNoteClick={seq => { onNoteClick(seq); onOpenNotes() }}
+	            onNoteClick={seq => { onNoteClick(seq); setOpenNoteId(notesBySeq.get(seq)?.id || null) }}
 	            onUpdateNote={handleUpdateNote}
 	            onDeleteNote={handleDeleteNote}
 	            onOpenNotes={onOpenNotes}
@@ -1486,7 +1640,7 @@ const SceneEditorImpl = ({
                 note={note}
                 highlighted={highlightedNoteSeq === note.seq}
                 onUpdateNote={handleUpdateNote}
-                onOpen={() => { onNoteClick(note.seq); onOpenNotes() }}
+                onOpen={() => { onNoteClick(note.seq); setOpenNoteId(note.id) }}
               />
             ))}
           </div>
@@ -1570,6 +1724,14 @@ const SceneEditorImpl = ({
               if (ta) { textareaRef.current = ta; ta.focus({ preventScroll: true }) }
             }, 0)
           }}
+        />
+      )}
+      {openNote && (
+        <NoteModal
+          note={openNote}
+          onUpdate={handleUpdateNote}
+          onDelete={handleDeleteNote}
+          onClose={() => setOpenNoteId(null)}
         />
       )}
     </div>
