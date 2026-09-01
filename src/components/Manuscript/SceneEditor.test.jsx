@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { SceneEditor } from './SceneEditor.jsx'
-import { DEFAULT_FORMAT } from './manuscriptUtils.js'
+import { DEFAULT_FORMAT, LARGE_SCENE_CHAR_THRESHOLD } from './manuscriptUtils.js'
+
+// This file wasn't cleaning up the DOM between tests (each `render()` call left its
+// output mounted), which every existing test tolerated only because it scopes its
+// queries to its own returned `container`. Text-based getByText/queryByText queries
+// below don't have that protection, so clean up for real between tests.
+afterEach(cleanup)
 
 function noop() {}
 
@@ -54,5 +60,45 @@ describe('SceneEditor content preview — mismatched markdown emphasis', () => {
   it('still renders proper underline text correctly', () => {
     const { container } = renderScene('This is _underlined_ text.')
     expect(container.querySelector('u')?.textContent).toBe('underlined')
+  })
+})
+
+describe('SceneEditor — very large scene copy action (2026-08-08 Phase 4(a))', () => {
+  beforeEach(() => {
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('does not show a copy-whole-scene action for an ordinary-sized scene', () => {
+    const { queryByText } = renderScene('A short scene, well under the threshold.')
+    expect(queryByText('Copy whole scene')).toBeNull()
+  })
+
+  it('shows a copy-whole-scene action once scene content exceeds the large-scene threshold', () => {
+    const bigContent = 'x'.repeat(LARGE_SCENE_CHAR_THRESHOLD + 1)
+    const { getByText } = renderScene(bigContent)
+    expect(getByText('Copy whole scene')).toBeTruthy()
+  })
+
+  it('copies the full scene content to the clipboard and confirms it, without relying on DOM selection', async () => {
+    const bigContent = 'y'.repeat(LARGE_SCENE_CHAR_THRESHOLD + 500)
+    const { getByText } = renderScene(bigContent)
+    fireEvent.click(getByText('Copy whole scene'))
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(bigContent)
+    await waitFor(() => expect(getByText('Copied!')).toBeTruthy())
+  })
+
+  it('surfaces a failure rather than silently doing nothing when the clipboard write fails', async () => {
+    navigator.clipboard.writeText.mockRejectedValueOnce(new Error('denied'))
+    const bigContent = 'z'.repeat(LARGE_SCENE_CHAR_THRESHOLD + 500)
+    const { getByText } = renderScene(bigContent)
+    fireEvent.click(getByText('Copy whole scene'))
+    await waitFor(() => expect(getByText('Copy failed')).toBeTruthy())
   })
 })
