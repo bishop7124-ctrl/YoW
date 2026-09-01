@@ -7,12 +7,15 @@ const REENGAGEMENT_UNSUBSCRIBE_SECRET = Deno.env.get('REENGAGEMENT_UNSUBSCRIBE_S
 const APP_URL = 'https://www.yourownworld.co.uk'
 
 // Matches api/reengagement-unsubscribe.js's signUnsubscribeLink() exactly —
-// same algorithm (HMAC-SHA256 over the user id), same secret, so a link
+// same algorithm (HMAC-SHA256 over a scoped "reengagement-unsubscribe:<id>"
+// string, not a bare id — see that file for why), same secret, so a link
 // generated here verifies there. node:crypto is used on both sides (Deno's
 // Node-compat module here) specifically so the two independent runtimes
 // produce byte-identical signatures for the same input.
+const SIGNATURE_SCOPE = 'reengagement-unsubscribe'
+
 function signUnsubscribeLink(userId: string, secret: string) {
-  return createHmac('sha256', secret).update(userId).digest('hex')
+  return createHmac('sha256', secret).update(`${SIGNATURE_SCOPE}:${userId}`).digest('hex')
 }
 
 type Stage = 'day1' | 'day3' | 'day7'
