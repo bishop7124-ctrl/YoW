@@ -155,15 +155,56 @@ const dateFrom = (value) => {
   return date && !Number.isNaN(date.getTime()) ? date : null
 }
 
+// ── Client-writable profile fields ──────────────────────────────────────────
+// The account owner can write user_metadata directly via
+// supabase.auth.updateUser() — through this app's AuthContext.updateProfile()
+// or by calling the Supabase client SDK directly (devtools, a script with the
+// anon key, etc.). Nothing in user_metadata is trustworthy for entitlement,
+// which is why getMembership() above reads plan/status/beta/wasMonthly only
+// from server-controlled app_metadata. This allowlist is a second, defensive
+// layer: it keeps updateProfile() from ever writing (or round-tripping) an
+// entitlement-shaped key into user_metadata in the first place, and — because
+// every caller currently spreads the full existing user_metadata back in
+// alongside the field it's actually changing — it also quietly drops any
+// stale entitlement field a legacy write already left there. Only harmless,
+// genuinely user-owned profile/preference fields belong here.
+// See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
+export const PROFILE_METADATA_ALLOWLIST = new Set([
+  'full_name',
+  'theme',
+  'theme_radius_unit',
+  'theme_visual_strength',
+  'custom_theme_colors',
+  'tour_progress',
+  'reengagement_opt_out',
+  // The one free-tier project the user has chosen to keep editable — a
+  // self-service pick among the user's own projects, not a privilege.
+  'free_project_id',
+])
+
+export function sanitizeProfileMetadata(profile) {
+  const clean = {}
+  for (const key of Object.keys(profile || {})) {
+    if (PROFILE_METADATA_ALLOWLIST.has(key)) clean[key] = profile[key]
+  }
+  return clean
+}
+
 export function getMembership(user) {
   const createdAt = dateFrom(user?.created_at || user?.createdAt)
-  const trialStartedAt = dateFrom(user?.user_metadata?.trial_started_at) || createdAt || new Date()
+  // Entitlement (including trial start) must come only from server-controlled
+  // app_metadata / auth fields — never user_metadata, which the signed-in
+  // account owner can write directly via supabase.auth.updateUser(). No code
+  // path ever legitimately wrote trial_started_at, so createdAt (the auth
+  // record's own server-set timestamp) is already the correct, tamper-proof
+  // trial start. See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
+  const trialStartedAt = createdAt || new Date()
   const trialEndsAt = new Date(trialStartedAt.getTime() + TRIAL_DAYS * DAY_MS)
   const now = new Date()
 
-  const subscriptionStatus = user?.app_metadata?.subscription_status || user?.user_metadata?.subscription_status || 'none'
-  const subscriptionPlan = user?.app_metadata?.subscription_plan || user?.user_metadata?.subscription_plan || null
-  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || user?.app_metadata?.beta_tester === true || user?.user_metadata?.beta_tester === true
+  const subscriptionStatus = user?.app_metadata?.subscription_status || 'none'
+  const subscriptionPlan = user?.app_metadata?.subscription_plan || null
+  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || user?.app_metadata?.beta_tester === true
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
   const isFounder = subscriptionPlan === 'founder'
 
@@ -172,8 +213,9 @@ export function getMembership(user) {
   const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS))
   const isFree = !isPaid && !isTrialActive
 
-  // wasMonthly: downgraded from a monthly subscription — active project is locked
-  const wasMonthly = isFree && (user?.user_metadata?.was_monthly === true)
+  // wasMonthly: downgraded from a monthly subscription — active project is locked.
+  // Written server-side only (api/stripe-webhook.js, on cancellation) to app_metadata.
+  const wasMonthly = isFree && (user?.app_metadata?.was_monthly === true)
 
   // 'plan' is the tier category used for CSS badge classes
   const plan = isPaid ? 'paid' : isTrialActive ? 'trial' : 'free'
