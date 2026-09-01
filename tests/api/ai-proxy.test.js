@@ -160,4 +160,10 @@ describe('allowedOrigins', () => {
     expect(origins.has('https://www.yourownworld.co.uk')).toBe(true)
     expect(origins.has('https://evil.example.com')).toBe(false)
   })
+
+  it('allows the current Vercel deployment origin (covers preview deployments)', async () => {
+    process.env.VERCEL_URL = 'yow-git-my-branch-example.vercel.app'
+    const { allowedOrigins } = await import('../../api/ai-proxy.js')
+    expect(allowedOrigins().has('https://yow-git-my-branch-example.vercel.app')).toBe(true)
+  })
 })

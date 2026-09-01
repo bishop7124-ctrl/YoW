@@ -35,6 +35,12 @@ export function allowedOrigins() {
     'https://tauri.localhost',
   ])
   if (process.env.SITE_URL) origins.add(process.env.SITE_URL)
+  // VERCEL_URL is auto-populated by Vercel on every deployment (production
+  // and preview alike) with that deployment's own hostname, no config
+  // needed. Without this, a Vercel preview deployment's frontend calling
+  // its own preview API would be blocked, since preview URLs are dynamic
+  // per-branch/per-PR and can't be listed as static entries above.
+  if (process.env.VERCEL_URL) origins.add(`https://${process.env.VERCEL_URL}`)
   return origins
 }
 
@@ -138,6 +144,12 @@ async function maybeCleanupRateLimitLog(supabase) {
   await supabase.from('ai_proxy_requests').delete().lt('created_at', cutoff).then(() => {}, () => {})
 }
 
+// Note: this is check-then-insert, not atomic — two requests from the same
+// user arriving concurrently can both read a count under the limit before
+// either has inserted, letting a tight burst exceed RATE_LIMIT_MAX by
+// roughly the number of in-flight requests. Accepted tradeoff for a simple,
+// durable log-table implementation; an atomic Postgres RPC (row lock or
+// upsert-and-check) would close this if real abuse patterns ever need it.
 async function checkAndRecordRateLimit(supabase, userId) {
   await maybeCleanupRateLimitLog(supabase)
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString()
