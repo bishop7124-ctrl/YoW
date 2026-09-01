@@ -93,7 +93,7 @@ The detailed evidence, severity, validation output, redundancy review, continuit
 
 Immediate order:
 
-1. Rotate/remove the committed real-looking test credential; add CI secret scanning. **Partial (2026-09-01):** code-side scrub and CI `secret-scan` job (`gitleaks`) done on `fix/scrub-committed-test-credential`, including a second leak location the original audit didn't catch (a stray committed `memory/` directory, `334d744`). Still open: rotating the live credential and the git-history rewrite, both pending the user — see [docs/QA_PLAN.md](QA_PLAN.md) Priority -1.
+1. Rotate/remove the committed real-looking test credential; add CI secret scanning. **Partial (2026-09-01):** code-side scrub and CI `secret-scan` job (`gitleaks`, plus a custom low-entropy password rule) done on `fix/scrub-committed-test-credential` ([PR #38](https://github.com/bishop7124-ctrl/YoW/pull/38)), covering **two** distinct leaked accounts, not one: `mbishoptesting@gmail.com` (in `scripts/seed-test-data.mjs` and a stray committed `memory/` directory the original audit didn't catch, `334d744`) and `accounta@yourownworld.co.uk` (in a static `docs/design/backups/*.bak` roadmap snapshot). Still open: rotating both live credentials and the git-history rewrite, both pending the user — see [docs/QA_PLAN.md](QA_PLAN.md) Priority -1.
 2. Fail closed and authorize/rate-limit the AI proxy, cron mailer, reset/welcome/re-engagement functions, and signed unsubscribe actions.
 3. Remove all entitlement trust in editable `user_metadata`; allowlist profile updates; migrate existing metadata.
 4. Keep paid checkout disabled; add Stripe event idempotency, one fulfillment path per product, atomic Founder allocation, and a tested approved price matrix.
