@@ -143,6 +143,25 @@ export async function waitForStorage(page, predicate, arg, timeout = 8000) {
   await page.waitForFunction(predicate, arg, { timeout })
 }
 
+// Wait for the storage bridge to be re-hydrated after a `page.reload()`.
+// `window.__yowStorageBridge?.flush()` before reload only guarantees the
+// flush's own promise resolved, not that the IndexedDB write it triggered
+// had actually landed before the reload's own hydration read ran (observed
+// directly: a reload immediately after `flush()` can still see a `null`
+// value for a key that was just confirmed present pre-reload). `nf_novels`
+// is written long before any test-specific record and is the one key every
+// caller can rely on already existing by this point, so use it as a
+// hydration-complete signal before reading the key the test actually cares
+// about — a plain post-reload read of that target key can't distinguish
+// "genuinely empty" from "storage hasn't re-hydrated yet" (both read as
+// null/`[]`), which is exactly the race this works around.
+export async function waitForStorageHydrated(page, timeout = 8000) {
+  await page.waitForFunction(() => {
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    return get('nf_novels') != null
+  }, undefined, { timeout })
+}
+
 // Seed project-storage entries (nf_* keys) directly into the app's IndexedDB
 // vault (see src/storage/browserVaultAdapter.js for the DB_NAME/DB_VERSION/
 // STORE_NAME schema, imported above rather than duplicated — out-of-line
