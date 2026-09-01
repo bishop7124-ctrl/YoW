@@ -126,6 +126,24 @@ function getSupabase() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
+// Deliberately reads ONLY server-controlled fields — app_metadata (writable
+// only by the service role, e.g. the Stripe webhook) and created_at (set by
+// Supabase at signup, never client-writable) — never user_metadata.
+// getMembership() in src/utils/membership.js falls back to user_metadata for
+// display-layer convenience, which is fine for UI but NOT safe as a
+// server-side security gate: every Free user has no app_metadata
+// entitlement fields by default, so that fallback is live for exactly the
+// population this check exists to reject, and audit finding P0-01
+// (docs/YOW_CODE_AUDIT_2026-09-01.md) confirms user_metadata is editable by
+// the signed-in user via the client SDK (supabase.auth.updateUser()) —
+// without this, a Free user could self-grant AI access with one console
+// call. Reuses getMembership()'s tested plan/trial logic by passing it a
+// copy of the user with user_metadata stripped, rather than duplicating it.
+export function hasAiEntitlement(user) {
+  const membership = getMembership({ ...user, user_metadata: {} })
+  return !membership.isFree
+}
+
 async function authenticate(req, supabase) {
   const token = (req.headers.authorization || '').replace('Bearer ', '')
   if (!token) return { user: null }
@@ -296,8 +314,7 @@ export default async function handler(req, res) {
     const { user } = await authenticate(req, supabase)
     if (!user) return res.status(401).json({ error: { code: 401, message: 'Sign in required.' } })
 
-    const membership = getMembership(user)
-    if (membership.isFree) {
+    if (!hasAiEntitlement(user)) {
       return res.status(403).json({ error: { code: 403, message: 'AI tools require a paid plan.' } })
     }
 
