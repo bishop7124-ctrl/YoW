@@ -127,6 +127,126 @@ function caretRangeFromPoint(x, y) {
   return null
 }
 
+// ─── Preview-backed visual caret ──────────────────────────────────────────────
+
+// The native WebKit textarea caret stretches to the full line box. With the
+// manuscript's deliberately generous line spacing that produces a 40px+ bar,
+// even though the type itself is around 19px. The visible text already exists
+// in the rich-preview layer, so use that DOM for a cheap caret coordinate rather
+// than rebuilding/mirroring the full scene on every keystroke (the latter was a
+// previously confirmed source of severe lag in very large scenes).
+function findPreviewCaretPosition(preview, rawOffset) {
+  const candidates = [...preview.querySelectorAll('[data-raw-start][data-raw-end]')]
+    .map(element => ({
+      element,
+      start: Number(element.getAttribute('data-raw-start')),
+      end: Number(element.getAttribute('data-raw-end')),
+    }))
+    .filter(candidate => Number.isFinite(candidate.start) && Number.isFinite(candidate.end))
+
+  if (!candidates.length) return null
+
+  // Prefer the deepest tagged leaves. Paragraph/note wrappers can span raw
+  // markdown delimiters that are intentionally absent from their visible text;
+  // using a leaf maps those delimiter offsets to the nearest visible boundary
+  // instead of drifting the caret into the formatted word.
+  const leaves = candidates.filter(({ element }) => !element.querySelector('[data-raw-start][data-raw-end]'))
+  const preciseCandidates = leaves.length ? leaves : candidates
+  const containing = preciseCandidates.filter(({ start, end }) => rawOffset >= start && rawOffset <= end)
+  const pool = containing.length ? containing : preciseCandidates
+  pool.sort((a, b) => {
+    if (!containing.length) {
+      const distanceA = rawOffset < a.start ? a.start - rawOffset : rawOffset - a.end
+      const distanceB = rawOffset < b.start ? b.start - rawOffset : rawOffset - b.end
+      if (distanceA !== distanceB) return distanceA - distanceB
+    }
+    // At a paragraph boundary, prefer the paragraph beginning at the caret
+    // over the one ending there. This puts a newly inserted paragraph's caret
+    // on its own indented line.
+    const startsAtCaretA = a.start === rawOffset ? 1 : 0
+    const startsAtCaretB = b.start === rawOffset ? 1 : 0
+    if (startsAtCaretA !== startsAtCaretB) return startsAtCaretB - startsAtCaretA
+    const spanA = a.end - a.start
+    const spanB = b.end - b.start
+    if (spanA !== spanB) return spanA - spanB
+    // Nested tagged spans are more precise than their tagged paragraph parent.
+    if (a.element.contains(b.element)) return 1
+    if (b.element.contains(a.element)) return -1
+    return 0
+  })
+
+  const { element, start, end } = pool[0]
+  const textLength = element.textContent?.length || 0
+  const rawSpan = Math.max(0, end - start)
+  const localOffset = rawSpan === 0
+    ? 0
+    : Math.max(0, Math.min(textLength, rawOffset - start))
+
+  const walker = document.createTreeWalker(element, 4) // NodeFilter.SHOW_TEXT
+  let remaining = localOffset
+  let textNode = walker.nextNode()
+  while (textNode && remaining > textNode.data.length) {
+    remaining -= textNode.data.length
+    textNode = walker.nextNode()
+  }
+
+  if (!textNode) {
+    textNode = element.lastChild?.nodeType === 3 ? element.lastChild : null
+    remaining = textNode?.data.length || 0
+  }
+
+  return { element, textNode, offset: remaining }
+}
+
+function rangeRectAtPosition(textNode, offset) {
+  if (!textNode) return null
+  const range = document.createRange()
+  const safeOffset = Math.max(0, Math.min(offset, textNode.data.length))
+  range.setStart(textNode, safeOffset)
+  range.collapse(true)
+  const collapsedRects = range.getClientRects?.()
+  if (collapsedRects?.length) return collapsedRects[collapsedRects.length - 1]
+
+  // Some engines do not expose a rectangle for a collapsed range at a wrap or
+  // newline boundary. A one-character neighbour still supplies the correct line
+  // box; only its left/right edge needs translating back to the caret boundary.
+  if (safeOffset < textNode.data.length) {
+    range.setEnd(textNode, safeOffset + 1)
+    const nextRects = range.getClientRects?.()
+    if (nextRects?.length) {
+      const rect = nextRects[0]
+      return {
+        top: rect.top, bottom: rect.bottom, height: rect.height,
+        left: rect.left, right: rect.left, width: 0,
+      }
+    }
+  }
+  if (safeOffset > 0) {
+    range.setStart(textNode, safeOffset - 1)
+    range.setEnd(textNode, safeOffset)
+    const previousRects = range.getClientRects?.()
+    if (previousRects?.length) {
+      const rect = previousRects[previousRects.length - 1]
+      return {
+        top: rect.top, bottom: rect.bottom, height: rect.height,
+        left: rect.right, right: rect.right, width: 0,
+      }
+    }
+  }
+  return null
+}
+
+function getPreviewCaretRect(preview, rawOffset) {
+  if (!preview) return null
+  const position = findPreviewCaretPosition(preview, rawOffset)
+  if (!position) {
+    const placeholder = preview.querySelector('.ms-placeholder') || preview
+    return placeholder.getBoundingClientRect()
+  }
+  return rangeRectAtPosition(position.textNode, position.offset)
+    || position.element.getBoundingClientRect()
+}
+
 // ─── Entity / note parsing ────────────────────────────────────────────────────
 
 const NOTE_MARKER_RE = /\s?\[\[(\d+)\]\]\s?/g
@@ -319,6 +439,8 @@ const ContentPreview = ({
   onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes,
   isBullets, isScript, scriptBlocks, scriptElement, projectType,
   mode = 'edit',
+  indentParagraphs = false,
+  baseOffset = 0,
 }) => {
   const entityNames = useMemo(
     () => Object.keys(entityMap).sort((a, b) => b.length - a.length),
@@ -356,8 +478,74 @@ const ContentPreview = ({
     if (!lineInfos.length) return <span className="ms-placeholder">One item per line…</span>
     return (
       <ul className="ms-bullets">
-        {lineInfos.map((info, i) => <li key={i}>{renderInlineMarkdown(info.line, `bl${i}`, info.start)}</li>)}
+        {lineInfos.map((info, i) => <li key={i}>{renderInlineMarkdown(info.line, `bl${i}`, baseOffset + info.start)}</li>)}
       </ul>
+    )
+  }
+
+  if (indentParagraphs) {
+    const paragraphs = []
+    const separator = /\n{2,}/g
+    let start = 0
+    let match
+    while ((match = separator.exec(content)) !== null) {
+      paragraphs.push({ start, end: match.index, text: content.slice(start, match.index) })
+      start = match.index + match[0].length
+    }
+    paragraphs.push({ start, end: content.length, text: content.slice(start) })
+
+    const notes = [...notesBySeq.values()]
+    return (
+      <div className="ms-prose-paragraphs">
+        {paragraphs.map((paragraph, paragraphIndex) => {
+          const isLast = paragraphIndex === paragraphs.length - 1
+          const paragraphNotes = new Map(notes.flatMap(note => {
+            const rawStart = note.anchorOffset ?? content.length
+            const rawEnd = note.anchorEndOffset ?? rawStart
+            const isPointNote = rawStart === rawEnd
+            const overlaps = isPointNote
+              ? rawStart >= paragraph.start && (rawStart < paragraph.end || (isLast && rawStart <= paragraph.end))
+              : rawEnd > paragraph.start && rawStart < paragraph.end
+            if (!overlaps) return []
+            return [[note.seq, {
+              ...note,
+              anchorOffset: Math.max(paragraph.start, rawStart) - paragraph.start,
+              anchorEndOffset: Math.min(paragraph.end, Math.max(rawStart, rawEnd)) - paragraph.start,
+            }]]
+          }))
+
+          return (
+            <div
+              key={`${paragraph.start}-${paragraph.end}-${paragraphIndex}`}
+              className="ms-prose-paragraph"
+              data-raw-start={baseOffset + paragraph.start}
+              data-raw-end={baseOffset + paragraph.end}
+            >
+              {paragraph.text ? (
+                <ContentPreview
+                  content={paragraph.text}
+                  entityMap={entityMap}
+                  notesBySeq={paragraphNotes}
+                  highlightedNoteSeq={highlightedNoteSeq}
+                  onEntityClick={onEntityClick}
+                  onNoteClick={onNoteClick}
+                  onUpdateNote={onUpdateNote}
+                  onDeleteNote={onDeleteNote}
+                  onOpenNotes={onOpenNotes}
+                  isBullets={false}
+                  isScript={false}
+                  projectType={projectType}
+                  mode={mode}
+                  indentParagraphs={false}
+                  baseOffset={baseOffset + paragraph.start}
+                />
+              ) : (
+                <span data-raw-start={baseOffset + paragraph.start} data-raw-end={baseOffset + paragraph.end}>{'\u00a0'}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
     )
   }
 
@@ -365,7 +553,7 @@ const ContentPreview = ({
   return (
     <>
       {segs.map((seg, i) => {
-        if (seg.type === 'entity') return <EntityLink key={i} seg={seg} onOpen={onEntityClick} />
+        if (seg.type === 'entity') return <EntityLink key={i} seg={{ ...seg, start: baseOffset + seg.start, end: baseOffset + seg.end }} onOpen={onEntityClick} />
         if (seg.type === 'note') {
           // Write mode: notes exist only as this inline box. Edit mode: notes
           // exist only as the gutter's floating icon (rendered by the parent,
@@ -391,15 +579,15 @@ const ContentPreview = ({
             <span
               key={i}
               className={`ms-note-highlight${highlightedNoteSeq === seg.note.seq ? ' is-highlighted' : ''}`}
-              data-raw-start={seg.start}
-              data-raw-end={seg.end}
+              data-raw-start={baseOffset + seg.start}
+              data-raw-end={baseOffset + seg.end}
               title={`Note ${seg.note.seq}`}
             >
-              {renderInlineMarkdown(content.slice(seg.start, seg.end), `nr${i}`, seg.start)}
+              {renderInlineMarkdown(content.slice(seg.start, seg.end), `nr${i}`, baseOffset + seg.start)}
             </span>
           )
         }
-        return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`, seg.start)}</span>
+        return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`, baseOffset + seg.start)}</span>
       })}
     </>
   )
@@ -623,6 +811,8 @@ const SceneEditorImpl = ({
   const warnedThisFocusRef = useRef(false)
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
+  const visualCaretFrameRef = useRef(null)
+  const activeVisualCaretRef = useRef({ marker: null, textarea: null })
   const localContentRef = useRef(localContent)
   // Manuscript.jsx overlays live (uncommitted) content onto the `scene` prop for
   // whichever scene is actively being edited, which means `scene` gets a brand new
@@ -646,6 +836,75 @@ const SceneEditorImpl = ({
   const isBullets = !isScript && scene.textMode === 'bullets'
   const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
   const scriptElements = getScriptElements(projectType)
+
+  const hideVisualCaret = useCallback(() => {
+    const { marker, textarea } = activeVisualCaretRef.current
+    marker?.classList.remove('is-visible')
+    textarea?.classList.remove('ms-textarea--custom-caret')
+    activeVisualCaretRef.current = { marker: null, textarea: null }
+  }, [])
+
+  const syncVisualCaret = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea || document.activeElement !== textarea || textarea.selectionStart !== textarea.selectionEnd) {
+      hideVisualCaret()
+      return
+    }
+
+    const editor = textarea.closest('.ms-rich-edit')
+    const preview = editor?.querySelector('.ms-rich-preview')
+    const marker = editor?.querySelector('.ms-editor-caret')
+    if (!editor || !preview || !marker) {
+      hideVisualCaret()
+      return
+    }
+
+    const base = Number(textarea.dataset.msStart) || 0
+    const caretRect = getPreviewCaretRect(preview, base + textarea.selectionEnd)
+    if (!caretRect) {
+      hideVisualCaret()
+      return
+    }
+
+    const editorRect = editor.getBoundingClientRect()
+    const fallbackScale = Number(pageZoom) || 1
+    const scaleX = editor.offsetWidth > 0 && editorRect.width > 0
+      ? editorRect.width / editor.offsetWidth
+      : fallbackScale
+    const scaleY = editor.offsetHeight > 0 && editorRect.height > 0
+      ? editorRect.height / editor.offsetHeight
+      : fallbackScale
+    const computed = window.getComputedStyle(textarea)
+    const fontSize = Number.parseFloat(computed.fontSize) || Number(formatSettings.fontSize) || 16
+    const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.2
+    const measuredLineHeight = caretRect.height > 0 ? caretRect.height / scaleY : lineHeight
+    const top = (caretRect.top - editorRect.top) / scaleY + Math.max(0, (measuredLineHeight - fontSize) / 2)
+    const left = (caretRect.left - editorRect.left) / scaleX
+
+    const previous = activeVisualCaretRef.current
+    if (previous.marker && previous.marker !== marker) previous.marker.classList.remove('is-visible')
+    if (previous.textarea && previous.textarea !== textarea) previous.textarea.classList.remove('ms-textarea--custom-caret')
+
+    marker.style.left = `${left}px`
+    marker.style.top = `${top}px`
+    marker.style.height = `${fontSize}px`
+    marker.classList.add('is-visible')
+    textarea.classList.add('ms-textarea--custom-caret')
+    activeVisualCaretRef.current = { marker, textarea }
+  }, [formatSettings.fontSize, hideVisualCaret, pageZoom])
+
+  const scheduleVisualCaret = useCallback(() => {
+    if (visualCaretFrameRef.current) window.cancelAnimationFrame(visualCaretFrameRef.current)
+    visualCaretFrameRef.current = window.requestAnimationFrame(() => {
+      visualCaretFrameRef.current = null
+      syncVisualCaret()
+    })
+  }, [syncVisualCaret])
+
+  useEffect(() => () => {
+    if (visualCaretFrameRef.current) window.cancelAnimationFrame(visualCaretFrameRef.current)
+    hideVisualCaret()
+  }, [hideVisualCaret])
 
   const hasMetadata = !!(scene.pov || scene.locationTag || (scene.status && scene.status !== 'draft'))
   const showSceneMeta = formatSettings.showSceneMetadata !== false
@@ -768,8 +1027,11 @@ const SceneEditorImpl = ({
   })
 
   useLayoutEffect(() => {
-    if (focused) scheduleCaretFollow()
-  }, [caretFollowEnabled, focused, localContent, formatSettings, pageZoom, scheduleCaretFollow])
+    if (focused) {
+      scheduleCaretFollow()
+      scheduleVisualCaret()
+    }
+  }, [caretFollowEnabled, focused, localContent, formatSettings, pageZoom, scheduleCaretFollow, scheduleVisualCaret])
 
   // The store's own conflict detection (mergeSceneUpdateWithPersistedCopy in
   // useStore.js) treats any mismatch between localStorage's `nf_scenes` and its
@@ -838,7 +1100,8 @@ const SceneEditorImpl = ({
   const syncCursorTools = useCallback(() => {
     rememberSelection()
     syncFloatingNoteButton()
-  }, [rememberSelection, syncFloatingNoteButton])
+    scheduleVisualCaret()
+  }, [rememberSelection, scheduleVisualCaret, syncFloatingNoteButton])
 
   const focusRange = useCallback((start, end = start) => {
     window.setTimeout(() => {
@@ -865,6 +1128,7 @@ const SceneEditorImpl = ({
       ta.setSelectionRange(Math.max(0, start - base), Math.max(0, end - base))
       lastSelectionRef.current = { start, end }
       syncFloatingNoteButton()
+      scheduleVisualCaret()
       // `preventScroll` only governs `.focus()` — it does nothing for the
       // `setSelectionRange` call just above, which can *independently* trigger
       // the browser's own "scroll the selection into view." Confirmed live by
@@ -882,7 +1146,7 @@ const SceneEditorImpl = ({
       // centered while typing" feature `caretFollowEnabled` toggles.
       scheduleCaretFollow({ immediate: true })
     }, 0)
-  }, [scheduleCaretFollow, syncFloatingNoteButton])
+  }, [scheduleCaretFollow, scheduleVisualCaret, syncFloatingNoteButton])
 
   // ─── Undo / redo ─────────────────────────────────────────────────────────
   // Snapshots cover raw content (+ script blocks, for script projects) and the caret
@@ -1112,10 +1376,11 @@ const SceneEditorImpl = ({
 	  const syncActiveScriptBlock = useCallback(() => {
 	    rememberSelection()
 	    debouncedSyncFloatingNoteButton.schedule()
+	    scheduleVisualCaret()
 	    if (!isScript || !textareaRef.current) return
 	    const nextIndex = getScriptBlockIndexAtOffset(localContentRef.current, textareaRef.current.selectionStart)
 	    setActiveScriptBlockIndex(Math.min(nextIndex, Math.max(0, localScriptBlocks.length - 1)))
-	  }, [isScript, localScriptBlocks.length, rememberSelection, debouncedSyncFloatingNoteButton])
+	  }, [isScript, localScriptBlocks.length, rememberSelection, debouncedSyncFloatingNoteButton, scheduleVisualCaret])
 
   const setActiveScriptElement = useCallback((type) => {
     if (!isScript) return
@@ -1244,12 +1509,15 @@ const SceneEditorImpl = ({
       return
     }
 
-	    if (e.key === 'Enter' && formatSettings.autoIndent && !isBullets && !e.shiftKey) {
-	      e.preventDefault()
-	      recordBeforeEdit(true)
-	      const start = base + e.target.selectionStart
-	      const end = base + e.target.selectionEnd
-	      const insertion = '\n' + ' '.repeat(formatSettings.indentSize)
+    if (e.key === 'Enter' && !isScript && !isBullets && !e.shiftKey) {
+      e.preventDefault()
+      recordBeforeEdit(true)
+      const start = base + e.target.selectionStart
+      const end = base + e.target.selectionEnd
+      // A paragraph break is semantic data, not a run of presentation spaces.
+      // The editor/final reader/exporters render first-line indentation; keeping
+      // the stored prose as `\n\n` also preserves copy/paste and DOCX paragraphs.
+      const insertion = '\n\n'
 	      const nextContent = localContent.slice(0, start) + insertion + localContent.slice(end)
       localContentRef.current = nextContent
       onPersistDraft(scene, nextContent)
@@ -1361,13 +1629,15 @@ const SceneEditorImpl = ({
     ? scene.title
     : `Scene ${sceneIndex + 1}`
 
-	  const textStyle = {
-	    fontFamily: formatSettings.fontFamily,
-	    fontSize: formatSettings.fontSize,
-	    lineHeight: formatSettings.lineHeight,
-	    textAlign: formatSettings.textAlign,
-	    textIndent: !isScript && !isBullets && formatSettings.autoIndent ? `${formatSettings.indentSize}ch` : undefined,
-	  }
+  const autoIndentEnabled = !isScript && !isBullets && formatSettings.autoIndent
+  const textStyle = {
+    fontFamily: formatSettings.fontFamily,
+    fontSize: formatSettings.fontSize,
+    lineHeight: formatSettings.lineHeight,
+    textAlign: formatSettings.textAlign,
+    '--ms-paragraph-indent': `${formatSettings.indentSize}ch`,
+    '--ms-paragraph-edit-gap': `${formatSettings.lineHeight}em`,
+  }
 
 	  // Replaces the `autoFocus` attribute the real textarea(s) used to have.
 	  // `autoFocus` calls the browser's native, uncontrollable focus() under the
@@ -1391,6 +1661,7 @@ const SceneEditorImpl = ({
 
 	  const handleEditorBlur = () => {
 	    burstActiveRef.current = false
+	    hideVisualCaret()
 	    onPersistDraft(scene, localContentRef.current, { immediate: true })
 	    debouncedUpdate.flush()
 	    window.setTimeout(() => {
@@ -1542,8 +1813,25 @@ const SceneEditorImpl = ({
 	                return (
 	                  <div key={block.key} className="ms-rich-edit">
 	                    <div className="ms-rich-preview ms-preview" aria-hidden="true" style={textStyle}>
-	                      {renderInlineMarkdown(localContent.slice(block.start, block.end), `edit-${block.key}`, block.start)}
+	                      <ContentPreview
+	                        content={localContent.slice(block.start, block.end)}
+	                        entityMap={entityMap}
+	                        notesBySeq={new Map()}
+	                        highlightedNoteSeq={highlightedNoteSeq}
+	                        onEntityClick={onEntityClick}
+	                        onNoteClick={() => {}}
+	                        onUpdateNote={handleUpdateNote}
+	                        onDeleteNote={handleDeleteNote}
+	                        onOpenNotes={onOpenNotes}
+	                        isBullets={false}
+	                        isScript={false}
+	                        projectType={projectType}
+	                        mode={mode}
+	                        indentParagraphs={autoIndentEnabled}
+	                        baseOffset={block.start}
+	                      />
 	                    </div>
+	                    <span className="ms-editor-caret" aria-hidden="true" />
 	                    <textarea
 	                      ref={node => {
 	                        if (node && (!textareaRef.current || document.activeElement === node)) textareaRef.current = node
@@ -1561,7 +1849,7 @@ const SceneEditorImpl = ({
 	                      placeholder={isBullets ? 'One item per line...' : 'Begin writing here...'}
 	                      spellCheck
 	                      rows={1}
-	                      className="ms-textarea ms-textarea-block ms-textarea--rich"
+	                      className={`ms-textarea ms-textarea-block ms-textarea--rich${autoIndentEnabled ? ' ms-prose-auto-indent' : ''}`}
 	                      style={textStyle}
 	                    />
 	                  </div>
@@ -1587,8 +1875,10 @@ const SceneEditorImpl = ({
 	                scriptElement={scriptElement}
 	                projectType={projectType}
 	                mode={mode}
+	                indentParagraphs={autoIndentEnabled}
 	              />
 	            </div>
+	            <span className="ms-editor-caret" aria-hidden="true" />
 	            <textarea
 	              ref={textareaRef}
 	              value={localContent}
@@ -1604,7 +1894,7 @@ const SceneEditorImpl = ({
 	              placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
 	              spellCheck
 	              rows={1}
-	              className="ms-textarea ms-textarea--rich"
+	              className={`ms-textarea ms-textarea--rich${autoIndentEnabled ? ' ms-prose-auto-indent' : ''}`}
 	              style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
 	            />
 	          </div>
@@ -1627,6 +1917,7 @@ const SceneEditorImpl = ({
             scriptElement={scriptElement}
             projectType={projectType}
             mode={mode}
+            indentParagraphs={autoIndentEnabled}
           />
 	        </div>
 	      )}

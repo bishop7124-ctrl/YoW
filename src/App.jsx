@@ -299,7 +299,7 @@ function AppInner() {
     for (const key of Object.keys(nextState)) {
       if (key.startsWith('welcome_') || key.startsWith('wizard_') || key.startsWith('tour_')) durable[key] = nextState[key]
     }
-    updateProfile({ ...(user.user_metadata || {}), tour_progress: durable }).catch(console.error)
+    updateProfile({ tour_progress: durable }).catch(console.error)
   }, [user, updateProfile])
   const tourStore = useTourStore({ remoteFlags: user?.user_metadata?.tour_progress, onPersist: persistTourProgress })
   const firstUrlSync = useRef(true)
@@ -1083,7 +1083,7 @@ function AppInner() {
   const handleFreeProjectConfirm = async (projectId) => {
     try {
       setFreeProjectBusy(true)
-      await updateProfile({ ...(user.user_metadata || {}), free_project_id: projectId })
+      await updateProfile({ free_project_id: projectId })
       if (store.setDashboardActiveProject) store.setDashboardActiveProject(projectId)
       else store.setActiveNovelId(projectId)
       setActiveSeriesId(null)

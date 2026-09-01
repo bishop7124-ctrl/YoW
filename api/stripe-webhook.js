@@ -22,6 +22,19 @@ export function getCurrentPeriodEnd(subscription) {
   return subscription.cancel_at || subscription.trial_end || subscription.ended_at
 }
 
+export function buildSubscriptionAppMetadata(existing, subscription, customerId, plan) {
+  return {
+    ...existing,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    subscription_status: subscription.status,
+    subscription_plan: plan,
+    subscription_current_period_end: getCurrentPeriodEnd(subscription),
+    subscription_cancel_at_period_end: subscription.cancel_at_period_end,
+    ...(subscription.status === 'canceled' ? { was_monthly: true } : {}),
+  }
+}
+
 // --------------------------------------------------------------------------
 // Upsert user_profiles row (storage + founder tracking).
 // Only called server-side with the service role key.
@@ -63,31 +76,11 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
   const existing = data?.user?.app_metadata || {}
 
   await supabaseAdmin.auth.admin.updateUserById(userId, {
-    app_metadata: {
-      ...existing,
-      stripe_customer_id:                customerId,
-      stripe_subscription_id:            subscription.id,
-      subscription_status:               subscription.status,
-      subscription_plan:                 plan,
-      subscription_current_period_end:   getCurrentPeriodEnd(subscription),
-      subscription_cancel_at_period_end: subscription.cancel_at_period_end,
-    },
+    app_metadata: buildSubscriptionAppMetadata(existing, subscription, customerId, plan),
   })
 
   // Ensure a user_profiles row exists for storage tracking.
   await upsertUserProfile(supabaseAdmin, userId, {})
-
-  // When a subscription is cancelled, record was_monthly so the free tier
-  // knows to lock the active project selection.
-  if (subscription.status === 'canceled') {
-    const userMeta = data?.user?.user_metadata || {}
-    await supabaseAdmin.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...userMeta,
-        was_monthly: true,
-      },
-    })
-  }
 }
 
 // --------------------------------------------------------------------------

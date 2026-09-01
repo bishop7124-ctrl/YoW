@@ -64,7 +64,17 @@ describe('get-download-links handler', () => {
     expect(res.status).toHaveBeenCalledWith(403)
   })
 
-  it.each(['premium_lifetime', 'premium_plus_lifetime', 'founder'])(
+  it('rejects a desktop plan claimed only through editable user metadata', async () => {
+    getUser.mockResolvedValue({
+      data: { user: { app_metadata: {}, user_metadata: { subscription_plan: 'founder' } } },
+      error: null,
+    })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it.each(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])(
     'returns download links for %s members',
     async (plan) => {
       getUser.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: plan } } }, error: null })
@@ -80,6 +90,13 @@ describe('get-download-links handler', () => {
       })
     }
   )
+
+  it('returns download links for a server beta flag without a duplicated plan key', async () => {
+    getUser.mockResolvedValue({ data: { user: { app_metadata: { beta_tester: true } } }, error: null })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(200)
+  })
 
   it('omits platforms whose download URL is not configured', async () => {
     delete process.env.DESKTOP_DOWNLOAD_URL_WINDOWS

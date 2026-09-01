@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 // shipped in the client bundle; entitlement is verified server-side before
 // they are returned.
 
-const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder'])
+const DESKTOP_ENTITLED_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
 
 export default async function handler(req, res) {
   const origin = req.headers.origin || process.env.SITE_URL || '*'
@@ -27,9 +27,10 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const plan = user.app_metadata?.subscription_plan || user.user_metadata?.subscription_plan || null
-    if (!LIFETIME_PLAN_KEYS.has(plan)) {
-      return res.status(403).json({ error: 'The desktop app is available to Lifetime and Founder members.' })
+    const serverMetadata = user.app_metadata || {}
+    const plan = serverMetadata.subscription_plan || (serverMetadata.beta_tester === true ? 'beta_tester' : null)
+    if (!DESKTOP_ENTITLED_PLAN_KEYS.has(plan)) {
+      return res.status(403).json({ error: 'Your account does not include desktop access.' })
     }
 
     const platforms = [

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { decodeHtmlEntities, buildFinalizedDraft } from './manuscriptUtils.js'
+import { decodeHtmlEntities, buildFinalizedDraft, getFinalizedContentBlocks } from './manuscriptUtils.js'
 
 describe('decodeHtmlEntities', () => {
   it('decodes named entities like apostrophes and ampersands', () => {
@@ -34,5 +34,17 @@ describe('buildFinalizedDraft', () => {
     expect(draft.acts[0].title).toBe('Act & One')
     expect(draft.acts[0].chapters[0].title).toBe("Chapter '1'")
     expect(draft.acts[0].chapters[0].scenes[0].content).toBe('She said, "I won\'t."')
+  })
+
+  it('keeps semantic paragraph breaks as separate finalized paragraphs', () => {
+    const acts = [{ id: 'a1', title: 'Act One', order: 0 }]
+    const chapters = [{ id: 'c1', actId: 'a1', title: 'Chapter One', order: 0 }]
+    const scenes = [{ id: 's1', chapterId: 'c1', title: 'Opening', content: 'First paragraph.\n\nSecond paragraph.', order: 0 }]
+    const draft = buildFinalizedDraft({ novel: { title: 'Paragraph Test' }, acts, chapters, scenes, labels, title: 'Draft 1' })
+
+    expect(getFinalizedContentBlocks(draft).filter(block => block.type === 'paragraph').map(block => block.text)).toEqual([
+      'First paragraph.',
+      'Second paragraph.',
+    ])
   })
 })

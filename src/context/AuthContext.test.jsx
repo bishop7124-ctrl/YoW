@@ -60,11 +60,17 @@ vi.mock('../utils/analytics', () => ({
 }))
 
 function Probe() {
-  const { user, signIn } = useAuth()
+  const { user, signIn, updateProfile } = useAuth()
   return (
     <>
       <div data-testid="user-id">{user?.id || 'signed-out'}</div>
       <button type="button" onClick={() => signIn('writer@example.com', 'password')}>Sign in</button>
+      <button type="button" onClick={() => updateProfile({
+        full_name: 'Writer',
+        subscription_plan: 'founder',
+        subscription_status: 'active',
+        beta_tester: true,
+      })}>Update profile</button>
     </>
   )
 }
@@ -118,5 +124,17 @@ describe('AuthProvider session policy', () => {
     expect(trackEvent).toHaveBeenCalledWith('explicit_login', { method: 'password', platform: 'web' })
     expect(trackEvent).toHaveBeenCalledWith('login', { method: 'password' })
     expect(trackEvent).toHaveBeenCalledWith('authenticated_app_open', { platform: 'web', auth_source: 'explicit_login' })
+  })
+
+  it('does not send entitlement fields through the client profile update path', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>)
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Update profile' }).click()
+    })
+
+    expect(supabase.auth.updateUser).toHaveBeenCalledWith({
+      data: { full_name: 'Writer' },
+    })
   })
 })

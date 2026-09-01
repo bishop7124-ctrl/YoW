@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getCurrentPeriodEnd } from '../../api/stripe-webhook.js'
+import { buildSubscriptionAppMetadata, getCurrentPeriodEnd } from '../../api/stripe-webhook.js'
 
 // ─── getCurrentPeriodEnd ─────────────────────────────────────────────────────
 
@@ -63,6 +63,31 @@ describe('getCurrentPeriodEnd', () => {
       ended_at: null,
     }
     expect(getCurrentPeriodEnd(sub)).toBeNull()
+  })
+})
+
+describe('buildSubscriptionAppMetadata', () => {
+  it('records canceled-monthly downgrade state in server-controlled app metadata', () => {
+    const subscription = {
+      id: 'sub_123',
+      status: 'canceled',
+      cancel_at_period_end: false,
+      cancel_at: 1234,
+      items: { data: [] },
+    }
+
+    expect(buildSubscriptionAppMetadata(
+      { existing_flag: true },
+      subscription,
+      'cus_123',
+      'premium_monthly'
+    )).toMatchObject({
+      existing_flag: true,
+      stripe_customer_id: 'cus_123',
+      subscription_status: 'canceled',
+      subscription_plan: 'premium_monthly',
+      was_monthly: true,
+    })
   })
 })
 
