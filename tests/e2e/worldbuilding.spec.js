@@ -1,8 +1,20 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydrated,
 } from './helpers.js'
+
+// `flush()` right before `page.reload()`, then `waitForStorageHydrated()`
+// right after: the app's real storage backend is an IndexedDB-backed vault
+// that persists asynchronously (see docs/ROADMAP.md's 2026-08-24 part 2 /
+// 2026-08-25 Bugs row), and `flush()`'s own promise resolving is not a hard
+// enough guarantee that the write it triggered had actually landed before a
+// reload's own hydration read runs — observed directly in this session: a
+// value confirmed present pre-reload could still read back `null` right
+// after reload. `waitForStorageHydrated` (helpers.js) waits for a key that's
+// always long-since written (`nf_novels`) as a "storage has re-hydrated"
+// signal before trusting a point read of the key the test actually cares
+// about.
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -29,11 +41,13 @@ test.describe('Characters', () => {
 
     // Pass charName as arg so it's available in the browser context
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, charName)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(true)
   })
@@ -47,7 +61,7 @@ test.describe('Characters', () => {
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, originalName)
 
@@ -57,11 +71,13 @@ test.describe('Characters', () => {
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, updatedName)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === updatedName)).toBe(true)
     expect(chars.some(c => c.name === originalName)).toBe(false)
@@ -75,7 +91,7 @@ test.describe('Characters', () => {
     await page.getByRole('button', { name: 'Save Character' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return chars.some(c => c.name === n)
     }, charName)
 
@@ -91,13 +107,81 @@ test.describe('Characters', () => {
     await page.locator('.studio-page-actions').getByRole('button', { name: 'Delete' }).click()
 
     await waitForStorage(page, (n) => {
-      const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+      const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
       return !chars.some(c => c.name === n)
     }, charName, 15_000)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(false)
+  })
+
+  // 2026-07-25 user report / docs/ROADMAP.md Bugs table: the character
+  // editor could close mid-edit (backdrop click, Escape, Cancel, or the X
+  // button) with no save and no warning, silently dropping in-progress
+  // profile edits. Mitigated via StudioSheet's dirty-tracking + unsaved-
+  // changes prompt and `closeOnBackdrop={false}` on the character Modal —
+  // this is the "needs browser QA" verification for that row.
+  test('unsaved character edits survive backdrop click, Escape, and Cancel — and Discard actually closes', async ({ page }) => {
+    await page.getByRole('button', { name: 'New' }).first().click()
+    const dialog = page.locator('[role="dialog"]').first()
+    await expect(dialog).toBeVisible()
+
+    const draftName = `Unsaved Draft ${Date.now()}`
+    await dialog.locator('input[required]').first().fill(draftName)
+    const pronounsInput = dialog.getByLabel('Pronouns')
+    await pronounsInput.fill('she/her')
+
+    // Backdrop click: the character modal opts out of close-on-backdrop
+    // entirely, so this must be a complete no-op — no prompt, no close.
+    await page.mouse.click(10, 10)
+    await expect(dialog).toBeVisible()
+    await expect(pronounsInput).toHaveValue('she/her')
+
+    // Escape on a dirty form must show the unsaved-changes prompt, not close.
+    await page.keyboard.press('Escape')
+    const prompt = page.locator('.save-changes-prompt')
+    await expect(prompt).toBeVisible()
+    await expect(dialog).toBeVisible()
+
+    // Cancel on the prompt itself just dismisses the prompt — edits remain.
+    await prompt.getByRole('button', { name: 'Cancel' }).click()
+    await expect(prompt).not.toBeVisible()
+    await expect(dialog).toBeVisible()
+    await expect(pronounsInput).toHaveValue('she/her')
+
+    // The form's own Cancel button is intercepted the same dirty-aware way
+    // as Escape/X, not a silent direct close.
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(prompt).toBeVisible()
+
+    // Discard actually closes, and drops the unsaved draft (never persisted).
+    await prompt.getByRole('button', { name: 'Discard' }).click()
+    await expect(dialog).not.toBeVisible()
+    const chars = await readStorage(page, 'nf_characters')
+    expect(chars?.some(c => c.name === draftName)).toBe(false)
+
+    // Now confirm a real save still works cleanly end-to-end, including the
+    // pronouns field the original report specifically called out.
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.locator('[role="dialog"] input[required]').first().fill(draftName)
+    await page.locator('[role="dialog"]').getByLabel('Pronouns').fill('she/her')
+    await page.getByRole('button', { name: 'Save Character' }).click()
+
+    await waitForStorage(page, (n) => {
+      const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+      const list = JSON.parse(get('nf_characters') || '[]')
+      return list.some(c => c.name === n && c.pronouns === 'she/her')
+    }, draftName)
+
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
+    await page.reload()
+    await waitForStorageHydrated(page)
+    const savedChars = await readStorage(page, 'nf_characters')
+    const saved = savedChars?.find(c => c.name === draftName)
+    expect(saved?.pronouns).toBe('she/her')
   })
 
   test('character search filters the list', async ({ page }) => {
@@ -109,7 +193,7 @@ test.describe('Characters', () => {
       await page.locator('[role="dialog"] input[required]').first().fill(charName)
       await page.getByRole('button', { name: 'Save Character' }).click()
       await waitForStorage(page, (n) => {
-        const chars = JSON.parse(localStorage.getItem('nf_characters') || '[]')
+        const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
         return chars.some(c => c.name === n)
       }, charName)
     }
@@ -144,11 +228,13 @@ test.describe('Locations', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (n) => {
-      const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
+      const locs = JSON.parse((window.__yowStorageBridge?.getItem('nf_locations') ?? localStorage.getItem('nf_locations')) || '[]')
       return locs.some(l => l.name === n)
     }, locName)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const locs = await readStorage(page, 'nf_locations')
     expect(locs.some(l => l.name === locName)).toBe(true)
   })
@@ -162,7 +248,7 @@ test.describe('Locations', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (n) => {
-      const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
+      const locs = JSON.parse((window.__yowStorageBridge?.getItem('nf_locations') ?? localStorage.getItem('nf_locations')) || '[]')
       return locs.some(l => l.name === n)
     }, original)
 
@@ -172,7 +258,7 @@ test.describe('Locations', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (n) => {
-      const locs = JSON.parse(localStorage.getItem('nf_locations') || '[]')
+      const locs = JSON.parse((window.__yowStorageBridge?.getItem('nf_locations') ?? localStorage.getItem('nf_locations')) || '[]')
       return locs.some(l => l.name === n)
     }, updated)
 
@@ -199,17 +285,19 @@ test.describe('Lore', () => {
     await page.getByRole('button', { name: 'Save Entry' }).click()
 
     await waitForStorage(page, (t) => {
-      const lore = JSON.parse(localStorage.getItem('nf_loreEntries') || '[]')
+      const lore = JSON.parse((window.__yowStorageBridge?.getItem('nf_loreEntries') ?? localStorage.getItem('nf_loreEntries')) || '[]')
       return lore.some(e => e.title === t || e.name === t)
     }, loreTitle)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const lore = await readStorage(page, 'nf_loreEntries')
     expect(lore.some(e => e.title === loreTitle || e.name === loreTitle)).toBe(true)
   })
 
   test('lore entries are scoped to the active project', async ({ page }) => {
-    const activeId = await page.evaluate(() => localStorage.getItem('nf_activeNovel'))
+    const activeId = await page.evaluate(() => (window.__yowStorageBridge?.getItem('nf_activeNovel') ?? localStorage.getItem('nf_activeNovel')))
     const lore = await readStorage(page, 'nf_loreEntries')
     const scoped = lore.filter(e => e.novelId === activeId)
     expect(scoped.length).toBe(lore.filter(e => e.novelId).length)
@@ -234,11 +322,13 @@ test.describe('Timeline', () => {
     await page.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (t) => {
-      const timeline = JSON.parse(localStorage.getItem('nf_timeline') || '[]')
+      const timeline = JSON.parse((window.__yowStorageBridge?.getItem('nf_timeline') ?? localStorage.getItem('nf_timeline')) || '[]')
       return timeline.some(e => e.title === t || e.name === t)
     }, eventTitle)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const timeline = await readStorage(page, 'nf_timeline')
     expect(timeline.some(e => e.title === eventTitle || e.name === eventTitle)).toBe(true)
   })
@@ -266,11 +356,13 @@ test.describe('Ideas', () => {
 
     const prefix = ideaText.slice(0, 15)
     await waitForStorage(page, (p) => {
-      const ideas = JSON.parse(localStorage.getItem('nf_ideaEntries') || '[]')
+      const ideas = JSON.parse((window.__yowStorageBridge?.getItem('nf_ideaEntries') ?? localStorage.getItem('nf_ideaEntries')) || '[]')
       return ideas.some(e => (e.title || e.text || e.content || '').includes(p))
     }, prefix)
 
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
+    await waitForStorageHydrated(page)
     const ideas = await readStorage(page, 'nf_ideaEntries')
     expect(ideas.some(e =>
       (e.title || e.text || e.content || '').includes(prefix),
