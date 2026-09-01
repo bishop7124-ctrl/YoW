@@ -77,13 +77,23 @@ YOW is launch-ready only when every gate below is passed. This is the operating 
 | Project-type gate | Novel, Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel are all fully live for their promised workflows. No active launch type is marketed as beta/limited at final launch. | Open |
 | Data safety gate | Auth, save, autosave, restore, export, account isolation, local/cloud transition, and storage-limit behavior are QA-passed with no known data-loss blocker. | Open |
 | Export ownership gate | Users can export complete project data through ZIP/DOCX/PDF/World Bible where promised, including before cloud expiry or inactive-account cleanup. | Open |
-| Payment gate | Stripe test-mode QA passes for Monthly, Lifetime, Founder, and £6 hosting renewal; live keys/prices/webhooks are reviewed before real checkout is enabled. | Passed by product decision 2026-07-28 (real-flow acceptance, not the formal test-mode API checklist — see [docs/QA_PLAN.md](docs/QA_PLAN.md) Priority 0); 2026-08-31 live Stripe prices confirmed by user and matched in app display: Monthly £10/month, Lifetime £99 one-time, Founder £299 one-time, hosting renewal £6/year; 2026-08-28 fixed in code: downgrade failing on accounts manually upgraded via SQL (see Bugs table), live-mode re-verification still needed; 2026-08-05 fixed live production bug: clicking "Renew Cloud Mode" (`MaintenancePayButton` in `AccountSettings.jsx`, also used by the new `CloudExpiryWarningModal`) sent `plan: 'hosting_renewal'` to `/api/create-checkout-session`, but that Vercel function's `PLAN_CONFIG` only recognized `'maintenance'` — every real renewal attempt in production failed with "Unknown plan: hosting_renewal" (user-reported, reproduced against the live endpoint). The parallel `supabase/functions/create-checkout-session` edge function already treated both names as aliases; `api/create-checkout-session.js` and `api/stripe-webhook.js` (`checkout.session.completed` and `invoice.paid` handlers) now do too. Not yet re-verified against a real Stripe test-mode renewal after the fix. |
+| Payment gate | Stripe test-mode QA passes for Monthly, Lifetime, Founder, and £6 hosting renewal; live keys/prices/webhooks are reviewed before real checkout is enabled. | Passed by product decision 2026-07-28 on a real-flow basis, without the formal Stripe test-mode checklist. Live Stripe prices were confirmed by the user and matched in app display on 2026-08-31: Monthly £10/month, Lifetime £99 one-time, Founder £299 one-time, hosting renewal £6/year. Beta-interest remains the public paid-plan path until the final pre-launch checkout switch. Still needs: beta-interest email/account-metadata QA, live re-verification of the SQL-only downgrade fallback fixed on 2026-08-28, and the final real-checkout success/cancel/failure/webhook pass after every other launch gate is ready. |
 | Legal and promise gate | Pricing, FAQ, Terms, privacy, cancellation, storage caps, Local Mode, cloud expiry, Founder recognition, and export ownership copy match the roadmap decisions. | Open |
 | Responsive gate | Core workflows work at mobile, tablet, and desktop widths without hidden critical controls or broken layouts. | Open |
 | Performance gate | A realistic large project remains usable for dashboard, writing, search, worldbuilding, map builder, and exports. | Open |
 | Marketing gate | Homepage, features, FAQ, pricing, SEO schema, and public pages do not imply excluded features such as collaboration, public sharing, read-only player views, fantasy calendar engines, mobile apps, marketplace/community, publishing integrations, or live VTT play. D&D/TTRPG copy is positioned for prep-focused solo GMs/private campaign planning. | Open |
 
 Launch triage decision (2026-07-04): feature-freeze the Map Builder for new depth until the full QA checklist passes or specific defects require small corrective changes. Schedule polish is accepted into launch scope as a practical configurable story/campaign calendar, but still not marketed as a full invented-calendar engine. Local storage is accepted into launch scope only through the downloadable desktop app/local vault; browser accounts require Cloud Mode. Collaboration remains excluded.
+
+### Agent-Side Launch Audit — 2026-09-01
+
+Status: Active launch-control pass
+
+- Remote audit: no open GitHub PRs; latest `main` QA run on 2026-09-01 completed successfully.
+- Current checkout caution: the shared local main checkout may lag `origin/main`; use a dedicated worktree for launch-audit edits and do not treat the shared checkout's untracked tracker copy as disposable.
+- Tracker cleanup: [docs/launch-user-task-tracker.html](docs/launch-user-task-tracker.html) is the owner-facing progress tool for live-account, dashboard, device, and judgement tasks. Keep the detailed deferred checks in [docs/QA_PLAN.md](docs/QA_PLAN.md).
+- Current next action: start with real two-account isolation, then multi-tab overwrite/warning QA, AI key isolation/proxy transport, live media cleanup, and the web idle logout/auth analytics check.
+- Final checkout switch remains last: beta-interest should stay live until data safety, project-type, responsive, legal/promise, marketing, and desktop/local-mode checks are passed or explicitly deferred by product decision.
 
 ## Competitive Positioning Risks
 
@@ -528,10 +538,11 @@ Users must never feel that their writing is held hostage. A lapsed hosting entit
 
 4. Storage and cost controls
    - Keep published storage caps per plan.
-   - Free accounts have a 5MB cloud storage cap (2026-08-05: briefly lowered to 3MB same-day, then reverted back to 5MB by product decision).
-   - Monthly accounts have unlimited projects with a 10GB fair-use cloud storage cap.
-   - Lifetime accounts use the 10GB fair-use cloud storage cap during the included 3-year hosting period and any renewed hosting period.
-   - Founder accounts include lifetime Cloud Mode with a 25GB fair-use cloud storage cap.
+   - Free accounts have a 250MB cloud storage cap and one editable cloud project.
+   - Monthly accounts have unlimited projects with an 8GB fair-use cloud storage cap.
+   - Lifetime accounts use the 8GB fair-use cloud storage cap during the included 3-year hosting period and any renewed hosting period.
+   - Beta tester accounts have temporary full beta access with a 15GB cloud storage cap.
+   - Founder accounts include lifetime Cloud Mode with a 15GB fair-use cloud storage cap.
    - Storage warnings appear at 80% usage.
    - At 100% usage, block new uploads and cloud-heavy file writes, but never block writing, deleting files, or exporting.
    - Cloud-stored project data, images, uploads, PDFs, backups, and imported files count toward storage. Local-only data does not count. Generated export files do not count unless stored permanently.
@@ -565,12 +576,12 @@ Users must never feel that their writing is held hostage. A lapsed hosting entit
 - Grace period length: decided at 90 days for lapsed paid hosting and inactive Free account cleanup.
 - Expired paid cloud data policy: after 90 days of warnings and export opportunity, archive paid/Lifetime data rather than fully deleting it by default.
 - Inactive Free account policy: Free accounts inactive for more than 18 months receive the 90-day warning/export flow, then are fully deleted from database/storage if there is no response.
-- Free cap: decided at 5MB cloud storage (2026-08-05: briefly lowered to 3MB, then reverted back to 5MB same day by product decision).
-- Free feature gates: Map Builder and AI Tools remain visible but locked on Free; selecting either opens the upgrade/membership surface. Existing maps remain readable/exportable after downgrade or trial end.
+- Free cap: decided at 250MB cloud storage with one editable cloud project (2026-08-08 pricing overhaul).
+- Free feature gates: Map Builder remains available for the active Free project on supported viewports; AI Tools remain visible but locked on Free and route to the upgrade/membership surface. Existing non-active projects remain readable/exportable after downgrade or trial end.
 - Lapsed Lifetime cloud fallback: after included hosting ends without renewal, web cloud access falls back to Free cloud limits, while the downloaded desktop app keeps Local Mode editing forever.
-- Monthly cap: decided at 10GB fair-use cloud storage.
-- Lifetime hosted cap: decided at 10GB fair-use cloud storage during included and renewed hosting periods.
-- Founder cap: decided at 25GB fair-use cloud storage.
+- Monthly cap: decided at 8GB fair-use cloud storage.
+- Lifetime hosted cap: decided at 8GB fair-use cloud storage during included and renewed hosting periods.
+- Founder cap: decided at 15GB fair-use cloud storage.
 - Over-cap behavior: warn at 80%; at 100%, block new uploads/cloud-heavy file writes but never block writing, deleting files, or exporting.
 - Storage accounting: cloud-stored project data, images, uploads, PDFs, backups, and imported files count; local-only data does not count; generated export files do not count unless stored permanently.
 - Offline licence: cached signed-in access should allow Local Mode on a previously verified device. Brand-new login and entitlement refresh require internet access; export should not be blocked merely because verification is overdue.

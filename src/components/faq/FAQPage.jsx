@@ -74,7 +74,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What happens to my data if I downgrade to Free?',
-        a: "Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable/exportable. You'll designate one active text-first project to edit. Everything else becomes view-only, and premium rooms such as Map Builder and AI Tools stay locked until you upgrade again.",
+        a: "Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable/exportable. You'll designate one active project to edit with the full core toolkit, including Map Builder, inside the Free storage allowance. Everything else becomes view-only, and AI tools lock until you upgrade again.",
       },
       {
         q: 'Can I cancel my Monthly subscription?',
