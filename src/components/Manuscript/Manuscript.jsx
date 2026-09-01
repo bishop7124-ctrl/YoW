@@ -17,8 +17,7 @@ import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
 import ManuscriptCatalogue from './ManuscriptCatalogue.jsx'
 import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
-import FocusedWritingShell, { ManuscriptZoomControl } from './FocusedWritingShell.jsx'
-import { useFocusedWritingMode } from './useFocusedWritingMode.js'
+import ManuscriptZoomControl from './ManuscriptZoomControl.jsx'
 import SceneConflictReview from './SceneConflictReview.jsx'
 import { useSceneWindow } from './useSceneWindow.js'
 
@@ -198,8 +197,8 @@ export default function Manuscript({ store, userId, membership = null }) {
     updateSceneContent, updateScene, updateAct, updateChapter,
     deleteAct, deleteChapter, deleteScene,
     moveAct, moveChapter, moveScene,
-    characters, locations,
-    setSelectedCharacterId, setSelectedLocationId,
+    characters, locations, loreEntries = [], worldHistory = [], timeline = [], factions = [], currentYear,
+    setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
     retireManuscript, restoreManuscriptCopy,
@@ -262,6 +261,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
+  const [selectedCatalogueEntity, setSelectedCatalogueEntity] = useState(null)
   // Lazy initializer (not an effect) so this reads localStorage once, on
   // first render, rather than mounting with 'ai' and then correcting itself
   // a tick later via a setState-in-effect.
@@ -331,7 +331,6 @@ export default function Manuscript({ store, userId, membership = null }) {
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
   const editorRefs = useRef({})
-  const focusedWriting = useFocusedWritingMode(userId)
   const { inView: scenesInView, registerElement: registerSceneElement, supported: virtualizationSupported } = useSceneWindow(scrollContainerRef)
   const sceneHeightCacheRef = useRef(new Map())
   const handleHeightMeasured = useCallback((sceneId, height) => {
@@ -405,15 +404,25 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const entityMap = useMemo(() => {
     const map = {}
+    const put = (name, entity) => {
+      if (name?.trim().length >= 2) map[name.trim().toLowerCase()] = entity
+    }
     ;(characters || []).forEach(c => {
-      if (c.name?.length >= 2) map[c.name.toLowerCase()] = { id: c.id, section: 'characters', name: c.name }
-      ;(c.keywords || []).forEach(kw => { if (kw?.length >= 2) map[kw.toLowerCase()] = { id: c.id, section: 'characters', name: c.name } })
+      const entity = { id: c.id, section: 'characters', sectionLabel: 'Character', name: c.name, preview: c.summary || c.description || c.notes || c.role || '' }
+      put(c.name, entity)
+      ;(c.keywords || []).forEach(kw => put(kw, entity))
     })
     ;(locations || []).forEach(l => {
-      if (l.name?.length >= 2) map[l.name.toLowerCase()] = { id: l.id, section: 'locations', name: l.name }
+      put(l.name, { id: l.id, section: 'locations', sectionLabel: 'Location', name: l.name, preview: l.description || l.notes || l.summary || '' })
+    })
+    ;(loreEntries || []).forEach(entry => {
+      put(entry.title, { id: entry.id, section: 'lore', sectionLabel: 'Lore', name: entry.title, preview: entry.content || entry.summary || entry.category || '' })
+    })
+    ;[...(worldHistory || []), ...(timeline || [])].forEach(entry => {
+      put(entry.title, { id: entry.id, section: 'worldhistory', sectionLabel: 'History', name: entry.title, preview: entry.content || entry.summary || entry.dateRange || entry.era || '' })
     })
     return map
-  }, [characters, locations])
+  }, [characters, locations, loreEntries, worldHistory, timeline])
 
   // Autosave state tracking — wraps updateSceneContent with UI feedback. The
   // indicator itself only clears back to "saved" once the store's syncStatus
@@ -507,37 +516,9 @@ export default function Manuscript({ store, userId, membership = null }) {
     })
   }, [activeSceneId, scenes])
 
-  useEffect(() => {
-    if (!focusedWriting.enabled) return undefined
-    const handleEscape = event => {
-      if (event.key !== 'Escape') return
-      if (surfaceId || inspectorOpen) {
-        event.preventDefault()
-        setSurfaceId(null)
-        setInspectorOpen(false)
-        return
-      }
-      event.preventDefault()
-      focusedWriting.setEnabled(false)
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [surfaceId, inspectorOpen, focusedWriting])
-
-  // Adapter for FocusedWritingShell's single activePanelId/onSetPanel pair
-  // (notes/format/ai/status) onto the redesign's separate inspectorTab/
-  // inspectorOpen/surfaceId state — 'ai' maps to the surface, everything
-  // else to the inspector ('status' is FocusedWritingShell's id for what the
-  // inspector now calls 'progress').
-  const focusedPanelId = surfaceId === 'ai'
-    ? 'ai'
-    : (inspectorOpen ? (inspectorTab === 'progress' ? 'status' : inspectorTab) : null)
-  const handleSetFocusedPanel = useCallback((id) => {
-    if (id === 'ai') { setSurfaceId(v => (v === 'ai' ? null : 'ai')); return }
-    if (id === null) { setInspectorOpen(false); setSurfaceId(null); return }
-    setInspectorTab(id === 'status' ? 'progress' : id)
-    setInspectorOpen(true)
-    setSurfaceId(null)
+  const [pageZoom, setPageZoom] = useState(1)
+  const handlePageZoomChange = useCallback((nextZoom) => {
+    setPageZoom(Math.min(1.5, Math.max(0.8, Number(nextZoom) || 1)))
   }, [])
 
   const handleFormatChange = useCallback((next) => {
@@ -546,10 +527,25 @@ export default function Manuscript({ store, userId, membership = null }) {
   }, [])
 
   const handleEntityClick = useCallback(entity => {
+    if (!entity?.id || !entity?.section) return
     if (entity.section === 'characters') setSelectedCharacterId(entity.id)
     if (entity.section === 'locations') setSelectedLocationId(entity.id)
+    if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
+    if (entity.section === 'worldhistory') setSelectedTimelineEventId?.(entity.id)
+    setSelectedCatalogueEntity(entity)
+    setInspectorTab('catalogue')
+    setInspectorOpen(true)
+    setSurfaceId(null)
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId])
+
+  const handleOpenEntitySection = useCallback(entity => {
+    if (!entity?.id || !entity?.section) return
+    if (entity.section === 'characters') setSelectedCharacterId(entity.id)
+    if (entity.section === 'locations') setSelectedLocationId(entity.id)
+    if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
+    if (entity.section === 'worldhistory') setSelectedTimelineEventId?.(entity.id)
     window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: entity.section } }))
-  }, [setSelectedCharacterId, setSelectedLocationId])
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId])
 
   const chapterGlobalNumbers = useMemo(() => {
     const map = {}
@@ -769,13 +765,33 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
   }, [scenes, handleContentUpdate])
 
+  const handleReplaceSelection = useCallback((sceneId, text) => {
+    const ref = editorRefs.current[sceneId]
+    if (ref?.replaceSelection) {
+      ref.replaceSelection(text)
+      return
+    }
+    const scene = scenes.find(s => s.id === sceneId)
+    if (!scene) return
+    handleContentUpdate(sceneId, text)
+  }, [scenes, handleContentUpdate])
+
   // Writing goals — persisted on activeNovel via updateNovel
   const activeNovelId = activeNovel?.id
-  const writingGoals = useMemo(() => activeNovel?.writingGoals ?? {}, [activeNovel?.writingGoals])
+  const writingGoals = useMemo(() => {
+    const goals = activeNovel?.writingGoals ?? {}
+    const manuscript = goals.manuscript ?? activeNovel?.wordCountTarget ?? activeNovel?.wordTarget ?? activeNovel?.targetWords ?? projectTypeConfig.defaultWordTarget ?? 0
+    return { ...goals, manuscript: Number(manuscript) || 0 }
+  }, [activeNovel?.writingGoals, activeNovel?.wordCountTarget, activeNovel?.wordTarget, activeNovel?.targetWords, projectTypeConfig.defaultWordTarget])
 
   const handleUpdateGoals = useCallback((newGoals) => {
     if (!activeNovelId) return
-    updateNovel(activeNovelId, { writingGoals: newGoals })
+    updateNovel(activeNovelId, {
+      writingGoals: newGoals,
+      ...(Object.prototype.hasOwnProperty.call(newGoals, 'manuscript')
+        ? { wordCountTarget: Number(newGoals.manuscript) || null, wordTarget: Number(newGoals.manuscript) || null }
+        : {}),
+    })
   }, [activeNovelId, updateNovel])
 
   // Template application
@@ -852,10 +868,10 @@ export default function Manuscript({ store, userId, membership = null }) {
     setActiveSceneId(sceneId)
     requestAnimationFrame(() => {
       document.getElementById(`ms-scene-${sceneId}`)
-        ?.scrollIntoView({ behavior: focusedWriting.enabled ? 'auto' : 'smooth', block: 'center' })
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
     setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: 'end' }), 200)
-  }, [focusedWriting.enabled, setActiveSceneId])
+  }, [setActiveSceneId])
 
   // Clicking a virtualized-away scene's placeholder (see SceneSlot above) — setting it
   // active forces a real SceneEditor to mount (same as any other click-to-activate
@@ -974,24 +990,17 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   // Global shortcuts not already owned by a child (⌘K's go-to-scene palette
   // and ⌘' 's note action are local to ManuscriptTopbar/SceneEditor
-  // respectively — see their own keydown handling). Skipped entirely while
-  // focused-writing owns Escape (its own effect above already handles that
-  // case) to avoid the two effects fighting over the same keypress.
+  // respectively — see their own keydown handling).
   useEffect(() => {
     const handler = event => {
       const meta = event.metaKey || event.ctrlKey
-      // Esc chain per spec §5.5: reader → focus → surface → menu. The
-      // "reader" step is Finalised mode here (activeFinalizedDraft's
-      // full-screen swap is a separate, still-modal reader with its own
-      // handling below) — both take priority over focused-writing's own
-      // Escape effect, but that effect already bails out early whenever
-      // focusedWriting.enabled is true, so there's no double-handling.
+      // Esc chain: reader before surfaces.
       if (event.key === 'Escape' && mode === 'final') {
         event.preventDefault()
         handleSetMode('edit')
         return
       }
-      if (event.key === 'Escape' && !focusedWriting.enabled && surfaceId) {
+      if (event.key === 'Escape' && surfaceId) {
         event.preventDefault()
         handleCloseSurface()
         return
@@ -1004,27 +1013,15 @@ export default function Manuscript({ store, userId, membership = null }) {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedWriting.enabled, surfaceId, activeFinalizedDraft, mode])
+  }, [surfaceId, activeFinalizedDraft, mode])
 
   if (isComicProject) return <ComicPlanner store={store} />
 
   return (
-    <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}${focusedWriting.enabled ? ' is-focused-writing' : ''}`}>
+    <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}`}>
 
       {/* ── Toolbar ─────────────────────────────────────────── */}
-      {focusedWriting.enabled ? (
-        <FocusedWritingShell
-          projectTitle={activeNovel?.title}
-          saveState={saveState}
-          wordCount={totalWordCount}
-          breadcrumb={breadcrumbPath}
-          activePanelId={focusedPanelId}
-          onSetPanel={handleSetFocusedPanel}
-          onExit={() => focusedWriting.setEnabled(false)}
-          pageZoom={focusedWriting.pageZoom}
-          onPageZoomChange={focusedWriting.setPageZoom}
-        />
-      ) : activeFinalizedDraft ? (
+      {activeFinalizedDraft ? (
         // Transitional reading header for the current activeFinalizedDraft
         // swap — step 8 replaces this whole branch with FinalizedReader as a
         // proper full-screen reader over the editor (Esc exits back to Edit)
@@ -1087,13 +1084,12 @@ export default function Manuscript({ store, userId, membership = null }) {
             return next
           })}
           hideAIAndInspector={mode !== 'edit'}
-          onEnterFocus={() => { setInspectorOpen(false); setSurfaceId(null); focusedWriting.setEnabled(true) }}
           onOverflowAction={handleOverflowAction}
           conflictCount={sceneConflicts.length}
           onOpenConflicts={() => setConflictReviewOpen(true)}
           fullscreen={fullscreen}
           onToggleFullscreen={toggleFullscreen}
-          zoomControl={<ManuscriptZoomControl pageZoom={focusedWriting.pageZoom} onPageZoomChange={focusedWriting.setPageZoom} />}
+          zoomControl={<ManuscriptZoomControl pageZoom={pageZoom} onPageZoomChange={handlePageZoomChange} />}
           scriptBetaBadge={isScriptProject && (
             <span className="ms-toolbar-badge" title="Readable script export is available; industry formatting is still in progress.">
               Script beta
@@ -1143,16 +1139,11 @@ export default function Manuscript({ store, userId, membership = null }) {
       ) : (
       <div className="flex flex-1 overflow-hidden relative">
 
-        {/* Left rail — hidden during focused writing per spec §5.4 ("the
-            rail, inspector and gutter hide"). Write mode's rail defaults to
+        {/* Left rail. Write mode's rail defaults to
             the spine on entry (see handleSetMode) but stays user-togglable
             ("expandable" per the mode table); Finalised hides it entirely,
-            handled by the branch above rather than a prop here. The
-            inspector below keeps working during focused writing regardless
-            of mode, preserving the old WritingSidebar's focus-mode overlay
-            capability (FocusedWritingShell's own notes/format/ai/status
-            buttons) rather than dropping it ahead of a fuller mode rework. */}
-        {!focusedWriting.enabled && (
+            handled by the branch above rather than a prop here. */}
+        {(
           <ManuscriptRail
             acts={acts}
             chapters={chapters}
@@ -1185,7 +1176,7 @@ export default function Manuscript({ store, userId, membership = null }) {
           <div
             className="manuscript-document mx-auto py-16 px-6 md:px-12"
             style={{
-              zoom: focusedWriting.pageZoom,
+              zoom: pageZoom,
               // Prose width is shared between Write and Edit via --ms-prose-w
               // (see .ms-scene-body/.ms-scene-body--write in index.css) so the
               // line length never changes between modes -- Edit's document is
@@ -1337,18 +1328,9 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onAskAI={handleAskAI}
                         mode={mode === 'write' ? 'write' : 'edit'}
                         projectType={activeNovel?.type || 'novel'}
-                        // `caretFollowEnabled` only controls Focused Writing's tight,
-                        // actively-centering 35/65 comfort band. Turning that tight band on
-                        // broadly for the regular editor made things worse, not better — it
-                        // re-centered on every keystroke during completely normal typing
-                        // (2026-08-07 pass 4). The regular editor still gets its own,
-                        // much wider GENTLE_ZONE correction regardless of this flag —
-                        // SceneEditor.jsx passes its own `focused` state into
-                        // useCaretComfortScroll for that — this prop only chooses which
-                        // band applies, not whether any correction runs at all.
-                        caretFollowEnabled={focusedWriting.enabled && focusedWriting.caretFollow}
+                        caretFollowEnabled={false}
                         scrollContainerRef={scrollContainerRef}
-                        pageZoom={focusedWriting.pageZoom}
+                        pageZoom={pageZoom}
                         keepEditingOnExternalBlur={surfaceId === 'ai'}
                       />
                     </SceneSlot>
@@ -1372,10 +1354,8 @@ export default function Manuscript({ store, userId, membership = null }) {
           </div>
         </main>
 
-        {/* Inspector — Scene/Notes/Format/Progress. Not gated on focus mode
-            (see the rail comment above): FocusedWritingShell's own
-            notes/format/status/ai buttons still need somewhere to open. */}
-        {inspectorOpen && (focusedWriting.enabled || mode !== 'write') && (
+        {/* Inspector — Scene/Notes/Catalogue/Format/Progress. */}
+        {inspectorOpen && (
           <ManuscriptInspector
             activeTab={inspectorTab}
             onSetTab={setInspectorTab}
@@ -1386,6 +1366,14 @@ export default function Manuscript({ store, userId, membership = null }) {
             locationNames={locationNames}
             entityMap={entityMap}
             onEntityClick={handleEntityClick}
+            characters={characters}
+            locations={locations}
+            factions={factions}
+            currentYear={currentYear}
+            loreEntries={loreEntries}
+            worldHistory={worldHistory?.length ? worldHistory : timeline}
+            selectedCatalogueEntity={selectedCatalogueEntity}
+            onOpenEntitySection={handleOpenEntitySection}
             highlightedNoteSeq={highlightedNoteSeq}
             formatSettings={formatSettings}
             onFormatChange={handleFormatChange}
@@ -1401,8 +1389,7 @@ export default function Manuscript({ store, userId, membership = null }) {
             absolutely overlaying the inspector — the two are mutually
             exclusive (never both open, see handleToggleSurface etc. above),
             so there's nothing left to overlay, and opening either now makes
-            room for itself the same way. Not gated on focus mode either: AI
-            stays reachable there via FocusedWritingShell's own AI button. */}
+            room for itself the same way. */}
         <ManuscriptSurface
           activeSurface={surfaceId}
           onClose={handleCloseSurface}
@@ -1413,6 +1400,7 @@ export default function Manuscript({ store, userId, membership = null }) {
           locations={locations}
           selectedText={activeAISelectionText}
           onAppendToScene={handleAppendToScene}
+          onReplaceSelection={handleReplaceSelection}
           userId={userId}
           membership={membership}
           scenes={scenes}
@@ -1446,7 +1434,7 @@ export default function Manuscript({ store, userId, membership = null }) {
       {/* Mobile-only (≤900px, CSS-hidden above that) bottom bar — hidden
           during focused writing and while viewing a finalized draft, same
           as the desktop chrome those two states already hide. */}
-      {!focusedWriting.enabled && !activeFinalizedDraft && (
+      {!activeFinalizedDraft && (
         <nav className="ms-tabbar font-sans" aria-label="Manuscript navigation">
           <button type="button" className={mobileTab === 'outline' ? 'is-on' : ''} onClick={() => handleMobileTab('outline')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>

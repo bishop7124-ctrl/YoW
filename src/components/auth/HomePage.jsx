@@ -126,7 +126,7 @@ const FEATURE_TABS = [
       { type: 'D&D Campaign', text: 'Organize campaign writing by story arc, session, and encounter.' },
     ],
     capabilities: [
-      'Rich text editing with distraction-free focus mode',
+      'Rich text editing with dedicated Write and Edit modes',
       'Acts, chapters, and scenes hierarchy',
       'Scene-level status tracking (draft / revised / final)',
       'Word count per scene and chapter',
@@ -419,7 +419,7 @@ const COMPARISON_FEATURES = [
 const PROBLEMS = [
   {
     problem: 'Draft in Google Docs',
-    solution: 'Manuscript editor with chapters, scenes, progress tracking, and focus mode — all built around how stories are actually structured.',
+    solution: 'Manuscript editor with chapters, scenes, progress tracking, and separate Write/Edit modes — all built around how stories are actually structured.',
   },
   {
     problem: 'Characters in a spreadsheet',
