@@ -84,6 +84,23 @@ describe('ai-proxy handler', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('rejects a Free user even if user_metadata is tampered to claim a paid plan', async () => {
+    // Regression test for a security-review finding: user_metadata is
+    // writable by the signed-in user themselves via the Supabase client SDK
+    // (audit finding P0-01), unlike app_metadata which only the service
+    // role can write. The entitlement check must ignore user_metadata
+    // entirely, not just prefer app_metadata.
+    const tamperedFreeUser = {
+      ...freeUser,
+      user_metadata: { subscription_status: 'active', subscription_plan: 'premium_monthly' },
+    }
+    getUser.mockResolvedValue({ data: { user: tamperedFreeUser }, error: null })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('allows a paid user under the rate limit through to the provider', async () => {
     getUser.mockResolvedValue({ data: { user: paidUser }, error: null })
     queueResult({ data: null, error: null, count: 0 }) // rate-limit count check
@@ -127,6 +144,33 @@ describe('ai-proxy handler', () => {
     const res = makeRes()
     await handler(makeReq({ headers: { authorization: 'Bearer x', origin: 'http://localhost:5173' } }), res)
     expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://localhost:5173')
+  })
+})
+
+describe('hasAiEntitlement', () => {
+  it('grants access from app_metadata (service-role-only, e.g. the Stripe webhook)', async () => {
+    const { hasAiEntitlement } = await import('../../api/ai-proxy.js')
+    expect(hasAiEntitlement(paidUser)).toBe(true)
+  })
+
+  it('denies a genuinely free, post-trial user', async () => {
+    const { hasAiEntitlement } = await import('../../api/ai-proxy.js')
+    expect(hasAiEntitlement(freeUser)).toBe(false)
+  })
+
+  it('ignores a client-editable user_metadata claim entirely', async () => {
+    const { hasAiEntitlement } = await import('../../api/ai-proxy.js')
+    const tampered = {
+      ...freeUser,
+      user_metadata: { subscription_status: 'active', subscription_plan: 'premium_monthly' },
+    }
+    expect(hasAiEntitlement(tampered)).toBe(false)
+  })
+
+  it('still grants a genuinely new user their trial window (from created_at, not user-editable)', async () => {
+    const { hasAiEntitlement } = await import('../../api/ai-proxy.js')
+    const freshUser = { id: 'user-fresh', created_at: new Date().toISOString(), app_metadata: {}, user_metadata: {} }
+    expect(hasAiEntitlement(freshUser)).toBe(true)
   })
 })
 
