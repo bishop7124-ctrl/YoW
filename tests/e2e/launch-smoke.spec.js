@@ -28,6 +28,10 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await editor.fill(sentence)
   await expect(editor).toHaveValue(sentence)
 
+  // Flush before reload — the IndexedDB backend persists asynchronously, so
+  // reloading immediately after typing can race it and lose the write (see
+  // autosave.spec.js's identical pattern for this same scenario).
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()
@@ -56,9 +60,13 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   // The modal moves to a preview phase showing the YOW export; click "Create Project" to confirm
   await page.getByRole('button', { name: 'Create Project' }).click({ timeout: 15_000 })
 
-  // After import, storage should have 2 projects (original + restored copy)
+  // After import, storage should have 2 projects (original + restored copy).
+  // Read through window.__yowStorageBridge — the app's real storage backend
+  // is an IndexedDB-backed vault, not raw localStorage (see docs/ROADMAP.md's
+  // 2026-08-24 part 2 / 2026-08-25 Bugs row).
   await expect.poll(async () => page.evaluate(() => {
-    const novels = JSON.parse(localStorage.getItem('nf_novels') || '[]')
+    const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
+    const novels = JSON.parse(raw || '[]')
     return novels.length
   }), { timeout: 20_000 }).toBe(2)
 })
