@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydrated,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -40,7 +40,7 @@ test('add a page to an issue and verify localStorage persistence', async ({ page
   await addPageBtn.click()
 
   await waitForStorage(page, () => {
-    const pages = JSON.parse(localStorage.getItem('nf_comicPages') || '[]')
+    const pages = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]')
     return pages.length >= 1
   })
 
@@ -61,7 +61,7 @@ test('add a panel to a page and verify localStorage persistence', async ({ page 
   await addPageBtn.click()
 
   await waitForStorage(page, () => {
-    const pages = JSON.parse(localStorage.getItem('nf_comicPages') || '[]')
+    const pages = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]')
     return pages.length >= 1
   })
 
@@ -73,7 +73,7 @@ test('add a panel to a page and verify localStorage persistence', async ({ page 
   await addPanelBtn.click()
 
   await waitForStorage(page, () => {
-    const panels = JSON.parse(localStorage.getItem('nf_comicPanels') || '[]')
+    const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.length >= 1
   })
 
@@ -91,13 +91,13 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
 
   await page.getByRole('button', { name: /Add page|New page|\+ Page/i }).first().click()
   await waitForStorage(page, () => {
-    return JSON.parse(localStorage.getItem('nf_comicPages') || '[]').length >= 1
+    return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]').length >= 1
   })
 
   await page.locator('.cp-page-row').first().click()
   await page.getByRole('button', { name: /Add panel|New panel|\+ Panel/i }).first().click()
   await waitForStorage(page, () => {
-    return JSON.parse(localStorage.getItem('nf_comicPanels') || '[]').length >= 1
+    return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]').length >= 1
   })
 
   // Fill in dialogue
@@ -111,14 +111,16 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
   await dialogueField.fill(dialogueText)
 
   await waitForStorage(page, () => {
-    const panels = JSON.parse(localStorage.getItem('nf_comicPanels') || '[]')
+    const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.some(p =>
       (p.dialogue || []).some(d => (d.text || d).includes(dialogueText.slice(0, 15)))
       || (p.dialogueText || '').includes(dialogueText.slice(0, 15)),
     )
   })
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await waitForStorageHydrated(page)
   const panels = await readStorage(page, 'nf_comicPanels')
   expect(panels.some(p =>
     JSON.stringify(p).includes(dialogueText.slice(0, 15)),
@@ -135,7 +137,7 @@ test('page and panel counts appear in the planner UI', async ({ page }) => {
 
   await page.getByRole('button', { name: /Add page|New page|\+ Page/i }).first().click()
   await waitForStorage(page, () => {
-    return JSON.parse(localStorage.getItem('nf_comicPages') || '[]').length >= 1
+    return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]').length >= 1
   })
 
   // Page count stat should be visible somewhere
@@ -156,7 +158,7 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
 
   await page.getByRole('button', { name: /Add page|New page|\+ Page/i }).first().click()
   await waitForStorage(page, () => {
-    return JSON.parse(localStorage.getItem('nf_comicPages') || '[]').length >= 1
+    return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]').length >= 1
   })
 
   const pagesBefore = await readStorage(page, 'nf_comicPages')
@@ -177,7 +179,7 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   }
 
   await waitForStorage(page, () => {
-    const pages = JSON.parse(localStorage.getItem('nf_comicPages') || '[]')
+    const pages = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]')
     return !pages.some(p => p.id === pageId)
   })
 
@@ -199,7 +201,7 @@ test('comic pages and panels are included in ZIP export', async ({ page }) => {
 
   await page.getByRole('button', { name: /Add page|New page|\+ Page/i }).first().click()
   await waitForStorage(page, () => {
-    return JSON.parse(localStorage.getItem('nf_comicPages') || '[]').length >= 1
+    return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]').length >= 1
   })
 
   await page.getByRole('button', { name: 'Project settings' }).click()
