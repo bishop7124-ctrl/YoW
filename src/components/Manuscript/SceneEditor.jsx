@@ -4,6 +4,7 @@ import {
   buildScriptBlocks, getScriptElements, getScriptElementLabel, getNextScriptElementAfterEnter,
   getScriptBlockIndexAtOffset, syncScriptBlocks,
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
+  LARGE_SCENE_CHAR_THRESHOLD,
 } from './manuscriptUtils.js'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
@@ -510,10 +511,36 @@ const SceneEditorImpl = ({
   const burstTimeoutRef = useRef(null)
   const [undoCount, setUndoCount] = useState(0)
   const [redoCount, setRedoCount] = useState(0)
+  const [copyStatus, setCopyStatus] = useState('idle') // 'idle' | 'copied' | 'error'
+  const copyStatusTimeoutRef = useRef(null)
   const isScript = SCRIPT_TYPES.has(projectType)
   const isBullets = !isScript && scene.textMode === 'bullets'
   const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
   const scriptElements = getScriptElements(projectType)
+
+  // Above this length, the browser's own native drag-select / Ctrl+A select-all can
+  // itself be slow or feel unresponsive (see LARGE_SCENE_CHAR_THRESHOLD's comment) —
+  // a cost that lives in the browser engine, not this app, so it can't be fixed by
+  // optimizing render code. Offer a direct copy that never touches DOM selection at
+  // all, and say so, rather than leaving the user to fight the native path.
+  const isVeryLargeScene = localContent.length > LARGE_SCENE_CHAR_THRESHOLD
+
+  useEffect(() => () => clearTimeout(copyStatusTimeoutRef.current), [])
+
+  const handleCopyWholeScene = useCallback(async () => {
+    clearTimeout(copyStatusTimeoutRef.current)
+    try {
+      await navigator.clipboard.writeText(localContentRef.current)
+      setCopyStatus('copied')
+    } catch {
+      // Clipboard access can be unavailable (insecure context, denied permission,
+      // older desktop webview) — surface it rather than silently doing nothing,
+      // since this button exists specifically because the fallback (native
+      // select-all) is also unreliable at this scene size.
+      setCopyStatus('error')
+    }
+    copyStatusTimeoutRef.current = setTimeout(() => setCopyStatus('idle'), 2000)
+  }, [])
 
   const hasMetadata = !!(scene.pov || scene.locationTag || (scene.status && scene.status !== 'draft'))
   const showSceneMeta = formatSettings.showSceneMetadata !== false
@@ -1250,6 +1277,16 @@ const SceneEditorImpl = ({
             <button onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} className="px-2 py-0.5 text-[11px] italic text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Italic (Ctrl+I)">I</button>
             <button onMouseDown={e => { e.preventDefault(); wrapSelection('_') }} className="px-2 py-0.5 text-[11px] underline text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-fade)] transition-colors" title="Underline (Ctrl+U)">U</button>
           </div>
+
+          {isVeryLargeScene && (
+            <button
+              onClick={handleCopyWholeScene}
+              className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 border border-[var(--border)] rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+              title="This scene is very large — dragging or Ctrl/Cmd+A to select all of it can feel slow or unresponsive in the browser itself. This copies the whole scene straight to your clipboard instead."
+            >
+              {copyStatus === 'copied' ? 'Copied!' : copyStatus === 'error' ? 'Copy failed' : 'Copy whole scene'}
+            </button>
+          )}
 
 	          {onOpenVersionHistory && (
 	            <button
