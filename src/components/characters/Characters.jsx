@@ -1038,7 +1038,7 @@ export default function Characters({ store, userId, membership }) {
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]"
         />
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base" aria-label="Sort by">
           <option value="name-asc">Name A→Z</option>
           <option value="name-desc">Name Z→A</option>
           <option value="role">Role</option>

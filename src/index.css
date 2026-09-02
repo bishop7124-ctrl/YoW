@@ -14725,12 +14725,17 @@ body {
   background: var(--text-muted);
   animation: ms-pulse 1s ease-in-out infinite;
 }
+/* Was a hardcoded, non-theme-aware #4ade80 at opacity 0.75 — axe measured
+   the rendered result at 1.24:1 against this pill's background (needs
+   4.5:1), i.e. functionally invisible, 2026-09-02. Mixing a fixed green
+   into each theme's own --text-main (already contrast-safe against every
+   theme's surfaces) keeps this recognizably "success green" while staying
+   readable in all four themes — verified 5.3-10.3:1 across all of them. */
 .ms-save-indicator.is-saved {
-  color: #4ade80;
-  opacity: 0.75;
+  color: color-mix(in srgb, #16a34a 40%, var(--text-main));
 }
 .ms-save-indicator.is-saved .ms-save-dot {
-  background: #4ade80;
+  background: color-mix(in srgb, #16a34a 40%, var(--text-main));
 }
 /* Local write failed to persist durably (audit P0-07) — distinct from
    "saving", since automatic retries have already been exhausted and this
@@ -15684,7 +15689,10 @@ body {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-muted);
+  /* Same --bg-hover-pill contrast shortfall as .ms-topbar-status above —
+     the inactive Write/Edit/Finalised labels measured 4.38:1 (axe,
+     2026-09-02) against this pill's background. */
+  color: color-mix(in srgb, var(--text-main) 10%, var(--text-muted));
   background: none;
   border: 0;
   cursor: pointer;
@@ -15700,7 +15708,11 @@ body {
   white-space: nowrap;
   overflow: hidden;
   font-size: 12px;
-  color: var(--text-muted);
+  /* --text-muted alone clears AA against --bg-main, but this pill sits on
+     --bg-nav *and* the --bg-hover overlay stacked on top of it, landing at
+     4.38:1 (axe, 2026-09-02) — just under the 4.5:1 floor. A 10% nudge
+     toward --text-main clears it without touching the shared token. */
+  color: color-mix(in srgb, var(--text-main) 10%, var(--text-muted));
   padding: 5px 12px;
   border-radius: var(--r-pill);
   background: var(--bg-hover);
@@ -22280,19 +22292,20 @@ body {
 }
 
 .gs-snippet-label {
+  /* No opacity multiplier: --text-muted is already tuned to the AA contrast
+     floor against --bg-main in every theme (axe color-contrast, 2026-09-02)
+     — stacking opacity on top of it was dropping as low as 2.33:1. */
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .09em;
   text-transform: uppercase;
   color: var(--text-muted);
-  opacity: .7;
 }
 
 .gs-snippet-count {
   font-size: 9px;
   font-weight: 700;
   color: var(--text-muted);
-  opacity: .6;
 }
 
 .gs-snippet-bottom {

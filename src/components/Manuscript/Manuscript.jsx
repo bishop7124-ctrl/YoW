@@ -1269,11 +1269,16 @@ export default function Manuscript({ store, userId, membership = null }) {
 
               if (item.type === 'chapter') return (
                 <div key={`chap-${item.chap.id}`} id={`ms-chap-${item.chap.id}`} className="pt-14 pb-8 text-center font-sans">
-                  <h2 className="text-[var(--accent)] text-xs font-black uppercase tracking-[0.5em] mb-1 opacity-80">
+                  {/* No opacity utility on either label below: axe flagged the
+                      accent heading at 4.07:1 (needs 4.5:1) with opacity-80,
+                      and --text-muted is already tuned to the AA floor on its
+                      own (see .gs-snippet-label's 2026-09-02 fix) — stacking
+                      opacity-70 on it here would fail the same way. */}
+                  <h2 className="text-[var(--accent)] text-xs font-black uppercase tracking-[0.5em] mb-1">
                     {getChapterTitle(item.chap)}
                   </h2>
                   {item.chap.title && !item.chap.title.toLowerCase().startsWith(labels.level2.toLowerCase()) && (
-                    <p className="text-[var(--text-muted)] text-sm italic mt-1 opacity-70">{item.chap.title}</p>
+                    <p className="text-[var(--text-muted)] text-sm italic mt-1">{item.chap.title}</p>
                   )}
                   <div className="w-8 h-px bg-[var(--border)] mx-auto mt-4 rounded-full" />
                   {!item.hasScenes && (
