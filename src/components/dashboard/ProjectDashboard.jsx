@@ -3,6 +3,7 @@ import { StudioBoard, StudioButton, StudioEmpty } from '../presentation/Studio'
 import { getEnabledSections, getProjectTypeStage } from '../../constants/projectTypes'
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import { relativeTimeFromNow } from '../../utils/relativeTime'
+import { buildWritingGoalStreak, withDailyGoalHistory } from '../../utils/writingStreak'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
@@ -114,16 +115,17 @@ const getSceneHistory = scene => {
 const buildWritingAnalytics = (stats, dailyGoal) => {
   const today = startOfDay(Date.now())
   const dateKeys = Array.from({ length: 35 }, (_, index) => toDateKey(shiftDate(today, index - 34)))
-  const dailyWords = Object.fromEntries(dateKeys.map(key => [key, 0]))
+  const allDailyWords = {}
 
   stats.scenes.forEach(scene => {
     const history = getSceneHistory(scene)
     history.forEach((entry, index) => {
       const previous = index > 0 ? history[index - 1].words : 0
       const delta = Math.max(0, entry.words - previous)
-      if (dailyWords[entry.date] !== undefined) dailyWords[entry.date] += delta
+      allDailyWords[entry.date] = (allDailyWords[entry.date] || 0) + delta
     })
   })
+  const dailyWords = Object.fromEntries(dateKeys.map(key => [key, allDailyWords[key] || 0]))
 
   const progression = dateKeys.slice(-14).map(key => {
     const end = Date.parse(`${key}T23:59:59`)
@@ -142,6 +144,7 @@ const buildWritingAnalytics = (stats, dailyGoal) => {
 
   return {
     dailyWords,
+    allDailyWords,
     progression,
     todayWords,
     goalProgress: Math.min(100, Math.round((todayWords / goal) * 100)),
@@ -601,25 +604,53 @@ const RecentActivityCard = ({ scenes, stats, unitLabelLower, workspaceLabel }) =
   </section>
 )
 
-const WritingStreakCard = ({ dailyWords, days = 14 }) => {
-  const recent = Object.entries(dailyWords).slice(-days)
-  const max = Math.max(1, ...recent.map(([, words]) => words))
-  const activeDays = recent.filter(([, words]) => words > 0).length
+const WritingStreakCard = ({ dailyWords, dailyGoal, goalHistory, onSetGoal, days = 14 }) => {
+  const streak = buildWritingGoalStreak(dailyWords, dailyGoal, goalHistory, undefined, days)
+  const caption = !streak.enabled
+    ? 'Set a daily word goal to start a consecutive-day streak.'
+    : streak.todayMet
+      ? `Today's ${formatNumber(streak.goal)}-word goal is complete.`
+      : streak.currentStreak > 0
+        ? `${formatNumber(streak.remaining)} words today will keep your ${streak.currentStreak}-day streak alive.`
+        : `${formatNumber(streak.remaining)} words to start a new streak today.`
+
   return (
-    <section className="overview-streak-card panel-soft" aria-label={`${days}-day writing streak`}>
+    <section className="overview-streak-card panel-soft" aria-label="Writing goal streak">
       <div className="overview-section-head">
         <div>
           <p className="studio-kicker">Momentum</p>
-          <h2>Writing streak</h2>
+          <h2>Goal streak</h2>
         </div>
-        <span className="overview-streak-range">Last {days} days</span>
+        <span className="overview-streak-range">{streak.enabled ? `${formatNumber(streak.goal)} words / day` : 'No daily goal'}</span>
       </div>
-      <ActivityHeatmap
-        dailyWords={Object.fromEntries(recent)}
-        heatmapMax={max}
-        className="overview-streak-heatmap"
-      />
-      <p className="overview-streak-caption">{activeDays} of the last {days} days had writing activity.</p>
+      <div className="overview-streak-summary">
+        <div><strong>{streak.currentStreak}</strong><span>Current streak</span></div>
+        <div><strong>{streak.bestStreak}</strong><span>Best streak</span></div>
+        <div><strong>{streak.totalGoalDays}</strong><span>Goals met</span></div>
+      </div>
+      <div className="overview-streak-days" role="list" aria-label={`Goal results for the last ${days} days`}>
+        {streak.recentDays.map(day => {
+          const weekday = new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })
+          const dayNumber = Number(day.date.slice(-2))
+          const status = day.goal <= 0 ? 'No goal set' : day.met ? 'Goal met' : 'Goal not met'
+          return (
+            <span
+              key={day.date}
+              role="listitem"
+              className={`${day.met ? 'is-met' : 'is-missed'}${day.isToday ? ' is-today' : ''}${day.goal <= 0 ? ' is-untracked' : ''}`}
+              title={`${formatShortDate(day.date)}: ${formatNumber(day.words)} of ${formatNumber(day.goal)} words — ${status}`}
+              aria-label={`${formatShortDate(day.date)}: ${status}, ${formatNumber(day.words)} of ${formatNumber(day.goal)} words`}
+            >
+              <small>{weekday}</small>
+              <b>{dayNumber}</b>
+            </span>
+          )
+        })}
+      </div>
+      <div className="overview-streak-footer">
+        <p className="overview-streak-caption">{caption}</p>
+        {!streak.enabled && onSetGoal && <button type="button" onClick={onSetGoal}>Set daily goal</button>}
+      </div>
     </section>
   )
 }
@@ -781,6 +812,10 @@ export default function ProjectDashboard({ store }) {
   const dailyGoal = Number(writingGoals.daily) > 0 ? String(writingGoals.daily) : ''
   const projectWordTarget = Number(writingGoals.manuscript || project?.wordCountTarget || project?.wordTarget || project?.targetWords || stats?.projectType.defaultWordTarget || 0)
   const analytics = useMemo(() => stats ? buildWritingAnalytics(stats, dailyGoal) : null, [stats, dailyGoal])
+  const goalStreak = useMemo(
+    () => analytics ? buildWritingGoalStreak(analytics.allDailyWords, dailyGoal, writingGoals.dailyHistory) : null,
+    [analytics, dailyGoal, writingGoals.dailyHistory]
+  )
   const readability = useMemo(() => stats ? buildReadability(stats.scenes) : null, [stats])
   const characterFocus = useMemo(() => stats ? buildCharacterFocus(stats) : [], [stats])
   const structureInsights = useMemo(() => stats ? buildStructureInsights(stats) : [], [stats])
@@ -836,7 +871,7 @@ export default function ProjectDashboard({ store }) {
   const updateDailyGoal = value => {
     const next = value.replace(/[^\d]/g, '')
     store.updateNovel?.(project.id, {
-      writingGoals: { ...writingGoals, daily: Number(next) || 0 },
+      writingGoals: withDailyGoalHistory(writingGoals, Number(next) || 0),
     })
   }
 
@@ -950,7 +985,12 @@ export default function ProjectDashboard({ store }) {
             </div>
 
             <div className="overview-momentum-row">
-              <WritingStreakCard dailyWords={analytics.dailyWords} />
+              <WritingStreakCard
+                dailyWords={analytics.allDailyWords}
+                dailyGoal={dailyGoal}
+                goalHistory={writingGoals.dailyHistory}
+                onSetGoal={openInsights}
+              />
               <RecentActivityCard
                 scenes={recentScenes}
                 stats={stats}
@@ -1090,6 +1130,17 @@ export default function ProjectDashboard({ store }) {
                 </div>
                 <ActivityHeatmap dailyWords={analytics.dailyWords} heatmapMax={analytics.heatmapMax} />
                 <small>Last 35 days</small>
+              </div>
+
+              <div className="analytics-card">
+                <div className="analytics-card-head">
+                  <span>Goal streak <InfoTip title="Goal streak">Counts consecutive local-calendar days that reached the daily word goal. An unfinished today does not break yesterday's streak; changing the goal keeps earlier days tied to the target that applied then.</InfoTip></span>
+                  <strong>{goalStreak.enabled ? `${goalStreak.currentStreak} days` : 'Set goal'}</strong>
+                </div>
+                <div className="analytics-metric-stack">
+                  <InsightMetric label="Current" value={`${goalStreak.currentStreak} days`} detail={goalStreak.todayMet ? 'Goal met today' : goalStreak.enabled ? `${formatNumber(goalStreak.remaining)} words to keep it` : 'Add a daily goal above'} />
+                  <InsightMetric label="Personal best" value={`${goalStreak.bestStreak} days`} detail={`${goalStreak.totalGoalDays} total goal days`} />
+                </div>
               </div>
 
               <div className="analytics-card">

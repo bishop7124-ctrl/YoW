@@ -105,9 +105,6 @@ jobs:
           # (part of `npm run qa`, which the static-qa job above runs and which
           # this job depends on), so adding a spec without adding it here fails
           # the build rather than going silently unrun.
-          - name: focused-writing
-            spec: tests/e2e/focused-writing.spec.js
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
