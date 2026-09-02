@@ -26,7 +26,11 @@ for (const viewport of viewports) {
     await expect(page).toHaveURL(/\/project\//)
     await expect(page.getByRole('heading', { name: projectTitle })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Write' }).click()
+    // At compact widths the top-nav "Write" button moves inside the collapsed
+    // section hamburger menu (see docs/ROADMAP.md "Write button hidden on
+    // compact layouts"); the project overview's "Open manuscript" CTA card
+    // reaches the same writing view and stays visible at every width.
+    await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).first().click()
     await page.getByText('Begin writing here…').click()
     const editor = page.getByPlaceholder('Begin writing here…')
     await expect(editor).toBeVisible()
