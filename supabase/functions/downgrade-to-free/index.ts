@@ -34,15 +34,11 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: true, alreadyFree: true })
   }
 
-  const userMeta = user.user_metadata || {}
   const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
     app_metadata: {
       ...appMeta,
       subscription_status: 'none',
       subscription_plan: null,
-    },
-    user_metadata: {
-      ...userMeta,
       was_monthly: true,
     },
   })

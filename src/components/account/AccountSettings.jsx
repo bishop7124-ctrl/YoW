@@ -2199,7 +2199,7 @@ const billingEndpoints = {
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL,
 }
 
-async function postBilling(endpoint, accessToken, body) {
+async function requestBillingResult(endpoint, accessToken, body) {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -2214,22 +2214,11 @@ async function postBilling(endpoint, accessToken, body) {
     error.code = data?.code
     throw error
   }
+  // Either a Stripe portal redirect (`url`), or — when the account has no
+  // real Stripe subscription to act on (e.g. plan set directly via SQL) —
+  // a direct local downgrade to Free (`downgraded`). See api/create-customer-portal.js.
+  if (!data?.url && !data?.downgraded) throw new Error('Billing did not return a destination URL.')
   return data
-}
-
-async function requestBillingUrl(endpoint, accessToken, body) {
-  const data = await postBilling(endpoint, accessToken, body)
-  if (!data?.url) throw new Error('Billing did not return a destination URL.')
-  return data.url
-}
-
-// Accounts with a plan granted manually (e.g. via direct SQL) have no real
-// Stripe customer, so the billing portal has nothing to manage. The portal
-// endpoint also owns a tightly-scoped fallback action for those SQL-only
-// grants; it refuses any account that has a real Stripe customer/subscription.
-async function requestDirectDowngrade(endpoint, accessToken, body) {
-  const data = await postBilling(endpoint, accessToken, body)
-  if (!data?.ok) throw new Error('Could not downgrade this account. Please try again.')
 }
 
 function PlanBadge({ membership }) {
@@ -2316,7 +2305,7 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
                 type="button"
                 className="account-secondary-button"
                 style={{ fontSize: 12, padding: '0 12px', minHeight: 32 }}
-                onClick={() => onSelect(null, 'cancel')}
+                onClick={() => onSelect(null)}
                 disabled={anyBusy}
               >
                 {anyBusy ? 'Opening...' : 'Cancel plan'}
@@ -2848,13 +2837,10 @@ export default function AccountSettings({
 
   if (!open || !user) return null
 
-  const openBilling = async (planKey, intent) => {
-    // planKey = null → open customer portal; otherwise open checkout for that plan.
-    // intent = 'cancel' only for the Free-plan card's "Cancel plan" button — the
-    // no-Stripe-customer fallback below must NOT fire for the separate "Manage
-    // subscription & billing"/"Billing history & receipts" button, which Lifetime
-    // and Founder purchasers (who have no subscription to cancel) also use just
-    // to view billing history, not to downgrade.
+  const openBilling = async (planKey) => {
+    // planKey = null opens the customer portal for Stripe-backed accounts or,
+    // after confirmation, downgrades a manually granted plan with no Stripe
+    // customer. Paid-plan selections still use the beta-interest flow below.
     if (planKey) {
       setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
       return
@@ -2866,31 +2852,35 @@ export default function AccountSettings({
       return
     }
 
+    // No real Stripe customer on file (e.g. plan set directly via SQL) —
+    // there's no subscription for Stripe to manage, so this action downgrades
+    // the account to Free immediately instead of opening the billing portal.
+    if (!planKey && !membership.hasStripeCustomer) {
+      const confirmed = window.confirm(
+        'This account has no billing record on file, so there is no subscription to manage. Continuing will downgrade it to the Free plan immediately. Continue?'
+      )
+      if (!confirmed) return
+    }
+
     try {
       setBillingBusy(planKey || 'portal')
       setBillingError('')
       setBillingMessage('')
       const accessToken = await getAccessToken()
-      const url = await requestBillingUrl(endpoint, accessToken, {
+      const result = await requestBillingResult(endpoint, accessToken, {
         userId: user.id,
         email: user.email,
         plan: planKey,
         currency: 'gbp',
       })
-      window.location.assign(url)
-    } catch (error) {
-      if (error.code === 'no_stripe_customer' && intent === 'cancel') {
-        try {
-          const accessToken = await getAccessToken()
-          await requestDirectDowngrade(endpoint, accessToken, { userId: user.id, action: 'downgrade_to_free' })
-          setBillingMessage('Your plan has been moved to Free.')
-          await refreshUser()
-        } catch (downgradeError) {
-          setBillingError(downgradeError.message || 'Billing could not be opened right now.')
-        }
+      if (result.downgraded) {
+        setBillingMessage('This account had no billing record on file, so it has been downgraded to the Free plan.')
+        await refreshUser()
       } else {
-        setBillingError(error.message || 'Billing could not be opened right now.')
+        window.location.assign(result.url)
       }
+    } catch (error) {
+      setBillingError(error.message || 'Billing could not be opened right now.')
     } finally {
       setBillingBusy('')
     }
@@ -3229,6 +3219,7 @@ export default function AccountSettings({
                 >
                   {billingBusy === 'portal'
                     ? 'Opening...'
+                    : !membership.hasStripeCustomer ? 'Downgrade to Free'
                     : membership.isLifetime ? 'Billing history & receipts' : 'Manage subscription & billing'}
                 </button>
               </div>
