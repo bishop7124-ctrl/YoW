@@ -1,3 +1,5 @@
+import { markLocalReadCorrupt } from './writeDurability.js'
+
 // Storage abstraction for project-data persistence (Desktop Lifetime Phase 1).
 //
 // All project-content reads/writes go through the active backend instead of
@@ -75,10 +77,37 @@ export function removeItem(key) {
 }
 
 // ── JSON value helper (never throws) ─────────────────────────────────────────
+//
+// A parse failure here can only mean one of two things: the key never had a
+// value (`getItem` returns `null`, and `JSON.parse(null)` — `null` coerces
+// to the string "null" — parses fine and yields `null`, never throws), or
+// the stored string is present but not valid JSON, i.e. genuine on-disk
+// corruption. Only the second case is worth recording — audit finding
+// P0-07 flags that this used to be indistinguishable from "never had a
+// value" from the caller's side, both silently resolving to `def`. It's
+// still not something this function can repair (there's no way to recover
+// a value from invalid JSON), but the caller — and the same storage-warning
+// banner (App.jsx) that already surfaces write failures — can now at least
+// tell the difference and let the user know something didn't load cleanly,
+// rather than the account quietly looking emptier than it should.
 
 export function loadValue(key, def = null) {
-  try { return JSON.parse(activeBackend.getItem(key)) ?? def }
-  catch { return def }
+  let raw
+  try {
+    raw = activeBackend.getItem(key)
+  } catch {
+    // Backend itself unavailable (storage blocked, etc.) — not a corruption
+    // signal, nothing to record; same as always having no value for this key.
+    return def
+  }
+  if (raw == null) return def
+  try {
+    return JSON.parse(raw) ?? def
+  } catch (error) {
+    markLocalReadCorrupt(key)
+    console.error(`[projectStorage] Stored value for "${key}" is not valid JSON — treating as corrupted, not just empty.`, error)
+    return def
+  }
 }
 
 // ── Test-only bridge ──────────────────────────────────────────────────────

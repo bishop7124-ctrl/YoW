@@ -1,10 +1,7 @@
 import { createDesktopVaultBackend } from './desktopVaultBackend.js'
 import { getStorageBackend, setStorageBackend } from './projectStorage.js'
 import { isDesktopAppRuntime } from '../utils/runtime.js'
-
-// useStore.js's LOCAL_WRITE_FAILED_KEY — duplicated here rather than shared
-// so this storage-layer module doesn't depend on the store module.
-const LOCAL_WRITE_FAILED_KEY = 'nf_localWriteFailed'
+import { LOCAL_WRITE_FAILED_KEY, markLocalWriteFailed, clearLocalWriteFailed, hasLocalWriteFailed } from './writeDurability.js'
 
 // src/utils/aiSettings.js's key names — duplicated here for the same reason
 // as LOCAL_WRITE_FAILED_KEY above. These hold the user's AI provider API key
@@ -86,7 +83,20 @@ function installFlushHandlers(backend) {
   const flush = () => { backend.flush?.() }
 
   window.addEventListener('pagehide', flush)
-  window.addEventListener('beforeunload', flush)
+  // beforeunload gets its own handler (not the shared `flush` above): a
+  // browser/webview cannot be made to guarantee an in-flight async vault
+  // write finishes before the window actually closes (audit finding P0-07),
+  // so the one real protection available here is blocking navigation with a
+  // confirmation prompt when a write is already known to have failed and
+  // hasn't recovered — giving the user a chance to wait/retry instead of
+  // silently losing it.
+  window.addEventListener('beforeunload', (event) => {
+    flush()
+    if (hasLocalWriteFailed()) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush()
   })
@@ -97,7 +107,7 @@ function installFlushHandlers(backend) {
   }
 }
 
-async function connectVaultBackend({ onWriteError }) {
+async function connectVaultBackend({ onWriteError, retry }) {
   const invoke = getTauriInvoke()
   if (!invoke) throw new Error('The desktop storage bridge is unavailable in this window.')
   const rows = await invoke('vault_read_all')
@@ -105,7 +115,19 @@ async function connectVaultBackend({ onWriteError }) {
     entries: entriesFromRows(rows),
     persistItem: (key, value) => invoke('vault_set_item', { key, value }),
     removePersistedItem: key => invoke('vault_remove_item', { key }),
-    onWriteError,
+    // Feeds writeDurability.js's tracking (audit P0-07) — this is what turns
+    // a real async vault-write failure into the same persistent, dismissible
+    // warning banner (App.jsx) that already existed for the synchronous
+    // localStorage-quota case, and what makes hasLocalWriteFailed() (checked
+    // above by the beforeunload handler, and polled by useStore.js) actually
+    // reflect production reality instead of only ever being true for a code
+    // path the desktop vault never takes.
+    onWriteError: (error, key) => {
+      markLocalWriteFailed(key)
+      onWriteError(error, key)
+    },
+    onWriteSuccess: key => clearLocalWriteFailed(key),
+    retry,
   })
 }
 
@@ -117,11 +139,11 @@ function activateVaultBackend(backend) {
   return activeDesktopVaultBackend
 }
 
-export async function initializeDesktopVaultStorage({ onWriteError = console.error } = {}) {
+export async function initializeDesktopVaultStorage({ onWriteError = console.error, retry } = {}) {
   if (!isDesktopAppRuntime()) return null
   if (!getTauriInvoke()) return null
   try {
-    const backend = await connectVaultBackend({ onWriteError })
+    const backend = await connectVaultBackend({ onWriteError, retry })
     return activateVaultBackend(backend)
   } catch (error) {
     vaultInitError = error
@@ -164,7 +186,7 @@ function migrateLocalStorageInto(backend) {
 // backend. Note: removals made while on the fallback aren't replayed here —
 // only keys still present in localStorage are migrated — but that's a rare
 // edge case compared to the data-loss risk of not migrating at all.
-export async function retryDesktopVaultStorage({ onWriteError = console.error } = {}) {
+export async function retryDesktopVaultStorage({ onWriteError = console.error, retry } = {}) {
   if (!isDesktopAppRuntime()) return null
   const current = getStorageBackend()
   if (current?.name === 'desktop-vault') {
@@ -174,7 +196,7 @@ export async function retryDesktopVaultStorage({ onWriteError = console.error } 
 
   let backend
   try {
-    backend = await connectVaultBackend({ onWriteError })
+    backend = await connectVaultBackend({ onWriteError, retry })
   } catch (error) {
     vaultInitError = error
     throw error

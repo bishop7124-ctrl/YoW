@@ -279,6 +279,7 @@ function AppInner() {
   const [readOnlyNotice, setReadOnlyNotice] = useState(null)
   const [dismissedLocalModeNotices, setDismissedLocalModeNotices] = useState({})
   const [localStorageWarningDismissed, setLocalStorageWarningDismissed] = useState(false)
+  const [localDataCorruptedDismissed, setLocalDataCorruptedDismissed] = useState(false)
   const [emailConfirmed, setEmailConfirmed] = useState(() => {
     const hash = window.location.hash
     const search = window.location.search
@@ -1164,9 +1165,9 @@ function AppInner() {
       {store.localStorageWarning && !localStorageWarningDismissed && !(desktopApp && desktopVaultError) && (
         <div role="alert" className="membership-toast">
           <span>
-            Your browser's local storage is full, so this device may not be keeping a reliable local copy of recent edits.
+            This device isn't keeping a reliable local copy of recent edits — a save didn't fully go through, most often because storage is full.
             {membership.canSyncCloud ? ' Your work is still syncing to your account. ' : ' '}
-            Close unused browser tabs or clear old site data to free up space.
+            Close unused browser tabs or clear old site data to free up space, then keep this tab open a moment for it to retry.
           </span>
           <button
             type="button"
@@ -1176,6 +1177,17 @@ function AppInner() {
             Storage settings
           </button>
           <button type="button" className="membership-toast-link" onClick={() => setLocalStorageWarningDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {store.localDataCorrupted && !localDataCorruptedDismissed && (
+        <div role="alert" className="membership-toast">
+          <span>
+            Some locally stored data on this device didn't load correctly and was skipped rather than shown incorrectly.
+            {membership.canSyncCloud ? ' If it also exists in your account, reloading after a fresh sync may recover it — otherwise contact support.' : ' Contact support if this repeats.'}
+          </span>
+          <button type="button" className="membership-toast-link" onClick={() => setLocalDataCorruptedDismissed(true)}>
             Dismiss
           </button>
         </div>

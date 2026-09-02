@@ -102,12 +102,13 @@ describe('browser vault adapter', () => {
     await tabTwoBackend.flush()
   })
 
-  it('records write failures via onWriteError without breaking the synchronous mirror', async () => {
+  it('records write failures via onWriteError, and feeds writeDurability.js so the app-wide warning banner reflects it (audit P0-07)', async () => {
     const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
     const { resetStorageBackend, writeItem, readItem } = await import('./projectStorage.js')
+    const { hasLocalWriteFailed } = await import('./writeDurability.js')
     const onWriteError = vi.fn()
 
-    const backend = await initializeIndexedDbStorage({ onWriteError })
+    const backend = await initializeIndexedDbStorage({ onWriteError, retry: { attempts: 1 } })
     // Force transaction creation itself to fail (before any request is opened),
     // simulating a blocked/unavailable IndexedDB write without leaving a dangling
     // half-started transaction behind.
@@ -115,12 +116,61 @@ describe('browser vault adapter', () => {
       throw new Error('indexeddb transaction failed')
     })
 
+    expect(hasLocalWriteFailed()).toBe(false)
     writeItem('nf_scenes', '[]')
     expect(readItem('nf_scenes')).toBe('[]')
     await backend.flush()
     expect(onWriteError).toHaveBeenCalled()
+    // This is the actual fix, not just the pre-existing console.error path:
+    // a real async IndexedDB failure now reaches the same tracking the
+    // storage-full warning banner (App.jsx) already reads.
+    expect(hasLocalWriteFailed()).toBe(true)
 
     transactionSpy.mockRestore()
+    resetStorageBackend()
+  })
+
+  it('blocks navigation via beforeunload when a local write has failed and not recovered', async () => {
+    const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
+    const { resetStorageBackend, writeItem } = await import('./projectStorage.js')
+    const { clearLocalWriteFailed } = await import('./writeDurability.js')
+    const onWriteError = vi.fn()
+
+    const backend = await initializeIndexedDbStorage({ onWriteError, retry: { attempts: 1 } })
+    const transactionSpy = vi.spyOn(IDBDatabase.prototype, 'transaction').mockImplementation(() => {
+      throw new Error('indexeddb transaction failed')
+    })
+    writeItem('nf_scenes', '[]')
+    await backend.flush()
+    transactionSpy.mockRestore()
+
+    const event = new Event('beforeunload', { cancelable: true })
+    Object.defineProperty(event, 'returnValue', { writable: true, value: undefined })
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(event.returnValue).toBe('')
+
+    // The underlying fake-indexeddb 'yow-storage' database persists across
+    // tests in this file (see the top-of-file note) — clear the failure
+    // ledger explicitly (and wait for it to actually land) so it doesn't
+    // leak into a later test's hydration.
+    clearLocalWriteFailed('nf_scenes')
+    await backend.flush()
+    resetStorageBackend()
+  })
+
+  it('does not block navigation when there is no failed write', async () => {
+    const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
+    const { resetStorageBackend } = await import('./projectStorage.js')
+
+    await initializeIndexedDbStorage()
+
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(false)
+
     resetStorageBackend()
   })
 })

@@ -91,6 +91,15 @@ export const SaveIndicator = ({ state }) => {
       <span className="ms-save-label">Saving</span>
     </span>
   )
+  // Local write failed to persist durably and automatic retries were
+  // exhausted (audit P0-07) — never shown as "Saved" until the storage
+  // backend actually confirms it, whatever cloud sync status says.
+  if (state === 'error') return (
+    <span className="ms-save-indicator is-error" title="A recent change could not be saved to this device. Keep this tab open — it will keep retrying.">
+      <span className="ms-save-dot" />
+      <span className="ms-save-label">Save failed — retrying</span>
+    </span>
+  )
   if (state === 'saved') return (
     <span className="ms-save-indicator is-saved" title="All changes saved">
       <span className="ms-save-dot" />
