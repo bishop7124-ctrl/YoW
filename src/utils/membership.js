@@ -163,6 +163,11 @@ export function getMembership(user) {
 
   const subscriptionStatus = user?.app_metadata?.subscription_status || user?.user_metadata?.subscription_status || 'none'
   const subscriptionPlan = user?.app_metadata?.subscription_plan || user?.user_metadata?.subscription_plan || null
+  // Whether this account has a real Stripe customer record. An account whose
+  // plan was set directly via SQL (support/manual comps) is paid locally but
+  // has no real Stripe subscription — the billing portal has nothing to act
+  // on for it (see api/create-customer-portal.js).
+  const hasStripeCustomer = !!user?.app_metadata?.stripe_customer_id
   const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || user?.app_metadata?.beta_tester === true || user?.user_metadata?.beta_tester === true
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
   const isFounder = subscriptionPlan === 'founder'
@@ -256,6 +261,7 @@ export function getMembership(user) {
     isBetaTester,
     isLifetime,
     isFounder,
+    hasStripeCustomer,
     // Desktop app access is a Lifetime/Founder entitlement (PRD Phase 4).
     // Browser plan behavior is unchanged — this only gates the desktop shell.
     isDesktopEntitled: isLifetime || isBetaTester,

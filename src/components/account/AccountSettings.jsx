@@ -2128,7 +2128,7 @@ const billingEndpoints = {
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL,
 }
 
-async function requestBillingUrl(endpoint, accessToken, body) {
+async function requestBillingResult(endpoint, accessToken, body) {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -2138,10 +2138,13 @@ async function requestBillingUrl(endpoint, accessToken, body) {
     body: JSON.stringify(body),
   })
 
-  if (!response.ok) throw new Error('Billing could not be opened right now.')
-  const data = await response.json()
-  if (!data?.url) throw new Error('Billing did not return a destination URL.')
-  return data.url
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(data?.error || 'Billing could not be opened right now.')
+  // Either a Stripe portal redirect (`url`), or — when the account has no
+  // real Stripe subscription to act on (e.g. plan set directly via SQL) —
+  // a direct local downgrade to Free (`downgraded`). See api/create-customer-portal.js.
+  if (!data?.url && !data?.downgraded) throw new Error('Billing did not return a destination URL.')
+  return data
 }
 
 function PlanBadge({ membership }) {
@@ -2774,18 +2777,33 @@ export default function AccountSettings({
       return
     }
 
+    // No real Stripe customer on file (e.g. plan set directly via SQL) —
+    // there's no subscription for Stripe to manage, so this action downgrades
+    // the account to Free immediately instead of opening the billing portal.
+    if (!planKey && !membership.hasStripeCustomer) {
+      const confirmed = window.confirm(
+        'This account has no billing record on file, so there is no subscription to manage. Continuing will downgrade it to the Free plan immediately. Continue?'
+      )
+      if (!confirmed) return
+    }
+
     try {
       setBillingBusy(planKey || 'portal')
       setBillingError('')
       setBillingMessage('')
       const accessToken = await getAccessToken()
-      const url = await requestBillingUrl(endpoint, accessToken, {
+      const result = await requestBillingResult(endpoint, accessToken, {
         userId: user.id,
         email: user.email,
         plan: planKey,
         currency: 'gbp',
       })
-      window.location.assign(url)
+      if (result.downgraded) {
+        setBillingMessage('This account had no billing record on file, so it has been downgraded to the Free plan.')
+        await refreshUser()
+      } else {
+        window.location.assign(result.url)
+      }
     } catch (error) {
       setBillingError(error.message || 'Billing could not be opened right now.')
     } finally {
@@ -3126,6 +3144,7 @@ export default function AccountSettings({
                 >
                   {billingBusy === 'portal'
                     ? 'Opening...'
+                    : !membership.hasStripeCustomer ? 'Downgrade to Free'
                     : membership.isLifetime ? 'Billing history & receipts' : 'Manage subscription & billing'}
                 </button>
               </div>
