@@ -10,51 +10,14 @@
          flashes the default theme before switching to the user's
          actual choice. Mirrors applyThemeToDocument in src/utils/theme.js, but
          must run synchronously here since that module only executes after
-         React mounts. -->
-    <script>
-      (function () {
-        try {
-          var root = document.documentElement
-          var theme = localStorage.getItem('nf-theme') || 'system'
-          var builtIn = ['dark-refined', 'light-refined', 'tropical', 'pearl-minimal']
-          var themeColors = {
-            'dark-refined': '#0e1a18',
-            'light-refined': '#e8f3ec',
-            tropical: '#0d282e',
-            'pearl-minimal': '#fafaf9'
-          }
-          var systemTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark-refined' : 'light-refined'
-          var resolvedTheme = theme === 'system' ? systemTheme : theme
-          if (theme === 'custom') {
-            root.setAttribute('data-theme', 'custom')
-            root.setAttribute('data-theme-choice', 'custom')
-            var tokens = JSON.parse(localStorage.getItem('nf-custom-computed') || 'null')
-            if (tokens) {
-              for (var prop in tokens) root.style.setProperty(prop, tokens[prop])
-            }
-          } else if (theme === 'system') {
-            root.setAttribute('data-theme', systemTheme)
-            root.setAttribute('data-theme-choice', 'system')
-          } else if (builtIn.indexOf(theme) !== -1) {
-            root.setAttribute('data-theme', theme)
-            root.setAttribute('data-theme-choice', theme)
-          }
-          var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta && themeColors[resolvedTheme]) meta.setAttribute('content', themeColors[resolvedTheme])
-        } catch (e) { /* localStorage unavailable — fall back to default theme */ }
-      })()
-    </script>
+         React mounts. Externalized to /theme-init.js (was inline) so the
+         site's CSP script-src can require 'self' instead of 'unsafe-inline'. -->
+    <script src="/theme-init.js"></script>
 
     <!-- ga:start: Google tag (gtag.js) — web only; stripped from the desktop
          build by vite.config.mjs (we don't track desktop app users). -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-L1BT87PKXV"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', 'G-L1BT87PKXV');
-  </script>
+  <script src="/ga-init.js"></script>
   <!-- ga:end -->
   <title>Your Own World — Worldbuilding & Writing Software for Authors</title>
     <meta name="description" content="Your Own World is an all-in-one worldbuilding and writing platform for authors, novelists, and tabletop game masters. Manage characters, lore, timelines, maps, and your manuscript in one focused workspace." />
