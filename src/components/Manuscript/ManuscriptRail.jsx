@@ -111,9 +111,9 @@ function InlineRename({ value, fallback, generatedLabel, onSave }) {
 
 function SceneRow({
   scene, index, isActive,
-  onSelect, onUpdateScene, onDeleteScene, onAddSceneBefore,
+  onSelect, onUpdateScene, onDeleteScene,
   dragRef, dragOver, setDragOver, onDropScene,
-  chapterOptions, onMoveScene, labels,
+  labels,
 }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const words = useMemo(() => countWords(scene.content), [scene.content])
@@ -144,9 +144,6 @@ function SceneRow({
 
   return (
     <>
-      <div className="ms-rail-addrow">
-        <button type="button" onClick={() => onAddSceneBefore(index)}>+ scene</button>
-      </div>
       <div
         className={`ms-rail-scene${isActive ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}`}
         style={{
@@ -192,15 +189,6 @@ function SceneRow({
         </div>
 
         <span className="ms-rail-row-actions">
-          {chapterOptions?.length > 1 && (
-            <ParentMoveSelect
-              className="ms-rail-move-select"
-              value={scene.chapterId}
-              options={chapterOptions}
-              label={`Move ${(labels?.level3 || 'scene').toLowerCase()} to ${(labels?.level2 || 'chapter').toLowerCase()}`}
-              onChange={chapterId => onMoveScene(scene.id, chapterId)}
-            />
-          )}
           <button type="button" className="ms-rail-icon-btn" onClick={() => setEditingTitle(true)} title="Rename scene" aria-label="Rename scene">
             <PencilIcon />
           </button>
@@ -228,7 +216,7 @@ function ChapterRow({
   activeSceneId, onSelectScene, onUpdateScene, onDeleteScene,
   labels, onMoveScene,
   dragRef, dragOver, setDragOver, onDropChapter, onDropScene,
-  chapterOptions, actOptions, onMoveChapter,
+  actOptions, onMoveChapter,
 }) {
   const [open, setOpen] = useState(true)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -349,20 +337,21 @@ function ChapterRow({
               onSelect={onSelectScene}
               onUpdateScene={onUpdateScene}
               onDeleteScene={onDeleteScene}
-              onAddSceneBefore={() => onAddScene(chap.id)}
               dragRef={dragRef}
               dragOver={dragOver}
               setDragOver={setDragOver}
               onDropScene={onDropScene}
-              chapterOptions={chapterOptions}
-              onMoveScene={onMoveScene}
               labels={labels}
             />
           ))}
           {chapScenes.length === 0 && (
-            <div className="ms-rail-dropzone">Drop {labels.level3.toLowerCase()} here</div>
+            <div className="ms-rail-dropzone">
+              {dragOver?.id === chap.id && dragOver?.type === 'chapter-empty'
+                ? `Drop ${labels.level3.toLowerCase()} here`
+                : `No ${labels.level3.toLowerCase()}s yet`}
+            </div>
           )}
-          <div className="ms-rail-addrow ms-rail-addrow-end">
+          <div className="ms-rail-add-scene">
             <button type="button" onClick={() => onAddScene(chap.id)}><PlusIcon /> {labels.level3.toLowerCase()}</button>
           </div>
         </div>
@@ -459,23 +448,13 @@ export default function ManuscriptRail({
     return map
   }, [sortedActs, chapters])
 
-  // Options for the explicit "move to..." selects — every act/chapter, not
-  // just empty ones (drag-and-drop is the empty-parent-only path; this
-  // control can move into a populated parent too, matching StoryOutline.jsx).
+  // Chapters retain an explicit act selector. Scenes stay compact and use the
+  // rail's populated/empty chapter drag targets instead of duplicating them
+  // with a per-row chapter selector.
   const actOptions = useMemo(() => sortedActs.map((act, idx) => ({
     id: act.id,
     label: act.title || `${labels.level1} ${idx + 1}`,
   })), [sortedActs, labels.level1])
-
-  const chapterOptions = useMemo(() => (
-    sortedActs.flatMap(act => chapters
-      .filter(c => c.actId === act.id)
-      .sort((a, b) => a.order - b.order)
-      .map(c => ({
-        id: c.id,
-        label: formatOutlineChapterTitle(c, labels.level2, chapterNumbers[c.id]),
-      })))
-  ), [sortedActs, chapters, chapterNumbers, labels.level2])
 
   const actWords = useCallback((act) => {
     const actChapIds = new Set(chapters.filter(c => c.actId === act.id).map(c => c.id))
@@ -629,7 +608,6 @@ export default function ManuscriptRail({
                         setDragOver={setDragOver}
                         onDropChapter={handleDropChapter}
                         onDropScene={handleDropScene}
-                        chapterOptions={chapterOptions}
                         actOptions={actOptions}
                         onMoveChapter={handleMoveChapterToAct}
                       />
@@ -644,21 +622,6 @@ export default function ManuscriptRail({
           </nav>
 
           <div className="ms-rail-f">
-            <button
-              type="button"
-              className="ms-rail-f-btn"
-              onClick={() => {
-                const lastAct = sortedActs[sortedActs.length - 1]
-                const lastChap = lastAct
-                  ? chapters.filter(c => c.actId === lastAct.id).sort((a, b) => a.order - b.order).slice(-1)[0]
-                  : null
-                if (lastChap) handleAddScene(lastChap.id)
-              }}
-              disabled={chapters.length === 0}
-              title={chapters.length === 0 ? `Add a ${labels.level2.toLowerCase()} first` : `Add a ${labels.level3.toLowerCase()} to the end of the manuscript`}
-            >
-              + {labels.level3}
-            </button>
             <button
               type="button"
               className="ms-rail-f-btn"

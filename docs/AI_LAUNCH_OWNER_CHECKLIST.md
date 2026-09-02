@@ -84,9 +84,9 @@ Use Chrome DevTools on the deployed production site.
 - [ ] Disable "Sync AI settings across signed-in devices."
 - [ ] Confirm the synced settings row is removed by signing into account A from a fresh browser/profile and checking that the key no longer follows the account.
 
-## 7. Legal/Human Review
+## 7. Owner Policy and Copy Review
 
-Have the launch owner and, preferably, a solicitor review:
+The launch owner must review the following. External solicitor/legal review is optional and is not a paid-launch requirement (product decision 2026-09-02):
 
 - [ ] Privacy Policy -> AI features and third-party AI providers.
 - [ ] Terms of Service -> AI features.
@@ -113,4 +113,4 @@ YOW AI can be treated as launch-ready only after:
 - [ ] Browser/network inspection shows no unintended key exposure.
 - [ ] Gemini confirmation behavior passes.
 - [ ] Cross-account key isolation passes.
-- [ ] Legal/human review signs off or records accepted risk.
+- [ ] Owner policy/copy review signs off or records accepted risk. External legal review may remain deferred.

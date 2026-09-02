@@ -126,6 +126,22 @@ describe('AuthProvider session policy', () => {
     expect(trackEvent).toHaveBeenCalledWith('authenticated_app_open', { platform: 'web', auth_source: 'explicit_login' })
   })
 
+  it('accepts a sign-in session broadcast from another same-origin tab', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>)
+
+    await waitFor(() => expect(mocks.authCallback).toBeTypeOf('function'))
+    await act(async () => {
+      await mocks.authCallback('SIGNED_IN', {
+        user: { id: 'user-from-other-tab' },
+        access_token: 'test-access-token',
+      })
+    })
+
+    expect(screen.getByTestId('user-id').textContent).toBe('user-from-other-tab')
+    expect(supabase.auth.signOut).not.toHaveBeenCalled()
+    expect(localStorage.getItem(WEB_LAST_ACTIVITY_KEY)).not.toBeNull()
+  })
+
   it('does not send entitlement fields through the client profile update path', async () => {
     render(<AuthProvider><Probe /></AuthProvider>)
 
