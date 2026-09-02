@@ -7,6 +7,63 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+const DEFAULT_REDIRECT = 'https://www.yourownworld.co.uk/login'
+
+// Audit finding P0-03: redirectTo was accepted from the caller with no
+// validation, so a crafted request could get Supabase to embed an
+// attacker-controlled redirect in a real recovery link — a link that, when
+// clicked by the legitimate user from their own inbox, could carry their
+// session token to an attacker's domain. Only the app's own known origins
+// may be used; anything else silently falls back to the safe default rather
+// than failing the whole request (a stray/dev redirectTo shouldn't block
+// someone from resetting their password).
+const ALLOWED_REDIRECT_ORIGINS = new Set([
+  'https://www.yourownworld.co.uk',
+  'http://localhost:3000',
+  'http://localhost:5173',
+])
+
+function sanitizeRedirectTo(candidate: unknown): string {
+  if (typeof candidate !== 'string' || !candidate) return DEFAULT_REDIRECT
+  try {
+    const url = new URL(candidate)
+    return ALLOWED_REDIRECT_ORIGINS.has(url.origin) ? candidate : DEFAULT_REDIRECT
+  } catch {
+    return DEFAULT_REDIRECT
+  }
+}
+
+// Durable per-email rate limit (supabase/migrations/20260901120000_email_action_rate_limits.sql)
+// — audit finding P0-03: this route had no rate limit at all, so it could be
+// hammered to spam a target inbox with reset emails. Deliberately generous
+// (a real user retrying a typo'd email a few times shouldn't get blocked)
+// while bounding sustained abuse.
+const RATE_LIMIT_MAX = Number(Deno.env.get('PASSWORD_RESET_RATE_LIMIT_MAX')) || 5
+const RATE_LIMIT_WINDOW_MINUTES = Number(Deno.env.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES')) || 15
+
+async function isRateLimited(email: string): Promise<boolean> {
+  const rateKey = email.trim().toLowerCase()
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString()
+  const { count, error: countError } = await supabaseAdmin
+    .from('email_action_rate_limits')
+    .select('id', { count: 'exact', head: true })
+    .eq('bucket', 'password-reset')
+    .eq('rate_key', rateKey)
+    .gte('created_at', windowStart)
+  // Fail open on a rate-limit infra error rather than blocking a real
+  // password-reset attempt on a durability blip.
+  if (countError) {
+    console.error('[send-reset-email] rate limit check failed', countError.message)
+    return false
+  }
+  if ((count || 0) >= RATE_LIMIT_MAX) return true
+  const { error: insertError } = await supabaseAdmin
+    .from('email_action_rate_limits')
+    .insert({ bucket: 'password-reset', rate_key: rateKey })
+  if (insertError) console.error('[send-reset-email] rate limit record failed', insertError.message)
+  return false
+}
+
 function resetEmailHtml(email: string, resetUrl: string) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -105,7 +162,16 @@ Deno.serve(async (req) => {
   const email = payload?.email as string | undefined
   if (!email) return jsonResponse({ error: 'No email in payload' }, 400)
 
-  const redirectTo = (payload?.redirectTo as string | undefined) || 'https://www.yourownworld.co.uk/login'
+  // Generic response from here on regardless of what actually happened
+  // (rate-limited, account doesn't exist, provider failure) — never confirm
+  // or deny whether an email has an account, a standard password-reset-flow
+  // practice this route didn't previously follow. The client already treats
+  // any 200 as "check your email".
+  const genericOk = () => jsonResponse({ sent: true })
+
+  if (await isRateLimited(email)) return genericOk()
+
+  const redirectTo = sanitizeRedirectTo(payload?.redirectTo)
 
   const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: 'recovery',
@@ -114,8 +180,9 @@ Deno.serve(async (req) => {
   })
 
   if (linkError || !linkData?.properties?.action_link) {
-    console.error('generateLink error:', linkError?.message)
-    return jsonResponse({ error: 'Could not generate reset link', detail: linkError?.message }, 500)
+    // Expected/routine for an email with no account — not logged as an
+    // error. Still returns success to the caller (no enumeration).
+    return genericOk()
   }
 
   const resetUrl = linkData.properties.action_link
@@ -137,8 +204,8 @@ Deno.serve(async (req) => {
   if (!res.ok) {
     const body = await res.text()
     console.error('Resend error:', body)
-    return jsonResponse({ error: 'Failed to send email', detail: body }, 500)
+    return genericOk()
   }
 
-  return jsonResponse({ sent: true, to: email })
+  return genericOk()
 })

@@ -767,6 +767,228 @@ describe('getProjectExportData', () => {
     expect(importedData.timeline.filter(event => event.eraId).every(event => importedData.eras.some(era => era.id === event.eraId))).toBe(true)
   })
 
+  it('never reuses exported ids, even when the same export is imported twice into one account (audit P0-06)', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+
+    let sample
+    act(() => { sample = result.current.ensureSampleProject() })
+    const exported = result.current.getProjectExportData(sample.id)
+
+    let importedA
+    let importedB
+    act(() => { importedA = result.current.importProjectFromData(exported) })
+    act(() => { importedB = result.current.importProjectFromData(exported) })
+
+    const dataA = result.current.getProjectExportData(importedA.id)
+    const dataB = result.current.getProjectExportData(importedB.id)
+    const dataSource = result.current.getProjectExportData(sample.id)
+
+    const collectionKeys = [
+      'characters', 'factions', 'locations', 'timeline', 'worldHistory', 'eras',
+      'acts', 'chapters', 'scenes', 'loreEntries', 'ideaEntries', 'maps',
+      'whiteboards', 'storySchedule', 'rpgCharacters',
+    ]
+    // Every collection except rpgCharacters actually has records in this
+    // fixture (confirmed against src/data/theLastEmberDemoProject.json) — an
+    // empty array for any of the others would mean the round trip silently
+    // dropped a whole section, not that this test doesn't apply to it.
+    const nonEmptyKeys = collectionKeys.filter(key => key !== 'rpgCharacters')
+    for (const key of nonEmptyKeys) {
+      expect((dataSource[key] ?? []).length).toBeGreaterThan(0)
+    }
+    for (const key of collectionKeys) {
+      const idsSource = (dataSource[key] ?? []).map(item => item.id)
+      const idsA = (dataA[key] ?? []).map(item => item.id)
+      const idsB = (dataB[key] ?? []).map(item => item.id)
+      expect(new Set(idsA).size).toBe(idsA.length) // no duplicate ids within one import
+      const overlapWithSource = idsA.filter(id => idsSource.includes(id))
+      const overlapWithOther = idsA.filter(id => idsB.includes(id))
+      expect(overlapWithSource).toEqual([])
+      expect(overlapWithOther).toEqual([])
+    }
+    expect(importedA.id).not.toBe(importedB.id)
+    expect(importedA.id).not.toBe(sample.id)
+  })
+
+  it('remaps every character cross-reference to the newly-imported ids (audit P0-06)', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+
+    let sample
+    act(() => { sample = result.current.ensureSampleProject() })
+    const exported = result.current.getProjectExportData(sample.id)
+
+    // The fixture's own journey beats don't populate their link fields, so
+    // splice in real cross-references (using ids already present elsewhere
+    // in this same export) to exercise the journey-beat remap path too.
+    const linkedCharacter = exported.characters[0]
+    const linkedChapter = exported.chapters[0]
+    const linkedScene = exported.scenes[0]
+    const linkedTimelineEvent = exported.timeline[0]
+    const target = exported.characters.find(c => c.id !== linkedCharacter.id)
+    const exportedWithJourneyLinks = {
+      ...exported,
+      characters: exported.characters.map(character => character.id === target.id ? {
+        ...character,
+        journey: {
+          ...(character.journey || {}),
+          beats: [
+            ...(character.journey?.beats || []),
+            {
+              title: 'Test beat',
+              linkedCharacterId: linkedCharacter.id,
+              chapterId: linkedChapter.id,
+              sceneId: linkedScene.id,
+              timelineEventId: linkedTimelineEvent.id,
+            },
+          ],
+        },
+      } : character),
+    }
+
+    let imported
+    act(() => { imported = result.current.importProjectFromData(exportedWithJourneyLinks) })
+    const importedData = result.current.getProjectExportData(imported.id)
+
+    const importedCharacterIds = new Set(importedData.characters.map(c => c.id))
+    const importedFactionIds = new Set(importedData.factions.map(f => f.id))
+    const charactersWithFaction = importedData.characters.filter(c => c.factionId)
+    const charactersWithRelationships = importedData.characters.filter(c => (c.relationships || []).length)
+    const charactersWithParents = importedData.characters.filter(c => (c.parentIds || []).length)
+    const charactersWithJourneyLinks = importedData.characters.filter(c =>
+      (c.journey?.beats || []).some(beat => beat.linkedCharacterId || beat.chapterId || beat.sceneId || beat.timelineEventId)
+    )
+    // The fixture (plus the spliced-in journey beat above) is known to
+    // exercise every one of these fields — an empty filter here would mean
+    // this test stopped exercising the behavior it claims to, not that it
+    // passed.
+    expect(charactersWithFaction.length).toBeGreaterThan(0)
+    expect(charactersWithRelationships.length).toBeGreaterThan(0)
+    expect(charactersWithParents.length).toBeGreaterThan(0)
+    expect(charactersWithJourneyLinks.length).toBeGreaterThan(0)
+
+    for (const character of charactersWithFaction) {
+      expect(importedFactionIds.has(character.factionId)).toBe(true)
+    }
+    for (const character of charactersWithRelationships) {
+      for (const relationship of character.relationships) {
+        expect(importedCharacterIds.has(relationship.targetId)).toBe(true)
+      }
+    }
+    for (const character of charactersWithParents) {
+      for (const parentId of character.parentIds) {
+        expect(importedCharacterIds.has(parentId)).toBe(true)
+      }
+    }
+    const importedChapterIds = new Set(importedData.chapters.map(c => c.id))
+    const importedSceneIds = new Set(importedData.scenes.map(s => s.id))
+    const importedTimelineIds = new Set(importedData.timeline.map(e => e.id))
+    for (const character of charactersWithJourneyLinks) {
+      for (const beat of character.journey.beats) {
+        if (beat.linkedCharacterId) expect(importedCharacterIds.has(beat.linkedCharacterId)).toBe(true)
+        if (beat.chapterId) expect(importedChapterIds.has(beat.chapterId)).toBe(true)
+        if (beat.sceneId) expect(importedSceneIds.has(beat.sceneId)).toBe(true)
+        if (beat.timelineEventId) expect(importedTimelineIds.has(beat.timelineEventId)).toBe(true)
+      }
+    }
+  })
+
+  it('remaps familyLinks, idea linkedEntities, map linkedEntity, and RPG character faction/npc links on import (audit P0-06)', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+
+    let sample
+    act(() => { sample = result.current.ensureSampleProject() })
+    const exported = result.current.getProjectExportData(sample.id)
+
+    // The fixture already exercises familyLinks and idea linkedEntities;
+    // splice in a map linkedEntity and an RPG character (neither present in
+    // the fixture) using real ids already in this export.
+    const linkedLocation = exported.locations[0]
+    const linkedFaction = exported.factions[0]
+    const linkedCharacter = exported.characters[0]
+    const exportedWithExtraLinks = {
+      ...exported,
+      maps: exported.maps.map((mapRecord, index) => index === 0 ? {
+        ...mapRecord,
+        mapObjects: [
+          ...(mapRecord.mapObjects || []),
+          { id: 'test-map-object', linkedEntity: { entityType: 'location', entityId: linkedLocation.id } },
+        ],
+      } : mapRecord),
+      rpgCharacters: [
+        {
+          id: 'test-rpg-1',
+          novelId: sample.id,
+          name: 'Test NPC',
+          factionIds: [linkedFaction.id],
+          npcRelationships: [{ id: 'rel-1', characterId: linkedCharacter.id, note: 'ally' }],
+        },
+      ],
+    }
+
+    let imported
+    act(() => { imported = result.current.importProjectFromData(exportedWithExtraLinks) })
+    const importedData = result.current.getProjectExportData(imported.id)
+
+    const importedCharacterIds = new Set(importedData.characters.map(c => c.id))
+    const importedLocationIds = new Set(importedData.locations.map(l => l.id))
+    const importedFactionIds = new Set(importedData.factions.map(f => f.id))
+    const importedLoreIds = new Set(importedData.loreEntries.map(l => l.id))
+
+    const charactersWithFamilyLinks = importedData.characters.filter(c => (c.familyLinks || []).length)
+    expect(charactersWithFamilyLinks.length).toBeGreaterThan(0)
+    for (const character of charactersWithFamilyLinks) {
+      for (const link of character.familyLinks) {
+        expect(importedCharacterIds.has(link.sourceCharacterId)).toBe(true)
+        expect(importedCharacterIds.has(link.targetCharacterId)).toBe(true)
+      }
+    }
+
+    const ideasWithLinks = importedData.ideaEntries.filter(i => (i.linkedEntities || []).length)
+    expect(ideasWithLinks.length).toBeGreaterThan(0)
+    const idMapsByType = { character: importedCharacterIds, location: importedLocationIds, faction: importedFactionIds, lore: importedLoreIds }
+    for (const idea of ideasWithLinks) {
+      for (const entity of idea.linkedEntities) {
+        const idSet = idMapsByType[entity.type]
+        if (idSet) expect(idSet.has(entity.id)).toBe(true)
+      }
+    }
+
+    const mapObject = importedData.maps[0]?.mapObjects?.find(o => o.id === 'test-map-object')
+    expect(mapObject?.linkedEntity?.entityId).toBeTruthy()
+    expect(importedLocationIds.has(mapObject.linkedEntity.entityId)).toBe(true)
+
+    expect(importedData.rpgCharacters).toHaveLength(1)
+    const rpgCharacter = importedData.rpgCharacters[0]
+    expect(importedFactionIds.has(rpgCharacter.factionIds[0])).toBe(true)
+    expect(importedCharacterIds.has(rpgCharacter.npcRelationships[0].characterId)).toBe(true)
+  })
+
+  it('remaps manuscript structure parent links (chapter->act, scene->chapter) on import (audit P0-06)', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+
+    let sample
+    act(() => { sample = result.current.ensureSampleProject() })
+    const exported = result.current.getProjectExportData(sample.id)
+
+    let imported
+    act(() => { imported = result.current.importProjectFromData(exported) })
+    const importedData = result.current.getProjectExportData(imported.id)
+
+    expect(importedData.chapters.length).toBeGreaterThan(0)
+    const importedActIds = new Set(importedData.acts.map(a => a.id))
+    for (const chapter of importedData.chapters) {
+      expect(chapter.actId).toBeTruthy()
+      expect(importedActIds.has(chapter.actId)).toBe(true)
+    }
+    if (importedData.scenes.length) {
+      const importedChapterIds = new Set(importedData.chapters.map(c => c.id))
+      for (const scene of importedData.scenes) {
+        expect(scene.chapterId).toBeTruthy()
+        expect(importedChapterIds.has(scene.chapterId)).toBe(true)
+      }
+    }
+  })
+
   it('omits comicPages/comicPanels for a non-comic project even if stray comic records share its novelId', () => {
     const { result } = renderHook(() => useStore(null))
 

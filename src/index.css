@@ -1825,6 +1825,117 @@ textarea:focus {
   cursor: pointer;
 }
 
+.ms-entity:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.ms-entity-wrap {
+  position: relative;
+  display: inline;
+}
+
+.ms-entity-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: min(280px, 82vw);
+  display: none;
+  padding: 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raise);
+  color: var(--text-main);
+  box-shadow: var(--shadow-lg);
+  white-space: normal;
+}
+
+.ms-entity-wrap:hover .ms-entity-popover,
+.ms-entity-wrap:focus-within .ms-entity-popover {
+  display: grid;
+  gap: 5px;
+}
+
+.ms-entity-popover b {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.ms-entity-popover small {
+  color: var(--text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ms-entity-popover span {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.ms-entity-popover button {
+  justify-self: start;
+  margin-top: 3px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  border: 0;
+  background: var(--accent-fade);
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ms-note-highlight {
+  border-radius: 3px;
+  background: color-mix(in srgb, #facc15 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #facc15 32%, transparent);
+}
+
+.ms-note-highlight.is-highlighted {
+  background: color-mix(in srgb, #facc15 44%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, #facc15 58%, transparent);
+}
+
+.ms-rich-edit {
+  position: relative;
+}
+
+.ms-rich-preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ms-rich-preview .ms-entity-wrap,
+.ms-rich-preview .ms-entity,
+.ms-rich-preview .ms-entity-popover,
+.ms-rich-preview .ms-entity-popover * {
+  pointer-events: auto;
+}
+
+.ms-textarea--rich {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: color-mix(in srgb, var(--studio-ink) 92%, #000);
+}
+
+.ms-textarea--rich::placeholder {
+  color: var(--studio-muted);
+  -webkit-text-fill-color: var(--studio-muted);
+}
+
 .ms-note-marker {
   margin-left: 2px;
   color: var(--accent);
@@ -3844,6 +3955,18 @@ textarea:focus {
 .ms-preview,
 .ms-textarea {
   color: var(--text-main);
+}
+
+.manuscript-processor .ms-textarea.ms-textarea--rich {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  background: transparent !important;
+  caret-color: color-mix(in srgb, var(--studio-ink) 92%, #000);
+}
+
+.manuscript-processor .ms-textarea.ms-textarea--rich::placeholder {
+  color: var(--studio-muted) !important;
+  -webkit-text-fill-color: var(--studio-muted) !important;
 }
 
 .modal-overlay,
@@ -6956,7 +7079,7 @@ body {
     padding: 6px 0 !important;
   }
 
-  .ms-focus-zoom {
+  .ms-page-zoom {
     display: none;
   }
 
@@ -15065,6 +15188,292 @@ body {
 }
 .ms-insp-tgt-n:hover { color: var(--accent-text); }
 
+.ms-ref-list {
+  display: grid;
+  gap: 7px;
+}
+
+.ms-ref-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.ms-ref-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ms-ref-tabs button:hover,
+.ms-ref-tabs button.is-on {
+  border-color: var(--accent);
+  background: var(--accent-fade);
+  color: var(--accent-text);
+}
+
+.ms-ref-tabs button span {
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-hover) 74%, transparent);
+  color: var(--text-faint);
+  text-align: center;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ms-ref-item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ms-ref-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-fade);
+}
+
+.ms-ref-item.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-fade);
+}
+
+.ms-ref-item b {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.ms-ref-item span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.ms-ref-detail {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent-fade) 72%, var(--bg-main));
+}
+
+.ms-ref-detail small {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ms-ref-detail b {
+  color: var(--text-main);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.ms-ref-detail p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ms-ref-detail button {
+  justify-self: start;
+  padding: 6px 9px;
+  border-radius: var(--r-sm);
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.ms-character-profile {
+  display: grid;
+  gap: 18px;
+  max-height: min(72vh, 780px);
+  overflow: auto;
+}
+
+.ms-character-profile-head {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.ms-character-profile-image,
+.ms-character-profile-initial {
+  width: 92px;
+  height: 116px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--accent-fade);
+}
+
+.ms-character-profile-image {
+  object-fit: cover;
+}
+
+.ms-character-profile-initial {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.ms-character-profile-head small {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ms-character-profile-head h3 {
+  margin: 2px 0 4px;
+  color: var(--text-main);
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.ms-character-profile-head p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ms-character-profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.ms-character-profile-chips span {
+  padding: 4px 7px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ms-character-profile-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ms-character-profile-wide {
+  grid-column: 1 / -1;
+}
+
+.ms-character-profile-card,
+.ms-profile-block {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+}
+
+.ms-character-profile-card h4,
+.ms-profile-block h4 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ms-profile-line {
+  display: grid;
+  grid-template-columns: minmax(82px, auto) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.ms-profile-line span {
+  color: var(--text-faint);
+}
+
+.ms-profile-line b {
+  color: var(--text-main);
+  font-weight: 650;
+  white-space: pre-wrap;
+}
+
+.ms-character-profile-prose,
+.ms-profile-block p {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.ms-character-profile-blocks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ms-character-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .ms-character-profile {
+    max-height: none;
+  }
+
+  .ms-character-profile-head,
+  .ms-character-profile-grid,
+  .ms-character-profile-blocks {
+    grid-template-columns: 1fr;
+  }
+
+  .ms-character-profile-actions {
+    flex-direction: column-reverse;
+  }
+}
+
 @media (min-width: 901px) and (max-width: 1250px) {
   .ms-insp { width: min(320px, 34vw); }
 }
@@ -15649,6 +16058,57 @@ body {
 }
 .ms-gutter-note-card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent-fade) 70%, var(--accent) 12%); }
 .ms-gutter-note-card.is-highlighted { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.ms-note-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.ms-note-modal blockquote {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid #facc15;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, #facc15 12%, var(--bg-main));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 110px;
+  overflow: auto;
+}
+
+.ms-note-modal label {
+  display: grid;
+  gap: 5px;
+}
+
+.ms-note-modal label span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ms-note-modal input,
+.ms-note-modal textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.ms-note-modal textarea {
+  resize: vertical;
+  min-height: 150px;
+}
+
+.ms-note-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 /* Container query (not a viewport media query — spec is explicit about
    this) on the writing column itself, named via container-name on
@@ -22300,68 +22760,9 @@ body {
   }
 }
 
-/* ─── Focused writing and manuscript page zoom ─────────────────────────── */
+/* ─── Manuscript page zoom ─────────────────────────────────────────────── */
 
-.ms-focus-topbar {
-  min-height: 44px;
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(0, auto) minmax(260px, 1fr);
-  align-items: center;
-  gap: 16px;
-  padding: 0 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
-  background: var(--bg-main);
-  flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  z-index: 230;
-}
-
-.ms-focus-project-title,
-.ms-focus-breadcrumb {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ms-focus-project-title {
-  color: var(--text-main);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.ms-focus-breadcrumb {
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.ms-focus-status {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.ms-focus-exit {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  border-radius: var(--r-sm);
-  color: var(--text-muted);
-  background: transparent;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.ms-focus-exit:hover,
-.ms-focus-exit:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.ms-focus-zoom {
+.ms-page-zoom {
   height: 26px;
   display: inline-grid;
   grid-template-columns: 24px 38px 24px;
@@ -22379,7 +22780,7 @@ body {
   white-space: nowrap;
 }
 
-.ms-focus-zoom button {
+.ms-page-zoom button {
   align-self: stretch;
   display: inline-flex;
   align-items: center;
@@ -22394,141 +22795,21 @@ body {
   line-height: 1;
 }
 
-.ms-focus-zoom button:hover:not(:disabled),
-.ms-focus-zoom button:focus-visible {
+.ms-page-zoom button:hover:not(:disabled),
+.ms-page-zoom button:focus-visible {
   color: var(--accent);
   background: var(--accent-fade);
 }
 
-.ms-focus-zoom button:disabled {
+.ms-page-zoom button:disabled {
   cursor: default;
   opacity: .3;
 }
 
-.ms-focus-controls {
-  position: fixed;
-  left: 50%;
-  bottom: max(14px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  z-index: 240;
-  display: flex;
-  gap: 3px;
-  padding: 4px;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--bg-nav) 92%, transparent);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
-  backdrop-filter: blur(14px);
-}
-
-.ms-focus-controls button {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--r-sm);
-  color: var(--text-muted);
-  background: transparent;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.ms-focus-controls button:hover,
-.ms-focus-controls button:focus-visible,
-.ms-focus-controls button.is-active {
-  color: var(--accent);
-  background: var(--accent-fade);
-}
-
-.manuscript-processor.is-focused-writing {
-  position: relative;
-  height: 100dvh;
-  max-height: 100dvh;
-}
-
-.manuscript-processor.is-focused-writing > .flex {
-  position: relative;
-}
-
-.manuscript-processor.is-focused-writing .manuscript-page.ms-scroll-container {
-  scroll-behavior: auto;
-  overscroll-behavior: contain;
-  /* useCaretComfortScroll pulls the caret up into the container's 35-65%
-     band by scrolling, but can only do that if there's blank space below
-     the last line to scroll into — at the very end of a long document
-     there's nothing there otherwise, so the caret gets pinned at the
-     bottom of the scrollable area no matter what the JS wants. 50vh keeps
-     the last line centerable regardless of viewport size. */
-  padding-bottom: 50vh;
-}
-
-.manuscript-processor.is-focused-writing .manuscript-document {
-  padding-top: clamp(36px, 7vh, 76px);
-}
-
-.manuscript-processor.is-focused-writing .group\/scene {
-  opacity: .72;
-  transition: opacity .12s;
-}
-
-.manuscript-processor.is-focused-writing .group\/scene.is-editing,
-.manuscript-processor.is-focused-writing .group\/scene:focus-within,
-.manuscript-processor.is-focused-writing .group\/scene:hover {
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .manuscript-processor.is-focused-writing *,
-  .manuscript-processor.is-focused-writing *::before,
-  .manuscript-processor.is-focused-writing *::after {
-    scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
-  }
-}
-
 @media (max-width: 640px) {
-  .ms-focus-topbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-    padding: 4px 8px;
-  }
-
-  .ms-focus-zoom {
+  .ms-page-zoom {
     display: none;
   }
-
-  .ms-focus-breadcrumb,
-  .ms-focus-status .ms-save-label,
-  .ms-focus-status .ms-toolbar-wordcount {
-    display: none;
-  }
-
-  .ms-focus-status {
-    gap: 6px;
-  }
-
-  .ms-focus-zoom {
-    grid-template-columns: 22px 34px 22px;
-  }
-
-  .ms-focus-controls {
-    left: 8px;
-    right: 8px;
-    bottom: max(8px, env(safe-area-inset-bottom));
-    transform: none;
-    justify-content: space-between;
-  }
-
-  .ms-focus-controls button {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 0 4px;
-  }
-
-  .manuscript-processor.is-focused-writing .manuscript-document {
-    padding: 28px 18px 0;
-  }
-
 }
 
 /* Project section switcher (Overview/Characters/AI Tools/etc.) as a hamburger menu
@@ -22661,21 +22942,6 @@ body {
 @media (max-width: 860px) {
   .studio-shell {
     padding-top: env(safe-area-inset-top);
-  }
-}
-
-/* Focused writing mode is meant to be distraction-free, but on mobile the outer
-   app header (logo/Write/settings/exit/account + the room hamburger) still rendered
-   above it unconditionally — the one thing a phone-sized focused session needs most
-   is vertical space for the keyboard and the text, not ~90px of duplicate chrome
-   that FocusedWritingShell's own compact topbar (title + Exit focus) already covers. */
-@media (max-width: 780px) {
-  .studio-shell:has(.manuscript-processor.is-focused-writing) {
-    grid-template-rows: minmax(0, 1fr);
-  }
-
-  .studio-shell:has(.manuscript-processor.is-focused-writing) .studio-spine {
-    display: none;
   }
 }
 

@@ -769,7 +769,6 @@ const CampaignProgressCard = ({ stats }) => {
 
 export default function ProjectDashboard({ store }) {
   const stats = store.activeProjectStats
-  const [dailyGoal, setDailyGoal] = useState(() => localStorage.getItem('nf-daily-word-goal') || '500')
   const [viewMode, setViewMode] = useState('overview')
   const [insightsCtaSeen, setInsightsCtaSeen] = useState(() => localStorage.getItem('nf-insights-cta-seen') === 'true')
   const openInsights = () => {
@@ -777,6 +776,10 @@ export default function ProjectDashboard({ store }) {
     setInsightsCtaSeen(true)
     setViewMode('insights')
   }
+  const project = stats?.project
+  const writingGoals = project?.writingGoals || {}
+  const dailyGoal = Number(writingGoals.daily) > 0 ? String(writingGoals.daily) : ''
+  const projectWordTarget = Number(writingGoals.manuscript || project?.wordCountTarget || project?.wordTarget || project?.targetWords || stats?.projectType.defaultWordTarget || 0)
   const analytics = useMemo(() => stats ? buildWritingAnalytics(stats, dailyGoal) : null, [stats, dailyGoal])
   const readability = useMemo(() => stats ? buildReadability(stats.scenes) : null, [stats])
   const characterFocus = useMemo(() => stats ? buildCharacterFocus(stats) : [], [stats])
@@ -804,7 +807,6 @@ export default function ProjectDashboard({ store }) {
     )
   }
 
-  const project = stats.project
   const isCampaign = Boolean(stats.campaignStats)
   const availableSections = new Set(getEnabledSections(project))
   const visibleRooms = NAV_ROOMS.filter(room => room.requires.some(id => availableSections.has(id)))
@@ -816,7 +818,6 @@ export default function ProjectDashboard({ store }) {
   const maxCharacterWords = Math.max(1, ...characterFocus.map(item => item.words))
   const maxStructureWords = Math.max(1, ...structureInsights.map(item => item.value))
   const maxLongestSceneWords = Math.max(1, ...(sceneInsights?.longest || []).map(item => item.words))
-  const projectWordTarget = Number(project.wordCountTarget || project.wordTarget || project.targetWords || stats.projectType.defaultWordTarget || 0)
   const projectWordProgress = projectWordTarget
     ? Math.round((stats.manuscriptWords / projectWordTarget) * 100)
     : null
@@ -834,8 +835,19 @@ export default function ProjectDashboard({ store }) {
 
   const updateDailyGoal = value => {
     const next = value.replace(/[^\d]/g, '')
-    setDailyGoal(next)
-    localStorage.setItem('nf-daily-word-goal', next)
+    store.updateNovel?.(project.id, {
+      writingGoals: { ...writingGoals, daily: Number(next) || 0 },
+    })
+  }
+
+  const updateManuscriptGoal = value => {
+    const next = value.replace(/[^\d]/g, '')
+    const numeric = Number(next) || 0
+    store.updateNovel?.(project.id, {
+      writingGoals: { ...writingGoals, manuscript: numeric },
+      wordCountTarget: numeric || null,
+      wordTarget: numeric || null,
+    })
   }
 
   return (
@@ -1037,6 +1049,17 @@ export default function ProjectDashboard({ store }) {
                   aria-label="Daily writing goal"
                 />
               </label>
+              {!isCampaign && (
+                <label className="analytics-goal">
+                  <span>Word goal</span>
+                  <input
+                    value={projectWordTarget > 0 ? String(projectWordTarget) : ''}
+                    onChange={event => updateManuscriptGoal(event.target.value)}
+                    inputMode="numeric"
+                    aria-label="Manuscript word goal"
+                  />
+                </label>
+              )}
             </div>
 
             <div className="analytics-grid">
