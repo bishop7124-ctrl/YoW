@@ -36,6 +36,7 @@ import RecordConflictReview from './shared/RecordConflictReview'
 import { useIsMobile } from '../utils/useMediaQuery'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
 import { UserMediaImage } from './shared/UserMedia'
+import MergeProjectModal from './MergeProjectModal'
 
 // ─── Project status ──────────────────────────────────────────────────────────
 
@@ -208,12 +209,17 @@ function ProjectSettings({ store, onClose }) {
   const initial = getEnabledSections(novel).filter(id => ALL_SECTION_IDS.includes(id))
   const [enabled, setEnabled] = useState(() => new Set(initial))
   const dialogRef = useRef(null)
+  const [showMerge, setShowMerge] = useState(false)
   useEffect(() => { dialogRef.current?.focus() }, [])
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    // Skip while MergeProjectModal is open on top of this dialog — its own
+    // Escape-to-close isn't wired (matching AIImportModal, which also has
+    // no Escape handling), so without this guard Escape would close this
+    // whole Project Settings dialog out from under it instead.
+    const handler = (e) => { if (e.key === 'Escape' && !showMerge) onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, showMerge])
   const [details, setDetails] = useState(() => ({
     title: novel?.title || '',
     description: novel?.description || '',
@@ -782,6 +788,16 @@ function ProjectSettings({ store, onClose }) {
             </section>
 
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Import</p>
+              <div className="project-settings-action-grid">
+                <button type="button" onClick={() => setShowMerge(true)} className="project-settings-action-card" title="Add another one of your projects' content into this project">
+                  <strong>Merge another project in</strong>
+                  <span>Adds characters, locations, worldbuilding, and more from another project you own — nothing here is replaced or removed</span>
+                </button>
+              </div>
+            </section>
+
+            <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Backups</p>
@@ -870,6 +886,14 @@ function ProjectSettings({ store, onClose }) {
           </span>
         </div>
       </div>
+      {showMerge && novel && (
+        <MergeProjectModal
+          store={store}
+          project={novel}
+          onClose={() => setShowMerge(false)}
+          onDone={() => {}}
+        />
+      )}
     </div>
   )
 }
