@@ -464,6 +464,49 @@
           </div>
         </article>
 
+        <article class="task-card" data-task data-id="web-idle-auth-analytics" data-group="Data Safety" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark web idle logout and auth analytics as passed">
+            <div>
+              <h3>Web idle logout and auth analytics</h3>
+              <p class="small">Confirm browser sessions expire after real inactivity and GA4 records restored versus explicit auth events.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Auth</span>
+                <span class="pill">GA4 dashboard</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Sign into production in a normal web browser and confirm activity updates the stored browser-activity timestamp.</li>
+                <li>Force that timestamp more than 24 hours into the past, then reload or focus the tab.</li>
+                <li>Confirm the web session signs out cleanly without data loss.</li>
+                <li>Sign in explicitly and confirm GA4 receives explicit login/authenticated app open events.</li>
+                <li>Refresh or reopen while still inside 24 hours and confirm GA4 records a restored session rather than another explicit login.</li>
+                <li>In the desktop app, confirm the stale browser timestamp does not force desktop logout.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
         <article class="task-card" data-task data-id="ai-key-isolation" data-group="Data Safety" data-priority="critical">
           <div class="task-head">
             <input class="done-toggle" type="checkbox" aria-label="Mark AI key isolation as passed">
@@ -534,7 +577,7 @@
                 <li>Open Map Builder on desktop or tablet, draw one object, refresh, and confirm it persists.</li>
                 <li>Open AI Tools and confirm it shows the upgrade/access wall rather than attempting a request.</li>
                 <li>Confirm account storage UI says 250 MB for Free.</li>
-                <li>Confirm a Monthly or beta tester account shows the current higher quota, not the old 5 GB value.</li>
+                <li>Confirm Monthly/Lifetime shows 8 GB, beta tester/Founder shows 15 GB, and no surface still shows the old 5 GB/10 GB/25 GB caps.</li>
               </ol>
             </div>
             <div class="notes-grid">
@@ -801,6 +844,48 @@
                 <li>Flag any wording that implies collaboration, public sharing, player portals, mobile apps, marketplace/community, publishing integrations, advanced fantasy calendars, or live VTT play.</li>
                 <li>Confirm D&D/TTRPG copy reads as private GM prep and campaign planning.</li>
                 <li>Check pages at desktop, tablet, and phone widths for obvious broken layout.</li>
+              </ol>
+            </div>
+            <div class="notes-grid">
+              <label>Evidence or links
+                <input type="text" data-field="evidence">
+              </label>
+              <label>Notes
+                <textarea data-field="notes"></textarea>
+              </label>
+            </div>
+          </div>
+        </article>
+
+        <article class="task-card" data-task data-id="project-type-promise-sweep" data-group="Promise And Final Switch" data-priority="high">
+          <div class="task-head">
+            <input class="done-toggle" type="checkbox" aria-label="Mark project type promise sweep as passed">
+            <div>
+              <h3>Project-type promise sweep</h3>
+              <p class="small">Confirm the six active project types feel honestly live for their promised workflows before final checkout returns.</p>
+              <div class="task-meta">
+                <span class="pill priority-high">High</span>
+                <span class="pill">Project-type gate</span>
+                <span class="pill">Browser QA</span>
+              </div>
+            </div>
+            <select data-field="status" aria-label="Task status">
+              <option value="not-started">Not started</option>
+              <option value="in-progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="not-applicable">Not applicable</option>
+            </select>
+          </div>
+          <div class="task-body">
+            <div>
+              <ol class="steps">
+                <li>Create or open Novel, Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel projects.</li>
+                <li>For Novella and Short Story, verify structure labels, default sections, drafting, and export.</li>
+                <li>For D&D/TTRPG, verify session prep/recap fields, map/default sections, Character Builder, and GM-side wording.</li>
+                <li>For Comic/Graphic Novel, verify page/panel planning, persistence, delete safety, and export/restore basics.</li>
+                <li>Flag any active project type that still reads as beta, limited, or misleading for final paid launch.</li>
               </ol>
             </div>
             <div class="notes-grid">
