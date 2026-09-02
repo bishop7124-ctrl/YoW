@@ -1,12 +1,34 @@
 /**
- * Seed script for mbishoptesting@gmail.com
+ * Seed script for a designated QA test account.
  * Wipes all existing user data then writes a fresh Testing Series
  * with one populated project for each active launch project type.
+ *
+ * Required environment variables:
+ *   VITE_SUPABASE_URL / SUPABASE_URL      — Supabase project URL
+ *   VITE_SUPABASE_ANON_KEY / SUPABASE_ANON_KEY — Supabase anon key
+ *   TEST_ACCOUNT_EMAIL                    — QA account email to sign in and reseed
+ *   TEST_ACCOUNT_PASSWORD                 — QA account password
+ *
+ * This script authenticates as the given account and DELETES all of its
+ * existing project data before reseeding — never point it at a real user
+ * account.
  */
-import { createClient } from '/Users/bishop/Desktop/Claude/yow/node_modules/@supabase/supabase-js/dist/index.mjs'
+import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://cwifaklpjqutlcwvkxpp.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3aWZha2xwanF1dGxjd3ZreHBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NTcwODEsImV4cCI6MjA5MzAzMzA4MX0.Nia6Zuypi91kr1CwloAZq0hUMQ_dUboqLEH4cQKVbBk'
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+const TEST_ACCOUNT_EMAIL = process.env.TEST_ACCOUNT_EMAIL
+const TEST_ACCOUNT_PASSWORD = process.env.TEST_ACCOUNT_PASSWORD
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Missing SUPABASE_URL/SUPABASE_ANON_KEY (or VITE_-prefixed equivalents) in the environment.')
+  process.exit(1)
+}
+if (!TEST_ACCOUNT_EMAIL || !TEST_ACCOUNT_PASSWORD) {
+  console.error('Missing TEST_ACCOUNT_EMAIL/TEST_ACCOUNT_PASSWORD in the environment. Refusing to run without an explicit, dedicated QA account — this script deletes all of the signed-in account\'s data.')
+  process.exit(1)
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 const USER_TABLES = ['novels', 'series_items']
@@ -1548,8 +1570,8 @@ function buildStructure(novelId, type, contentFn) {
 async function main() {
   console.log('Authenticating...')
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: 'mbishoptesting@gmail.com',
-    password: 'testing1234',
+    email: TEST_ACCOUNT_EMAIL,
+    password: TEST_ACCOUNT_PASSWORD,
   })
   if (authError) { console.error('Auth failed:', authError.message); process.exit(1) }
   const userId = authData.user.id
