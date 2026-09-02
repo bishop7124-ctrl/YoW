@@ -3,1081 +3,185 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>YOW Launch User Task Tracker</title>
+  <meta name="description" content="A beginner-friendly, interactive paid-launch roadmap for Your Own World.">
+  <title>YOW Launch School</title>
   <style>
-    :root {
-      color-scheme: light;
-      --bg: #f7f3ec;
-      --panel: #fffaf2;
-      --ink: #1e2724;
-      --muted: #62716b;
-      --line: #d8d0c3;
-      --accent: #1f6f6b;
-      --accent-soft: #e0efec;
-      --warn: #a5532f;
-      --ok: #277a55;
-      --shadow: 0 16px 42px rgba(46, 38, 25, .10);
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: var(--ink);
-      background:
-        linear-gradient(180deg, rgba(31, 111, 107, .10), transparent 340px),
-        var(--bg);
-    }
-
-    header {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 34px 20px 22px;
-    }
-
-    h1 {
-      margin: 0 0 10px;
-      font-size: clamp(2rem, 5vw, 4rem);
-      line-height: 1;
-      letter-spacing: 0;
-    }
-
-    p { line-height: 1.55; }
-    .lede {
-      max-width: 800px;
-      margin: 0;
-      color: var(--muted);
-      font-size: 1.05rem;
-    }
-
-    main {
-      max-width: 1180px;
-      margin: 0 auto 48px;
-      padding: 0 20px;
-    }
-
-    .toolbar,
-    .summary,
-    .task-card,
-    details {
-      background: color-mix(in srgb, var(--panel) 94%, white);
-      border: 1px solid var(--line);
-      box-shadow: var(--shadow);
-      border-radius: 8px;
-    }
-
-    .toolbar {
-      display: grid;
-      grid-template-columns: minmax(220px, 1fr) repeat(4, max-content);
-      gap: 10px;
-      align-items: center;
-      padding: 14px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-
-    input[type="search"],
-    select,
-    textarea,
-    input[type="text"] {
-      width: 100%;
-      min-height: 40px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: white;
-      color: var(--ink);
-      padding: 9px 10px;
-      font: inherit;
-      font-size: 16px;
-    }
-
-    button {
-      min-height: 40px;
-      border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--line));
-      border-radius: 7px;
-      background: var(--accent);
-      color: white;
-      padding: 8px 12px;
-      font: inherit;
-      font-weight: 750;
-      cursor: pointer;
-    }
-
-    button.secondary {
-      background: white;
-      color: var(--accent);
-    }
-
-    .summary {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 1px;
-      overflow: hidden;
-      margin: 18px 0;
-      padding: 0;
-    }
-
-    .summary div {
-      padding: 16px;
-      background: rgba(255, 255, 255, .62);
-    }
-
-    .summary strong {
-      display: block;
-      font-size: 1.55rem;
-      line-height: 1.1;
-    }
-
-    .summary span {
-      color: var(--muted);
-      font-size: .92rem;
-    }
-
-    .section-title {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 14px;
-      margin: 28px 0 12px;
-    }
-
-    .section-title h2 {
-      margin: 0;
-      font-size: 1.35rem;
-    }
-
-    .section-title p {
-      margin: 0;
-      color: var(--muted);
-      font-size: .95rem;
-    }
-
-    .task-list {
-      display: grid;
-      gap: 14px;
-    }
-
-    .task-card {
-      padding: 16px;
-    }
-
-    .task-head {
-      display: grid;
-      grid-template-columns: max-content minmax(0, 1fr) 170px;
-      gap: 12px;
-      align-items: start;
-    }
-
-    .task-card h3 {
-      margin: 0 0 5px;
-      font-size: 1.08rem;
-    }
-
-    .task-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .pill {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 3px 8px;
-      color: var(--muted);
-      background: white;
-      font-size: .78rem;
-      font-weight: 750;
-    }
-
-    .priority-critical { color: #7a231d; border-color: #d8aaa1; background: #fff1ee; }
-    .priority-high { color: #744016; border-color: #dfbd95; background: #fff7e8; }
-    .priority-medium { color: #265e5b; border-color: #a9d4d0; background: var(--accent-soft); }
-
-    .task-body {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, .75fr);
-      gap: 14px;
-      margin-top: 14px;
-    }
-
-    .steps,
-    .acceptance {
-      margin: 0;
-      padding-left: 22px;
-      color: var(--muted);
-    }
-
-    .steps li,
-    .acceptance li {
-      margin: 6px 0;
-      line-height: 1.45;
-    }
-
-    .notes-grid {
-      display: grid;
-      gap: 10px;
-    }
-
-    label {
-      display: grid;
-      gap: 5px;
-      color: var(--muted);
-      font-size: .84rem;
-      font-weight: 750;
-    }
-
-    textarea {
-      min-height: 90px;
-      resize: vertical;
-    }
-
-    .done-toggle {
-      display: grid;
-      place-items: center;
-      width: 28px;
-      height: 28px;
-      margin-top: 2px;
-      accent-color: var(--accent);
-    }
-
-    .task-card.is-passed {
-      border-color: color-mix(in srgb, var(--ok) 48%, var(--line));
-      background: color-mix(in srgb, white 78%, #e9f6ee);
-    }
-
-    .task-card.is-failed,
-    .task-card.is-blocked {
-      border-color: color-mix(in srgb, var(--warn) 52%, var(--line));
-    }
-
-    details {
-      margin-top: 24px;
-      padding: 14px 16px;
-    }
-
-    summary {
-      cursor: pointer;
-      font-weight: 850;
-    }
-
-    .small {
-      color: var(--muted);
-      font-size: .9rem;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    @media (max-width: 860px) {
-      .toolbar {
-        grid-template-columns: 1fr;
-        position: static;
-      }
-
-      .summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .task-head,
-      .task-body {
-        grid-template-columns: 1fr;
-      }
-
-      .done-toggle {
-        place-self: start;
-      }
-    }
+    :root { color-scheme: light; --paper:#f5f1e8; --surface:#fffcf6; --ink:#172925; --muted:#61716c; --line:#d8d2c6; --teal:#176a65; --teal-dark:#0d4542; --teal-soft:#dcefeb; --gold-soft:#fff0d8; --blue-soft:#e5eef7; --green-soft:#e2f2e8; --shadow:0 16px 40px rgba(29,44,39,.09); --radius:14px; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; min-width:320px; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:radial-gradient(circle at 8% 4%,rgba(23,106,101,.12),transparent 24rem),linear-gradient(180deg,#fbf8f1 0,var(--paper) 42rem); }
+    button,input,select,textarea { font:inherit; }
+    button,select { cursor:pointer; }
+    button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible { outline:3px solid rgba(47,95,136,.28); outline-offset:2px; }
+    button:disabled { cursor:not-allowed; opacity:.55; }
+    p { line-height:1.58; }
+    .shell { max-width:1240px; margin:0 auto; padding:22px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:22px; }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .brand-mark { display:grid; place-items:center; width:42px; height:42px; border-radius:11px; background:var(--teal-dark); color:#fff; font-weight:900; letter-spacing:-.04em; }
+    .brand strong,.brand span { display:block; }
+    .brand span,.save-state { color:var(--muted); font-size:.79rem; }
+    .decision-banner { display:grid; grid-template-columns:auto 1fr; gap:12px; margin-bottom:18px; padding:13px 16px; border:1px solid #abd2c9; border-radius:12px; background:var(--teal-soft); color:var(--teal-dark); }
+    .decision-banner strong { display:block; margin-bottom:2px; }
+    .decision-banner p { margin:0; font-size:.9rem; }
+    .hero { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(290px,.75fr); gap:18px; margin-bottom:18px; }
+    .hero-copy,.next-card,.panel,.task-card,.empty-state { border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); }
+    .hero-copy { padding:clamp(22px,4vw,38px); }
+    .eyebrow { margin:0 0 9px; color:var(--teal); font-size:.76rem; font-weight:850; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(2.25rem,6vw,4.7rem); font-weight:600; letter-spacing:-.045em; line-height:.98; }
+    .hero-copy>p:not(.eyebrow) { max-width:720px; margin:18px 0 0; color:var(--muted); font-size:1.03rem; }
+    .reassurance { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+    .reassurance span,.pill { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:999px; background:#fff; padding:5px 9px; color:var(--muted); font-size:.76rem; font-weight:760; }
+    .next-card { display:flex; flex-direction:column; padding:22px; background:var(--teal-dark); color:#fff; }
+    .next-card .eyebrow { color:#aadcd4; }
+    .next-card h2 { margin:0; font-size:1.42rem; }
+    .next-card p { margin:9px 0 16px; color:#d5e8e4; font-size:.92rem; }
+    .next-card .button { margin-top:auto; background:#fff; color:var(--teal-dark); border-color:#fff; }
+    .summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:18px; }
+    .metric { padding:16px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.66); }
+    .metric strong { display:block; font-size:1.65rem; line-height:1.1; }
+    .metric span { color:var(--muted); font-size:.8rem; }
+    .metric.owner strong { color:var(--teal); } .metric.dev strong { color:#2f5f88; } .metric.waiting strong { color:#a76518; }
+    .progress-track { height:8px; overflow:hidden; margin-top:5px; border-radius:99px; background:#e7e2d8; }
+    .progress-fill { width:0; height:100%; border-radius:inherit; background:var(--teal); transition:width .3s ease; }
+    .controls { position:sticky; top:0; z-index:20; display:grid; grid-template-columns:minmax(180px,1fr) auto auto; gap:10px; margin-bottom:18px; padding:10px; border:1px solid var(--line); border-radius:13px; background:rgba(255,252,246,.94); box-shadow:0 8px 25px rgba(29,44,39,.08); backdrop-filter:blur(14px); }
+    .tabs { display:flex; gap:6px; overflow-x:auto; }
+    .tab,.button { min-height:42px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); padding:9px 13px; font-weight:780; white-space:nowrap; }
+    .tab[aria-selected="true"],.button.primary { border-color:var(--teal); background:var(--teal); color:#fff; }
+    .button.quiet { color:var(--teal-dark); }
+    .intro-panel { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px; padding:18px; }
+    .intro-panel h2 { margin:0 0 7px; font-size:1.1rem; }
+    .intro-panel p { margin:0; color:var(--muted); font-size:.9rem; }
+    .legend { display:flex; flex-wrap:wrap; align-content:start; justify-content:flex-end; gap:7px; }
+    .who-owner { background:var(--teal-soft); border-color:#afd3cb; color:var(--teal-dark); }
+    .who-dev { background:var(--blue-soft); border-color:#b8cde0; color:#244f73; }
+    .who-joint { background:var(--gold-soft); border-color:#e2c18e; color:#754b16; }
+    .who-later { background:#ede9e2; color:#5e5a54; }
+    .section-heading { margin:28px 2px 12px; }
+    .section-heading h2 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:1.65rem; font-weight:600; }
+    .section-heading p { margin:3px 0 0; color:var(--muted); font-size:.88rem; }
+    .task-list { display:grid; gap:12px; }
+    .task-card { overflow:clip; }
+    .task-card[data-status="done"] { border-color:#acd0b9; background:#f4fbf6; }
+    .task-card[data-status="blocked"] { border-color:#deb5ad; }
+    .task-card[data-status="in-progress"] { border-color:#dcb879; }
+    .task-summary { display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; gap:13px; align-items:center; width:100%; padding:16px; border:0; background:transparent; color:inherit; text-align:left; }
+    .task-number { display:grid; place-items:center; width:34px; height:34px; border-radius:10px; background:#ece7dc; color:var(--muted); font-weight:850; }
+    .task-title h3 { margin:0; font-size:1rem; }
+    .task-title p { margin:3px 0 0; color:var(--muted); font-size:.83rem; }
+    .task-time { color:var(--muted); font-size:.78rem; font-weight:750; white-space:nowrap; }
+    .chevron { color:var(--muted); transition:transform .2s ease; }
+    .task-card.open .chevron { transform:rotate(180deg); }
+    .task-detail { display:none; border-top:1px solid var(--line); padding:18px; }
+    .task-card.open .task-detail { display:block; }
+    .lesson-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr); gap:18px; }
+    .lesson h4 { margin:0 0 8px; font-size:.92rem; }
+    .lesson p { margin:0 0 15px; color:var(--muted); font-size:.9rem; }
+    .steps { margin:0 0 18px; padding-left:23px; }
+    .steps li { margin:9px 0; padding-left:3px; line-height:1.5; }
+    .done-box,.wait-box,.help-box { margin-top:12px; padding:12px 14px; border-radius:10px; font-size:.86rem; line-height:1.5; }
+    .done-box { border:1px solid #aed2ba; background:var(--green-soft); color:#205b40; }
+    .wait-box { border:1px solid #e0c08c; background:var(--gold-soft); color:#704814; }
+    .help-box { border:1px solid #b9cde0; background:var(--blue-soft); color:#244d70; }
+    .done-box strong,.wait-box strong,.help-box strong { display:block; margin-bottom:3px; }
+    .workspace { display:grid; gap:13px; align-content:start; }
+    label { display:grid; gap:5px; color:var(--muted); font-size:.79rem; font-weight:780; }
+    select,textarea,input[type="text"] { width:100%; min-height:42px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); padding:9px 10px; font-size:16px; }
+    textarea { min-height:112px; resize:vertical; }
+    .action-row { display:flex; flex-wrap:wrap; gap:7px; }
+    .action-row .button { min-height:38px; padding:7px 10px; font-size:.82rem; }
+    .status-note { margin:0; color:var(--muted); font-size:.78rem; }
+    .empty-state { padding:34px; text-align:center; }
+    .empty-state h2 { margin:0 0 7px; } .empty-state p { margin:0; color:var(--muted); }
+    .hidden { display:none!important; }
+    .guide { margin-top:26px; padding:18px; }
+    .guide summary { font-weight:850; cursor:pointer; }
+    .guide-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:13px; margin-top:15px; }
+    .guide-grid div { padding:13px; border-radius:10px; background:#f5f1e9; }
+    .guide-grid strong { display:block; margin-bottom:4px; }
+    .guide-grid p { margin:0; color:var(--muted); font-size:.85rem; }
+    .toast { position:fixed; right:20px; bottom:20px; z-index:50; max-width:360px; padding:12px 15px; border-radius:10px; background:var(--ink); color:#fff; box-shadow:var(--shadow); font-size:.86rem; }
+    @media(max-width:900px) { .hero,.lesson-grid { grid-template-columns:1fr; } .summary-grid { grid-template-columns:repeat(2,1fr); } .controls { position:static; grid-template-columns:1fr; } .intro-panel { grid-template-columns:1fr; } .legend { justify-content:flex-start; } }
+    @media(max-width:620px) { .shell { padding:13px; } .topbar { align-items:flex-start; } .save-state { max-width:120px; text-align:right; } .hero-copy { padding:22px; } .task-summary { grid-template-columns:auto minmax(0,1fr) auto; } .task-time { display:none; } .guide-grid { grid-template-columns:1fr; } }
+    @media print { body { background:#fff; } .controls,.action-row,.next-card .button { display:none!important; } .shell { max-width:none; padding:0; } .hero { grid-template-columns:1fr; } .task-card,.hero-copy,.next-card,.panel { box-shadow:none; break-inside:avoid; } .task-detail { display:block; } .next-card { color:var(--ink); background:#fff; } .next-card p,.next-card .eyebrow { color:var(--muted); } }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Launch User Task Tracker</h1>
-    <p class="lede">A focused checklist for the launch-readiness items that need owner action, live-account verification, or notes from real devices. Beta-interest stays in place until the final pre-launch checkout switch.</p>
-  </header>
-
-  <main>
-    <section class="toolbar" aria-label="Tracker controls">
-      <input id="search" type="search" placeholder="Search tasks">
-      <select id="statusFilter" aria-label="Filter by status">
-        <option value="all">All statuses</option>
-        <option value="not-started">Not started</option>
-        <option value="in-progress">In progress</option>
-        <option value="blocked">Blocked</option>
-        <option value="passed">Passed</option>
-        <option value="failed">Failed</option>
-        <option value="not-applicable">Not applicable</option>
-      </select>
-      <button type="button" class="secondary" id="exportJson">Export JSON</button>
-      <button type="button" class="secondary" id="importJson">Import JSON</button>
-      <button type="button" id="resetProgress">Reset</button>
-      <input id="importFile" type="file" accept="application/json" class="hidden">
+  <div class="shell">
+    <header class="topbar"><div class="brand"><div class="brand-mark">YOW</div><div><strong>Launch School</strong><span>Your paid-launch control panel</span></div></div><div class="save-state" id="saveState" role="status">Progress saves automatically</div></header>
+    <aside class="decision-banner"><span>✓</span><div><strong>Two things you do not need to arrange for launch</strong><p>You do not need to hire a solicitor, buy Apple notarisation, or buy Windows publisher signing. The app will launch unsigned with clear installation instructions. We will reconsider signing only after revenue can comfortably cover it.</p></div></aside>
+    <section class="hero">
+      <div class="hero-copy"><p class="eyebrow">First-day-friendly roadmap</p><h1>You steer the launch.<br>Development builds it.</h1><p>You are not expected to know web development. Your job is to make business decisions, supply access when asked, try the finished product like a customer, and approve the final promises. Each task below tells you exactly what to do.</p><div class="reassurance"><span>✓ No coding required</span><span>✓ Technical work is labelled</span><span>✓ “Done” is defined</span><span>✓ Your notes save here</span></div></div>
+      <aside class="next-card"><p class="eyebrow">Your next move</p><h2 id="nextTitle">Loading…</h2><p id="nextReason"></p><button class="button" id="openNext" type="button">Open this task</button></aside>
     </section>
-
-    <section class="summary" aria-label="Progress summary">
-      <div><strong id="summaryDone">0</strong><span>passed</span></div>
-      <div><strong id="summaryActive">0</strong><span>in progress</span></div>
-      <div><strong id="summaryBlocked">0</strong><span>blocked or failed</span></div>
-      <div><strong id="summaryTotal">0</strong><span>total tasks</span></div>
-    </section>
-
-    <section aria-labelledby="now-title">
-      <div class="section-title">
-        <h2 id="now-title">Start Here</h2>
-        <p>Do these first. They reduce the most launch risk.</p>
-      </div>
-      <div class="task-list">
-        <article class="task-card" data-task data-id="account-isolation" data-group="Start Here" data-priority="critical">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark account isolation as passed">
-            <div>
-              <h3>Real two-account isolation</h3>
-              <p class="small">Verify account B never sees or overwrites account A data after switching accounts in the same browser session.</p>
-              <div class="task-meta">
-                <span class="pill priority-critical">Critical</span>
-                <span class="pill">Data safety gate</span>
-                <span class="pill">Needs two real accounts</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Use production and sign into account A.</li>
-                <li>Create or identify a clearly named project in account A and add a unique sentence to a scene.</li>
-                <li>Sign out, then sign into account B without restarting the browser.</li>
-                <li>Confirm account B does not show account A projects, scenes, theme, AI settings, or storage state.</li>
-                <li>Create or edit one small account B project, refresh, and confirm it persists.</li>
-                <li>Sign back into account A and confirm account A still has its project and unique sentence.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence" placeholder="Screenshot, account names, project names, run notes">
-              </label>
-              <label>Notes
-                <textarea data-field="notes" placeholder="What happened? Any weird loading, stale data, or confusion?"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="multi-tab-conflict" data-group="Start Here" data-priority="critical">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark multi-tab conflict QA as passed">
-            <div>
-              <h3>Two-tab overwrite and warning check</h3>
-              <p class="small">Verify two open tabs on the same account do not silently lose edits, and same-scene editing warns proactively.</p>
-              <div class="task-meta">
-                <span class="pill priority-critical">Critical</span>
-                <span class="pill">Data safety gate</span>
-                <span class="pill">Production browser</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Open the same signed-in account in two browser tabs.</li>
-                <li>Edit different records, such as one character in tab 1 and one location in tab 2; refresh both and confirm both survive.</li>
-                <li>Edit different fields on the same record in two tabs; refresh both and confirm both fields survive.</li>
-                <li>Open the same scene in both tabs; confirm the second tab shows an "also open" warning before editing.</li>
-                <li>Choose "Edit anyway", make distinct scene edits, wait for "Saved", refresh both tabs, and confirm no edit silently disappears.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence" placeholder="Project/scene names, screenshots, anything odd">
-              </label>
-              <label>Notes
-                <textarea data-field="notes" placeholder="Record exact repro steps if anything fails."></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section aria-labelledby="data-title">
-      <div class="section-title">
-        <h2 id="data-title">Data Safety</h2>
-        <p>Real accounts, storage, exports, and cloud behavior.</p>
-      </div>
-      <div class="task-list">
-        <article class="task-card" data-task data-id="new-account-onboarding" data-group="Data Safety" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark new account onboarding as passed">
-            <div>
-              <h3>Fresh account sample and first-project flow</h3>
-              <p class="small">Check a genuinely new account sees the correct first-run choices, sample project behavior, and AI setup prompt.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Auth</span>
-                <span class="pill">Onboarding</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Create a new account in a clean browser profile or private window.</li>
-                <li>Choose the sample tour; confirm exactly one editable Sample Project opens with linked writing/worldbuilding content.</li>
-                <li>Confirm the AI setup prompt appears before any product tour.</li>
-                <li>Delete the sample, refresh and re-login, and confirm the sample is not recreated.</li>
-                <li>Create a second fresh account, choose "Start my own project", and confirm the AI setup prompt appears after the first project is created.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="web-idle-auth-analytics" data-group="Data Safety" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark web idle logout and auth analytics as passed">
-            <div>
-              <h3>Web idle logout and auth analytics</h3>
-              <p class="small">Confirm browser sessions expire after real inactivity and GA4 records restored versus explicit auth events.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Auth</span>
-                <span class="pill">GA4 dashboard</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Sign into production in a normal web browser and confirm activity updates the stored browser-activity timestamp.</li>
-                <li>Force that timestamp more than 24 hours into the past, then reload or focus the tab.</li>
-                <li>Confirm the web session signs out cleanly without data loss.</li>
-                <li>Sign in explicitly and confirm GA4 receives explicit login/authenticated app open events.</li>
-                <li>Refresh or reopen while still inside 24 hours and confirm GA4 records a restored session rather than another explicit login.</li>
-                <li>In the desktop app, confirm the stale browser timestamp does not force desktop logout.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="ai-key-isolation" data-group="Data Safety" data-priority="critical">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark AI key isolation as passed">
-            <div>
-              <h3>AI key sync and isolation</h3>
-              <p class="small">Confirm synced AI provider keys follow only the intended account and are never visible in another account or logs.</p>
-              <div class="task-meta">
-                <span class="pill priority-critical">Critical</span>
-                <span class="pill">Security</span>
-                <span class="pill">Needs provider key</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>In account A, save an AI provider key with sync enabled.</li>
-                <li>Open account A in a clean browser profile and confirm AI settings/tools can use the synced provider without re-entry.</li>
-                <li>Sign into account B in the original browser and confirm account B cannot see or use account A's key/settings.</li>
-                <li>Disable sync in account A, save, then open account A in a clean profile and confirm the key no longer follows the account.</li>
-                <li>Use browser network/devtools while making one AI request and confirm the key is not visible in URLs, responses, console logs, or analytics.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="free-plan-storage" data-group="Data Safety" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark free plan storage as passed">
-            <div>
-              <h3>Free plan map, AI lock, and storage cap</h3>
-              <p class="small">Confirm Free users get the promised 250 MB cloud storage, Map Builder access, and AI lock behavior.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Legal promise</span>
-                <span class="pill">Free account</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Use a real Free account with one active project.</li>
-                <li>Open Map Builder on desktop or tablet, draw one object, refresh, and confirm it persists.</li>
-                <li>Open AI Tools and confirm it shows the upgrade/access wall rather than attempting a request.</li>
-                <li>Confirm account storage UI says 250 MB for Free.</li>
-                <li>Confirm Monthly/Lifetime shows 8 GB, beta tester/Founder shows 15 GB, and no surface still shows the old 5 GB/10 GB/25 GB caps.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="live-media-upload" data-group="Data Safety" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark live media upload as passed">
-            <div>
-              <h3>Live media upload and cleanup</h3>
-              <p class="small">Verify real Supabase Storage writes, quota updates, replacement cleanup, and delete cleanup.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Storage</span>
-                <span class="pill">Real account</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Upload a small image as a project cover or character portrait in a real signed-in account.</li>
-                <li>Refresh and confirm the image remains visible.</li>
-                <li>Replace it with a second image, then confirm the old object is removed from Storage if you have Supabase access.</li>
-                <li>Delete the record or remove the image and confirm the current object is cleaned up.</li>
-                <li>Confirm storage-used numbers increase/decrease reasonably.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="delete-project-scene-cleanup" data-group="Data Safety" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark project delete cleanup as passed">
-            <div>
-              <h3>Project delete cleans scene rows</h3>
-              <p class="small">Delete a throwaway project and confirm no orphan scene rows remain for that project id.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Supabase check</span>
-                <span class="pill">Destructive QA</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Create a throwaway project and add two scenes with unique text.</li>
-                <li>Record the project id if available.</li>
-                <li>Delete the project from the app.</li>
-                <li>Query Supabase scenes for that project id and confirm zero rows remain.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section aria-labelledby="desktop-title">
-      <div class="section-title">
-        <h2 id="desktop-title">Desktop And Local Mode</h2>
-        <p>Only run these when the desktop build is ready to test.</p>
-      </div>
-      <div class="task-list">
-        <article class="task-card" data-task data-id="desktop-account-surface" data-group="Desktop And Local Mode" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark desktop account surface as passed">
-            <div>
-              <h3>Desktop account-only surface</h3>
-              <p class="small">Desktop should show account settings and device management, not the full web workspace.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Desktop</span>
-                <span class="pill">Entitlement</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Launch desktop signed out and confirm the compact login/auth screen appears.</li>
-                <li>Sign in with Free, Monthly, Lifetime, and Founder accounts as available.</li>
-                <li>Confirm every plan lands in Account Settings only, with no project library/editor or marketing pages.</li>
-                <li>For entitled accounts, verify Membership shows desktop device information.</li>
-                <li>Test sign-out and, if possible, device cap/deactivation behavior.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="desktop-vault-local-mode" data-group="Desktop And Local Mode" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark desktop vault local mode as passed">
-            <div>
-              <h3>Desktop vault, Local-first, and sync status</h3>
-              <p class="small">Verify local vault relocation, local persistence, cloud-sync paused states, and recovery messaging.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Desktop</span>
-                <span class="pill">Local Mode</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Move the vault to an empty folder and confirm projects/backups remain after reload.</li>
-                <li>Cancel the folder picker and confirm nothing changes.</li>
-                <li>Enable Local-first, edit writing and worldbuilding records, quit/reopen, and confirm changes remain.</li>
-                <li>Confirm automatic cloud sync is paused while Local-first is on.</li>
-                <li>Force a sync failure and confirm the UI shows retryable error messaging without blocking editing.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section aria-labelledby="promise-title">
-      <div class="section-title">
-        <h2 id="promise-title">Promise And Final Switch</h2>
-        <p>Run after the core safety checks, with checkout still parked until last.</p>
-      </div>
-      <div class="task-list">
-        <article class="task-card" data-task data-id="pricing-beta-interest" data-group="Promise And Final Switch" data-priority="medium">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark pricing and beta interest QA as passed">
-            <div>
-              <h3>Pricing page and beta-interest flow</h3>
-              <p class="small">Confirm public prices are correct and beta-interest captures signed-in and signed-out users without enabling checkout.</p>
-              <div class="task-meta">
-                <span class="pill priority-medium">Medium</span>
-                <span class="pill">Beta-interest stays</span>
-                <span class="pill">Payment promise</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Hard refresh production Pricing and FAQ.</li>
-                <li>Confirm Monthly GBP10, Lifetime GBP99, Founder GBP299, and hosting renewal GBP6/year copy.</li>
-                <li>Click each paid CTA and confirm the beta-interest modal opens, not Stripe Checkout.</li>
-                <li>Submit once signed in and confirm email plus beta_tester metadata if you have dashboard access.</li>
-                <li>Submit once signed out and confirm it records interest without granting account access.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="marketing-truth" data-group="Promise And Final Switch" data-priority="medium">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark marketing truth pass as passed">
-            <div>
-              <h3>Marketing truth pass</h3>
-              <p class="small">Confirm public pages do not promise excluded launch features or overstate D&D/TTRPG use cases.</p>
-              <div class="task-meta">
-                <span class="pill priority-medium">Medium</span>
-                <span class="pill">Marketing gate</span>
-                <span class="pill">Copy review</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Review Home, Features, FAQ, Pricing, About, AI Overview, and feature landing pages.</li>
-                <li>Flag any wording that implies collaboration, public sharing, player portals, mobile apps, marketplace/community, publishing integrations, advanced fantasy calendars, or live VTT play.</li>
-                <li>Confirm D&D/TTRPG copy reads as private GM prep and campaign planning.</li>
-                <li>Check pages at desktop, tablet, and phone widths for obvious broken layout.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="project-type-promise-sweep" data-group="Promise And Final Switch" data-priority="high">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark project type promise sweep as passed">
-            <div>
-              <h3>Project-type promise sweep</h3>
-              <p class="small">Confirm the six active project types feel honestly live for their promised workflows before final checkout returns.</p>
-              <div class="task-meta">
-                <span class="pill priority-high">High</span>
-                <span class="pill">Project-type gate</span>
-                <span class="pill">Browser QA</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Create or open Novel, Novella, Short Story, D&D Campaign, TTRPG Campaign, and Comic/Graphic Novel projects.</li>
-                <li>For Novella and Short Story, verify structure labels, default sections, drafting, and export.</li>
-                <li>For D&D/TTRPG, verify session prep/recap fields, map/default sections, Character Builder, and GM-side wording.</li>
-                <li>For Comic/Graphic Novel, verify page/panel planning, persistence, delete safety, and export/restore basics.</li>
-                <li>Flag any active project type that still reads as beta, limited, or misleading for final paid launch.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-
-        <article class="task-card" data-task data-id="final-checkout-switch" data-group="Promise And Final Switch" data-priority="critical">
-          <div class="task-head">
-            <input class="done-toggle" type="checkbox" aria-label="Mark final checkout switch as passed">
-            <div>
-              <h3>Final checkout switch</h3>
-              <p class="small">This stays last: remove/migrate beta-interest and re-enable real checkout only when every other gate is ready.</p>
-              <div class="task-meta">
-                <span class="pill priority-critical">Critical</span>
-                <span class="pill">Do last</span>
-                <span class="pill">Payment gate</span>
-              </div>
-            </div>
-            <select data-field="status" aria-label="Task status">
-              <option value="not-started">Not started</option>
-              <option value="in-progress">In progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="not-applicable">Not applicable</option>
-            </select>
-          </div>
-          <div class="task-body">
-            <div>
-              <ol class="steps">
-                <li>Confirm every other launch gate is passed or explicitly deferred by product decision.</li>
-                <li>Decide how to handle beta_tester accounts: migrate, expire, or keep manually entitled.</li>
-                <li>Re-enable paid checkout CTAs.</li>
-                <li>Verify live Stripe products, prices, webhooks, success URLs, cancel URLs, portal URLs, and metadata updates.</li>
-                <li>Run success, cancel, failed-payment, cancellation, and downgrade checks.</li>
-              </ol>
-            </div>
-            <div class="notes-grid">
-              <label>Evidence or links
-                <input type="text" data-field="evidence">
-              </label>
-              <label>Notes
-                <textarea data-field="notes"></textarea>
-              </label>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <details>
-      <summary>How to use this tracker</summary>
-      <p class="small">Progress is stored in this browser's localStorage. Use Export JSON after each QA session if you want a portable backup or want to share notes back into the repo. This file is intentionally smaller than the full QA plan: it only tracks tasks that require a human, live accounts, dashboards, devices, or judgement.</p>
-    </details>
-  </main>
-
+    <section class="summary-grid" aria-label="Launch progress"><div class="metric owner"><strong id="ownerReady">0</strong><span>things you can do now</span></div><div class="metric dev"><strong id="devOpen">0</strong><span>development items open</span></div><div class="metric waiting"><strong id="ownerWaiting">0</strong><span>your tasks waiting on development</span></div><div class="metric"><strong id="doneCount">0 / 0</strong><span>tasks complete</span><div class="progress-track"><div class="progress-fill" id="progressFill"></div></div></div></section>
+    <nav class="controls" aria-label="Roadmap views"><div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true" data-view="now">Start here</button><button class="tab" role="tab" aria-selected="false" data-view="owner">My actions</button><button class="tab" role="tab" aria-selected="false" data-view="development">Development</button><button class="tab" role="tab" aria-selected="false" data-view="joint">Testing together</button><button class="tab" role="tab" aria-selected="false" data-view="later">Later</button><button class="tab" role="tab" aria-selected="false" data-view="all">Everything</button></div><button class="button quiet" id="exportProgress">Save backup</button><button class="button quiet" id="moreActions">More</button></nav>
+    <div class="panel intro-panel"><div><h2 id="viewTitle">Start here</h2><p id="viewDescription"></p></div><div class="legend"><span class="pill who-owner">YOU — decision or setup</span><span class="pill who-dev">DEVELOPMENT — no action from you</span><span class="pill who-joint">TOGETHER — guided test</span><span class="pill who-later">LATER — postponed</span></div></div>
+    <main id="taskSections"></main>
+    <section class="empty-state hidden" id="emptyState"><h2>Nothing is waiting here.</h2><p>Choose another view above or celebrate the clear desk.</p></section>
+    <details class="panel guide"><summary>Help: what do these words mean?</summary><div class="guide-grid"><div><strong>Development</strong><p>Work inside the product’s code, database, tests, or release system. You do not do this.</p></div><div><strong>QA / testing</strong><p>Trying the product and recording what happened. A failed test is useful information, not your mistake.</p></div><div><strong>Production</strong><p>The real customer website. Use disposable accounts when instructed.</p></div><div><strong>Gate</strong><p>A group of checks that must pass before taking money.</p></div><div><strong>Evidence</strong><p>A screenshot, date, or short note proving what happened. Never paste secrets.</p></div><div><strong>Blocked</strong><p>You cannot continue because something is missing. Mark it blocked and ask development.</p></div></div></details>
+    <input type="file" id="importFile" accept="application/json" class="hidden"><div class="toast hidden" id="toast" role="status"></div>
+  </div>
   <script>
-    const STORAGE_KEY = 'yow-launch-user-task-tracker-v1'
-    const tasks = [...document.querySelectorAll('[data-task]')]
-    const search = document.querySelector('#search')
-    const statusFilter = document.querySelector('#statusFilter')
-    const importFile = document.querySelector('#importFile')
+    const STORAGE_KEY='yow-launch-school-v2'
+    const t=(id,section,owner,readiness,time,priority,title,summary,why,prepare,steps,done,help,starter='')=>({id,section,owner,readiness,time,priority,title,summary,why,prepare,steps,done,help,starter})
+    const tasks=[
+      t('access','Prepare','owner','ready','30–45 min',1,'Check every business account','Make sure a lost password cannot stop launch week.','Only you can confirm the business still controls its services. This is an administrator-access check, not the already-resolved test-credentials issue.','Your phone for verification codes. Never put passwords or recovery codes here.',['Sign in to GitHub, Vercel, Supabase, Stripe, Resend, Google Analytics, your domain/DNS account, and the support inbox.','Confirm two-factor authentication and recovery details are current.','Record only “Access confirmed” and the date.','If one is inaccessible, mark Blocked and name only the service.'],'You can personally sign in to every service and recover access.','Copy this request: “I cannot access [service]. Tell me exactly which role or permission YOW needs there.”'),
+      t('devices','Prepare','owner','ready','20 min',2,'Make a device-testing plan','Identify the computers and phones we can test.','Real devices catch problems automation cannot. You only identify them; development supplies the test.','Borrowed devices are fine if no private data is left behind.',['Find one Apple Silicon Mac.','Find one Windows 10 or 11 computer.','Find one iPhone/Safari and one Android/Chrome phone.','Find a tablet, or record that browser-sized tablet testing will substitute.','Write who has each device and when it is available. Say whether Intel Mac support matters.'],'Every promised platform has a named test device.','If a device is unavailable, development can suggest cloud testing or narrow the support list.'),
+      t('lifetime','Business decisions','owner','ready','5 min',3,'Decide Lifetime browser access','Choose what happens on the website while Cloud Mode is active.','The website, desktop app, prices, and account rules need one answer.','No technical knowledge needed.',['Review the recommendation in the answer box.','Confirm that desktop Local Mode continues forever.','Confirm that, after cloud hosting expires, browser use follows Free limits unless renewed.','Edit the answer if needed, then mark Done.'],'One sentence clearly explains Lifetime browser access before and after cloud expiry.','Recommended: accept the prepared answer.','Accept recommendation: Lifetime includes browser access while Cloud Mode is active; Local Mode continues forever; after expiry browser access follows Free limits unless renewed.'),
+      t('offline','Business decisions','owner','ready','5 min',4,'Approve the device and offline rule','Confirm three computers and a 30-day licence recheck.','Customers need a predictable rule when adding devices or staying offline.','The current system already uses the recommendation.',['Approve or change the three-device limit.','Approve or change the 30-day recheck.','Confirm a missed recheck may warn but never block writing or export.','Mark Done when the rule is final.'],'Device limit, recheck period, and safety promise are approved.','Recommended: accept the prepared answer.','Accept recommendation: 3 active devices; recheck every 30 days; never block editing or export.'),
+      t('pdf','Business decisions','owner','ready','10 min',5,'Choose what PDFs may contain','Decide whether normal PDFs are for sharing or restoring.','Current visual PDFs can contain hidden project data a sender may not expect to share.','Imagine emailing a PDF to a reader, client, player, or friend.',['Approve share-safe PDFs containing only the visible document.','Keep complete restorable data in a clearly labelled ZIP backup.','If you prefer embedded data, describe the warning customers must see.','Record the decision and mark Done.'],'Development knows exactly what belongs in PDF and ZIP exports.','Recommended: accept the prepared answer.','Accept recommendation: PDFs are share-safe; full restorable project data belongs only in ZIP backups.'),
+      t('beta','Business decisions','owner','ready','10 min',6,'Decide what happens to Beta Testers','Choose whether free beta access continues when payment goes live.','Temporary beta status grants broad access and needs a defined ending.','A rough count of testers helps. Do not paste personal data here.',['Choose: keep selected testers complimentary, give a fixed free period, or end beta access at launch.','Choose the notice period.','Decide whether projects remain readable/exportable after access changes.','Write the rule; development handles accounts and messages.'],'Every beta account has a predictable access, notice, and export outcome.','If unsure, ask development for the affected account count and a least-disruptive recommendation.'),
+      t('founder','Business decisions','owner','ready','20 min',7,'Define Founder benefits','Turn broad promises into practical rules.','“Permanent recognition” and “priority influence” need a real meaning.','Open the current Founder pricing copy if helpful.',['Say where recognition appears and how removal requests work.','Define “feature your debut work,” consent, and content suitability.','Define “priority influence” without promising every request will be built.','Decide what happens to a limited slot after refund or chargeback.'],'Each benefit has a delivery, consent/removal, and refund rule.','Mark Blocked if you want development to prepare the current claims as a short decision sheet.'),
+      t('custom-ai','Business decisions','owner','ready','10 min',8,'Decide whether custom AI providers launch','Choose whether customers may enter any compatible web address.','Arbitrary providers are harder to secure, explain, and support than named providers.','This is a support-and-risk choice, not a technical exam.',['Review the recommendation to launch only named, tested providers.','Decide whether flexibility is worth extra privacy and support risk.','Accept the recommendation or require custom providers with a warning.'],'Development knows whether custom endpoints are included, hidden, or unsupported.','Recommended: accept the prepared answer.','Accept recommendation: launch named providers only; defer arbitrary custom endpoints.'),
+      t('policies','Business decisions','owner','ready','30–45 min',9,'Write the basic customer-service rules','Give development facts for Terms, checkout, and support.','A solicitor is optional, but customers still need honest answers about payments and access.','Your trading identity, customer contact, privacy contact, and operating country.',['Write the business/trading identity and support/privacy contacts.','Choose refund rules for Monthly, Lifetime, and Founder, subject to mandatory customer rights.','Describe failed Monthly payment and cancellation outcomes.','Describe what happens when optional Cloud Mode renewal is not paid.','Set a realistic support reply target.'],'Identity, contacts, refunds, failed payment, cancellation/cloud lapse, and support timing all have answers.','Approve business rules, not legal prose. Development will draft the final wording.'),
+      t('unsigned','Prepare','owner','ready','15 min',10,'Approve the unsigned-app explanation','Make sure buyers expect the Mac or Windows warning.','Customers must learn about the warning before purchase, not after.','No certificate purchase is required. Development verifies the exact instructions.',['Review the message in the answer box.','Approve it for Pricing, pre-download, and the installation guide.','Do not imply Apple or Microsoft verified the app.','Edit it into your voice, then mark Done.'],'One approved disclosure explains the warning and where installation help lives.','Recommended: approve or lightly edit the prepared wording.','Approve or edit: YOW’s desktop app is currently unsigned, so macOS or Windows will show a security warning the first time you open it. We provide tested step-by-step instructions before download. App updates are cryptographically verified by YOW.'),
+      t('fixtures','Prepare','owner','ready','45–60 min',11,'Prepare disposable test accounts','Keep launch testing away from valuable work.','Some checks deliberately delete projects or change plan states.','Use controlled email addresses. Keep passwords only in your password manager.',['Prepare two ordinary accounts for isolation tests.','Prepare one account safe to delete completely.','Identify Free, Monthly, Lifetime, Founder, and Beta Tester states.','Create an obviously disposable project named DELETE-SAFE.','Record only account nicknames and purposes here.'],'Every destructive or plan test has a clearly labelled safe account.','If you cannot set a plan, list the nickname and desired state for development.'),
+      t('keys','Prepare','owner','ready','30 min',12,'Prepare low-spend AI test keys','Create safe provider access for final AI checks.','Real provider checks need real keys without risking unlimited spend.','Only prepare providers you actually plan to advertise.',['Create a separate test key/project where supported.','Set the lowest practical spend cap or alert.','Store keys only in a password manager or the provider/YOW screen when instructed.','Never paste keys here, in chat, screenshots, code, or email.','Record only which providers are ready.'],'Every advertised provider has a low-risk key or is removed from launch.','If a provider has no cap, use a temporary key and revoke it after the guided test.'),
 
-    function readState() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-      } catch {
-        return {}
-      }
-    }
+      t('responsive','Build the product','development','working','Development',20,'Finish responsive and accessibility automation','Merge and verify the active browser-test work.','This finds mobile and accessibility problems before your manual testing.','Nothing. Development owns this.',['Review and merge the active work.','Run the full automated suite.','Record results in the roadmap and QA plan.'],'The launch baseline has a green automated suite.','You do not need to chase this; wait for a physical-device script.'),
+      t('integrity','Build the product','development','working','Development',21,'Finish data-integrity and recovery work','Make save, import, restore, replace, and delete fail safely.','A paid writing product cannot risk silent partial saves or accidental replacement.','Nothing. Development owns code, database, and failure tests.',['Finish transaction-like restore/replace/delete.','Verify durable save acknowledgement and interrupted-write recovery.','Complete import isolation and destructive failure tests.','Prepare a beginner owner test script.'],'Automated failure checks pass and safe owner QA is prepared.','Later, you follow the script and report what you see; you do not diagnose code.'),
+      t('export','Build the product','development','waiting-decision','Development',22,'Align PDF and backup privacy','Implement your PDF/ZIP decision.','This depends on your “Choose what PDFs may contain” answer.','Waiting for your PDF decision.',['Implement the approved PDF/ZIP boundary.','Test that private sections do not leak.','Verify ZIP restores completely.','Update export wording.'],'Output contains exactly what the interface promises.','Complete your PDF decision; development does the rest.'),
+      t('desktop','Build the product','development','working','Largest build item',23,'Restore the full desktop workspace','Include writing, worldbuilding, maps, exports, and Local Mode.','Lifetime and Founder promise a real desktop product, not only Account Settings.','Nothing. Development owns this.',['Expose the complete workspace.','Verify vault, local-first sync, import, export, and recovery.','Produce final unsigned Mac and Windows packages.','Write Gatekeeper and SmartScreen instructions.'],'Both release candidates complete the promised work using the local vault.','Do nothing until development says the release candidate is ready for owner QA.'),
+      t('performance','Build the product','development','working','Development',24,'Improve real-project performance','Reduce heavy loading and measure a large project.','Small automated tests may miss slowness in a real manuscript and world.','Nothing until a realistic project is requested.',['Repair ineffective code splitting.','Create a repeatable large-project fixture.','Measure dashboard, editor, search, map, and exports.','Prepare a short owner feel-test.'],'Performance meets the recorded budget and feels usable on ordinary hardware.','Your later role is human judgement, not performance engineering.'),
+      t('copy','Build the product','development','waiting-decision','Development',25,'Draft one consistent set of promises','Align Pricing, FAQ, Terms, Privacy, emails, and the app.','Development needs your policy choices before removing contradictory wording.','Waiting for your business decisions.',['Turn policies into plain-language copy.','Remove collaboration, player portal, mobile-app, publishing, marketplace, and VTT overclaims.','Add accurate AI, storage, export, cloud-expiry, and unsigned-app wording.','Prepare one owner review packet.'],'Every customer surface matches the approved plan and owner review packet.','You review meaning and tone later; you do not hunt through source files.'),
+      t('payments','Build the product','development','working','Development',26,'Finish payment and entitlement hardening','Make access server-controlled and repeat-safe.','Checkout must not grant the wrong plan, process an event twice, or oversell Founder places.','Nothing now. Real checkout remains off.',['Finish server-controlled entitlement reconciliation.','Verify webhook idempotency and one fulfilment path.','Verify atomic Founder allocation.','Prepare final payment rehearsal scripts.'],'Automated and test-mode paths pass; live checkout still waits for owner approval.','Never turn checkout on early. Development supplies the final script.'),
 
-    function writeState(state) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    }
+      t('safety-qa','Test together','joint','blocked','60–90 min',30,'Run guided web data-safety testing','Prove saves, separation, restore, deletion, and media cleanup.','Real-account behavior still needs human observation.','Wait for development to finish data work and supply the script.',['Follow one instruction at a time with disposable accounts.','Record differences with a screenshot or short note.','Stop immediately on data crossover or loss.','Do not try to fix anything yourself.'],'Every scenario has evidence and no unresolved data-loss failure.','A failed result is not your mistake. Record the last successful step and screen result.'),
+      t('types-qa','Test together','joint','blocked','2–3 sessions',31,'Try all six project types','Confirm each feels honestly ready to sell.','Final launch promises all six as complete, not beta experiments.','Wait for development to supply sample projects and a script.',['Try Novel, Novella, Short Story, D&D, TTRPG, and Comic.','Create, edit, save, refresh, navigate, and export.','Use requested phone, tablet, and desktop sizes.','Record confusing language even when it works.'],'All six complete their promised workflow without blocking defects or beta labels.','Answer only: “Could a new paying customer understand and finish this?”'),
+      t('ai-qa','Test together','joint','blocked','60–90 min',32,'Run guided AI-provider testing','Test every advertised provider safely.','Live provider and network behavior can differ from automated mocks.','Wait until production checks are ready; keep low-spend keys in your password manager.',['Follow the provider-by-provider script.','Test model loading, chat, suggestions, and one specialist tool.','Confirm Gemini billing acknowledgement.','Check only the named network/log fields with guidance.','Remove any provider that cannot pass safely.'],'Every advertised provider passes or is deliberately removed.','Never share a full key. Revoke it immediately if it appears unexpectedly.'),
+      t('mac-qa','Test together','joint','blocked','60–90 min',33,'Install the unsigned Mac release candidate','Follow the customer instructions on a clean Mac.','The accepted warning still needs a clear, reliable installation path.','Wait for a versioned release candidate and instructions.',['Use a Mac without this release installed.','Follow only the published Gatekeeper steps.','Run the supplied writing, vault, export, offline, restart, and update checks.','Uninstall/reinstall and check promised data behavior.','Record Mac model, macOS version, app version, and result.'],'A new customer can install and complete every required workflow.','If the warning differs, hide personal details, capture it, and stop for development.'),
+      t('windows-qa','Test together','joint','blocked','60–90 min',34,'Install the unsigned Windows release candidate','Follow the customer instructions on Windows 10/11.','SmartScreen and WebView2 must be verified on the real platform.','Wait for a versioned release candidate and instructions.',['Use a Windows computer without this release installed.','Follow only the published SmartScreen steps.','Confirm WebView2 installs or is detected.','Run the supplied workflow, restart, and update checks.','Record Windows version, app version, and result.'],'A new customer can install and complete every required workflow.','If Windows shows something different, hide personal details, capture it, and stop.'),
+      t('approve-copy','Approve','owner','blocked','60–90 min',35,'Approve final customer wording','Review one prepared packet instead of hunting through the site.','No solicitor is required, but you must confirm prices, limits, policies, and promises.','Wait for development to provide links/screenshots and highlighted changes.',['Read each promise summary.','Compare prices, storage, desktop/cloud access, refunds, AI, exports, Founder benefits, and unsigned warnings with your decisions.','Flag anything a normal customer could misunderstand.','Confirm identity and contact details.','Write “Owner approved” with the date after corrections.'],'The packet is complete, accurate, understandable, and owner-approved.','Reject a scattered or technical review. Development must assemble one clear packet.'),
+      t('payment-qa','Final switch','joint','blocked','Half day',36,'Rehearse payments','Prove success, failure, cancellation, refund, renewal, and access.','This links real money to customer access, so it stays last.','Wait until every non-payment gate passes and development supplies the plan.',['Verify £10 Monthly, £99 Lifetime, £299 Founder, and £6/year renewal.','Run test success, cancel, failure, delay, duplicate, refund, cancellation, and renewal.','Confirm account access and emails.','Review the backup and disable-checkout procedure.','Enable checkout only for controlled live purchases.'],'Every outcome matches policy and checkout can be disabled quickly.','Do not improvise in Stripe. Stop at the first mismatch.'),
+      t('go','Final switch','owner','blocked','15 min',37,'Give paid-launch approval','Make the final business decision after seeing evidence.','Only the owner authorises taking public money.','Wait for a one-page red/amber/green gate report.',['Read the gate report.','Confirm no unresolved red blocker.','Confirm support, payment monitoring, and rollback ownership.','Confirm unsigned disclosure and final copy approval.','Write dated “GO” or “NO-GO” with the exact condition.'],'A dated GO begins the monitored launch window.','Reject technical or ambiguous reporting; ask development for plain English.'),
 
-    function taskData(card) {
-      const id = card.dataset.id
-      return {
-        status: card.querySelector('[data-field="status"]').value,
-        evidence: card.querySelector('[data-field="evidence"]').value,
-        notes: card.querySelector('[data-field="notes"]').value
-      }
-    }
-
-    function saveCard(card) {
-      const state = readState()
-      state[card.dataset.id] = taskData(card)
-      writeState(state)
-      render()
-    }
-
-    function setCardStatus(card, status) {
-      card.querySelector('[data-field="status"]').value = status
-      card.querySelector('.done-toggle').checked = status === 'passed'
-      card.classList.toggle('is-passed', status === 'passed')
-      card.classList.toggle('is-failed', status === 'failed')
-      card.classList.toggle('is-blocked', status === 'blocked')
-    }
-
-    function restore() {
-      const state = readState()
-      tasks.forEach(card => {
-        const saved = state[card.dataset.id] || {}
-        setCardStatus(card, saved.status || 'not-started')
-        card.querySelector('[data-field="evidence"]').value = saved.evidence || ''
-        card.querySelector('[data-field="notes"]').value = saved.notes || ''
-      })
-      render()
-    }
-
-    function render() {
-      const q = search.value.trim().toLowerCase()
-      const filter = statusFilter.value
-      let passed = 0
-      let active = 0
-      let blocked = 0
-
-      tasks.forEach(card => {
-        const data = taskData(card)
-        const text = card.innerText.toLowerCase()
-        const matchesSearch = !q || text.includes(q)
-        const matchesStatus = filter === 'all' || data.status === filter
-        const visible = matchesSearch && matchesStatus
-        card.classList.toggle('hidden', !visible)
-        setCardStatus(card, data.status)
-        if (data.status === 'passed') passed += 1
-        if (data.status === 'in-progress') active += 1
-        if (data.status === 'blocked' || data.status === 'failed') blocked += 1
-      })
-
-      document.querySelector('#summaryDone').textContent = passed
-      document.querySelector('#summaryActive').textContent = active
-      document.querySelector('#summaryBlocked').textContent = blocked
-      document.querySelector('#summaryTotal').textContent = tasks.length
-    }
-
-    tasks.forEach(card => {
-      card.querySelector('[data-field="status"]').addEventListener('change', () => saveCard(card))
-      card.querySelector('.done-toggle').addEventListener('change', event => {
-        setCardStatus(card, event.target.checked ? 'passed' : 'not-started')
-        saveCard(card)
-      })
-      card.querySelectorAll('[data-field="evidence"], [data-field="notes"]').forEach(input => {
-        input.addEventListener('input', () => saveCard(card))
-      })
-    })
-
-    search.addEventListener('input', render)
-    statusFilter.addEventListener('change', render)
-
-    document.querySelector('#exportJson').addEventListener('click', () => {
-      const state = readState()
-      state.__exportedAt = new Date().toISOString()
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'yow-launch-user-task-progress.json'
-      a.click()
-      URL.revokeObjectURL(url)
-    })
-
-    document.querySelector('#importJson').addEventListener('click', () => importFile.click())
-    importFile.addEventListener('change', async event => {
-      const file = event.target.files && event.target.files[0]
-      if (!file) return
-      try {
-        const imported = JSON.parse(await file.text())
-        delete imported.__exportedAt
-        writeState(imported)
-        restore()
-      } catch {
-        alert('Could not import that JSON file.')
-      } finally {
-        importFile.value = ''
-      }
-    })
-
-    document.querySelector('#resetProgress').addEventListener('click', () => {
-      if (!confirm('Reset all local progress in this tracker?')) return
-      localStorage.removeItem(STORAGE_KEY)
-      restore()
-    })
-
-    restore()
+      t('signing','After revenue','later','later','Not launch work',50,'Add OS signing after the revenue threshold','Remove first-launch warnings when the business can afford it.','You explicitly decided this will not delay paid launch.','Wait until the agreed revenue threshold is passed.',['Define the threshold amount and measurement period.','After crossing it, price current Apple and Windows options.','Buy the appropriate accounts/certificates.','Let development add and verify signing.'],'Customers receive OS-signed packages.','Ignore this during launch preparation.'),
+      t('legal','After revenue','later','later','Optional',51,'Consider external legal review','Buy professional review later if scale or risk justifies it.','Professional sign-off is explicitly not a launch requirement.','Wait for stable documents and available budget.',['Revisit after launch or before a major market/policy change.','Review the actual customer journey and documents.','Record any chosen changes in the roadmap.'],'Optional review is complete and chosen changes ship.','Ignore this for launch unless you change the decision.')
+    ]
+    const viewInfo={now:['Start here','Only tasks you can usefully complete now. Begin at the top and ignore the rest today.'],owner:['My actions','Every decision, preparation, review, or approval that belongs to you—including tasks not ready yet.'],development:['Development work','Technical work owned by development. Read for context; you are not expected to perform it.'],joint:['Testing together','Guided sessions that need a finished build and your judgement. Start only when marked ready.'],later:['Deliberately later','Post-launch work that must not delay launch.'],all:['Complete roadmap','Every owner, development, test, and post-launch item.']}
+    let currentView='now',toastTimer
+    const readState=()=>{try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}')}catch{return{}}}
+    function writeState(state){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));const el=document.querySelector('#saveState');el.textContent='Saved just now on this device';clearTimeout(el._timer);el._timer=setTimeout(()=>el.textContent='Progress saves automatically',1800)}
+    const statusOf=(task,state)=>state[task.id]?.status||(task.readiness==='working'?'in-progress':task.readiness==='blocked'?'waiting':task.readiness==='later'?'later':'not-started')
+    const ownerLabel=o=>o==='owner'?'YOU':o==='development'?'DEVELOPMENT':o==='joint'?'TOGETHER':'LATER'
+    const whoClass=o=>`who-${o==='development'?'dev':o}`
+    const esc=v=>String(v||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
+    const options=s=>[['not-started','Not started'],['in-progress','In progress'],['waiting','Waiting on development'],['blocked','Blocked / something went wrong'],['done','Done'],['later','Deliberately later']].map(([v,l])=>`<option value="${v}" ${s===v?'selected':''}>${l}</option>`).join('')
+    function visible(task,state){const s=statusOf(task,state);if(currentView==='now')return task.owner==='owner'&&task.readiness==='ready'&&s!=='done';if(currentView==='owner')return task.owner==='owner';if(currentView==='development')return task.owner==='development';if(currentView==='joint')return task.owner==='joint';if(currentView==='later')return task.owner==='later';return true}
+    function card(task,state,index){const saved=state[task.id]||{},status=statusOf(task,state),answer=saved.answer??task.starter,blocked=task.readiness==='blocked'&&!['done','in-progress'].includes(status);return `<article class="task-card" data-id="${task.id}" data-status="${status}"><button class="task-summary" aria-expanded="false"><span class="task-number">${index+1}</span><span class="task-title"><h3>${task.title}</h3><p>${task.summary}</p></span><span class="task-time">${task.time}</span><span class="chevron">⌄</span></button><div class="task-detail"><div class="lesson-grid"><div class="lesson"><span class="pill ${whoClass(task.owner)}">${ownerLabel(task.owner)}</span><h4 style="margin-top:14px">Why this matters</h4><p>${task.why}</p><div class="${blocked?'wait-box':'help-box'}"><strong>${blocked?'Wait before starting':'What you need'}</strong>${task.prepare}</div><h4 style="margin-top:18px">Do this, one step at a time</h4><ol class="steps">${task.steps.map(s=>`<li>${s}</li>`).join('')}</ol><div class="done-box"><strong>What “done” means</strong>${task.done}</div><div class="help-box"><strong>If you are unsure or stuck</strong>${task.help}</div></div><aside class="workspace"><label>Status<select data-field="status">${options(status)}</select></label><label>Your answer, result, or decision<textarea data-field="answer" placeholder="Do not paste passwords or API keys.">${esc(answer)}</textarea></label><label>Evidence (optional)<input type="text" data-field="evidence" value="${esc(saved.evidence)}" placeholder="Screenshot name, date, or link"></label><div class="action-row">${task.owner==='owner'&&task.readiness==='ready'?'<button class="button primary" data-action="start">Start this task</button>':''}<button class="button quiet" data-action="done">Mark done</button><button class="button quiet" data-action="copy">Copy help message</button></div><p class="status-note">Saved privately in this browser. Use “Save backup” for a portable copy.</p></aside></div></div></article>`}
+    function render(){const state=readState();let shown=tasks.filter(x=>visible(x,state)).sort((a,b)=>a.priority-b.priority);if(currentView==='now')shown=shown.slice(0,1);const groups=[...new Set(shown.map(x=>x.section))];document.querySelector('#taskSections').innerHTML=groups.map(g=>{const list=shown.filter(x=>x.section===g);return `<section><div class="section-heading"><h2>${g}</h2><p>${list.length} ${list.length===1?'task':'tasks'}</p></div><div class="task-list">${list.map((x,i)=>card(x,state,i)).join('')}</div></section>`}).join('');document.querySelector('#emptyState').classList.toggle('hidden',shown.length>0);[document.querySelector('#viewTitle').textContent,document.querySelector('#viewDescription').textContent]=viewInfo[currentView];bind();summary(state)}
+    function summary(state){const rows=tasks.map(task=>({task,status:statusOf(task,state)})),ready=rows.filter(x=>x.task.owner==='owner'&&x.task.readiness==='ready'&&x.status!=='done').length,dev=rows.filter(x=>x.task.owner==='development'&&x.status!=='done').length,waiting=rows.filter(x=>(x.task.owner==='joint'&&x.status!=='done')||(x.task.owner==='owner'&&['waiting','blocked'].includes(x.status))).length,done=rows.filter(x=>x.status==='done').length;document.querySelector('#ownerReady').textContent=ready;document.querySelector('#devOpen').textContent=dev;document.querySelector('#ownerWaiting').textContent=waiting;document.querySelector('#doneCount').textContent=`${done} / ${tasks.length}`;document.querySelector('#progressFill').style.width=`${Math.round(done/tasks.length*100)}%`;const next=tasks.filter(x=>x.owner==='owner'&&x.readiness==='ready'&&statusOf(x,state)!=='done').sort((a,b)=>a.priority-b.priority)[0];document.querySelector('#nextTitle').textContent=next?next.title:'Your ready-now list is clear';document.querySelector('#nextReason').textContent=next?`${next.time}. ${next.summary}`:'Anything open for you is waiting for development or scheduled later.';document.querySelector('#openNext').disabled=!next;document.querySelector('#openNext').dataset.id=next?.id||''}
+    function update(id,patch,rerender=true){const state=readState();state[id]={...(state[id]||{}),...patch,updatedAt:new Date().toISOString()};writeState(state);if(rerender){render();requestAnimationFrame(()=>openCard(id))}else summary(state)}
+    function openCard(id){const c=document.querySelector(`[data-id="${id}"]`);if(c){c.classList.add('open');c.querySelector('.task-summary').setAttribute('aria-expanded','true')}}
+    function toast(message){const el=document.querySelector('#toast');el.textContent=message;el.classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.add('hidden'),3200)}
+    function bind(){document.querySelectorAll('.task-card').forEach(c=>{const id=c.dataset.id,task=tasks.find(x=>x.id===id),head=c.querySelector('.task-summary');head.onclick=()=>{const open=c.classList.toggle('open');head.setAttribute('aria-expanded',String(open))};c.querySelector('[data-field="status"]').onchange=e=>update(id,{status:e.target.value});c.querySelector('[data-field="answer"]').oninput=e=>update(id,{answer:e.target.value},false);c.querySelector('[data-field="evidence"]').oninput=e=>update(id,{evidence:e.target.value},false);c.querySelector('[data-action="start"]')?.addEventListener('click',()=>update(id,{status:'in-progress'}));c.querySelector('[data-action="done"]').onclick=()=>update(id,{status:'done'});c.querySelector('[data-action="copy"]').onclick=async()=>{const msg=`YOW launch task: ${task.title}\n\nI need guidance. ${task.help}\n\nMy notes: ${c.querySelector('[data-field="answer"]').value||'(none yet)'}`;try{await navigator.clipboard.writeText(msg);toast('Help message copied. Paste it into your development chat.')}catch{toast('Copy was blocked. Select and copy your notes manually.')}}})}
+    document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{currentView=tab.dataset.view;document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',String(x===tab)));render();document.querySelector('#viewTitle').scrollIntoView({block:'start'})})
+    document.querySelector('#openNext').onclick=e=>{currentView='now';document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.view==='now')));render();openCard(e.currentTarget.dataset.id);document.querySelector(`[data-id="${e.currentTarget.dataset.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'})}
+    document.querySelector('#exportProgress').onclick=()=>{const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),progress:readState()},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`yow-launch-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);toast('Backup downloaded. Keep it somewhere safe.')}
+    document.querySelector('#moreActions').onclick=()=>{const choice=prompt('Type one option:\n\nIMPORT — restore a backup\nPRINT — print or save as PDF\nRESET — erase progress in this browser')?.trim().toLowerCase();if(choice==='import')document.querySelector('#importFile').click();else if(choice==='print')window.print();else if(choice==='reset'&&confirm('Erase progress saved in this browser?')){localStorage.removeItem(STORAGE_KEY);render();toast('Local progress reset.')}else if(choice)toast('Please type IMPORT, PRINT, or RESET.')}
+    document.querySelector('#importFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;try{const parsed=JSON.parse(await file.text());localStorage.setItem(STORAGE_KEY,JSON.stringify(parsed.progress||parsed));render();toast('Backup restored.')}catch{toast('That backup could not be read.')}e.target.value=''}
+    render()
   </script>
 </body>
 </html>

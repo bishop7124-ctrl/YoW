@@ -86,7 +86,7 @@ Review `LegalModal.jsx` and the static Beta Disclaimer against implementation fo
 - Beta data-loss disclaimer versus affirmative “securely stored/always intact” marketing.
 - Hidden JSON embedded in PDF exports.
 
-Obtain qualified legal review before paid launch; this audit identifies implementation/copy inconsistencies, not legal compliance advice.
+Owner review and approval of the final customer-facing legal and promise copy is required before paid launch. External qualified legal review is optional and may happen after launch (product decision 2026-09-02); this audit identifies implementation/copy inconsistencies, not legal compliance advice.
 
 ## URL/rendering conflicts
 

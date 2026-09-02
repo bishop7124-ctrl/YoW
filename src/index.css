@@ -14926,32 +14926,24 @@ body {
 }
 .ms-rail-scenes.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; }
 
-.ms-rail-addrow { display: flex; justify-content: center; height: 6px; margin: 0 8px; opacity: 0; transition: opacity 0.12s; }
-.ms-rail-addrow:hover, .ms-rail-scenes:hover .ms-rail-addrow { opacity: 1; }
-.ms-rail-addrow-end { height: auto; opacity: 1; margin: 2px 0 0; }
-.ms-rail-addrow button {
-  height: 16px;
-  margin-top: -5px;
-  padding: 0 10px;
+.ms-rail-add-scene { display: flex; margin: 6px 0 0; }
+.ms-rail-add-scene button {
+  min-height: 26px;
+  width: 100%;
+  justify-content: center;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 11px;
-  line-height: 16px;
+  line-height: 18px;
   color: var(--text-faint);
-  background: var(--bg-raise);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px dashed var(--border);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.ms-rail-addrow-end button {
-  height: 22px;
-  margin-top: 2px;
-  width: 100%;
-  justify-content: center;
-  border-style: dashed;
-}
-.ms-rail-addrow button:hover { color: var(--accent-text); border-color: var(--accent); }
+.ms-rail-add-scene button:hover { color: var(--accent-text); border-color: var(--accent); background: var(--accent-fade); }
 
 .ms-rail-scene {
   display: flex;
