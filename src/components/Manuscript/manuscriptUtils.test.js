@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
-import { decodeHtmlEntities, buildFinalizedDraft, getFinalizedContentBlocks } from './manuscriptUtils.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildFinalizedDraft, copyTextToClipboard, decodeHtmlEntities, getFinalizedContentBlocks } from './manuscriptUtils.js'
 
 describe('decodeHtmlEntities', () => {
   it('decodes named entities like apostrophes and ampersands', () => {
@@ -46,5 +46,64 @@ describe('buildFinalizedDraft', () => {
       'First paragraph.',
       'Second paragraph.',
     ])
+  })
+})
+
+// copyTextToClipboard backs the "Copy scene" action (SceneEditor.jsx's header
+// toolbar) — the accepted product decision for the single-very-large-scene
+// typing-lag case (docs/ROADMAP.md, 2026-08-08): copy the full in-memory
+// content directly instead of relying on native `<textarea>` selection, which
+// can get slow or unreliable once a scene is big enough. These tests cover
+// both the primary Clipboard API path and the execCommand fallback used when
+// it's unavailable or rejected — exactly the "very long scene, real content"
+// shape this decision targets, at a small scale for speed.
+describe('copyTextToClipboard', () => {
+  const originalClipboard = navigator.clipboard
+  const originalExecCommand = document.execCommand
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: originalClipboard, configurable: true })
+    document.execCommand = originalExecCommand
+    vi.restoreAllMocks()
+  })
+
+  it('returns false without touching the clipboard for empty content', async () => {
+    const writeText = vi.fn()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    expect(await copyTextToClipboard('')).toBe(false)
+    expect(writeText).not.toHaveBeenCalled()
+  })
+
+  it('uses the async Clipboard API when available', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const content = 'A '.repeat(60000) + 'final paragraph past a very long scene.'
+
+    expect(await copyTextToClipboard(content)).toBe(true)
+    expect(writeText).toHaveBeenCalledWith(content)
+  })
+
+  it('falls back to execCommand when the Clipboard API rejects', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    document.execCommand = vi.fn(() => true)
+
+    expect(await copyTextToClipboard('scene content')).toBe(true)
+    expect(document.execCommand).toHaveBeenCalledWith('copy')
+  })
+
+  it('falls back to execCommand when the Clipboard API is unavailable', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    document.execCommand = vi.fn(() => true)
+
+    expect(await copyTextToClipboard('scene content')).toBe(true)
+    expect(document.execCommand).toHaveBeenCalledWith('copy')
+  })
+
+  it('returns false when every copy path fails', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    document.execCommand = vi.fn(() => false)
+
+    expect(await copyTextToClipboard('scene content')).toBe(false)
   })
 })

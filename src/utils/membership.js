@@ -155,6 +155,41 @@ const dateFrom = (value) => {
   return date && !Number.isNaN(date.getTime()) ? date : null
 }
 
+// ── Client-writable profile fields ──────────────────────────────────────────
+// The account owner can write user_metadata directly via
+// supabase.auth.updateUser() — through this app's AuthContext.updateProfile()
+// or by calling the Supabase client SDK directly (devtools, a script with the
+// anon key, etc.). Nothing in user_metadata is trustworthy for entitlement,
+// which is why getMembership() above reads plan/status/beta/wasMonthly only
+// from server-controlled app_metadata. This allowlist is a second, defensive
+// layer: it keeps updateProfile() from ever writing (or round-tripping) an
+// entitlement-shaped key into user_metadata in the first place, and — because
+// every caller currently spreads the full existing user_metadata back in
+// alongside the field it's actually changing — it also quietly drops any
+// stale entitlement field a legacy write already left there. Only harmless,
+// genuinely user-owned profile/preference fields belong here.
+// See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
+export const PROFILE_METADATA_ALLOWLIST = new Set([
+  'full_name',
+  'theme',
+  'theme_radius_unit',
+  'theme_visual_strength',
+  'custom_theme_colors',
+  'tour_progress',
+  'reengagement_opt_out',
+  // The one free-tier project the user has chosen to keep editable — a
+  // self-service pick among the user's own projects, not a privilege.
+  'free_project_id',
+])
+
+export function sanitizeProfileMetadata(profile) {
+  const clean = {}
+  for (const key of Object.keys(profile || {})) {
+    if (PROFILE_METADATA_ALLOWLIST.has(key)) clean[key] = profile[key]
+  }
+  return clean
+}
+
 export function getMembership(user) {
   const createdAt = dateFrom(user?.created_at || user?.createdAt)
   const serverMetadata = user?.app_metadata || {}
