@@ -62,7 +62,13 @@ export default function WorldHistory({ store }) {
       const event = updateEvent(editTarget.id, data)
       setSelectedId(event?.id || editTarget.id)
     } else {
-      const event = addEvent(data, { createHistory: false })
+      // Unlike the plain Timeline tab (which opts out of the mirrored
+      // worldHistory record so ordinary plot beats don't clutter world-lore
+      // AI context), this IS the History tab — its entries need a linked
+      // `worldHistory` record so they show up in the AI chat context
+      // selector's History section (AIPanel.jsx's ContextSelector reads
+      // `store.worldHistory`, not `timeline`) and in history-aware exports.
+      const event = addEvent(data, { createHistory: true })
       if (!event) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
       setSelectedId(event.id)
     }
