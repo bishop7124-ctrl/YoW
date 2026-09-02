@@ -108,7 +108,7 @@ export default function Factions({ store }) {
         {!selectedFactionId ? (
           <>
             <div className="mb-4">
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field px-2 py-1.5 text-base">
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field px-2 py-1.5 text-base" aria-label="Sort by">
                 <option value="name-asc">Name A→Z</option>
                 <option value="name-desc">Name Z→A</option>
                 <option value="members-desc">Most Members</option>

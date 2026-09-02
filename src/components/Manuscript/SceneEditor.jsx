@@ -2018,6 +2018,7 @@ const SceneEditorImpl = ({
           rows={1}
           style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', height: 1, width: 1, top: 0, left: 0 }}
           tabIndex={-1}
+          aria-hidden="true"
         />
       )}
 

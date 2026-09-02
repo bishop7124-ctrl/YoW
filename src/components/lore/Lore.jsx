@@ -231,7 +231,7 @@ export default function Lore({ store }) {
               {existingTags.map(t => <option key={t} value={t}>#{t}</option>)}
             </select>
           </div>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base" aria-label="Sort by">
             <option value="title-asc">Title A→Z</option>
             <option value="title-desc">Title Z→A</option>
             <option value="category-asc">Category A→Z</option>
