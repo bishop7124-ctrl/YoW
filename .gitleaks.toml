@@ -1,0 +1,31 @@
+title = "YOW gitleaks config"
+
+# Extend gitleaks' built-in ruleset (AWS, Stripe, Supabase-style JWTs via the
+# generic high-entropy rules, etc.) rather than replacing it.
+[extend]
+useDefault = true
+
+# Gitleaks' default rules are tuned for high-entropy secrets (API keys,
+# tokens) and generally miss short, low-entropy, dictionary-style passwords
+# hardcoded next to a `password:`/`password =` assignment — exactly the shape
+# of the P0-04 leak (docs/QA_PLAN.md Priority -1) that this config exists to
+# catch going forward. This rule does not depend on entropy.
+[[rules]]
+id = "hardcoded-password-assignment"
+description = "Hardcoded password/credential literal assigned in source (any entropy)"
+regex = '''(?i)(password|passwd|pwd)\s*[:=]\s*['"][^'"\s]{6,}['"]'''
+tags = ["password", "credential"]
+
+[allowlist]
+description = "Known-safe placeholder/example values"
+regexes = [
+  '''your-.*-here''',
+  '''<[A-Z_]+>''',
+  '''\$\{.*\}''',
+  '''process\.env\.''',
+]
+paths = [
+  '''.*\.test\.[jt]sx?$''',
+  '''.*/__tests__/.*''',
+  '''\.env\.example$''',
+]

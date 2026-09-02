@@ -40,6 +40,10 @@ async function upsertUserProfile(supabaseAdmin, userId, patch = {}) {
 
 // --------------------------------------------------------------------------
 // Write subscription data to app_metadata for recurring plans.
+// Naturally idempotent: it always fetches the subscription's *current*
+// state from Stripe and overwrites app_metadata with it (no field is
+// computed additively from the previous value), so replaying this for the
+// same or an older event is a harmless no-op/overwrite-with-same-data.
 // --------------------------------------------------------------------------
 async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbackUserId) {
   const userId = subscription.metadata?.user_id
@@ -62,6 +66,14 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
   const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
   const existing = data?.user?.app_metadata || {}
 
+  // Single write for the whole app_metadata object — the admin API replaces
+  // app_metadata wholesale rather than merging, so every field that should
+  // survive (including was_monthly below) has to be folded into the one
+  // call. was_monthly is written to app_metadata, not user_metadata — the
+  // account owner can write user_metadata directly via the client SDK, and
+  // this flag gates real product behavior (which project stays editable), so
+  // it must be server-controlled like every other entitlement field. See
+  // docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
   await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: {
       ...existing,
@@ -71,35 +83,51 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
       subscription_plan:                 plan,
       subscription_current_period_end:   getCurrentPeriodEnd(subscription),
       subscription_cancel_at_period_end: subscription.cancel_at_period_end,
+      // Cancellation locks the free tier back to a single active project.
+      ...(subscription.status === 'canceled' ? { was_monthly: true } : {}),
     },
   })
 
   // Ensure a user_profiles row exists for storage tracking.
   await upsertUserProfile(supabaseAdmin, userId, {})
-
-  // When a subscription is cancelled, record was_monthly so the free tier
-  // knows to lock the active project selection.
-  if (subscription.status === 'canceled') {
-    const userMeta = data?.user?.user_metadata || {}
-    await supabaseAdmin.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...userMeta,
-        was_monthly: true,
-      },
-    })
-  }
 }
 
 // --------------------------------------------------------------------------
 // Write lifetime plan data to app_metadata after a one-time payment.
+// Idempotent by construction: every field either short-circuits on an
+// existing value (lifetime_purchased_at, hosting_included_until) or is set
+// to the same fixed value on every call, so replaying this for the same
+// event is a harmless no-op. Founder allocation is the one non-idempotent
+// exception, which is why it goes through the atomic claim_founder_slot RPC
+// rather than an unconditional upsert (audit P0-05 — see docs/YOW_CODE_AUDIT_2026-09-01.md).
 // --------------------------------------------------------------------------
 async function activateLifetimePlan(supabaseAdmin, session) {
   const userId = session.metadata?.user_id || session.client_reference_id
-  const plan   = session.metadata?.plan
+  let plan     = session.metadata?.plan
 
   if (!userId || !plan) {
     console.warn('[stripe-webhook] Missing user_id or plan for lifetime activation', session.id)
     return
+  }
+
+  let founderOverflow = false
+  if (plan === 'founder') {
+    const { data: claimed, error: claimError } = await supabaseAdmin.rpc('claim_founder_slot', { p_user_id: userId })
+    if (claimError) {
+      // Fail the handler (not silently downgrade) so this event is retried
+      // rather than a payment going unfulfilled because of a transient DB error.
+      throw new Error(`claim_founder_slot failed: ${claimError.message}`)
+    }
+    if (!claimed) {
+      // Lost the atomic race for the last slot(s) after already being
+      // charged — never leave a paying customer with nothing. Grant
+      // Lifetime (a real, valid entitlement they paid at least as much
+      // for) and flag the account for the owner to manually resolve the
+      // Founder/Lifetime price difference or comp a slot.
+      console.error('[stripe-webhook] Founder slots exhausted at fulfillment time for', userId, '— granting Lifetime instead, needs manual review')
+      plan = 'premium_plus_lifetime'
+      founderOverflow = true
+    }
   }
 
   const customerId = typeof session.customer === 'string'
@@ -128,13 +156,27 @@ async function activateLifetimePlan(supabaseAdmin, session) {
     },
   })
 
-  // Create/update user_profiles row. Set is_founder flag for Founder purchases.
-  const profilePatch = { is_founder: plan === 'founder' }
-  await upsertUserProfile(supabaseAdmin, userId, profilePatch)
+  // is_founder itself was already set (or not) by claim_founder_slot above;
+  // this only records the overflow flag for the non-founder-plan case.
+  if (founderOverflow) {
+    await upsertUserProfile(supabaseAdmin, userId, { founder_overflow_at: new Date().toISOString() })
+  } else if (plan !== 'founder') {
+    // Ordinary (non-Founder, non-overflow) Lifetime purchase — ensure the
+    // profile row exists for storage tracking, same as the subscription path.
+    await upsertUserProfile(supabaseAdmin, userId, {})
+  }
 }
 
 // --------------------------------------------------------------------------
 // Extend maintenance_expires_at by 1 year on successful Cloud Hosting & Storage Renewal payment.
+//
+// Called only from invoice.paid — the single canonical fulfillment point for
+// this product. Maintenance/hosting_renewal is Stripe subscription mode, so
+// every period (the first one included) generates an invoice.paid event;
+// checkout.session.completed intentionally does NOT also call this (it used
+// to, which is exactly the audit P0-05 bug: checkout.session.completed and
+// the corresponding first invoice.paid both fired for the same purchase,
+// extending maintenance by 2 years for one payment).
 // --------------------------------------------------------------------------
 async function extendMaintenance(supabaseAdmin, userId) {
   if (!userId) {
@@ -151,6 +193,33 @@ async function extendMaintenance(supabaseAdmin, userId) {
   await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: { ...existing, maintenance_expires_at: newExpiry.toISOString() },
   })
+}
+
+// --------------------------------------------------------------------------
+// Release a Founder slot on a full refund. Only frees the slot counter
+// (is_founder = false) so get_founder_slot_info/claim_founder_slot see it
+// as available again — whether a refund also revokes the user's paid
+// access/plan is a separate product decision this does not make.
+// --------------------------------------------------------------------------
+async function releaseFounderSlotForCharge(stripe, supabaseAdmin, charge) {
+  if (!charge.refunded) return // partial refund — the charge isn't fully refunded yet
+  if (charge.metadata?.plan && charge.metadata.plan !== 'founder') return
+
+  let userId = charge.metadata?.user_id || null
+  let plan = charge.metadata?.plan || null
+
+  if (!userId && charge.payment_intent) {
+    const piId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent.id
+    const pi = await stripe.paymentIntents.retrieve(piId)
+    userId = pi.metadata?.user_id || null
+    plan = plan || pi.metadata?.plan || null
+  }
+
+  if (!userId || plan !== 'founder') return
+
+  const { error } = await supabaseAdmin.rpc('release_founder_slot', { p_user_id: userId })
+  if (error) console.error('[stripe-webhook] release_founder_slot failed for', userId, error.message)
+  else console.log('[stripe-webhook] Released Founder slot on full refund for', userId)
 }
 
 // --------------------------------------------------------------------------
@@ -178,7 +247,25 @@ export default async function handler(req, res) {
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
   } catch (err) {
     console.error('[stripe-webhook] Signature verification failed:', err.message)
-    return res.status(400).json({ error: err.message || 'Invalid signature' })
+    return res.status(400).json({ error: 'Invalid signature' })
+  }
+
+  // Claim this event id before doing any fulfillment work. A unique-key
+  // violation means it's already been processed (an earlier delivery, or a
+  // concurrent retry landing at the same instant) — skip straight to 200 so
+  // Stripe stops retrying, without applying fulfillment a second time. This
+  // is the fix for audit P0-05: there was previously no ledger at all, so a
+  // Stripe retry of any event could re-apply its side effects.
+  const { error: claimError } = await supabaseAdmin
+    .from('stripe_processed_events')
+    .insert({ id: event.id, type: event.type })
+  if (claimError) {
+    if (claimError.code === '23505') {
+      console.log('[stripe-webhook] duplicate event, already processed:', event.id, event.type)
+      return res.status(200).json({ received: true, duplicate: true })
+    }
+    console.error('[stripe-webhook] failed to claim event ledger row:', claimError.message)
+    return res.status(500).json({ error: 'Internal server error' })
   }
 
   try {
@@ -187,12 +274,18 @@ export default async function handler(req, res) {
         const session = event.data.object
 
         if (session.metadata?.plan === 'maintenance' || session.metadata?.plan === 'hosting_renewal') {
-          // First maintenance subscription checkout — extend immediately.
-          const userId = session.metadata?.user_id || session.client_reference_id
-          await extendMaintenance(supabaseAdmin, userId)
+          // Intentionally a no-op — see extendMaintenance's comment above.
+          // The subscription's first invoice.paid is the sole fulfillment
+          // point for this product.
         } else if (session.mode === 'payment') {
-          // One-time lifetime purchase — activate immediately.
-          await activateLifetimePlan(supabaseAdmin, session)
+          // One-time lifetime/founder purchase. Some payment methods
+          // (e.g. delayed bank debits) leave checkout.session.completed
+          // firing before payment actually clears — only fulfill once
+          // Stripe confirms payment_status is paid; the async_payment_*
+          // events below cover the delayed-clearing case.
+          if (session.payment_status === 'paid') {
+            await activateLifetimePlan(supabaseAdmin, session)
+          }
         } else if (session.subscription) {
           // Recurring subscription — retrieve full subscription object to get status.
           const subId = typeof session.subscription === 'string'
@@ -211,6 +304,22 @@ export default async function handler(req, res) {
         break
       }
 
+      // A delayed payment method (e.g. certain bank debits) clears after
+      // checkout.session.completed already fired with payment_status
+      // 'unpaid' — this is the actual fulfillment point for those. Session
+      // shape is identical to checkout.session.completed.
+      case 'checkout.session.async_payment_succeeded': {
+        const session = event.data.object
+        if (session.mode === 'payment') await activateLifetimePlan(supabaseAdmin, session)
+        break
+      }
+
+      case 'checkout.session.async_payment_failed': {
+        const session = event.data.object
+        console.warn('[stripe-webhook] Delayed payment failed for session', session.id, session.metadata)
+        break
+      }
+
       case 'invoice.paid':
       case 'invoice.payment_failed': {
         const invoice = event.data.object
@@ -223,7 +332,9 @@ export default async function handler(req, res) {
         if (!subId) break
         const latestSub = await stripe.subscriptions.retrieve(subId, { expand: ['latest_invoice'] })
 
-        // Maintenance subscription renewal — extend access rather than updating membership plan.
+        // Maintenance subscription — first payment or renewal, extend access.
+        // This is the single canonical fulfillment point for this product
+        // (see extendMaintenance's comment).
         if ((latestSub.metadata?.plan === 'maintenance' || latestSub.metadata?.plan === 'hosting_renewal') && event.type === 'invoice.paid') {
           const userId = latestSub.metadata?.user_id
             || invoice.metadata?.user_id
@@ -245,12 +356,23 @@ export default async function handler(req, res) {
         await updateSubscriptionMembership(supabaseAdmin, event.data.object)
         break
 
+      case 'charge.refunded':
+        await releaseFounderSlotForCharge(stripe, supabaseAdmin, event.data.object)
+        break
+
       default:
         break
     }
   } catch (err) {
     console.error('[stripe-webhook] Handler error for', event.type, err)
-    return res.status(500).json({ error: err.message })
+    // Release the claim so a legitimate Stripe retry can actually reprocess
+    // this event — otherwise a transient failure here would permanently
+    // mark a never-applied event as done and silently drop the fulfillment.
+    const { error: releaseError } = await supabaseAdmin.from('stripe_processed_events').delete().eq('id', event.id)
+    if (releaseError) console.error('[stripe-webhook] failed to release event ledger row after error:', releaseError.message)
+    // Never forward raw exception detail to the client (audit P0-05) — log
+    // it server-side above, where it's already captured for debugging.
+    return res.status(500).json({ error: 'Internal server error' })
   }
 
   return res.status(200).json({ received: true })
