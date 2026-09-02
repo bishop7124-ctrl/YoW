@@ -7,6 +7,18 @@
 // scenes. IndexedDB's real-world quota is a share of free disk (typically hundreds
 // of MB to several GB) rather than localStorage's ~5-10MB per-origin cap, which is
 // the actual cause of the "browser storage is full" warning this backend fixes.
+//
+// Durability (audit finding P0-07): the mirror update above is synchronous and
+// always succeeds, but the actual disk write is async and can fail (a blocked
+// version-change upgrade, a transaction abort, real quota exhaustion). Every
+// queued write is retried with backoff before being reported as failed, and
+// `getDurabilityState()` exposes whether anything is still pending or has
+// given up — callers (browserVaultAdapter.js) feed `onWriteError`/
+// `onWriteSuccess` into writeDurability.js's tracking, which is what
+// actually makes a failure visible to the user instead of only reaching
+// `console.error`.
+
+import { withRetry } from './writeDurability.js'
 
 function normalizeEntries(entries = {}) {
   if (entries instanceof Map) return new Map(entries)
@@ -20,16 +32,30 @@ export function createIndexedDbBackend({
   persistItem,
   removePersistedItem,
   onWriteError = noop,
+  onWriteSuccess = noop,
+  retry,
 } = {}) {
   const mirror = normalizeEntries(entries)
   const persist = typeof persistItem === 'function' ? persistItem : async () => {}
   const removePersisted = typeof removePersistedItem === 'function' ? removePersistedItem : async () => {}
   let queue = Promise.resolve()
+  let pendingCount = 0
+  let lastError = null
 
-  const enqueue = task => {
+  const enqueue = (key, task) => {
+    pendingCount += 1
     queue = queue
-      .then(task)
-      .catch(error => { onWriteError(error) })
+      .then(() => withRetry(task, retry))
+      .then(() => {
+        pendingCount = Math.max(0, pendingCount - 1)
+        lastError = null
+        onWriteSuccess(key)
+      })
+      .catch(error => {
+        pendingCount = Math.max(0, pendingCount - 1)
+        lastError = error
+        onWriteError(error, key)
+      })
     return queue
   }
 
@@ -39,11 +65,11 @@ export function createIndexedDbBackend({
     setItem: (key, value) => {
       const stringValue = String(value)
       mirror.set(key, stringValue)
-      enqueue(() => persist(key, stringValue))
+      return enqueue(key, () => persist(key, stringValue))
     },
     removeItem: key => {
       mirror.delete(key)
-      enqueue(() => removePersisted(key))
+      return enqueue(key, () => removePersisted(key))
     },
     // Applies a write/removal another browser tab already made (and already
     // persisted to the shared IndexedDB database) directly to this tab's own
@@ -58,5 +84,6 @@ export function createIndexedDbBackend({
     applyExternalRemove: key => { mirror.delete(key) },
     flush: () => queue,
     snapshot: () => Object.fromEntries(mirror),
+    getDurabilityState: () => ({ pending: pendingCount, lastError }),
   }
 }

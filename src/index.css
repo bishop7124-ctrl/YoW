@@ -14732,6 +14732,17 @@ body {
 .ms-save-indicator.is-saved .ms-save-dot {
   background: #4ade80;
 }
+/* Local write failed to persist durably (audit P0-07) — distinct from
+   "saving", since automatic retries have already been exhausted and this
+   isn't expected to resolve on its own; distinct from the muted "saved"
+   styling since it needs to stay noticeable, not fade into the chrome. */
+.ms-save-indicator.is-error {
+  color: var(--danger, #ef4444);
+}
+.ms-save-indicator.is-error .ms-save-dot {
+  background: var(--danger, #ef4444);
+  animation: ms-pulse 1.4s ease-in-out infinite;
+}
 @keyframes ms-pulse {
   0%, 100% { opacity: 0.4; transform: scale(0.8); }
   50%       { opacity: 1;   transform: scale(1); }
