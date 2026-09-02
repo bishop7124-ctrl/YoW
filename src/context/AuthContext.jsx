@@ -7,6 +7,7 @@ import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSetting
 import { trackEvent, identifyUser } from '../utils/analytics'
 import { isDesktopAppRuntime } from '../utils/runtime'
 import { clearLastWebActivity, isWebSessionIdleExpired, writeLastWebActivity } from '../utils/sessionActivity'
+import { sanitizeProfileMetadata } from '../utils/membership'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -89,7 +90,7 @@ export function AuthProvider({ children }) {
         // Fire welcome email after email confirmation is complete (PKCE flow)
         if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at && session.user.id) {
           const confirmedJustNow = new Date(session.user.email_confirmed_at) > new Date(Date.now() - 30_000)
-          if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email)
+          if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email, session.access_token)
         }
         if (event === 'SIGNED_IN' && session?.user?.id && sessionStorage.getItem('yow_oauth_login_pending') === 'google') {
           sessionStorage.removeItem('yow_oauth_login_pending')
@@ -133,14 +134,19 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  async function sendWelcomeEmail(userId, email) {
-    if (OFFLINE_MODE) return
+  // Sends the caller's own session token, not the (public) anon key — the
+  // Edge Function verifies it and derives the account's real user id/email
+  // from the token itself rather than trusting anything in the request body
+  // (audit finding P0-03: this previously let any caller with the public
+  // anon key request a "welcome" email, with an arbitrary user_id/email of
+  // their choosing, sent through YOW's Resend account).
+  async function sendWelcomeEmail(userId, email, accessToken) {
+    if (OFFLINE_MODE || !accessToken) return
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
       const res = await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
         body: JSON.stringify({ record: { user_id: userId, email } }),
       })
       console.log('[welcome] response', res.status)
@@ -231,14 +237,23 @@ export function AuthProvider({ children }) {
 
   const clearRecoveryMode = () => setRecoveryMode(false)
 
+  // Only an allowlisted set of harmless profile/preference fields may ever be
+  // written to user_metadata here — entitlement (plan, subscription status,
+  // beta access) must never come from a client-writable field. See
+  // sanitizeProfileMetadata() in utils/membership.js and
+  // docs/YOW_CODE_AUDIT_2026-09-01.md P0-01. This is defense in depth, not the
+  // security boundary itself: getMembership() reading only app_metadata is
+  // what actually makes user_metadata untrustworthy for entitlement, since a
+  // user can always call supabase.auth.updateUser() directly and bypass any
+  // app-layer wrapper.
   const updateProfile = OFFLINE_MODE
     ? (profile) => {
-        const updated = { ...user, user_metadata: { ...(user?.user_metadata ?? {}), ...profile } }
+        const updated = { ...user, user_metadata: { ...(user?.user_metadata ?? {}), ...sanitizeProfileMetadata(profile) } }
         setUser(updated)
         return Promise.resolve(updated)
       }
     : async (profile) => {
-        const { data, error } = await supabase.auth.updateUser({ data: profile })
+        const { data, error } = await supabase.auth.updateUser({ data: sanitizeProfileMetadata(profile) })
         if (error) throw error
         setUser(data.user ?? null)
         return data.user
