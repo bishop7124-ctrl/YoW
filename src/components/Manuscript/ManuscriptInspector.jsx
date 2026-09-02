@@ -5,13 +5,48 @@ import {
   todayKey, computeStreak, lastNDays, totalWordsOnDate, countWords,
 } from './manuscriptUtils.js'
 import { NotesPanel } from './ManuscriptToolbar.jsx'
+import Modal from '../shared/Modal.jsx'
+import { getCharacterAge } from '../../utils/characterAge.js'
 
 const TABS = [
   { id: 'scene', label: 'Scene' },
   { id: 'notes', label: 'Notes' },
+  { id: 'catalogue', label: 'Catalogue' },
   { id: 'format', label: 'Format' },
   { id: 'progress', label: 'Progress' },
 ]
+
+const TRAIT_FIELDS = [
+  ['strengths', 'Strengths'],
+  ['weaknesses', 'Weaknesses'],
+  ['internalGoal', 'Internal Goal'],
+  ['externalGoal', 'External Goal'],
+  ['disabilities', 'Disabilities'],
+  ['qualifications', 'Qualifications'],
+  ['talents', 'Talents'],
+  ['languages', 'Languages'],
+  ['fears', 'Fears'],
+  ['passions', 'Passions'],
+]
+
+const BACKGROUND_FIELDS = [
+  ['hometown', 'Hometown'],
+  ['religion', 'Religion'],
+  ['language', 'Primary Language'],
+  ['historicEventsWitnessed', 'Historic Events Witnessed'],
+  ['lifeEvents', 'Life Events'],
+]
+
+function getCharacterStatus(character) {
+  if (character?.status) return character.status
+  return character?.deathDate ? 'dead' : 'alive'
+}
+
+function formatCharacterStatus(status) {
+  if (status === 'alive') return 'Alive'
+  if (status === 'dead') return 'Dead'
+  return status || ''
+}
 
 // ─── Scene tab ─────────────────────────────────────────────────────────────────
 
@@ -352,11 +387,222 @@ function TargetRow({ label, current, target, onSetTarget }) {
   )
 }
 
+function ProfileLine({ label, value }) {
+  if (value === undefined || value === null || value === '') return null
+  return (
+    <div className="ms-profile-line">
+      <span>{label}</span>
+      <b>{String(value)}</b>
+    </div>
+  )
+}
+
+function ProfileBlock({ label, value }) {
+  if (!value) return null
+  return (
+    <section className="ms-profile-block">
+      <h4>{label}</h4>
+      <p>{value}</p>
+    </section>
+  )
+}
+
+function CharacterProfileModal({ character, characters = [], factions = [], currentYear, onClose, onOpenFullEntry }) {
+  if (!character) return null
+  const faction = character.factionId ? factions.find(item => item.id === character.factionId) : null
+  const status = getCharacterStatus(character)
+  const age = getCharacterAge(character, currentYear)
+  const parentNames = (character.parentIds || []).map(id => characters.find(item => item.id === id)?.name).filter(Boolean)
+  const childNames = (character.childIds || []).map(id => characters.find(item => item.id === id)?.name).filter(Boolean)
+  const spouseNames = (character.spouseIds || []).map(id => characters.find(item => item.id === id)?.name).filter(Boolean)
+  const relationships = Array.isArray(character.relationships)
+    ? character.relationships.map(rel => ({ ...rel, targetName: characters.find(item => item.id === rel.targetId)?.name })).filter(rel => rel.targetName)
+    : []
+  const traitBlocks = TRAIT_FIELDS.map(([field, label]) => ({ label, value: character.traits?.[field] })).filter(item => item.value)
+  const backgroundBlocks = BACKGROUND_FIELDS.map(([field, label]) => ({ label, value: character.background?.[field] })).filter(item => item.value)
+
+  return (
+    <Modal title={character.name || 'Character profile'} onClose={onClose} wide centered closeOnBackdrop>
+      <div className="ms-character-profile">
+        <header className="ms-character-profile-head">
+          {character.image ? (
+            <img src={character.image} alt="" className="ms-character-profile-image" style={{ objectPosition: character.imagePosition || '50% 50%' }} />
+          ) : (
+            <div className="ms-character-profile-initial">{character.name?.[0]?.toUpperCase() || '?'}</div>
+          )}
+          <div>
+            <small>Character dossier</small>
+            <h3>{character.name || 'Untitled character'}</h3>
+            <p>{[character.role, character.pronouns, age ? `Age ${age}` : null].filter(Boolean).join(' · ') || 'Character'}</p>
+            <div className="ms-character-profile-chips">
+              {faction && <span>{faction.name}</span>}
+              {character.familyGroup && <span>House {character.familyGroup}</span>}
+              {character.species && <span>{character.species}</span>}
+              {character.titleJob && <span>{character.titleJob}</span>}
+              {character.keywords?.map(keyword => <span key={keyword}>{keyword}</span>)}
+            </div>
+          </div>
+        </header>
+
+        <div className="ms-character-profile-grid">
+          <section className="ms-character-profile-card">
+            <h4>Profile Details</h4>
+            <ProfileLine label="Name" value={character.name} />
+            <ProfileLine label="Role" value={character.role} />
+            <ProfileLine label="Pronouns" value={character.pronouns} />
+            <ProfileLine label="Species" value={character.species} />
+            <ProfileLine label="Title / Job" value={character.titleJob || character.title} />
+            <ProfileLine label="Family Group" value={character.familyGroup} />
+            <ProfileLine label="Faction" value={faction?.name} />
+            <ProfileLine label="Birth Year" value={character.birthDate} />
+            <ProfileLine label="Status" value={formatCharacterStatus(status)} />
+            {status !== 'alive' && <ProfileLine label="Death Year" value={character.deathDate} />}
+            <ProfileLine label="Age" value={age} />
+          </section>
+
+          <section className="ms-character-profile-card">
+            <h4>Biography</h4>
+            <p className="ms-character-profile-prose">{character.bio || 'No biography provided.'}</p>
+          </section>
+
+          {(parentNames.length > 0 || childNames.length > 0 || spouseNames.length > 0 || relationships.length > 0) && (
+            <section className="ms-character-profile-card ms-character-profile-wide">
+              <h4>Relationships</h4>
+              <ProfileLine label="Parents" value={parentNames.join(', ')} />
+              <ProfileLine label="Children" value={childNames.join(', ')} />
+              <ProfileLine label="Spouses" value={spouseNames.join(', ')} />
+              {relationships.map(rel => (
+                <ProfileLine key={`${rel.targetId}-${rel.type}`} label={rel.type || 'Relationship'} value={rel.targetName} />
+              ))}
+            </section>
+          )}
+
+          {traitBlocks.length > 0 && (
+            <section className="ms-character-profile-card ms-character-profile-wide">
+              <h4>Character Traits</h4>
+              <div className="ms-character-profile-blocks">
+                {traitBlocks.map(item => <ProfileBlock key={item.label} label={item.label} value={item.value} />)}
+              </div>
+            </section>
+          )}
+
+          {character.extraAbilities?.length > 0 && (
+            <section className="ms-character-profile-card ms-character-profile-wide">
+              <h4>Extra Abilities</h4>
+              <div className="ms-character-profile-blocks">
+                {character.extraAbilities.map((ability, index) => (
+                  <ProfileBlock key={`${ability.name || 'ability'}-${index}`} label={ability.name || `Ability ${index + 1}`} value={ability.description || 'No description.'} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {backgroundBlocks.length > 0 && (
+            <section className="ms-character-profile-card ms-character-profile-wide">
+              <h4>Background</h4>
+              <div className="ms-character-profile-blocks">
+                {backgroundBlocks.map(item => <ProfileBlock key={item.label} label={item.label} value={item.value} />)}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <div className="ms-character-profile-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+          <button type="button" className="btn btn-primary" onClick={() => onOpenFullEntry?.({ id: character.id, section: 'characters', name: character.name })}>Open full entry</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function CatalogueTab({ characters = [], locations = [], factions = [], currentYear, loreEntries = [], worldHistory = [], onEntityClick, selectedEntity, onOpenEntitySection }) {
+  const [profileCharacter, setProfileCharacter] = useState(null)
+  const sections = [
+    { id: 'characters', label: 'Characters', items: characters, getTitle: item => item.name, getPreview: item => item.summary || item.description || item.notes || item.role },
+    { id: 'locations', label: 'Locations', items: locations, getTitle: item => item.name, getPreview: item => item.description || item.notes || item.summary },
+    { id: 'lore', label: 'Lore', items: loreEntries, getTitle: item => item.title, getPreview: item => item.content || item.summary || item.category },
+    { id: 'worldhistory', label: 'History', items: worldHistory, getTitle: item => item.title, getPreview: item => item.content || item.summary || item.dateRange || item.era },
+  ]
+  const [activeSectionId, setActiveSectionId] = useState(selectedEntity?.section || sections.find(section => section.items?.length)?.id || sections[0].id)
+  const total = sections.reduce((sum, section) => sum + (section.items?.length || 0), 0)
+  if (!total) return <div className="ms-insp-empty">No catalogue entries yet.</div>
+  const activeSection = sections.find(section => section.id === activeSectionId) || sections[0]
+  const selectedSection = sections.find(section => section.id === selectedEntity?.section)
+  const selectedItem = selectedSection?.items?.find(item => item.id === selectedEntity?.id)
+  const selectedTitle = selectedItem ? selectedSection.getTitle(selectedItem) : selectedEntity?.name
+  const selectedPreview = selectedItem ? selectedSection.getPreview(selectedItem) : selectedEntity?.preview
+  const openCatalogueItem = (item, section, title) => {
+    onEntityClick({ id: item.id, section: section.id, name: title })
+    if (section.id === 'characters') setProfileCharacter(item)
+  }
+
+  return (
+    <div className="ms-insp-scroll ms-catalogue-tab">
+      <div className="ms-ref-tabs" role="tablist" aria-label="Catalogue sections">
+        {sections.map(section => (
+          <button
+            key={section.id}
+            type="button"
+            role="tab"
+            aria-selected={activeSection.id === section.id}
+            className={activeSection.id === section.id ? 'is-on' : ''}
+            onClick={() => setActiveSectionId(section.id)}
+          >
+            {section.label}
+            <span>{section.items?.length || 0}</span>
+          </button>
+        ))}
+      </div>
+      {selectedEntity && (
+        <section className="ms-ref-detail" aria-label="Selected catalogue entry">
+          <small>{selectedSection?.label || selectedEntity.section}</small>
+          <b>{selectedTitle || 'Untitled'}</b>
+          {selectedPreview && <p>{selectedPreview}</p>}
+          <button type="button" onClick={() => onOpenEntitySection?.(selectedEntity)}>
+            Open full entry
+          </button>
+        </section>
+      )}
+      <div className="ms-ref-list" role="tabpanel" aria-label={activeSection.label}>
+        {(activeSection.items || []).length === 0 ? (
+          <div className="ms-insp-empty">No {activeSection.label.toLowerCase()} yet.</div>
+        ) : (activeSection.items || []).slice(0, 120).map(item => {
+          const title = activeSection.getTitle(item) || 'Untitled'
+          const preview = activeSection.getPreview(item) || ''
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`ms-ref-item${selectedEntity?.section === activeSection.id && selectedEntity?.id === item.id ? ' is-selected' : ''}`}
+              onClick={() => openCatalogueItem(item, activeSection, title)}
+            >
+              <b>{title}</b>
+              {preview && <span>{preview}</span>}
+            </button>
+          )
+        })}
+      </div>
+      {profileCharacter && (
+        <CharacterProfileModal
+          character={profileCharacter}
+          characters={characters}
+          factions={factions}
+          currentYear={currentYear}
+          onClose={() => setProfileCharacter(null)}
+          onOpenFullEntry={onOpenEntitySection}
+        />
+      )}
+    </div>
+  )
+}
+
 // ─── Root component ───────────────────────────────────────────────────────────
 
 export default function ManuscriptInspector({
   activeTab, onSetTab, onClose,
   scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick,
+  characters, locations, factions, currentYear, loreEntries, worldHistory, selectedCatalogueEntity, onOpenEntitySection,
   highlightedNoteSeq,
   formatSettings, onFormatChange,
   scenes, chapters, writingGoals, onUpdateGoals,
@@ -396,6 +642,20 @@ export default function ManuscriptInspector({
           scene
             ? <NotesPanel scene={scene} onUpdateScene={onUpdateScene} highlightedSeq={highlightedNoteSeq} />
             : <div className="ms-insp-empty">Select a scene to see its notes.</div>
+        )}
+        {activeTab === 'catalogue' && (
+          <CatalogueTab
+            key={`${selectedCatalogueEntity?.section || 'all'}:${selectedCatalogueEntity?.id || 'none'}`}
+            characters={characters}
+            locations={locations}
+            factions={factions}
+            currentYear={currentYear}
+            loreEntries={loreEntries}
+            worldHistory={worldHistory}
+            onEntityClick={onEntityClick}
+            selectedEntity={selectedCatalogueEntity}
+            onOpenEntitySection={onOpenEntitySection}
+          />
         )}
         {activeTab === 'format' && (
           <FormatTab settings={formatSettings} onChange={onFormatChange} />

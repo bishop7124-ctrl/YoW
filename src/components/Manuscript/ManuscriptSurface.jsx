@@ -77,7 +77,7 @@ export default function ManuscriptSurface({
   activeSurface, onClose,
   contextLabel,
   // AI pane
-  activeScene, activeNovel, characters, locations, selectedText, onAppendToScene, userId, membership,
+  activeScene, activeNovel, characters, locations, selectedText, onAppendToScene, onReplaceSelection, userId, membership,
   // Search pane
   scenes, chapters, acts, activeNovelId, onOpenScene, onReplaceInScene,
   // History pane
@@ -106,6 +106,7 @@ export default function ManuscriptSurface({
             locations={locations}
             selectedText={selectedText}
             onAppendToScene={onAppendToScene}
+            onReplaceSelection={onReplaceSelection}
             userId={userId}
             membership={membership}
           />

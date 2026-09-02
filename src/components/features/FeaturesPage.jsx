@@ -47,7 +47,7 @@ const FEATURE_MATRIX = [
         note: 'Labels adapt to each format: Hook / Inciting incident / Climax for novels; Quest hook / Boss battle / Arc climax for D&D; Splash / Page turn / Issue climax for comics.',
       },
       {
-        label: 'Distraction-free focus mode',
+        label: 'Dedicated Write/Edit modes',
         prose: true,
         comic: true,
         ttrpg: true,
