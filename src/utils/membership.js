@@ -1,4 +1,4 @@
-import { BILLING } from './billingConfig'
+import { BILLING } from './billingConfig.js'
 
 export const TRIAL_DAYS = 28
 
