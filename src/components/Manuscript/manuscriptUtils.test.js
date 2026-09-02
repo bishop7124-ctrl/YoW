@@ -1,6 +1,39 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildFinalizedDraft, copyTextToClipboard, decodeHtmlEntities, getFinalizedContentBlocks } from './manuscriptUtils.js'
+import {
+  buildFinalizedDraft,
+  copyTextToClipboard,
+  dailyWordsForScenes,
+  decodeHtmlEntities,
+  getFinalizedContentBlocks,
+  subtractDays,
+} from './manuscriptUtils.js'
+
+describe('writing progress dates', () => {
+  it('moves across calendar boundaries without using UTC date conversion', () => {
+    expect(subtractDays('2026-03-01', 1)).toBe('2026-02-28')
+    expect(subtractDays('2024-03-01', 1)).toBe('2024-02-29')
+  })
+
+  it('combines cumulative scene histories into daily net word totals', () => {
+    const scenes = [
+      { wordHistory: [
+        { date: '2026-08-31', words: 300, timestamp: 1 },
+        { date: '2026-09-01', words: 800, timestamp: 2 },
+      ] },
+      { wordHistory: [
+        { date: '2026-09-01', words: 200, timestamp: 3 },
+        { date: '2026-09-02', words: 550, timestamp: 4 },
+      ] },
+    ]
+
+    expect(dailyWordsForScenes(scenes)).toEqual({
+      '2026-08-31': 300,
+      '2026-09-01': 700,
+      '2026-09-02': 350,
+    })
+  })
+})
 
 describe('decodeHtmlEntities', () => {
   it('decodes named entities like apostrophes and ampersands', () => {

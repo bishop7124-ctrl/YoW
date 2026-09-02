@@ -330,13 +330,13 @@ export function wordCountForScenes(scenes) {
 // re-duplicating them a third time.
 
 export function todayKey() {
-  return new Date().toISOString().slice(0, 10)
+  return dateKey(Date.now())
 }
 
 export function subtractDays(dateStr, n) {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
+  return dateKey(d)
 }
 
 export function formatShortDate(dateStr) {
@@ -366,6 +366,15 @@ export function sceneNetByDate(scene) {
 
 export function totalWordsOnDate(scenes, date) {
   return scenes.reduce((sum, s) => sum + (sceneNetByDate(s)[date] ?? 0), 0)
+}
+
+export function dailyWordsForScenes(scenes) {
+  return scenes.reduce((totals, scene) => {
+    Object.entries(sceneNetByDate(scene)).forEach(([date, words]) => {
+      totals[date] = (totals[date] || 0) + words
+    })
+    return totals
+  }, {})
 }
 
 export function computeStreak(scenes) {

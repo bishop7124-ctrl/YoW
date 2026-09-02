@@ -15244,8 +15244,39 @@ body {
 .ms-insp-bar > div { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.2s ease; }
 .ms-insp-goal-meta { display: flex; justify-content: space-between; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--text-faint); }
 
+.ms-insp-streak {
+  display: grid;
+  gap: 10px;
+  margin: -8px 0 22px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
+}
+.ms-insp-streak-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ms-insp-streak-stats > div { display: grid; gap: 2px; }
+.ms-insp-streak-stats b { color: var(--text-main); font-family: var(--font-serif); font-size: 20px; line-height: 1; }
+.ms-insp-streak-stats span { color: var(--text-faint); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.ms-insp-streak-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.ms-insp-streak-days > span {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-faint);
+  background: var(--bg-main);
+  font-size: 9px;
+  font-weight: 750;
+}
+.ms-insp-streak-days > .is-met { border-color: color-mix(in srgb, var(--accent) 78%, var(--border)); color: var(--accent-contrast, var(--bg-main)); background: var(--accent); }
+.ms-insp-streak-days > .is-untracked { border-style: dashed; opacity: .52; }
+.ms-insp-streak-days > .is-today { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.ms-insp-streak > p { margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.45; }
+
 .ms-insp-spark { display: flex; align-items: flex-end; gap: 5px; height: 44px; margin: 10px 0 4px; }
 .ms-insp-spark-bar { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--bg-hover); }
+.ms-insp-spark-bar.is-goal-met { background: color-mix(in srgb, var(--accent) 72%, #5fcf91); }
 .ms-insp-spark-bar.is-now { background: var(--accent); }
 .ms-insp-spark-x { display: flex; gap: 5px; font-size: 10px; color: var(--text-faint); }
 .ms-insp-spark-x span { flex: 1; text-align: center; }
@@ -23323,19 +23354,67 @@ body {
   letter-spacing: .05em;
 }
 
-/* Reuses .analytics-heatmap's per-cell coloring (span[data-level]); only the
-   container geometry differs — a single 14-wide row instead of the 35-day
-   7-column block used in the Insights tab. */
-.overview-streak-heatmap {
-  grid-template-columns: repeat(14, minmax(0, 1fr));
+.overview-streak-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.overview-streak-summary > div { display: grid; gap: 3px; }
+.overview-streak-summary strong { color: var(--text-main); font-family: var(--font-serif); font-size: clamp(22px, 2.4vw, 30px); line-height: 1; }
+.overview-streak-summary span { color: var(--text-muted); font-size: 10px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
+
+.overview-streak-days {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(22px, 1fr));
+  gap: 4px;
   max-width: 100%;
-  margin: 10px 0;
+  margin: 10px 0 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.overview-streak-days > span {
+  display: grid;
+  place-items: center;
+  min-height: 38px;
+  padding: 4px 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--bg-main) 68%, transparent);
+}
+
+.overview-streak-days small { font-size: 8px; font-weight: 750; text-transform: uppercase; }
+.overview-streak-days b { color: inherit; font-size: 10px; line-height: 1; }
+.overview-streak-days > .is-met { border-color: color-mix(in srgb, var(--accent) 75%, var(--border)); color: var(--accent-contrast, var(--bg-main)); background: var(--accent); }
+.overview-streak-days > .is-untracked { border-style: dashed; opacity: .48; }
+.overview-streak-days > .is-today { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.overview-streak-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .overview-streak-caption {
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.overview-streak-footer button {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 720;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .overview-activity-list {
@@ -23401,8 +23480,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .overview-streak-heatmap {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+  .overview-streak-days {
+    grid-template-columns: repeat(7, minmax(28px, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
 }

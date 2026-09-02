@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react'
 import {
   SCENE_STATUSES,
   FONTS, LINE_SPACINGS, INDENT_SIZES, DEFAULT_FORMAT,
-  todayKey, computeStreak, lastNDays, totalWordsOnDate, countWords,
+  todayKey, dailyWordsForScenes, formatShortDate, lastNDays, totalWordsOnDate, countWords,
 } from './manuscriptUtils.js'
 import { NotesPanel } from './ManuscriptToolbar.jsx'
 import Modal from '../shared/Modal.jsx'
 import { getCharacterAge } from '../../utils/characterAge.js'
+import { buildWritingGoalStreak } from '../../utils/writingStreak.js'
 
 const TABS = [
   { id: 'scene', label: 'Scene' },
@@ -262,8 +263,8 @@ function FormatTab({ settings, onChange }) {
 
 function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
   const today = todayKey()
-  const streak = useMemo(() => computeStreak(scenes), [scenes])
   const wordsToday = useMemo(() => totalWordsOnDate(scenes, today), [scenes, today])
+  const dailyWords = useMemo(() => dailyWordsForScenes(scenes), [scenes])
   const last7 = useMemo(() => lastNDays(scenes, 7), [scenes])
   const totalWords = useMemo(() => scenes.reduce((acc, s) => acc + countWords(s.content), 0), [scenes])
   const avgWordsPerDay = useMemo(() => {
@@ -275,6 +276,10 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
   const goals = writingGoals ?? {}
   const dailyGoal = goals.daily ?? 0
   const manuscriptGoal = goals.manuscript ?? 0
+  const goalStreak = useMemo(
+    () => buildWritingGoalStreak(dailyWords, dailyGoal, goals.dailyHistory, today, 7),
+    [dailyGoal, dailyWords, goals.dailyHistory, today]
+  )
   const dailyPct = dailyGoal > 0 ? Math.min(100, (wordsToday / dailyGoal) * 100) : 0
   const peakDay = Math.max(...last7.map(d => d.words), 1)
 
@@ -285,6 +290,13 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
     onUpdateGoals({ ...goals, daily: Number.isFinite(val) && val >= 0 ? val : 0 })
     setEditingGoal(false)
   }
+  const streakMessage = !goalStreak.enabled
+    ? 'Set a daily goal to begin tracking consecutive goal days.'
+    : goalStreak.todayMet
+      ? 'Goal met today — the streak is secure.'
+      : goalStreak.currentStreak > 0
+        ? `${goalStreak.remaining.toLocaleString()} words today will keep the streak alive.`
+        : `${goalStreak.remaining.toLocaleString()} words to start a new streak.`
 
   return (
     <div className="ms-insp-scroll">
@@ -310,9 +322,30 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
         </div>
         <div className="ms-insp-bar"><div style={{ width: `${dailyPct}%` }} /></div>
         <div className="ms-insp-goal-meta">
-          <span>{streak > 0 ? `${streak}-day streak` : 'No streak yet'}</span>
+          <span>{goalStreak.enabled ? `${goalStreak.currentStreak}-day goal streak` : 'Goal streak off'}</span>
           <span>{avgWordsPerDay > 0 ? `${avgWordsPerDay.toLocaleString()} avg / day` : ''}</span>
         </div>
+      </div>
+
+      <div className="ms-insp-streak" aria-label="Writing goal streak">
+        <div className="ms-insp-streak-stats">
+          <div><b>{goalStreak.currentStreak}</b><span>Current</span></div>
+          <div><b>{goalStreak.bestStreak}</b><span>Best</span></div>
+          <div><b>{goalStreak.totalGoalDays}</b><span>Goals met</span></div>
+        </div>
+        <div className="ms-insp-streak-days" role="list" aria-label="Last seven daily goal results">
+          {goalStreak.recentDays.map(day => (
+            <span
+              key={day.date}
+              role="listitem"
+              className={`${day.met ? 'is-met' : 'is-missed'}${day.isToday ? ' is-today' : ''}${day.goal <= 0 ? ' is-untracked' : ''}`}
+              title={`${formatShortDate(day.date)}: ${day.words.toLocaleString()} of ${day.goal.toLocaleString()} words`}
+            >
+              {new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}
+            </span>
+          ))}
+        </div>
+        <p>{streakMessage}</p>
       </div>
 
       <div className="ms-insp-group">
@@ -321,7 +354,8 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
           {last7.map((day, i) => {
             const isToday = day.date === today
             const pct = peakDay > 0 ? Math.max((day.words / peakDay) * 100, day.words > 0 ? 6 : 0) : 0
-            return <div key={i} className={`ms-insp-spark-bar${isToday ? ' is-now' : ''}`} style={{ height: `${pct}%` }} title={`${day.words.toLocaleString()} words`} />
+            const goalDay = goalStreak.recentDays[i]
+            return <div key={i} className={`ms-insp-spark-bar${goalDay?.met ? ' is-goal-met' : ''}${isToday ? ' is-now' : ''}`} style={{ height: `${pct}%` }} title={`${day.words.toLocaleString()} of ${(goalDay?.goal || 0).toLocaleString()} words`} />
           })}
         </div>
         <div className="ms-insp-spark-x">

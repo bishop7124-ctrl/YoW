@@ -20,6 +20,7 @@ import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, pers
 import ManuscriptZoomControl from './ManuscriptZoomControl.jsx'
 import SceneConflictReview from './SceneConflictReview.jsx'
 import { useSceneWindow } from './useSceneWindow.js'
+import { withDailyGoalHistory } from '../../utils/writingStreak.js'
 
 const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
 
@@ -796,13 +797,22 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const handleUpdateGoals = useCallback((newGoals) => {
     if (!activeNovelId) return
+    let goalsToSave = { ...writingGoals, ...newGoals }
+    if (Object.prototype.hasOwnProperty.call(newGoals, 'daily')) {
+      const recordedDailyGoal = withDailyGoalHistory(writingGoals, newGoals.daily)
+      goalsToSave = {
+        ...goalsToSave,
+        daily: recordedDailyGoal.daily,
+        dailyHistory: recordedDailyGoal.dailyHistory,
+      }
+    }
     updateNovel(activeNovelId, {
-      writingGoals: newGoals,
-      ...(Object.prototype.hasOwnProperty.call(newGoals, 'manuscript')
-        ? { wordCountTarget: Number(newGoals.manuscript) || null, wordTarget: Number(newGoals.manuscript) || null }
+      writingGoals: goalsToSave,
+      ...(Object.prototype.hasOwnProperty.call(goalsToSave, 'manuscript')
+        ? { wordCountTarget: Number(goalsToSave.manuscript) || null, wordTarget: Number(goalsToSave.manuscript) || null }
         : {}),
     })
-  }, [activeNovelId, updateNovel])
+  }, [activeNovelId, updateNovel, writingGoals])
 
   // Template application
   const handleApplyTemplate = useCallback(async (template, { withChapters, withScenes }) => {
