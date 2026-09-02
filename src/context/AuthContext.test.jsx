@@ -60,11 +60,22 @@ vi.mock('../utils/analytics', () => ({
 }))
 
 function Probe() {
-  const { user, signIn } = useAuth()
+  const { user, signIn, updateProfile } = useAuth()
   return (
     <>
       <div data-testid="user-id">{user?.id || 'signed-out'}</div>
       <button type="button" onClick={() => signIn('writer@example.com', 'password')}>Sign in</button>
+      <button
+        type="button"
+        onClick={() => updateProfile({
+          full_name: 'Ada Lovelace',
+          subscription_status: 'active',
+          subscription_plan: 'founder',
+          beta_tester: true,
+        })}
+      >
+        Update profile
+      </button>
     </>
   )
 }
@@ -118,5 +129,20 @@ describe('AuthProvider session policy', () => {
     expect(trackEvent).toHaveBeenCalledWith('explicit_login', { method: 'password', platform: 'web' })
     expect(trackEvent).toHaveBeenCalledWith('login', { method: 'password' })
     expect(trackEvent).toHaveBeenCalledWith('authenticated_app_open', { platform: 'web', auth_source: 'explicit_login' })
+  })
+
+  // P0-01 (docs/YOW_CODE_AUDIT_2026-09-01.md): updateProfile() must never let
+  // an entitlement-shaped field reach supabase.auth.updateUser(), since that
+  // call writes user_metadata directly and any signed-in user can invoke it.
+  it('strips entitlement fields before writing profile updates to Supabase', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>)
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Update profile' }).click()
+    })
+
+    expect(supabase.auth.updateUser).toHaveBeenCalledWith({
+      data: { full_name: 'Ada Lovelace' },
+    })
   })
 })
