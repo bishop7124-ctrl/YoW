@@ -3006,34 +3006,171 @@ export function useStore(userId = null, options = {}) {
       return null
     }
     if (storageExceededCheck()) { return null }
-    const oldId = data.project?.id
     const newId = uid()
-    const eraIdMap = Object.fromEntries((data.eras ?? []).map(era => [era.id, uid()]))
-    const remap = (item) => item?.novelId === oldId ? { ...item, novelId: newId } : item
-    const remapEra = (item) => item?.novelId === oldId ? { ...item, id: eraIdMap[item.id] || uid(), novelId: newId } : item
-    const remapTimelineEra = (item) => {
-      const remapped = remap(item)
-      return remapped?.eraId && eraIdMap[remapped.eraId] ? { ...remapped, eraId: eraIdMap[remapped.eraId] } : remapped
+
+    // Every record type below gets a brand-new id, never the id it was
+    // exported with — so re-importing the same export twice, or importing
+    // it into an account that still has the source project, can never
+    // collide with an existing record. Locally, colliding ids break
+    // edit/delete-by-id and React keys across the two "different" projects;
+    // in Supabase, normalized tables use globally unique text primary keys,
+    // so a duplicate-id upsert can silently overwrite/reparent the
+    // *original* project's row instead of creating a new one — real data
+    // corruption, not just a display bug (audit finding P0-06). `data` is
+    // only ever read here, never mutated, so the source project this was
+    // exported from is untouched either way.
+    const buildIdMap = (items) => Object.fromEntries((items ?? []).map(item => [item.id, uid()]))
+    const eraIdMap = buildIdMap(data.eras)
+    const characterIdMap = buildIdMap(data.characters)
+    const factionIdMap = buildIdMap(data.factions)
+    const locationIdMap = buildIdMap(data.locations)
+    const timelineIdMap = buildIdMap(data.timeline)
+    const worldHistoryIdMap = buildIdMap(data.worldHistory)
+    const actIdMap = buildIdMap(data.acts)
+    const chapterIdMap = buildIdMap(data.chapters)
+    const sceneIdMap = buildIdMap(data.scenes)
+    const loreIdMap = buildIdMap(data.loreEntries)
+    const ideaIdMap = buildIdMap(data.ideaEntries)
+    const mapIdMap = buildIdMap(data.maps)
+    const whiteboardIdMap = buildIdMap(data.whiteboards)
+    const storyScheduleIdMap = buildIdMap(data.storySchedule)
+    const rpgCharacterIdMap = buildIdMap(data.rpgCharacters)
+    const comicPageIdMap = buildIdMap(data.comicPages)
+    const comicPanelIdMap = buildIdMap(data.comicPanels)
+
+    // Fall back to the original id when it isn't in the map (e.g. a stale
+    // reference to a record that no longer exists in the export) rather
+    // than dropping the field — matches the existing remap convention used
+    // by populateYowProject() (src/components/AIImportModal.jsx) for the
+    // sibling YOW-import path this mirrors.
+    const at = (map, id) => (id && map[id]) || id
+    const mapIds = (map, ids) => (ids || []).map(id => at(map, id))
+    const own = (item, idMap) => ({ ...item, id: at(idMap, item.id), novelId: newId })
+
+    const remapJourney = (journey) => {
+      if (!journey?.beats?.length) return journey
+      return {
+        ...journey,
+        beats: journey.beats.map(beat => ({
+          ...beat,
+          timelineEventId: beat.timelineEventId ? at(timelineIdMap, beat.timelineEventId) : beat.timelineEventId,
+          chapterId: beat.chapterId ? at(chapterIdMap, beat.chapterId) : beat.chapterId,
+          sceneId: beat.sceneId ? at(sceneIdMap, beat.sceneId) : beat.sceneId,
+          linkedCharacterId: beat.linkedCharacterId ? at(characterIdMap, beat.linkedCharacterId) : beat.linkedCharacterId,
+        })),
+      }
     }
+    const remapCharacter = (character) => ({
+      ...own(character, characterIdMap),
+      factionId: character.factionId ? at(factionIdMap, character.factionId) : character.factionId,
+      parentIds: mapIds(characterIdMap, character.parentIds),
+      childIds: mapIds(characterIdMap, character.childIds),
+      spouseIds: mapIds(characterIdMap, character.spouseIds),
+      relationships: (character.relationships || []).map(rel => ({ ...rel, targetId: at(characterIdMap, rel.targetId) })),
+      familyLinks: (character.familyLinks || []).map(link => ({
+        ...link,
+        sourceCharacterId: at(characterIdMap, link.sourceCharacterId),
+        targetCharacterId: at(characterIdMap, link.targetCharacterId),
+      })),
+      ...(character.journey ? { journey: remapJourney(character.journey) } : {}),
+    })
+    const remapFaction = (faction) => own(faction, factionIdMap)
+    const remapLocation = (location) => own(location, locationIdMap)
+    const remapLore = (entry) => ({
+      ...own(entry, loreIdMap),
+      characterIds: mapIds(characterIdMap, entry.characterIds),
+      locationIds: mapIds(locationIdMap, entry.locationIds),
+    })
+    const remapTimeline = (event) => ({
+      ...own(event, timelineIdMap),
+      eraId: event.eraId ? at(eraIdMap, event.eraId) : event.eraId,
+      worldHistoryEntryId: event.worldHistoryEntryId ? at(worldHistoryIdMap, event.worldHistoryEntryId) : event.worldHistoryEntryId,
+      linkedCharacters: mapIds(characterIdMap, event.linkedCharacters),
+      linkedLocations: mapIds(locationIdMap, event.linkedLocations),
+    })
+    const remapWorldHistory = (entry) => ({
+      ...own(entry, worldHistoryIdMap),
+      eraId: entry.eraId ? at(eraIdMap, entry.eraId) : entry.eraId,
+      timelineEventId: entry.timelineEventId ? at(timelineIdMap, entry.timelineEventId) : entry.timelineEventId,
+    })
+    const remapEra = (era) => own(era, eraIdMap)
+    const remapAct = (act) => own(act, actIdMap)
+    const remapChapter = (chapter) => ({
+      ...own(chapter, chapterIdMap),
+      actId: chapter.actId ? at(actIdMap, chapter.actId) : chapter.actId,
+    })
+    const remapScene = (scene) => ({
+      ...own(scene, sceneIdMap),
+      chapterId: scene.chapterId ? at(chapterIdMap, scene.chapterId) : scene.chapterId,
+    })
+    // { type: 'character'|'location'|'faction'|'lore', id, name } — see
+    // IdeasKanban.jsx's allEntities.
+    const linkedEntityIdMaps = { character: characterIdMap, location: locationIdMap, faction: factionIdMap, lore: loreIdMap }
+    const remapIdea = (idea) => ({
+      ...own(idea, ideaIdMap),
+      linkedEntities: (idea.linkedEntities || []).map(entity => {
+        const idMap = linkedEntityIdMaps[entity.type]
+        return idMap ? { ...entity, id: at(idMap, entity.id) } : entity
+      }),
+    })
+    // Only 'location' is a currently-supported linkedEntity.entityType (see
+    // YOWMapBuilder.jsx), but remap defensively by type in case that grows.
+    const remapMapLinkedEntity = (linkedEntity) => {
+      if (!linkedEntity || linkedEntity.entityType !== 'location') return linkedEntity
+      return { ...linkedEntity, entityId: at(locationIdMap, linkedEntity.entityId) }
+    }
+    const remapMap = (mapRecord) => ({
+      ...own(mapRecord, mapIdMap),
+      ...(mapRecord.mapObjects ? { mapObjects: mapRecord.mapObjects.map(o => o.linkedEntity ? { ...o, linkedEntity: remapMapLinkedEntity(o.linkedEntity) } : o) } : {}),
+      ...(mapRecord.mapRegions ? { mapRegions: mapRecord.mapRegions.map(r => r.linkedEntity ? { ...r, linkedEntity: remapMapLinkedEntity(r.linkedEntity) } : r) } : {}),
+      ...(mapRecord.mapPins ? { mapPins: mapRecord.mapPins.map(p => p.linkedEntity ? { ...p, linkedEntity: remapMapLinkedEntity(p.linkedEntity) } : p) } : {}),
+    })
+    const remapWhiteboard = (whiteboard) => own(whiteboard, whiteboardIdMap)
+    const remapScheduleEvent = (event) => ({
+      ...own(event, storyScheduleIdMap),
+      linkedCharacters: mapIds(characterIdMap, event.linkedCharacters),
+      linkedLocations: mapIds(locationIdMap, event.linkedLocations),
+    })
+    const remapRpgCharacter = (character) => ({
+      ...own(character, rpgCharacterIdMap),
+      factionIds: mapIds(factionIdMap, character.factionIds),
+      npcRelationships: (character.npcRelationships || []).map(rel => ({ ...rel, characterId: at(characterIdMap, rel.characterId) })),
+    })
+    const remapComicPage = (page) => ({
+      ...own(page, comicPageIdMap),
+      issueId: page.issueId ? at(chapterIdMap, page.issueId) : page.issueId,
+      characterIds: mapIds(characterIdMap, page.characterIds),
+      locationIds: mapIds(locationIdMap, page.locationIds),
+    })
+    const remapComicPanel = (panel) => ({
+      ...own(panel, comicPanelIdMap),
+      pageId: panel.pageId ? at(comicPageIdMap, panel.pageId) : panel.pageId,
+      characterIds: mapIds(characterIdMap, panel.characterIds),
+      locationIds: mapIds(locationIdMap, panel.locationIds),
+    })
+
     const project = { ...data.project, id: newId, importedAt: new Date().toISOString(), focus: false }
     commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, project])
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => [...prev, ...(data.characters ?? []).map(remap)])
-    commitLocal(factionsRef, setFactions, 'nf_factions', prev => [...prev, ...(data.factions ?? []).map(remap)])
-    commitLocal(locationsRef, setLocations, 'nf_locations', prev => [...prev, ...(data.locations ?? []).map(remap)])
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, ...(data.timeline ?? []).map(remapTimelineEra)])
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, ...(data.worldHistory ?? []).map(remapTimelineEra)])
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => [...prev, ...(data.characters ?? []).map(remapCharacter)])
+    commitLocal(factionsRef, setFactions, 'nf_factions', prev => [...prev, ...(data.factions ?? []).map(remapFaction)])
+    commitLocal(locationsRef, setLocations, 'nf_locations', prev => [...prev, ...(data.locations ?? []).map(remapLocation)])
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, ...(data.timeline ?? []).map(remapTimeline)])
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, ...(data.worldHistory ?? []).map(remapWorldHistory)])
     setEras(prev => [...prev, ...(data.eras ?? []).map(remapEra)])
-    commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...(data.acts ?? []).map(remap)])
-    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...(data.chapters ?? []).map(remap)])
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...(data.scenes ?? []).map(remap)])
-    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, ...(data.loreEntries ?? []).map(remap)])
-    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, ...(data.ideaEntries ?? []).map(remap)])
-    commitLocal(mapsRef, setMaps, 'nf_maps', prev => [...prev, ...(data.maps ?? []).map(remap)])
-    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => [...prev, ...(data.whiteboards ?? []).map(remap)])
-    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, ...(data.storySchedule ?? []).map(remap)])
-    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => [...prev, ...(data.rpgCharacters ?? []).map(remap).map(normalizeRpgCharacter)])
-    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, ...(data.comicPages ?? []).map(remap)])
-    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, ...(data.comicPanels ?? []).map(remap)])
+    commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...(data.acts ?? []).map(remapAct)])
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...(data.chapters ?? []).map(remapChapter)])
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...(data.scenes ?? []).map(remapScene)])
+    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, ...(data.loreEntries ?? []).map(remapLore)])
+    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, ...(data.ideaEntries ?? []).map(remapIdea)])
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => [...prev, ...(data.maps ?? []).map(remapMap)])
+    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => [...prev, ...(data.whiteboards ?? []).map(remapWhiteboard)])
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, ...(data.storySchedule ?? []).map(remapScheduleEvent)])
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => [...prev, ...(data.rpgCharacters ?? []).map(remapRpgCharacter).map(normalizeRpgCharacter)])
+    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, ...(data.comicPages ?? []).map(remapComicPage)])
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, ...(data.comicPanels ?? []).map(remapComicPanel)])
+    if (data.activeMapId && mapIdMap[data.activeMapId]) {
+      setActiveMapByNovel(prev => ({ ...prev, [newId]: mapIdMap[data.activeMapId] }))
+    }
     selectActiveNovel(newId)
     return project
   }
