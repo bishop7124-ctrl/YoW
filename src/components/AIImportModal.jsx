@@ -951,6 +951,77 @@ function hasContent(parsed, key) {
   return (parsed[key] || []).length > 0
 }
 
+// Whether a pending import population is populating a project this import
+// itself just created (safe to delete on failure) vs. an existing project
+// the user picked as a destination (must never be deleted on failure, even
+// if it was left partially populated by the failed attempt). Defaults to
+// "new" (delete-safe) so any pendingImport shape that predates the
+// isNewProject field — there shouldn't be one, but this is the one place a
+// wrong default could silently destroy a user's project — still rolls back
+// exactly like it always has.
+export function isNewProjectImport(pendingImport) {
+  return pendingImport?.isNewProject !== false
+}
+
+// populateYowProject() (native YOW-export import) is not destination-type-
+// aware the way populateProject() is (see its typeKey === 'comic' branch) —
+// it always writes acts/chapters/scenes and comicPages/comicPanels based on
+// what the *source* export contains, not what the destination project's
+// workspace actually renders. Comic projects only ever show Comic Pages, and
+// non-comic projects only ever show Manuscript scenes, so importing a comic
+// export into a non-comic project (or vice versa) would silently write
+// content into tables that project's UI never displays — the opposite of
+// this feature's "adds visibly, replaces nothing" promise. Restrict the
+// destination list to same-comic-ness projects rather than teaching
+// populateYowProject to convert between the two structures, which is a
+// larger, separate piece of work.
+export function filterYowCompatibleDestinations(novels, yowImport) {
+  const sourceIsComic = yowImport?.project?.type === 'comic'
+  return (novels || []).filter(n => (n.type === 'comic') === sourceIsComic)
+}
+
+// A Free-plan account has exactly one editable project (membership.freeProjectId);
+// every other project is view-only everywhere else in the app (NovelManager.jsx's
+// ProjectCard `viewOnly` prop, useStore.js's isFreeLockedProject guard on
+// updateNovel/deleteNovel). "Import into" must respect the same lock — it writes
+// new records into whatever project is chosen just as directly as those do.
+export function filterImportableNovels(novels, membership) {
+  return (novels || []).filter(n => !membership?.freeProjectId || n.id === membership.freeProjectId)
+}
+
+// ── Destination picker (create new vs. import into an existing project) ──────
+// Purely additive: importing into an existing project only ever appends new
+// records (new IDs, remapped links) alongside what's already there — nothing
+// existing is edited, replaced, or deleted. Duplicate detection / merge
+// choices are a separate, larger follow-up (see docs/ROADMAP.md Bugs table).
+
+function DestinationPicker({ novels, value, onChange }) {
+  if (!novels?.length) return null
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <label htmlFor="import-destination-select" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>Import into</label>
+        <select
+          id="import-destination-select"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{ flex: 1, minWidth: 160, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <option value="new">A new project</option>
+          {novels.map(n => (
+            <option key={n.id} value={n.id}>{n.title || 'Untitled project'}</option>
+          ))}
+        </select>
+      </div>
+      {value !== 'new' && (
+        <p style={{ margin: '5px 0 0', fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+          Adds the content you selected below to this project alongside what's already there — nothing existing is replaced or removed.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Create-as project type selector (AI + archive imports) ───────────────────
 
 function TypeSelect({ value, onChange }) {
@@ -991,6 +1062,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const [aiError, setAiError] = useState('')
   const [selections, setSelections] = useState({})
   const [targetType, setTargetType] = useState(DEFAULT_TYPE) // create-as type for AI/archive imports
+  const [destination, setDestination] = useState('new') // 'new' | an existing novel id
   // Phase-2 payload: wait for activeNovelId to update before populating entries
   const [pendingImport, setPendingImport] = useState(null)
   const fileInputRef = useRef()
@@ -1001,6 +1073,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (!pendingImport) return
     if (store.activeNovelId !== pendingImport.novelId) return
     const id = pendingImport.novelId
+    const isNewProject = isNewProjectImport(pendingImport)
     try {
       if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
       else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
@@ -1010,8 +1083,23 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     } catch (err) {
       console.error('Import population failed:', err)
       setPendingImport(null)
-      store.deleteNovel(id)
-      setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+      // Only ever delete a project this import itself just created — an
+      // existing destination project the user picked is never touched by
+      // the rollback, even if some of its sections partially populated
+      // before the error (see the "Import into an existing project" row in
+      // docs/ROADMAP.md's Bugs table for why this distinction matters).
+      if (isNewProject) {
+        store.deleteNovel(id)
+        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+      } else {
+        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. Some content may already have been added to the destination project; check it before importing again.')
+      }
+      // Don't leave a stale existing-project selection sitting in state — a
+      // retry with a different (e.g. differently-typed) file re-validates in
+      // handleCreate regardless, but resetting here means the picker itself
+      // also starts clean rather than showing a choice from the failed
+      // attempt.
+      setDestination('new')
       setPhase('upload')
     }
   }, [store.activeNovelId, pendingImport]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1025,6 +1113,12 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   }
   const aiConfigured = !!getAIConfig()
   const aiLockedForFree = !!membership?.isFree
+  const importableNovels = filterImportableNovels(store.novels, membership)
+  // When importing into an existing project, structure labels (Part/Chapter/
+  // Scene vs. Story Arc/Session/Encounter, etc.) should follow that project's
+  // own type rather than the create-as selector, which only applies when
+  // creating a new project.
+  const effectiveType = destination === 'new' ? targetType : (importableNovels.find(n => n.id === destination)?.type || targetType)
 
   const handleFiles = async (fileList) => {
     setFileError('')
@@ -1212,6 +1306,23 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const handleCreate = () => {
     const sourceData = yowImport || ncImport || parsed
     if (!sourceData) return
+
+    if (destination !== 'new') {
+      // Re-validate against both guards here rather than trusting the
+      // DestinationPicker's already-filtered options: `destination` is
+      // component state that outlives a single preview render (e.g. it
+      // isn't reset after a failed-import retry with a differently-typed
+      // file), so a stale selection could otherwise slip past
+      // filterYowCompatibleDestinations on a second attempt.
+      const target = importableNovels.find(n => n.id === destination)
+      const yowCompatible = !yowImport || filterYowCompatibleDestinations(importableNovels, yowImport).some(n => n.id === destination)
+      if (!target || !yowCompatible) { setAiError('The selected project is no longer a valid destination for this import. Choose another.'); return }
+      setPhase('creating')
+      setPendingImport({ novelId: target.id, data: sourceData, sel: selections, type: target.type, isYow: !!yowImport, isNewProject: false })
+      if (store.activeNovelId !== target.id) store.setActiveNovelId(target.id)
+      return
+    }
+
     let title, description, type
     if (yowImport) {
       title = yowImport.project?.title; description = yowImport.project?.description || ''
@@ -1232,7 +1343,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras })
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
-    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport })
+    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport, isNewProject: true })
   }
 
   const handleCancel = () => {
@@ -1259,8 +1370,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {phase === 'upload'    && 'Upload files — drop a YOW export, compatible project archive, or any writing file'}
               {phase === 'analyzing' && 'Analyzing your files…'}
               {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : ncImport ? `Project archive detected — "${ncImport.projectTitle}"` : 'Review what will be created')}
-              {phase === 'creating'  && 'Creating your project…'}
-              {phase === 'done'      && 'Project created successfully!'}
+              {phase === 'creating'  && (destination === 'new' ? 'Creating your project…' : 'Importing into your project…')}
+              {phase === 'done'      && (destination === 'new' ? 'Project created successfully!' : 'Import complete!')}
             </p>
           </div>
           {canClose && (
@@ -1403,6 +1514,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{yowImport.project?.title || 'Untitled'}</p>
                 {yowImport.project?.description && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{yowImport.project.description}</p>}
                 <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--accent)', fontWeight: 700, textTransform: 'capitalize' }}>{(yowImport.project?.type || 'novel').replace(/_/g, ' ')}</p>
+                <DestinationPicker novels={filterYowCompatibleDestinations(importableNovels, yowImport)} value={destination} onChange={setDestination} />
               </div>
 
               <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
@@ -1427,7 +1539,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                   <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 99, background: 'color-mix(in srgb, #f59e0b 16%, transparent)', color: '#f59e0b', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)', letterSpacing: '.06em', textTransform: 'uppercase' }}>ZIP Archive</span>
                 </div>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{ncImport.projectTitle}</p>
-                <TypeSelect value={targetType} onChange={setTargetType} />
+                <DestinationPicker novels={importableNovels} value={destination} onChange={setDestination} />
+                {destination === 'new' && <TypeSelect value={targetType} onChange={setTargetType} />}
               </div>
 
               <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
@@ -1435,8 +1548,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 {NC_SECTIONS.filter(s => ncSectionCount(ncImport, s.key) > 0).map(({ key, label }) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>
                     <input type="checkbox" checked={!!selections[key]} onChange={e => setSelections(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{ncCountLabel(ncImport, key, targetType)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{key === 'acts' ? getProjectType(targetType).workspaceLabel : label}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{ncCountLabel(ncImport, key, effectiveType)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{key === 'acts' ? getProjectType(effectiveType).workspaceLabel : label}</span>
                   </label>
                 ))}
               </div>
@@ -1453,7 +1566,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Project</p>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{parsed.project?.title}</p>
                 {parsed.project?.description && <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>{parsed.project.description}</p>}
-                <TypeSelect value={targetType} onChange={setTargetType} />
+                <DestinationPicker novels={importableNovels} value={destination} onChange={setDestination} />
+                {destination === 'new' && <TypeSelect value={targetType} onChange={setTargetType} />}
               </div>
 
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -1465,8 +1579,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                 {SECTIONS.filter(s => hasContent(parsed, s.key)).map(({ key, label }) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>
                     <input type="checkbox" checked={!!selections[key]} onChange={e => setSelections(p => ({ ...p, [key]: e.target.checked }))} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{countLabel(parsed, key, targetType)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{key === 'acts' ? getProjectType(targetType).workspaceLabel : label}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{countLabel(parsed, key, effectiveType)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{key === 'acts' ? getProjectType(effectiveType).workspaceLabel : label}</span>
                   </label>
                 ))}
               </div>
@@ -1483,14 +1597,14 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {phase === 'creating' ? (
                 <>
                   <div className="ai-import-spinner" />
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Creating your project…</p>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>{destination === 'new' ? 'Creating your project…' : 'Importing into your project…'}</p>
                 </>
               ) : (
                 <>
                   <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'color-mix(in srgb, #5dc878 14%, transparent)', border: '1px solid color-mix(in srgb, #5dc878 40%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5dc878" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                   </div>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Project created!</p>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>{destination === 'new' ? 'Project created!' : 'Import complete!'}</p>
                 </>
               )}
             </div>
@@ -1501,7 +1615,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
         {(phase === 'upload' || phase === 'preview') && (
           <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
             {phase === 'preview' && (
-              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText(''); setTargetType(DEFAULT_TYPE) }}
+              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText(''); setTargetType(DEFAULT_TYPE); setDestination('new') }}
                 style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginRight: 'auto' }}>
                 Back
               </button>
@@ -1522,7 +1636,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
             {phase === 'preview' && (
               <button type="button" onClick={handleCreate}
                 style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
-                Create Project
+                {destination === 'new' ? 'Create Project' : 'Import Into Project'}
               </button>
             )}
           </div>
