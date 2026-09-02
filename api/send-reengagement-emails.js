@@ -40,9 +40,15 @@ export default async function handler(req, res) {
 
   // Vercel Cron sends `Authorization: Bearer $CRON_SECRET` automatically
   // when CRON_SECRET is set as a project env var — reject anything else so
-  // this can't be triggered by a random public request.
+  // this can't be triggered by a random public request. Fail CLOSED if the
+  // secret itself isn't configured: a missing secret must never make this
+  // bulk-send route public (audit finding P0-03).
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    console.error('[send-reengagement-emails] CRON_SECRET is not configured')
+    return res.status(500).json({ error: 'Not configured' })
+  }
+  if (req.headers.authorization !== `Bearer ${cronSecret}`) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 

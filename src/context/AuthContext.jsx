@@ -89,7 +89,7 @@ export function AuthProvider({ children }) {
         // Fire welcome email after email confirmation is complete (PKCE flow)
         if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at && session.user.id) {
           const confirmedJustNow = new Date(session.user.email_confirmed_at) > new Date(Date.now() - 30_000)
-          if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email)
+          if (confirmedJustNow) sendWelcomeEmail(session.user.id, session.user.email, session.access_token)
         }
         if (event === 'SIGNED_IN' && session?.user?.id && sessionStorage.getItem('yow_oauth_login_pending') === 'google') {
           sessionStorage.removeItem('yow_oauth_login_pending')
@@ -133,14 +133,19 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  async function sendWelcomeEmail(userId, email) {
-    if (OFFLINE_MODE) return
+  // Sends the caller's own session token, not the (public) anon key — the
+  // Edge Function verifies it and derives the account's real user id/email
+  // from the token itself rather than trusting anything in the request body
+  // (audit finding P0-03: this previously let any caller with the public
+  // anon key request a "welcome" email, with an arbitrary user_id/email of
+  // their choosing, sent through YOW's Resend account).
+  async function sendWelcomeEmail(userId, email, accessToken) {
+    if (OFFLINE_MODE || !accessToken) return
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
       const res = await fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
         body: JSON.stringify({ record: { user_id: userId, email } }),
       })
       console.log('[welcome] response', res.status)
