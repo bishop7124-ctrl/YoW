@@ -46,6 +46,7 @@
     "caniuse-lite": "1.0.30001797"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^2.11.4",

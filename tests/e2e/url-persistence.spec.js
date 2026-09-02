@@ -100,3 +100,28 @@ test('writing view can be reached via direct URL without losing content', async 
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   await expect(page.locator('.ms-preview').filter({ hasText: text.slice(0, 15) })).toBeVisible({ timeout: 10_000 })
 })
+
+// Roadmap bug: "Dashboard had no dedicated URL — shared `/` with the
+// marketing homepage." Fixed via buildRoute returning `/dashboard` for
+// viewMode === 'manager' plus a redirect from bare `/`. This suite runs
+// under VITE_OFFLINE_MODE, which has no logged-out state to reach the
+// marketing homepage from (see the top-of-file note in accessibility.spec.js)
+// — so only the logged-in-state QA from that row's Next Action is coverable
+// here: log in -> URL becomes /dashboard, project-nav-and-back, and
+// bookmark/reload. The logged-out `/` behavior still needs manual QA.
+test('dashboard has its own /dashboard URL, survives navigation and reload', async ({ page }) => {
+  await expect(page).toHaveURL(/\/dashboard$/)
+
+  await createProject(page, { title: 'Dashboard URL Test' })
+  await expect(page).toHaveURL(/\/project\/.+/)
+
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByRole('heading', { name: 'Dashboard URL Test' })).toBeVisible()
+
+  // Bookmark/reload: reloading directly at /dashboard should land back on
+  // the dashboard, not bounce to a project or the marketing homepage.
+  await page.reload()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByRole('heading', { name: 'Dashboard URL Test' })).toBeVisible()
+})
