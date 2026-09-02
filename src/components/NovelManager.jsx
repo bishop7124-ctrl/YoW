@@ -175,6 +175,9 @@ function ProjectExportMenu({ onExport, compact = false }) {
           ))}
           <div className="novel-export-theme-group" role="group" aria-label="Visual PDF themes">
             <span>Visual PDF theme</span>
+            <p className="novel-export-theme-note">
+              Also embeds this project's full data — including hidden sections and private notes — so the PDF can be re-imported later. Be mindful before sharing it publicly.
+            </p>
             {EXPORT_PDF_THEME_OPTIONS.map(theme => (
               <button
                 key={theme.id}

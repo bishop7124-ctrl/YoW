@@ -769,6 +769,9 @@ function ProjectSettings({ store, onClose }) {
               </div>
               <div style={{ marginTop: 12 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>Visual PDF theme</p>
+                <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', lineHeight: 1.35, marginTop: -4, marginBottom: 8 }}>
+                  Also embeds this project's full data — including hidden sections and private notes — so the PDF can be re-imported later. Be mindful before sharing it publicly.
+                </p>
                 <div className="project-settings-theme-grid">
                   {EXPORT_PDF_THEME_OPTIONS.map(theme => (
                     <button
