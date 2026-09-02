@@ -287,24 +287,7 @@ fn bind_text(stmt: *mut sqlite3_stmt, index: c_int, value: &str) -> Result<(), S
 #[tauri::command]
 fn vault_read_all(app: tauri::AppHandle) -> Result<Vec<VaultEntry>, String> {
   let db = open_vault(&app)?;
-  let stmt = prepare(db.raw, "SELECT key, value FROM kv ORDER BY key;")?;
-  let mut entries = Vec::new();
-
-  loop {
-    let result = unsafe { sqlite3_step(stmt) };
-    if result == SQLITE_ROW {
-      let key = column_string(stmt, 0);
-      let value = column_string(stmt, 1);
-      entries.push(VaultEntry { key, value });
-    } else if result == SQLITE_DONE {
-      unsafe { sqlite3_finalize(stmt); }
-      return Ok(entries);
-    } else {
-      let error = db_error(db.raw);
-      unsafe { sqlite3_finalize(stmt); }
-      return Err(error);
-    }
-  }
+  read_all_entries(db.raw)
 }
 
 fn column_string(stmt: *mut sqlite3_stmt, column: c_int) -> String {
@@ -632,16 +615,24 @@ fn validate_snapshot_path(path: &PathBuf) -> Result<PathBuf, String> {
   Ok(path.clone())
 }
 
-fn snapshot_path_for_restore(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
-  if name.contains('/') || name.contains('\\') {
-    return validate_snapshot_path(&PathBuf::from(name));
-  }
+// Shared by every by-name snapshot lookup below, so a future tightening of
+// the traversal/shape checks can't be applied to one lookup and forgotten on
+// another.
+fn validate_snapshot_name(name: &str) -> Result<(), String> {
   if name.contains("..") {
     return Err("Invalid snapshot name.".to_string());
   }
   if !is_restorable_snapshot_name(name) {
     return Err("Invalid snapshot file.".to_string());
   }
+  Ok(())
+}
+
+fn snapshot_path_for_restore(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
+  if name.contains('/') || name.contains('\\') {
+    return validate_snapshot_path(&PathBuf::from(name));
+  }
+  validate_snapshot_name(name)?;
   let backups = backup_dir(app)?;
   let path = backups.join(name);
   if path.is_file() {
@@ -660,45 +651,44 @@ fn snapshot_path_for_restore(app: &tauri::AppHandle, name: &str) -> Result<PathB
   Err("Snapshot could not be found. It may have been moved or deleted outside YOW.".to_string())
 }
 
-// Like `snapshot_path_for_restore`, but never copies the file — a scrub must
-// modify the actual on-disk copy it found, not silently leave a stale
-// (still-leaking) original behind in the default Backups directory while
-// scrubbing a freshly copied duplicate elsewhere. Used only by the
-// snapshot-scoped read/scrub commands below, never by restore.
-fn resolve_existing_snapshot_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
+// Like `snapshot_path_for_restore`, but never copies the file, and returns
+// EVERY existing physical copy of `name` instead of just one. A scrub must
+// modify every on-disk copy it finds: `vault_relocate` moves the *live*
+// vault but only ever *copies* backup files into the new location
+// (`backup_dir`'s own `copy_backup_files` call, which skips a target that
+// already exists rather than ever deleting a source) — so a relocated
+// install can easily have two independent, identically-named copies of the
+// same pre-fix leaking snapshot, one in the active Backups directory and
+// one still sitting in the original default app-data directory. Resolving
+// to only the first one found (as `snapshot_path_for_restore` deliberately
+// does, for its own copy-on-read restore semantics) would leave that second
+// copy leaking indefinitely. Used only by the snapshot-scoped read/scrub
+// commands below, never by restore.
+fn resolve_existing_snapshot_paths(app: &tauri::AppHandle, name: &str) -> Result<Vec<PathBuf>, String> {
   if name.contains('/') || name.contains('\\') {
-    return validate_snapshot_path(&PathBuf::from(name));
+    return Ok(vec![validate_snapshot_path(&PathBuf::from(name))?]);
   }
-  if name.contains("..") {
-    return Err("Invalid snapshot name.".to_string());
-  }
-  if !is_restorable_snapshot_name(name) {
-    return Err("Invalid snapshot file.".to_string());
-  }
-  let backups = backup_dir(app)?;
-  let path = backups.join(name);
-  if path.is_file() {
-    return Ok(path);
+  validate_snapshot_name(name)?;
+
+  let mut paths = Vec::new();
+  let active_path = backup_dir(app)?.join(name);
+  if active_path.is_file() {
+    paths.push(active_path.clone());
   }
   let default_path = app_default_dir(app)?.join("Backups").join(name);
-  if default_path.is_file() {
-    return Ok(default_path);
+  if default_path.is_file() && default_path != active_path {
+    paths.push(default_path);
   }
-  Err("Snapshot could not be found. It may have been moved or deleted outside YOW.".to_string())
+  if paths.is_empty() {
+    return Err("Snapshot could not be found. It may have been moved or deleted outside YOW.".to_string());
+  }
+  Ok(paths)
 }
 
-// Reads every entry from a snapshot/backup file's own `kv` table — same
-// shape as `vault_read_all`, but against an arbitrary backup copy instead of
-// the live vault. Used by the JS-side scrub (audit finding P0-10 follow-up)
-// to find which secrets, if any, a given snapshot still carries; the
-// sensitive-key predicate itself stays in `tauriVaultAdapter.js`'s
-// `isSensitiveStorageKey()` (the single source of truth already used for the
-// live vault) rather than being duplicated here.
-#[tauri::command]
-fn vault_snapshot_read_all(app: tauri::AppHandle, name: String) -> Result<Vec<VaultEntry>, String> {
-  let path = resolve_existing_snapshot_path(&app, &name)?;
-  let db = open_db(&path)?;
-  let stmt = prepare(db.raw, "SELECT key, value FROM kv ORDER BY key;")?;
+// Shared by vault_read_all and vault_snapshot_read_all so the two read paths
+// (live vault vs. an arbitrary backup file) can't silently diverge.
+fn read_all_entries(db: *mut sqlite3) -> Result<Vec<VaultEntry>, String> {
+  let stmt = prepare(db, "SELECT key, value FROM kv ORDER BY key;")?;
   let mut entries = Vec::new();
 
   loop {
@@ -711,34 +701,67 @@ fn vault_snapshot_read_all(app: tauri::AppHandle, name: String) -> Result<Vec<Va
       unsafe { sqlite3_finalize(stmt); }
       return Ok(entries);
     } else {
-      let error = db_error(db.raw);
+      let error = db_error(db);
       unsafe { sqlite3_finalize(stmt); }
       return Err(error);
     }
   }
 }
 
-// Deletes `keys` from a snapshot/backup file's own `kv` table in place.
-// Companion to `vault_snapshot_read_all`: together these let the JS layer
-// scrub secrets (audit finding P0-10) out of pre-fix backup copies the same
-// way `scrubSensitiveVaultEntries` already scrubs the live vault, without
-// duplicating the sensitive-key predicate into Rust. Returns how many rows
-// were actually removed, so a snapshot with none of the given keys present
-// is distinguishable from a real failure.
+// Reads every entry from every existing physical copy of a snapshot/backup
+// file's own `kv` table — same shape as `vault_read_all`, but against an
+// arbitrary backup name (which, per `resolve_existing_snapshot_paths` above,
+// can resolve to more than one file) instead of the single live vault. Used
+// by the JS-side scrub (audit finding P0-10 follow-up) to find which
+// secrets, if any, a given snapshot name still carries anywhere on disk; the
+// sensitive-key predicate itself stays in `tauriVaultAdapter.js`'s
+// `isSensitiveStorageKey()` (the single source of truth already used for the
+// live vault) rather than being duplicated here. Entries are merged by key
+// across copies (last write wins) since same-named copies are expected to be
+// identical anyway — this is only ever used to decide *which keys* to scrub,
+// not to distinguish the copies from each other.
+#[tauri::command]
+fn vault_snapshot_read_all(app: tauri::AppHandle, name: String) -> Result<Vec<VaultEntry>, String> {
+  let paths = resolve_existing_snapshot_paths(&app, &name)?;
+  let mut merged: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+  for path in &paths {
+    let db = open_db(&path)?;
+    for entry in read_all_entries(db.raw)? {
+      merged.insert(entry.key, entry.value);
+    }
+  }
+  let mut entries: Vec<VaultEntry> = merged.into_iter().map(|(key, value)| VaultEntry { key, value }).collect();
+  entries.sort_by(|a, b| a.key.cmp(&b.key));
+  Ok(entries)
+}
+
+// Deletes `keys` from every existing physical copy of a snapshot/backup
+// file's `kv` table in place. Companion to `vault_snapshot_read_all`:
+// together these let the JS layer scrub secrets (audit finding P0-10) out of
+// pre-fix backup copies the same way `scrubSensitiveVaultEntries` already
+// scrubs the live vault, without duplicating the sensitive-key predicate
+// into Rust. Returns how many rows were actually removed across all copies,
+// so a snapshot with none of the given keys present is distinguishable from
+// a real failure.
 #[tauri::command]
 fn vault_snapshot_remove_keys(app: tauri::AppHandle, name: String, keys: Vec<String>) -> Result<u32, String> {
-  let path = resolve_existing_snapshot_path(&app, &name)?;
-  let db = open_db(&path)?;
+  let paths = resolve_existing_snapshot_paths(&app, &name)?;
   let mut removed: u32 = 0;
-  for key in &keys {
-    let stmt = prepare(db.raw, "DELETE FROM kv WHERE key = ?1;")?;
-    bind_text(stmt, 1, key)?;
-    let result = unsafe { sqlite3_step(stmt) };
-    unsafe { sqlite3_finalize(stmt); }
-    if result != SQLITE_DONE {
-      return Err(db_error(db.raw));
+  for path in &paths {
+    let db = open_db(&path)?;
+    for key in &keys {
+      let stmt = prepare(db.raw, "DELETE FROM kv WHERE key = ?1;")?;
+      if let Err(error) = bind_text(stmt, 1, key) {
+        unsafe { sqlite3_finalize(stmt); }
+        return Err(error);
+      }
+      let result = unsafe { sqlite3_step(stmt) };
+      unsafe { sqlite3_finalize(stmt); }
+      if result != SQLITE_DONE {
+        return Err(db_error(db.raw));
+      }
+      removed += unsafe { sqlite3_changes(db.raw) }.max(0) as u32;
     }
-    removed += unsafe { sqlite3_changes(db.raw) }.max(0) as u32;
   }
   Ok(removed)
 }
