@@ -95,6 +95,8 @@ jobs:
             spec: tests/e2e/project-type-labels.spec.js
           - name: import-into-existing-project
             spec: tests/e2e/import-into-existing-project.spec.js
+          - name: merge-project
+            spec: tests/e2e/merge-project.spec.js
           # Added 2026-08-28. This spec existed in tests/e2e/ from the start but
           # was never listed here, so CI ran 13 of the directory's 14 files and
           # nothing flagged the gap — it had rotted to 4/4 failing against the
