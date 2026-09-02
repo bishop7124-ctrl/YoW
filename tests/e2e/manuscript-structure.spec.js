@@ -119,8 +119,12 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
-  // Scene status badge is clickable in the scene meta bar
-  const statusBtn = page.locator('.scene-status, [data-status]').first()
+  // The status chip (SceneEditor.jsx's `.ms-meta-status`) is hidden by CSS
+  // while the editor is in Write mode (`.ms-scene-header--write .ms-meta-status
+  // { display: none }`) — it only renders in Edit mode.
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Edit' }).click()
+
+  const statusBtn = page.locator('.ms-meta-status').first()
   if (!(await statusBtn.isVisible().catch(() => false))) {
     test.skip() // status control not visible in this layout, skip gracefully
     return
@@ -157,20 +161,31 @@ test('finalized draft can be created and viewed', async ({ page }) => {
     return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
-  // Look for Finalize / Final Draft button
-  const finalizeBtn = page
-    .getByRole('button', { name: /Final(ize|ised)? draft|Create final|Compile/i })
-    .first()
+  // Finalise lives behind the topbar overflow ("More") menu, under the
+  // "Finish" section, as "Finalise draft" (British spelling — the previous
+  // regex only matched "Finalize"/"Finalised", never plain "Finalise").
+  // Opening it there swaps the surface to the FinalisePane, which has its
+  // own "Finalise draft" button that actually calls handleFinaliseDraft().
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menu').getByRole('button', { name: 'Finalise draft' }).click()
 
+  const finalizeBtn = page.getByRole('button', { name: 'Finalise draft' }).first()
   if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
   }
 
+  // handleFinaliseDraft() names the copy via window.prompt then confirms via
+  // window.confirm — both are native dialogs Playwright auto-dismisses
+  // unless handled, which is why this used to silently no-op. One `on`
+  // handler (not two `once`s — both `once`s would fire on the first dialog
+  // and the second would error "already handled") covers both dialogs.
+  page.on('dialog', dialog => dialog.accept())
   await finalizeBtn.click()
 
-  // The finalized reader or success state should appear
+  // The finalized reader (FinalizedReader.jsx's `.ms-final-reader`, shared by
+  // both its scroll and paged view modes) should appear.
   await expect(
-    page.locator('.finalized-reader, .final-draft, [data-finalized]').first(),
+    page.locator('.ms-final-reader').first(),
   ).toBeVisible({ timeout: 8000 })
 })
