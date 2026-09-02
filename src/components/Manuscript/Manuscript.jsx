@@ -207,6 +207,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     sceneConflicts = [], restoreSceneConflict, discardSceneConflict,
     syncStatus,
     recordLocalWrite,
+    localStorageWarning,
   } = store
 
   const projectTypeConfig = getProjectType(activeNovel?.type)
@@ -481,10 +482,21 @@ export default function Manuscript({ store, userId, membership = null }) {
   // canSyncCloud-less sessions (offline/local-only) never leave 'idle', so
   // they fall through to "saved" immediately, matching the old timer's
   // behavior there.
+  //
+  // localStorageWarning also gates this (audit P0-07): it reflects whether
+  // the *local* IndexedDB/desktop-vault write actually landed, which cloud
+  // syncStatus knows nothing about — a browser tab with no cloud sync at all
+  // (Free/local-only) used to always read "Saved" the moment the debounce
+  // timer cleared, with zero connection to whether the on-device write
+  // itself succeeded. A failed local write always wins over a successful
+  // cloud sync here: the point of "Saved" is that this device won't lose the
+  // edit, and a stale local write can still be true even while cloud sync
+  // reports success from an earlier value.
   useEffect(() => {
+    if (localStorageWarning) { setSaveState('error'); return }
     if (!syncStatus) return
     setSaveState(syncStatus.state === 'syncing' ? 'saving' : 'saved')
-  }, [syncStatus])
+  }, [syncStatus, localStorageWarning])
 
   const handleReplaceInScene = useCallback((sceneId, newContent) => {
     handleContentUpdate(sceneId, newContent)

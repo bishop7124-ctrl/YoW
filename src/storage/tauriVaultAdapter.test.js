@@ -203,6 +203,51 @@ describe('tauri vault adapter', () => {
     resetStorageBackend()
   })
 
+  it('records a failed vault write and blocks beforeunload navigation until it recovers (audit P0-07)', async () => {
+    vi.stubEnv('MODE', 'desktop')
+    let failWrites = true
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async (command) => {
+          if (command === 'vault_read_all') return []
+          if (command === 'vault_set_item' && failWrites) throw new Error('vault write failed')
+          return null
+        }),
+      },
+    }
+
+    const { initializeDesktopVaultStorage } = await import('./tauriVaultAdapter.js')
+    const { resetStorageBackend, writeItem } = await import('./projectStorage.js')
+    const { hasLocalWriteFailed } = await import('./writeDurability.js')
+    const onWriteError = vi.fn()
+
+    const backend = await initializeDesktopVaultStorage({ onWriteError, retry: { attempts: 1 } })
+    expect(hasLocalWriteFailed()).toBe(false)
+
+    writeItem('nf_scenes', '[]')
+    await backend.flush()
+    expect(onWriteError).toHaveBeenCalled()
+    expect(hasLocalWriteFailed()).toBe(true)
+
+    const blockedEvent = new Event('beforeunload', { cancelable: true })
+    Object.defineProperty(blockedEvent, 'returnValue', { writable: true, value: undefined })
+    window.dispatchEvent(blockedEvent)
+    expect(blockedEvent.defaultPrevented).toBe(true)
+    expect(blockedEvent.returnValue).toBe('')
+
+    // Recovers once the same key writes successfully.
+    failWrites = false
+    writeItem('nf_scenes', '[]')
+    await backend.flush()
+    expect(hasLocalWriteFailed()).toBe(false)
+
+    const clearEvent = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(clearEvent)
+    expect(clearEvent.defaultPrevented).toBe(false)
+
+    resetStorageBackend()
+  })
+
   it('relocates the vault through the native folder picker command', async () => {
     vi.stubEnv('MODE', 'desktop')
     window.__TAURI__ = {

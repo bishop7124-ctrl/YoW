@@ -7,6 +7,13 @@ import { clearJourneyLinks } from '../utils/characterJourney'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
+import {
+  LOCAL_WRITE_FAILED_KEY,
+  markLocalWriteFailed,
+  clearLocalWriteFailed,
+  hasLocalWriteFailed,
+  hasCorruptLocalData,
+} from '../storage/writeDurability'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
 import { deleteUserMedia } from '../utils/uploadUserMedia'
@@ -15,7 +22,6 @@ import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
 const load = (key, def) => loadValue(key, def)
 const LOCAL_WRITE_AT_KEY = 'nf_localWriteAt'
 const LOCAL_OWNER_KEY = 'nf_localOwner'
-const LOCAL_WRITE_FAILED_KEY = 'nf_localWriteFailed'
 const lastActiveProjectKey = (ownerId) => ownerId ? `nf_lastActiveProject:${ownerId}` : null
 const PROJECT_STORAGE_KEYS = [
   'nf_novels',
@@ -122,31 +128,12 @@ const clearProjectRefs = (refs) => {
   refs.activeMapByNovelRef.current = {}
   refs.currentYearRef.current = 0
 }
-// Tracks which storage keys most recently failed to persist (e.g. quota
-// exceeded). A stale key on disk must never be treated as "fresher than the
-// cloud" during import reconciliation just because *some* other key's write
-// happened to succeed and bumped nf_localWriteAt.
-const readFailedWriteKeys = () => {
-  try { return new Set(JSON.parse(readItem(LOCAL_WRITE_FAILED_KEY) || '[]')) }
-  catch { return new Set() }
-}
-const markLocalWriteFailed = (key) => {
-  try {
-    const failed = readFailedWriteKeys()
-    if (failed.has(key)) return
-    failed.add(key)
-    writeItem(LOCAL_WRITE_FAILED_KEY, JSON.stringify([...failed]))
-  } catch { /* best effort */ }
-}
-const clearLocalWriteFailed = (key) => {
-  try {
-    const failed = readFailedWriteKeys()
-    if (!failed.has(key)) return
-    failed.delete(key)
-    writeItem(LOCAL_WRITE_FAILED_KEY, JSON.stringify([...failed]))
-  } catch { /* best effort */ }
-}
-const hasLocalWriteFailed = () => readFailedWriteKeys().size > 0
+// markLocalWriteFailed/clearLocalWriteFailed/hasLocalWriteFailed now live in
+// storage/writeDurability.js (imported above) — a storage-layer concern, not
+// a store concern, and needed there so the IndexedDB/desktop-vault backends'
+// real async write failures (audit P0-07) can feed the same tracking this
+// module's own `save()` below already fed from its synchronous try/catch
+// (which only the legacy localStorage backend actually throws through).
 // Returns the exact raw string actually written (or null on failure) — commitLocal's
 // externalWrite check below caches this per key so a later commit can tell "did
 // anything else touch this key since I wrote it" with a cheap string comparison
@@ -664,12 +651,22 @@ export function useStore(userId = null, options = {}) {
     acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards, series, storySchedule,
   ])
 
-  // Surfaces a UI warning when browser storage (localStorage) can't keep up —
-  // e.g. quota exceeded from many populated projects. save() flags failing
-  // keys as it goes; poll rather than thread a setter through every call site.
+  // Surfaces a UI warning when local storage can't keep up — quota exceeded,
+  // or (audit P0-07) the IndexedDB/desktop-vault backend's real async
+  // persist failing after retries are exhausted. save() and the storage
+  // backends both flag failing keys as they go (see writeDurability.js);
+  // poll rather than thread a setter through every call site.
   const [localStorageWarning, setLocalStorageWarning] = useState(() => hasLocalWriteFailed())
+  // Separate signal: a stored value existed but failed to parse as JSON —
+  // genuine on-disk corruption, not a write failure, so it needs different
+  // user guidance (nothing to "free up space" for; some data just didn't
+  // load).
+  const [localDataCorrupted, setLocalDataCorrupted] = useState(() => hasCorruptLocalData())
   useEffect(() => {
-    const check = () => setLocalStorageWarning(hasLocalWriteFailed())
+    const check = () => {
+      setLocalStorageWarning(hasLocalWriteFailed())
+      setLocalDataCorrupted(hasCorruptLocalData())
+    }
     const interval = setInterval(check, 4000)
     return () => clearInterval(interval)
   }, [])
@@ -3438,7 +3435,7 @@ export function useStore(userId = null, options = {}) {
     importData, replaceData, clearData, finishRemoteLoad,
     getLocalSnapshot: getCurrentSnapshot,
     syncStatus, trackSync, flushPendingSync,
-    localStorageWarning,
+    localStorageWarning, localDataCorrupted,
     userId, storageQuotaBytes, storageUsedBytes, refreshStorageUsedBytes,
   }
 
