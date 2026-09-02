@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -100,7 +100,10 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
     return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]').length >= 1
   })
 
-  // Fill in dialogue
+  // A panel starts with no dialogue lines — "+ balloon" (PanelEditor's
+  // addDialogue) has to be clicked before the dialogue text field exists.
+  await page.getByRole('button', { name: '+ balloon' }).first().click()
+
   const dialogueField = page.getByPlaceholder(/dialogue|speech|balloon/i).first()
   if (!(await dialogueField.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
@@ -110,15 +113,20 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
   const dialogueText = `Panel dialogue ${Date.now()}`
   await dialogueField.fill(dialogueText)
 
-  await waitForStorage(page, () => {
+  // waitForStorage's predicate runs in the page realm via page.waitForFunction,
+  // which serializes the function source — it can't close over dialogueText
+  // from this scope, so it has to come in as an explicit arg.
+  await waitForStorage(page, (text) => {
     const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.some(p =>
-      (p.dialogue || []).some(d => (d.text || d).includes(dialogueText.slice(0, 15)))
-      || (p.dialogueText || '').includes(dialogueText.slice(0, 15)),
+      (p.dialogue || []).some(d => (d.text || d).includes(text.slice(0, 15)))
+      || (p.dialogueText || '').includes(text.slice(0, 15)),
     )
-  })
+  }, dialogueText)
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await waitForStorageHydration(page)
   const panels = await readStorage(page, 'nf_comicPanels')
   expect(panels.some(p =>
     JSON.stringify(p).includes(dialogueText.slice(0, 15)),
@@ -162,9 +170,12 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   const pagesBefore = await readStorage(page, 'nf_comicPages')
   const pageId = pagesBefore[0]?.id
 
-  // Open page then delete
+  // Open page then delete. The page-actions "Delete" button's accessible
+  // name is just "Delete" (its title attribute "Delete page" is overridden
+  // by the button's own text content) — scope to .cp-page-actions so this
+  // doesn't collide with any other "Delete"-labelled control on the page.
   await page.locator('.cp-page-row').first().click()
-  const deletePageBtn = page.getByRole('button', { name: /Delete page|Remove page/i }).first()
+  const deletePageBtn = page.locator('.cp-page-actions').getByRole('button', { name: 'Delete' }).first()
   if (!(await deletePageBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
