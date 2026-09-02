@@ -7,6 +7,7 @@ import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSetting
 import { trackEvent, identifyUser } from '../utils/analytics'
 import { isDesktopAppRuntime } from '../utils/runtime'
 import { clearLastWebActivity, isWebSessionIdleExpired, writeLastWebActivity } from '../utils/sessionActivity'
+import { sanitizeProfileMetadata } from '../utils/membership'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -236,14 +237,23 @@ export function AuthProvider({ children }) {
 
   const clearRecoveryMode = () => setRecoveryMode(false)
 
+  // Only an allowlisted set of harmless profile/preference fields may ever be
+  // written to user_metadata here — entitlement (plan, subscription status,
+  // beta access) must never come from a client-writable field. See
+  // sanitizeProfileMetadata() in utils/membership.js and
+  // docs/YOW_CODE_AUDIT_2026-09-01.md P0-01. This is defense in depth, not the
+  // security boundary itself: getMembership() reading only app_metadata is
+  // what actually makes user_metadata untrustworthy for entitlement, since a
+  // user can always call supabase.auth.updateUser() directly and bypass any
+  // app-layer wrapper.
   const updateProfile = OFFLINE_MODE
     ? (profile) => {
-        const updated = { ...user, user_metadata: { ...(user?.user_metadata ?? {}), ...profile } }
+        const updated = { ...user, user_metadata: { ...(user?.user_metadata ?? {}), ...sanitizeProfileMetadata(profile) } }
         setUser(updated)
         return Promise.resolve(updated)
       }
     : async (profile) => {
-        const { data, error } = await supabase.auth.updateUser({ data: profile })
+        const { data, error } = await supabase.auth.updateUser({ data: sanitizeProfileMetadata(profile) })
         if (error) throw error
         setUser(data.user ?? null)
         return data.user

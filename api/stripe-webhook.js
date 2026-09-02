@@ -62,6 +62,14 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
   const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
   const existing = data?.user?.app_metadata || {}
 
+  // Single write for the whole app_metadata object — the admin API replaces
+  // app_metadata wholesale rather than merging, so every field that should
+  // survive (including was_monthly below) has to be folded into the one
+  // call. was_monthly is written to app_metadata, not user_metadata — the
+  // account owner can write user_metadata directly via the client SDK, and
+  // this flag gates real product behavior (which project stays editable), so
+  // it must be server-controlled like every other entitlement field. See
+  // docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
   await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: {
       ...existing,
@@ -71,23 +79,13 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
       subscription_plan:                 plan,
       subscription_current_period_end:   getCurrentPeriodEnd(subscription),
       subscription_cancel_at_period_end: subscription.cancel_at_period_end,
+      // Cancellation locks the free tier back to a single active project.
+      ...(subscription.status === 'canceled' ? { was_monthly: true } : {}),
     },
   })
 
   // Ensure a user_profiles row exists for storage tracking.
   await upsertUserProfile(supabaseAdmin, userId, {})
-
-  // When a subscription is cancelled, record was_monthly so the free tier
-  // knows to lock the active project selection.
-  if (subscription.status === 'canceled') {
-    const userMeta = data?.user?.user_metadata || {}
-    await supabaseAdmin.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...userMeta,
-        was_monthly: true,
-      },
-    })
-  }
 }
 
 // --------------------------------------------------------------------------

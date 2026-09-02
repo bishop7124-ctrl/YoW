@@ -27,7 +27,9 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const plan = user.app_metadata?.subscription_plan || user.user_metadata?.subscription_plan || null
+    // app_metadata only — user_metadata is client-writable and must never be
+    // trusted for entitlement. See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
+    const plan = user.app_metadata?.subscription_plan || null
     if (!LIFETIME_PLAN_KEYS.has(plan)) {
       return res.status(403).json({ error: 'The desktop app is available to Lifetime and Founder members.' })
     }
