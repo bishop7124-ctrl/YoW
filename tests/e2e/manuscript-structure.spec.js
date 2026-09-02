@@ -120,7 +120,10 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 
 test('scene status cycles and persists', async ({ page }) => {
   // Scene status badge is clickable in the scene meta bar
-  const statusBtn = page.locator('.scene-status, [data-status]').first()
+  // (SceneEditor.jsx's `.ms-meta-status` chip — the manuscript editor
+  // redesign replaced the old `.scene-status`/`[data-status]` markup this
+  // locator used to target).
+  const statusBtn = page.locator('.ms-meta-status').first()
   if (!(await statusBtn.isVisible().catch(() => false))) {
     test.skip() // status control not visible in this layout, skip gracefully
     return
@@ -157,20 +160,44 @@ test('finalized draft can be created and viewed', async ({ page }) => {
     return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
-  // Look for Finalize / Final Draft button
-  const finalizeBtn = page
-    .getByRole('button', { name: /Final(ize|ised)? draft|Create final|Compile/i })
-    .first()
+  // The redesign moved "Finalise draft" off a direct toolbar button and into
+  // the topbar's overflow ("More") menu's Finish section (ManuscriptTopbar.jsx
+  // `buildOverflowSections`), which opens a FinalisePane surface (Manuscript
+  // Surface.jsx) holding the actual "Finalise draft" action button.
+  const moreBtn = page.getByRole('button', { name: 'More' })
+  if (!(await moreBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    test.skip()
+    return
+  }
+  await moreBtn.click()
 
-  if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+  const openFinaliseMenuItem = page.getByRole('button', { name: 'Finalise draft', exact: true })
+  if (!(await openFinaliseMenuItem.isVisible({ timeout: 3000 }).catch(() => false))) {
+    test.skip()
+    return
+  }
+  await openFinaliseMenuItem.click()
+
+  const finaliseBtn = page.getByRole('button', { name: 'Finalise draft', exact: true })
+  if (!(await finaliseBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
   }
 
-  await finalizeBtn.click()
+  // handleFinaliseDraft (Manuscript.jsx) prompts for a draft name via native
+  // window.prompt(), then confirms via window.confirm() — Playwright
+  // auto-dismisses both without a handler (prompt returns null, so the
+  // handler bails out before finalizing at all), so accept both explicitly.
+  page.on('dialog', dialog => dialog.accept())
+  await finaliseBtn.click()
 
-  // The finalized reader or success state should appear
+  // A successful finalise sets `readerDraft`, which renders the finalized-
+  // reader toolbar (`role="group" aria-label="Finalized reader view"`,
+  // Manuscript.jsx) regardless of which reader view (scroll/pages) is active
+  // — more robust than asserting on the reader body, which differs between
+  // the two view modes (FinalizedReader.jsx's scroll-mode `.ms-final-book`
+  // article vs. its paged-mode "Pages X of Y" layout).
   await expect(
-    page.locator('.finalized-reader, .final-draft, [data-finalized]').first(),
+    page.getByRole('group', { name: 'Finalized reader view' }),
   ).toBeVisible({ timeout: 8000 })
 })
