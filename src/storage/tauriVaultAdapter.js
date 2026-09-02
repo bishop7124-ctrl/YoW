@@ -6,6 +6,61 @@ import { isDesktopAppRuntime } from '../utils/runtime.js'
 // so this storage-layer module doesn't depend on the store module.
 const LOCAL_WRITE_FAILED_KEY = 'nf_localWriteFailed'
 
+// src/utils/aiSettings.js's key names — duplicated here for the same reason
+// as LOCAL_WRITE_FAILED_KEY above. These hold the user's AI provider API key
+// (and, for the legacy key, the same secret under an older name) and are
+// deliberately kept out of the shared storage-backend abstraction entirely
+// (aiSettings.js reads/writes them via raw `localStorage` directly, never
+// through readItem/writeItem), so nothing in the app ever depends on them
+// living in the desktop vault.
+const AI_SETTINGS_KEY = 'nf_aiSettings'
+const LEGACY_AI_SETTINGS_KEY = 'nf-ai-settings'
+const AI_SETTINGS_OWNER_KEY = 'nf_aiSettingsOwner'
+
+// Substrings (case-insensitive) that mark a key as sensitive by convention
+// even if it isn't one of the specific names above — a defense-in-depth net
+// for a *future* localStorage-based secret this file's author forgets to
+// add to the exact-name list below. Deliberately narrow: no `nf_` storage
+// key in this codebase currently contains any of these (checked via a full
+// repo grep for both literal and templated key names), so this can't
+// silently exclude real project data today, and each term is specific
+// enough that it's unlikely to collide with a future legitimate one either
+// (unlike, say, "auth", which "nf_authorNotes" could plausibly become).
+const SENSITIVE_KEY_SUBSTRINGS = ['token', 'secret', 'password', 'credential', 'apikey', 'api_key']
+
+// Keys that must never be copied into the desktop vault (audit finding
+// P0-10): the vault and its snapshot/backup files are plain SQLite on disk,
+// not a browser's protected per-origin localStorage sandbox, so anything
+// written here is later readable by anyone with filesystem access to this
+// device. `nf_aiSettings`/its legacy name hold a provider API key in
+// plaintext; Supabase's own auth-session key (`sb-<project-ref>-auth-token`,
+// the same convention AuthContext.jsx's readCachedUser()/signOut() already
+// key off of) holds a live session token.
+function isSensitiveStorageKey(key) {
+  if (key === AI_SETTINGS_KEY || key === LEGACY_AI_SETTINGS_KEY || key === AI_SETTINGS_OWNER_KEY) return true
+  if (key.startsWith('sb-') && key.endsWith('-auth-token')) return true
+  const lower = key.toLowerCase()
+  return SENSITIVE_KEY_SUBSTRINGS.some(substring => lower.includes(substring))
+}
+
+// Removes any sensitive keys a pre-fix build may already have copied into
+// this vault's live database, so an existing installation self-heals on its
+// next successful connection rather than needing a separate migration step.
+// Best-effort: a failure here shouldn't block using the vault. Deliberately
+// narrow in scope, not a full remediation — see the P0-10 Bugs table row in
+// docs/ROADMAP.md for what this does *not* cover (existing snapshot/backup
+// .db copies, and whether a SQL DELETE here is a secure erase at the SQLite
+// storage layer) and why: both need native testing this sandboxed session
+// can't do.
+function scrubSensitiveVaultEntries(backend) {
+  try {
+    const existingKeys = Object.keys(backend.snapshot?.() || {})
+    for (const key of existingKeys) {
+      if (isSensitiveStorageKey(key)) backend.removeItem(key)
+    }
+  } catch { /* best-effort cleanup only */ }
+}
+
 let activeDesktopVaultBackend = null
 let flushHandlersInstalled = false
 // Set when a vault connection attempt fails, so the UI can tell "vault is
@@ -55,6 +110,7 @@ async function connectVaultBackend({ onWriteError }) {
 }
 
 function activateVaultBackend(backend) {
+  scrubSensitiveVaultEntries(backend)
   activeDesktopVaultBackend = setStorageBackend(backend)
   installFlushHandlers(activeDesktopVaultBackend)
   vaultInitError = null
@@ -82,6 +138,25 @@ export function getDesktopVaultInitError() {
   return vaultInitError
 }
 
+// Copies fallback-localStorage edits into the vault, skipping anything
+// isSensitiveStorageKey() flags — the vault and its snapshot/backup files
+// are plaintext SQLite on disk, not a browser's protected per-origin
+// localStorage sandbox, so an auth session token or AI provider key must
+// never end up there (audit finding P0-10). Nothing in the app reads those
+// keys through the storage-backend abstraction this vault serves (they're
+// read/written via raw `localStorage` directly, see aiSettings.js), so
+// skipping them here changes no behavior beyond closing the leak.
+function migrateLocalStorageInto(backend) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i)
+    if (key == null || isSensitiveStorageKey(key)) continue
+    const value = window.localStorage.getItem(key)
+    if (value == null) continue
+    backend.setItem(key, value)
+  }
+}
+
 // Re-attempts the vault connection after a failed startup init (a transient
 // IPC hiccup, a locked/unreachable vault file, etc). Any edits made while
 // running on the localStorage fallback are copied into the vault before the
@@ -105,15 +180,7 @@ export async function retryDesktopVaultStorage({ onWriteError = console.error } 
     throw error
   }
 
-  if (typeof window !== 'undefined' && window.localStorage) {
-    for (let i = 0; i < window.localStorage.length; i += 1) {
-      const key = window.localStorage.key(i)
-      if (key == null) continue
-      const value = window.localStorage.getItem(key)
-      if (value == null) continue
-      backend.setItem(key, value)
-    }
-  }
+  migrateLocalStorageInto(backend)
   // The migration above may have carried over a stale "write failed" flag
   // from the fallback backend; the migration itself is the recovery, so
   // there's nothing left to warn about.
