@@ -76,8 +76,6 @@ Build output is unusually large: the main JavaScript chunk is approximately 2,48
 
 The same fallback exists in `api/desktop-devices.js:64` and `api/get-download-links.js:30`. A user can therefore self-assign a lifetime/founder/beta-looking plan and unlock paid UI, desktop download links, and device activation. This is a direct revenue and access-control bypass.
 
-A related Free-plan boundary uses `user_metadata.free_project_id`. A Free user can legitimately choose the one editable project through the UI, but the same metadata is directly editable by the user: changing it can rotate which projects are editable, and clearing it can reopen the create/import path after refresh. A hard one-project quota therefore also needs a trusted one-time selection/reset endpoint or server-owned record rather than client metadata alone.
-
 Required outcome: entitlement must come only from server-controlled `app_metadata` or a dedicated database entitlement queried by trusted server code. Profile updates must allowlist harmless profile fields. Existing user metadata must be migrated/sanitized, and all plan combinations need negative authorization tests.
 
 ### P0-02 — Public AI credential proxy can be abused

@@ -94,6 +94,11 @@ export default async function handler(req, res) {
       authedUser = data.user
       const existingAppMeta = authedUser.app_metadata || {}
       const now = new Date().toISOString()
+      // app_metadata only. This previously also wrote the same beta_tester
+      // fields into user_metadata, which the account owner can edit directly
+      // via the client SDK — redundant at best, a self-service entitlement
+      // bypass at worst if any code ever again trusted user_metadata for
+      // entitlement. See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
       const { error: updateError } = await supabase.auth.admin.updateUserById(authedUser.id, {
         app_metadata: {
           ...existingAppMeta,

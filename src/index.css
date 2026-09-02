@@ -1958,7 +1958,6 @@ textarea:focus {
   0%, 52% { opacity: 1; }
   53%, 100% { opacity: 0; }
 }
-
 .ms-textarea--rich::placeholder {
   color: var(--studio-muted);
   -webkit-text-fill-color: var(--studio-muted);
@@ -1989,7 +1988,6 @@ textarea:focus {
 .ms-rich-preview .ms-prose-paragraph + .ms-prose-paragraph {
   margin-top: var(--ms-paragraph-edit-gap, 2em);
 }
-
 .ms-note-marker {
   margin-left: 2px;
   color: var(--accent);

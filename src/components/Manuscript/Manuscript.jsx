@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { useMediaQuery } from '../../utils/useMediaQuery'
+import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
 import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
@@ -230,7 +230,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   // railUserToggledRef below), ≤900px rail becomes an off-canvas sheet
   // (railSheetOpen) instead of collapsing at all.
   const isNarrowBand = useMediaQuery(1250)
-  const isMobileBand = useMediaQuery(900)
+  const isMobileBand = useMediaQuery(BREAKPOINT_MS_OVERLAY)
   const [railCollapsed, setRailCollapsed] = useState(() => (
     typeof window !== 'undefined' && window.innerWidth <= 1250
   ))
@@ -259,6 +259,16 @@ export default function Manuscript({ store, userId, membership = null }) {
   // (2026-08-27 manuscript-editor-redesign regression, caught by CI's
   // responsive-smoke spec failing at 768px — see docs/ROADMAP.md Bugs table).
   const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
+  // Also close if a later resize crosses into the overlay band. This catches
+  // tablet rotation from landscape to portrait without fighting a user who
+  // deliberately opens the inspector after already being in that band.
+  useEffect(() => {
+    if (!isMobileBand) return
+    const timeout = window.setTimeout(() => {
+      setInspectorOpen(prev => (prev ? false : prev))
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [isMobileBand])
   const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
   const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
   const [selectedCatalogueEntity, setSelectedCatalogueEntity] = useState(null)
