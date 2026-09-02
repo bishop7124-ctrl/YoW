@@ -860,7 +860,7 @@ const NC_SECTIONS = [
 
 // ── YOW section config & helpers ──────────────────────────────────────────────
 
-const YOW_SECTIONS = [
+export const YOW_SECTIONS = [
   { key: 'characters',    label: 'Characters' },
   { key: 'factions',      label: 'Factions' },
   { key: 'locations',     label: 'Locations' },
@@ -874,17 +874,17 @@ const YOW_SECTIONS = [
   { key: 'storySchedule', label: 'Story schedule' },
 ]
 
-function yowSectionCount(data, key) {
+export function yowSectionCount(data, key) {
   if (key === 'acts') return (data.acts || []).length + (data.comicPages || []).length
   return (data[key] || []).length
 }
 
-function yowSectionLabel(data, key, label) {
+export function yowSectionLabel(data, key, label) {
   if (key === 'acts') return getProjectType(data.project?.type).workspaceLabel || label
   return label
 }
 
-function yowCountLabel(data, key) {
+export function yowCountLabel(data, key) {
   if (key === 'acts') {
     const type = getProjectType(data.project?.type)
     const lc = (s) => s.toLowerCase()
