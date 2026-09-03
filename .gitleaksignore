@@ -1,0 +1,48 @@
+# Gitleaks fingerprint allowlist.
+#
+# gitleaks/gitleaks-action@v2's scheduled (cron) trigger runs gitleaks with
+# `--all` (full git history) instead of the push/PR trigger's new-commits-only
+# diff, so these six historical findings resurface on every scheduled run
+# against main even though the push/PR scans (correctly) never flag them.
+# Each line is the exact `Fingerprint:` gitleaks prints for that finding
+# (<commit>:<file>:<rule>:<line>). Full investigation history, verification,
+# and status of the two real-credential entries below:
+# docs/QA_PLAN.md, "Priority -1: 2026-09-01 Whole-Codebase Audit Blocker
+# Closure" -> "Secrets and authorization"; docs/ROADMAP.md, "Whole-codebase
+# audit snapshot -- 2026-09-01" (item 1, "Rotate/remove the committed
+# real-looking test credential").
+#
+# False positive: localStorage key NAME constant, not a credential value.
+# Verified 2026-09-03 against the historical file content at this commit.
+961375ee500d657b27851e7a29542e95a94cf9bf:docs/qa-checklist.html:generic-api-key:967
+
+# False positive: localStorage key NAME constant, not a credential value.
+# Verified 2026-09-03 against the historical file content at this commit.
+961375ee500d657b27851e7a29542e95a94cf9bf:docs/qa-outstanding-checklist.html:generic-api-key:1256
+
+# False positive: localStorage key NAME constant, not a credential value.
+# Verified 2026-09-03 against the historical file content at this commit.
+961375ee500d657b27851e7a29542e95a94cf9bf:docs/qa-outstanding-checklist.html:generic-api-key:1257
+
+# False positive: this is Supabase's public anon/publishable key (JWT
+# payload decodes to role:"anon"), not a service-role secret -- intentionally
+# public, protected by Postgres RLS. Confirmed identical to the key current
+# src/supabase.js loads from the client-exposed VITE_SUPABASE_ANON_KEY env
+# var. Verified 2026-09-03 by decoding the JWT and comparing against current
+# source.
+c9f2e7d8fb5fe5d406213d708baf0e5d076839fb:scripts/seed-test-data.mjs:jwt:9
+
+# Real credential, but confirmed dead: the mbishoptesting@gmail.com test
+# account password, rotated 2026-09-02 (confirmed by the user). The
+# git-history rewrite that would remove this line from history entirely is a
+# separate, deliberately deferred, lower-urgency item pending user
+# coordination -- not attempted here. Verified 2026-09-03.
+c9f2e7d8fb5fe5d406213d708baf0e5d076839fb:scripts/seed-test-data.mjs:hardcoded-password-assignment:1389
+
+# False positive: this is Supabase's public anon/publishable key (JWT
+# payload decodes to role:"anon"), not a service-role secret -- intentionally
+# public, protected by Postgres RLS. Same key as the seed-test-data.mjs entry
+# above; confirmed identical to the key current src/supabase.js loads from
+# the client-exposed VITE_SUPABASE_ANON_KEY env var. Verified 2026-09-03 by
+# decoding the JWT and comparing against current source.
+eaaac5b6ba2937865eb37a9c3971e2e95ebb0cd7:src/supabase.js:jwt:32
