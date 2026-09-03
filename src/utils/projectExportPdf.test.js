@@ -33,6 +33,10 @@ const baseProjectData = (enabledSections) => ({
   storySchedule: [{ id: 'sched-1', title: 'Private session date' }],
   comicPages: [{ id: 'page-1', novelId: 'project-1', issueId: 'chap-1', order: 0 }],
   comicPanels: [{ id: 'panel-1', novelId: 'project-1', pageId: 'page-1', dialogue: 'Private panel script never rendered in the visual PDF.', order: 0 }],
+  rpgCharacters: [{
+    id: 'rpg-1', name: 'GM-only NPC', backstory: 'A backstory never shown on any visual PDF page.',
+    secrets: 'A GM-only secret that must never leave the app via export.',
+  }],
 })
 
 describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
@@ -67,6 +71,13 @@ describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
     expect(embedded.comicPanels).toEqual([])
     expect(pdfText).not.toContain('Private manuscript prose that never renders')
     expect(pdfText).not.toContain('Private panel script never rendered')
+
+    // Character Builder (D&D/Tabletop RPG projects) is its own toggle, off
+    // here, gating a separate rpgCharacters array the visual PDF never
+    // renders on any page — it must be emptied out of the embed too.
+    expect(embedded.rpgCharacters).toEqual([])
+    expect(pdfText).not.toContain('A backstory never shown on any visual PDF page')
+    expect(pdfText).not.toContain('A GM-only secret that must never leave the app via export')
 
     // Disabled-section text must not appear anywhere in the file at all —
     // neither on the rendered pages nor in the embed.
@@ -107,6 +118,23 @@ describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
     // just because familytree, not characters, is what's enabled.
     expect(embedded.characters[0].bio).toBeUndefined()
     expect(pdfText).not.toContain('A visible hero bio.')
+  })
+
+  it('embeds rpgCharacters once Character Builder is enabled, but always strips the secrets field regardless', async () => {
+    const projectData = baseProjectData(['characterbuilder'])
+    const blob = await createProjectPdfBlob(projectData)
+    const pdfText = new TextDecoder().decode(await blob.arrayBuffer())
+    const embedded = extractEmbeddedYowData(pdfText)
+
+    expect(embedded.rpgCharacters).toHaveLength(1)
+    expect(embedded.rpgCharacters[0].name).toBe('GM-only NPC')
+    expect(embedded.rpgCharacters[0].backstory).toBe('A backstory never shown on any visual PDF page.')
+    // The Secrets tab (CharacterSheet.jsx) tells the user this field "won't
+    // appear in exports unless you choose to include them" — no export flow
+    // offers that opt-in, so it must be stripped even when the rest of the
+    // RPG character record is embedded.
+    expect(embedded.rpgCharacters[0].secrets).toBeUndefined()
+    expect(pdfText).not.toContain('A GM-only secret that must never leave the app via export')
   })
 
   it('leaves visible-page rendering unaffected by the embed scoping', async () => {
