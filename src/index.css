@@ -9935,6 +9935,15 @@ body {
   text-transform: uppercase;
 }
 
+.novel-export-theme-note {
+  margin: 0;
+  padding: 0 9px 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .novel-export-theme-group button {
   display: grid;
   gap: 2px;
