@@ -16,12 +16,13 @@ test.beforeEach(async ({ page }) => {
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
   // StructureSidebar (`.ms-sidebar-*`) was replaced by ManuscriptRail in the
-  // 2026-08-27 redesign. Its footer "+ Scene" button (`.ms-rail-f-btn`) adds
-  // to the end of the manuscript regardless of which chapter is selected —
-  // scoped to that class since "+ Scene" text alone also matches the
-  // per-chapter inline row button and the empty-manuscript "add first
-  // scene" CTA (`.manuscript-add-scene`).
-  await page.locator('.ms-rail-f-btn', { hasText: '+ Scene' }).click()
+  // 2026-08-27 redesign. That redesign also removed the rail footer's global
+  // "+ Scene" button (`.ms-rail-f-btn`) — the footer now only has "+ Chapter"
+  // and "+ Act". Adding a scene now happens via the per-chapter inline button
+  // in the main content area (`.manuscript-add-scene`, in Manuscript.jsx):
+  // "+ Add Scene" for an empty chapter, or "+ Scene" after a chapter's last
+  // scene. Scoped to `.manuscript-add-scene` so this matches either case.
+  await page.locator('.manuscript-add-scene').first().click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
