@@ -3,6 +3,7 @@ import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk } from '../utils/archiveImportLimits'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -19,12 +20,14 @@ function readTextFile(file) {
   })
 }
 
-async function readZipFile(file) {
+export async function readZipFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
       if (err) { reject(err); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const results = []
       for (const [path, data] of Object.entries(files)) {
         const basename = path.split('/').pop()
@@ -41,12 +44,15 @@ async function readZipFile(file) {
 
 // Attempt to read a ZIP as a native YOW project export.
 // Returns parsed projectData object, or null if not a YOW export.
-async function tryReadYowZip(file) {
+export async function tryReadYowZip(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
-  return new Promise((resolve) => {
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
-      if (err || !files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
+      if (err) { resolve(null); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
+      if (!files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
       try {
         const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
         if (manifest?.app !== 'YOW' || manifest?.format !== 'yow-project-export') { resolve(null); return }
@@ -94,12 +100,14 @@ async function readPdfFile(file) {
 }
 
 // Extract plain text from a .docx file (OOXML — ZIP of XML files).
-async function readDocxFile(file) {
+export async function readDocxFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
       if (err) { reject(new Error(`Could not read ${file.name}`)); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const xmlBytes = files['word/document.xml']
       if (!xmlBytes) { reject(new Error(`${file.name} doesn't appear to be a valid .docx file`)); return }
       const xml = new TextDecoder('utf-8').decode(xmlBytes)
@@ -115,7 +123,7 @@ async function readDocxFile(file) {
   })
 }
 
-async function processFiles(fileList) {
+export async function processFiles(fileList) {
   const results = []
   for (const file of fileList) {
     const lower = file.name.toLowerCase()
@@ -730,12 +738,14 @@ export function populateYowProject(store, data, sel) {
 
 // Compatible structured ZIP import
 
-async function tryReadStructuredZip(file) {
+export async function tryReadStructuredZip(file) {
   const { unzip, unzipSync } = await import('fflate')
   const buffer = await file.arrayBuffer()
-  return new Promise((resolve) => {
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
       if (err) { resolve(null); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const paths = Object.keys(files)
       const isNC = paths.some(p =>
         /^(characters|locations|lore|items|other|snippets|notes)\/[^/]+\/metadata\.json$/.test(p)
@@ -792,7 +802,9 @@ async function tryReadStructuredZip(file) {
       const docxBytes = files['novel.docx']
       if (docxBytes) {
         try {
+          assertArchiveInputSizeOk(docxBytes.byteLength, `"${file.name}" (novel.docx)`)
           const docxFiles = unzipSync(docxBytes)
+          assertUnzippedResultOk(docxFiles, `"${file.name}" (novel.docx)`)
           const xmlBytes = docxFiles['word/document.xml']
           if (xmlBytes) {
             const xml = new TextDecoder('utf-8').decode(xmlBytes)
@@ -817,7 +829,13 @@ async function tryReadStructuredZip(file) {
               }
             }
           }
-        } catch { /* manuscript extraction failed — skip */ }
+        } catch (manuscriptErr) {
+          // A limit-exceeded guard must abort the whole import with a clear
+          // error rather than being treated like an ordinary corrupt/invalid
+          // novel.docx (which we tolerate by just skipping the manuscript).
+          if (manuscriptErr?.isArchiveLimitError) { reject(manuscriptErr); return }
+          /* manuscript extraction failed — skip */
+        }
       }
 
       // Extract project name from ZIP filename
