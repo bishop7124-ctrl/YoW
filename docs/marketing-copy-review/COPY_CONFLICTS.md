@@ -21,7 +21,7 @@ Resolve in order. “Implementation first” means the intended statement may re
 | --- | --- | --- |
 | “YOW adapts to launch-ready project types.” | Roadmap project-type gate is open; Comic is still Beta; campaign/Comic manual QA remains. | Use beta-honest wording until gate passes. |
 | ~~D&D notes “hidden from players”~~ | There is no player view, share portal, or collaboration. | **Resolved 2026-09-03:** `HomePage.jsx` D&D Characters/Locations use cases now say “private DM-only notes” / “your own private prep” instead of implying a player-visible surface. |
-| ~~Players can explore/discover lore/map pins progressively~~ | Excluded player/public viewing is explicitly forbidden by roadmap marketing gate. | **Resolved 2026-09-03:** `HomePage.jsx` D&D Lore/Maps use cases and `public/dnd-campaign-manager/index.html`'s secrets bullet were reworded to describe private GM prep, not player-facing discovery. |
+| ~~Players can explore/discover lore/map pins progressively~~ | Excluded player/public viewing is explicitly forbidden by roadmap marketing gate. | **Resolved 2026-09-03:** `HomePage.jsx` D&D Lore/Maps use cases, `public/dnd-campaign-manager/index.html`'s secrets bullet, and `public/timeline-tool-for-writers/index.html`'s Campaign Session Log card (“that the whole party can reference” implied player access) were reworded to describe private GM prep, not player-facing discovery. |
 | “Recent activity feed across all project sections” | Roadmap says current recent activity covers manuscript scene edits only. | Narrow to manuscript activity or implement full activity timestamps/feed. |
 | “Everything in one place” / “nothing gets lost” / “never lose the thread” | Absolute data-safety language conflicts with known durability/import/sync risks. | Replace absolutes; harden implementation; publish backup guidance. |
 | “Every AI tool reads your project context” | Context varies by tool/selection and some tools use compact subsets. | Publish a tool-by-tool context matrix or say “can use relevant project context.” |
@@ -108,7 +108,7 @@ Choose one canonical copy data source and generate both static SEO pages and Rea
 - [ ] Backup/sync/saved terminology has concrete acceptance evidence.
 - [ ] Free downgrade/Map/AI behavior matches across Pricing, FAQ, Account, legal, and code.
 - [ ] Every active project type's capabilities were manually verified before “launch-ready” language.
-- [x] Player/public/collaboration implications removed from D&D/TTRPG copy (2026-09-03: `HomePage.jsx`, `public/dnd-campaign-manager/index.html`). No other project type's copy was found to carry the same implication.
+- [x] Player/public/collaboration implications removed from D&D/TTRPG copy (2026-09-03: `HomePage.jsx`, `public/dnd-campaign-manager/index.html`, `public/timeline-tool-for-writers/index.html`). Spot-checked the rest of the public D&D/TTRPG-facing pages (`faq`, `worldbuilding-software`, `about`, `family-tree-builder`) and found no other instance of the pattern, but this was not an exhaustive re-audit of every page.
 - [ ] Static/React route duplication resolved.
 - [ ] SEO title/description/schema/canonical/social tags updated with visible copy.
 - [ ] Welcome/reset/re-engagement authorization and deduplication fixed before lifecycle send QA.
