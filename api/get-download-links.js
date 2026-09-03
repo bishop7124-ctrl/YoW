@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 
 // Vercel API route — desktop app download delivery.
 // Called by DownloadPage.jsx. The installer URLs live only in server env vars
@@ -9,10 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 const DESKTOP_ENTITLED_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
