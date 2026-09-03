@@ -561,22 +561,74 @@ fn open_external_url(url: String) -> Result<(), String> {
   if !url.starts_with("https://") {
     return Err("Only https links can be opened.".to_string());
   }
-  let status = Command::new("open")
-    .arg(&url)
-    .status()
-    .map_err(|error| format!("Could not open the link: {error}"))?;
-  if status.success() { Ok(()) } else { Err("The link could not be opened.".to_string()) }
+  spawn_opener(&url)
 }
 
 #[tauri::command]
 fn vault_reveal_in_finder(app: tauri::AppHandle) -> Result<(), String> {
   let path = vault_path(&app)?;
-  let status = Command::new("open")
-    .arg("-R")
-    .arg(path)
+  reveal_path(&path)
+}
+
+// Opens a URL with the OS's registered default handler. Previously always
+// shelled out to macOS's `open`, which silently does nothing on Windows/
+// Linux (audit finding #27) — YOW ships on all three (bundle.targets =
+// "all" in tauri.conf.json).
+fn spawn_opener(url: &str) -> Result<(), String> {
+  if cfg!(target_os = "macos") {
+    let status = Command::new("open")
+      .arg(url)
+      .status()
+      .map_err(|error| format!("Could not open the link: {error}"))?;
+    return if status.success() { Ok(()) } else { Err("The link could not be opened.".to_string()) };
+  }
+  if cfg!(target_os = "windows") {
+    // explorer.exe can report a nonzero exit code on a genuine success (a
+    // long-documented Windows quirk) — a successful spawn is treated as
+    // success rather than trusting its exit code.
+    Command::new("explorer")
+      .arg(url)
+      .spawn()
+      .map_err(|error| format!("Could not open the link: {error}"))?;
+    return Ok(());
+  }
+  let status = Command::new("xdg-open")
+    .arg(url)
     .status()
-    .map_err(|error| format!("Could not ask Finder to reveal the vault: {error}"))?;
-  if status.success() { Ok(()) } else { Err("Finder could not reveal the vault.".to_string()) }
+    .map_err(|error| format!("Could not open the link: {error}"))?;
+  if status.success() { Ok(()) } else { Err("The link could not be opened.".to_string()) }
+}
+
+// Reveals (selects, where the platform supports it) a file in the system
+// file manager. Previously always shelled out to macOS's `open -R`, which
+// silently does nothing on Windows/Linux (audit finding #27).
+fn reveal_path(path: &std::path::Path) -> Result<(), String> {
+  if cfg!(target_os = "macos") {
+    let status = Command::new("open")
+      .arg("-R")
+      .arg(path)
+      .status()
+      .map_err(|error| format!("Could not ask Finder to reveal the vault: {error}"))?;
+    return if status.success() { Ok(()) } else { Err("Finder could not reveal the vault.".to_string()) };
+  }
+  if cfg!(target_os = "windows") {
+    let mut arg = std::ffi::OsString::from("/select,");
+    arg.push(path.as_os_str());
+    Command::new("explorer")
+      .arg(arg)
+      .spawn()
+      .map_err(|error| format!("Could not ask Explorer to reveal the vault: {error}"))?;
+    return Ok(());
+  }
+  // Linux has no universal "select in file manager" primitive across
+  // desktop environments — fall back to opening the containing folder (the
+  // vault file itself isn't pre-selected/highlighted).
+  let parent = path.parent().unwrap_or(path);
+  let status = Command::new("xdg-open")
+    .arg(parent)
+    .status()
+    .map_err(|error| format!("Could not open the vault folder: {error}"))?;
+  if status.success() { Ok(()) } else { Err("The file manager could not open the vault folder.".to_string()) }
 }
 
 #[tauri::command]
