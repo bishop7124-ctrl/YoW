@@ -188,6 +188,7 @@ function ProjectExportMenu({ onExport, compact = false }) {
                 <small>{theme.tagline}</small>
               </button>
             ))}
+            <p className="novel-export-theme-note">Also embeds a re-importable copy of this export's included sections in the file — not just the printed pages.</p>
           </div>
         </div>
       )}
