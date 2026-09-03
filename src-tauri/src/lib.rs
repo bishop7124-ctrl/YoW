@@ -554,7 +554,7 @@ fn list_snapshots_with_prefix(
   let backups = backup_dir(app)?;
   let mut snapshots = Vec::new();
   collect_snapshots_from_dir(&backups, Some(prefix), &mut HashSet::new(), &mut snapshots)?;
-  snapshots.sort_by(|a, b| b.modified_seconds.cmp(&a.modified_seconds));
+  snapshots.sort_by_key(|snapshot| std::cmp::Reverse(snapshot.modified_seconds));
   Ok(snapshots)
 }
 
@@ -680,7 +680,7 @@ fn vault_list_snapshots(app: tauri::AppHandle) -> Result<Vec<VaultSnapshot>, Str
   if default_backups != backups {
     collect_snapshots_from_dir(&default_backups, None, &mut seen, &mut snapshots)?;
   }
-  snapshots.sort_by(|a, b| b.modified_seconds.cmp(&a.modified_seconds));
+  snapshots.sort_by_key(|snapshot| std::cmp::Reverse(snapshot.modified_seconds));
   Ok(snapshots)
 }
 
