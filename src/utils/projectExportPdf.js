@@ -1259,18 +1259,42 @@ const YOW_EMBED_SECTION_FIELDS = [
   ['worldhistory', ['worldHistory']],
   ['map', ['maps']],
   ['ideas', ['ideaEntries']],
-  ['outline', ['acts', 'chapters', 'scenes']],
+  // 'outline' is the same section id for every project type — for comic
+  // projects it's labeled "Pages" (see projectTypes.js workspaceLabel) and
+  // its content lives in comicPages/comicPanels (volumes/issues reuse
+  // acts/chapters, already covered) rather than chapters/scenes, so both
+  // need to be scoped alongside acts/chapters/scenes.
+  ['outline', ['acts', 'chapters', 'scenes', 'comicPages', 'comicPanels']],
   ['schedule', ['storySchedule']],
 ]
 
 // `characters` also stays populated when only `familytree` is enabled, since
 // the Relationship Atlas page (createRelationshipsPage / relationshipSection)
 // reads directly from projectData.characters regardless of the `characters`
-// toggle — so the embed mirrors whichever of those two sections is on.
+// toggle. But that page — and the in-app Family Tree it mirrors on
+// re-import — only ever reads identity/lineage fields, never bio, traits,
+// background, or other narrative-profile data a user could have written
+// with Characters intentionally left off. So when `characters` itself is
+// disabled, the embed keeps only that minimal field set per character
+// instead of the full record, or the familytree exception would silently
+// smuggle private character data past a toggle the user explicitly turned off.
+const FAMILYTREE_ONLY_CHARACTER_FIELDS = [
+  'id', 'name', 'familyGroup', 'image', 'imagePosition', 'role',
+  'birthDate', 'deathDate', 'parentIds', 'childIds', 'spouseIds',
+  'familyLinks', 'relationships',
+]
+
+const pickFields = (obj, fields) =>
+  Object.fromEntries(fields.filter(field => field in obj).map(field => [field, obj[field]]))
+
 const scopeProjectDataForEmbed = (projectData) => {
   const enabled = getEnabled(projectData)
   const scoped = { ...projectData }
-  if (!(enabled.has('characters') || enabled.has('familytree'))) scoped.characters = []
+  if (!enabled.has('characters')) {
+    scoped.characters = enabled.has('familytree')
+      ? (projectData.characters ?? []).map(character => pickFields(character, FAMILYTREE_ONLY_CHARACTER_FIELDS))
+      : []
+  }
   YOW_EMBED_SECTION_FIELDS.forEach(([sectionId, fields]) => {
     if (enabled.has(sectionId)) return
     fields.forEach(field => { scoped[field] = [] })

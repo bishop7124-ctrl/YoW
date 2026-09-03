@@ -31,6 +31,8 @@ const baseProjectData = (enabledSections) => ({
   chapters: [{ id: 'chap-1', novelId: 'project-1', actId: 'act-1', title: 'Chapter One', order: 0 }],
   scenes: [{ id: 'scene-1', novelId: 'project-1', chapterId: 'chap-1', title: 'Scene One', content: 'Private manuscript prose that never renders in the visual PDF.', order: 0 }],
   storySchedule: [{ id: 'sched-1', title: 'Private session date' }],
+  comicPages: [{ id: 'page-1', novelId: 'project-1', issueId: 'chap-1', order: 0 }],
+  comicPanels: [{ id: 'panel-1', novelId: 'project-1', pageId: 'page-1', dialogue: 'Private panel script never rendered in the visual PDF.', order: 0 }],
 })
 
 describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
@@ -55,11 +57,16 @@ describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
     expect(embedded.storySchedule).toEqual([])
 
     // 'outline' is disabled here, so manuscript prose — never shown on any
-    // visual PDF page — must not ride along in the embed either.
+    // visual PDF page — must not ride along in the embed either. That
+    // includes comic projects' comicPages/comicPanels, which are the
+    // 'outline' section's data for that project type (see projectTypes.js).
     expect(embedded.acts).toEqual([])
     expect(embedded.chapters).toEqual([])
     expect(embedded.scenes).toEqual([])
+    expect(embedded.comicPages).toEqual([])
+    expect(embedded.comicPanels).toEqual([])
     expect(pdfText).not.toContain('Private manuscript prose that never renders')
+    expect(pdfText).not.toContain('Private panel script never rendered')
 
     // Disabled-section text must not appear anywhere in the file at all —
     // neither on the rendered pages nor in the embed.
@@ -81,11 +88,13 @@ describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
     expect(embedded.acts).toHaveLength(1)
     expect(embedded.chapters).toHaveLength(1)
     expect(embedded.scenes).toHaveLength(1)
+    expect(embedded.comicPages).toHaveLength(1)
+    expect(embedded.comicPanels).toHaveLength(1)
 
     expect(pdfText).toContain('Secret Cabal')
   })
 
-  it('keeps characters embedded when only familytree (not characters) is enabled, matching what the Relationship Atlas page renders', async () => {
+  it('keeps characters embedded when only familytree (not characters) is enabled, matching what the Relationship Atlas page renders — but strips private profile fields the Characters section (not familytree) gates', async () => {
     const projectData = baseProjectData(['familytree'])
     const blob = await createProjectPdfBlob(projectData)
     const pdfText = new TextDecoder().decode(await blob.arrayBuffer())
@@ -93,6 +102,11 @@ describe('createProjectPdfBlob — embedded /YOW data scoping', () => {
 
     expect(embedded.characters).toHaveLength(1)
     expect(embedded.characters[0].name).toBe('Rendered Hero')
+    // Family Tree / Relationship Atlas only ever render identity + lineage
+    // fields — bio (and other narrative-profile fields) must not ride along
+    // just because familytree, not characters, is what's enabled.
+    expect(embedded.characters[0].bio).toBeUndefined()
+    expect(pdfText).not.toContain('A visible hero bio.')
   })
 
   it('leaves visible-page rendering unaffected by the embed scoping', async () => {
