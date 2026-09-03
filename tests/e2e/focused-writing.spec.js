@@ -62,8 +62,20 @@ test('long wrapped prose keeps the caret inside the calm comfort zone', async ({
     if (!textarea || !container) return false
     const textareaRect = textarea.getBoundingClientRect()
     const containerRect = container.getBoundingClientRect()
-    return textareaRect.bottom >= containerRect.top + container.clientHeight * .35
-      && textareaRect.bottom <= containerRect.top + container.clientHeight * .72
+    // `.ms-textarea` carries a decorative 36px bottom padding (the blank
+    // "paper" margin below the last line) that's part of the raw box's
+    // bottom edge but has nothing to do with where the caret actually
+    // sits — with 260 wrapped words filling it, the caret is right at the
+    // end of the content, so subtracting that padding turns this into an
+    // accurate proxy for the caret's own line instead of overshooting by
+    // a fixed ~9% of the container's height. Confirmed against the real
+    // mirror-based caret measurement (useTextareaCaretRect.js) landing at
+    // frac ≈0.65 — exactly the hook's own comfort-zone target — while the
+    // unadjusted box bottom read frac ≈0.74, just outside this band.
+    const paddingBottom = Number.parseFloat(getComputedStyle(textarea).paddingBottom) || 0
+    const textBottom = textareaRect.bottom - paddingBottom
+    return textBottom >= containerRect.top + container.clientHeight * .35
+      && textBottom <= containerRect.top + container.clientHeight * .72
   })).toBe(true)
 })
 
