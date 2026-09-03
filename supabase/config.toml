@@ -1,0 +1,74 @@
+# Supabase CLI project config. Read by `supabase functions deploy` /
+# `supabase db push` etc. to know which remote project to target and how
+# each Edge Function should be deployed.
+#
+# This intentionally does NOT configure local `supabase start` (db/auth/
+# storage/studio ports, local auth settings, etc.) — this project is
+# developed and tested against the real hosted project (see docs/ROADMAP.md
+# Agent Instructions), and guessing at local-stack settings nobody has
+# actually run here would be worse than leaving the CLI's own defaults in
+# place. Add those sections deliberately, from a real working local stack,
+# if that ever changes.
+project_id = "cwifaklpjqutlcwvkxpp"
+
+# ── Edge Functions: JWT verification ──────────────────────────────────────
+# Supabase's platform gateway can require a valid signed JWT in the
+# Authorization header before a function's own code ever runs (independent
+# of anything the function checks itself). Before this file existed there
+# was no committed record of which functions had this on or off — audit
+# finding #26 (docs/YOW_CODE_AUDIT_2026-09-01.md). Every function in this
+# repo implements its own complete authorization in code (see each file's
+# comments) rather than relying on the platform gate, so verify_jwt = false
+# everywhere below matches how each was actually designed to be called —
+# not a weakening, since the in-function check is the real boundary in
+# every case. Confirmed for each below via its own source, not assumed.
+
+[functions.stripe-webhook]
+# Called by Stripe directly — verifies the `stripe-signature` header
+# against STRIPE_WEBHOOK_SECRET itself (api/stripe-webhook.js's Vercel
+# equivalent is the one actually wired up in production; this Edge
+# Function predates it). Stripe never sends a Supabase JWT, so
+# verify_jwt = true would make this endpoint permanently unreachable.
+verify_jwt = false
+
+[functions.send-reset-email]
+# Called by an unauthenticated visitor on the "forgot password" screen —
+# by definition, before they have any session. Protects itself with a
+# durable per-email rate limit and a redirectTo origin allowlist instead.
+# verify_jwt = true would make this endpoint permanently unreachable.
+verify_jwt = false
+
+[functions.send-welcome-email]
+# Called two ways, both already verified in code (not by the platform
+# gate): the `on_user_profile_created` DB trigger with the service-role
+# key, or the browser client with the new user's own fresh session token
+# (checked against SUPABASE_SERVICE_ROLE_KEY / supabase.auth.getUser()
+# respectively — see the file's own comments referencing audit finding
+# P0-03).
+verify_jwt = false
+
+[functions.send-reengagement-email]
+# Server-to-server only: called by api/send-reengagement-emails.js (a
+# Vercel Cron route, itself gated by CRON_SECRET), passing the service
+# role key as its Authorization header — checked with an exact string
+# comparison in code. Never called by an end-user browser.
+verify_jwt = false
+
+# The three functions below are superseded by Vercel api/*.js routes —
+# create-checkout-session and create-customer-portal by their same-named
+# api/*.js file, downgrade-to-free by downgradeToFreeLocally() folded into
+# api/create-customer-portal.js — and nothing in src/ calls any of the three
+# Edge Functions anymore (confirmed via grep). Left deployable rather than
+# deleted here since removing a live Edge Function is a separate decision
+# from documenting its config; verify_jwt = true matches their original
+# design (each also calls supabase.auth.getUser() on the token itself, so
+# this is defense-in-depth, not the only check).
+
+[functions.create-checkout-session]
+verify_jwt = true
+
+[functions.create-customer-portal]
+verify_jwt = true
+
+[functions.downgrade-to-free]
+verify_jwt = true
