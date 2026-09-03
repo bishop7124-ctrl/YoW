@@ -13,7 +13,7 @@
     "check:e2e-matrix": "node ./scripts/check-e2e-matrix.mjs",
     "check:api-esm": "node ./scripts/check-api-esm-resolution.mjs",
     "sync:interest-emails": "node ./scripts/sync-interest-emails.mjs",
-    "lint": "eslint src --ext .js,.jsx",
+    "lint": "eslint src api scripts tests --ext .js,.jsx,.mjs",
     "test": "vitest run",
     "qa": "npm run lint && npm run test && npm run build && npm run check:load && npm run check:e2e-matrix && npm run check:api-esm",
     "qa:all": "npm run qa && npm run qa:smoke",
