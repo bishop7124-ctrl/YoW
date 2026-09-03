@@ -22,6 +22,18 @@ vi.mock('fflate', async (importOriginal) => {
         cb(null, { 'big.bin': { byteLength: MAX_ARCHIVE_UNCOMPRESSED_BYTES + 1 } })
         return
       }
+      // A synthetic "compatible structured ZIP" (one NC-format entry, so
+      // tryReadStructuredZip recognizes it) that also carries an oversized
+      // `novel.docx` — reused to prove the nested-manuscript size guard
+      // actually aborts the whole import instead of being swallowed by the
+      // surrounding try/catch that otherwise tolerates a corrupt novel.docx.
+      if (buf.length === 1 && buf[0] === 0xfd) {
+        cb(null, {
+          'characters/alice-abc1234567/metadata.json': new TextEncoder().encode(JSON.stringify({ attributes: { name: 'Alice' } })),
+          'novel.docx': { byteLength: MAX_ARCHIVE_INPUT_BYTES + 1 },
+        })
+        return
+      }
       actual.unzip(buf, cb)
     },
   }
@@ -85,5 +97,14 @@ describe('a decompressed total-uncompressed-size over the cap is rejected', () =
 
   it('tryReadYowZip rejects rather than silently falling through', async () => {
     await expect(tryReadYowZip(fakeControlZipFile('bigcontent.zip', 0xfe))).rejects.toThrow(/too large once decompressed/)
+  })
+})
+
+describe('an oversized nested novel.docx inside a compatible structured ZIP aborts the whole import', () => {
+  it('tryReadStructuredZip rejects rather than silently dropping the manuscript and resolving the rest', async () => {
+    // Before the fix, the size guard on novel.docx threw inside a try/catch
+    // meant only to tolerate a corrupt/invalid nested .docx, so the error
+    // was swallowed and the import silently resolved without a manuscript.
+    await expect(tryReadStructuredZip(fakeControlZipFile('withNovel.zip', 0xfd))).rejects.toThrow(/too large to import/)
   })
 })
