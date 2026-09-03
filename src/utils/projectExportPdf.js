@@ -1266,7 +1266,26 @@ const YOW_EMBED_SECTION_FIELDS = [
   // need to be scoped alongside acts/chapters/scenes.
   ['outline', ['acts', 'chapters', 'scenes', 'comicPages', 'comicPanels']],
   ['schedule', ['storySchedule']],
+  // 'characterbuilder' (D&D/Tabletop RPG projects — see projectTypes.js
+  // defaultSections) is its own toggle, separate from 'characters', and its
+  // records live in a separate rpgCharacters array (see
+  // useStore.js getProjectExportData) that createProjectPdfBlob never renders
+  // on any visible page. Without this entry, disabling Character Builder for
+  // an export did nothing to the embed: the full RPG sheet — hp, inventory,
+  // journal/session notes, and the secrets field below — still rode along.
+  ['characterbuilder', ['rpgCharacters']],
 ]
+
+// The Character Builder's Secrets tab (CharacterSheet.jsx TabNotes) tells the
+// user directly: "Secrets are stored locally only — they won't appear in
+// exports unless you choose to include them." No export flow offers that
+// opt-in, so `secrets` must never leave the app via the embed, independent of
+// whether Character Builder itself is enabled for this export.
+const stripRpgCharacterSecrets = (character) => {
+  if (!character || typeof character !== 'object') return character
+  const { secrets, ...rest } = character
+  return rest
+}
 
 // `characters` also stays populated when only `familytree` is enabled, since
 // the Relationship Atlas page (createRelationshipsPage / relationshipSection)
@@ -1299,6 +1318,9 @@ const scopeProjectDataForEmbed = (projectData) => {
     if (enabled.has(sectionId)) return
     fields.forEach(field => { scoped[field] = [] })
   })
+  if (scoped.rpgCharacters?.length) {
+    scoped.rpgCharacters = scoped.rpgCharacters.map(stripRpgCharacterSecrets)
+  }
   return scoped
 }
 
