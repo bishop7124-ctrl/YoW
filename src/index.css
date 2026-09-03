@@ -9959,6 +9959,16 @@ body {
   color: var(--accent);
 }
 
+.novel-export-theme-note {
+  margin: 6px 9px 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
 .novel-cover-error {
   position: absolute;
   left: 12px;
