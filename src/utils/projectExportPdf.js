@@ -1245,6 +1245,85 @@ const createOutlinePages = (projectData, theme) => {
   return pages
 }
 
+// Sections that gate whether a project data array is embedded in the PDF's
+// /YOW re-import stream, matching the enabled/disabled toggles a user sets in
+// Project Settings (see Layout.jsx ALL_SECTIONS / SETTINGS_GROUPS). A section
+// left disabled for this export must not have its data embedded either, even
+// though nothing on the visible pages depends on it (e.g. Schedule) — the
+// embed should never carry more than what the user opted into for this file.
+const YOW_EMBED_SECTION_FIELDS = [
+  ['locations', ['locations']],
+  ['factions', ['factions']],
+  ['lore', ['loreEntries']],
+  ['timeline', ['timeline']],
+  ['worldhistory', ['worldHistory']],
+  ['map', ['maps']],
+  ['ideas', ['ideaEntries']],
+  // 'outline' is the same section id for every project type — for comic
+  // projects it's labeled "Pages" (see projectTypes.js workspaceLabel) and
+  // its content lives in comicPages/comicPanels (volumes/issues reuse
+  // acts/chapters, already covered) rather than chapters/scenes, so both
+  // need to be scoped alongside acts/chapters/scenes.
+  ['outline', ['acts', 'chapters', 'scenes', 'comicPages', 'comicPanels']],
+  ['schedule', ['storySchedule']],
+  // 'characterbuilder' (D&D/Tabletop RPG projects — see projectTypes.js
+  // defaultSections) is its own toggle, separate from 'characters', and its
+  // records live in a separate rpgCharacters array (see
+  // useStore.js getProjectExportData) that createProjectPdfBlob never renders
+  // on any visible page. Without this entry, disabling Character Builder for
+  // an export did nothing to the embed: the full RPG sheet — hp, inventory,
+  // journal/session notes, and the secrets field below — still rode along.
+  ['characterbuilder', ['rpgCharacters']],
+]
+
+// The Character Builder's Secrets tab (CharacterSheet.jsx TabNotes) tells the
+// user directly: "Secrets are stored locally only — they won't appear in
+// exports unless you choose to include them." No export flow offers that
+// opt-in, so `secrets` must never leave the app via the embed, independent of
+// whether Character Builder itself is enabled for this export.
+const stripRpgCharacterSecrets = (character) => {
+  if (!character || typeof character !== 'object') return character
+  const { secrets, ...rest } = character
+  return rest
+}
+
+// `characters` also stays populated when only `familytree` is enabled, since
+// the Relationship Atlas page (createRelationshipsPage / relationshipSection)
+// reads directly from projectData.characters regardless of the `characters`
+// toggle. But that page — and the in-app Family Tree it mirrors on
+// re-import — only ever reads identity/lineage fields, never bio, traits,
+// background, or other narrative-profile data a user could have written
+// with Characters intentionally left off. So when `characters` itself is
+// disabled, the embed keeps only that minimal field set per character
+// instead of the full record, or the familytree exception would silently
+// smuggle private character data past a toggle the user explicitly turned off.
+const FAMILYTREE_ONLY_CHARACTER_FIELDS = [
+  'id', 'name', 'familyGroup', 'image', 'imagePosition', 'role',
+  'birthDate', 'deathDate', 'parentIds', 'childIds', 'spouseIds',
+  'familyLinks', 'relationships',
+]
+
+const pickFields = (obj, fields) =>
+  Object.fromEntries(fields.filter(field => field in obj).map(field => [field, obj[field]]))
+
+const scopeProjectDataForEmbed = (projectData) => {
+  const enabled = getEnabled(projectData)
+  const scoped = { ...projectData }
+  if (!enabled.has('characters')) {
+    scoped.characters = enabled.has('familytree')
+      ? (projectData.characters ?? []).map(character => pickFields(character, FAMILYTREE_ONLY_CHARACTER_FIELDS))
+      : []
+  }
+  YOW_EMBED_SECTION_FIELDS.forEach(([sectionId, fields]) => {
+    if (enabled.has(sectionId)) return
+    fields.forEach(field => { scoped[field] = [] })
+  })
+  if (scoped.rpgCharacters?.length) {
+    scoped.rpgCharacters = scoped.rpgCharacters.map(stripRpgCharacterSecrets)
+  }
+  return scoped
+}
+
 const createPdfBytes = (pageContents, title, projectData) => {
   const pageDescriptors = pageContents.map(page => typeof page === 'string' ? { content: page, links: [] } : { links: [], ...page })
   const chunks = []
@@ -1346,25 +1425,30 @@ const createPdfBytes = (pageContents, title, projectData) => {
     addObject(outlinesId, `<< /Type /Outlines /First ${outlineSections[0].id} 0 R /Last ${outlineSections[outlineSections.length - 1].id} 0 R /Count ${outlineSections.length} >>`)
   }
 
-  // Embed the full project JSON so a YOW PDF can be re-imported with all connections intact.
+  // Embed the project JSON so a YOW PDF can be re-imported with connections intact —
+  // scoped to only the sections enabled for this export (scopeProjectDataForEmbed),
+  // the same way the visible pages are scoped, so a section the user turned off is
+  // not silently included in the file just because it's technically part of the
+  // project. See docs/ROADMAP.md Export ownership gate.
   let yowDataId = null
   if (projectData) {
     try {
+      const embedData = scopeProjectDataForEmbed(projectData)
       // Strip _pdfImage fields added by prepareProjectPdfData — render-only, not needed for re-import
       const cleanData = {
-        ...projectData,
-        characters: (projectData.characters ?? []).map(character => {
+        ...embedData,
+        characters: (embedData.characters ?? []).map(character => {
           const copy = { ...character }
           delete copy._pdfImage
           return copy
         }),
-        factions: (projectData.factions ?? []).map(faction => {
+        factions: (embedData.factions ?? []).map(faction => {
           const copy = { ...faction }
           delete copy._pdfImage
           delete copy._exportLogoImage
           return copy
         }),
-        maps: (projectData.maps ?? []).map(map => {
+        maps: (embedData.maps ?? []).map(map => {
           const copy = { ...map }
           delete copy._pdfImage
           return copy

@@ -783,6 +783,9 @@ function ProjectSettings({ store, onClose }) {
                     </button>
                   ))}
                 </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                  Also embeds a re-importable copy of this export's included sections in the file itself — the printed pages aren't the only thing saved inside a Visual PDF.
+                </p>
               </div>
               {exporting && <p style={{ fontSize: 11, color: 'var(--accent)', marginTop: 10 }}>Preparing export...</p>}
             </section>
