@@ -20,13 +20,13 @@ Resolve in order. “Implementation first” means the intended statement may re
 | Claim | Why it conflicts | Action |
 | --- | --- | --- |
 | “YOW adapts to launch-ready project types.” | Roadmap project-type gate is open; Comic is still Beta; campaign/Comic manual QA remains. | Use beta-honest wording until gate passes. |
-| D&D notes “hidden from players” | There is no player view, share portal, or collaboration. | Say “private GM notes” without implying a player-facing surface. |
-| Players can explore/discover lore/map pins progressively | Excluded player/public viewing is explicitly forbidden by roadmap marketing gate. | Remove unless a future player view is accepted and built. |
+| ~~D&D notes “hidden from players”~~ | There is no player view, share portal, or collaboration. | **Resolved 2026-09-03:** `HomePage.jsx` D&D Characters/Locations use cases now say “private DM-only notes” / “your own private prep” instead of implying a player-visible surface. |
+| ~~Players can explore/discover lore/map pins progressively~~ | Excluded player/public viewing is explicitly forbidden by roadmap marketing gate. | **Resolved 2026-09-03:** `HomePage.jsx` D&D Lore/Maps use cases and `public/dnd-campaign-manager/index.html`'s secrets bullet were reworded to describe private GM prep, not player-facing discovery. |
 | “Recent activity feed across all project sections” | Roadmap says current recent activity covers manuscript scene edits only. | Narrow to manuscript activity or implement full activity timestamps/feed. |
 | “Everything in one place” / “nothing gets lost” / “never lose the thread” | Absolute data-safety language conflicts with known durability/import/sync risks. | Replace absolutes; harden implementation; publish backup guidance. |
 | “Every AI tool reads your project context” | Context varies by tool/selection and some tools use compact subsets. | Publish a tool-by-tool context matrix or say “can use relevant project context.” |
 | Character loyalty/reputation scores; faction history event log | Needs confirmation in actual Factions data/UI/export. | Verify or remove. |
-| Lore/player progressive exploration | No sharing/player surface. | Remove. |
+| ~~Lore/player progressive exploration~~ | No sharing/player surface. | **Resolved 2026-09-03:** duplicate of the row above; same fix. |
 | “Most writers use 5–8 separate apps” | Quantified market statement has no cited evidence. | Source it or use non-quantitative wording. |
 | “Growing community” | No community product; social proof may be unsupported. | Use “writers and worldbuilders” without growth/community claim unless measurable. |
 | “ChatGPT/Claude account” | Consumer subscriptions do not necessarily provide API credentials. | Say API provider/account/key and link to provider setup requirements. |
@@ -108,7 +108,7 @@ Choose one canonical copy data source and generate both static SEO pages and Rea
 - [ ] Backup/sync/saved terminology has concrete acceptance evidence.
 - [ ] Free downgrade/Map/AI behavior matches across Pricing, FAQ, Account, legal, and code.
 - [ ] Every active project type's capabilities were manually verified before “launch-ready” language.
-- [ ] Player/public/collaboration implications removed.
+- [x] Player/public/collaboration implications removed from D&D/TTRPG copy (2026-09-03: `HomePage.jsx`, `public/dnd-campaign-manager/index.html`). No other project type's copy was found to carry the same implication.
 - [ ] Static/React route duplication resolved.
 - [ ] SEO title/description/schema/canonical/social tags updated with visible copy.
 - [ ] Welcome/reset/re-engagement authorization and deduplication fixed before lifecycle send QA.
