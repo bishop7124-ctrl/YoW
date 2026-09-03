@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 
 // Vercel API route — replaces supabase/functions/create-customer-portal
 // Called by AccountSettings.jsx when a paid user clicks
@@ -60,10 +61,7 @@ export async function downgradeToFreeLocally(supabaseAdmin, user) {
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
