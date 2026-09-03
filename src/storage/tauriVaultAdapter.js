@@ -58,6 +58,54 @@ function scrubSensitiveVaultEntries(backend) {
   } catch { /* best-effort cleanup only */ }
 }
 
+// Removes any sensitive key (isSensitiveStorageKey()) from every existing
+// snapshot/backup .db file (audit finding P0-10 follow-up — the live vault's
+// own entries are already scrubbed by scrubSensitiveVaultEntries above, but
+// that never touched standalone Backups/*.db copies a pre-fix build may have
+// already leaked secrets into, since a snapshot is a raw byte-for-byte copy
+// of vault.db taken before the fix existed). Best-effort and non-blocking by
+// design: a single unreadable/locked snapshot file must not stop the rest
+// from being scrubbed, and this must never block vault activation. The
+// sensitive-key predicate itself is not duplicated into Rust — Rust only
+// exposes generic read/remove-by-key commands against an arbitrary backup
+// file (vault_snapshot_read_all/vault_snapshot_remove_keys), matching the
+// same read/write split the live vault already uses.
+export async function scrubDesktopVaultSnapshots() {
+  const invoke = getTauriInvoke()
+  const summary = { scannedSnapshots: 0, scrubbedSnapshots: 0, scrubbedKeys: 0 }
+  if (!invoke) return summary
+
+  let snapshots
+  try {
+    snapshots = await invoke('vault_list_snapshots')
+  } catch (error) {
+    console.error('Could not list desktop vault snapshots to scrub:', error)
+    return summary
+  }
+  if (!Array.isArray(snapshots)) return summary
+
+  for (const snapshot of snapshots) {
+    summary.scannedSnapshots += 1
+    try {
+      const rows = await invoke('vault_snapshot_read_all', { name: snapshot.name })
+      const sensitiveKeys = (Array.isArray(rows) ? rows : [])
+        .map(row => row.key)
+        .filter(key => key != null && isSensitiveStorageKey(key))
+      if (sensitiveKeys.length === 0) continue
+
+      await invoke('vault_snapshot_remove_keys', { name: snapshot.name, keys: sensitiveKeys })
+      summary.scrubbedSnapshots += 1
+      summary.scrubbedKeys += sensitiveKeys.length
+    } catch (error) {
+      // One inaccessible/locked snapshot shouldn't stop the rest from being
+      // scrubbed — same best-effort framing as scrubSensitiveVaultEntries.
+      console.error(`Could not scrub desktop vault snapshot "${snapshot?.name}":`, error)
+    }
+  }
+
+  return summary
+}
+
 let activeDesktopVaultBackend = null
 let flushHandlersInstalled = false
 // Set when a vault connection attempt fails, so the UI can tell "vault is
@@ -133,6 +181,12 @@ async function connectVaultBackend({ onWriteError, retry }) {
 
 function activateVaultBackend(backend) {
   scrubSensitiveVaultEntries(backend)
+  // Fire-and-forget: scrubbing every existing backup file is real IPC/disk
+  // work that shouldn't delay activating the vault the app is about to use,
+  // but a failure still needs to surface somewhere rather than vanish.
+  scrubDesktopVaultSnapshots().catch(error => {
+    console.error('Desktop vault snapshot scrub failed:', error)
+  })
   activeDesktopVaultBackend = setStorageBackend(backend)
   installFlushHandlers(activeDesktopVaultBackend)
   vaultInitError = null
