@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
+import { applyCors } from './_lib/cors.js'
 
 const MAX_LENGTHS = { name: 120, email: 254, projectType: 160, message: 1200, plan: 80, planLabel: 120, page: 240 }
 const ADMIN_EMAIL = 'yourownworld.admin@gmail.com'
@@ -48,10 +49,7 @@ export function getSupabaseAdminConfig(env = process.env) {
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
