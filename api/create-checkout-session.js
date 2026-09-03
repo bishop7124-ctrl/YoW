@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const { plan = 'premium_monthly', currency = 'gbp' } = req.body || {}
+    const { plan = 'premium_monthly' } = req.body || {}
     const planConfig = PLAN_CONFIG[plan]
     if (!planConfig) return res.status(400).json({ error: `Unknown plan: ${plan}` })
 
