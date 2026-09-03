@@ -53,8 +53,19 @@ function formatMb(bytes) {
  */
 export function assertArchiveInputSizeOk(byteLength, label = 'This file') {
   if (typeof byteLength === 'number' && byteLength > MAX_ARCHIVE_INPUT_BYTES) {
-    throw new Error(`${label} is too large to import (max ${formatMb(MAX_ARCHIVE_INPUT_BYTES)}).`)
+    throw makeArchiveLimitError(`${label} is too large to import (max ${formatMb(MAX_ARCHIVE_INPUT_BYTES)}).`)
   }
+}
+
+// Marks errors thrown by the two guards above so callers that wrap
+// decompression in a broad try/catch (e.g. to tolerate a corrupt nested
+// document without aborting the whole import) can tell a deliberate
+// limit-exceeded rejection apart from a generic parse failure and make sure
+// it still propagates as a user-facing error instead of being swallowed.
+function makeArchiveLimitError(message) {
+  const err = new Error(message)
+  err.isArchiveLimitError = true
+  return err
 }
 
 /**
@@ -66,11 +77,11 @@ export function assertArchiveInputSizeOk(byteLength, label = 'This file') {
 export function assertUnzippedResultOk(files, label = 'This archive') {
   const paths = Object.keys(files || {})
   if (paths.length > MAX_ARCHIVE_FILE_COUNT) {
-    throw new Error(`${label} contains too many files to import safely (${paths.length} entries, max ${MAX_ARCHIVE_FILE_COUNT}).`)
+    throw makeArchiveLimitError(`${label} contains too many files to import safely (${paths.length} entries, max ${MAX_ARCHIVE_FILE_COUNT}).`)
   }
   let total = 0
   for (const path of paths) total += files[path]?.byteLength ?? files[path]?.length ?? 0
   if (total > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
-    throw new Error(`${label} is too large once decompressed to import safely (max ${formatMb(MAX_ARCHIVE_UNCOMPRESSED_BYTES)}).`)
+    throw makeArchiveLimitError(`${label} is too large once decompressed to import safely (max ${formatMb(MAX_ARCHIVE_UNCOMPRESSED_BYTES)}).`)
   }
 }

@@ -829,7 +829,13 @@ export async function tryReadStructuredZip(file) {
               }
             }
           }
-        } catch { /* manuscript extraction failed — skip */ }
+        } catch (manuscriptErr) {
+          // A limit-exceeded guard must abort the whole import with a clear
+          // error rather than being treated like an ordinary corrupt/invalid
+          // novel.docx (which we tolerate by just skipping the manuscript).
+          if (manuscriptErr?.isArchiveLimitError) { reject(manuscriptErr); return }
+          /* manuscript extraction failed — skip */
+        }
       }
 
       // Extract project name from ZIP filename
