@@ -51,9 +51,7 @@ The exact overview, “why it matters,” use cases, and capability lists are de
 Claims needing special review:
 
 - Dashboard: “Recent activity feed across all project sections.” [OVERCLAIM — current roadmap says recent activity covers manuscript scenes, not all entity types.]
-- Characters/D&D: “DM-only notes hidden from players.” [OVERCLAIM — YOW has no player portal/public shared view.]
-- Lore/D&D: “world codex ... players can explore progressively.” [OVERCLAIM — implies excluded player-facing sharing.]
-- Maps/D&D: “pins your players discover progressively.” [OVERCLAIM — implies excluded player-facing sharing.]
+- Characters/D&D, Lore/D&D, Maps/D&D player-view implications: **[RESOLVED 2026-09-03]** the D&D use-case copy previously read “DM-only notes hidden from players,” “world codex ... players can explore progressively,” and “pins your players discover progressively” — all implying an excluded player-facing surface. Reworded to describe private GM-only prep (see `COPY_CONFLICTS.md`); no player/sharing language remains in these strings.
 - Maps: “Multiple map layers per project,” region/territory annotations, upload-any-image canvas, pin-to-location linking. [VERIFY against current map workflow and exports.]
 - Family Trees: “Export as image.” [VERIFY in product and mobile.]
 - Factions: “Character loyalty and reputation scores” and “Faction history event log.” [VERIFY; do not advertise if these are only free-text or absent.]

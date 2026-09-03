@@ -148,7 +148,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Build full protagonist profiles, track character arc milestones, and see exactly which scenes each character appears in.' },
       { type: 'Short Story', text: 'Keep only the essential character details close at hand for a tighter cast.' },
-      { type: 'D&D Campaign', text: 'Create NPC profiles with goals, secrets, faction loyalties, and DM-only notes hidden from players.' },
+      { type: 'D&D Campaign', text: 'Create NPC profiles with goals, secrets, faction loyalties, and private DM-only notes.' },
     ],
     capabilities: [
       'Rich character profiles with custom fields',
@@ -174,7 +174,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Document your magic system rules, historical events, and cultural traditions so every scene stays internally consistent.' },
       { type: 'Novella', text: 'Keep the world rules and backstory that matter without carrying a full epic-scale bible.' },
-      { type: 'D&D Campaign', text: 'Build a world codex — gods, histories, languages, and laws — that your players can explore progressively as they discover it.' },
+      { type: 'D&D Campaign', text: 'Build a private world codex — gods, histories, languages, and laws — so every answer is one search away when you\'re running the table.' },
     ],
     capabilities: [
       'Tagged and categorized lore entries',
@@ -200,7 +200,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Track which chapters are set where, link key plot events to their locations, and maintain consistent atmospheric descriptions.' },
       { type: 'Short Story', text: 'Track the few places that matter and keep atmosphere notes consistent.' },
-      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, with secrets only the DM can see.' },
+      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, keeping every secret in your own private prep.' },
     ],
     capabilities: [
       'Nested location hierarchy (continent → city → building → room)',
@@ -226,7 +226,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Pin every city, keep, and landmark your characters visit, with plot-relevant notes visible only as your story reaches those places.' },
       { type: 'TTRPG Campaign', text: 'Upload campaign maps and connect important places to your location database.' },
-      { type: 'D&D Campaign', text: 'Layer world maps, regional maps, and dungeon floor plans — each with pins your players discover progressively.' },
+      { type: 'D&D Campaign', text: 'Layer world maps, regional maps, and dungeon floor plans — each with pins tied to your private location notes, ready whenever a session needs them.' },
     ],
     capabilities: [
       'Upload any image as a map canvas',
