@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -100,7 +100,15 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
     return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]').length >= 1
   })
 
-  // Fill in dialogue
+  // A panel starts with no dialogue lines — click "+ balloon"
+  // (ComicPlanner.jsx's `addDialogue`) to add one before its text field exists.
+  const addBalloonBtn = page.getByRole('button', { name: '+ balloon' })
+  if (!(await addBalloonBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+    test.skip()
+    return
+  }
+  await addBalloonBtn.click()
+
   const dialogueField = page.getByPlaceholder(/dialogue|speech|balloon/i).first()
   if (!(await dialogueField.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
@@ -110,17 +118,22 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
   const dialogueText = `Panel dialogue ${Date.now()}`
   await dialogueField.fill(dialogueText)
 
-  await waitForStorage(page, () => {
+  // `waitForStorage`'s predicate runs inside the browser (page.waitForFunction),
+  // so a Node-scope closure variable like `dialogueText` isn't visible to it —
+  // forward the needle explicitly via the `arg` param instead.
+  await waitForStorage(page, (needle) => {
     const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.some(p =>
-      (p.dialogue || []).some(d => (d.text || d).includes(dialogueText.slice(0, 15)))
-      || (p.dialogueText || '').includes(dialogueText.slice(0, 15)),
+      (p.dialogue || []).some(d => (d.text || d).includes(needle))
+      || (p.dialogueText || '').includes(needle),
     )
-  })
+  }, dialogueText.slice(0, 15))
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await waitForStorageHydration(page)
   const panels = await readStorage(page, 'nf_comicPanels')
-  expect(panels.some(p =>
+  expect(panels?.some(p =>
     JSON.stringify(p).includes(dialogueText.slice(0, 15)),
   )).toBe(true)
 })
@@ -162,9 +175,12 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   const pagesBefore = await readStorage(page, 'nf_comicPages')
   const pageId = pagesBefore[0]?.id
 
-  // Open page then delete
+  // Open page then delete. The page editor's delete button (ComicPlanner.jsx
+  // `PageEditor`) has visible text "Delete" (title="Delete page" is a tooltip,
+  // not the accessible name) — exact-match it, since the panel delete control
+  // is a "×" icon button and doesn't collide.
   await page.locator('.cp-page-row').first().click()
-  const deletePageBtn = page.getByRole('button', { name: /Delete page|Remove page/i }).first()
+  const deletePageBtn = page.getByRole('button', { name: 'Delete', exact: true }).first()
   if (!(await deletePageBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
