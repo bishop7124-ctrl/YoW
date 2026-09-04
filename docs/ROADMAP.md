@@ -1127,7 +1127,7 @@ Blocking questions the `product-owner` skill (or any agent) found mid-work that 
 
 | Item | Blocking Question | Found While | Status |
 | --- | --- | --- | --- |
-| No open questions | — | — | — |
+| Theme contrast audit (`docs/QA_PLAN.md` Priority 4, 2026-07-20) | Two low-contrast findings from the 2026-07-20 contrast pass were left unfixed because fixing them changes visual character, not because they're pure code bugs: (1) `--accent` used as small link/label text (e.g. `AiSettingsLink`) on sage-modern, caramel-latte, and pearl-minimal measures 3.4–3.7:1 against `--bg-main`, below the 4.5:1 AA text threshold — fixing means darkening each theme's identity accent color; (2) `--border` measures ~1.2–1.6:1 against `--bg-main` on every theme, below the 3:1 WCAG non-text/UI guideline — borders are decorative dividers throughout the app, so raising this is a broad visual pass, not a targeted fix. Should these be accepted as intentional low-contrast decorative/brand choices, or scheduled as a dedicated pre-launch accessibility pass? | 2026-09-04 product-owner autonomous session, auditing `docs/QA_PLAN.md` Priority 4 for items flagged as needing a decision but never logged here. | Open |
 
 ## Icebox
 
