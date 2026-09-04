@@ -3,7 +3,7 @@ import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
-import { findDuplicate, analyzeCategory, createUndoStack, applyDuplicateResolution, tallyAction, emptySummary, RESOLUTION_POLICIES } from '../utils/importMerge'
+import { findDuplicate, analyzeCategory, createUndoStack, applyDuplicateResolution, tallyAction, emptySummary, isEmptyValue, RESOLUTION_POLICIES } from '../utils/importMerge'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -1037,19 +1037,34 @@ export function populateYowProjectIntoExisting(store, data, sel, resolutions = {
 
       // Pass 2: relationships, remapped through idMap (points a Skip/Merge
       // duplicate's old id at the *existing* destination record's id).
+      // For a Merge-resolved character this must respect the same "only fill
+      // empty fields" contract as computeMergePatch — relationships/parentIds/
+      // childIds/spouseIds/factionId are content just like bio/role, and an
+      // existing character's already-populated family/relationship links must
+      // never be silently overwritten by an imported record merge chose to
+      // treat as "the same person". Create and Replace still apply source
+      // values unconditionally, matching those policies' own semantics.
       for (const c of data.characters || []) {
         const newId = idMap[c.id]
-        if (!newId || actionByOldId[c.id] === 'skip') continue // Skip leaves the existing record fully untouched
+        const action = actionByOldId[c.id]
+        if (!newId || action === 'skip') continue // Skip leaves the existing record fully untouched
+        const destBefore = beforeByNewId[newId] // pre-import snapshot; undefined for a brand-new record
+        const mergeOnly = action === 'merge'
+        const setIfAllowed = (patch, key, value) => {
+          if (isEmptyValue(value)) return
+          if (mergeOnly && destBefore && !isEmptyValue(destBefore[key])) return // already populated — Merge must not overwrite
+          patch[key] = value
+        }
         const patch = {}
         const rels = (c.relationships || []).map(r => ({ ...r, targetId: remap(r.targetId) })).filter(r => r.targetId)
-        if (rels.length)                                    patch.relationships = rels
-        if (c.parentIds?.length)  patch.parentIds  = c.parentIds.map(remap).filter(Boolean)
-        if (c.childIds?.length)   patch.childIds   = c.childIds.map(remap).filter(Boolean)
-        if (c.spouseIds?.length)  patch.spouseIds  = c.spouseIds.map(remap).filter(Boolean)
-        if (c.factionId)          patch.factionId  = remap(c.factionId)
+        setIfAllowed(patch, 'relationships', rels)
+        setIfAllowed(patch, 'parentIds', (c.parentIds || []).map(remap).filter(Boolean))
+        setIfAllowed(patch, 'childIds', (c.childIds || []).map(remap).filter(Boolean))
+        setIfAllowed(patch, 'spouseIds', (c.spouseIds || []).map(remap).filter(Boolean))
+        setIfAllowed(patch, 'factionId', c.factionId ? remap(c.factionId) : '')
         if (!Object.keys(patch).length) continue
         store.saveCharacter(patch, newId)
-        if (beforeByNewId[newId]) undo.push(() => store.saveCharacter(beforeByNewId[newId], newId))
+        if (destBefore) undo.push(() => store.saveCharacter(destBefore, newId))
         // else: newId was created this transaction — its full deletion (already queued above) covers this write too.
       }
     }
@@ -1231,9 +1246,19 @@ export function populateYowProjectIntoExisting(store, data, sel, resolutions = {
     }
 
     if (sel.rpgCharacters) {
+      // Always create-separate (no duplicate detection), but an RPG sheet's
+      // own faction memberships and in-story NPC-relationship links still
+      // reference ids from other categories imported above — remap those
+      // through idMap so a Skip/Merge-resolved faction or character is
+      // pointed at, not a dangling old id or (if that id happened to already
+      // exist in the destination for something unrelated) the wrong record.
       for (const c of data.rpgCharacters || []) {
-        const { id: _id, novelId: _nid, ...rest } = c
-        const newId = store.saveRpgCharacter(rest)
+        const { id: _id, novelId: _nid, factionIds, npcRelationships, ...rest } = c
+        const newId = store.saveRpgCharacter({
+          ...rest,
+          factionIds: (factionIds || []).map(remap).filter(Boolean),
+          npcRelationships: (npcRelationships || []).map(r => ({ ...r, characterId: r.characterId ? remap(r.characterId) : r.characterId })),
+        })
         if (newId) { undo.push(() => store.deleteRpgCharacter(newId)); summary.new++ }
       }
     }
