@@ -6,7 +6,8 @@ import { estimateStoreSize } from '../utils/storageQuota'
 import { clearJourneyLinks } from '../utils/characterJourney'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
-import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, deleteAllSceneContentForNovel } from '../storage/sceneContentStore'
+import { clearSceneVersionsForNovel } from '../utils/sceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -2960,6 +2961,22 @@ export function useStore(userId = null, options = {}) {
       ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
       ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
     ])
+    // Per-scene storage cleanup (audit finding #16: "Project deletion can
+    // leave per-scene keys"). Deliberately reads `nf_scenes` straight from
+    // the storage backend rather than trusting `scenesRef.current` — the
+    // in-memory copy is normally in sync, but the whole point of the bug
+    // being fixed here is a case where it silently isn't (a scene whose
+    // content key was never "known" to this tab this session). Falls back to
+    // `scenesRef.current` too (union, not replace) purely as a belt-and-braces
+    // net for the reverse gap — a scene added this tick whose own persistence
+    // effect hasn't flushed yet — not because the storage read is expected to
+    // be incomplete in normal operation.
+    const removedContentIds = deleteAllSceneContentForNovel(id, {
+      knownContentKeyIds: knownSceneContentIdsRef.current,
+      lastWrittenContentById: lastWrittenSceneContentByIdRef.current,
+    })
+    const inMemorySceneIds = scenesRef.current.filter(s => s.novelId === id).map(s => s.id).filter(sid => sid != null)
+    clearSceneVersionsForNovel(id, [...new Set([...removedContentIds, ...inMemorySceneIds])])
     const updatedNovels = novelsRef.current.filter(n => n.id !== id)
     commitLocal(novelsRef, setNovels, 'nf_novels', updatedNovels)
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.filter(c => c.novelId !== id))
