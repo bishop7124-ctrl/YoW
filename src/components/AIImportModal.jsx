@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
+import { findDuplicate, analyzeCategory, createUndoStack, applyDuplicateResolution, tallyAction, emptySummary, RESOLUTION_POLICIES } from '../utils/importMerge'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -566,6 +567,215 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
   }
 }
 
+// ── Import into an existing project (generic AI / structured-ZIP import) ─────
+// Same source data + selections as populateProject, but resolves each source
+// record against the destination project's *current* records first —
+// duplicate detection (case-insensitive/trimmed name match) plus a
+// skip/merge/replace/createSeparate policy per category — instead of always
+// creating new rows. Assumes store.activeNovelId already equals the
+// destination project (every store add/save call stamps novelId from
+// activeNovelId — see the modal's phase-2 effect), and that store.characters/
+// locations/factions/loreEntries/worldHistory/timeline/ideaEntries already
+// reflect the destination project's existing records (they're pre-scoped by
+// activeNovelId on the store). Rolls back everything it touched — restoring
+// matched records to their pre-import state and deleting anything newly
+// created — if any individual write throws, then re-throws so the caller can
+// surface a clean "no changes were made" error.
+//
+// Manuscript structure (acts/chapters/scenes) is always appended as new
+// content rather than duplicate-matched: chapter/act titles like "Chapter 1"
+// collide constantly across unrelated source material, and silently merging
+// prose into an existing outline risks corrupting it. This mirrors the
+// explicit scope decision to leave comic pages/panels and RPG characters as
+// always-create-separate too (see populateYowProjectIntoExisting).
+export function populateProjectIntoExisting(store, data, sel, typeKey = DEFAULT_TYPE, resolutions = {}) {
+  const structure = getProjectType(typeKey).structure
+  const undo = createUndoStack()
+  const summary = emptySummary()
+  const policy = (key) => resolutions[key] || 'skip'
+
+  try {
+    if (sel.characters) {
+      const existing = store.characters || []
+      for (const c of data.characters || []) {
+        const fields = { name: c.name || '', role: c.role || '', bio: c.bio || '', keywords: [], familyGroup: '' }
+        const destMatch = findDuplicate(existing, c, x => x.name)
+        const res = applyDuplicateResolution({
+          policy: policy('characters'), destMatch, sourceFields: fields,
+          create: () => {
+            const newId = store.saveCharacter(fields)
+            undo.push(() => store.deleteCharacter(newId))
+            return newId
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.saveCharacter(patch, id)
+            undo.push(() => store.saveCharacter(before, id))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.locations) {
+      const existing = store.locations || []
+      for (const l of data.locations || []) {
+        const fields = { name: l.name || '', category: l.category || '', description: l.description || '' }
+        const destMatch = findDuplicate(existing, l, x => x.name)
+        const res = applyDuplicateResolution({
+          policy: policy('locations'), destMatch, sourceFields: fields,
+          create: () => {
+            const created = store.addLocation(fields)
+            if (created?.id) undo.push(() => store.deleteLocation(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.saveLocation(patch, id)
+            undo.push(() => store.saveLocation(before, id))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.factions) {
+      const existing = store.factions || []
+      for (const f of data.factions || []) {
+        const fields = { name: f.name || '', description: f.description || '' }
+        const destMatch = findDuplicate(existing, f, x => x.name)
+        const res = applyDuplicateResolution({
+          policy: policy('factions'), destMatch, sourceFields: fields,
+          create: () => {
+            const newId = uid()
+            store.setFactions(prev => [...prev, { id: newId, ...fields }])
+            undo.push(() => store.setFactions(prev => prev.filter(x => x.id !== newId)))
+            return newId
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.setFactions(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
+            undo.push(() => store.setFactions(prev => prev.map(x => x.id === id ? before : x)))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.lore) {
+      const existing = store.loreEntries || []
+      for (const e of data.lore || []) {
+        const fields = { title: e.title || '', category: e.category || '', content: e.content || '' }
+        const destMatch = findDuplicate(existing, e, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('lore'), destMatch, sourceFields: fields,
+          create: () => {
+            const created = store.addLoreEntry(fields)
+            if (created?.id) undo.push(() => store.deleteLoreEntry(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateLoreEntry(id, patch)
+            undo.push(() => store.updateLoreEntry(id, before))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.worldHistory) {
+      const existing = store.worldHistory || []
+      for (const h of data.worldHistory || []) {
+        const fields = { title: h.title || '', era: h.era || '', dateRange: h.dateRange || '', content: h.content || '' }
+        const destMatch = findDuplicate(existing, h, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('worldHistory'), destMatch, sourceFields: fields,
+          create: () => {
+            const created = store.addHistoryEntry(fields)
+            if (created?.id) undo.push(() => store.deleteHistoryEntry(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateHistoryEntry(id, patch)
+            undo.push(() => store.updateHistoryEntry(id, before))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.timeline) {
+      const existing = store.timeline || []
+      for (const ev of data.timeline || []) {
+        const fields = { title: ev.title || '', date: ev.date || '', description: ev.description || '', tags: [] }
+        const destMatch = findDuplicate(existing, ev, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('timeline'), destMatch, sourceFields: fields,
+          create: () => {
+            const created = store.addEvent(fields, { createHistory: false })
+            if (created?.id) undo.push(() => store.deleteEvent(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateEvent(id, patch)
+            undo.push(() => store.updateEvent(id, before))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.ideaEntries) {
+      const existing = store.ideaEntries || []
+      for (const idea of data.ideaEntries || []) {
+        const fields = { title: idea.title || '', description: idea.description || '', body: idea.body || idea.description || '', status: 'raw' }
+        const destMatch = findDuplicate(existing, idea, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('ideaEntries'), destMatch, sourceFields: fields,
+          create: () => {
+            const created = store.addIdeaEntry(fields)
+            if (created?.id) undo.push(() => store.deleteIdeaEntry(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateIdeaEntry(id, patch)
+            undo.push(() => store.updateIdeaEntry(id, before))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+    if (sel.acts) {
+      for (const act of relabelActsForType(data.acts, typeKey)) {
+        const newAct = store.addAct(act.title || structure.level1)
+        undo.push(() => store.deleteAct(newAct.id))
+        if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
+        for (const chap of act.chapters || []) {
+          const newChap = store.addChapter(newAct.id, chap.title || structure.level2)
+          if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
+          for (const scene of chap.scenes || []) {
+            if (typeKey === 'comic') {
+              // deleteAct cascades chapters/scenes but not comic pages — track separately.
+              const page = store.addComicPage(newChap.id, {
+                title: scene.title || structure.level3,
+                summary: (scene.content || '').trim() || scene.synopsis || '',
+              })
+              if (page?.id) undo.push(() => store.deleteComicPage(page.id))
+            } else {
+              const newScene = store.addScene(newChap.id, scene.title || structure.level3)
+              if (scene.synopsis || scene.content)
+                store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
+            }
+          }
+        }
+        summary.new++
+      }
+    }
+  } catch (err) {
+    undo.undoAll()
+    throw err
+  }
+  return summary
+}
+
 // ── Native YOW export import ──────────────────────────────────────────────────
 // Remaps all IDs (prevents collisions if the same export is imported twice),
 // preserves family-tree links, faction membership, timeline↔worldHistory links.
@@ -726,6 +936,367 @@ export function populateYowProject(store, data, sel) {
   // Whiteboard — one per project, no separate section toggle
   const whiteboard = data.whiteboards?.[0]?.whiteboard
   if (whiteboard) store.updateWhiteboard(whiteboard)
+}
+
+// ── Import into an existing project (native YOW export) ──────────────────────
+// Same source data + selections as populateYowProject, but resolves
+// characters/factions/locations/loreEntries/worldHistory/timeline/
+// ideaEntries/storySchedule/maps against the destination project's current
+// records first (duplicate detection + skip/merge/replace/createSeparate),
+// instead of always creating new rows. Extends the existing idMap pattern so
+// that once a duplicate is resolved as Skip or Merge, later references to the
+// source record's old id (character relationships, faction membership,
+// world-history↔timeline links, comic page/panel character/location links,
+// schedule-entry character/location links) resolve to the *existing*
+// destination record's id rather than a newly created one.
+//
+// Deferred/always-create-separate for this phase (see ROADMAP): eras,
+// manuscript structure (acts/chapters/scenes), comic pages/panels, RPG
+// characters, and the whiteboard (a single per-project note board with no
+// sensible "duplicate" concept — importing into an existing project leaves
+// the destination's whiteboard untouched rather than risk silently
+// overwriting it). All of these still get their ids remapped through idMap
+// so cross-references into merged/skipped records stay correct; they just
+// aren't offered a resolution policy of their own.
+//
+// Assumes store.activeNovelId already equals the destination project (see
+// the modal's phase-2 effect). Rolls back everything it touched — restoring
+// matched records to their pre-import state and deleting anything newly
+// created — if any individual write throws, then re-throws.
+export function populateYowProjectIntoExisting(store, data, sel, resolutions = {}) {
+  const undo = createUndoStack()
+  const summary = emptySummary()
+  const idMap = {}
+  const eraIdMap = {}
+  const ord = (arr) => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const remap = (oldId) => (oldId && idMap[oldId]) ? idMap[oldId] : oldId
+  const remapEra = (oldEraId) => (oldEraId && eraIdMap[oldEraId]) ? eraIdMap[oldEraId] : null
+  const policy = (key) => resolutions[key] || 'skip'
+
+  try {
+    // Eras — always created fresh (no duplicate-detection concept for them yet)
+    if ((sel.worldHistory || sel.timeline) && data.eras?.length) {
+      for (const era of data.eras) {
+        const { id: oldId, novelId: _nid, ...rest } = era
+        const created = store.addEra(rest)
+        if (created) { eraIdMap[oldId] = created.id; undo.push(() => store.deleteEra(created.id)) }
+      }
+    }
+
+    // Factions first — characters reference them
+    if (sel.factions) {
+      const existing = store.factions || []
+      for (const f of data.factions || []) {
+        const { id: oldId, novelId: _nid, ...rest } = f
+        const destMatch = findDuplicate(existing, f, x => x.name)
+        const res = applyDuplicateResolution({
+          policy: policy('factions'), destMatch, sourceFields: rest,
+          create: () => {
+            const newId = uid()
+            store.setFactions(prev => [...prev, { id: newId, novelId: store.activeNovelId, ...rest }])
+            undo.push(() => store.setFactions(prev => prev.filter(x => x.id !== newId)))
+            return newId
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.setFactions(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
+            undo.push(() => store.setFactions(prev => prev.map(x => x.id === id ? before : x)))
+          },
+        })
+        idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    if (sel.characters) {
+      const existing = store.characters || []
+      const actionByOldId = {}
+      const beforeByNewId = {} // full pre-import snapshot of every matched dest character, keyed by its (existing) id
+
+      // Pass 1: identity fields only (avoids broken relationship links mid-loop)
+      for (const c of data.characters || []) {
+        const { id: oldId, novelId: _nid, relationships: _r, parentIds: _p, childIds: _c, spouseIds: _sp, factionId: _f, ...rest } = c
+        const destMatch = findDuplicate(existing, c, x => x.name)
+        if (destMatch) beforeByNewId[destMatch.id] = beforeByNewId[destMatch.id] || { ...destMatch }
+        const res = applyDuplicateResolution({
+          policy: policy('characters'), destMatch, sourceFields: rest,
+          create: () => {
+            const newId = store.saveCharacter(rest)
+            undo.push(() => store.deleteCharacter(newId))
+            return newId
+          },
+          update: (id, patch) => {
+            store.saveCharacter(patch, id)
+            undo.push(() => store.saveCharacter(beforeByNewId[id], id))
+          },
+        })
+        idMap[oldId] = res.id
+        actionByOldId[oldId] = res.action
+        tallyAction(summary, res.action)
+      }
+
+      // Pass 2: relationships, remapped through idMap (points a Skip/Merge
+      // duplicate's old id at the *existing* destination record's id).
+      for (const c of data.characters || []) {
+        const newId = idMap[c.id]
+        if (!newId || actionByOldId[c.id] === 'skip') continue // Skip leaves the existing record fully untouched
+        const patch = {}
+        const rels = (c.relationships || []).map(r => ({ ...r, targetId: remap(r.targetId) })).filter(r => r.targetId)
+        if (rels.length)                                    patch.relationships = rels
+        if (c.parentIds?.length)  patch.parentIds  = c.parentIds.map(remap).filter(Boolean)
+        if (c.childIds?.length)   patch.childIds   = c.childIds.map(remap).filter(Boolean)
+        if (c.spouseIds?.length)  patch.spouseIds  = c.spouseIds.map(remap).filter(Boolean)
+        if (c.factionId)          patch.factionId  = remap(c.factionId)
+        if (!Object.keys(patch).length) continue
+        store.saveCharacter(patch, newId)
+        if (beforeByNewId[newId]) undo.push(() => store.saveCharacter(beforeByNewId[newId], newId))
+        // else: newId was created this transaction — its full deletion (already queued above) covers this write too.
+      }
+    }
+
+    if (sel.locations) {
+      const existing = store.locations || []
+      for (const l of data.locations || []) {
+        const { id: oldId, novelId: _nid, ...rest } = l
+        const destMatch = findDuplicate(existing, l, x => x.name)
+        const res = applyDuplicateResolution({
+          policy: policy('locations'), destMatch, sourceFields: rest,
+          create: () => {
+            const created = store.addLocation(rest)
+            if (created?.id) undo.push(() => store.deleteLocation(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.saveLocation(patch, id)
+            undo.push(() => store.saveLocation(before, id))
+          },
+        })
+        if (res.id) idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    if (sel.loreEntries) {
+      const existing = store.loreEntries || []
+      for (const e of data.loreEntries || []) {
+        const { id: oldId, novelId: _nid, ...rest } = e
+        const destMatch = findDuplicate(existing, e, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('loreEntries'), destMatch, sourceFields: rest,
+          create: () => {
+            const created = store.addLoreEntry(rest)
+            if (created?.id) undo.push(() => store.deleteLoreEntry(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateLoreEntry(id, patch)
+            undo.push(() => store.updateLoreEntry(id, before))
+          },
+        })
+        if (oldId && res.id) idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    // World history first — timeline events link back to it
+    const historyBeforeById = {}
+    if (sel.worldHistory) {
+      const existing = store.worldHistory || []
+      for (const h of ord(data.worldHistory)) {
+        const { id: oldId, novelId: _nid, timelineEventId: _tid, eraId, ...rest } = h
+        const destMatch = findDuplicate(existing, h, x => x.title)
+        if (destMatch) historyBeforeById[destMatch.id] = historyBeforeById[destMatch.id] || { ...destMatch }
+        const res = applyDuplicateResolution({
+          policy: policy('worldHistory'), destMatch, sourceFields: { ...rest, eraId: remapEra(eraId) },
+          create: () => {
+            const created = store.addHistoryEntry({ ...rest, eraId: remapEra(eraId) })
+            if (created?.id) undo.push(() => store.deleteHistoryEntry(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            store.updateHistoryEntry(id, patch)
+            undo.push(() => store.updateHistoryEntry(id, historyBeforeById[id]))
+          },
+        })
+        if (res.id) idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    if (sel.timeline) {
+      const existing = store.timeline || []
+      for (const ev of ord(data.timeline)) {
+        const { id: oldId, novelId: _nid, worldHistoryEntryId, eraId, ...rest } = ev
+        const destMatch = findDuplicate(existing, ev, x => x.title)
+        // Link to the resolved (new-or-existing) world history entry if both were
+        // imported. Deliberately excluded from `sourceFields` (which merge/replace
+        // draw on) below — the persisted field name on an existing timeline record
+        // is `worldHistoryEntryId`, not `linkedHistoryEntryId`, so a naive merge/
+        // replace of that key could never correctly detect "already linked" and
+        // risks relinking a matched duplicate's history unexpectedly. Scoped down:
+        // this link is only ever set when the event is newly created here.
+        const linkedHistoryEntryId = (sel.worldHistory && worldHistoryEntryId) ? idMap[worldHistoryEntryId] : undefined
+        const sourceFields = { ...rest, eraId: remapEra(eraId) }
+        const res = applyDuplicateResolution({
+          policy: policy('timeline'), destMatch, sourceFields,
+          create: () => {
+            const created = store.addEvent(
+              { ...sourceFields, ...(linkedHistoryEntryId ? { linkedHistoryEntryId } : {}) },
+              { createHistory: false },
+            )
+            if (created?.id) undo.push(() => store.deleteEvent(created.id))
+            // A brand-new event auto-links back to an existing (skip/merge/
+            // replace'd) history entry via addEvent's own worldHistoryEntryId
+            // back-reference sync — that history record needs its own rollback
+            // if this transaction didn't already touch it.
+            if (linkedHistoryEntryId && historyBeforeById[linkedHistoryEntryId]) {
+              undo.push(() => store.updateHistoryEntry(linkedHistoryEntryId, historyBeforeById[linkedHistoryEntryId]))
+            }
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateEvent(id, patch)
+            undo.push(() => store.updateEvent(id, before))
+          },
+        })
+        if (oldId && res.id) idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    if (sel.ideaEntries) {
+      const existing = store.ideaEntries || []
+      for (const idea of ord(data.ideaEntries)) {
+        const { id: oldId, novelId: _nid, ...rest } = idea
+        const destMatch = findDuplicate(existing, idea, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('ideaEntries'), destMatch, sourceFields: rest,
+          create: () => {
+            const created = store.addIdeaEntry(rest)
+            if (created?.id) undo.push(() => store.deleteIdeaEntry(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateIdeaEntry(id, patch)
+            undo.push(() => store.updateIdeaEntry(id, before))
+          },
+        })
+        if (oldId && res.id) idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    // Manuscript structure, comic pages/panels, RPG characters — always
+    // create-separate for this phase (see file header comment above).
+    if (sel.acts) {
+      for (const act of ord(data.acts)) {
+        const newAct = store.addAct(act.title || 'Act')
+        idMap[act.id] = newAct.id
+        undo.push(() => store.deleteAct(newAct.id))
+        if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
+        for (const chap of ord((data.chapters || []).filter(c => c.actId === act.id))) {
+          const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
+          idMap[chap.id] = newChap.id
+          if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
+          for (const scene of ord((data.scenes || []).filter(s => s.chapterId === chap.id))) {
+            const newScene = store.addScene(newChap.id, scene.title || 'Scene')
+            if (scene.synopsis || scene.content)
+              store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
+          }
+        }
+      }
+      summary.new += (data.acts || []).length
+      for (const page of ord(data.comicPages)) {
+        const { id: oldId, novelId: _nid, issueId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = page
+        const created = store.addComicPage(remap(issueId), {
+          ...rest,
+          characterIds: (characterIds || []).map(remap),
+          locationIds: (locationIds || []).map(remap),
+        })
+        if (created?.id) { idMap[oldId] = created.id; undo.push(() => store.deleteComicPage(created.id)); summary.new++ }
+      }
+      for (const panel of ord(data.comicPanels)) {
+        const { id: _id, novelId: _nid, pageId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = panel
+        const created = store.addComicPanel(remap(pageId), {
+          ...rest,
+          characterIds: (characterIds || []).map(remap),
+          locationIds: (locationIds || []).map(remap),
+        })
+        if (created?.id) { undo.push(() => store.deleteComicPanel(created.id)); summary.new++ }
+      }
+    }
+
+    if (sel.rpgCharacters) {
+      for (const c of data.rpgCharacters || []) {
+        const { id: _id, novelId: _nid, ...rest } = c
+        const newId = store.saveRpgCharacter(rest)
+        if (newId) { undo.push(() => store.deleteRpgCharacter(newId)); summary.new++ }
+      }
+    }
+
+    if (sel.maps) {
+      const existing = (store.mapProject?.maps) || []
+      for (const map of data.maps || []) {
+        const { id: _id, novelId: _nid, name: mapName, mapType: mapMapType, created: _c, ...rest } = map
+        const destMatch = findDuplicate(existing, map, x => x.name)
+        const res = applyDuplicateResolution({
+          policy: policy('maps'), destMatch, sourceFields: { name: mapName || 'Map', mapType: mapMapType || 'regional', ...rest },
+          create: () => {
+            const newMapId = store.addMap(mapName || 'Map', mapMapType || 'regional')
+            if (newMapId) {
+              if (Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
+              undo.push(() => store.deleteMap(newMapId))
+            }
+            return newMapId
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateMapData(id, () => patch)
+            undo.push(() => store.updateMapData(id, () => before))
+          },
+        })
+        tallyAction(summary, res.action)
+      }
+    }
+
+    if (sel.storySchedule) {
+      const existing = store.storySchedule || []
+      for (const ev of ord(data.storySchedule)) {
+        const { id: oldId, novelId: _nid, linkedCharacters, linkedLocations, ...rest } = ev
+        const sourceFields = {
+          ...rest,
+          ...(linkedCharacters ? { linkedCharacters: linkedCharacters.map(remap).filter(Boolean) } : {}),
+          ...(linkedLocations ? { linkedLocations: linkedLocations.map(remap).filter(Boolean) } : {}),
+        }
+        const destMatch = findDuplicate(existing, ev, x => x.title)
+        const res = applyDuplicateResolution({
+          policy: policy('storySchedule'), destMatch, sourceFields,
+          create: () => {
+            const created = store.addScheduleEvent(sourceFields)
+            if (created?.id) undo.push(() => store.deleteScheduleEvent(created.id))
+            return created?.id
+          },
+          update: (id, patch) => {
+            const before = { ...destMatch }
+            store.updateScheduleEvent(id, patch)
+            undo.push(() => store.updateScheduleEvent(id, before))
+          },
+        })
+        if (oldId && res.id) idMap[oldId] = res.id
+        tallyAction(summary, res.action)
+      }
+    }
+
+    // Whiteboard is deliberately left untouched — see file header comment.
+  } catch (err) {
+    undo.undoAll()
+    throw err
+  }
+  return summary
 }
 
 // Compatible structured ZIP import
@@ -977,6 +1548,125 @@ function TypeSelect({ value, onChange }) {
   )
 }
 
+// ── Import-into-existing-project: duplicate-detectable categories ────────────
+// `key` matches the source data's field name (data[key]); `destKey` matches
+// the field name on store.getProjectExportData()'s result, which differs for
+// AI/generic "lore" (destination side is `loreEntries`). Manuscript structure,
+// comic pages/panels, and RPG characters are deliberately excluded — see the
+// header comments on populateYowProjectIntoExisting/populateProjectIntoExisting.
+const YOW_MERGE_CATEGORIES = [
+  { key: 'factions',      destKey: 'factions',     label: 'Factions',         nameField: 'name' },
+  { key: 'characters',    destKey: 'characters',    label: 'Characters',       nameField: 'name' },
+  { key: 'locations',     destKey: 'locations',     label: 'Locations',        nameField: 'name' },
+  { key: 'loreEntries',   destKey: 'loreEntries',   label: 'Lore entries',     nameField: 'title' },
+  { key: 'worldHistory',  destKey: 'worldHistory',  label: 'World history',    nameField: 'title' },
+  { key: 'timeline',      destKey: 'timeline',      label: 'Timeline events',  nameField: 'title' },
+  { key: 'ideaEntries',   destKey: 'ideaEntries',   label: 'Ideas & notes',    nameField: 'title' },
+  { key: 'storySchedule', destKey: 'storySchedule', label: 'Story schedule',   nameField: 'title' },
+  { key: 'maps',          destKey: 'maps',          label: 'Maps',             nameField: 'name' },
+]
+const GENERIC_MERGE_CATEGORIES = [
+  { key: 'characters',   destKey: 'characters',   label: 'Characters',        nameField: 'name' },
+  { key: 'locations',    destKey: 'locations',    label: 'Locations',         nameField: 'name' },
+  { key: 'factions',     destKey: 'factions',     label: 'Factions / Groups', nameField: 'name' },
+  { key: 'lore',         destKey: 'loreEntries',  label: 'Lore entries',      nameField: 'title' },
+  { key: 'worldHistory', destKey: 'worldHistory', label: 'World history',     nameField: 'title' },
+  { key: 'timeline',     destKey: 'timeline',     label: 'Timeline events',   nameField: 'title' },
+  { key: 'ideaEntries',  destKey: 'ideaEntries',  label: 'Ideas & notes',     nameField: 'title' },
+]
+
+const RESOLUTION_LABELS = {
+  skip: 'Skip duplicates',
+  merge: 'Merge (fill blanks)',
+  replace: 'Replace',
+  createSeparate: 'Create separate',
+}
+
+// Aggregate the per-category duplicate preview into the same "N new, M
+// skipped, K merged, J replaced" shape the actual commit returns — shown
+// before the user commits so the destination-project summary line and the
+// post-commit summary read consistently. (An edge case can differ slightly:
+// a "Merge" resolution whose patch ends up empty — because every field was
+// already populated on the destination record — is counted as skipped by the
+// actual commit, but as merged here; this is a cosmetic preview nuance, not a
+// data-safety one.)
+function computePlannedSummary(preview, resolutions) {
+  const summary = emptySummary()
+  for (const cat of preview || []) {
+    summary.new += cat.newCount
+    if (!cat.duplicateCount) continue
+    const pol = resolutions[cat.key] || 'skip'
+    if (pol === 'createSeparate') summary.new += cat.duplicateCount
+    else if (pol === 'merge') summary.merged += cat.duplicateCount
+    else if (pol === 'replace') summary.replaced += cat.duplicateCount
+    else summary.skipped += cat.duplicateCount
+  }
+  return summary
+}
+
+// ── Destination step (Create new project vs. Import into existing) ──────────
+
+function ImportDestinationPicker({ store, effectiveType, mode, onModeChange, destProjectId, onDestProjectChange, preview, resolutions, onResolutionChange }) {
+  const compatible = (store.novels || []).filter(n => n.type === effectiveType)
+  const typeLabel = getProjectType(effectiveType).label
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+      <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Destination</p>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: mode === 'new' ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${mode === 'new' ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}` }}>
+        <input type="radio" name="import-destination" checked={mode === 'new'} onChange={() => onModeChange('new')} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>Create new project</span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: compatible.length ? 'pointer' : 'not-allowed', opacity: compatible.length ? 1 : 0.55, background: mode === 'existing' ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${mode === 'existing' ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}` }}>
+        <input type="radio" name="import-destination" checked={mode === 'existing'} disabled={!compatible.length} onChange={() => onModeChange('existing')} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: compatible.length ? 'pointer' : 'not-allowed' }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>Import into existing project</span>
+      </label>
+      {!compatible.length && (
+        <p style={{ margin: '-2px 0 0 2px', fontSize: 10.5, color: 'var(--text-muted)' }}>
+          No existing {typeLabel.toLowerCase()} projects to import into — create one first, or import as a new project.
+        </p>
+      )}
+
+      {mode === 'existing' && compatible.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-main)', border: '1px solid var(--border)' }}>
+          <select
+            value={destProjectId}
+            onChange={e => onDestProjectChange(e.target.value)}
+            style={{ padding: '7px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-nav)', color: 'var(--text-main)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <option value="">Choose a project…</option>
+            {compatible.map(n => <option key={n.id} value={n.id}>{n.title || 'Untitled'}</option>)}
+          </select>
+
+          {destProjectId && preview && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {preview.length === 0 && (
+                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>No overlapping content found — everything will import as new.</p>
+              )}
+              {preview.map(cat => (
+                <div key={cat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, background: 'var(--bg-nav)', border: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1, minWidth: 100, fontSize: 11.5, color: 'var(--text-main)', fontWeight: 600 }}>{cat.label}</span>
+                  <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                    {cat.newCount} new{cat.duplicateCount ? ` · ${cat.duplicateCount} match existing` : ''}
+                  </span>
+                  {cat.duplicateCount > 0 && (
+                    <select
+                      value={resolutions[cat.key] || 'skip'}
+                      onChange={e => onResolutionChange(cat.key, e.target.value)}
+                      style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      {RESOLUTION_POLICIES.map(p => <option key={p} value={p}>{RESOLUTION_LABELS[p]}</option>)}
+                    </select>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 export default function AIImportModal({ store, onClose, onImportDone, userId = null, membership = null }) {
@@ -991,27 +1681,54 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const [aiError, setAiError] = useState('')
   const [selections, setSelections] = useState({})
   const [targetType, setTargetType] = useState(DEFAULT_TYPE) // create-as type for AI/archive imports
-  // Phase-2 payload: wait for activeNovelId to update before populating entries
+  // Destination step: create a new project (unchanged default) or import into
+  // an existing one of the same type.
+  const [destinationMode, setDestinationMode] = useState('new') // 'new' | 'existing'
+  const [destProjectId, setDestProjectId] = useState('')
+  const [resolutions, setResolutions] = useState({}) // category key → 'skip' | 'merge' | 'replace' | 'createSeparate'
+  const [mergeResult, setMergeResult] = useState(null) // completion summary from the "into existing" path
+  // Phase-2 payload: wait for activeNovelId to settle on the target project
+  // before populating entries. Two shapes share one effect:
+  //   - create-new:      { targetNovelId, data, sel, type, isYow }
+  //   - into-existing:    { targetNovelId, data, sel, type, isYow, intoExisting: true, resolutions }
   const [pendingImport, setPendingImport] = useState(null)
   const fileInputRef = useRef()
   const abortRef = useRef(false)
 
-  // Phase 2: fires once store.activeNovelId has settled to the new project's id
+  // Phase 2: fires once store.activeNovelId has settled on the target project.
+  // For "create new" that's the just-created project (already made active by
+  // addNovel). For "import into existing" the target isn't active yet, so this
+  // switches to it first — every store add/save call stamps novelId from
+  // activeNovelId — then waits for the next render to see it land.
   useEffect(() => {
     if (!pendingImport) return
-    if (store.activeNovelId !== pendingImport.novelId) return
-    const id = pendingImport.novelId
+    if (store.activeNovelId !== pendingImport.targetNovelId) {
+      if (pendingImport.intoExisting) store.setActiveNovelId(pendingImport.targetNovelId)
+      return
+    }
+    const id = pendingImport.targetNovelId
     try {
-      if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
-      else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
+      if (pendingImport.intoExisting) {
+        const summary = pendingImport.isYow
+          ? populateYowProjectIntoExisting(store, pendingImport.data, pendingImport.sel, pendingImport.resolutions)
+          : populateProjectIntoExisting(store, pendingImport.data, pendingImport.sel, pendingImport.type, pendingImport.resolutions)
+        setMergeResult(summary)
+      } else {
+        if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
+        else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
+      }
       setPendingImport(null)
       setPhase('done')
-      setTimeout(() => { onImportDone?.(id); onClose() }, 1100)
+      setTimeout(() => { onImportDone?.(id); onClose() }, pendingImport.intoExisting ? 1400 : 1100)
     } catch (err) {
-      console.error('Import population failed:', err)
+      console.error('Import population failed (rolled back):', err)
       setPendingImport(null)
-      store.deleteNovel(id)
-      setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+      if (pendingImport.intoExisting) {
+        setAiError('This import could not be completed — no changes were made to the destination project.')
+      } else {
+        store.deleteNovel(id)
+        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+      }
       setPhase('upload')
     }
   }, [store.activeNovelId, pendingImport]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1209,20 +1926,43 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     }
   }
 
+  // Shared across "Create new project" and "Import into existing project" —
+  // the effective project type this import resolves to, and the source data
+  // object regardless of which upload path produced it.
+  const sourceData = yowImport || ncImport || parsed
+  const effectiveType = yowImport
+    ? (PROJECT_TYPES[yowImport.project?.type] ? yowImport.project.type : DEFAULT_TYPE)
+    : (PROJECT_TYPES[targetType] ? targetType : DEFAULT_TYPE)
+  const mergeCategories = yowImport ? YOW_MERGE_CATEGORIES : GENERIC_MERGE_CATEGORIES
+
+  // Per-category duplicate preview against the chosen destination project —
+  // read-only (store.getProjectExportData never writes), so this is safe to
+  // recompute on every render while the user picks a project/policy.
+  const destPreview = useMemo(() => {
+    if (destinationMode !== 'existing' || !destProjectId || !sourceData) return null
+    const destData = store.getProjectExportData(destProjectId)
+    if (!destData) return null
+    return mergeCategories
+      .filter(cat => selections[cat.key] && (sourceData[cat.key] || []).length > 0)
+      .map(cat => {
+        const { newCount, duplicateCount } = analyzeCategory(sourceData[cat.key], destData[cat.destKey] || [], x => x[cat.nameField])
+        return { key: cat.key, label: cat.label, newCount, duplicateCount }
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destinationMode, destProjectId, sourceData, selections, mergeCategories])
+
+  const plannedSummary = destPreview ? computePlannedSummary(destPreview, resolutions) : null
+
   const handleCreate = () => {
-    const sourceData = yowImport || ncImport || parsed
     if (!sourceData) return
-    let title, description, type
+    let title, description
+    const type = effectiveType
     if (yowImport) {
       title = yowImport.project?.title; description = yowImport.project?.description || ''
-      // Restore keeps the exported type; unknown/retired types fall back safely to Novel
-      type = PROJECT_TYPES[yowImport.project?.type] ? yowImport.project.type : DEFAULT_TYPE
     } else if (ncImport) {
       title = ncImport.projectTitle; description = ''
-      type = PROJECT_TYPES[targetType] ? targetType : DEFAULT_TYPE
     } else {
       title = parsed.project?.title; description = parsed.project?.description || ''
-      type = PROJECT_TYPES[targetType] ? targetType : DEFAULT_TYPE
     }
     const extras = {}
     if (yowImport?.project?.wordTarget) extras.wordTarget = yowImport.project.wordTarget
@@ -1232,7 +1972,16 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras })
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
-    setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport })
+    setPendingImport({ targetNovelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport })
+  }
+
+  const handleImportIntoExisting = () => {
+    if (!sourceData || !destProjectId) { setAiError('Choose a project to import into.'); return }
+    const destNovel = (store.novels || []).find(n => n.id === destProjectId)
+    if (!destNovel || destNovel.type !== effectiveType) { setAiError('Choose a project to import into.'); return }
+    setMergeResult(null)
+    setPhase('creating')
+    setPendingImport({ targetNovelId: destProjectId, data: sourceData, sel: selections, type: effectiveType, isYow: !!yowImport, intoExisting: true, resolutions })
   }
 
   const handleCancel = () => {
@@ -1259,8 +2008,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {phase === 'upload'    && 'Upload files — drop a YOW export, compatible project archive, or any writing file'}
               {phase === 'analyzing' && 'Analyzing your files…'}
               {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : ncImport ? `Project archive detected — "${ncImport.projectTitle}"` : 'Review what will be created')}
-              {phase === 'creating'  && 'Creating your project…'}
-              {phase === 'done'      && 'Project created successfully!'}
+              {phase === 'creating'  && (pendingImport?.intoExisting ? 'Importing into your project…' : 'Creating your project…')}
+              {phase === 'done'      && (mergeResult ? 'Import complete!' : 'Project created successfully!')}
             </p>
           </div>
           {canClose && (
@@ -1415,6 +2164,14 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                   </label>
                 ))}
               </div>
+
+              <ImportDestinationPicker
+                store={store} effectiveType={effectiveType}
+                mode={destinationMode} onModeChange={setDestinationMode}
+                destProjectId={destProjectId} onDestProjectChange={setDestProjectId}
+                preview={destPreview} resolutions={resolutions}
+                onResolutionChange={(key, val) => setResolutions(p => ({ ...p, [key]: val }))}
+              />
             </div>
           )}
 
@@ -1443,6 +2200,14 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
                 "Other entries" (creatures, concepts, misc notes) are imported as raw captures on the Ideas board.
               </p>
+
+              <ImportDestinationPicker
+                store={store} effectiveType={effectiveType}
+                mode={destinationMode} onModeChange={setDestinationMode}
+                destProjectId={destProjectId} onDestProjectChange={setDestProjectId}
+                preview={destPreview} resolutions={resolutions}
+                onResolutionChange={(key, val) => setResolutions(p => ({ ...p, [key]: val }))}
+              />
             </div>
           )}
 
@@ -1474,6 +2239,14 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {SECTIONS.every(s => !hasContent(parsed, s.key)) && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No content was extracted. The project will be created empty.</p>
               )}
+
+              <ImportDestinationPicker
+                store={store} effectiveType={effectiveType}
+                mode={destinationMode} onModeChange={setDestinationMode}
+                destProjectId={destProjectId} onDestProjectChange={setDestProjectId}
+                preview={destPreview} resolutions={resolutions}
+                onResolutionChange={(key, val) => setResolutions(p => ({ ...p, [key]: val }))}
+              />
             </div>
           )}
 
@@ -1483,14 +2256,23 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {phase === 'creating' ? (
                 <>
                   <div className="ai-import-spinner" />
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Creating your project…</p>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
+                    {pendingImport?.intoExisting ? 'Importing into your project…' : 'Creating your project…'}
+                  </p>
                 </>
               ) : (
                 <>
                   <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'color-mix(in srgb, #5dc878 14%, transparent)', border: '1px solid color-mix(in srgb, #5dc878 40%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5dc878" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
                   </div>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Project created!</p>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
+                    {mergeResult ? 'Import complete!' : 'Project created!'}
+                  </p>
+                  {mergeResult && (
+                    <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
+                      {mergeResult.new} new · {mergeResult.skipped} skipped · {mergeResult.merged} merged · {mergeResult.replaced} replaced
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -1499,32 +2281,49 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
 
         {/* Footer */}
         {(phase === 'upload' || phase === 'preview') && (
-          <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
-            {phase === 'preview' && (
-              <button type="button" onClick={() => { setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText(''); setTargetType(DEFAULT_TYPE) }}
-                style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginRight: 'auto' }}>
-                Back
-              </button>
-            )}
-            <button type="button" onClick={handleCancel}
-              style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
-              Cancel
-            </button>
-            {phase === 'upload' && (() => {
-              const analyzeDisabled = !files.length || (!aiLockedForFree && !aiConfigured)
+          <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+            {phase === 'preview' && destinationMode === 'existing' && destProjectId && plannedSummary && (() => {
+              const destTitle = (store.novels || []).find(n => n.id === destProjectId)?.title || 'this project'
               return (
-                <button type="button" onClick={handleAnalyze} disabled={analyzeDisabled}
-                  style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: analyzeDisabled ? 'var(--border)' : 'var(--accent)', color: analyzeDisabled ? 'var(--text-muted)' : 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: analyzeDisabled ? 'not-allowed' : 'pointer' }}>
-                  {aiLockedForFree ? 'Upgrade for AI Import' : 'Analyze with AI'}
-                </button>
+                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+                  Importing into <strong style={{ color: 'var(--text-main)' }}>"{destTitle}"</strong>: {plannedSummary.new} new, {plannedSummary.skipped} skipped, {plannedSummary.merged} merged, {plannedSummary.replaced} replaced
+                </p>
               )
             })()}
-            {phase === 'preview' && (
-              <button type="button" onClick={handleCreate}
-                style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
-                Create Project
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              {phase === 'preview' && (
+                <button type="button" onClick={() => {
+                  setPhase('upload'); setParsed(null); setYowImport(null); setNcImport(null); setStreamedText(''); setTargetType(DEFAULT_TYPE)
+                  setDestinationMode('new'); setDestProjectId(''); setResolutions({})
+                }}
+                  style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', marginRight: 'auto' }}>
+                  Back
+                </button>
+              )}
+              <button type="button" onClick={handleCancel}
+                style={{ padding: '9px 16px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
+                Cancel
               </button>
-            )}
+              {phase === 'upload' && (() => {
+                const analyzeDisabled = !files.length || (!aiLockedForFree && !aiConfigured)
+                return (
+                  <button type="button" onClick={handleAnalyze} disabled={analyzeDisabled}
+                    style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: analyzeDisabled ? 'var(--border)' : 'var(--accent)', color: analyzeDisabled ? 'var(--text-muted)' : 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: analyzeDisabled ? 'not-allowed' : 'pointer' }}>
+                    {aiLockedForFree ? 'Upgrade for AI Import' : 'Analyze with AI'}
+                  </button>
+                )
+              })()}
+              {phase === 'preview' && (() => {
+                const isExisting = destinationMode === 'existing'
+                const disabled = isExisting && !destProjectId
+                return (
+                  <button type="button" onClick={isExisting ? handleImportIntoExisting : handleCreate} disabled={disabled}
+                    style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: disabled ? 'var(--border)' : 'var(--accent)', color: disabled ? 'var(--text-muted)' : 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: disabled ? 'not-allowed' : 'pointer' }}>
+                    {isExisting ? 'Import into Project' : 'Create Project'}
+                  </button>
+                )
+              })()}
+            </div>
           </div>
         )}
       </div>
