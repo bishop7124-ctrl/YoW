@@ -292,14 +292,20 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
   }
 
   if (worldHistoryIds?.length) {
-    const history = (store.worldHistory || []).filter(entry => worldHistoryIds.includes(entry.id))
+    // "History" context reads `store.timeline` — the World History and
+    // Timeline workspace pages both write new entries there via
+    // `addEvent(data, { createHistory: false })`, which intentionally skips
+    // the legacy `store.worldHistory` collection, so that array stays empty
+    // for anything created going forward (only migrated/imported legacy rows
+    // land in it). See the 2026-09-04 Bugs-table row for how this was found.
+    const history = (store.timeline || []).filter(entry => worldHistoryIds.includes(entry.id))
     if (history.length) {
       lines.push('\n--- HISTORY ---')
       history.forEach(entry => {
         lines.push(`\n${entry.title}`)
         if (entry.era) lines.push(`Era: ${entry.era}`)
         if (entry.startYear || entry.endYear) lines.push(`Years: ${[entry.startYear, entry.endYear].filter(Boolean).join(' - ')}`)
-        if (entry.dateRange) lines.push(`Date range: ${entry.dateRange}`)
+        if (entry.dateRange || entry.date) lines.push(`Date: ${entry.dateRange || entry.date}`)
         if (entry.content) lines.push(entry.content)
       })
     }

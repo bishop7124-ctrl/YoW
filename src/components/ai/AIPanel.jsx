@@ -135,7 +135,15 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
   const clearAll  = (field)      => setCtx(prev => ({ ...prev, [field]: [] }))
 
   const {
-    characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [], ideaEntries = [],
+    characters = [], locations = [], loreEntries = [], chapters = [], acts = [], ideaEntries = [],
+    // "History" context uses `store.timeline` (what the World History and
+    // Timeline workspace pages actually read/write via `addEvent`), not the
+    // legacy `store.worldHistory` collection — both pages call
+    // `addEvent(data, { createHistory: false })`, which intentionally skips
+    // writing new entries into `worldHistory`, so that array only ever holds
+    // migrated/imported legacy rows and stays empty for anything created
+    // going forward. See the 2026-09-04 Bugs-table row for how this was found.
+    timeline: worldHistory = [],
   } = store
 
   const allContextIds = useMemo(() => ({
@@ -177,7 +185,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
   const historyByEra = useMemo(() => {
     const map = {}
     worldHistory.forEach(entry => {
-      const era = entry.era || entry.dateRange || 'Unassigned'
+      const era = entry.era || entry.dateRange || entry.date || 'Unassigned'
       if (!map[era]) map[era] = []
       map[era].push(entry)
     })
@@ -281,7 +289,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
                   <CheckItem
                     key={entry.id}
                     label={entry.title}
-                    sub={entry.startYear || entry.endYear ? [entry.startYear, entry.endYear].filter(Boolean).join(' - ') : entry.dateRange}
+                    sub={entry.startYear || entry.endYear ? [entry.startYear, entry.endYear].filter(Boolean).join(' - ') : (entry.dateRange || entry.date)}
                     checked={ctx.worldHistoryIds.includes(entry.id)}
                     onChange={() => toggle('worldHistoryIds', entry.id)}
                   />
