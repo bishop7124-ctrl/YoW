@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
+import { streamMessage, buildSystemPrompt, PROVIDERS, getHistoryContextEntries } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, createAiChatDocxBlob, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
@@ -136,15 +136,14 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
 
   const {
     characters = [], locations = [], loreEntries = [], chapters = [], acts = [], ideaEntries = [],
-    // "History" context uses `store.timeline` (what the World History and
-    // Timeline workspace pages actually read/write via `addEvent`), not the
-    // legacy `store.worldHistory` collection — both pages call
-    // `addEvent(data, { createHistory: false })`, which intentionally skips
-    // writing new entries into `worldHistory`, so that array only ever holds
-    // migrated/imported legacy rows and stays empty for anything created
-    // going forward. See the 2026-09-04 Bugs-table row for how this was found.
-    timeline: worldHistory = [],
+    timeline: rawTimeline = [], worldHistory: rawWorldHistory = [],
   } = store
+  // See getHistoryContextEntries in aiApi.js for why "History" context reads
+  // both store.timeline and store.worldHistory rather than either alone.
+  const worldHistory = useMemo(
+    () => getHistoryContextEntries({ timeline: rawTimeline, worldHistory: rawWorldHistory }),
+    [rawTimeline, rawWorldHistory]
+  )
 
   const allContextIds = useMemo(() => ({
     characterIds: characters.map(c => c.id),
