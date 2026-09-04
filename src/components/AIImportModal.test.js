@@ -518,6 +518,50 @@ describe('populateYowProjectIntoExisting', () => {
     expect(store.rpgCharacters).toHaveLength(1)
     expect(summary.new).toBeGreaterThan(0)
   })
+
+  it('a Merge-resolved character never overwrites relationships/parentIds/factionId already populated on the destination record', () => {
+    const store = mockMergeStore({
+      factions: [{ id: 'existing-faction', name: 'Old Guard' }],
+      characters: [{ id: 'existing-mika', name: 'Mika', bio: '', parentIds: ['existing-parent'], factionId: 'existing-faction' }],
+    })
+    const data = {
+      factions: [{ id: 'old-faction', name: 'New Faction' }],
+      characters: [
+        { id: 'old-mika', name: 'Mika', bio: 'Imported bio (should fill — was blank)', parentIds: ['old-other'], factionId: 'old-faction' },
+        { id: 'old-other', name: 'Someone Else' },
+      ],
+    }
+    populateYowProjectIntoExisting(store, data, { factions: true, characters: true }, { characters: 'merge' })
+    const mika = store.characters.find(c => c.id === 'existing-mika')
+    // Blank field: merge fills it in.
+    expect(mika.bio).toBe('Imported bio (should fill — was blank)')
+    // Already-populated relationship-shaped fields: merge must leave them untouched.
+    expect(mika.parentIds).toEqual(['existing-parent'])
+    expect(mika.factionId).toBe('existing-faction')
+  })
+
+  it('remaps an RPG character\'s factionIds and NPC-relationship characterIds through idMap', () => {
+    const store = mockMergeStore({
+      factions: [{ id: 'existing-faction', name: 'Old Guard' }],
+      characters: [{ id: 'existing-npc', name: 'Garrick' }],
+    })
+    const data = {
+      factions: [{ id: 'old-faction', name: 'Old Guard' }], // name-matches → skip-resolved onto existing-faction
+      characters: [{ id: 'old-npc', name: 'Garrick' }],      // name-matches → skip-resolved onto existing-npc
+      rpgCharacters: [{
+        id: 'old-rpg', name: 'Thorn', class: 'Ranger',
+        factionIds: ['old-faction'],
+        npcRelationships: [{ id: 'rel-1', characterId: 'old-npc', type: 'Ally' }],
+      }],
+    }
+    populateYowProjectIntoExisting(store, data, { factions: true, characters: true, rpgCharacters: true }, {})
+    const rpg = store.rpgCharacters.find(c => c.name === 'Thorn')
+    expect(rpg.factionIds).toEqual(['existing-faction'])
+    expect(rpg.npcRelationships).toEqual([{ id: 'rel-1', characterId: 'existing-npc', type: 'Ally' }])
+    // No duplicate faction/character created — the skip-resolved matches were reused, not re-created.
+    expect(store.factions).toHaveLength(1)
+    expect(store.characters).toHaveLength(1)
+  })
 })
 
 // ── Manuscript parsing (Gutenberg-style ebooks and plain manuscripts) ─────────
