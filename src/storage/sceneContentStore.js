@@ -29,6 +29,7 @@
 // working unchanged as long as it goes through these first.
 
 import { readItem, writeItem, removeItem, listKeys } from './projectStorage'
+import { markLocalReadCorrupt } from './writeDurability'
 
 const CONTENT_KEY_PREFIX = 'nf_scene_content:'
 const SCENES_KEY = 'nf_scenes'
@@ -190,6 +191,21 @@ export function hydrateScenesFromStorage(metaScenes) {
  *     `nf_scene_content:*` key actually present in the backend rather than
  *     only ones some in-memory cache already knows about.
  *
+ * **Both passes require `nf_scenes` to have actually been read.** If it
+ * can't be read/parsed — key absent is fine and legitimately means "no
+ * scenes anywhere yet" (handled below without throwing), but a genuine read
+ * failure (backend unavailable) or corrupt JSON is not the same thing as
+ * "zero scenes exist" — this function aborts entirely rather than guessing.
+ * A prior version of this function treated any read/parse failure as an
+ * empty `nf_scenes`, which made `liveIds` an empty set and turned the
+ * orphan sweep into "delete every `nf_scene_content:*` key on the account,"
+ * including every *other* project's scene prose — a real data-loss bug
+ * caught in security review (see docs/ROADMAP.md, audit finding #16). See
+ * projectStorage.js's `loadValue`/`markLocalReadCorrupt` for the same
+ * corrupt-vs-absent distinction used elsewhere, and indexedDbBackend.js /
+ * audit finding P0-07 for why an unreadable local value is a real,
+ * anticipated scenario here, not just a theoretical one.
+ *
  * `caches` (optional) lets the caller's own per-tab `knownContentKeyIds`/
  * `lastWrittenContentById` (see splitScenesForStorage's own doc comment)
  * stay in sync with what this function removes, so a later commit in the
@@ -203,16 +219,21 @@ export function hydrateScenesFromStorage(metaScenes) {
  */
 export function deleteAllSceneContentForNovel(novelId, caches = {}) {
   const { knownContentKeyIds, lastWrittenContentById } = caches
-  let metadata = []
+  let metadata
   try {
     const raw = readItem(SCENES_KEY)
     const parsed = raw == null ? [] : JSON.parse(raw)
     metadata = Array.isArray(parsed) ? parsed : []
-  } catch {
-    // Corrupted or unreadable `nf_scenes` — nothing more can be discovered
-    // from storage here; the orphan sweep below still runs (with an empty
-    // `liveIds`, so it degrades to "remove everything found," which is only
-    // reachable in this already-corrupt state).
+  } catch (error) {
+    // Genuinely unreadable/corrupt `nf_scenes` — NOT the same as "no scenes
+    // exist" (see doc comment above). With no trustworthy metadata there is
+    // no safe way to tell which content keys belong to `novelId`, nor which
+    // ones are truly orphaned account-wide, so both the project-scoped
+    // removal and the orphan sweep abort rather than risk deleting live
+    // content that just happens to look unreferenced from here.
+    markLocalReadCorrupt(SCENES_KEY)
+    console.error(`[sceneContentStore] "${SCENES_KEY}" could not be read/parsed — aborting deleteAllSceneContentForNovel's storage sweep instead of risking deletion of live scene content.`, error)
+    return []
   }
   const liveIds = new Set(metadata.map(s => s?.id).filter(id => id != null))
   const projectIds = novelId == null
@@ -231,6 +252,22 @@ export function deleteAllSceneContentForNovel(novelId, caches = {}) {
 
   // Orphan sweep — see doc comment above. Runs after the project-scoped pass
   // so its own now-removed keys no longer appear in `listKeys`'s result.
+  //
+  // KNOWN CROSS-TAB RACE (security review finding, docs/ROADMAP.md audit
+  // finding #16 — deferred to live QA, see docs/QA_PLAN.md): a scene edit
+  // broadcasts its content-key write and its `nf_scenes` metadata write to
+  // other tabs as two separate BroadcastChannel messages in sequence (see
+  // browserVaultAdapter.js's wireCrossTabSync and the shared `mirror` in
+  // indexedDbBackend.js). If this sweep runs *in a different tab* inside the
+  // narrow window after that tab's mirror has applied the new content-key
+  // message but before it applies the corresponding `nf_scenes` message, the
+  // new scene's id is briefly missing from `liveIds` above even though it's
+  // genuinely live under an unrelated, undeleted project — and this sweep
+  // would delete its just-written content. Narrow (same-origin tabs, mid-
+  // edit-and-delete race) and not closed by this fix: closing it fully would
+  // mean making the two broadcasts atomic (a bigger change to the cross-tab
+  // sync mechanism than this fix's scope), so it's left as a documented risk
+  // rather than a rushed redesign.
   listKeys(CONTENT_KEY_PREFIX).forEach(key => {
     const id = key.slice(CONTENT_KEY_PREFIX.length)
     if (liveIds.has(id)) return // still belongs to a live scene in some project

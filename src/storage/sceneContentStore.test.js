@@ -196,12 +196,37 @@ describe('sceneContentStore', () => {
       expect(lastWrittenContentById.has('scene-1')).toBe(false)
     })
 
-    it('is a no-op when nf_scenes is missing or corrupt, beyond sweeping any content keys it finds as orphans', () => {
-      localStorage.setItem(sceneContentKey('scene-x'), 'Unreachable metadata.')
-      // No 'nf_scenes' key at all.
+    it('is a true no-op — touches nothing at all — when nf_scenes is missing entirely', () => {
+      // No 'nf_scenes' key at all is a legitimate, unambiguous state (a
+      // fresh account, or every project already deleted) — not a read
+      // failure — so the orphan sweep still runs normally against it.
+      localStorage.setItem(sceneContentKey('scene-x'), 'Nobody references this scene any more.')
       const removed = deleteAllSceneContentForNovel('novel-1', { knownContentKeyIds: new Set(), lastWrittenContentById: new Map() })
       expect(removed).toEqual(['scene-x'])
       expect(localStorage.getItem(sceneContentKey('scene-x'))).toBeNull()
+    })
+
+    // Regression test for a real data-loss bug found in security review of
+    // the #16 fix itself (see docs/ROADMAP.md): an earlier version of this
+    // function treated *any* read/parse failure on `nf_scenes` — including
+    // genuine corruption, not just a missing key — as "there are zero live
+    // scenes," which made the orphan sweep below delete every
+    // `nf_scene_content:*` key on the entire account, across every project,
+    // not just the one being deleted. Corrupt/unreadable metadata must
+    // instead abort the whole sweep (both passes) rather than guess.
+    it('aborts entirely — deletes nothing, anywhere — when nf_scenes is corrupt/unreadable, leaving every scene\'s content untouched', () => {
+      localStorage.setItem('nf_scenes', '{not valid json')
+      // A scene that legitimately belongs to the project being deleted...
+      localStorage.setItem(sceneContentKey('scene-1'), 'Novel 1 scene prose.')
+      // ...and a completely unrelated scene under a different, undeleted
+      // project — the exact content the original bug would wipe out.
+      localStorage.setItem(sceneContentKey('scene-9'), 'Unrelated project — must survive.')
+
+      const removed = deleteAllSceneContentForNovel('novel-1', { knownContentKeyIds: new Set(), lastWrittenContentById: new Map() })
+
+      expect(removed).toEqual([])
+      expect(localStorage.getItem(sceneContentKey('scene-1'))).toBe('Novel 1 scene prose.')
+      expect(localStorage.getItem(sceneContentKey('scene-9'))).toBe('Unrelated project — must survive.')
     })
   })
 
