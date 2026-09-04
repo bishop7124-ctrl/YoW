@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from './sceneContentStore'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, deleteAllSceneContentForNovel } from './sceneContentStore'
 import { resetStorageBackend } from './projectStorage'
 
 describe('sceneContentStore', () => {
@@ -122,6 +122,87 @@ describe('sceneContentStore', () => {
 
     expect(localStorage.getItem(sceneContentKey('b'))).toBeNull()
     expect(knownContentKeyIds.has('b')).toBe(false)
+  })
+
+  // Regression coverage for audit finding #16 ("Project deletion can leave
+  // per-scene keys"): the fix reads the deleted project's scene ids straight
+  // from persisted `nf_scenes`, independent of any in-memory
+  // knownContentKeyIds/scenesRef state — see deleteAllSceneContentForNovel's
+  // own doc comment for the two passes this exercises.
+  describe('deleteAllSceneContentForNovel', () => {
+    it('removes a project\'s scene content keys directly from storage, even when the caller\'s in-memory caches never knew about them', () => {
+      // Seed storage directly, the way a scene created/synced in a different
+      // tab (or an earlier session) would appear — never routed through
+      // splitScenesForStorage in *this* tab, so knownContentKeyIds/
+      // lastWrittenContentById (both empty here) never learned its id.
+      localStorage.setItem('nf_scenes', JSON.stringify([
+        { id: 'scene-1', novelId: 'novel-1', title: 'Chapter One' },
+        { id: 'scene-2', novelId: 'novel-1', title: 'Chapter Two' },
+        { id: 'scene-3', novelId: 'novel-2', title: 'Other project scene' },
+      ]))
+      localStorage.setItem(sceneContentKey('scene-1'), 'Novel 1 scene 1 prose.')
+      localStorage.setItem(sceneContentKey('scene-2'), 'Novel 1 scene 2 prose.')
+      localStorage.setItem(sceneContentKey('scene-3'), 'Novel 2 scene prose.')
+
+      const knownContentKeyIds = new Set() // deliberately empty — the bug this fix closes
+      const lastWrittenContentById = new Map()
+
+      const removed = deleteAllSceneContentForNovel('novel-1', { knownContentKeyIds, lastWrittenContentById })
+
+      expect(removed.sort()).toEqual(['scene-1', 'scene-2'])
+      expect(localStorage.getItem(sceneContentKey('scene-1'))).toBeNull()
+      expect(localStorage.getItem(sceneContentKey('scene-2'))).toBeNull()
+      // Another project's scene content must survive untouched.
+      expect(localStorage.getItem(sceneContentKey('scene-3'))).toBe('Novel 2 scene prose.')
+    })
+
+    it('also sweeps orphaned content keys with no living scene record in nf_scenes at all, regardless of project', () => {
+      // A key left behind by some earlier gap in cleanup — its scene no
+      // longer appears in nf_scenes under any project.
+      localStorage.setItem('nf_scenes', JSON.stringify([
+        { id: 'scene-1', novelId: 'novel-1', title: 'Still here' },
+      ]))
+      localStorage.setItem(sceneContentKey('scene-1'), 'Live content.')
+      localStorage.setItem(sceneContentKey('orphan-1'), 'Nobody references this scene any more.')
+
+      const removed = deleteAllSceneContentForNovel('novel-1', { knownContentKeyIds: new Set(), lastWrittenContentById: new Map() })
+
+      expect(removed.sort()).toEqual(['orphan-1', 'scene-1'])
+      expect(localStorage.getItem(sceneContentKey('orphan-1'))).toBeNull()
+      expect(localStorage.getItem(sceneContentKey('scene-1'))).toBeNull()
+    })
+
+    it('leaves other projects\' orphan-free content untouched and removes nothing when the project has no scenes', () => {
+      localStorage.setItem('nf_scenes', JSON.stringify([
+        { id: 'scene-9', novelId: 'novel-9', title: 'Untouched' },
+      ]))
+      localStorage.setItem(sceneContentKey('scene-9'), 'Should survive.')
+
+      const removed = deleteAllSceneContentForNovel('novel-empty', { knownContentKeyIds: new Set(), lastWrittenContentById: new Map() })
+
+      expect(removed).toEqual([])
+      expect(localStorage.getItem(sceneContentKey('scene-9'))).toBe('Should survive.')
+    })
+
+    it('purges removed ids from the caller-supplied caches so a later commit does not carry stale bookkeeping', () => {
+      localStorage.setItem('nf_scenes', JSON.stringify([{ id: 'scene-1', novelId: 'novel-1' }]))
+      localStorage.setItem(sceneContentKey('scene-1'), 'Content.')
+      const knownContentKeyIds = new Set(['scene-1'])
+      const lastWrittenContentById = new Map([['scene-1', 'Content.']])
+
+      deleteAllSceneContentForNovel('novel-1', { knownContentKeyIds, lastWrittenContentById })
+
+      expect(knownContentKeyIds.has('scene-1')).toBe(false)
+      expect(lastWrittenContentById.has('scene-1')).toBe(false)
+    })
+
+    it('is a no-op when nf_scenes is missing or corrupt, beyond sweeping any content keys it finds as orphans', () => {
+      localStorage.setItem(sceneContentKey('scene-x'), 'Unreachable metadata.')
+      // No 'nf_scenes' key at all.
+      const removed = deleteAllSceneContentForNovel('novel-1', { knownContentKeyIds: new Set(), lastWrittenContentById: new Map() })
+      expect(removed).toEqual(['scene-x'])
+      expect(localStorage.getItem(sceneContentKey('scene-x'))).toBeNull()
+    })
   })
 
   describe('hydrateScenesFromStorage', () => {

@@ -28,9 +28,10 @@
 // existing `save('nf_scenes', ...)`/`load('nf_scenes', ...)` pattern keeps
 // working unchanged as long as it goes through these first.
 
-import { readItem, writeItem, removeItem } from './projectStorage'
+import { readItem, writeItem, removeItem, listKeys } from './projectStorage'
 
 const CONTENT_KEY_PREFIX = 'nf_scene_content:'
+const SCENES_KEY = 'nf_scenes'
 
 export const sceneContentKey = (id) => `${CONTENT_KEY_PREFIX}${id}`
 
@@ -153,4 +154,88 @@ export function hydrateScenesFromStorage(metaScenes) {
     } catch { /* fall through with empty content rather than throw */ }
     return { ...scene, content }
   })
+}
+
+/**
+ * Removes every per-scene content key that belongs to a deleted project —
+ * written for audit finding #16 ("Project deletion can leave per-scene
+ * keys"). This is deliberately independent of any in-memory scene state
+ * (`scenesRef`/React `scenes`): the caller's project-deletion code path
+ * (`deleteNovel` in useStore.js) only knows which scenes to filter out of
+ * `nf_scenes` via *this tab's own current state*, which can miss a scene
+ * whose content key exists on disk but whose id never made it into this
+ * tab's tracking this session — a stale/orphan key that then survives the
+ * project "forever," even though the user believes the project is gone
+ * (storage, privacy, and later-resurrection risk, per the finding).
+ *
+ * Two independent passes, both reading storage directly rather than trusting
+ * memory:
+ *  1. **Project-scoped**: reads the persisted `nf_scenes` metadata blob
+ *     directly (not `scenesRef.current`) to find every scene id that
+ *     actually belongs to `novelId` on disk right now, and removes each
+ *     one's content key unconditionally — regardless of whether this tab's
+ *     `knownContentKeyIds` ever saw it. This is the authoritative "index"
+ *     the fix uses in place of an efficient per-project storage query: since
+ *     content keys carry no project id of their own (`nf_scene_content:<id>`
+ *     has no `novelId`), `nf_scenes` — which does — is the closest thing to
+ *     one already in the schema.
+ *  2. **Orphan sweep**: because per-scene content keys carry no project id,
+ *     a key left behind by an *earlier* gap in this same cleanup (before
+ *     this fix shipped) — i.e. a content key whose scene record is already
+ *     gone from `nf_scenes` entirely, under any project — can't be
+ *     attributed to `novelId` by the pass above. It has no living owner
+ *     anywhere, though, so it's always safe to remove on sight. Project
+ *     deletion is a natural, infrequent point to also run this sweep, using
+ *     `listKeys` (see projectStorage.js) to enumerate every
+ *     `nf_scene_content:*` key actually present in the backend rather than
+ *     only ones some in-memory cache already knows about.
+ *
+ * `caches` (optional) lets the caller's own per-tab `knownContentKeyIds`/
+ * `lastWrittenContentById` (see splitScenesForStorage's own doc comment)
+ * stay in sync with what this function removes, so a later commit in the
+ * same tab doesn't have stale bookkeeping for an id that no longer exists.
+ *
+ * Returns the full set of scene ids whose content key was removed (project
+ * ids first, then any orphan ids), so a caller that also needs to clean up
+ * a *different* per-scene store (e.g. scene version history, keyed by
+ * `sceneId` — see sceneVersions.js's `clearSceneVersionsForNovel`) doesn't
+ * have to re-derive the same id list.
+ */
+export function deleteAllSceneContentForNovel(novelId, caches = {}) {
+  const { knownContentKeyIds, lastWrittenContentById } = caches
+  let metadata = []
+  try {
+    const raw = readItem(SCENES_KEY)
+    const parsed = raw == null ? [] : JSON.parse(raw)
+    metadata = Array.isArray(parsed) ? parsed : []
+  } catch {
+    // Corrupted or unreadable `nf_scenes` — nothing more can be discovered
+    // from storage here; the orphan sweep below still runs (with an empty
+    // `liveIds`, so it degrades to "remove everything found," which is only
+    // reachable in this already-corrupt state).
+  }
+  const liveIds = new Set(metadata.map(s => s?.id).filter(id => id != null))
+  const projectIds = novelId == null
+    ? []
+    : metadata.filter(s => s && s.novelId === novelId).map(s => s.id).filter(id => id != null)
+
+  const removedIds = []
+  const removeContentKey = (id) => {
+    try { removeItem(sceneContentKey(id)) } catch { /* best effort */ }
+    knownContentKeyIds?.delete(id)
+    lastWrittenContentById?.delete(id)
+    removedIds.push(id)
+  }
+
+  projectIds.forEach(removeContentKey)
+
+  // Orphan sweep — see doc comment above. Runs after the project-scoped pass
+  // so its own now-removed keys no longer appear in `listKeys`'s result.
+  listKeys(CONTENT_KEY_PREFIX).forEach(key => {
+    const id = key.slice(CONTENT_KEY_PREFIX.length)
+    if (liveIds.has(id)) return // still belongs to a live scene in some project
+    removeContentKey(id)
+  })
+
+  return removedIds
 }

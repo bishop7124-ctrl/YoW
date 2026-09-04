@@ -55,3 +55,31 @@ export function deleteSceneVersion(versionId) {
   const all = load()
   save(all.filter(v => v.id !== versionId))
 }
+
+/**
+ * Removes every saved version snapshot belonging to a deleted project —
+ * the version-history half of audit finding #16 ("Project deletion can
+ * leave per-scene keys"): all scene versions live in one flat blob under
+ * `nf_scene_versions` rather than per-scene keys, but that blob was never
+ * filtered on project delete at all, so every version of every scene in a
+ * deleted project stayed on disk indefinitely.
+ *
+ * Matches primarily on each version's own `novelId` (set at save time —
+ * see `saveSceneVersion` above). `sceneIds` is an optional fallback set
+ * (the caller — `deleteNovel` in useStore.js — already has it from
+ * `deleteAllSceneContentForNovel`'s return value) for the rare version
+ * record saved before `novelId` existed on the scene it snapshotted, or
+ * where the scene itself never carried one: those records have
+ * `novelId: null`, so `novelId` alone can't identify them, but their
+ * `sceneId` still can.
+ */
+export function clearSceneVersionsForNovel(novelId, sceneIds = []) {
+  if (novelId == null) return
+  const sceneIdSet = new Set(sceneIds)
+  const all = load()
+  save(all.filter(v => {
+    if (v.novelId === novelId) return false
+    if (v.novelId == null && sceneIdSet.has(v.sceneId)) return false
+    return true
+  }))
+}

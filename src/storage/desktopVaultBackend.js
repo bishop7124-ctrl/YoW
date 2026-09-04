@@ -70,6 +70,10 @@ export function createDesktopVaultBackend({
     },
     flush: () => queue,
     snapshot: () => Object.fromEntries(mirror),
+    // Full key enumeration (see projectStorage.js's listKeys) — the mirror
+    // already holds every key hydrated from the vault at startup (`vault_read_all`),
+    // so this is just reading it out, not a new query.
+    keys: () => Array.from(mirror.keys()),
     getDurabilityState: () => ({ pending: pendingCount, lastError }),
   }
 }
