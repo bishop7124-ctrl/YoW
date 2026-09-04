@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
+import { streamMessage, buildSystemPrompt, PROVIDERS, getHistoryContextEntries } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, createAiChatDocxBlob, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
@@ -135,8 +135,15 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
   const clearAll  = (field)      => setCtx(prev => ({ ...prev, [field]: [] }))
 
   const {
-    characters = [], locations = [], loreEntries = [], worldHistory = [], chapters = [], acts = [], ideaEntries = [],
+    characters = [], locations = [], loreEntries = [], chapters = [], acts = [], ideaEntries = [],
+    timeline: rawTimeline = [], worldHistory: rawWorldHistory = [],
   } = store
+  // See getHistoryContextEntries in aiApi.js for why "History" context reads
+  // both store.timeline and store.worldHistory rather than either alone.
+  const worldHistory = useMemo(
+    () => getHistoryContextEntries({ timeline: rawTimeline, worldHistory: rawWorldHistory }),
+    [rawTimeline, rawWorldHistory]
+  )
 
   const allContextIds = useMemo(() => ({
     characterIds: characters.map(c => c.id),
@@ -177,7 +184,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
   const historyByEra = useMemo(() => {
     const map = {}
     worldHistory.forEach(entry => {
-      const era = entry.era || entry.dateRange || 'Unassigned'
+      const era = entry.era || entry.dateRange || entry.date || 'Unassigned'
       if (!map[era]) map[era] = []
       map[era].push(entry)
     })
@@ -281,7 +288,7 @@ function ContextSelector({ store, onStart, onCancel, initialContext, initialAgen
                   <CheckItem
                     key={entry.id}
                     label={entry.title}
-                    sub={entry.startYear || entry.endYear ? [entry.startYear, entry.endYear].filter(Boolean).join(' - ') : entry.dateRange}
+                    sub={entry.startYear || entry.endYear ? [entry.startYear, entry.endYear].filter(Boolean).join(' - ') : (entry.dateRange || entry.date)}
                     checked={ctx.worldHistoryIds.includes(entry.id)}
                     onChange={() => toggle('worldHistoryIds', entry.id)}
                   />

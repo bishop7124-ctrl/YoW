@@ -246,6 +246,29 @@ export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, 
   onError(`Unknown provider: ${provider}`)
 }
 
+// "History" context combines `store.timeline` — what the World History and
+// Timeline workspace pages actually write new entries into via `addEvent`
+// (both call it with `{ createHistory: false }`) — with any `store.worldHistory`
+// entries that never got a linked timeline event. That second group isn't
+// just migrated/imported legacy data: the World History page's own inline AI
+// bar ("Add a historical entry…", AIAssistant.jsx's `createType: 'history'`)
+// and AI-generated/imported world-history content (AIImportModal.jsx's
+// `populateProject`/`populateYowProject`) both call `store.addHistoryEntry`
+// directly, which writes only to `worldHistory` and creates no timeline
+// counterpart. Reading `store.timeline` alone would make those entries
+// silently invisible to AI chat context. Entries already linked to a timeline
+// event (`h.timelineEventId`, or referenced by a timeline entry's
+// `worldHistoryEntryId`) are skipped here since the linked timeline entry
+// already represents them — this mirrors the orphan-migration logic in
+// useStore.js's `importData`. See the 2026-09-04 Bugs-table row.
+export function getHistoryContextEntries(store) {
+  const timelineEntries = store.timeline || []
+  const worldHistoryEntries = store.worldHistory || []
+  const linkedHistoryIds = new Set(timelineEntries.map(e => e.worldHistoryEntryId).filter(Boolean))
+  const orphanHistory = worldHistoryEntries.filter(h => !h.timelineEventId && !linkedHistoryIds.has(h.id))
+  return [...timelineEntries, ...orphanHistory]
+}
+
 export function buildSystemPrompt(novel, context, store, agentDirective) {
   const lines = [
     'You are a creative writing assistant embedded in Your Own World.',
@@ -292,14 +315,14 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
   }
 
   if (worldHistoryIds?.length) {
-    const history = (store.worldHistory || []).filter(entry => worldHistoryIds.includes(entry.id))
+    const history = getHistoryContextEntries(store).filter(entry => worldHistoryIds.includes(entry.id))
     if (history.length) {
       lines.push('\n--- HISTORY ---')
       history.forEach(entry => {
         lines.push(`\n${entry.title}`)
         if (entry.era) lines.push(`Era: ${entry.era}`)
         if (entry.startYear || entry.endYear) lines.push(`Years: ${[entry.startYear, entry.endYear].filter(Boolean).join(' - ')}`)
-        if (entry.dateRange) lines.push(`Date range: ${entry.dateRange}`)
+        if (entry.dateRange || entry.date) lines.push(`Date: ${entry.dateRange || entry.date}`)
         if (entry.content) lines.push(entry.content)
       })
     }
