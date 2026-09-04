@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
+import {
+  populateProject, populateYowProject, populateProjectIntoExisting, populateYowProjectIntoExisting,
+  relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter,
+} from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 function mockStore() {
@@ -45,6 +48,137 @@ function mockStore() {
     addScheduleEvent: () => {},
     addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
     updateWhiteboard: (board) => { calls.whiteboards.push(board) },
+  }
+}
+
+// Fuller store double for the "import into existing project" path: unlike
+// mockStore() above (which only ever creates), this one holds a seeded
+// destination project's existing records and supports the update/delete
+// calls duplicate resolution and rollback rely on. All mutations are
+// immutable (replace the array, never mutate in place) — matching the real
+// store's commitLocal/setState pattern, which matters here because
+// populate*IntoExisting reads store.X once per category into a local
+// `existing` snapshot and must not see its own writes mid-loop.
+function mockMergeStore(seed = {}) {
+  let n = 0
+  const nid = (p) => `${p}-${++n}`
+  const state = {
+    characters: [...(seed.characters || [])],
+    locations: [...(seed.locations || [])],
+    factions: [...(seed.factions || [])],
+    loreEntries: [...(seed.loreEntries || [])],
+    worldHistory: [...(seed.worldHistory || [])],
+    timeline: [...(seed.timeline || [])],
+    ideaEntries: [...(seed.ideaEntries || [])],
+    storySchedule: [...(seed.storySchedule || [])],
+    maps: [...(seed.maps || [])],
+    acts: [], chapters: [], scenes: [],
+    comicPages: [...(seed.comicPages || [])],
+    comicPanels: [...(seed.comicPanels || [])],
+    rpgCharacters: [...(seed.rpgCharacters || [])],
+    eras: [...(seed.eras || [])],
+  }
+  const upsert = (key, id, patch) => { state[key] = state[key].map(x => x.id === id ? { ...x, ...patch } : x) }
+  const remove = (key, id) => { state[key] = state[key].filter(x => x.id !== id) }
+  const add = (key, record) => { state[key] = [...state[key], record] }
+
+  return {
+    _state: state,
+    activeNovelId: 'dest-novel',
+    setActiveNovelId: () => {},
+    get characters() { return state.characters },
+    get locations() { return state.locations },
+    get factions() { return state.factions },
+    get loreEntries() { return state.loreEntries },
+    get worldHistory() { return state.worldHistory },
+    get timeline() { return state.timeline },
+    get ideaEntries() { return state.ideaEntries },
+    get storySchedule() { return state.storySchedule },
+    get mapProject() { return { maps: state.maps } },
+    // Not read by populate*IntoExisting itself (comic pages/panels, RPG
+    // characters, acts/chapters/scenes, eras, and maps are always-create or
+    // written via mapProject) — exposed here purely for test assertions.
+    get maps() { return state.maps },
+    get acts() { return state.acts },
+    get chapters() { return state.chapters },
+    get scenes() { return state.scenes },
+    get comicPages() { return state.comicPages },
+    get comicPanels() { return state.comicPanels },
+    get rpgCharacters() { return state.rpgCharacters },
+    get eras() { return state.eras },
+
+    saveCharacter: (data, id) => {
+      if (id) { upsert('characters', id, data); return id }
+      const newId = nid('char'); add('characters', { id: newId, ...data }); return newId
+    },
+    deleteCharacter: (id) => remove('characters', id),
+
+    addLocation: (data) => { const rec = { id: nid('loc'), ...data }; add('locations', rec); return rec },
+    saveLocation: (data, id) => { upsert('locations', id, data); return { id, ...data } },
+    deleteLocation: (id) => remove('locations', id),
+
+    setFactions: (updater) => { state.factions = updater(state.factions) },
+
+    addLoreEntry: (data) => { const rec = { id: nid('lore'), ...data }; add('loreEntries', rec); return rec },
+    updateLoreEntry: (id, data) => upsert('loreEntries', id, data),
+    deleteLoreEntry: (id) => remove('loreEntries', id),
+
+    addHistoryEntry: (data) => { const rec = { id: nid('hist'), ...data }; add('worldHistory', rec); return rec },
+    updateHistoryEntry: (id, data) => upsert('worldHistory', id, data),
+    deleteHistoryEntry: (id) => remove('worldHistory', id),
+
+    addEvent: (data) => {
+      // Mirrors the real store: the input key is `linkedHistoryEntryId`, but
+      // the field persisted on the record is `worldHistoryEntryId`.
+      const { linkedHistoryEntryId, ...rest } = data
+      const historyId = linkedHistoryEntryId ?? data.worldHistoryEntryId ?? null
+      const rec = { id: nid('event'), ...rest, worldHistoryEntryId: historyId }
+      add('timeline', rec)
+      if (historyId) upsert('worldHistory', historyId, { timelineEventId: rec.id })
+      return rec
+    },
+    updateEvent: (id, data) => upsert('timeline', id, data),
+    deleteEvent: (id) => remove('timeline', id),
+
+    addIdeaEntry: (data) => { const rec = { id: nid('idea'), ...data }; add('ideaEntries', rec); return rec },
+    updateIdeaEntry: (id, data) => upsert('ideaEntries', id, data),
+    deleteIdeaEntry: (id) => remove('ideaEntries', id),
+
+    addScheduleEvent: (data) => { const rec = { id: nid('sched'), ...data }; add('storySchedule', rec); return rec },
+    updateScheduleEvent: (id, data) => upsert('storySchedule', id, data),
+    deleteScheduleEvent: (id) => remove('storySchedule', id),
+
+    addMap: (name, mapType) => { const id = nid('map'); add('maps', { id, name, mapType, mapPins: [], mapObjects: [] }); return id },
+    updateMapData: (mapId, updater) => {
+      const map = state.maps.find(m => m.id === mapId)
+      if (!map) return
+      upsert('maps', mapId, updater(map) || {})
+    },
+    deleteMap: (id) => remove('maps', id),
+
+    addEra: (data) => { const rec = { id: nid('era'), ...data }; add('eras', rec); return rec },
+    deleteEra: (id) => remove('eras', id),
+
+    addAct: (title) => { const rec = { id: nid('act'), title }; add('acts', rec); return rec },
+    updateAct: (id, data) => upsert('acts', id, data),
+    deleteAct: (id) => {
+      const chapIds = state.chapters.filter(c => c.actId === id).map(c => c.id)
+      remove('acts', id)
+      state.chapters = state.chapters.filter(c => c.actId !== id)
+      state.scenes = state.scenes.filter(s => !chapIds.includes(s.chapterId))
+    },
+    addChapter: (actId, title) => { const rec = { id: nid('chap'), actId, title }; add('chapters', rec); return rec },
+    updateChapter: (id, data) => upsert('chapters', id, data),
+    addScene: (chapterId, title) => { const rec = { id: nid('scene'), chapterId, title }; add('scenes', rec); return rec },
+    updateScene: (id, data) => upsert('scenes', id, data),
+
+    addComicPage: (issueId, data) => { const rec = { id: nid('page'), issueId, ...data }; add('comicPages', rec); return rec },
+    deleteComicPage: (id) => remove('comicPages', id),
+    addComicPanel: (pageId, data) => { const rec = { id: nid('panel'), pageId, ...data }; add('comicPanels', rec); return rec },
+    deleteComicPanel: (id) => remove('comicPanels', id),
+
+    saveRpgCharacter: (data) => { const id = nid('rpg'); add('rpgCharacters', { id, ...data }); return id },
+    deleteRpgCharacter: (id) => remove('rpgCharacters', id),
   }
 }
 
@@ -198,6 +332,191 @@ describe('populateYowProject', () => {
     expect(store.calls.rpgCharacters).toHaveLength(1)
     expect(store.calls.rpgCharacters[0].name).toBe('Thorn')
     expect(store.calls.rpgCharacters[0]).not.toHaveProperty('novelId')
+  })
+})
+
+// ── Import into an existing project ───────────────────────────────────────────
+
+describe('populateProjectIntoExisting', () => {
+  it('creates brand-new records that have no name match in the destination', () => {
+    const store = mockMergeStore({ characters: [{ id: 'd1', name: 'Someone Else' }] })
+    const summary = populateProjectIntoExisting(store, { characters: [{ name: 'Mika', role: 'Protagonist' }] }, { characters: true }, 'novel', {})
+    expect(store.characters).toHaveLength(2)
+    expect(store.characters.some(c => c.name === 'Mika')).toBe(true)
+    expect(summary).toEqual({ new: 1, skipped: 0, merged: 0, replaced: 0 })
+  })
+
+  it('defaults duplicates to Skip — the existing record is left completely untouched', () => {
+    const store = mockMergeStore({ characters: [{ id: 'd1', name: 'Mika', bio: 'Original bio', role: 'Antagonist' }] })
+    const summary = populateProjectIntoExisting(store, { characters: [{ name: 'Mika', bio: 'Imported bio', role: 'Protagonist' }] }, { characters: true }, 'novel', {})
+    expect(store.characters).toHaveLength(1)
+    expect(store.characters[0]).toEqual({ id: 'd1', name: 'Mika', bio: 'Original bio', role: 'Antagonist' })
+    expect(summary).toEqual({ new: 0, skipped: 1, merged: 0, replaced: 0 })
+  })
+
+  it('Merge fills only empty fields on the destination record, never overwriting a populated one', () => {
+    const store = mockMergeStore({ characters: [{ id: 'd1', name: 'Mika', bio: '', role: 'Antagonist' }] })
+    const summary = populateProjectIntoExisting(
+      store,
+      { characters: [{ name: 'Mika', bio: 'Imported bio', role: 'Protagonist' }] },
+      { characters: true }, 'novel', { characters: 'merge' },
+    )
+    const merged = store.characters.find(c => c.id === 'd1')
+    expect(merged.bio).toBe('Imported bio') // was empty — filled in
+    expect(merged.role).toBe('Antagonist')  // was already populated — untouched
+    expect(summary).toEqual({ new: 0, skipped: 0, merged: 1, replaced: 0 })
+  })
+
+  it('Replace overwrites the destination record\'s fields from the imported one', () => {
+    const store = mockMergeStore({ locations: [{ id: 'd1', name: 'Old Port', category: 'City', description: 'stale' }] })
+    const summary = populateProjectIntoExisting(
+      store,
+      { locations: [{ name: 'Old Port', category: 'Ruins', description: 'fresh' }] },
+      { locations: true }, 'novel', { locations: 'replace' },
+    )
+    const replaced = store.locations.find(l => l.id === 'd1')
+    expect(replaced.category).toBe('Ruins')
+    expect(replaced.description).toBe('fresh')
+    expect(summary).toEqual({ new: 0, skipped: 0, merged: 0, replaced: 1 })
+  })
+
+  it('Create separate imports a same-named record as a brand-new one instead of resolving the match', () => {
+    const store = mockMergeStore({ factions: [{ id: 'd1', name: 'The Guild' }] })
+    const summary = populateProjectIntoExisting(
+      store,
+      { factions: [{ name: 'The Guild', description: 'A second, distinct guild' }] },
+      { factions: true }, 'novel', { factions: 'createSeparate' },
+    )
+    expect(store.factions).toHaveLength(2)
+    expect(summary).toEqual({ new: 1, skipped: 0, merged: 0, replaced: 0 })
+  })
+
+  it('rolls back every write and leaves the destination project exactly as found when a write throws', () => {
+    const seedCharacters = [{ id: 'd1', name: 'Mika', bio: '' }]
+    const seedLocations = [{ id: 'd2', name: 'Old Port' }]
+    const store = mockMergeStore({ characters: seedCharacters, locations: seedLocations })
+    // Simulate a failure partway through: locations succeed, then the second
+    // character write throws.
+    let charWrites = 0
+    const realSaveCharacter = store.saveCharacter
+    store.saveCharacter = (data, id) => {
+      charWrites++
+      if (charWrites === 2) throw new Error('simulated failure')
+      return realSaveCharacter(data, id)
+    }
+    const data = {
+      locations: [{ name: 'New Harbor' }],
+      characters: [{ name: 'New Character 1' }, { name: 'New Character 2' }],
+    }
+    expect(() => populateProjectIntoExisting(store, data, { locations: true, characters: true }, 'novel', {})).toThrow('simulated failure')
+    // Everything this import touched — including the location write that
+    // succeeded before the character write failed — must be rolled back.
+    expect(store.locations).toEqual(seedLocations)
+    expect(store.characters).toEqual(seedCharacters)
+  })
+
+  it('rolls back a Merge/Replace to the exact pre-import record, not just the touched fields', () => {
+    const store = mockMergeStore({ characters: [{ id: 'd1', name: 'Mika', bio: '', role: 'Antagonist' }] })
+    const original = { ...store.characters[0] }
+    const realSaveCharacter = store.saveCharacter
+    let writes = 0
+    store.saveCharacter = (data, id) => {
+      writes++
+      // The merge write (writes === 1) is allowed to land; the second write
+      // (creating "Someone New") fails outright — a real failed write never
+      // partially applies, so throw before delegating, not after.
+      if (writes === 2) throw new Error('simulated failure')
+      return realSaveCharacter(data, id)
+    }
+    const data = { characters: [{ name: 'Mika', bio: 'filled in' }, { name: 'Someone New' }] }
+    expect(() => populateProjectIntoExisting(store, data, { characters: true }, 'novel', { characters: 'merge' })).toThrow()
+    expect(store.characters).toEqual([original])
+  })
+})
+
+describe('populateYowProjectIntoExisting', () => {
+  it('remaps relationships through a Skip-resolved duplicate to the existing destination record\'s id', () => {
+    const store = mockMergeStore({ characters: [{ id: 'existing-mika', name: 'Mika', bio: 'Already here', parentIds: [] }] })
+    const data = {
+      characters: [
+        { id: 'old-mika', name: 'Mika', bio: 'Imported bio (should be ignored)' },
+        { id: 'old-child', name: 'Kip', parentIds: ['old-mika'] },
+      ],
+    }
+    populateYowProjectIntoExisting(store, data, { characters: true }, { characters: 'skip' })
+    // Mika (skip-resolved) must be left completely untouched...
+    const mika = store.characters.find(c => c.id === 'existing-mika')
+    expect(mika.bio).toBe('Already here')
+    // ...but Kip's parentIds must resolve to Mika's *existing* id, not a new one.
+    const kip = store.characters.find(c => c.name === 'Kip')
+    expect(kip.parentIds).toEqual(['existing-mika'])
+    expect(store.characters).toHaveLength(2) // no duplicate Mika created
+  })
+
+  it('a brand-new timeline event auto-links back to a Skip-resolved existing world-history entry', () => {
+    const store = mockMergeStore({
+      worldHistory: [{ id: 'existing-hist', title: 'The Founding', content: 'Original content' }],
+    })
+    const data = {
+      worldHistory: [{ id: 'old-hist', title: 'The Founding', content: 'Imported content (ignored)' }],
+      timeline: [{ id: 'old-event', title: 'The Founding Ceremony', worldHistoryEntryId: 'old-hist' }],
+    }
+    populateYowProjectIntoExisting(store, data, { worldHistory: true, timeline: true }, { worldHistory: 'skip' })
+    expect(store.worldHistory).toHaveLength(1)
+    expect(store.worldHistory[0].content).toBe('Original content') // untouched content
+    const event = store.timeline.find(e => e.title === 'The Founding Ceremony')
+    expect(event.worldHistoryEntryId).toBe('existing-hist')
+    // The back-reference this creates on the history entry must roll back too.
+    expect(store.worldHistory[0].timelineEventId).toBe(event.id)
+  })
+
+  it('Merge fills only empty fields on a matched map, never overwriting populated ones', () => {
+    const store = mockMergeStore({ maps: [{ id: 'd1', name: 'Continent', mapType: 'region', mapPins: [{ id: 'p-old' }], notes: '' }] })
+    const data = { maps: [{ id: 'old-map', name: 'Continent', mapType: 'region', mapPins: [{ id: 'p-new' }], notes: 'fresh notes' }] }
+    populateYowProjectIntoExisting(store, data, { maps: true }, { maps: 'merge' })
+    const merged = store.maps.find(m => m.id === 'd1')
+    expect(merged.mapPins).toEqual([{ id: 'p-old' }]) // already populated — untouched
+    expect(merged.notes).toBe('fresh notes')          // was empty — filled in
+  })
+
+  it('rolls back every category it touched — including comic pages/panels and eras — on a simulated failure', () => {
+    const store = mockMergeStore({
+      characters: [{ id: 'd1', name: 'Mika' }],
+      locations: [{ id: 'd2', name: 'Old Port' }],
+    })
+    const charSnapshot = [...store.characters]
+    const locSnapshot = [...store.locations]
+    let mapCalls = 0
+    const realAddMap = store.addMap
+    store.addMap = (...args) => {
+      mapCalls++
+      if (mapCalls === 1) throw new Error('simulated failure')
+      return realAddMap(...args)
+    }
+    const data = {
+      characters: [{ id: 'old-char', name: 'New Character' }],
+      locations: [{ id: 'old-loc', name: 'New Harbor' }],
+      maps: [{ id: 'old-map', name: 'World Map', mapType: 'world' }],
+    }
+    expect(() => populateYowProjectIntoExisting(store, data, { characters: true, locations: true, maps: true }, {})).toThrow('simulated failure')
+    expect(store.characters).toEqual(charSnapshot)
+    expect(store.locations).toEqual(locSnapshot)
+    expect(store.maps).toEqual([])
+  })
+
+  it('leaves comic pages/panels and RPG characters as always-create-separate (no resolution policy applied)', () => {
+    const store = mockMergeStore({})
+    const data = {
+      acts: [{ id: 'old-act', title: 'Volume 1', order: 0 }],
+      chapters: [{ id: 'old-chap', actId: 'old-act', title: 'Issue 1', order: 0 }],
+      scenes: [],
+      comicPages: [{ id: 'old-page', issueId: 'old-chap', order: 0, title: 'Page 1' }],
+      rpgCharacters: [{ id: 'old-rpg', name: 'Thorn', class: 'Ranger' }],
+    }
+    const summary = populateYowProjectIntoExisting(store, data, { acts: true, rpgCharacters: true }, {})
+    expect(store.comicPages).toHaveLength(1)
+    expect(store.rpgCharacters).toHaveLength(1)
+    expect(summary.new).toBeGreaterThan(0)
   })
 })
 
