@@ -84,6 +84,10 @@ export function createIndexedDbBackend({
     applyExternalRemove: key => { mirror.delete(key) },
     flush: () => queue,
     snapshot: () => Object.fromEntries(mirror),
+    // Full key enumeration (see projectStorage.js's listKeys) — the mirror
+    // already holds every key hydrated from IndexedDB at startup, so this is
+    // just reading it out, not a new query.
+    keys: () => Array.from(mirror.keys()),
     getDurabilityState: () => ({ pending: pendingCount, lastError }),
   }
 }
