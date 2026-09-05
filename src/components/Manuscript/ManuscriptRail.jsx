@@ -626,6 +626,21 @@ export default function ManuscriptRail({
               type="button"
               className="ms-rail-f-btn"
               onClick={() => {
+                const lastAct = sortedActs[sortedActs.length - 1]
+                const lastChap = lastAct
+                  ? chapters.filter(c => c.actId === lastAct.id).sort((a, b) => a.order - b.order).slice(-1)[0]
+                  : null
+                if (lastChap) handleAddScene(lastChap.id)
+              }}
+              disabled={chapters.length === 0}
+              title={chapters.length === 0 ? `Add a ${labels.level2.toLowerCase()} first` : `Add a ${labels.level3.toLowerCase()} to the end of the manuscript`}
+            >
+              + {labels.level3}
+            </button>
+            <button
+              type="button"
+              className="ms-rail-f-btn"
+              onClick={() => {
                 const act = sortedActs[sortedActs.length - 1]
                 if (act) handleAddChapter(act.id)
               }}
