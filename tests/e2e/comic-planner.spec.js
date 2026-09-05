@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -100,25 +100,28 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
     return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]').length >= 1
   })
 
-  // Fill in dialogue
+  // A panel's dialogue textarea (placeholder "Dialogue text…",
+  // ComicPlanner.jsx's DialogueLine) only renders once a dialogue line has
+  // been added to the panel via the "+ balloon" button — a fresh panel
+  // starts with zero dialogue lines, so there's nothing to fill in yet.
+  await page.getByRole('button', { name: '+ balloon' }).first().click()
   const dialogueField = page.getByPlaceholder(/dialogue|speech|balloon/i).first()
-  if (!(await dialogueField.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
+  await expect(dialogueField).toBeVisible({ timeout: 3000 })
 
   const dialogueText = `Panel dialogue ${Date.now()}`
   await dialogueField.fill(dialogueText)
 
-  await waitForStorage(page, () => {
+  await waitForStorage(page, (needle) => {
     const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.some(p =>
-      (p.dialogue || []).some(d => (d.text || d).includes(dialogueText.slice(0, 15)))
-      || (p.dialogueText || '').includes(dialogueText.slice(0, 15)),
+      (p.dialogue || []).some(d => (d.text || d).includes(needle))
+      || (p.dialogueText || '').includes(needle),
     )
-  })
+  }, dialogueText.slice(0, 15))
 
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await waitForStorageHydration(page)
   const panels = await readStorage(page, 'nf_comicPanels')
   expect(panels.some(p =>
     JSON.stringify(p).includes(dialogueText.slice(0, 15)),
@@ -162,13 +165,14 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   const pagesBefore = await readStorage(page, 'nf_comicPages')
   const pageId = pagesBefore[0]?.id
 
-  // Open page then delete
+  // Open page then delete. The button's own text is just "Delete"
+  // (PageEditor's `cp-danger` button in ComicPlanner.jsx) with a "Delete
+  // page" `title` attribute for disambiguation — getByTitle targets that
+  // directly rather than relying on the accessible name, which is "Delete"
+  // (its text content wins over `title` when both are present).
   await page.locator('.cp-page-row').first().click()
-  const deletePageBtn = page.getByRole('button', { name: /Delete page|Remove page/i }).first()
-  if (!(await deletePageBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
+  const deletePageBtn = page.getByTitle('Delete page').first()
+  await expect(deletePageBtn).toBeVisible({ timeout: 3000 })
 
   await deletePageBtn.click()
   const confirmBtn = page.getByRole('button', { name: /Confirm|Yes|Delete/i }).first()

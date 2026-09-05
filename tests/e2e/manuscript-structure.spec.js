@@ -16,12 +16,12 @@ test.beforeEach(async ({ page }) => {
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
   // StructureSidebar (`.ms-sidebar-*`) was replaced by ManuscriptRail in the
-  // 2026-08-27 redesign. Its footer "+ Scene" button (`.ms-rail-f-btn`) adds
-  // to the end of the manuscript regardless of which chapter is selected —
-  // scoped to that class since "+ Scene" text alone also matches the
-  // per-chapter inline row button and the empty-manuscript "add first
-  // scene" CTA (`.manuscript-add-scene`).
-  await page.locator('.ms-rail-f-btn', { hasText: '+ Scene' }).click()
+  // 2026-08-27 redesign, and its footer no longer has a rail-level "+ Scene"
+  // button at all (`.ms-rail-f-btn` today only adds a Chapter or an Act —
+  // see ManuscriptRail.jsx's `.ms-rail-f` block). Scenes are now added via
+  // the per-chapter inline row button (`.ms-rail-add-scene button`,
+  // rendered once per chapter under its scene list).
+  await page.locator('.ms-rail-add-scene button').first().click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
@@ -119,16 +119,23 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
-  // Scene status badge is clickable in the scene meta bar
-  const statusBtn = page.locator('.scene-status, [data-status]').first()
-  if (!(await statusBtn.isVisible().catch(() => false))) {
-    test.skip() // status control not visible in this layout, skip gracefully
-    return
-  }
+  // Status is no longer an inline scene-meta-bar badge — the 2026-08-27
+  // manuscript-editor-redesign moved it into the right-hand Inspector's
+  // "Scene" tab as a row of plain option buttons (`.ms-opt`, one per
+  // SCENE_STATUSES entry in manuscriptUtils.js), with the active one
+  // carrying `is-on`. Select the scene first so the Inspector has something
+  // to show (same pattern as the "rename a scene" test above).
+  await page.locator('.ms-preview').first().click()
 
-  const before = await statusBtn.textContent()
-  await statusBtn.click()
-  const after = await statusBtn.textContent()
+  const statusRow = page.locator('.ms-insp-row').first()
+  await expect(statusRow).toBeVisible()
+  const before = await statusRow.locator('.ms-opt.is-on').first().textContent()
+  // Click the next status in the cycle (not currently active) rather than
+  // assuming a fixed index, so this doesn't depend on the scene's starting status.
+  const nextOption = statusRow.locator('.ms-opt:not(.is-on)').first()
+  const after = await nextOption.textContent()
+  await nextOption.click()
+  await expect(statusRow.locator('.ms-opt.is-on')).toHaveText(after)
   expect(after).not.toBe(before)
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
@@ -139,10 +146,15 @@ test('scene status cycles and persists', async ({ page }) => {
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
 })
 
-// ─── Finalize draft ───────────────────────────────────────────────────────────
+// ─── Finalised mode ───────────────────────────────────────────────────────────
 
 test('finalized draft can be created and viewed', async ({ page }) => {
-  // Write some content first
+  // The 2026-08-27 manuscript-editor-redesign replaced the old one-off
+  // "Finalize draft" action button with a persistent "Finalised" mode
+  // alongside Write/Edit in the topbar's mode switcher (ManuscriptTopbar.jsx
+  // MODES, `[role=group][aria-label="Editor mode"]`) — a live read view of
+  // the current manuscript, not a saved snapshot. Write some content first
+  // so there's something to see in that read view.
   const placeholder = page.getByText('Begin writing here…')
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
   await page.getByPlaceholder('Begin writing here…').fill('Draft content for finalization.')
@@ -157,20 +169,11 @@ test('finalized draft can be created and viewed', async ({ page }) => {
     return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
-  // Look for Finalize / Final Draft button
-  const finalizeBtn = page
-    .getByRole('button', { name: /Final(ize|ised)? draft|Create final|Compile/i })
-    .first()
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Finalised' }).click()
 
-  if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
-
-  await finalizeBtn.click()
-
-  // The finalized reader or success state should appear
-  await expect(
-    page.locator('.finalized-reader, .final-draft, [data-finalized]').first(),
-  ).toBeVisible({ timeout: 8000 })
+  // Finalised mode shows its own Manuscript/Book sub-view switcher
+  // (`[aria-label="Finalised view"]`) and, in Manuscript sub-view, the
+  // written content in a read-only surface.
+  await expect(page.getByRole('group', { name: 'Finalised view' })).toBeVisible({ timeout: 8000 })
+  await expect(page.getByText('Draft content for finalization.')).toBeVisible()
 })
