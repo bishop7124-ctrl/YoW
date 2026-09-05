@@ -1112,6 +1112,23 @@ describe('characters/locations reference stability', () => {
     expect(result.current.characters).not.toBe(charactersBefore)
     expect(result.current.characters).toHaveLength(2)
   })
+
+  // Manuscript.jsx's entityMap useMemo also depends on `loreEntries`/`worldHistory`/
+  // `timeline` (not just characters/locations) — these went through the exact same
+  // unmemoized seriesScope()-in-`api` pattern, so entityMap could still churn on every
+  // render via this path even after characters/locations were fixed on their own.
+  it('keeps the same loreEntries array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.addLoreEntry({ title: 'The Old Wars' }) })
+
+    const loreEntriesBefore = result.current.loreEntries
+
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.loreEntries).toBe(loreEntriesBefore)
+  })
 })
 
 describe('lore CRUD', () => {

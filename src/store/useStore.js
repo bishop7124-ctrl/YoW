@@ -1791,10 +1791,28 @@ export function useStore(userId = null, options = {}) {
   // so the app can warn about them and offer a restore/discard path instead.
   const novelScenes = scenes.filter(s => s.novelId === activeNovelId && !s.conflictOf).sort((a, b) => a.order - b.order)
   const novelSceneConflicts = scenes.filter(s => s.novelId === activeNovelId && s.conflictOf).sort((a, b) => (b.conflictCreatedAt || 0) - (a.conflictCreatedAt || 0))
-  const novelTimeline = seriesScope(timeline, 'timeline')
-  const novelWorldHistory = seriesScope(worldHistory, 'worldhistory')
+  // Memoized for the same reason scopedCharacters/scopedLocations are above:
+  // Manuscript.jsx's `entityMap` useMemo (the one this file's "Typing lag" ROADMAP
+  // row is about) depends on `loreEntries`/`worldHistory`/`timeline` in addition to
+  // `characters`/`locations` — an unmemoized seriesScope() call here would still
+  // leave entityMap churning on every render even after characters/locations were
+  // fixed, just via a different set of props feeding the exact same memo.
+  const novelTimeline = useMemo(
+    () => seriesScope(timeline, 'timeline'),
+    [timeline, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const novelWorldHistory = useMemo(
+    () => seriesScope(worldHistory, 'worldhistory'),
+    [worldHistory, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const novelLoreEntries = useMemo(
+    () => seriesScope(loreEntries, 'lore'),
+    [loreEntries, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  // factions/ideaEntries don't currently feed any memo comparator the way the three
+  // above (and characters/locations) do, so they're deliberately left unmemoized here
+  // — same scope decision as novelFactions/novelIdeaEntries noted in ROADMAP.md.
   const novelFactions = seriesScope(factions, 'factions')
-  const novelLoreEntries = seriesScope(loreEntries, 'lore')
   const novelIdeaEntries = seriesScope(ideaEntries, 'ideas')
   const novelStorySchedule = storySchedule.filter(e => e.novelId === activeNovelId)
   const novelMaps = maps.filter(m => m.novelId === activeNovelId)
