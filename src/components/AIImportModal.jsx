@@ -963,6 +963,21 @@ export function isNewProjectImport(pendingImport) {
   return pendingImport?.isNewProject !== false
 }
 
+// A brand-new project always seeds one starter Act/Chapter/Scene
+// ("Act 1" > "Chapter 1" > "Opening Scene" or the project type's equivalent
+// labels) via store.addNovel/buildStarterStructure, so the workspace never
+// opens completely empty. When that new project is the destination of an
+// import that itself brings manuscript structure (sel.acts), the imported
+// acts land *alongside* that starter scaffold instead of replacing it,
+// leaving a duplicate empty Act 1 in the outline. Only ever called for a
+// project this import itself just created (isNewProjectImport), so this
+// never touches an existing destination project's real content.
+export function clearStarterManuscriptScaffold(store, novelId) {
+  store.acts
+    .filter(act => act.novelId === novelId)
+    .forEach(act => store.deleteAct(act.id))
+}
+
 // populateYowProject() (native YOW-export import) is not destination-type-
 // aware the way populateProject() is (see its typeKey === 'comic' branch) —
 // it always writes acts/chapters/scenes and comicPages/comicPanels based on
@@ -1075,6 +1090,12 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     const id = pendingImport.novelId
     const isNewProject = isNewProjectImport(pendingImport)
     try {
+      // Every project type (including comic, whose Act/Chapter records are
+      // just relabelled Volume/Issue) seeds this same starter scaffold via
+      // buildStarterStructure, so the clear applies universally here.
+      if (isNewProject && pendingImport.sel.acts) {
+        clearStarterManuscriptScaffold(store, id)
+      }
       if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
       else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
       setPendingImport(null)
