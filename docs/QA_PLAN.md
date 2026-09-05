@@ -179,7 +179,7 @@ Status: Partial — localStorage guard automated and passing locally as of 2026-
 
 ## Priority 2: Autosave, Editor, And Structure
 
-Status: Partial — autosave, structure CRUD, and URL persistence automated and **passing in real CI** (re-confirmed 2026-09-02, GitHub Actions run #344 / 33510644071 on `main`: `Smoke / autosave`, `Smoke / manuscript-structure`, and `Smoke / url-persistence` all green — CI has in fact been green on every push/schedule run on `main` since run #307 on 2026-08-31); deep editing still deferred
+Status: Partial — autosave, structure CRUD, and URL persistence automated. **Update (2026-09-05):** the "CI green since run #307" claim below no longer held — a same-day direct-to-`main` commit (`2e1de62`, 2026-09-02 22:57) regressed `Smoke / manuscript-structure` by dropping `ManuscriptRail.jsx`'s footer "add scene" button (see `docs/ROADMAP.md` Bugs table, 2026-09-05 CI-red row); fixed and re-verified locally (unit + e2e), pending merge and one real green scheduled/push run on `main` to close the loop — do not re-cite the #344 all-green run below as current until that happens. (Original claim, now historical:) re-confirmed 2026-09-02, GitHub Actions run #344 / 33510644071 on `main`: `Smoke / autosave`, `Smoke / manuscript-structure`, and `Smoke / url-persistence` all green — CI had been green on every push/schedule run on `main` from run #307 (2026-08-31) through that point; deep editing still deferred
 
 - ✅ Autosave reliability: `tests/e2e/autosave.spec.js` covers immediate reload, nav-away, rapid typing, logout simulation, and timestamp. Passes in CI.
 - ✅ Scene/chapter CRUD: `tests/e2e/manuscript-structure.spec.js` covers add/rename scene, add chapter, structure defaults, word count update. Passes in CI.
