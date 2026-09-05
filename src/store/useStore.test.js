@@ -1073,6 +1073,64 @@ describe('character CRUD', () => {
   })
 })
 
+// Manuscript.jsx derives entityMap/characterNames/locationNames from `characters`/
+// `locations` via useMemo, and SceneEditor.jsx's React.memo comparator relies on those
+// staying referentially stable across renders that don't actually touch character/location
+// data — otherwise every scene's memo is invalidated on every such render (see the "Typing
+// lag" ROADMAP row). `characters`/`locations` used to be rebuilt via an unmemoized
+// seriesScope() call inline in the `api` object on every render of whatever component
+// calls useStore(), so any unrelated state update (e.g. selecting a different scene, or the
+// periodic local-storage-warning poll) handed out a brand-new array reference for both.
+describe('characters/locations reference stability', () => {
+  it('keeps the same characters/locations array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+    act(() => { result.current.saveLocation({ name: 'The Shire' }) })
+
+    const charactersBefore = result.current.characters
+    const locationsBefore = result.current.locations
+
+    // Trigger a re-render via state completely unrelated to characters/locations.
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.characters).toBe(charactersBefore)
+    expect(result.current.locations).toBe(locationsBefore)
+  })
+
+  it('produces a new characters/locations reference only when the underlying data actually changes', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+
+    const charactersBefore = result.current.characters
+
+    act(() => { result.current.saveCharacter({ name: 'Sam' }) })
+
+    expect(result.current.characters).not.toBe(charactersBefore)
+    expect(result.current.characters).toHaveLength(2)
+  })
+
+  // Manuscript.jsx's entityMap useMemo also depends on `loreEntries`/`worldHistory`/
+  // `timeline` (not just characters/locations) — these went through the exact same
+  // unmemoized seriesScope()-in-`api` pattern, so entityMap could still churn on every
+  // render via this path even after characters/locations were fixed on their own.
+  it('keeps the same loreEntries array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.addLoreEntry({ title: 'The Old Wars' }) })
+
+    const loreEntriesBefore = result.current.loreEntries
+
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.loreEntries).toBe(loreEntriesBefore)
+  })
+})
+
 describe('lore CRUD', () => {
   it('deleteLoreEntry strips the deleted entry out of other entries\' loreIds', () => {
     const { result } = renderHook(() => useStore(null))
