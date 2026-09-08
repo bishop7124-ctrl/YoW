@@ -1,1 +1,1 @@
-export { default } from './YOWMapBuilder'
+export { default } from './AtlasBuilder'

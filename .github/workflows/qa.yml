@@ -79,6 +79,8 @@ jobs:
             spec: tests/e2e/autosave.spec.js
           - name: manuscript-structure
             spec: tests/e2e/manuscript-structure.spec.js
+          - name: atlas-builder
+            spec: tests/e2e/atlas-builder.spec.js
           - name: worldbuilding
             spec: tests/e2e/worldbuilding.spec.js
           - name: dashboard

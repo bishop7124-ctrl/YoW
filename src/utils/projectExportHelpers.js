@@ -1,5 +1,6 @@
-import { getProjectType } from '../constants/projectTypes.js'
+import { getProjectType, getStoryEventIndicators } from '../constants/projectTypes.js'
 import { isDesktopAppRuntime } from './runtime.js'
+import { SESSION_PLAN_FIELDS, SESSION_RECAP_FIELDS, buildOutlineModel } from './outlineDisplay.js'
 
 export const sanitizeFilename = (value, fallback = 'project') => {
   const name = String(value || fallback)
@@ -83,21 +84,8 @@ export const valueList = (...values) =>
 
 export const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
 
-export const SESSION_PLAN_EXPORT_FIELDS = [
-  ['Hooks', 'hooks'],
-  ['Encounter flow', 'encounters'],
-  ['NPCs', 'npcs'],
-  ['Rewards', 'rewards'],
-  ['Consequences', 'consequences'],
-  ['Session notes', 'notes'],
-]
-
-export const SESSION_RECAP_EXPORT_FIELDS = [
-  ['Recap', 'summary'],
-  ['Player choices', 'playerChoices'],
-  ['Fallout', 'fallout'],
-  ['Next hooks', 'nextHooks'],
-]
+export const SESSION_PLAN_EXPORT_FIELDS = SESSION_PLAN_FIELDS.map(({ label, key }) => [label, key])
+export const SESSION_RECAP_EXPORT_FIELDS = SESSION_RECAP_FIELDS.map(({ label, key }) => [label, key])
 
 export const isCampaignProject = (project) => CAMPAIGN_PROJECT_TYPES.has(project?.type)
 export const isComicProject = (project) => project?.type === 'comic'
@@ -109,6 +97,12 @@ export const sessionExportRows = (chapter) => [
 
 export const sessionExportSummary = (chapter) =>
   sessionExportRows(chapter).map(([label, value]) => `${label}: ${cleanText(value)}`).join('\n')
+
+export const outlineStoryEventLabel = (item, project) => {
+  const value = item?.storyEvent == null ? '' : String(item.storyEvent).trim()
+  if (!value) return ''
+  return getStoryEventIndicators(project?.type).find(indicator => indicator.id === value)?.label || value
+}
 
 export const asArray = (value) => {
   if (Array.isArray(value)) return value
@@ -122,20 +116,28 @@ export const getRelationshipLinks = (character) =>
 export const getEnabled = (projectData) => {
   const enabled = projectData.project?.enabledSections
   return new Set(Array.isArray(enabled) ? enabled : [
-    'outline', 'characters', 'familytree', 'factions', 'locations', 'lore', 'ideas',
+    'outline', 'characters', 'familytree', 'relationships', 'factions', 'locations', 'lore', 'ideas',
     'schedule', 'timeline', 'worldhistory', 'map',
   ])
 }
 
 export const buildOutline = (projectData) => {
-  const { acts = [], chapters = [], scenes = [] } = projectData
-  return sortByOrder(acts).map(act => ({
+  const model = buildOutlineModel(projectData)
+  const outline = model.acts.map(({ act, chapters }) => ({
     act,
-    chapters: sortByOrder(chapters.filter(chapter => chapter.actId === act.id)).map(chapter => ({
-      chapter,
-      scenes: sortByOrder(scenes.filter(scene => scene.chapterId === chapter.id)),
-    })),
+    chapters: chapters.map(({ chapter, scenes }) => ({ chapter, scenes })),
   }))
+  if (!model.unplacedChapters.length && !model.unplacedScenes.length) return outline
+  return [...outline, {
+    act: { id: '__unplaced-outline__', title: 'Unplaced outline items', synopsis: 'Recovered records whose saved parent is unavailable.' },
+    chapters: [
+      ...model.unplacedChapters.map(({ chapter, scenes }) => ({ chapter, scenes })),
+      ...(model.unplacedScenes.length ? [{
+        chapter: { id: '__unplaced-scenes__', title: 'Unplaced scenes', synopsis: 'Scenes whose saved chapter is unavailable.' },
+        scenes: model.unplacedScenes,
+      }] : []),
+    ],
+  }]
 }
 
 export const wordCount = (text = '') => cleanText(text).split(/\s+/).filter(Boolean).length
