@@ -402,6 +402,19 @@ export default function ManuscriptRail({
   const dragRef = useRef(null)
   const sortedActs = useMemo(() => sortOutlineItems(acts), [acts])
 
+  // The last chapter of the last act, in manuscript order — used by the
+  // footer "+ Scene" control to add to the true end of the manuscript.
+  // Falls back through earlier acts if the last act has no chapters yet
+  // (e.g. a freshly added empty act), so the button stays enabled/correct
+  // rather than silently no-opping on a chapter-less trailing act.
+  const lastChapterOfLastAct = useMemo(() => {
+    for (let i = sortedActs.length - 1; i >= 0; i--) {
+      const actChapters = chapters.filter(c => c.actId === sortedActs[i].id).sort((a, b) => a.order - b.order)
+      if (actChapters.length > 0) return actChapters[actChapters.length - 1]
+    }
+    return null
+  }, [sortedActs, chapters])
+
   const handleAddScene = useCallback((chapId) => {
     const newScene = addScene(chapId, labels.level3)
     requestAnimationFrame(() => {
@@ -622,6 +635,17 @@ export default function ManuscriptRail({
           </nav>
 
           <div className="ms-rail-f">
+            <button
+              type="button"
+              className="ms-rail-f-btn"
+              onClick={() => {
+                if (lastChapterOfLastAct) handleAddScene(lastChapterOfLastAct.id)
+              }}
+              disabled={!lastChapterOfLastAct}
+              title={lastChapterOfLastAct ? `Add a ${labels.level3.toLowerCase()} to the end of the manuscript` : `Add a ${labels.level2.toLowerCase()} first`}
+            >
+              + {labels.level3}
+            </button>
             <button
               type="button"
               className="ms-rail-f-btn"
