@@ -13,6 +13,7 @@ import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { PROVIDERS, fetchLiveModels } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
@@ -3234,6 +3235,10 @@ export default function AccountSettings({
                 View full pricing page →
               </a>
             </div>}
+
+            <div style={{ marginTop: 18 }}>
+              <SupportDevelopmentLink variant="banner" />
+            </div>
 
             {billingMessage && <p className="account-success">{billingMessage}</p>}
             {billingError && <p className="account-error">{billingError}</p>}
