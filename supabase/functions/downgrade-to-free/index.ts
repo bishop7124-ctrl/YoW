@@ -39,6 +39,8 @@ Deno.serve(async (req) => {
       ...appMeta,
       subscription_status: 'none',
       subscription_plan: null,
+      beta_tester: false,
+      access_revoked_at: new Date().toISOString(),
       was_monthly: true,
     },
   })

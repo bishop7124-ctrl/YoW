@@ -89,8 +89,10 @@ export const FAMILY_RELATIONSHIP_TYPE_IDS = new Set([
   "grandparent",
 ]);
 
+const relationshipTypesById = new Map(REL_TYPES.map(type => [type.id, type]));
+
 export const getRelType = (id) =>
-  REL_TYPES.find((r) => r.id === id) ?? REL_TYPES[0];
+  relationshipTypesById.get(id) ?? { id, label: String(id || "Unknown relationship"), color: "#94a3b8" };
 
 export const isCharacterLinkRelType = (id) =>
   Boolean(id) &&

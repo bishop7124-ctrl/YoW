@@ -1,6 +1,7 @@
+import { BackupAllButton } from './AccessChangeNotice'
 import { useState, useEffect, useRef } from 'react'
 
-export default function FreeProjectSelector({ novels, onConfirm, busy }) {
+export default function FreeProjectSelector({ novels, store, onConfirm, busy }) {
   const [selectedId, setSelectedId] = useState(novels[0]?.id ?? null)
   const dialogRef = useRef(null)
   useEffect(() => { dialogRef.current?.focus() }, [])
@@ -61,6 +62,8 @@ export default function FreeProjectSelector({ novels, onConfirm, busy }) {
           Choose carefully.
         </div>
 
+        <p style={{ color: 'var(--text-muted)' }}>Free cloud storage is 250 MB. Download backups before removing any projects to fit that limit. Choosing an active project does not delete the others.</p>
+        {store && <BackupAllButton store={store} novels={novels} />}
         <div role="radiogroup" aria-labelledby="free-selector-title" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 28, maxHeight: 280, overflowY: 'auto' }}>
           {novels.map(novel => (
             <button

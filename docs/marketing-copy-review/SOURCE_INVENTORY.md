@@ -47,10 +47,8 @@ This is the file-level map of marketing and promise-bearing text. â€œCanonicalâ€
 | `public/story-planning-software/index.html` | Story-planning SEO page | Explicit static rewrite. |
 | `public/timeline-tool-for-writers/index.html` | Timeline SEO page | Explicit static rewrite. |
 | `public/worldbuilding-software/index.html` | Worldbuilding/comparison SEO page | Explicit static rewrite. |
-| `public/founders/index.html` | Founder directory and scarcity statement | Explicit static rewrite; production canonical for `/founders/`. |
-| `public/founders/morgan-bishop/index.html` | Founder profile | Explicit static profile rewrite. |
-| `public/features/index.html` | Older static Features copy | Duplicate/orphan relative to React `/features/`; may still be bundled. |
-| `public/faq/index.html` | Older static FAQ and pricing copy | Duplicate/orphan relative to React `/faq/`; contains stale plan language. |
+
+The former static duplicates for Features, FAQ, Founders and the Morgan Bishop profile were removed on 2026-09-07. Their React components are the only production owners of those URLs; the founder profile image remains a shared public asset.
 
 ## Account, plan, upgrade, and in-app promotional text
 
@@ -61,7 +59,6 @@ This is the file-level map of marketing and promise-bearing text. â€œCanonicalâ€
 | `src/components/account/CloudExpiryWarningModal.jsx` | Hosting-expiry, Local Mode, Free fallback, export-all, renewal copy. Contains stale 5 MB claim. |
 | `src/components/account/FreeProjectSelector.jsx` | Downgrade/free editable-project promise and read-only/export behavior. |
 | `src/components/account/StorageCard.jsx` | Quota, fair use, media/storage messaging. |
-| `src/components/desktop/DesktopUpgradeWall.jsx` | Desktop entitlement/upgrade copy; not the current signed-in desktop product flow. |
 | `src/components/auth/UserMenu.jsx` | Plan badge/account CTA labels. |
 | `src/components/Layout.jsx` | Automatic backup frequency/settings copy and project settings export labels. |
 | `src/components/NovelManager.jsx` | Library upgrade states, import/create plan limits, trial/free status. |
