@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 
 // ─── Legal content ─────────────────────────────────────────────────────────────
 
@@ -350,7 +351,10 @@ export default function LegalModal({ page, onClose, onNavigate }) {
               </button>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>© 2026 YourOwnWorld</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>© 2026 YourOwnWorld</p>
+            <SupportDevelopmentLink />
+          </div>
         </div>
       </div>
     </div>
