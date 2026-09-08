@@ -1,7 +1,7 @@
-// Personal Monzo.me-style tip link — not part of the Stripe/billing system.
-// One shared component so the link/label/styling stays consistent everywhere
-// it's shown (footers, pricing page, info popups).
-export const MONZO_SUPPORT_URL = 'https://monzo.com/pay/r/your-own-world_SoCBPDb76nMXgr'
+// Personal Ko-fi tip page — open amount, card payment, not part of the
+// Stripe/billing system. One shared component so the link/label/styling
+// stays consistent everywhere it's shown (footers, pricing page, info popups).
+export const KOFI_SUPPORT_URL = 'https://ko-fi.com/yourownworld'
 
 const pillStyle = {
   display: 'inline-flex',
@@ -40,12 +40,12 @@ export default function SupportDevelopmentLink({ variant = 'pill', label, style 
   if (variant === 'banner') {
     return (
       <a
-        href={MONZO_SUPPORT_URL}
+        href={KOFI_SUPPORT_URL}
         target="_blank"
         rel="noopener noreferrer"
         style={{ ...bannerStyle, ...style }}
       >
-        <span style={{ fontSize: 28, flexShrink: 0 }} aria-hidden="true">💛</span>
+        <span style={{ fontSize: 28, flexShrink: 0 }} aria-hidden="true">☕</span>
         <span style={{ flex: '1 1 260px' }}>
           <strong style={{ display: 'block', fontSize: 15, color: 'var(--text-main)', marginBottom: 4 }}>
             {label || 'Help support YOW development'}
@@ -59,7 +59,7 @@ export default function SupportDevelopmentLink({ variant = 'pill', label, style 
           border: '1px solid var(--accent)', color: 'var(--accent)',
           fontSize: '0.85rem', fontWeight: 700,
         }}>
-          Tip on Monzo →
+          Buy me a coffee →
         </span>
       </a>
     )
@@ -67,12 +67,12 @@ export default function SupportDevelopmentLink({ variant = 'pill', label, style 
 
   return (
     <a
-      href={MONZO_SUPPORT_URL}
+      href={KOFI_SUPPORT_URL}
       target="_blank"
       rel="noopener noreferrer"
       style={{ ...pillStyle, ...style }}
     >
-      <span aria-hidden="true">💛</span>
+      <span aria-hidden="true">☕</span>
       {label || 'Support development'}
     </a>
   )
