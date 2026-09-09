@@ -1,5 +1,3 @@
-/* global process */
-
 // Shared CORS allowlist/header helper for Vercel API routes under api/.
 //
 // Every route that authenticates a caller via a bearer token (rather than a
