@@ -114,12 +114,11 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
-  // Scene status badge is clickable in the scene meta bar
-  const statusBtn = page.locator('.scene-status, [data-status]').first()
-  if (!(await statusBtn.isVisible().catch(() => false))) {
-    test.skip() // status control not visible in this layout, skip gracefully
-    return
-  }
+  // Scene status badge is clickable in the scene meta bar (manuscript-editor
+  // redesign renders it as `.ms-meta-status`, not the old `.scene-status`/
+  // `[data-status]` — see SceneEditor.jsx's `ms-meta-chip ms-meta-status` button).
+  const statusBtn = page.locator('.ms-meta-status').first()
+  await expect(statusBtn).toBeVisible()
 
   const before = await statusBtn.textContent()
   await statusBtn.click()
@@ -134,38 +133,32 @@ test('scene status cycles and persists', async ({ page }) => {
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
 })
 
-// ─── Finalize draft ───────────────────────────────────────────────────────────
+// ─── Finalised mode ───────────────────────────────────────────────────────────
 
-test('finalized draft can be created and viewed', async ({ page }) => {
-  // Write some content first
+test('Finalised mode shows a live read-only view of the current manuscript', async ({ page }) => {
+  // The manuscript-editor redesign replaced the old "Finalize draft" button
+  // (which produced a saved snapshot) with a "Finalised" mode tab next to
+  // Write/Edit — a live, read-only, never-persisted view rebuilt from the
+  // current acts/chapters/scenes (see Manuscript.jsx's `liveFinalizedDraft`
+  // comment). There's no snapshot-creation button to click any more.
   const placeholder = page.getByText('Begin writing here…')
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
-  await page.getByPlaceholder('Begin writing here…').fill('Draft content for finalization.')
+  const text = 'Draft content for finalization.'
+  await page.getByPlaceholder('Begin writing here…').fill(text)
 
-  await waitForStorage(page, () => {
+  await waitForStorage(page, (expected) => {
     // Scene prose lives under its own nf_scene_content:<id> key, not inline
     // on the nf_scenes record (src/storage/sceneContentStore.js) — a scene
     // can transiently still show inline content right after the first local
     // commit though, so check both rather than assuming either is authoritative.
     const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
     const scenes = JSON.parse(get('nf_scenes') || '[]')
-    return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
-  })
+    return scenes.some(s => (s.content || '').includes(expected) || (get(`nf_scene_content:${s.id}`) || '').includes(expected))
+  }, text)
 
-  // Look for Finalize / Final Draft button
-  const finalizeBtn = page
-    .getByRole('button', { name: /Final(ize|ised)? draft|Create final|Compile/i })
-    .first()
+  await page.getByRole('button', { name: 'Finalised', exact: true }).click()
 
-  if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
-
-  await finalizeBtn.click()
-
-  // The finalized reader or success state should appear
-  await expect(
-    page.locator('.finalized-reader, .final-draft, [data-finalized]').first(),
-  ).toBeVisible({ timeout: 8000 })
+  const reader = page.locator('.ms-final-book[aria-label="Finalized manuscript"]')
+  await expect(reader).toBeVisible({ timeout: 8000 })
+  await expect(reader.getByText(text)).toBeVisible()
 })
