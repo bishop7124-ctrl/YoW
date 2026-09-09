@@ -569,44 +569,106 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
 // ── Native YOW export import ──────────────────────────────────────────────────
 // Remaps all IDs (prevents collisions if the same export is imported twice),
 // preserves family-tree links, faction membership, timeline↔worldHistory links.
+//
+// `opts.dedupe` (used for "import into an existing project" — see
+// populateYowProjectIntoExisting below) skips creating a record when a
+// same-name record already exists in the destination, remapping the
+// imported record's references to point at the existing one instead of
+// creating a duplicate. Dedup only looks at the destination's pre-existing
+// records, not at other items in the same import batch — two same-named
+// characters in the source ZIP still both get created, just each may also
+// match (or not) something already in the destination. Structure (acts/
+// chapters/scenes) and comic pages/panels/maps/schedule are never deduped —
+// merging manuscript structure is out of scope here, they're always
+// appended as new. `opts.onCreated(kind, id)` — when given — is called for
+// every top-level record actually created (not deduped), so a caller can
+// roll every one of them back on a later failure without touching anything
+// that already existed in the destination.
+const norm = (s) => (s || '').trim().toLowerCase()
 
-export function populateYowProject(store, data, sel) {
+export function populateYowProject(store, data, sel, opts = {}) {
+  const { dedupe = false, onCreated = () => {}, skipWhiteboard = false } = opts
   const idMap = {}
   const eraIdMap = {}
   const ord = (arr) => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   const remap = (oldId) => (oldId && idMap[oldId]) ? idMap[oldId] : oldId
   const remapEra = (oldEraId) => (oldEraId && eraIdMap[oldEraId]) ? eraIdMap[oldEraId] : null
+  // Snapshot of the destination's own pre-existing records, read once before
+  // this import creates anything — so items created earlier in this same
+  // batch are never mistaken for a pre-existing duplicate (see comment
+  // above). store.characters/locations/factions/loreEntries/worldHistory/
+  // timeline/ideaEntries are series-scoped (seriesScope() in useStore.js):
+  // for a project in a series with syncCategories covering one of these,
+  // that list can include a *sibling* novel's own record merely because
+  // it's visible here, not the destination's. Filtering to
+  // store.activeNovelId (already switched to the destination by the time
+  // this runs) keeps dedup strictly to records actually owned by the
+  // destination project, matching the "additive only to this project"
+  // promise the import UI makes.
+  const existingByName = (list, field) => {
+    const map = new Map()
+    for (const item of list || []) {
+      if (item.novelId !== store.activeNovelId) continue
+      const key = norm(item[field])
+      if (key && !map.has(key)) map.set(key, item)
+    }
+    return map
+  }
+  const existingEras = dedupe ? existingByName(store.eras, 'name') : null
+  const existingFactions = dedupe ? existingByName(store.factions, 'name') : null
+  const existingCharacters = dedupe ? existingByName(store.characters, 'name') : null
+  const existingLocations = dedupe ? existingByName(store.locations, 'name') : null
+  const existingLore = dedupe ? existingByName(store.loreEntries, 'title') : null
+  const existingHistory = dedupe ? existingByName(store.worldHistory, 'title') : null
+  const existingTimeline = dedupe ? existingByName(store.timeline, 'title') : null
+  const existingIdeas = dedupe ? existingByName(store.ideaEntries, 'title') : null
+  const existingRpgCharacters = dedupe ? existingByName(store.rpgCharacters, 'name') : null
+  // Track which newly-created characters this import owns, so the
+  // relationship pass below never patches (mutates) a character we matched
+  // to an existing one instead of creating.
+  const createdCharacterIds = new Set()
 
   // Eras — referenced by both world history entries and timeline events below
   if ((sel.worldHistory || sel.timeline) && data.eras?.length) {
     for (const era of data.eras) {
       const { id: oldId, novelId: _nid, ...rest } = era
+      const match = dedupe ? existingEras.get(norm(era.name)) : null
+      if (match) { eraIdMap[oldId] = match.id; continue }
       const created = store.addEra(rest)
-      if (created) eraIdMap[oldId] = created.id
+      if (created) { eraIdMap[oldId] = created.id; onCreated('era', created.id) }
     }
   }
 
   // Factions first — characters reference them
   if (sel.factions) {
     for (const f of data.factions || []) {
+      const match = dedupe ? existingFactions.get(norm(f.name)) : null
+      if (match) { idMap[f.id] = match.id; continue }
       const newId = uid()
       idMap[f.id] = newId
       const { id: _id, novelId: _nid, ...rest } = f
       store.setFactions(prev => [...prev, { id: newId, novelId: store.activeNovelId, ...rest }])
+      onCreated('faction', newId)
     }
   }
 
   if (sel.characters) {
     // Pass 1: create characters with no cross-references (avoids broken links mid-loop)
     for (const c of data.characters || []) {
+      const match = dedupe ? existingCharacters.get(norm(c.name)) : null
+      if (match) { idMap[c.id] = match.id; continue }
       const { id: oldId, novelId: _nid, relationships: _r, parentIds: _p, childIds: _c, spouseIds: _sp, factionId: _f, ...rest } = c
       const newId = store.saveCharacter(rest)
       idMap[oldId] = newId
+      createdCharacterIds.add(newId)
+      onCreated('character', newId)
     }
-    // Pass 2: restore relationships with remapped IDs
+    // Pass 2: restore relationships with remapped IDs — only for characters
+    // this import actually created, never for one matched to an existing
+    // record (that record's own relationships are left untouched).
     for (const c of data.characters || []) {
       const newId = idMap[c.id]
-      if (!newId) continue
+      if (!newId || !createdCharacterIds.has(newId)) continue
       const patch = {}
       const rels = (c.relationships || []).map(r => ({ ...r, targetId: remap(r.targetId) })).filter(r => r.targetId)
       if (rels.length)                                    patch.relationships = rels
@@ -620,16 +682,20 @@ export function populateYowProject(store, data, sel) {
 
   if (sel.locations) {
     for (const l of data.locations || []) {
+      const match = dedupe ? existingLocations.get(norm(l.name)) : null
+      if (match) { idMap[l.id] = match.id; continue }
       const { id: oldId, novelId: _nid, ...rest } = l
       const created = store.addLocation(rest)
-      if (created?.id) idMap[oldId] = created.id
+      if (created?.id) { idMap[oldId] = created.id; onCreated('location', created.id) }
     }
   }
 
   if (sel.loreEntries) {
     for (const e of data.loreEntries || []) {
+      if (dedupe && existingLore.get(norm(e.title))) continue
       const { id: _id, novelId: _nid, ...rest } = e
-      store.addLoreEntry(rest)
+      const created = store.addLoreEntry(rest)
+      if (created?.id) onCreated('loreEntry', created.id)
     }
   }
 
@@ -637,47 +703,66 @@ export function populateYowProject(store, data, sel) {
   if (sel.worldHistory) {
     for (const h of ord(data.worldHistory)) {
       const { id: oldId, novelId: _nid, timelineEventId: _tid, eraId, ...rest } = h
+      const match = dedupe ? existingHistory.get(norm(h.title)) : null
+      if (match) { idMap[oldId] = match.id; continue }
       const entry = store.addHistoryEntry({ ...rest, eraId: remapEra(eraId) })
-      if (entry) idMap[oldId] = entry.id
+      if (entry) { idMap[oldId] = entry.id; onCreated('historyEntry', entry.id) }
     }
   }
 
   if (sel.timeline) {
     for (const ev of ord(data.timeline)) {
       const { id: _id, novelId: _nid, worldHistoryEntryId, eraId, ...rest } = ev
+      if (dedupe && existingTimeline.get(norm(ev.title))) continue
       // Link to the newly-created world history entry if both were imported
       const linkedHistoryEntryId = (sel.worldHistory && worldHistoryEntryId) ? idMap[worldHistoryEntryId] : undefined
-      store.addEvent(
+      const created = store.addEvent(
         { ...rest, eraId: remapEra(eraId), ...(linkedHistoryEntryId ? { linkedHistoryEntryId } : {}) },
         { createHistory: false },
       )
+      if (created?.id) onCreated('timelineEvent', created.id)
     }
   }
 
   if (sel.ideaEntries) {
     for (const idea of ord(data.ideaEntries)) {
+      if (dedupe && existingIdeas.get(norm(idea.title))) continue
       const { id: _id, novelId: _nid, ...rest } = idea
-      store.addIdeaEntry(rest)
+      const created = store.addIdeaEntry(rest)
+      if (created?.id) onCreated('ideaEntry', created.id)
     }
   }
 
   if (sel.acts) {
+    // Manuscript structure is never deduped against the destination's
+    // existing structure — merging chapter/scene trees is out of scope here,
+    // so an import always appends a new act (deleteAct cascades its
+    // chapters/scenes, so a single tracked id rolls back the whole subtree).
     for (const act of ord(data.acts)) {
       const newAct = store.addAct(act.title || 'Act')
+      // addAct returns null on storage-quota exceeded (see storageExceededCheck
+      // in useStore.js) — every other creator in this function already guards
+      // its return value the same way; skip this act and its children rather
+      // than crash on a null dereference.
+      if (!newAct?.id) continue
       idMap[act.id] = newAct.id
+      onCreated('act', newAct.id)
       if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
       for (const chap of ord((data.chapters || []).filter(c => c.actId === act.id))) {
         const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
+        if (!newChap?.id) continue
         idMap[chap.id] = newChap.id
         if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
         for (const scene of ord((data.scenes || []).filter(s => s.chapterId === chap.id))) {
           const newScene = store.addScene(newChap.id, scene.title || 'Scene')
+          if (!newScene?.id) continue
           if (scene.synopsis || scene.content)
             store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
         }
       }
     }
     // Comic pages/panels belong to the Volume/Issue structure imported above.
+    // Not cascaded by deleteAct/deleteChapter, so tracked separately.
     for (const page of ord(data.comicPages)) {
       const { id: oldId, novelId: _nid, issueId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = page
       const created = store.addComicPage(remap(issueId), {
@@ -685,7 +770,7 @@ export function populateYowProject(store, data, sel) {
         characterIds: (characterIds || []).map(remap),
         locationIds: (locationIds || []).map(remap),
       })
-      if (created?.id) idMap[oldId] = created.id
+      if (created?.id) { idMap[oldId] = created.id; onCreated('comicPage', created.id) }
     }
     for (const panel of ord(data.comicPanels)) {
       const { id: _id, novelId: _nid, pageId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = panel
@@ -694,13 +779,17 @@ export function populateYowProject(store, data, sel) {
         characterIds: (characterIds || []).map(remap),
         locationIds: (locationIds || []).map(remap),
       })
+      // Not tracked individually for rollback — cascaded by its parent
+      // comicPage's deleteComicPage (see store.deleteComicPage).
     }
   }
 
   if (sel.rpgCharacters) {
     for (const c of data.rpgCharacters || []) {
+      if (dedupe && existingRpgCharacters.get(norm(c.name))) continue
       const { id: _id, novelId: _nid, ...rest } = c
-      store.saveRpgCharacter(rest)
+      const newId = store.saveRpgCharacter(rest)
+      if (newId) onCreated('rpgCharacter', newId)
     }
   }
 
@@ -712,20 +801,72 @@ export function populateYowProject(store, data, sel) {
       // dropped (or written onto the wrong map) when importing more than one map.
       const newMapId = store.addMap(map.name || 'Map', map.mapType || 'regional')
       const { id: _id, novelId: _nid, name: _n, mapType: _mt, created: _c, ...rest } = map
-      if (newMapId && Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
+      if (newMapId) {
+        onCreated('map', newMapId)
+        if (Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
+      }
     }
   }
 
   if (sel.storySchedule) {
     for (const ev of ord(data.storySchedule)) {
       const { id: _id, novelId: _nid, ...rest } = ev
-      store.addScheduleEvent(rest)
+      const created = store.addScheduleEvent(rest)
+      if (created?.id) onCreated('scheduleEvent', created.id)
     }
   }
 
-  // Whiteboard — one per project, no separate section toggle
+  // Whiteboard — one per project, no separate section toggle. Always
+  // overwrites the destination's whiteboard wholesale, so it's never safe to
+  // apply when importing into an existing project (skipWhiteboard) — only
+  // the "create new project" path (an empty destination) uses it.
   const whiteboard = data.whiteboards?.[0]?.whiteboard
-  if (whiteboard) store.updateWhiteboard(whiteboard)
+  if (whiteboard && !skipWhiteboard) store.updateWhiteboard(whiteboard)
+}
+
+// ── Import into an existing project ───────────────────────────────────────────
+// Wraps populateYowProject with dedup-against-destination and a
+// transaction-like commit: every record it creates is tracked, and if
+// anything throws partway through, everything already created this call is
+// deleted again before the error propagates — the destination project is
+// left exactly as it was, never left half-imported. Only ever additive to
+// the destination; the source data (already fully read into memory by this
+// point) is never touched.
+const ROLLBACK_DELETERS = {
+  era: 'deleteEra',
+  faction: 'deleteFaction',
+  character: 'deleteCharacter',
+  location: 'deleteLocation',
+  loreEntry: 'deleteLoreEntry',
+  historyEntry: 'deleteHistoryEntry',
+  timelineEvent: 'deleteEvent',
+  ideaEntry: 'deleteIdeaEntry',
+  act: 'deleteAct', // cascades its chapters/scenes
+  comicPage: 'deleteComicPage', // cascades its panels
+  rpgCharacter: 'deleteRpgCharacter',
+  map: 'deleteMap',
+  scheduleEvent: 'deleteScheduleEvent',
+}
+
+export function populateYowProjectIntoExisting(store, data, sel, { dedupe = true } = {}) {
+  const created = []
+  try {
+    populateYowProject(store, data, sel, {
+      dedupe,
+      skipWhiteboard: true,
+      onCreated: (kind, id) => created.push({ kind, id }),
+    })
+    return { ok: true, created }
+  } catch (err) {
+    // Best-effort rollback, deepest/last-created first. A single deleter
+    // throwing must not stop the rest from being attempted.
+    for (let i = created.length - 1; i >= 0; i--) {
+      const { kind, id } = created[i]
+      const deleterName = ROLLBACK_DELETERS[kind]
+      try { store[deleterName]?.(id) } catch (rollbackErr) { console.error('Import rollback failed for', kind, id, rollbackErr) }
+    }
+    throw err
+  }
 }
 
 // Compatible structured ZIP import
@@ -991,16 +1132,39 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const [aiError, setAiError] = useState('')
   const [selections, setSelections] = useState({})
   const [targetType, setTargetType] = useState(DEFAULT_TYPE) // create-as type for AI/archive imports
+  // Destination for a native YOW export: 'new' (default, unchanged behavior)
+  // or an existing project's id. Only offered for yowImport — see the
+  // "Import destination" UI below.
+  const [destinationNovelId, setDestinationNovelId] = useState('new')
+  const [skipDuplicates, setSkipDuplicates] = useState(true)
   // Phase-2 payload: wait for activeNovelId to update before populating entries
   const [pendingImport, setPendingImport] = useState(null)
   const fileInputRef = useRef()
   const abortRef = useRef(false)
 
-  // Phase 2: fires once store.activeNovelId has settled to the new project's id
+  // Phase 2: fires once store.activeNovelId has settled to the target project's id
   useEffect(() => {
     if (!pendingImport) return
     if (store.activeNovelId !== pendingImport.novelId) return
     const id = pendingImport.novelId
+    if (pendingImport.intoExisting) {
+      try {
+        const result = populateYowProjectIntoExisting(store, pendingImport.data, pendingImport.sel, { dedupe: pendingImport.dedupe })
+        setPendingImport(null)
+        setPhase('done')
+        setTimeout(() => { onImportDone?.(id, { intoExisting: true, ...result }); onClose() }, 1100)
+      } catch (err) {
+        // populateYowProjectIntoExisting already rolled back everything it
+        // created before rethrowing — the destination project is unchanged,
+        // so (unlike the create-new path below) there is nothing here to
+        // delete.
+        console.error('Import into existing project failed (rolled back):', err)
+        setPendingImport(null)
+        setAiError('This archive could not be fully imported into that project — it may be corrupted or in an unexpected format. Nothing was changed in the destination project.')
+        setPhase('upload')
+      }
+      return
+    }
     try {
       if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
       else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
@@ -1212,6 +1376,23 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
   const handleCreate = () => {
     const sourceData = yowImport || ncImport || parsed
     if (!sourceData) return
+
+    // Import into an existing project — only offered for a native YOW
+    // export (see the "Import destination" UI below). Never creates a
+    // project; targets the chosen one and lets the phase-2 effect run
+    // populateYowProjectIntoExisting once activeNovelId has switched to it.
+    if (yowImport && destinationNovelId !== 'new') {
+      const targetId = destinationNovelId
+      if (!store.novels.some(n => n.id === targetId)) {
+        setAiError('That project could not be found — it may have been deleted. Choose another destination.')
+        return
+      }
+      setPhase('creating')
+      store.setActiveNovelId(targetId)
+      setPendingImport({ novelId: targetId, data: sourceData, sel: selections, intoExisting: true, dedupe: skipDuplicates })
+      return
+    }
+
     let title, description, type
     if (yowImport) {
       title = yowImport.project?.title; description = yowImport.project?.description || ''
@@ -1259,8 +1440,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               {phase === 'upload'    && 'Upload files — drop a YOW export, compatible project archive, or any writing file'}
               {phase === 'analyzing' && 'Analyzing your files…'}
               {phase === 'preview'   && (yowImport ? 'Native YOW export detected — no AI needed' : ncImport ? `Project archive detected — "${ncImport.projectTitle}"` : 'Review what will be created')}
-              {phase === 'creating'  && 'Creating your project…'}
-              {phase === 'done'      && 'Project created successfully!'}
+              {phase === 'creating'  && (yowImport && destinationNovelId !== 'new' ? 'Importing into the destination project…' : 'Creating your project…')}
+              {phase === 'done'      && (yowImport && destinationNovelId !== 'new' ? 'Import complete!' : 'Project created successfully!')}
             </p>
           </div>
           {canClose && (
@@ -1415,6 +1596,43 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                   </label>
                 ))}
               </div>
+
+              {/* Import destination — new project (default) or merge additively into an existing one */}
+              <p style={{ margin: '4px 0 0', fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Import destination</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: destinationNovelId === 'new' ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${destinationNovelId === 'new' ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}` }}>
+                  <input type="radio" name="import-destination" value="new" checked={destinationNovelId === 'new'} onChange={() => setDestinationNovelId('new')} style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }} />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>Create new project</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: store.novels.length ? 'pointer' : 'not-allowed', opacity: store.novels.length ? 1 : .55, background: destinationNovelId !== 'new' ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${destinationNovelId !== 'new' ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}` }}>
+                  <input
+                    type="radio" name="import-destination" value="existing" disabled={!store.novels.length}
+                    checked={destinationNovelId !== 'new'}
+                    onChange={() => setDestinationNovelId(store.novels[0]?.id || 'new')}
+                    style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>Import into an existing project</span>
+                </label>
+                {destinationNovelId !== 'new' && (
+                  <div style={{ marginLeft: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <select
+                      aria-label="Destination project"
+                      value={destinationNovelId}
+                      onChange={e => setDestinationNovelId(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: 12 }}
+                    >
+                      {store.novels.map(n => <option key={n.id} value={n.id}>{n.title}</option>)}
+                    </select>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={skipDuplicates} onChange={e => setSkipDuplicates(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }} />
+                      Skip items that already exist in that project by name (recommended) — otherwise every item is added as a new copy, even if a same-named one already exists.
+                    </label>
+                    <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      Additive only — nothing in "{store.novels.find(n => n.id === destinationNovelId)?.title || 'the destination project'}" is ever overwritten or deleted, and this file's own source project (if it still exists) is untouched either way. Manuscript chapters/scenes from this import are always added as new, never merged into existing ones.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1522,7 +1740,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
             {phase === 'preview' && (
               <button type="button" onClick={handleCreate}
                 style={{ padding: '9px 22px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
-                Create Project
+                {yowImport && destinationNovelId !== 'new' ? 'Import Into Project' : 'Create Project'}
               </button>
             )}
           </div>

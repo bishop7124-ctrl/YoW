@@ -1,49 +1,88 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
+import { populateProject, populateYowProject, populateYowProjectIntoExisting, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
-function mockStore() {
+// `existing` seeds the destination project's pre-existing records, read by
+// populateYowProject's dedupe path (dedupe reads store.characters/locations/
+// etc. once up front — see its own comment) — used to test "import into an
+// existing project" duplicate detection and rollback.
+function mockStore(existing = {}) {
   const calls = {
     characters: [], locations: [], lore: [], history: [], events: [], ideas: [],
-    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [], maps: [],
+    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], factions: [], whiteboards: [], maps: [],
   }
+  const deleted = []
   let n = 0
   const nid = (p) => `${p}-${++n}`
   return {
     calls,
+    deleted,
     activeNovelId: 'novel-new',
+    novels: existing.novels || [],
+    characters: existing.characters || [],
+    locations: existing.locations || [],
+    loreEntries: existing.loreEntries || [],
+    worldHistory: existing.worldHistory || [],
+    timeline: existing.timeline || [],
+    ideaEntries: existing.ideaEntries || [],
+    rpgCharacters: existing.rpgCharacters || [],
+    eras: existing.eras || [],
+    factions: existing.factions || [],
     saveCharacter: (data, id) => {
       if (id) { Object.assign(calls.characters.find(c => c.id === id), data); return id }
       const newId = nid('char'); calls.characters.push({ ...data, id: newId }); return newId
     },
+    deleteCharacter: (id) => { deleted.push(['character', id]); calls.characters = calls.characters.filter(c => c.id !== id) },
     addLocation: (data) => { const item = { ...data, id: nid('loc') }; calls.locations.push(item); return item },
-    setFactions: () => {},
+    deleteLocation: (id) => { deleted.push(['location', id]); calls.locations = calls.locations.filter(l => l.id !== id) },
+    setFactions: (updater) => { calls.factions = typeof updater === 'function' ? updater(calls.factions) : updater },
+    deleteFaction: (id) => { deleted.push(['faction', id]); calls.factions = calls.factions.filter(f => f.id !== id) },
     addLoreEntry: (data) => { const item = { ...data, id: nid('lore') }; calls.lore.push(item); return item },
+    deleteLoreEntry: (id) => { deleted.push(['loreEntry', id]); calls.lore = calls.lore.filter(l => l.id !== id) },
     addHistoryEntry: (data) => { const item = { ...data, id: nid('hist') }; calls.history.push(item); return item },
+    deleteHistoryEntry: (id) => { deleted.push(['historyEntry', id]); calls.history = calls.history.filter(h => h.id !== id) },
     addEvent: (data) => { const item = { ...data, id: nid('event') }; calls.events.push(item); return item },
+    deleteEvent: (id) => { deleted.push(['timelineEvent', id]); calls.events = calls.events.filter(e => e.id !== id) },
     addIdeaEntry: (data) => { const item = { ...data, id: nid('idea') }; calls.ideas.push(item); return item },
+    deleteIdeaEntry: (id) => { deleted.push(['ideaEntry', id]); calls.ideas = calls.ideas.filter(i => i.id !== id) },
     addAct: (title) => { const a = { id: nid('act'), title }; calls.acts.push(a); return a },
     updateAct: (id, data) => Object.assign(calls.acts.find(a => a.id === id), data),
+    deleteAct: (id) => {
+      deleted.push(['act', id])
+      const chapterIds = calls.chapters.filter(c => c.actId === id).map(c => c.id)
+      calls.acts = calls.acts.filter(a => a.id !== id)
+      calls.chapters = calls.chapters.filter(c => c.actId !== id)
+      calls.scenes = calls.scenes.filter(s => !chapterIds.includes(s.chapterId))
+    },
     addChapter: (actId, title) => { const c = { id: nid('chap'), actId, title }; calls.chapters.push(c); return c },
     updateChapter: (id, data) => Object.assign(calls.chapters.find(c => c.id === id), data),
     addScene: (chapterId, title) => { const s = { id: nid('scene'), chapterId, title }; calls.scenes.push(s); return s },
     updateScene: (id, data) => Object.assign(calls.scenes.find(s => s.id === id), data),
     addComicPage: (issueId, data) => { const p = { id: nid('page'), issueId, ...data }; calls.comicPages.push(p); return p },
+    deleteComicPage: (id) => {
+      deleted.push(['comicPage', id])
+      calls.comicPages = calls.comicPages.filter(p => p.id !== id)
+      calls.comicPanels = calls.comicPanels.filter(p => p.pageId !== id)
+    },
     addComicPanel: (pageId, data) => { const p = { id: nid('panel'), pageId, ...data }; calls.comicPanels.push(p); return p },
     saveRpgCharacter: (data) => { const id = nid('rpg'); calls.rpgCharacters.push({ ...data, id }); return id },
+    deleteRpgCharacter: (id) => { deleted.push(['rpgCharacter', id]); calls.rpgCharacters = calls.rpgCharacters.filter(c => c.id !== id) },
     addMap: (name, mapType) => {
       const id = nid('map')
       calls.maps.push({ id, name, mapType })
       return id
     },
+    deleteMap: (id) => { deleted.push(['map', id]); calls.maps = calls.maps.filter(m => m.id !== id) },
     updateActiveMapData: () => {},
     updateMapData: (mapId, updater) => {
       const map = calls.maps.find(m => m.id === mapId)
       if (!map) return
       Object.assign(map, updater(map))
     },
-    addScheduleEvent: () => {},
+    addScheduleEvent: (data) => { const item = { ...data, id: nid('sched') }; return item },
+    deleteScheduleEvent: (id) => { deleted.push(['scheduleEvent', id]) },
     addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
+    deleteEra: (id) => { deleted.push(['era', id]); calls.eras = calls.eras.filter(e => e.id !== id) },
     updateWhiteboard: (board) => { calls.whiteboards.push(board) },
   }
 }
@@ -198,6 +237,83 @@ describe('populateYowProject', () => {
     expect(store.calls.rpgCharacters).toHaveLength(1)
     expect(store.calls.rpgCharacters[0].name).toBe('Thorn')
     expect(store.calls.rpgCharacters[0]).not.toHaveProperty('novelId')
+  })
+})
+
+describe('populateYowProjectIntoExisting', () => {
+  it('links a same-name character to the existing one instead of creating a duplicate', () => {
+    const store = mockStore({ characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Mika' }] })
+    const data = { characters: [{ id: 'old-char', name: 'Mika', relationships: [] }, { id: 'old-char-2', name: 'Rowan' }] }
+    const result = populateYowProjectIntoExisting(store, data, { characters: true })
+    expect(result.ok).toBe(true)
+    // "Mika" matched the existing record — no new character created for it
+    expect(store.calls.characters).toHaveLength(1)
+    expect(store.calls.characters[0].name).toBe('Rowan')
+    expect(result.created.map(c => c.kind)).toEqual(['character'])
+  })
+
+  it('does not dedupe against a same-name record owned by a different novel (e.g. a series-synced sibling)', () => {
+    // store.characters is series-scoped in the real app (seriesScope() in
+    // useStore.js) and can include a sibling novel's own record just because
+    // it's visible from the destination project — dedup must only match
+    // records actually owned by the destination (store.activeNovelId).
+    const store = mockStore({ characters: [{ id: 'sibling-char', novelId: 'novel-other', name: 'Mika' }] })
+    const data = { characters: [{ id: 'old-char', name: 'Mika', relationships: [] }] }
+    populateYowProjectIntoExisting(store, data, { characters: true })
+    // A genuine new character was created in the destination — the sibling
+    // novel's "Mika" was never treated as already existing there.
+    expect(store.calls.characters).toHaveLength(1)
+    expect(store.calls.characters[0].name).toBe('Mika')
+    expect(store.calls.characters[0].id).not.toBe('sibling-char')
+  })
+
+  it('remaps a relationship pointing at a deduped character to the existing record, and never patches the existing record', () => {
+    const store = mockStore({ characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Mika', relationships: [] }] })
+    const data = {
+      characters: [
+        { id: 'old-mika', name: 'Mika', relationships: [] },
+        { id: 'old-rowan', name: 'Rowan', relationships: [{ type: 'friend', targetId: 'old-mika' }] },
+      ],
+    }
+    populateYowProjectIntoExisting(store, data, { characters: true })
+    const rowan = store.calls.characters.find(c => c.name === 'Rowan')
+    expect(rowan.relationships).toEqual([{ type: 'friend', targetId: 'existing-char' }])
+    // The existing "Mika" record itself was never targeted by saveCharacter's
+    // patch call (only newly-created characters go through pass 2)
+    expect(store.calls.characters.find(c => c.id === 'existing-char')).toBeUndefined()
+  })
+
+  it('creates duplicates anyway when dedupe is turned off', () => {
+    const store = mockStore({ locations: [{ id: 'existing-loc', novelId: 'novel-new', name: 'The Keep' }] })
+    const data = { locations: [{ id: 'old-loc', name: 'The Keep' }] }
+    populateYowProjectIntoExisting(store, data, { locations: true }, { dedupe: false })
+    expect(store.calls.locations).toHaveLength(1) // a genuine new copy, distinct from the pre-existing one
+    expect(store.calls.locations[0].name).toBe('The Keep')
+  })
+
+  it('never overwrites the destination whiteboard', () => {
+    const store = mockStore()
+    const data = { whiteboards: [{ whiteboard: { notes: [{ id: 'n1', text: 'Should not land' }], groups: [] } }] }
+    populateYowProjectIntoExisting(store, data, {})
+    expect(store.calls.whiteboards).toHaveLength(0)
+  })
+
+  it('rolls back everything it created when a later step throws, leaving pre-existing records untouched', () => {
+    const store = mockStore({ characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Keep Me' }] })
+    store.addAct = () => { throw new Error('simulated failure') }
+    const data = {
+      characters: [{ id: 'old-char', name: 'New Guy' }],
+      locations: [{ id: 'old-loc', name: 'New Place' }],
+      acts: [{ id: 'old-act', title: 'Act 1' }],
+    }
+    expect(() => populateYowProjectIntoExisting(store, data, { characters: true, locations: true, acts: true }))
+      .toThrow('simulated failure')
+    // Everything created before the throw was rolled back...
+    expect(store.calls.characters).toHaveLength(0)
+    expect(store.calls.locations).toHaveLength(0)
+    // ...and the destination's own pre-existing record was never touched
+    expect(store.characters).toEqual([{ id: 'existing-char', novelId: 'novel-new', name: 'Keep Me' }])
+    expect(store.deleted.map(([kind]) => kind).sort()).toEqual(['character', 'location'])
   })
 })
 
