@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage,
+  seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -100,25 +100,37 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
     return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]').length >= 1
   })
 
-  // Fill in dialogue
+  // A panel starts with no dialogue lines — "+ balloon" adds one, which is
+  // when the "Dialogue text…" input actually mounts (PanelEditor in
+  // ComicPlanner.jsx).
+  await page.getByRole('button', { name: '+ balloon' }).first().click()
   const dialogueField = page.getByPlaceholder(/dialogue|speech|balloon/i).first()
-  if (!(await dialogueField.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
+  await expect(dialogueField).toBeVisible({ timeout: 3000 })
 
   const dialogueText = `Panel dialogue ${Date.now()}`
   await dialogueField.fill(dialogueText)
 
-  await waitForStorage(page, () => {
+  // `waitForStorage`'s predicate runs inside the page via page.waitForFunction,
+  // which serializes the function standalone — it can't close over `dialogueText`
+  // from this scope, so it has to come in as `arg` instead (this previously
+  // threw "dialogueText is not defined" the moment the test got far enough to
+  // reach it).
+  await waitForStorage(page, (expected) => {
     const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.some(p =>
-      (p.dialogue || []).some(d => (d.text || d).includes(dialogueText.slice(0, 15)))
-      || (p.dialogueText || '').includes(dialogueText.slice(0, 15)),
+      (p.dialogue || []).some(d => (d.text || d).includes(expected))
+      || (p.dialogueText || '').includes(expected),
     )
-  })
+  }, dialogueText.slice(0, 15))
 
+  // Flush the IndexedDB-backed vault's fire-and-forget persist queue before
+  // reloading, and wait for post-reload hydration to actually finish, same
+  // convention this suite uses elsewhere (see helpers.js's flush/
+  // waitForStorageHydrated comments) — otherwise the reload can race the
+  // write and read back stale/empty storage.
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
+  await waitForStorageHydration(page)
   const panels = await readStorage(page, 'nf_comicPanels')
   expect(panels.some(p =>
     JSON.stringify(p).includes(dialogueText.slice(0, 15)),
@@ -162,15 +174,18 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   const pagesBefore = await readStorage(page, 'nf_comicPages')
   const pageId = pagesBefore[0]?.id
 
-  // Open page then delete
+  // Open page then delete. The button's own accessible name is just "Delete"
+  // (its "Delete page" wording only exists as a `title` tooltip, not part of
+  // the name — PageEditor in ComicPlanner.jsx) — match on the title instead
+  // so this doesn't collide with "Delete panel"/other Delete controls on the
+  // same page.
   await page.locator('.cp-page-row').first().click()
-  const deletePageBtn = page.getByRole('button', { name: /Delete page|Remove page/i }).first()
-  if (!(await deletePageBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
+  const deletePageBtn = page.getByTitle('Delete page').first()
+  await expect(deletePageBtn).toBeVisible({ timeout: 3000 })
 
   await deletePageBtn.click()
+  // No confirmation step today (onDeletePage deletes immediately), but stay
+  // defensive in case one is added later.
   const confirmBtn = page.getByRole('button', { name: /Confirm|Yes|Delete/i }).first()
   if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await confirmBtn.click()
