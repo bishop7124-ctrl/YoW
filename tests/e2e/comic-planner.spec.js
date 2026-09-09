@@ -100,14 +100,9 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
     return JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]').length >= 1
   })
 
-  // A panel starts with no dialogue lines — click "+ balloon"
-  // (ComicPlanner.jsx's `addDialogue`) to add one before its text field exists.
-  const addBalloonBtn = page.getByRole('button', { name: '+ balloon' })
-  if (!(await addBalloonBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
-  await addBalloonBtn.click()
+  // A panel starts with no dialogue lines — "+ balloon" (PanelEditor's
+  // addDialogue) has to be clicked before the dialogue text field exists.
+  await page.getByRole('button', { name: '+ balloon' }).first().click()
 
   const dialogueField = page.getByPlaceholder(/dialogue|speech|balloon/i).first()
   if (!(await dialogueField.isVisible({ timeout: 3000 }).catch(() => false))) {
@@ -118,16 +113,16 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
   const dialogueText = `Panel dialogue ${Date.now()}`
   await dialogueField.fill(dialogueText)
 
-  // `waitForStorage`'s predicate runs inside the browser (page.waitForFunction),
-  // so a Node-scope closure variable like `dialogueText` isn't visible to it —
-  // forward the needle explicitly via the `arg` param instead.
-  await waitForStorage(page, (needle) => {
+  // waitForStorage's predicate runs in the page realm via page.waitForFunction,
+  // which serializes the function source — it can't close over dialogueText
+  // from this scope, so it has to come in as an explicit arg.
+  await waitForStorage(page, (text) => {
     const panels = JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPanels') ?? localStorage.getItem('nf_comicPanels')) || '[]')
     return panels.some(p =>
-      (p.dialogue || []).some(d => (d.text || d).includes(needle))
-      || (p.dialogueText || '').includes(needle),
+      (p.dialogue || []).some(d => (d.text || d).includes(text.slice(0, 15)))
+      || (p.dialogueText || '').includes(text.slice(0, 15)),
     )
-  }, dialogueText.slice(0, 15))
+  }, dialogueText)
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
@@ -175,12 +170,12 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
   const pagesBefore = await readStorage(page, 'nf_comicPages')
   const pageId = pagesBefore[0]?.id
 
-  // Open page then delete. The page editor's delete button (ComicPlanner.jsx
-  // `PageEditor`) has visible text "Delete" (title="Delete page" is a tooltip,
-  // not the accessible name) — exact-match it, since the panel delete control
-  // is a "×" icon button and doesn't collide.
+  // Open page then delete. The page-actions "Delete" button's accessible
+  // name is just "Delete" (its title attribute "Delete page" is overridden
+  // by the button's own text content) — scope to .cp-page-actions so this
+  // doesn't collide with any other "Delete"-labelled control on the page.
   await page.locator('.cp-page-row').first().click()
-  const deletePageBtn = page.getByRole('button', { name: 'Delete', exact: true }).first()
+  const deletePageBtn = page.locator('.cp-page-actions').getByRole('button', { name: 'Delete' }).first()
   if (!(await deletePageBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return

@@ -15,13 +15,8 @@ test.beforeEach(async ({ page }) => {
 // ─── Scene CRUD ───────────────────────────────────────────────────────────────
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
-  // StructureSidebar (`.ms-sidebar-*`) was replaced by ManuscriptRail in the
-  // 2026-08-27 redesign. Its footer "+ Scene" button (`.ms-rail-f-btn`) adds
-  // to the end of the manuscript regardless of which chapter is selected —
-  // scoped to that class since "+ Scene" text alone also matches the
-  // per-chapter inline row button and the empty-manuscript "add first
-  // scene" CTA (`.manuscript-add-scene`).
-  await page.locator('.ms-rail-f-btn', { hasText: '+ Scene' }).click()
+  // Scene creation now lives at the end of each expanded chapter.
+  await page.locator('.ms-rail-add-scene').first().getByRole('button', { name: 'scene', exact: true }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
@@ -119,10 +114,11 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
-  // Scene status badge is clickable in the scene meta bar
-  // (SceneEditor.jsx's `.ms-meta-status` chip — the manuscript editor
-  // redesign replaced the old `.scene-status`/`[data-status]` markup this
-  // locator used to target).
+  // The status chip (SceneEditor.jsx's `.ms-meta-status`) is hidden by CSS
+  // while the editor is in Write mode (`.ms-scene-header--write .ms-meta-status
+  // { display: none }`) — it only renders in Edit mode.
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Edit' }).click()
+
   const statusBtn = page.locator('.ms-meta-status').first()
   if (!(await statusBtn.isVisible().catch(() => false))) {
     test.skip() // status control not visible in this layout, skip gracefully
@@ -160,44 +156,31 @@ test('finalized draft can be created and viewed', async ({ page }) => {
     return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
-  // The redesign moved "Finalise draft" off a direct toolbar button and into
-  // the topbar's overflow ("More") menu's Finish section (ManuscriptTopbar.jsx
-  // `buildOverflowSections`), which opens a FinalisePane surface (Manuscript
-  // Surface.jsx) holding the actual "Finalise draft" action button.
-  const moreBtn = page.getByRole('button', { name: 'More' })
-  if (!(await moreBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
-  await moreBtn.click()
+  // Finalise lives behind the topbar overflow ("More") menu, under the
+  // "Finish" section, as "Finalise draft" (British spelling — the previous
+  // regex only matched "Finalize"/"Finalised", never plain "Finalise").
+  // Opening it there swaps the surface to the FinalisePane, which has its
+  // own "Finalise draft" button that actually calls handleFinaliseDraft().
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menu').getByRole('button', { name: 'Finalise draft' }).click()
 
-  const openFinaliseMenuItem = page.getByRole('button', { name: 'Finalise draft', exact: true })
-  if (!(await openFinaliseMenuItem.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
-  await openFinaliseMenuItem.click()
-
-  const finaliseBtn = page.getByRole('button', { name: 'Finalise draft', exact: true })
-  if (!(await finaliseBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
+  const finalizeBtn = page.getByRole('button', { name: 'Finalise draft' }).first()
+  if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
   }
 
-  // handleFinaliseDraft (Manuscript.jsx) prompts for a draft name via native
-  // window.prompt(), then confirms via window.confirm() — Playwright
-  // auto-dismisses both without a handler (prompt returns null, so the
-  // handler bails out before finalizing at all), so accept both explicitly.
+  // handleFinaliseDraft() names the copy via window.prompt then confirms via
+  // window.confirm — both are native dialogs Playwright auto-dismisses
+  // unless handled, which is why this used to silently no-op. One `on`
+  // handler (not two `once`s — both `once`s would fire on the first dialog
+  // and the second would error "already handled") covers both dialogs.
   page.on('dialog', dialog => dialog.accept())
-  await finaliseBtn.click()
+  await finalizeBtn.click()
 
-  // A successful finalise sets `readerDraft`, which renders the finalized-
-  // reader toolbar (`role="group" aria-label="Finalized reader view"`,
-  // Manuscript.jsx) regardless of which reader view (scroll/pages) is active
-  // — more robust than asserting on the reader body, which differs between
-  // the two view modes (FinalizedReader.jsx's scroll-mode `.ms-final-book`
-  // article vs. its paged-mode "Pages X of Y" layout).
+  // The finalized reader (FinalizedReader.jsx's `.ms-final-reader`, shared by
+  // both its scroll and paged view modes) should appear.
   await expect(
-    page.getByRole('group', { name: 'Finalized reader view' }),
+    page.locator('.ms-final-reader').first(),
   ).toBeVisible({ timeout: 8000 })
 })
