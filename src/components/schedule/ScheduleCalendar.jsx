@@ -11,18 +11,18 @@ import ScheduleSettingsModal from './ScheduleSettingsModal.jsx'
 const titleCase = value => String(value || 'other').replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
 const UNKNOWN_COLORS = ['#14b8a6', '#ec4899', '#a78bfa', '#84cc16']
 
-export default function ScheduleCalendar({ store }) {
-  return <ScheduleWorkspace key={store.activeNovelId || store.activeNovel?.id || 'none'} store={store} />
+export default function ScheduleCalendar({ store, initialEntryId = null }) {
+  return <ScheduleWorkspace key={store.activeNovelId || store.activeNovel?.id || 'none'} store={store} initialEntryId={initialEntryId} />
 }
 
-function ScheduleWorkspace({ store }) {
+function ScheduleWorkspace({ store, initialEntryId }) {
   const { activeNovelId, readOnly, updateNovel } = store
   const calendar = useMemo(() => getScheduleCalendar(store.activeNovel), [store.activeNovel])
   const viewSettings = useMemo(() => getScheduleViewSettings(store.activeNovel, calendar), [store.activeNovel, calendar])
   const [viewYear, setViewYear] = useState(() => viewSettings.openYear)
   const [viewMonth, setViewMonth] = useState(() => viewSettings.openMonth)
   const [viewMode, setViewMode] = useState('month')
-  const [modal, setModal] = useState(null)
+  const [modal, setModal] = useState(initialEntryId ? { type: 'detail', eventId: initialEntryId } : null)
   const events = useMemo(() => (store.storySchedule || []).map(normalizeScheduleEvent), [store.storySchedule])
   const eventIndex = useMemo(() => new Map(events.map(event => [event.id, event])), [events])
   const configuredCategories = useMemo(() => getScheduleCategories(store.activeNovel), [store.activeNovel])

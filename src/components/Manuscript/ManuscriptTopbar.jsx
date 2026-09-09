@@ -215,7 +215,7 @@ export default function ManuscriptTopbar({
           {mode && onSetMode && (
             <div className="ms-modes" role="group" aria-label="Editor mode">
               {MODES.map(m => (
-                <button key={m.id} type="button" className={mode === m.id ? 'is-on' : ''} onClick={() => onSetMode(m.id)}>
+                <button key={m.id} type="button" aria-pressed={mode === m.id} className={mode === m.id ? 'is-on' : ''} onClick={() => onSetMode(m.id)}>
                   {m.label}
                 </button>
               ))}

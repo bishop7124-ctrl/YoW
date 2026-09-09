@@ -970,6 +970,7 @@ export default function Layout({
     return () => clearTimeout(t)
   }, [activeSectionTourId, tourStore?.toursEnabled, suppressAutoTour]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [referenceTarget, setReferenceTarget] = useState(null)
   const resetStudioIndex = useCallback(() => {
     window.dispatchEvent(new Event('studio-index-reset'))
   }, [])
@@ -989,6 +990,7 @@ export default function Layout({
           openUpgradePage()
           return
         }
+        setReferenceTarget(e.detail.entryId ? { section: e.detail.section, id: e.detail.entryId } : null)
         setSection(e.detail.section)
         if (ALL_SECTIONS.find(s => s.id === e.detail.section)) setViewMode('planning')
       }
@@ -1031,16 +1033,16 @@ export default function Layout({
     characters:   <Characters store={store} userId={userId} membership={membership} />,
     relationships: <RelationshipMap store={store} />,
     familytree:   <FamilyTree store={store} />,
-    factions:     <Factions store={store} />,
+    factions:     <Factions key={referenceTarget?.section === 'factions' ? referenceTarget.id : 'default'} initialEntryId={referenceTarget?.section === 'factions' ? referenceTarget.id : null} store={store} />,
     locations:    <Locations store={store} />,
     lore:         <Lore store={store} />,
     ideas:        <IdeasKanban store={store} userId={userId} membership={membership} />,
-    schedule:     <ScheduleCalendar store={store} />,
+    schedule:     <ScheduleCalendar key={referenceTarget?.section === 'schedule' ? referenceTarget.id : 'default'} initialEntryId={referenceTarget?.section === 'schedule' ? referenceTarget.id : null} store={store} />,
     timeline:     <Timeline store={store} />,
     worldhistory: <WorldHistory store={store} />,
     map:          <MapBuilder store={store} />,
     aitools:           <AITools store={store} userId={userId} membership={membership} />,
-    characterbuilder:  <CharacterBuilder store={store} />,
+    characterbuilder:  <CharacterBuilder key={referenceTarget?.section === 'characterbuilder' ? referenceTarget.id : 'default'} initialEntryId={referenceTarget?.section === 'characterbuilder' ? referenceTarget.id : null} store={store} />,
   }
 
   const activeSection = planningSections.find(s => s.id === section) || planningSections[0]
@@ -1106,7 +1108,7 @@ export default function Layout({
               setViewMode('writing')
             }}
           >
-            Write
+            {projectTypeCfg.workspaceLabel === 'Sessions' ? 'Sessions' : projectTypeCfg.workspaceLabel === 'Pages' ? 'Pages' : 'Write'}
           </StudioButton>
         )}
         topBar={null}
@@ -1231,13 +1233,6 @@ export default function Layout({
                     'AI Tools',
                     'Upgrade to unlock project-aware analysis, character interviews, and story consistency tools.'
                   )
-                ) : section === 'map' && isMobileViewport ? (
-                  <div className="workspace-page grid h-full place-items-center p-6">
-                    <StudioEmpty
-                      title="Map Builder is desktop-only"
-                      body="Open this project on a tablet or desktop to create and edit maps. Locations remain available on mobile."
-                    />
-                  </div>
                 ) : (
                   databaseContent[section] || databaseContent['characters']
                 )}

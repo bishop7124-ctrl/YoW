@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useDialogFocus } from '../../utils/useDialogFocus'
+import { useRef } from 'react'
 
 function CheckIcon({ done }) {
   return (
@@ -22,8 +23,8 @@ export function buildMilestones({ allProjectStats, characters, loreEntries, loca
     },
     {
       id: 'write_scene',
-      label: 'Write your first scene',
-      hint: 'Open a project and start drafting in the Manuscript.',
+      label: 'Draft your first scene, encounter, or page',
+      hint: 'Open a project and start drafting in its writing workspace.',
       done: allProjectStats.some(s => s.manuscriptWords > 0),
     },
     {
@@ -36,7 +37,7 @@ export function buildMilestones({ allProjectStats, characters, loreEntries, loca
       id: 'build_world',
       label: 'Build your world',
       hint: 'Add a location, lore entry, or timeline event.',
-      done: (loreEntries ?? []).some(e => !e.syncDeleted) || (locations ?? []).some(l => !l.syncDeleted),
+      done: (loreEntries ?? []).some(e => !e.syncDeleted) || (locations ?? []).some(l => !l.syncDeleted) || allProjectStats.some(project => (project.timeline || []).some(event => !event.syncDeleted)),
     },
     {
       id: 'export',
@@ -53,15 +54,12 @@ export default function GettingStartedChecklist({ milestones, onClose, onDismiss
   const allDone = doneCount === milestones.length
   const pct = Math.round((doneCount / milestones.length) * 100)
 
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const dialogRef = useRef(null)
+  useDialogFocus(dialogRef, onClose)
 
   return (
     <div className="gs-modal-backdrop" onClick={onClose}>
-      <div className="gs-modal" onClick={e => e.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Getting started" className="gs-modal" onClick={e => e.stopPropagation()}>
         <div className="gs-modal-header">
           <div>
             <p className="gs-modal-eyebrow">Getting started</p>

@@ -10,6 +10,7 @@ import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../ut
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { groupFamilyRelationships } from '../../utils/familyRelationships'
 import { UserMediaImage } from '../shared/UserMedia'
+import { CharacterPortrait, CharacterAvatar } from '../shared/CharacterPortrait'
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
@@ -91,24 +92,6 @@ function ImageLightbox({ src, alt, onClose }) {
         alt={alt}
         onClick={e => e.stopPropagation()}
         className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-      />
-    </div>
-  )
-}
-
-// Renders a character image respecting focal point and optional zoom level
-function CharacterPortrait({ src, position, zoom, className = '' }) {
-  const z = zoom || 1
-  return (
-    <div className={`overflow-hidden ${className}`}>
-      <UserMediaImage
-        src={src}
-        alt=""
-        className="w-full h-full object-cover pointer-events-none"
-        style={{
-          objectPosition: position || '50% 50%',
-          ...(z !== 1 && { transform: `scale(${z})`, transformOrigin: position || '50% 50%' }),
-        }}
       />
     </div>
   )
@@ -260,112 +243,235 @@ function ComboSelect({ value, onChange, options, placeholder, label, allowCustom
   )
 }
 
-// Full-screen photo editor popup: set focal point and zoom level
+// Every real spot in the app that shows a character portrait, so the editor can preview
+// the actual crop instead of a generic shape. Sizes/rounding mirror the live components —
+// keep in sync with Characters list rows, the dossier header, RelationshipMap and FamilyTree.
+const PHOTO_RENDER_CONTEXTS = [
+  { id: 'list', label: 'Character list', hint: 'Sidebar row', size: 32, shape: 'circle' },
+  { id: 'map', label: 'Relationship map', hint: 'Connection node', size: 52, shape: 'circle' },
+  { id: 'tree', label: 'Family tree', hint: 'Tree node', size: 46, shape: 'square' },
+  { id: 'profile', label: 'Dossier header', hint: 'Character profile', size: 88, shape: 'square' },
+]
+
+// Crop box size is stored as "zoom" (1x-3x) everywhere else in the app, so the
+// box's side length is expressed as a fraction of the largest possible square —
+// 1 = the full inscribed square (zoom 1x), 1/3 = the tightest crop (zoom 3x).
+const MIN_ZOOM = 1
+const MAX_ZOOM = 3
+const MIN_BOX = 1 / MAX_ZOOM
+const MAX_BOX = 1 / MIN_ZOOM
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
+
+// CharacterPortrait renders a crop with plain CSS: object-position positions the
+// browser's own object-fit:cover crop, then transform: scale(zoom) with the SAME
+// point as transform-origin zooms in around it. Those two steps share one anchor
+// value per axis, which means the anchor is only the crop window's true center
+// when it's already 50% — off-center, the window is skewed toward whichever side
+// has more "room" on the un-square axis (the axis that overflows during cover).
+// A box-drag editor needs the exact inverse of that compound formula, not the
+// naive "center = position" reading, or dragging the box away from center drifts
+// the actual rendered crop away from what the box visually shows. Full derivation
+// in the redesign's follow-up notes (ROADMAP Bugs table, 2026-09-09).
+//
+// For one axis with normalized image length N (1 for the shorter natural side)
+// and window size s = 1/zoom, the window's start position works out to
+// windowStart = position * (N - s) — independent of N on the non-overflowing
+// axis (where N = 1) it degenerates to windowStart = 0 for any position, which
+// is why that axis has no room to pan at zoom 1.
+
+// Reconstructs the crop box (in units where the image's shorter natural side = 1)
+// from the stored objectPosition-style imagePosition/imageZoom pair, so reopening
+// the editor shows the box exactly where it was left.
+function boxFromPositionZoom(position, zoom, naturalW, naturalH) {
+  const minDim = Math.min(naturalW, naturalH) || 1
+  const normW = naturalW / minDim
+  const normH = naturalH / minDim
+  const size = clamp(1 / (zoom || 1), MIN_BOX, MAX_BOX)
+  const [pxStr, pyStr] = String(position || '50% 50%').split(' ')
+  const px = (parseFloat(pxStr) || 50) / 100
+  const py = (parseFloat(pyStr) || 50) / 100
+  return {
+    normW, normH, size,
+    cx: clamp(px * (normW - size) + size / 2, size / 2, normW - size / 2),
+    cy: clamp(py * (normH - size) + size / 2, size / 2, normH - size / 2),
+  }
+}
+
+// The inverse: turns the crop box back into the objectPosition + scale pair that
+// every renderer in the app (CharacterPortrait) already knows how to draw.
+function positionZoomFromBox(box) {
+  const { cx, cy, size, normW, normH } = box
+  const rangeX = normW - size
+  const rangeY = normH - size
+  // Below ~1000th of a unit there's no meaningful room to solve position from
+  // (a square image at zoom 1x on that axis) — center is the only consistent answer.
+  const px = rangeX > 1e-3 ? clamp((cx - size / 2) / rangeX, 0, 1) : 0.5
+  const py = rangeY > 1e-3 ? clamp((cy - size / 2) / rangeY, 0, 1) : 0.5
+  return { position: `${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%`, zoom: Math.round((1 / size) * 100) / 100 }
+}
+
+// Full-screen photo editor popup: drag a square crop box to reposition and resize
+// it, and see exactly how that crop will look everywhere the app shows this
+// character's portrait.
 function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) {
-  const [pos, setPos] = useState(imagePosition || '50% 50%')
-  const [zoom, setZoom] = useState(imageZoom || 1)
   const resolvedImage = useUserMediaUrl(image)
   const pickerRef = useRef(null)
-  const [isDragging, setIsDragging] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  // Assume square until the real photo dimensions are known (a moment after mount,
+  // once the measurement <img> below fires onLoad) so the box is interactive right
+  // away instead of blocking on image decode; it reflows to the true aspect ratio
+  // as soon as the real size is known.
+  const [box, setBox] = useState(() => boxFromPositionZoom(imagePosition, imageZoom, 1, 1))
 
-  const handleInteraction = (e) => {
-    if (!pickerRef.current) return
+  const [mode, setMode] = useState(null) // 'move' | 'resize' | null
+  const grabOffsetRef = useRef({ dx: 0, dy: 0 })
+
+  const handleImageLoad = (e) => {
+    const w = e.currentTarget.naturalWidth
+    const h = e.currentTarget.naturalHeight
+    if (!w || !h) return
+    setBox(boxFromPositionZoom(imagePosition, imageZoom, w, h))
+  }
+
+  const DISPLAY_TARGET = 280
+  const scale = DISPLAY_TARGET / Math.max(box.normW, box.normH)
+  const displayW = box.normW * scale
+  const displayH = box.normH * scale
+
+  const pointToNormalized = (clientX, clientY) => {
     const rect = pickerRef.current.getBoundingClientRect()
-    const x = Math.max(0, Math.min(100, Math.round(((e.clientX - rect.left) / rect.width) * 100)))
-    const y = Math.max(0, Math.min(100, Math.round(((e.clientY - rect.top) / rect.height) * 100)))
-    setPos(`${x}% ${y}%`)
+    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale }
   }
 
-  const [posX, posY] = pos.split(' ')
-
-  const previewStyle = {
-    objectFit: 'cover',
-    objectPosition: pos,
-    ...(zoom !== 1 && { transform: `scale(${zoom})`, transformOrigin: pos }),
+  const handleDown = (e) => {
+    const role = e.target.closest('[data-crop-role]')?.dataset.cropRole
+    const p = pointToNormalized(e.clientX, e.clientY)
+    pickerRef.current?.setPointerCapture?.(e.pointerId)
+    if (role === 'handle') {
+      setMode('resize')
+    } else if (role === 'box') {
+      grabOffsetRef.current = { dx: p.x - box.cx, dy: p.y - box.cy }
+      setMode('move')
+    } else {
+      // Click on the dimmed background: jump the box here and start fine-tuning.
+      grabOffsetRef.current = { dx: 0, dy: 0 }
+      setBox(prev => ({ ...prev, cx: clamp(p.x, prev.size / 2, prev.normW - prev.size / 2), cy: clamp(p.y, prev.size / 2, prev.normH - prev.size / 2) }))
+      setMode('move')
+    }
   }
+
+  const handleMove = (e) => {
+    if (!mode) return
+    const p = pointToNormalized(e.clientX, e.clientY)
+    if (mode === 'move') {
+      const { dx, dy } = grabOffsetRef.current
+      setBox(prev => ({
+        ...prev,
+        cx: clamp(p.x - dx, prev.size / 2, prev.normW - prev.size / 2),
+        cy: clamp(p.y - dy, prev.size / 2, prev.normH - prev.size / 2),
+      }))
+    } else if (mode === 'resize') {
+      setBox(prev => {
+        const half = Math.max(Math.abs(p.x - prev.cx), Math.abs(p.y - prev.cy), MIN_BOX / 2)
+        const maxByBounds = Math.min(prev.cx, prev.normW - prev.cx, prev.cy, prev.normH - prev.cy) * 2
+        return { ...prev, size: clamp(half * 2, MIN_BOX, Math.min(MAX_BOX, maxByBounds)) }
+      })
+    }
+  }
+
+  const endInteraction = () => setMode(null)
+  const resetBox = () => setBox(prev => ({ ...prev, size: MAX_BOX, cx: prev.normW / 2, cy: prev.normH / 2 }))
+
+  const { position: derivedPosition, zoom: derivedZoom } = positionZoomFromBox(box)
+  const isDefaultBox = box.size >= MAX_BOX - 0.001 && Math.abs(box.cx - box.normW / 2) < 0.001 && Math.abs(box.cy - box.normH / 2) < 0.001
 
   return (
     <Modal title="Edit Portrait" onClose={onClose} wide centered>
       <form data-confirms-save onSubmit={event => {
         event.preventDefault()
-        onSave(pos, zoom)
+        onSave(derivedPosition, derivedZoom)
         event.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
       }}>
-      <div className="flex gap-6 items-start">
-        {/* Main drag-to-position area */}
-        <div className="flex-1 min-w-0">
+      <div className="flex flex-col sm:flex-row gap-6 items-start">
+        {/* Main crop-box area */}
+        <div className="flex-1 min-w-0 w-full">
           <p className="text-xs text-[var(--text-muted)] mb-2">
-            Drag or click to set the focal point — controls where the portrait is cropped across the app.
+            Drag the box to reposition it, drag its corner handle to resize — this is what stays inside the frame wherever this photo appears in the app.
           </p>
-          <div
-            ref={pickerRef}
-            data-dirties-form
-            className="relative h-72 rounded-lg overflow-hidden cursor-crosshair select-none touch-none border border-[var(--border)]"
-            onPointerDown={(e) => { setIsDragging(true); e.currentTarget.setPointerCapture?.(e.pointerId); handleInteraction(e) }}
-            onPointerMove={(e) => { if (isDragging) handleInteraction(e) }}
-            onPointerUp={() => setIsDragging(false)}
-            onPointerCancel={() => setIsDragging(false)}
-          >
-            <img
-              src={resolvedImage || image}
-              alt="Portrait"
-              className="w-full h-full pointer-events-none"
-              style={previewStyle}
-            />
-            {/* Focal point crosshair */}
-            <div
-              className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ left: posX, top: posY }}
-            >
-              <div className="absolute inset-0 rounded-full border-2 border-white shadow-lg" />
-              <div className="absolute top-1/2 left-0 w-full h-px bg-white/80 -translate-y-1/2" />
-              <div className="absolute left-1/2 top-0 h-full w-px bg-white/80 -translate-x-1/2" />
-            </div>
-          </div>
-
-          {/* Zoom slider */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Zoom</span>
-              <span className="text-[10px] text-[var(--text-muted)]">{zoom.toFixed(1)}×</span>
-            </div>
-            <input
-              aria-label="Portrait zoom" type="range" min="1" max="3" step="0.05" value={zoom}
-              onChange={e => setZoom(Number(e.target.value))}
-              className="w-full h-1 accent-[var(--accent)]"
-            />
-            {zoom > 1 && (
-              <button
-                type="button"
+          <div className="h-72 rounded-lg overflow-hidden border border-[var(--border)] bg-[var(--bg-main)] flex items-center justify-center">
+            {imgError ? (
+              <span className="text-xs text-red-400 px-4 text-center">Could not load this photo to crop it.</span>
+            ) : !resolvedImage ? (
+              <span className="text-xs text-[var(--text-muted)]">Loading photo…</span>
+            ) : (
+              <div
+                ref={pickerRef}
                 data-dirties-form
-                onClick={() => setZoom(1)}
-                className="mt-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+                className="relative select-none touch-none"
+                style={{ width: displayW, height: displayH }}
+                onPointerDown={handleDown}
+                onPointerMove={handleMove}
+                onPointerUp={endInteraction}
+                onPointerCancel={endInteraction}
               >
-                Reset zoom
+                <img
+                  src={resolvedImage}
+                  alt="Portrait"
+                  draggable={false}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                />
+                <div
+                  data-crop-role="box"
+                  title="Drag to move"
+                  className="absolute border-2 border-white cursor-move"
+                  style={{
+                    left: (box.cx - box.size / 2) * scale,
+                    top: (box.cy - box.size / 2) * scale,
+                    width: box.size * scale,
+                    height: box.size * scale,
+                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
+                  }}
+                >
+                  <div
+                    data-crop-role="handle"
+                    title="Drag to resize"
+                    className="absolute -right-2 -bottom-2 w-5 h-5 rounded-full bg-white border-2 border-[var(--accent)] cursor-nwse-resize"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          {!imgError && resolvedImage && (
+            <img src={resolvedImage} alt="" className="hidden" onLoad={handleImageLoad} onError={() => setImgError(true)} />
+          )}
+
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Zoom {derivedZoom.toFixed(1)}×</span>
+            {!isDefaultBox && (
+              <button type="button" data-dirties-form onClick={resetBox} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">
+                Reset crop
               </button>
             )}
           </div>
         </div>
 
-        {/* Live previews */}
-        <div className="flex flex-col gap-4 items-center flex-shrink-0 pt-6">
-          <div className="text-center">
-            <div className="w-10 h-10 rounded-full overflow-hidden border border-[var(--border)] mx-auto">
-              <UserMediaImage src={image} alt="" className="w-full h-full" style={previewStyle} />
-            </div>
-            <p className="text-[9px] text-[var(--text-muted)] mt-1">Avatar</p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-20 rounded-lg overflow-hidden border border-[var(--border)] mx-auto">
-              <UserMediaImage src={image} alt="" className="w-full h-full" style={previewStyle} />
-            </div>
-            <p className="text-[9px] text-[var(--text-muted)] mt-1">Card</p>
-          </div>
-          <div className="text-center">
-            <div className="w-24 h-24 rounded-xl overflow-hidden border border-[var(--border)] mx-auto">
-              <UserMediaImage src={image} alt="" className="w-full h-full" style={previewStyle} />
-            </div>
-            <p className="text-[9px] text-[var(--text-muted)] mt-1">Profile</p>
+        {/* Live previews of every real spot this photo appears */}
+        <div className="w-full sm:w-auto flex-shrink-0">
+          <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest mb-2 sm:text-right">Where this appears</p>
+          <div className="grid grid-cols-4 sm:grid-cols-2 gap-3">
+            {PHOTO_RENDER_CONTEXTS.map(ctx => (
+              <div key={ctx.id} className="text-center">
+                <CharacterPortrait
+                  src={image}
+                  position={derivedPosition}
+                  zoom={derivedZoom}
+                  className={`border border-[var(--border)] mx-auto ${ctx.shape === 'circle' ? 'rounded-full' : 'rounded-lg'}`}
+                  style={{ width: ctx.size, height: ctx.size }}
+                />
+                <p className="text-[9px] text-[var(--text-main)] mt-1 leading-tight">{ctx.label}</p>
+                <p className="text-[8px] text-[var(--text-muted)] leading-tight">{ctx.hint}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1079,18 +1185,7 @@ function CharactersWorkspace({ store, userId, membership }) {
             active={selectedCharacterId === c.id}
           >
             <div className="flex items-center gap-2.5">
-              {c.image ? (
-                <CharacterPortrait
-                  src={c.image}
-                  position={c.imagePosition}
-                  zoom={c.imageZoom}
-                  className="w-8 h-8 rounded-full flex-shrink-0 border border-[var(--border)]"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[var(--accent-fade)] border border-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-bold text-[var(--accent)]">{c.name.charAt(0)}</span>
-                </div>
-              )}
+              <CharacterAvatar character={c} size={32} />
               <div>
                 <div className="text-sm font-medium text-[var(--text-main)]">{c.name}</div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{c.role || 'Supporting'}</div>

@@ -280,7 +280,7 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
                 <span>1</span>
                 <div>
                   <strong>Choose a format</strong>
-                  <small>Novel, campaign, screenplay, comic, and more.</small>
+                  <small>Novel, novella, short story, campaign, or comic.</small>
                 </div>
               </div>
               <div className="first-run-tour-step">
