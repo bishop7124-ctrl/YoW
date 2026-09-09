@@ -41,6 +41,7 @@ vi.mock('@supabase/supabase-js', () => ({
 const constructEvent = vi.fn()
 const subscriptionsRetrieve = vi.fn()
 const paymentIntentsRetrieve = vi.fn()
+const chargesRetrieve = vi.fn()
 
 vi.mock('stripe', () => ({
   // Must be a real constructor (the module does `new Stripe(key)`) — an
@@ -50,6 +51,7 @@ vi.mock('stripe', () => ({
       webhooks: { constructEvent },
       subscriptions: { retrieve: subscriptionsRetrieve },
       paymentIntents: { retrieve: paymentIntentsRetrieve },
+      charges: { retrieve: chargesRetrieve },
     }
   }),
 }))
@@ -451,7 +453,8 @@ describe('handler — Founder slot allocation', () => {
     expect(upsertCall.args[0]).toMatchObject({ user_id: 'user-2', founder_overflow_at: expect.any(String) })
   })
 
-  it('releases the slot on a full refund of a Founder charge', async () => {
+  it('revokes access and releases the slot on a full Founder refund', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'founder', beta_tester: true } } }, error: null })
     constructEvent.mockReturnValue({
       id: 'evt_refund', type: 'charge.refunded',
       data: { object: { id: 'ch_1', refunded: true, metadata: { user_id: 'user-3', plan: 'founder' } } },
@@ -464,6 +467,39 @@ describe('handler — Founder slot allocation', () => {
 
     expect(res.status).toHaveBeenCalledWith(200)
     expect(rpc).toHaveBeenCalledWith('release_founder_slot', { p_user_id: 'user-3' })
+    expect(metadataWritesFor('user-3')[0]).toMatchObject({ subscription_plan: null, subscription_status: 'none', beta_tester: false, access_revoked_at: expect.any(String) })
+  })
+
+  it('keeps a newer Founder purchase when an older charge is refunded', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'founder', lifetime_payment_intent: 'pi_new' } } }, error: null })
+    constructEvent.mockReturnValue({ id: 'evt_old', type: 'charge.refunded', data: { object: { id: 'ch_old', refunded: true, payment_intent: 'pi_old', metadata: { user_id: 'user-3', plan: 'founder' } } } })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(updateUserById).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('retries a failed revocation instead of releasing a still-active slot', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'founder' } } }, error: null })
+    updateUserById.mockResolvedValueOnce({ error: new Error('Temporary auth failure') })
+    constructEvent.mockReturnValue({ id: 'evt_retry_refund', type: 'charge.refunded', data: { object: { id: 'ch_retry', refunded: true, metadata: { user_id: 'user-3', plan: 'founder' } } } })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(fromCalls.some(call => call.table === 'stripe_processed_events' && call.method === 'delete')).toBe(true)
+  })
+
+  it.each(['lost', 'won', 'warning_closed'])('handles a %s dispute without treating all closures as lost', async status => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'founder' } } }, error: null })
+    chargesRetrieve.mockResolvedValue({ id: 'ch_dispute', metadata: { user_id: 'user-3', plan: 'founder' } })
+    constructEvent.mockReturnValue({ id: `evt_dispute_${status}`, type: 'charge.dispute.closed', data: { object: { charge: 'ch_dispute', status } } })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(200)
+    if (status === 'lost') expect(rpc).toHaveBeenCalledWith('release_founder_slot', { p_user_id: 'user-3' })
+    else expect(updateUserById).not.toHaveBeenCalled()
   })
 
   it('does not release a slot on a partial refund', async () => {

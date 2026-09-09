@@ -1,3 +1,5 @@
+import { useMembership } from './utils/useMembership'
+import AccessChangeNotice from './components/account/AccessChangeNotice'
 import { Component, useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -28,7 +30,6 @@ import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
 import DownloadPage from './components/download/DownloadPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
-import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
@@ -42,6 +43,7 @@ import { isDesktopAppRuntime } from './utils/runtime'
 import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
+import { isStandalonePublicRoute, parsePublicRoute } from './utils/appRoutes'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
@@ -61,39 +63,6 @@ const APP_FONT_OPTIONS = {
   serif: 'Georgia, "Times New Roman", serif',
   mono: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
   dyslexia: 'Dyslexie, "OpenDyslexic", "Atkinson Hyperlegible", Verdana, Arial, sans-serif',
-}
-
-function isPricingPath(path) {
-  return path === '/pricing' || path === '/pricing/'
-}
-
-function isFeaturesPath(path) {
-  return path === '/features' || path === '/features/'
-}
-
-function isFAQPath(path) {
-  return path === '/faq' || path === '/faq/'
-}
-
-function isFoundersPath(path) {
-  return path === '/founders' || path === '/founders/'
-}
-
-function isDownloadPath(path) {
-  return path === '/download' || path === '/download/'
-}
-
-function getFounderProfileSlug(path) {
-  const m = path.match(/^\/founders\/([^/]+)\/?$/)
-  if (!m) return null
-  const slug = m[1]
-  return (slug === '' || slug === 'founders') ? null : slug
-}
-
-function getAuthRouteMode(path) {
-  if (path === '/login' || path === '/login/') return 'login'
-  if (path === '/signup' || path === '/signup/') return 'signup'
-  return null
 }
 
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
@@ -234,7 +203,7 @@ function AppInner() {
     if (user) { setSignedOut(false); setOpenLoginAfterSignOut(false); prevUserRef.current = user }
   }, [user, authLoading, recoveryMode])
   const userId = user?.uid || user?.id || null
-  const membership = getMembership(user)
+  const membership = useMembership(user)
   const [storageModeState, setStorageModeState] = useState(() => loadStorageModeState(userId))
   const storageMode = storageModeState.userId === (userId || null)
     ? storageModeState.mode
@@ -264,13 +233,14 @@ function AppInner() {
   const [activeSeriesId, setActiveSeriesId] = useState(() => initialRouteSnapshot.seriesId || null)
   const [seriesEntryNovelId, setSeriesEntryNovelId] = useState(null)
   const [layoutViewMode, setLayoutViewMode] = useState(() => initialRouteSnapshot.layoutViewMode)
-  const [showPricing, setShowPricing] = useState(() => isPricingPath(window.location.pathname))
-  const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
-  const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
-  const [showFounders, setShowFounders] = useState(() => isFoundersPath(window.location.pathname))
-  const [showDownload, setShowDownload] = useState(() => isDownloadPath(window.location.pathname))
-  const [founderProfileSlug, setFounderProfileSlug] = useState(() => getFounderProfileSlug(window.location.pathname))
-  const [authRouteMode, setAuthRouteMode] = useState(() => getAuthRouteMode(window.location.pathname))
+  const [publicRoute, setPublicRoute] = useState(() => parsePublicRoute(window.location.pathname))
+  const showPricing = publicRoute.page === 'pricing'
+  const showFeatures = publicRoute.page === 'features'
+  const showFAQ = publicRoute.page === 'faq'
+  const showFounders = publicRoute.page === 'founders'
+  const showDownload = publicRoute.page === 'download'
+  const founderProfileSlug = publicRoute.founderProfileSlug
+  const authRouteMode = publicRoute.authRouteMode
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(() => initialRouteSnapshot.accountOpen)
   const [accountTab, setAccountTab] = useState(() => initialRouteSnapshot.accountTab)
@@ -554,13 +524,7 @@ function AppInner() {
 
   const navigatePublic = (path) => {
     window.history.pushState(null, '', path)
-    setShowPricing(isPricingPath(path))
-    setShowFeatures(isFeaturesPath(path))
-    setShowFAQ(isFAQPath(path))
-    setShowFounders(isFoundersPath(path))
-    setShowDownload(isDownloadPath(path))
-    setFounderProfileSlug(getFounderProfileSlug(path))
-    setAuthRouteMode(getAuthRouteMode(path))
+    setPublicRoute(parsePublicRoute(path))
   }
 
   const goToSignup = (email) => {
@@ -623,7 +587,7 @@ function AppInner() {
     if (!user) return
     // Public standalone pages own the URL; don't rewrite it out from under them
     // when auth/data loading changes the app-side navigation state.
-    if (showPricing || showFeatures || showFAQ || showFounders || founderProfileSlug) return
+    if (isStandalonePublicRoute(publicRoute)) return
     const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, {
       accountOpen,
       accountTab,
@@ -631,44 +595,15 @@ function AppInner() {
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, showPricing, showFeatures, showFAQ, showFounders, founderProfileSlug])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, publicRoute])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
     const handlePop = () => {
       const path = window.location.pathname
-      setShowDownload(isDownloadPath(path))
-      if (isDownloadPath(path)) {
-        setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setFounderProfileSlug(null); setAuthRouteMode(null)
-        return
-      }
-      if (isPricingPath(path)) {
-        setShowPricing(true); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
-        return
-      }
-      if (isFeaturesPath(path)) {
-        setShowFeatures(true); setShowPricing(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
-        return
-      }
-      if (isFAQPath(path)) {
-        setShowFAQ(true); setShowPricing(false); setShowFeatures(false); setShowFounders(false); setAuthRouteMode(null)
-        return
-      }
-      if (isFoundersPath(path)) {
-        setShowFounders(true); setFounderProfileSlug(null); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
-        return
-      }
-      const profileSlug = getFounderProfileSlug(path)
-      if (profileSlug) {
-        setFounderProfileSlug(profileSlug); setShowFounders(false); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
-        return
-      }
-      const nextAuthRouteMode = getAuthRouteMode(path)
-      if (nextAuthRouteMode) {
-        setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(nextAuthRouteMode)
-        return
-      }
-      setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
+      const nextPublicRoute = parsePublicRoute(path)
+      setPublicRoute(nextPublicRoute)
+      if (isStandalonePublicRoute(nextPublicRoute) || (nextPublicRoute.page === 'auth' && !user)) return
       const route = parseRoute()
       setSection(route.section)
       setLayoutViewMode(route.layoutViewMode)
@@ -691,7 +626,7 @@ function AppInner() {
     }
     window.addEventListener('popstate', handlePop)
     return () => window.removeEventListener('popstate', handlePop)
-  }, [store])
+  }, [store, user])
 
   useEffect(() => {
     const handleOpenAccount = (event) => {
@@ -745,7 +680,7 @@ function AppInner() {
 
   // Use the product default on public/marketing pages so user theme choices
   // never leak into the landing experience.
-  const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || showDownload || !!founderProfileSlug || !user
+  const isPublicPage = isStandalonePublicRoute(publicRoute) || !user
   useEffect(() => {
     const applyCurrentTheme = () => {
       if (isPublicPage) {
@@ -1082,7 +1017,7 @@ function AppInner() {
     )
   }
 
-  const showFreeSelector = membership.isFree && !membership.freeProjectId && store.novels.length >= 1
+  const showFreeSelector = !desktopApp && membership.usesFreeCloudLimits && !membership.freeProjectId && store.novels.length >= 1
 
   const handleFreeProjectConfirm = async (projectId) => {
     try {
@@ -1290,9 +1225,11 @@ function AppInner() {
           </button>
         </div>
       )}
+      <AccessChangeNotice membership={membership} store={store} desktopApp={desktopApp} onManageMembership={() => { setAccountTab('membership'); setAccountOpen(true) }} />
       {showFreeSelector && (
         <FreeProjectSelector
           novels={store.novels}
+          store={store}
           onConfirm={handleFreeProjectConfirm}
           busy={freeProjectBusy}
         />
@@ -1453,7 +1390,8 @@ function AppInner() {
     if (target.type === 'character') store.setSelectedCharacterId?.(target.itemId)
     if (target.type === 'location') store.setSelectedLocationId?.(target.itemId)
     if (target.type === 'lore') store.setSelectedLoreEntryId?.(target.itemId)
-    if (target.type === 'timeline' || target.type === 'history') store.setSelectedTimelineEventId?.(target.itemId)
+    if (target.type === 'timeline') store.setSelectedTimelineEventId?.(target.itemId)
+    if (target.type === 'history') store.setSelectedHistoryEntryId?.(target.itemId)
     if (target.type === 'map') store.selectMap?.(target.itemId)
   }
 
