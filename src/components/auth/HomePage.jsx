@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 
 const PROJECT_TYPES = [
   {
@@ -126,7 +127,7 @@ const FEATURE_TABS = [
       { type: 'D&D Campaign', text: 'Organize campaign writing by story arc, session, and encounter.' },
     ],
     capabilities: [
-      'Rich text editing with distraction-free focus mode',
+      'Rich text editing with dedicated Write and Edit modes',
       'Acts, chapters, and scenes hierarchy',
       'Scene-level status tracking (draft / revised / final)',
       'Word count per scene and chapter',
@@ -148,7 +149,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Build full protagonist profiles, track character arc milestones, and see exactly which scenes each character appears in.' },
       { type: 'Short Story', text: 'Keep only the essential character details close at hand for a tighter cast.' },
-      { type: 'D&D Campaign', text: 'Create NPC profiles with goals, secrets, faction loyalties, and DM-only notes hidden from players.' },
+      { type: 'D&D Campaign', text: 'Create NPC profiles with goals, secrets, faction loyalties, and private DM-only notes.' },
     ],
     capabilities: [
       'Rich character profiles with custom fields',
@@ -174,7 +175,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Document your magic system rules, historical events, and cultural traditions so every scene stays internally consistent.' },
       { type: 'Novella', text: 'Keep the world rules and backstory that matter without carrying a full epic-scale bible.' },
-      { type: 'D&D Campaign', text: 'Build a world codex — gods, histories, languages, and laws — that your players can explore progressively as they discover it.' },
+      { type: 'D&D Campaign', text: 'Build a private world codex — gods, histories, languages, and laws — so every answer is one search away when you\'re running the table.' },
     ],
     capabilities: [
       'Tagged and categorized lore entries',
@@ -200,7 +201,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Track which chapters are set where, link key plot events to their locations, and maintain consistent atmospheric descriptions.' },
       { type: 'Short Story', text: 'Track the few places that matter and keep atmosphere notes consistent.' },
-      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, with secrets only the DM can see.' },
+      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, keeping every secret in your own private prep.' },
     ],
     capabilities: [
       'Nested location hierarchy (continent → city → building → room)',
@@ -226,7 +227,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Pin every city, keep, and landmark your characters visit, with plot-relevant notes visible only as your story reaches those places.' },
       { type: 'TTRPG Campaign', text: 'Upload campaign maps and connect important places to your location database.' },
-      { type: 'D&D Campaign', text: 'Layer world maps, regional maps, and dungeon floor plans — each with pins your players discover progressively.' },
+      { type: 'D&D Campaign', text: 'Layer world maps, regional maps, and dungeon floor plans — each with pins tied to your private location notes, ready whenever a session needs them.' },
     ],
     capabilities: [
       'Upload any image as a map canvas',
@@ -419,7 +420,7 @@ const COMPARISON_FEATURES = [
 const PROBLEMS = [
   {
     problem: 'Draft in Google Docs',
-    solution: 'Manuscript editor with chapters, scenes, progress tracking, and focus mode — all built around how stories are actually structured.',
+    solution: 'Manuscript editor with chapters, scenes, progress tracking, and separate Write/Edit modes — all built around how stories are actually structured.',
   },
   {
     problem: 'Characters in a spreadsheet',
@@ -459,8 +460,8 @@ const AI_FEATURES = [
     benefit: 'Keep your magic system, world history, and internal rules consistent across hundreds of pages.',
   },
   {
-    name: 'Character Interview Mode',
-    desc: 'Have a real conversation with any character in your project. The AI responds as that character, informed by their full profile, history, and relationships.',
+    name: 'AI Character Simulation',
+    desc: 'Explore an AI-generated roleplay of any character in your project, informed by their profile, history, and relationships.',
     benefit: 'Find authentic character voice, unlock natural dialogue, and understand how your character would genuinely react to your plot.',
   },
   {
@@ -950,6 +951,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
               <button type="button" onClick={() => onOpenLegal('cookies')}  className="yow-footer-link">Cookies</button>
             </>
           )}
+          <SupportDevelopmentLink />
         </nav>
       </footer>
     </div>

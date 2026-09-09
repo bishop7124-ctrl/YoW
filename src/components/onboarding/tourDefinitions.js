@@ -140,7 +140,7 @@ export const AI_TOOLS_TOUR = [
   {
     target: 'aitools-provider',
     title: 'Choose a tool',
-    body: 'Pick from Plot Hole Detector, Lore Conflict Checker, Character Interview, and Style Consistency. Connect your API key in Account Settings → AI to get started.',
+    body: 'Pick from Plot Hole Detector, Lore Conflict Checker, AI Character Simulation, and Style Consistency. Connect your API key in Account Settings → AI to get started.',
   },
 ]
 

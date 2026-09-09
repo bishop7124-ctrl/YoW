@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 
 // ─── Legal content ─────────────────────────────────────────────────────────────
 
@@ -15,14 +16,19 @@ const Li = ({ children }) => <li style={{ marginBottom: 5, paddingLeft: 4 }}>{ch
 const Ul = ({ children }) => <ul style={{ paddingLeft: 18, marginBottom: 10 }}>{children}</ul>
 const Accent = ({ children }) => <strong style={{ color: 'var(--text-main)' }}>{children}</strong>
 
+const BusinessIdentity = () => (
+  <P>Morgan Bishop trading as Your Own World, a sole trader operating in the United Kingdom. Business address: 2 Tiffany Close, Alfold, GU6 8XG, England. Contact: <a href="mailto:support@yourownworld.co.uk">support@yourownworld.co.uk</a>.</P>
+)
+
 const CONTENT = {
   privacy: {
     title: 'Privacy Policy',
-    sub: 'Last updated May 2026',
+    sub: 'Last updated September 2026',
     body: (
       <>
         <Section title="Who we are">
-          <P>Your Own World ("we", "our", "the Service") is a creative writing platform operated by YourOwnWorld. Questions about this policy can be directed to <Accent>privacy@yourownworld.co.uk</Accent>.</P>
+          <BusinessIdentity />
+          <P>Morgan Bishop is the controller of personal data processed to operate Your Own World. Use the contact above for privacy requests.</P>
         </Section>
         <Section title="What we collect">
           <Ul>
@@ -38,12 +44,18 @@ const CONTENT = {
             <Li>To manage your account and subscription.</Li>
             <Li>To send transactional emails (account confirmation, password reset).</Li>
           </Ul>
-          <P>We do <Accent>not</Accent> sell your data, share it with advertisers, or use it to train AI models.</P>
+          <P>We do <Accent>not</Accent> sell your data, share it with advertisers, or use it to train YOW-owned AI models.</P>
+        </Section>
+        <Section title="AI features and third-party AI providers">
+          <P>AI features are optional. If you use them, you choose which supported third-party AI provider to connect with your own API key.</P>
+          <P>When you use AI features, YOW may send the information needed to fulfil your request to the provider you selected. Depending on the feature and context you choose, this may include manuscript text, characters, lore, locations, notes, timeline information, comic page or panel details, campaign/session material, or other relevant project content.</P>
+          <P>Third-party AI providers process data under their own terms, privacy policies, pricing, limits, data-handling, storage, training, and retention practices. YOW does not operate or control those external providers, and those practices may differ by provider or account configuration. You should review the applicable provider terms and privacy policy before connecting a key.</P>
+          <P>API keys are stored only to enable the integration you choose. Keys are hidden after saving, stored locally for your account, and, if sync is enabled, stored in encrypted form in your YOW account so your signed-in devices can use the same provider. You can remove a saved key or disconnect synced AI settings from Account Settings.</P>
         </Section>
         <Section title="Your rights">
           <Ul>
             <Li>Access, correct, or delete your data via Account Settings at any time.</Li>
-            <Li>Request a full data export — email <Accent>privacy@yourownworld.co.uk</Accent>.</Li>
+            <Li>Request a full data export — email <Accent>support@yourownworld.co.uk</Accent>.</Li>
             <Li>Close your account at any time; your data will be deleted within 30 days.</Li>
           </Ul>
         </Section>
@@ -58,14 +70,23 @@ const CONTENT = {
   },
   terms: {
     title: 'Terms of Service',
-    sub: 'Last updated May 2026',
+    sub: 'Last updated September 2026',
     body: (
       <>
+        <Section title="Who provides the service">
+          <BusinessIdentity />
+        </Section>
         <Section title="Using the service">
           <P>By creating an account you agree to these terms. The Service is provided for lawful creative writing purposes. You agree not to use it to create, store, or distribute content that is illegal, harmful, or abusive.</P>
         </Section>
         <Section title="Your content">
           <P>Everything you write <Accent>remains yours</Accent>. Your Own World claims no ownership of your stories, characters, world notes, or manuscripts. You grant us a limited, non-exclusive licence to store and deliver your content as part of providing the Service to you.</P>
+        </Section>
+        <Section title="AI features">
+          <P>AI functionality is provided through third-party providers selected by you. Use of those services is also subject to the selected provider's own terms, privacy policies, acceptable-use rules, pricing, limits, and restrictions.</P>
+          <P>You are responsible for ensuring you have the rights and permissions needed to submit content through AI features. You must not use YOW AI integrations in a way that violates applicable law or the selected provider's acceptable-use policies.</P>
+          <P>YOW does not guarantee model availability, uptime, output quality, accuracy, pricing, limits, or continued availability of any third-party provider or model. AI outputs may be inaccurate, incomplete, repetitive, or similar to outputs generated for other users.</P>
+          <P>YOW does not claim ownership of your project content. YOW also does not claim ownership over AI-generated outputs, subject to applicable law and the selected provider's terms. You remain responsible for reviewing, editing, and deciding how to use any AI-generated output.</P>
         </Section>
         <Section title="Subscriptions and billing">
           <Ul>
@@ -74,9 +95,18 @@ const CONTENT = {
             <Li>Lifetime app access means permanent access to the YOW desktop app and Local Mode. It does not mean indefinite hosted cloud storage above the Free allowance unless your Cloud Mode entitlement is active.</Li>
             <Li>If Lifetime cloud hosting lapses, your lifetime licence remains active and you can continue in desktop Local Mode, import backups, and export your work. Web cloud access falls back to the Free one-project, 250 MB allowance unless Cloud Mode is renewed.</Li>
             <Li>Founder includes lifetime Cloud Mode within the published storage and fair-use cap.</Li>
+            <Li>A failed Monthly payment moves the account to Free access. Download all project backups and choose the project to keep editable; if stored data exceeds 250 MB, reduce cloud storage or restore a paid plan. Selecting an editable project does not delete other projects.</Li>
+            <Li>If optional Cloud Mode renewal is not paid, download your backups or renew Cloud Mode. Lifetime desktop Local Mode remains available.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>
-            <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. No refunds are issued for partial periods.</Li>
+            <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. Sales are final, including partial billing periods, except where mandatory consumer rights require a refund or another remedy.</Li>
           </Ul>
+        </Section>
+        <Section title="Support and Founder profiles">
+          <P>Contact support@yourownworld.co.uk for support or privacy requests. We aim to reply within one week.</P>
+          <P>YOW manages Founder profiles and features submitted work there with permission. Contact founders@yourownworld.co.uk for questions, updates, or removal requests. Founder membership does not promise priority influence over development. A full refund or lost chargeback removes Founder access and returns its slot to availability.</P>
+        </Section>
+        <Section title="Beta access at launch">
+          <P>At launch, beta testers enter a 30-day notice period with full web access. Desktop downloads are not included during that period. At its end the account moves to Free unless upgraded. Download project backups before reducing stored projects to Free limits.</P>
         </Section>
         <Section title="Availability">
           <P>We aim for high availability but do not guarantee uninterrupted service. We are not liable for losses arising from downtime, though we take reasonable precautions to prevent data loss and service interruption.</P>
@@ -102,7 +132,7 @@ const CONTENT = {
           <P>The AI tools in Your Own World are designed to <Accent>assist</Accent> your creative process — generating ideas, suggesting options, helping with research. AI does not replace your voice or authorship. We will always be transparent about where AI is involved and will never present AI output as your own work without your direction.</P>
         </Section>
         <Section title="Your data is not training data">
-          <P>Your writing content is <Accent>never</Accent> used to train AI models — ours or anyone else's — without your explicit opt-in consent. This is a hard commitment, not a legal hedge.</P>
+          <P>YOW does not use your writing content to train YOW-owned AI models. If you choose to connect a third-party AI provider, that provider's own data practices, retention settings, and training policies apply to requests sent to it.</P>
         </Section>
         <Section title="No dark patterns">
           <P>We will never use manipulative design to confuse you about pricing, make cancellation difficult, obscure your data rights, or create false urgency. If something costs money, we'll say so clearly before you pay.</P>
@@ -185,29 +215,13 @@ const LEGAL_LABELS = {
 
 // ─── Cookie prefs inline in the cookies page ──────────────────────────────────
 
-function CookiePrefInline() {
-  const current = getCookieConsent()
-  const [prefs, setPrefs] = useState({
-    preferences: current !== 'essential' && current !== null,
-    analytics: current === 'all',
-  })
-  const [saved, setSaved] = useState(false)
-
-  const save = () => {
-    let level = 'essential'
-    if (prefs.analytics) level = 'all'
-    else if (prefs.preferences) level = 'preferences'
-    setCookieConsent(level)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2200)
-  }
-
-  const Toggle = ({ checked, onChange, disabled }) => (
+  const Toggle = ({ label, checked, onChange, disabled }) => (
     <button
       type="button"
       onClick={disabled ? undefined : onChange}
       disabled={disabled}
       role="switch"
+      aria-label={label}
       aria-checked={checked}
       style={{
         flexShrink: 0, width: 36, height: 20, borderRadius: 10,
@@ -232,9 +246,28 @@ function CookiePrefInline() {
         <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', marginBottom: 2 }}>{label}</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{desc}</p>
       </div>
-      <Toggle checked={checked} onChange={onChange} disabled={disabled} />
+      <Toggle label={label} checked={checked} onChange={onChange} disabled={disabled} />
     </div>
   )
+
+
+function CookiePrefInline() {
+  const current = getCookieConsent()
+  const [prefs, setPrefs] = useState({
+    preferences: current !== 'essential' && current !== null,
+    analytics: current === 'all',
+  })
+  const [saved, setSaved] = useState(false)
+
+  const save = () => {
+    let level = 'essential'
+    if (prefs.analytics) level = 'all'
+    else if (prefs.preferences) level = 'preferences'
+    setCookieConsent(level)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2200)
+  }
+
 
   return (
     <div style={{ marginTop: 24, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-main)' }}>
@@ -257,7 +290,7 @@ function CookiePrefInline() {
         <button
           type="button"
           onClick={save}
-          style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+          style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
         >
           Save preferences
         </button>
@@ -270,12 +303,39 @@ function CookiePrefInline() {
 
 export default function LegalModal({ page, onClose, onNavigate }) {
   const dialogRef = useRef(null)
-  useEffect(() => { dialogRef.current?.focus() }, [page])
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  const isOpen = Boolean(CONTENT[page])
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+    if (!isOpen) return
+    const previousFocus = document.activeElement
+    const dialog = dialogRef.current
+    dialog?.focus()
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onCloseRef.current?.()
+      }
+      if (e.key !== 'Tab' || !dialog) return
+      const controls = Array.from(dialog.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'))
+        .filter(el => !el.closest('[hidden], [inert]'))
+      const first = controls[0], last = controls[controls.length - 1]
+      if (!first) { e.preventDefault(); dialog.focus(); return }
+      if (!dialog.contains(document.activeElement) || document.activeElement === dialog) {
+        e.preventDefault(); (e.shiftKey ? last : first).focus()
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => {
+      document.removeEventListener('keydown', handler)
+      if (previousFocus?.isConnected) previousFocus.focus()
+    }
+  }, [isOpen])
+  useEffect(() => { if (isOpen) dialogRef.current?.focus() }, [page, isOpen])
 
   if (!page) return null
 
@@ -338,7 +398,10 @@ export default function LegalModal({ page, onClose, onNavigate }) {
               </button>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>© 2026 YourOwnWorld</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>© 2026 YourOwnWorld</p>
+            <SupportDevelopmentLink />
+          </div>
         </div>
       </div>
     </div>

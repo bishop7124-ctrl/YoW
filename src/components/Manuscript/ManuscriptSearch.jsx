@@ -61,29 +61,36 @@ export default function ManuscriptSearch({
   onOpenScene,
   onReplaceInScene,
   onClose,
+  // toast(message, { undo }) — shows the undo affordance for replace-all/
+  // replace-in-scene per spec §5.2. Optional so this component still works
+  // (silently, with no undo offered) if a caller doesn't pass one.
+  onToast,
+  // When true, renders just the panel (no fixed backdrop/centering, no
+  // click-outside-to-close) so it can sit inside ManuscriptSurface's own
+  // chrome instead of floating as a standalone modal. Esc-to-close still
+  // works either way. Defaults to false so every existing modal call site
+  // is unaffected.
+  embedded = false,
 }) {
   const [term, setTerm] = useState('')
   const [replacement, setReplacement] = useState('')
   const [matchCase, setMatchCase] = useState(false)
   const [wholeWord, setWholeWord] = useState(false)
   const [showReplace, setShowReplace] = useState(false)
-  const [confirmReplace, setConfirmReplace] = useState(null) // { mode, sceneId? }
   const overlayRef = useRef(null)
   const inputRef = useRef(null)
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50) }, [])
 
   useEffect(() => {
-    const onKey = e => {
-      if (e.key === 'Escape') { if (confirmReplace) setConfirmReplace(null); else onClose() }
-    }
+    const onKey = e => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, confirmReplace])
+  }, [onClose])
 
   const handleOverlayClick = useCallback(e => {
-    if (e.target === overlayRef.current) { if (confirmReplace) setConfirmReplace(null); else onClose() }
-  }, [onClose, confirmReplace])
+    if (e.target === overlayRef.current) onClose()
+  }, [onClose])
 
   const novelScenes = useMemo(
     () => scenes.filter(s => s.novelId === activeNovelId),
@@ -113,39 +120,44 @@ export default function ManuscriptSearch({
 
   const totalCount = results.reduce((sum, r) => sum + r.count, 0)
 
+  // Per spec §5.2: replace-all (and replace-in-scene, the same class of
+  // action scoped to one scene) apply immediately with no confirm dialog,
+  // posting a single undo toast instead — unlike scene/chapter/act delete,
+  // which keep window.confirm() unchanged per an explicit product decision.
+  // Undo is a real, complete inverse here (not a re-open-and-hope): each
+  // scene's exact prior content is captured in the closure below before the
+  // replace runs, so undo just writes it straight back through the same
+  // onReplaceInScene path — no need to touch the store's own version-history
+  // snapshot (saveSceneVersion below) at all for the undo itself.
   const doReplaceInScene = useCallback((sceneId) => {
     const scene = novelScenes.find(s => s.id === sceneId)
-    if (!scene || !regex) return
+    if (!scene || !regex) return null
+    const previousContent = scene.content || ''
     saveSceneVersion(scene)
     const r = buildRegex(term, matchCase, wholeWord)
-    const newContent = (scene.content || '').replace(r, replacement)
+    const newContent = previousContent.replace(r, replacement)
     onReplaceInScene(sceneId, newContent)
+    return { sceneId, previousContent }
   }, [novelScenes, regex, term, replacement, matchCase, wholeWord, onReplaceInScene])
 
-  const doReplaceAll = useCallback(() => {
-    results.forEach(r => doReplaceInScene(r.scene.id))
-  }, [results, doReplaceInScene])
+  const replaceInSceneWithToast = useCallback((sceneId, count) => {
+    const undone = doReplaceInScene(sceneId)
+    if (!undone) return
+    onToast?.(`Replaced ${count} match${count !== 1 ? 'es' : ''} in this scene.`, {
+      undo: () => onReplaceInScene(undone.sceneId, undone.previousContent),
+    })
+  }, [doReplaceInScene, onReplaceInScene, onToast])
 
-  const executeConfirm = useCallback(() => {
-    if (!confirmReplace) return
-    if (confirmReplace.mode === 'scene') {
-      doReplaceInScene(confirmReplace.sceneId)
-    } else {
-      doReplaceAll()
-    }
-    setConfirmReplace(null)
-  }, [confirmReplace, doReplaceInScene, doReplaceAll])
+  const replaceAllWithToast = useCallback(() => {
+    const sceneCount = results.length
+    const undone = results.map(r => doReplaceInScene(r.scene.id)).filter(Boolean)
+    onToast?.(`Replaced ${totalCount} match${totalCount !== 1 ? 'es' : ''} in ${sceneCount} scene${sceneCount !== 1 ? 's' : ''}.`, {
+      undo: () => undone.forEach(u => onReplaceInScene(u.sceneId, u.previousContent)),
+    })
+  }, [results, doReplaceInScene, onReplaceInScene, onToast, totalCount])
 
-  return (
-    <div
-      ref={overlayRef}
-      className="ms-search-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Global search"
-      onClick={handleOverlayClick}
-    >
-      <div className="ms-search-panel">
+  const panel = (
+      <div className={`ms-search-panel${embedded ? ' ms-search-panel--embedded' : ''}`}>
         <div className="ms-search-header">
           <span className="ms-search-title">Search Manuscript</span>
           <button className="ms-vh-close" onClick={onClose} aria-label="Close search">
@@ -197,8 +209,8 @@ export default function ManuscriptSearch({
               <button
                 className="ms-toolbar-btn"
                 disabled={!term || results.length === 0}
-                onClick={() => setConfirmReplace({ mode: 'all' })}
-                title="Replace all matches across the project"
+                onClick={replaceAllWithToast}
+                title="Replace all matches across the project — applies immediately, undo from the toast"
               >
                 Replace all
               </button>
@@ -228,8 +240,8 @@ export default function ManuscriptSearch({
                   {showReplace && (
                     <button
                       className="ms-toolbar-btn"
-                      onClick={() => setConfirmReplace({ mode: 'scene', sceneId: scene.id })}
-                      title={`Replace all in "${scene.title || 'this scene'}"`}
+                      onClick={() => replaceInSceneWithToast(scene.id, count)}
+                      title={`Replace all in "${scene.title || 'this scene'}" — applies immediately, undo from the toast`}
                     >
                       Replace in scene
                     </button>
@@ -259,33 +271,21 @@ export default function ManuscriptSearch({
           )}
         </div>
 
-        {confirmReplace && (
-          <div className="ms-vh-confirm-overlay">
-            <div className="ms-vh-confirm-box">
-              <div className="ms-vh-confirm-title">
-                {confirmReplace.mode === 'all' ? 'Replace all matches?' : 'Replace all in scene?'}
-              </div>
-              <p className="ms-vh-confirm-body">
-                {confirmReplace.mode === 'all'
-                  ? `Replace every occurrence of "${term}" with "${replacement}" across ${results.length} scene${results.length !== 1 ? 's' : ''} (${totalCount} match${totalCount !== 1 ? 'es' : ''} total). A version snapshot will be saved for each affected scene first.`
-                  : `Replace all ${results.find(r => r.scene.id === confirmReplace.sceneId)?.count ?? 0} occurrence${(results.find(r => r.scene.id === confirmReplace.sceneId)?.count ?? 0) !== 1 ? 's' : ''} of "${term}" with "${replacement}" in this scene. A version snapshot will be saved first.`
-                }
-              </p>
-              <div className="ms-search-confirm-row">
-                <span className="ms-search-confirm-term">"{term}"</span>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                  <path d="M2 7h10M8 3l4 4-4 4" />
-                </svg>
-                <span className="ms-search-confirm-term">"{replacement}"</span>
-              </div>
-              <div className="ms-vh-confirm-actions">
-                <button className="btn btn-secondary" onClick={() => setConfirmReplace(null)}>Cancel</button>
-                <button className="btn btn-primary" onClick={executeConfirm}>Confirm replace</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+  )
+
+  if (embedded) return panel
+
+  return (
+    <div
+      ref={overlayRef}
+      className="ms-search-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Global search"
+      onClick={handleOverlayClick}
+    >
+      {panel}
     </div>
   )
 }

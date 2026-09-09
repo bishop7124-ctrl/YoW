@@ -32,7 +32,7 @@ const TOOLS = [
   },
   {
     id:      'interview',
-    label:   'Character Interview',
+    label:   'AI Character Simulation',
     icon:    (
       <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <circle cx={9} cy={8} r={3} />
@@ -64,13 +64,13 @@ export function AIToolsUpgradeWall() {
       <AIStar size={36} style={{ opacity: 0.4 }} />
       <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>AI Tools is a paid feature</p>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 320, margin: 0 }}>
-        Upgrade your plan to unlock Plot Hole Detector, Lore Conflict Checker, Character Interview, and Style Analysis.
+        Upgrade your plan to unlock Plot Hole Detector, Lore Conflict Checker, AI Character Simulation, and Style Analysis.
       </p>
       <button
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))}
         style={{
-          marginTop: 8, background: 'var(--accent)', color: 'var(--bg-main)',
+          marginTop: 8, background: 'var(--accent)', color: 'var(--accent-contrast)',
           fontWeight: 800, fontSize: 13, padding: '9px 20px', borderRadius: 8,
           border: 'none', cursor: 'pointer',
         }}
