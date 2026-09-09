@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
+import { getMembership } from '../src/utils/membership.js'
 
 const MAX_LENGTHS = { name: 120, email: 254, projectType: 160, message: 1200, plan: 80, planLabel: 120, page: 240 }
 const ADMIN_EMAIL = 'yourownworld.admin@gmail.com'
@@ -47,6 +48,12 @@ export function getSupabaseAdminConfig(env = process.env) {
   }
 }
 
+export function canGrantBetaAccess(user, env = process.env) {
+  const metadata = user.app_metadata || {}
+  return !getMembership(user).isPaid && !metadata.beta_notice_started_at
+    && !metadata.access_revoked_at && env.YOW_BETA_ENROLLMENT_CLOSED !== 'true'
+}
+
 export default async function handler(req, res) {
   const origin = req.headers.origin || process.env.SITE_URL || '*'
   res.setHeader('Access-Control-Allow-Origin', origin)
@@ -73,6 +80,7 @@ export default async function handler(req, res) {
   const { name = '', email, projectType = '', message = '', plan = '', planLabel = 'Paid plan', page = '' } = req.body
   const token = getBearerToken(req)
   let authedUser = null
+  let betaTester = false
 
   if (token) {
     const { url, serviceRoleKey } = getSupabaseAdminConfig()
@@ -99,7 +107,9 @@ export default async function handler(req, res) {
       // via the client SDK — redundant at best, a self-service entitlement
       // bypass at worst if any code ever again trusted user_metadata for
       // entitlement. See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
-      const { error: updateError } = await supabase.auth.admin.updateUserById(authedUser.id, {
+      const membership = getMembership(authedUser)
+      const canGrantBeta = canGrantBetaAccess(authedUser)
+      const { error: updateError } = canGrantBeta ? await supabase.auth.admin.updateUserById(authedUser.id, {
         app_metadata: {
           ...existingAppMeta,
           subscription_status: 'active',
@@ -109,7 +119,8 @@ export default async function handler(req, res) {
           beta_tester_source: 'paid_plan_interest',
           beta_tester_requested_plan: plan || null,
         },
-      })
+      }) : { error: null }
+      betaTester = canGrantBeta || membership.isBetaTester
       if (updateError) {
         console.error('[register-paid-interest] metadata update failed:', updateError)
         return res.status(500).json({ error: 'Interest was received, but beta access could not be activated.' })
@@ -144,5 +155,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: `Failed to send interest email: ${err.message}` })
   }
 
-  return res.status(200).json({ ok: true, betaTester: !!authedUser })
+  return res.status(200).json({ ok: true, betaTester })
 }
