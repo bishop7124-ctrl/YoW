@@ -10,7 +10,20 @@ const CHANNEL_NAME = 'yow-record-presence'
 const HEARTBEAT_MS = 4000
 const STALE_MS = 10000
 
-const tabId = Math.random().toString(36).slice(2)
+function getTabId() {
+  try {
+    const key = 'yow-tab-presence-id'
+    const existing = sessionStorage.getItem(key)
+    if (existing) return existing
+    const next = Math.random().toString(36).slice(2)
+    sessionStorage.setItem(key, next)
+    return next
+  } catch {
+    return Math.random().toString(36).slice(2)
+  }
+}
+
+const tabId = getTabId()
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null
 
 // key -> Map(otherTabId -> lastSeenAt)

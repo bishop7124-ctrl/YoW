@@ -14,10 +14,19 @@ function formatTimestamp(ts) {
   } catch { return 'Unknown date' }
 }
 
-export default function SceneVersionHistory({ scene, onRestore, onClose }) {
+// `embedded`: renders just the panel, no fixed backdrop/centering/click-outside
+// — for use inside ManuscriptSurface's own chrome. Defaults to false so every
+// existing modal call site is unaffected. See ManuscriptSearch.jsx for the
+// same pattern.
+// `onToast`: toast(message, { undo }) — per spec §5.2, restoring a version
+// applies immediately with no confirm dialog and posts an undo toast instead
+// (same treatment as ManuscriptSearch's replace-all). "Clear all versions" is
+// deliberately NOT included — it's a genuine irreversible bulk delete, not
+// named in the spec's undo-toast list, and there is no prior state left to
+// undo to once the snapshots themselves are gone.
+export default function SceneVersionHistory({ scene, onRestore, onClose, onToast, embedded = false }) {
   const [versions, setVersions] = useState([])
   const [previewId, setPreviewId] = useState(null)
-  const [confirmId, setConfirmId] = useState(null)   // restore confirm
   const [confirmClear, setConfirmClear] = useState(false)
   const overlayRef = useRef(null)
 
@@ -30,21 +39,19 @@ export default function SceneVersionHistory({ scene, onRestore, onClose }) {
   useEffect(() => {
     const onKey = e => {
       if (e.key === 'Escape') {
-        if (confirmId) { setConfirmId(null); return }
         if (confirmClear) { setConfirmClear(false); return }
         onClose()
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, confirmId, confirmClear])
+  }, [onClose, confirmClear])
 
   const handleOverlayClick = useCallback(e => {
     if (e.target !== overlayRef.current) return
-    if (confirmId) { setConfirmId(null); return }
     if (confirmClear) { setConfirmClear(false); return }
     onClose()
-  }, [onClose, confirmId, confirmClear])
+  }, [onClose, confirmClear])
 
   const handleDeleteOne = useCallback((id) => {
     deleteVersion(id)
@@ -59,19 +66,18 @@ export default function SceneVersionHistory({ scene, onRestore, onClose }) {
     reload()
   }, [scene?.id, reload])
 
-  const preview = previewId ? versions.find(v => v.id === previewId) : null
-  const toConfirm = confirmId ? versions.find(v => v.id === confirmId) : null
+  const handleRestore = useCallback((version) => {
+    if (!scene) return
+    const previous = { sceneId: scene.id, content: scene.content || '', title: scene.title || '' }
+    onRestore(version)
+    onToast?.('Restored an earlier version.', { undo: () => onRestore(previous) })
+    onClose()
+  }, [scene, onRestore, onToast, onClose])
 
-  return (
-    <div
-      ref={overlayRef}
-      className="ms-vh-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Version history"
-      onClick={handleOverlayClick}
-    >
-      <div className="ms-vh-panel" tabIndex={-1}>
+  const preview = previewId ? versions.find(v => v.id === previewId) : null
+
+  const panel = (
+      <div className={`ms-vh-panel${embedded ? ' ms-vh-panel--embedded' : ''}`} tabIndex={-1}>
         <div className="ms-vh-header">
           <div>
             <div className="ms-vh-title">Version History</div>
@@ -148,7 +154,8 @@ export default function SceneVersionHistory({ scene, onRestore, onClose }) {
                       </div>
                       <button
                         className="ms-vh-restore-btn"
-                        onClick={() => setConfirmId(preview.id)}
+                        onClick={() => handleRestore(preview)}
+                        title="Applies immediately — undo from the toast"
                       >
                         Restore this version
                       </button>
@@ -166,32 +173,6 @@ export default function SceneVersionHistory({ scene, onRestore, onClose }) {
             </div>
           )}
         </div>
-
-        {/* Restore confirmation */}
-        {toConfirm && (
-          <div className="ms-vh-confirm-overlay">
-            <div className="ms-vh-confirm-box">
-              <div className="ms-vh-confirm-title">Restore this version?</div>
-              <p className="ms-vh-confirm-body">
-                Your current scene content will be saved as a new version first, so you can undo this restore by returning to version history.
-              </p>
-              <div className="ms-vh-confirm-meta">
-                <strong>{toConfirm.title || 'Scene'}</strong>
-                <span>{formatTimestamp(toConfirm.timestamp)}</span>
-                <span>{toConfirm.wordCount.toLocaleString()} words</span>
-              </div>
-              <div className="ms-vh-confirm-actions">
-                <button className="btn btn-secondary" onClick={() => setConfirmId(null)}>Cancel</button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => { onRestore(toConfirm); setConfirmId(null); onClose() }}
-                >
-                  Yes, restore
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Clear all confirmation */}
         {confirmClear && (
@@ -215,6 +196,20 @@ export default function SceneVersionHistory({ scene, onRestore, onClose }) {
           </div>
         )}
       </div>
+  )
+
+  if (embedded) return panel
+
+  return (
+    <div
+      ref={overlayRef}
+      className="ms-vh-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Version history"
+      onClick={handleOverlayClick}
+    >
+      {panel}
     </div>
   )
 }

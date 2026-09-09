@@ -70,6 +70,32 @@ describe('desktop-devices handler', () => {
     expect(res.status).toHaveBeenCalledWith(403)
   })
 
+  it('rejects a desktop plan claimed only through editable user metadata', async () => {
+    getUser.mockResolvedValue({
+      data: { user: { id: 'u', app_metadata: {}, user_metadata: { subscription_plan: 'founder' } } },
+      error: null,
+    })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(403)
+  })
+
+  it('allows a server-granted beta tester to activate a device', async () => {
+    getUser.mockResolvedValue({
+      data: { user: { id: 'beta-user', app_metadata: { beta_tester: true } } },
+      error: null,
+    })
+    queueResult({ data: [], error: null })
+    queueResult({ data: null, error: null })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(res.json.mock.calls[0][0].record).toMatchObject({
+      userId: 'beta-user',
+      plan: 'beta_tester',
+    })
+  })
+
   it('activates a device and returns a signed entitlement record', async () => {
     getUser.mockResolvedValue({ data: { user: lifetimeUser }, error: null })
     queueResult({ data: [], error: null })        // existing devices

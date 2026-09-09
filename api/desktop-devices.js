@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { getMembership } from '../src/utils/membership.js'
 import { createClient } from '@supabase/supabase-js'
 
 // Vercel API route — desktop device activation registry (PRD Phase 4).
@@ -11,7 +12,6 @@ import { createClient } from '@supabase/supabase-js'
 // The registry is advisory by design: it powers the cap, the devices UI, and
 // offline-grace re-verification. It never gates editing or export client-side.
 
-const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder'])
 const DEFAULT_DEVICE_CAP = 3
 
 const deviceCap = () => {
@@ -61,9 +61,10 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const plan = user.app_metadata?.subscription_plan || user.user_metadata?.subscription_plan || null
-    if (!LIFETIME_PLAN_KEYS.has(plan)) {
-      return res.status(403).json({ error: 'The desktop app is available to Lifetime and Founder members.' })
+    const serverMetadata = user.app_metadata || {}
+    const plan = serverMetadata.subscription_plan || (serverMetadata.beta_tester === true ? 'beta_tester' : null)
+    if (!getMembership(user).isDesktopEntitled) {
+      return res.status(403).json({ error: 'Your account does not include desktop access.' })
     }
 
     if (req.method === 'GET') {

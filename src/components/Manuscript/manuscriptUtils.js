@@ -231,6 +231,50 @@ export function persistSceneDraftToLocalStorage(scene, content, { immediate = fa
   return runPersistSceneDraft(scene, content)
 }
 
+// ─── Clipboard ────────────────────────────────────────────────────────────────
+
+// Copy plain text to the clipboard. Prefers the async Clipboard API (works
+// everywhere modern and needs no DOM node of its own); falls back to the
+// classic hidden-textarea + execCommand('copy') trick for contexts where the
+// Clipboard API is unavailable or denied (older WebViews, non-secure/http
+// embeddings, permission prompts the user dismissed). Same fallback shape
+// AIPanel.jsx's message-copy button already uses.
+//
+// Deliberately content-agnostic: the "copy whole scene" action (SceneEditor's
+// header toolbar) passes it the full in-memory `localContent` string directly,
+// not anything read back out of the DOM. That's what makes it work as the
+// accepted product decision for the single-very-large-scene case (2026-08-08,
+// see docs/ROADMAP.md's typing-lag row): a giant scene's native `<textarea>`
+// can make Ctrl+A/drag-select slow or unreliable, but the underlying content
+// model is just a string regardless of scene length, so copying it never has
+// to touch native selection at all.
+export async function copyTextToClipboard(text) {
+  if (!text) return false
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // fall through to the execCommand fallback below
+    }
+  }
+  if (typeof document === 'undefined') return false
+  try {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.setAttribute('readonly', '')
+    textArea.style.position = 'fixed'
+    textArea.style.opacity = '0'
+    document.body.appendChild(textArea)
+    textArea.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 // ─── Format settings ──────────────────────────────────────────────────────────
 
 export const FONTS = [
@@ -286,6 +330,87 @@ export const nextStatus = (current) => {
 
 export function wordCountForScenes(scenes) {
   return scenes.reduce((sum, scene) => sum + countWords(scene.content || ''), 0)
+}
+
+// ─── Writing-progress helpers ─────────────────────────────────────────────────
+// Pure date/word-history math shared by anything that renders a streak, a
+// per-day word count, or a sparkline. WritingSidebar.jsx's ProgressPanel/
+// GoalsPanel predate this file and keep their own private, functionally
+// identical copies — deliberately left alone rather than refactored to import
+// from here, since that component is slated for deletion once the redesign's
+// ManuscriptInspector fully replaces it (see docs/design/Manuscript Editor
+// Handoff Spec.md §7 step 9). New code should use these instead of
+// re-duplicating them a third time.
+
+export function todayKey() {
+  return dateKey(Date.now())
+}
+
+export function subtractDays(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() - n)
+  return dateKey(d)
+}
+
+export function formatShortDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// Net words added per date for a scene (wordHistory is a cumulative daily log).
+export function sceneNetByDate(scene) {
+  const history = scene.wordHistory ?? []
+  if (!history.length) return {}
+  const byDate = {}
+  history.forEach(h => {
+    if (!byDate[h.date] || h.timestamp > byDate[h.date].timestamp) {
+      byDate[h.date] = h
+    }
+  })
+  const sorted = Object.keys(byDate).sort()
+  const net = {}
+  sorted.forEach((date, i) => {
+    const cur = byDate[date].words
+    const prev = i > 0 ? byDate[sorted[i - 1]].words : 0
+    net[date] = Math.max(0, cur - prev)
+  })
+  return net
+}
+
+export function totalWordsOnDate(scenes, date) {
+  return scenes.reduce((sum, s) => sum + (sceneNetByDate(s)[date] ?? 0), 0)
+}
+
+export function dailyWordsForScenes(scenes) {
+  return scenes.reduce((totals, scene) => {
+    Object.entries(sceneNetByDate(scene)).forEach(([date, words]) => {
+      totals[date] = (totals[date] || 0) + words
+    })
+    return totals
+  }, {})
+}
+
+export function computeStreak(scenes) {
+  const today = todayKey()
+  let streak = 0
+  let date = today
+  for (let i = 0; i < 365; i++) {
+    if (totalWordsOnDate(scenes, date) > 0) {
+      streak++
+      date = subtractDays(date, 1)
+    } else {
+      break
+    }
+  }
+  return streak
+}
+
+export function lastNDays(scenes, n) {
+  const today = todayKey()
+  return Array.from({ length: n }, (_, i) => {
+    const date = subtractDays(today, n - 1 - i)
+    return { date, words: totalWordsOnDate(scenes, date) }
+  })
 }
 
 // Content can pick up literal HTML entities (e.g. "don&apos;t") from DOCX/AI import

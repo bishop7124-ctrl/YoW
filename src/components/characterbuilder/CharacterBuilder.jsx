@@ -17,14 +17,17 @@ function PartyCard({ character, onClick }) {
   const conditions = character.conditions || []
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
+      aria-label={`Open ${character.name || 'character'} sheet`}
       style={{
         padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
         border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
         background: 'color-mix(in srgb, var(--bg-nav) 70%, transparent)',
         transition: 'all .15s ease',
         display: 'flex', flexDirection: 'column', gap: 10,
+        width: '100%', textAlign: 'left', fontFamily: 'inherit', color: 'inherit',
       }}
       onMouseEnter={e => {
         e.currentTarget.style.border = '1px solid color-mix(in srgb, var(--accent) 45%, transparent)'
@@ -107,7 +110,7 @@ function PartyCard({ character, onClick }) {
       {character.status !== 'active' && (
         <div style={{ fontSize: 10, fontWeight: 700, color: status.color, textTransform: 'uppercase', letterSpacing: '.06em' }}>{status.label}</div>
       )}
-    </div>
+    </button>
   )
 }
 
@@ -145,9 +148,9 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
         <input
           className="field" placeholder="Search characters…" value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: 140, padding: '6px 10px', fontSize: 12 }}
+          style={{ flex: 1, minWidth: 140, padding: '6px 10px', fontSize: 16 }}
         />
-        <select className="field" value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px 10px', fontSize: 12 }}>
+        <select className="field" value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px 10px', fontSize: 16 }}>
           <option value="all">All Characters</option>
           <option value="party">Party Only</option>
           <option value="active">Active</option>
@@ -166,7 +169,7 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
         </button>
         <button
           onClick={onNew}
-          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+          style={{ padding: '6px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
         >+ New Character</button>
       </div>
 
@@ -210,7 +213,7 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
               <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 300, margin: '0 auto 18px' }}>Create your first character to start building your party.</p>
               <button
                 onClick={onNew}
-                style={{ padding: '9px 22px', borderRadius: 10, background: 'var(--accent)', color: 'var(--bg-main)', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                style={{ padding: '9px 22px', borderRadius: 10, background: 'var(--accent)', color: 'var(--accent-contrast)', border: 'none', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
               >Create First Character</button>
             </div>
           </div>

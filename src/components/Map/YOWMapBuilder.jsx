@@ -8,7 +8,7 @@ import {
 } from './mapConstants.js'
 import {
   uid, clamp, round, screenToMap, snapToGrid,
-  objectContainsPoint, normalizeObject, loadJson, saveJson, getObjectBounds,
+  objectContainsPoint, normalizeObject, loadJson, saveJson, getObjectBounds, isMapObjectExportable,
 } from './mapUtils.js'
 import { downloadBlob } from '../../utils/projectExportHelpers.js'
 import { drawBackground, drawMovementGrid, drawObject, drawDraft, drawHoverHighlight, drawRiverGroup } from './mapDraw.js'
@@ -66,6 +66,7 @@ const DEFAULT_LOCATION_LABEL_SIZE = 13
 const DEFAULT_LOCATION_LABEL_COLOR = '#1a140a'
 const DEFAULT_LOCATION_LABEL_OUTLINE = '#f4e8c4'
 const DEFAULT_REGION_FILL_OPACITY = 0.16
+const objectRenderBoundsCache = new WeakMap()
 
 function sortVisibleObjects(objects) {
   return [...objects].filter(o => o.visible !== false).sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
@@ -93,12 +94,32 @@ function getLocalWallMaterial(value) {
 }
 
 function getObjectRenderBounds(object) {
+  const cached = objectRenderBoundsCache.get(object)
+  if (cached) return cached
   const b = getObjectBounds(object)
   const pointSize = Math.max(object.height || 0, object.width || 0, Number(object.properties?.iconSize) || 0, 80)
   const pad = object.geometry?.type
     ? Math.max(48, Number(object.properties?.lineThickness || 0) * 4)
     : Math.max(48, pointSize * 0.5)
-  return { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 }
+  let bounds = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 }
+
+  // Territory labels can be moved well outside their polygon. Include that
+  // offset label in culling bounds so it does not disappear while panning.
+  const name = object.properties?.name || ''
+  if (object.type === 'territory' && name && !object.properties?.labelHidden) {
+    const fontSize = Number(object.properties?.labelFontSize) || 22
+    const labelX = b.x + b.width / 2 + (object.properties?.labelOffsetX || 0)
+    const labelY = b.y + b.height / 2 + (object.properties?.labelOffsetY || 0)
+    const labelWidth = Math.max(fontSize * 2, name.length * fontSize * 0.65)
+    const left = Math.min(bounds.x, labelX - labelWidth / 2 - 12)
+    const top = Math.min(bounds.y, labelY - fontSize - 12)
+    const right = Math.max(bounds.x + bounds.width, labelX + labelWidth / 2 + 12)
+    const bottom = Math.max(bounds.y + bounds.height, labelY + fontSize + 12)
+    bounds = { x: left, y: top, width: right - left, height: bottom - top }
+  }
+
+  objectRenderBoundsCache.set(object, bounds)
+  return bounds
 }
 
 function StampPreviewCanvas({ stamp, stylePreset, active }) {
@@ -233,12 +254,14 @@ function MapDashboard({ project, addMap, selectMap, deleteMap, renameMap }) {
               key={map.id}
               style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--surface)', display: 'flex', flexDirection: 'column' }}
             >
-              <div
-                style={{ height: 120, background: map.metadata?.stylePreset === 'blueprint' ? '#1a2b4a' : map.metadata?.stylePreset === 'atlas' ? '#c0d8e4' : '#e8d6a4', cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 32 }}
+              <button
+                type="button"
+                aria-label={`Open ${map.name || 'untitled map'}`}
+                style={{ width: '100%', height: 120, padding: 0, border: 'none', background: map.metadata?.stylePreset === 'blueprint' ? '#1a2b4a' : map.metadata?.stylePreset === 'atlas' ? '#c0d8e4' : '#e8d6a4', cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 32 }}
                 onClick={() => selectMap(map.id)}
               >
                 🗺️
-              </div>
+              </button>
               <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
                 {renamingId === map.id ? (
                   <input
@@ -247,7 +270,7 @@ function MapDashboard({ project, addMap, selectMap, deleteMap, renameMap }) {
                     onChange={e => setRenameVal(e.target.value)}
                     onBlur={() => { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) }}
                     onKeyDown={e => { if (e.key === 'Enter') { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) } if (e.key === 'Escape') setRenamingId(null) }}
-                    style={{ border: '1px solid var(--accent)', borderRadius: 5, padding: '4px 7px', background: 'var(--surface2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, width: '100%' }}
+                    style={{ border: '1px solid var(--accent)', borderRadius: 5, padding: '4px 7px', background: 'var(--surface2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 16, fontWeight: 600, width: '100%' }}
                   />
                 ) : (
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', cursor: 'pointer' }} onDoubleClick={() => { setRenamingId(map.id); setRenameVal(map.name || '') }}>
@@ -296,7 +319,7 @@ function NewMapModal({ onClose, onCreate }) {
         </div>
 
         <Field label="Map name">
-          <input autoFocus value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="Untitled Map" style={{ ...inputStyle, fontSize: 14, padding: '10px 12px' }} />
+          <input autoFocus value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="Untitled Map" style={{ ...inputStyle, fontSize: 16, padding: '10px 12px' }} />
         </Field>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -383,12 +406,12 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   const interactionRef = useRef(null)
   const viewRef = useRef({ zoom: DEFAULT_ZOOM, pan: { x: 80, y: 80 } })
   const objectsRef = useRef([])
+  const objectByIdRef = useRef(new Map())
   const visibleObjectsRef = useRef([])
   const selectedIdsRef = useRef([])
   const hoveredIdRef = useRef(null)
   const cursorMapPointRef = useRef(null)
   const draftRef = useRef(null)
-  const activeMapRef = useRef(null)
   const schemaRef = useRef({ objects: [], layers: [], metadata: {} })
   const baseCanvasRef = useRef({ key: '', canvas: null })
   const undoStackRef = useRef([])
@@ -397,7 +420,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   const [editorMode, setEditorMode] = useState('create') // 'create' | 'view'
   const [viewTooltip, setViewTooltip] = useState(null) // { x, y, object }
-  const [mode, setMode] = useState('select')
+  const [mode, setModeState] = useState('select')
   const [view, setView] = useState(viewRef.current)
   const [selectedIds, setSelectedIds] = useState([])
   const [hoveredId, setHoveredId] = useState(null)
@@ -426,6 +449,10 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   // the segment between geometry points[index] and points[index + 1].
   const [selectedSegment, setSelectedSegment] = useState(null)
   const selectedSegmentRef = useRef(null)
+  function setMode(nextMode) {
+    setModeState(nextMode)
+    if (nextMode !== 'select' && selectedSegmentRef.current) setSelectedSegment(null)
+  }
   // MapEditor remounts whenever the active map changes (key={activeMap.id}),
   // so the selected inspector tab is kept outside component state to survive
   // map switches and deletions.
@@ -469,7 +496,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   const visibleObjects = useMemo(() => sortVisibleObjects(objects), [objects])
 
-  const selectedObjects = objects.filter(o => selectedIds.includes(o.id))
+  const objectsById = useMemo(() => new Map(objects.map(object => [object.id, object])), [objects])
+  const selectedObjects = selectedIds.map(id => objectsById.get(id)).filter(Boolean)
   const primarySelection = selectedObjects[0] || null
 
   const allowedTools = MAP_TYPE_TOOLS[activeMapType] || MAP_TYPE_TOOLS.region
@@ -513,9 +541,10 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   // Sync refs
   useEffect(() => {
     objectsRef.current = objects
+    objectByIdRef.current = objectsById
     visibleObjectsRef.current = visibleObjects
     selectedIdsRef.current = selectedIds
-  }, [objects, selectedIds, visibleObjects])
+  }, [objects, objectsById, selectedIds, visibleObjects])
   // Layers/metadata must be read through a ref inside persistence paths: the
   // window keydown handler mounts once, so a closed-over `schema` goes stale
   // and keyboard delete/undo/redo would write back old metadata (dropping
@@ -527,7 +556,6 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     if (selectedSegmentRef.current && !selectedIds.includes(selectedSegmentRef.current.objectId)) setSelectedSegment(null)
   }, [selectedIds])
   useEffect(() => { hoveredIdRef.current = hoveredId; requestRender() }, [hoveredId]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { activeMapRef.current = activeMap }, [activeMap])
   useEffect(() => { draftRef.current = draft; requestRender() }, [draft]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { viewRef.current = view; requestRender() }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { undoStackRef.current = []; redoStackRef.current = [] }, [activeMap?.id])
@@ -536,7 +564,6 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       cursorMapPointRef.current = null
       requestRender()
     }
-    if (mode !== 'select') setSelectedSegment(null)
   }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -577,41 +604,33 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   // ── Persistence ────────────────────────────────────────────────────────────
 
-  function persistObjects(nextObjects) {
+  function persistMap({ mapObjects = objectsRef.current, mapLayers = schemaRef.current.layers, metadata = schemaRef.current.metadata } = {}) {
     updateActiveMapData(() => ({
       schemaVersion: SCHEMA_VERSION,
       width: MAP_W, height: MAP_H,
-      mapObjects: nextObjects,
-      mapLayers: schemaRef.current.layers,
-      metadata: schemaRef.current.metadata,
+      mapObjects,
+      mapLayers,
+      metadata,
     }))
+  }
+
+  function persistObjects(nextObjects) {
+    persistMap({ mapObjects: nextObjects })
   }
 
   function persistLayers(nextLayers) {
-    updateActiveMapData(() => ({
-      schemaVersion: SCHEMA_VERSION,
-      width: MAP_W, height: MAP_H,
-      mapObjects: objectsRef.current,
-      mapLayers: nextLayers,
-      metadata: schemaRef.current.metadata,
-    }))
+    takeSnapshot()
+    persistMap({ mapLayers: nextLayers })
   }
 
   function persistMeta(patch) {
-    updateActiveMapData(() => ({
-      schemaVersion: SCHEMA_VERSION,
-      width: MAP_W, height: MAP_H,
-      mapObjects: objectsRef.current,
-      mapLayers: schemaRef.current.layers,
-      metadata: { ...(schemaRef.current.metadata || {}), ...patch },
-    }))
+    takeSnapshot()
+    persistMap({ metadata: { ...(schemaRef.current.metadata || {}), ...patch } })
   }
 
   // ── History ────────────────────────────────────────────────────────────────
 
   function takeSnapshot() {
-    const cur = activeMapRef.current
-    if (!cur) return
     undoStackRef.current = [...undoStackRef.current.slice(-39), {
       mapObjects: objectsRef.current.map(o => ({ ...o })),
       mapLayers: schemaRef.current.layers,
@@ -628,38 +647,45 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   function undo() {
     const prev = undoStackRef.current.pop()
-    const cur = activeMapRef.current
-    if (!prev || !cur) return
+    if (!prev) return
     redoStackRef.current = [...redoStackRef.current.slice(-39), { mapObjects: objectsRef.current, mapLayers: schemaRef.current.layers, metadata: schemaRef.current.metadata }]
     applySnapshot(prev); setHistoryVersion(v => v + 1)
   }
 
   function redo() {
     const next = redoStackRef.current.pop()
-    const cur = activeMapRef.current
-    if (!next || !cur) return
+    if (!next) return
     undoStackRef.current = [...undoStackRef.current.slice(-39), { mapObjects: objectsRef.current, mapLayers: schemaRef.current.layers, metadata: schemaRef.current.metadata }]
     applySnapshot(next); setHistoryVersion(v => v + 1)
   }
 
   // ── Object mutations ────────────────────────────────────────────────────────
 
-  function updateObjects(updater, { skipHistory } = {}) {
-    if (!skipHistory) takeSnapshot()
+  function updateObjects(updater, { nextLayers } = {}) {
+    takeSnapshot()
     const next = typeof updater === 'function' ? updater(objectsRef.current) : updater
-    persistObjects(next)
+    persistMap({
+      mapObjects: next,
+      mapLayers: nextLayers === undefined ? schemaRef.current.layers : nextLayers,
+    })
   }
 
   function updateObjectsTransient(updater) {
     const next = typeof updater === 'function' ? updater(objectsRef.current) : updater
     objectsRef.current = next
-    visibleObjectsRef.current = sortVisibleObjects(next)
+    objectByIdRef.current = new Map(next.map(object => [object.id, object]))
+    // Transient interactions only move/resize existing objects, so z-order and
+    // visibility are unchanged. Preserve the existing order instead of sorting
+    // the whole map on every pointermove.
+    visibleObjectsRef.current = visibleObjectsRef.current
+      .map(object => objectByIdRef.current.get(object.id))
+      .filter(Boolean)
     requestRender()
   }
 
   function patchSelected(patch) {
     const ids = new Set(selectedIds)
-    updateObjects(cur => cur.map(o => ids.has(o.id) && !o.locked && !isLayerLocked(o)
+    updateObjects(cur => cur.map(o => ids.has(o.id) && !o.locked
       ? { ...o, ...patch, properties: patch.properties ? { ...o.properties, ...patch.properties } : o.properties, linkedEntity: patch.linkedEntity !== undefined ? patch.linkedEntity : o.linkedEntity }
       : o))
   }
@@ -679,10 +705,10 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   function deleteSelectedSegment() {
     const seg = selectedSegmentRef.current
     if (!seg) return false
-    const obj = objectsRef.current.find(o => o.id === seg.objectId)
+    const obj = objectByIdRef.current.get(seg.objectId)
     const pts = obj?.geometry?.points
     setSelectedSegment(null)
-    if (!obj || obj.locked || isLayerLocked(obj) || !pts || pts.length < 2 || seg.index >= pts.length - 1) return false
+    if (!obj || obj.locked || !pts || pts.length < 2 || seg.index >= pts.length - 1) return false
     if (pts.length === 2) {
       updateObjects(cur => cur.filter(o => o.id !== obj.id))
       setSelectedIds([])
@@ -716,8 +742,6 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     updateObjects(cur => [...cur, ...copies])
     setSelectedIds(copies.map(o => o.id))
   }
-
-  function isLayerLocked() { return false }
 
   // ── Canvas rendering ────────────────────────────────────────────────────────
 
@@ -754,8 +778,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     }
   }
 
-  function getDrawableObjects(mapBounds) {
-    const selected = new Set(selectedIdsRef.current)
+  function getDrawableObjects(mapBounds, selected) {
     const hovered = hoveredIdRef.current
     return visibleObjectsRef.current.filter(o => (
       selected.has(o.id) ||
@@ -765,12 +788,12 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   }
 
   function drawObjectsInLayerOrder(ctx, orderedObjects, selectedIds, opts) {
-    const selected = new Set(selectedIds)
+    const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds)
     let riverRun = []
     const openings = []
     const flushRivers = () => {
       if (!riverRun.length) return
-      drawRiverGroup(ctx, riverRun, selectedIds, opts)
+      drawRiverGroup(ctx, riverRun, selected, opts)
       riverRun = []
     }
 
@@ -820,13 +843,14 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
     ctx.save()
     ctx.beginPath(); ctx.rect(0, 0, MAP_W, MAP_H); ctx.clip()
-    const drawableObjects = getDrawableObjects(getViewportMapBounds(rect))
-    drawObjectsInLayerOrder(ctx, drawableObjects, selectedIdsRef.current, { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode })
+    const selected = new Set(selectedIdsRef.current)
+    const drawableObjects = getDrawableObjects(getViewportMapBounds(rect), selected)
+    drawObjectsInLayerOrder(ctx, drawableObjects, selected, { style: stylePreset, mapType: activeMapType, zoom: viewRef.current.zoom, geometryEditMode })
 
     // Selected line segment highlight (double-click selection)
     const seg = selectedSegmentRef.current
     if (seg) {
-      const segObj = objectsRef.current.find(o => o.id === seg.objectId)
+      const segObj = objectByIdRef.current.get(seg.objectId)
       const segPts = segObj?.geometry?.points
       if (segObj && segPts && seg.index < segPts.length - 1) {
         const a = segPts[seg.index], b = segPts[seg.index + 1]
@@ -905,7 +929,9 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     }
 
     // hover
-    const hovObj = visibleObjectsRef.current.find(o => o.id === hoveredIdRef.current && !selectedIdsRef.current.includes(o.id))
+    const hovObj = selectedIdsRef.current.includes(hoveredIdRef.current)
+      ? null
+      : objectByIdRef.current.get(hoveredIdRef.current)
     drawHoverHighlight(ctx, hovObj, viewRef.current.zoom)
 
     // draft
@@ -971,8 +997,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   function hitTestTerritoryLabelHandle(point) {
     if (mode !== 'select' || selectedIdsRef.current.length !== 1) return null
-    const object = objectsRef.current.find(o => o.id === selectedIdsRef.current[0])
-    if (!object || object.locked || isLayerLocked(object)) return null
+    const object = objectByIdRef.current.get(selectedIdsRef.current[0])
+    if (!object || object.locked) return null
     const labelPoint = getTerritoryLabelPoint(object)
     if (!labelPoint) return null
     const radius = Math.max(8, 12 / viewRef.current.zoom)
@@ -987,7 +1013,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     const visible = visibleObjectsRef.current
     for (let i = visible.length - 1; i >= 0; i--) {
       const object = visible[i]
-      if (!selected.has(object.id) || object.locked || isLayerLocked(object)) continue
+      if (!selected.has(object.id) || object.locked) continue
       const points = object.geometry?.points || []
       if (!points.length) continue
       for (let pointIndex = points.length - 1; pointIndex >= 0; pointIndex--) {
@@ -1013,8 +1039,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
   function hitTestResizeHandle(point) {
     if (mode !== 'select' || selectedIdsRef.current.length !== 1) return null
-    const object = objectsRef.current.find(o => o.id === selectedIdsRef.current[0])
-    if (!object || object.locked || isLayerLocked(object)) return null
+    const object = objectByIdRef.current.get(selectedIdsRef.current[0])
+    if (!object || object.locked) return null
     const canResizeStamp = object.type === 'stamp' && !object.geometry
     const canResizeGeometry = geometryEditMode === 'resize' && object.geometry?.points?.length
     if (!canResizeStamp && !canResizeGeometry) return null
@@ -1142,6 +1168,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
     // Political regions/rooms need a name — open naming modal
     if (objectType === 'territory') {
+      setTerritoryConfig({ name: '', fill: obj.properties.fill || '#7050a8', linkToId: '', createNewLocation: false })
       setModal({ kind: 'territory', objectId: obj.id })
     } else {
       setMode('select')
@@ -1154,8 +1181,9 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         ? { fill: '#f0e3bd', stroke: '#b79a62', organicEdges: true }
         : { fill: '#1e3d20', stroke: '#142a16', organicEdges: true }
       case 'terrain': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: DEFAULT_REGION_FILL_OPACITY, terrainType: selectedTerrainType, terrainSymbolScale: 1 }
-      case 'region': return { fill: TERRAIN_TYPES.find(t => t.value === selectedTerrainType)?.color || '#6b9e44', stroke: '#2a3a18', terrainFillOpacity: DEFAULT_REGION_FILL_OPACITY, terrainType: selectedTerrainType, terrainSymbolScale: 1 } // legacy compat
-      case 'territory': return { fill: '#7050a8', stroke: '#4a3070', fillOpacity: DEFAULT_REGION_FILL_OPACITY, name: '' }
+      // The UI tool is named "region", but completeDraft stores the political
+      // shape as a territory. Keep its defaults separate from terrain regions.
+      case 'region': return { fill: '#7050a8', stroke: '#4a3070', fillOpacity: DEFAULT_REGION_FILL_OPACITY, name: '' }
       case 'wall': {
         // Local and interior walls share the material preset system; interior
         // walls keep semanticType 'wall' so door/window placement is unaffected.
@@ -1308,7 +1336,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     const point = screenToMap(e.clientX, e.clientY, viewportRef.current, viewRef.current)
     const tolerance = 12 / (viewRef.current.zoom || 1)
     for (const o of [...visibleObjectsRef.current].reverse()) {
-      if (!LINE_SEGMENT_TYPES.has(o.type) || o.locked || isLayerLocked(o)) continue
+      if (!LINE_SEGMENT_TYPES.has(o.type) || o.locked) continue
       const pts = o.geometry?.points
       if (!pts || pts.length < 2) continue
       const hitWidth = (Number(o.properties?.lineThickness) || 6) / 2 + tolerance
@@ -1413,7 +1441,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     // select
     const labelHandleHit = hitTestTerritoryLabelHandle(point)
     if (labelHandleHit) {
-      const object = objectsRef.current.find(o => o.id === labelHandleHit.objectId)
+      const object = objectByIdRef.current.get(labelHandleHit.objectId)
       if (!object) return
       interactionRef.current = {
         type: 'label-position-drag',
@@ -1430,7 +1458,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
     const resizeHit = hitTestResizeHandle(point)
     if (resizeHit) {
-      const object = objectsRef.current.find(o => o.id === selectedIdsRef.current[0])
+      const object = objectByIdRef.current.get(selectedIdsRef.current[0])
       if (!object) return
       setHoveredResizeHandle({ objectId: object.id, handle: resizeHit.handle })
       if (object.type === 'stamp' && !object.geometry) {
@@ -1463,7 +1491,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
 
     const handleHit = hitTestPointHandle(point)
     if (handleHit) {
-      const object = objectsRef.current.find(o => o.id === handleHit.objectId)
+      const object = objectByIdRef.current.get(handleHit.objectId)
       if (!object) return
       setSelectedIds([object.id])
       setHoveredPointHandle(handleHit)
@@ -1481,16 +1509,20 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     }
 
     const hit = hitTest(point)
-    if (hit && !hit.locked && !isLayerLocked(hit)) {
+    if (hit && !hit.locked) {
       const additive = e.shiftKey || e.metaKey || e.ctrlKey
       const next = additive
         ? (selectedIdsRef.current.includes(hit.id) ? selectedIdsRef.current.filter(id => id !== hit.id) : [...selectedIdsRef.current, hit.id])
         : selectedIdsRef.current.includes(hit.id) ? selectedIdsRef.current : [hit.id]
+      const nextIds = new Set(next)
+      const startObjectsById = new Map(objectsRef.current
+        .filter(object => nextIds.has(object.id))
+        .map(object => [object.id, { id: object.id, x: object.x || 0, y: object.y || 0, geometry: object.geometry }]))
       setSelectedIds(next)
       interactionRef.current = {
         type: 'drag',
         startClientX: e.clientX, startClientY: e.clientY, hasMoved: false, startPoint: point,
-        startObjects: objectsRef.current.filter(o => next.includes(o.id)).map(o => ({ id: o.id, x: o.x || 0, y: o.y || 0, geometry: o.geometry })),
+        startObjectsById,
       }
       return
     }
@@ -1579,7 +1611,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       if (!ia.hasMoved) { takeSnapshot(); ia.hasMoved = true }
       const dx = pt.x - ia.startPoint.x, dy = pt.y - ia.startPoint.y
       updateObjectsTransient(cur => cur.map(o => {
-        const start = ia.startObjects.find(s => s.id === o.id)
+        const start = ia.startObjectsById.get(o.id)
         if (!start || o.locked) return o
         if (o.geometry?.type === 'polygon' || o.geometry?.type === 'path') {
           const pts = start.geometry?.points || []
@@ -1596,7 +1628,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       const dx = pt.x - ia.startPoint.x
       const dy = pt.y - ia.startPoint.y
       updateObjectsTransient(cur => cur.map(o => {
-        if (o.id !== ia.objectId || o.locked || isLayerLocked(o)) return o
+        if (o.id !== ia.objectId || o.locked) return o
         const points = ia.startPoints.map((p, index) => (
           index === ia.pointIndex ? getSnappedPoint({ x: p.x + dx, y: p.y + dy }) : p
         ))
@@ -1611,7 +1643,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       const dx = pt.x - ia.startPoint.x
       const dy = pt.y - ia.startPoint.y
       updateObjectsTransient(cur => cur.map(o => {
-        if (o.id !== ia.objectId || o.locked || isLayerLocked(o)) return o
+        if (o.id !== ia.objectId || o.locked) return o
         return {
           ...o,
           properties: {
@@ -1628,7 +1660,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       if (!ia.hasMoved && screenDist < DRAG_THRESHOLD_PX) return
       if (!ia.hasMoved) { takeSnapshot(); ia.hasMoved = true }
       updateObjectsTransient(cur => cur.map(o => {
-        if (o.id !== ia.objectId || o.locked || isLayerLocked(o)) return o
+        if (o.id !== ia.objectId || o.locked) return o
         const points = resizeGeometryPoints(ia.startPoints, ia, pt)
         return { ...o, geometry: { ...o.geometry, points } }
       }))
@@ -1639,7 +1671,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       if (!ia.hasMoved && screenDist < DRAG_THRESHOLD_PX) return
       if (!ia.hasMoved) { takeSnapshot(); ia.hasMoved = true }
       updateObjectsTransient(cur => cur.map(o => {
-        if (o.id !== ia.objectId || o.locked || isLayerLocked(o)) return o
+        if (o.id !== ia.objectId || o.locked) return o
         return { ...o, ...resizeStampObject(ia.startObject, ia, pt) }
       }))
     }
@@ -1732,7 +1764,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     drawBackground(ctx, MAP_W, MAP_H, stylePreset, baseLayer)
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, MAP_W, MAP_H); ctx.clip()
     drawMovementGrid(ctx, MAP_W, MAP_H, gridSettings)
-    drawObjectsInLayerOrder(ctx, visibleObjects, [], opts)
+    drawObjectsInLayerOrder(ctx, visibleObjects.filter(isMapObjectExportable), [], opts)
     ctx.restore()
     exportCanvas.toBlob(blob => {
       if (!blob) return
@@ -1789,7 +1821,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           <select
             value={activeMap.id}
             onChange={e => selectMap(e.target.value)}
-            style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '4px 8px', fontSize: 12, fontFamily: 'inherit', fontWeight: 600, maxWidth: 160 }}
+            style={{ border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '4px 8px', fontSize: 16, fontFamily: 'inherit', fontWeight: 600, maxWidth: 160 }}
           >
             {(project.maps || []).map(m => <option key={m.id} value={m.id}>{m.name || 'Untitled'}</option>)}
           </select>
@@ -1808,7 +1840,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         <select
           value={stylePreset}
           onChange={e => persistMeta({ stylePreset: e.target.value })}
-          style={{ height: 28, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '0 8px', fontSize: 12, fontFamily: 'inherit' }}
+          style={{ height: 28, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '0 8px', fontSize: 16, fontFamily: 'inherit' }}
         >
           {STYLE_PRESETS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -1995,7 +2027,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
                     <select
                       value={localWallMaterial}
                       onChange={e => setLocalWallMaterial(e.target.value)}
-                      style={{ ...inputStyle, width: '100%', minWidth: 0, fontSize: 12, padding: '5px 8px' }}
+                      style={{ ...inputStyle, width: '100%', minWidth: 0, fontSize: 16, padding: '5px 8px' }}
                     >
                       {LOCAL_WALL_MATERIALS.map(material => <option key={material.value} value={material.value}>{material.label}</option>)}
                     </select>
@@ -2098,8 +2130,8 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           {mode === 'stamp' && (
             <div style={{ position: 'absolute', left: TOOLBAR_W, top: CMD_H + 8, width: 236, maxWidth: 'calc(100vw - 112px)', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'var(--shadow-md)', maxHeight: '80vh', overflow: 'hidden' }}>
               <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Stamps</div>
-              <input value={stampSearch} onChange={e => setStampSearch(e.target.value)} placeholder="Search stamps" style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 12, padding: '5px 8px' }} />
-              <select value={stampCategory} onChange={e => setStampCategory(e.target.value)} style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 12, padding: '5px 8px' }}>
+              <input value={stampSearch} onChange={e => setStampSearch(e.target.value)} placeholder="Search stamps" style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 16, padding: '5px 8px' }} />
+              <select value={stampCategory} onChange={e => setStampCategory(e.target.value)} style={{ ...inputStyle, width: '100%', minWidth: 0, boxSizing: 'border-box', fontSize: 16, padding: '5px 8px' }}>
                 {allStampCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(58px, 1fr))', gap: 5, overflowX: 'hidden', overflowY: 'auto', flex: 1, minWidth: 0 }}>
@@ -2301,7 +2333,7 @@ function SliderInput({ value, min, max, step = 1, onChange, numWidth = 54 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `1fr ${numWidth}px`, gap: 8, alignItems: 'center' }}>
       <input type="range" min={min} max={max} step={step} value={value} onChange={onChange} style={{ width: '100%' }} />
-      <input type="number" min={min} max={max} step={step} value={value} onChange={onChange} style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }} />
+      <input type="number" min={min} max={max} step={step} value={value} onChange={onChange} style={{ ...inputStyle, padding: '5px 6px', fontSize: 16 }} />
     </div>
   )
 }
@@ -2494,7 +2526,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
                 step="5"
                 value={round((prop('terrainSymbolScale') || 1) * 100, 0)}
                 onChange={e => setProp('terrainSymbolScale', clamp(Number(e.target.value) / 100, 0.55, 1.8))}
-                style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }}
+                style={{ ...inputStyle, padding: '5px 6px', fontSize: 16 }}
               />
             </div>
           </Field>
@@ -2537,13 +2569,10 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
           <Field label="Title">
             <input value={prop('title') || ''} onChange={e => patchSelected({ properties: { title: e.target.value, name: e.target.value || 'Note' } })} style={inputStyle} />
           </Field>
-          <Field label="Visibility">
-            <select value={prop('visibility') || 'private'} onChange={e => setProp('visibility', e.target.value)} style={inputStyle}>
-              <option value="private">Private (editor only)</option>
-              <option value="public">Exportable</option>
-            </select>
-          </Field>
-          {isCampaign && <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}><input type="checkbox" checked={Boolean(prop('gmOnly'))} onChange={e => setProp('gmOnly', e.target.checked)} /> GM only</label>}
+          <label style={checkStyle}>
+            <input type="checkbox" disabled={Boolean(prop('gmOnly'))} checked={prop('visibility') === 'public' && !prop('gmOnly')} onChange={e => setProp('visibility', e.target.checked ? 'public' : 'private')} /> Include title marker in PNG exports
+          </label>
+          {isCampaign && <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}><input type="checkbox" checked={Boolean(prop('gmOnly'))} onChange={e => patchSelected({ properties: { gmOnly: e.target.checked, ...(e.target.checked ? { visibility: 'private' } : {}) } })} /> GM only</label>}
         </>
       )}
 
@@ -2867,7 +2896,7 @@ function ObjectInspector({ primarySelection, selectedIds, patchSelected, deleteS
                   const size = clamp(Number(e.target.value) || 80, MIN_SIZE, 320)
                   patchSelected({ width: size, height: size })
                 }}
-                style={{ ...inputStyle, padding: '5px 6px', fontSize: 11 }}
+                style={{ ...inputStyle, padding: '5px 6px', fontSize: 16 }}
               />
             </div>
           </Field>
@@ -3009,10 +3038,13 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
   function toggleGroupVisible(groupId) {
     const g = groups.find(x => x.id === groupId)
     if (!g) return
-    const next = groups.map(x => x.id === groupId ? { ...x, visible: x.visible === false } : x)
-    persistLayers(next)
-    // Also toggle all objects in group
-    updateObjects(cur => cur.map(o => o.groupId === groupId ? { ...o, visible: g.visible === false ? undefined : false } : o))
+    const nextLayers = groups.map(x => x.id === groupId ? { ...x, visible: x.visible === false } : x)
+    // Keep group metadata and its object visibility in one map update. Separate
+    // writes race through React state and can restore stale layers or objects.
+    updateObjects(
+      cur => cur.map(o => o.groupId === groupId ? { ...o, visible: g.visible === false ? undefined : false } : o),
+      { nextLayers },
+    )
   }
 
   function deleteOne(id) {
@@ -3022,12 +3054,14 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
 
   function deleteGroup(groupId) {
     // Ungroup objects (remove groupId), then delete group
-    updateObjects(cur => cur.map(o => o.groupId === groupId ? { ...o, groupId: null } : o))
-    persistLayers(groups.filter(g => g.id !== groupId))
+    updateObjects(
+      cur => cur.map(o => o.groupId === groupId ? { ...o, groupId: null } : o),
+      { nextLayers: groups.filter(g => g.id !== groupId) },
+    )
   }
 
   function createGroup() {
-    const newGroup = { id: uid('grp'), name: 'New Group', visible: true, locked: false }
+    const newGroup = { id: uid('grp'), name: 'New Group', visible: true }
     persistLayers([...groups, newGroup])
     setTimeout(() => { setRenamingGroupId(newGroup.id); setRenameVal('New Group') }, 50)
   }
@@ -3129,7 +3163,7 @@ function LayersPanel({ objects, layers, selectedIds, setSelectedIds, updateObjec
                     onBlur={saveGroupRename}
                     onKeyDown={e => { if (e.key === 'Enter') saveGroupRename(); if (e.key === 'Escape') setRenamingGroupId(null) }}
                     onClick={e => e.stopPropagation()}
-                    style={{ ...inputStyle, fontSize: 11, padding: '2px 5px', height: 22 }}
+                    style={{ ...inputStyle, fontSize: 16, padding: '2px 5px', height: 22 }}
                   />
                 ) : (
                   <span
@@ -3307,7 +3341,7 @@ function PlacesPanel({ objects, selectedIds, setSelectedIds, setMode, setInspect
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search places…"
-          style={{ ...inputStyle, fontSize: 12, padding: '5px 8px' }}
+          style={{ ...inputStyle, fontSize: 16, padding: '5px 8px' }}
         />
         <div style={{ display: 'grid', gridTemplateColumns: isInteriorMap ? '1fr' : 'repeat(3, 1fr)', gap: 4 }}>
           {(isInteriorMap
@@ -3432,7 +3466,7 @@ function MapInspector({ activeMap, project, stylePreset, gridSettings, baseLayer
             <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
               onBlur={() => { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) }}
               onKeyDown={e => { if (e.key === 'Enter') { if (renameVal.trim()) renameMap(map.id, renameVal.trim()); setRenamingId(null) } if (e.key === 'Escape') setRenamingId(null) }}
-              style={{ ...inputStyle, flex: 1, fontSize: 12 }} />
+              style={{ ...inputStyle, flex: 1, fontSize: 16 }} />
           ) : (
             <button onClick={() => selectMap(map.id)} onDoubleClick={() => { setRenamingId(map.id); setRenameVal(map.name || '') }}
               style={{ flex: 1, textAlign: 'left', background: map.id === activeMap.id ? 'var(--accent)' : 'var(--surface2)', color: map.id === activeMap.id ? '#fff' : 'var(--muted)', border: `1px solid ${map.id === activeMap.id ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 6, padding: '5px 8px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -3535,11 +3569,11 @@ function MapModal({ modal, onClose, locConfig, setLocConfig, labelConfig, setLab
               <textarea value={noteConfig.body} onChange={e => setNoteConfig(c => ({ ...c, body: e.target.value }))} placeholder="Write your note here..." rows={4} style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }} />
             </Field>
             <label style={checkStyle}>
-              <input type="checkbox" checked={noteConfig.visibility === 'private'} onChange={e => setNoteConfig(c => ({ ...c, visibility: e.target.checked ? 'private' : 'public' }))} /> Private (not exported by default)
+              <input type="checkbox" disabled={Boolean(noteConfig.gmOnly)} checked={noteConfig.visibility === 'public' && !noteConfig.gmOnly} onChange={e => setNoteConfig(c => ({ ...c, visibility: e.target.checked ? 'public' : 'private' }))} /> Include title marker in PNG exports
             </label>
             {isCampaign && (
               <label style={checkStyle}>
-                <input type="checkbox" checked={Boolean(noteConfig.gmOnly)} onChange={e => setNoteConfig(c => ({ ...c, gmOnly: e.target.checked }))} /> GM only
+                <input type="checkbox" checked={Boolean(noteConfig.gmOnly)} onChange={e => setNoteConfig(c => ({ ...c, gmOnly: e.target.checked, ...(e.target.checked ? { visibility: 'private' } : {}) }))} /> GM only
               </label>
             )}
           </>
@@ -3654,7 +3688,7 @@ function Field({ label, children }) {
 
 const inputStyle = {
   width: '100%', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)',
-  borderRadius: 6, padding: '6px 9px', fontFamily: 'inherit', fontSize: 12, boxSizing: 'border-box',
+  borderRadius: 6, padding: '6px 9px', fontFamily: 'inherit', fontSize: 16, boxSizing: 'border-box',
 }
 
 function tabStyle(active) {

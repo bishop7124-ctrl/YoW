@@ -3,7 +3,7 @@ import Modal from '../shared/Modal'
 import { StudioButton } from '../presentation/Studio'
 import { STORY_PHASE_OPTIONS } from '../../utils/characterJourney'
 
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const emptyBeat = {
@@ -22,17 +22,18 @@ export default function JourneyBeatModal({ beat, character, characters, timeline
   const submit = event => {
     event.preventDefault()
     if (!form.title.trim()) { setError('Give this journey beat a title.'); return }
-    onSave({ ...form, title: form.title.trim() })
+    if (!onSave({ ...form, title: form.title.trim() })) setError('This beat could not be saved. Your draft is still here.')
+    else event.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
   }
 
   return (
     <Modal title={beat ? 'Edit journey beat' : 'Add journey beat'} onClose={onClose} wide centered>
-      <form className="space-y-5" onSubmit={submit}>
+      <form data-confirms-save className="space-y-5" onSubmit={submit}>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="md:col-span-2">
             <span className={LABEL}>Beat title *</span>
             <input autoFocus className={INPUT} value={form.title} onChange={event => { set('title', event.target.value); setError('') }} placeholder="The choice at the bridge" />
-            {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
+            {error && <span role="alert" className="mt-1 block text-xs text-red-500">{error}</span>}
           </label>
           <label>
             <span className={LABEL}>Story phase</span>

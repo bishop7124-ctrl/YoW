@@ -1,21 +1,15 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage, waitForStorageHydrated,
+  seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
-// `flush()` right before `page.reload()`, then `waitForStorageHydrated()`
-// right after: the app's real storage backend is an IndexedDB-backed vault
-// that persists asynchronously (see docs/ROADMAP.md's 2026-08-24 part 2 /
-// 2026-08-25 Bugs row), and `flush()`'s own promise resolving is not a hard
-// enough guarantee that the write it triggered had actually landed before a
-// reload's own hydration read runs — observed directly in this session: a
-// value confirmed present pre-reload could still read back `null` right
-// after reload. `waitForStorageHydrated` (helpers.js) waits for a key that's
-// always long-since written (`nf_novels`) as a "storage has re-hydrated"
-// signal before trusting a point read of the key the test actually cares
-// about.
-
+// Every persistence test here follows the same three-step shape around its
+// reload: flush() so the write has landed, reload, then waitForStorageHydration()
+// so the *read* goes to the IndexedDB vault rather than the default localStorage
+// backend the bridge answers from until main.jsx finishes swapping it. Only the
+// first of those was present before 2026-08-28, which is what made this spec
+// flaky — see waitForStorageHydration in helpers.js for the full trace.
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
   await page.goto('/')
@@ -47,7 +41,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(true)
   })
@@ -77,7 +71,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === updatedName)).toBe(true)
     expect(chars.some(c => c.name === originalName)).toBe(false)
@@ -113,7 +107,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const chars = await readStorage(page, 'nf_characters')
     expect(chars.some(c => c.name === charName)).toBe(false)
   })
@@ -178,7 +172,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const savedChars = await readStorage(page, 'nf_characters')
     const saved = savedChars?.find(c => c.name === draftName)
     expect(saved?.pronouns).toBe('she/her')
@@ -234,7 +228,7 @@ test.describe('Locations', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const locs = await readStorage(page, 'nf_locations')
     expect(locs.some(l => l.name === locName)).toBe(true)
   })
@@ -291,7 +285,7 @@ test.describe('Lore', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const lore = await readStorage(page, 'nf_loreEntries')
     expect(lore.some(e => e.title === loreTitle || e.name === loreTitle)).toBe(true)
   })
@@ -318,8 +312,12 @@ test.describe('Timeline', () => {
     const eventTitle = `Event ${Date.now()}`
 
     await page.getByRole('button', { name: 'New Event' }).click()
-    await page.locator('[role="dialog"] input[required]').first().fill(eventTitle)
-    await page.getByRole('button', { name: 'Save' }).click()
+    const dialog = page.getByRole('dialog', { name: 'New Timeline Event' })
+    const titleInput = dialog.getByRole('textbox').first()
+    await titleInput.click()
+    await titleInput.pressSequentially(eventTitle)
+    await expect(titleInput).toHaveValue(eventTitle)
+    await dialog.getByRole('button', { name: 'Save' }).click()
 
     await waitForStorage(page, (t) => {
       const timeline = JSON.parse((window.__yowStorageBridge?.getItem('nf_timeline') ?? localStorage.getItem('nf_timeline')) || '[]')
@@ -328,7 +326,7 @@ test.describe('Timeline', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const timeline = await readStorage(page, 'nf_timeline')
     expect(timeline.some(e => e.title === eventTitle || e.name === eventTitle)).toBe(true)
   })
@@ -362,8 +360,8 @@ test.describe('Ideas', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
-    const ideas = await readStorage(page, 'nf_ideaEntries')
+    await waitForStorageHydration(page)
+    const ideas = await readStorage(page, 'nf_ideaEntries') || []
     expect(ideas.some(e =>
       (e.title || e.text || e.content || '').includes(prefix),
     )).toBe(true)
