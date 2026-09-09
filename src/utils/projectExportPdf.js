@@ -2,12 +2,21 @@ import { getExportPdfTheme } from './projectExportThemes.js'
 import { getProjectType } from '../constants/projectTypes.js'
 import { normalizeFactionLogo } from '../components/Factions/logoData.js'
 import {
-  cleanText, escapeHtml, sortByOrder, sortByTitle, valueList,
-  asArray, isCampaignProject, sessionExportRows, sessionExportSummary,
+  cleanText, escapeHtml, sortByTitle, valueList,
+  asArray, isCampaignProject, sessionExportRows, sessionExportSummary, outlineStoryEventLabel,
   getRelationshipLinks, getEnabled, buildOutline, wordCount, buildSummaryStats,
   getProjectExportLabel, getProjectWorkspaceLabel, getProjectPdfFilename, downloadBlob,
 } from './projectExportHelpers.js'
+import { outlineSynopsis } from './outlineDisplay.js'
 import { getSignedUserMediaUrl, isUserMediaReference } from './uploadUserMedia.js'
+import { getDirectFamilyRelationshipRows } from './familyRelationships.js'
+import { formatTimelineDate, sortTimelineEntries } from './timelineYear.js'
+import { normalizeHistoryEntry } from './historyEntries.js'
+import { createLoreReferenceIndex, loreReferenceRows } from './loreEntries.js'
+import { buildCharacterIndex, characterDetailFields, characterJourneyFields } from './characterEntries.js'
+import { buildRelationshipIndex, getSocialRelationshipRows } from './relationshipMap.js'
+import { buildIdeaIndex, buildIdeaEntityIndex, ideaExportFields } from './ideaEntries.js'
+import { getScheduleCalendar, normalizeScheduleEvent, scheduleExportFields, sortScheduleEvents } from './scheduleCalendar.js'
 
 const textEncoder = new TextEncoder()
 
@@ -537,83 +546,68 @@ const articleCard = (title, meta, content, related = [], image = '') => `
   </article>
 `
 
-const characterDossier = (character, projectData) => {
-  const relationships = getRelationshipLinks(character)
-    .map(rel => {
-      const target = (projectData.characters ?? []).find(item => item.id === rel.targetId)
-      return target ? { ...rel, targetName: target.name } : null
-    })
-    .filter(Boolean)
+const characterDossier = (character, projectData, byId) => {
+  const relationships = character.relationships.flatMap(rel => {
+    const target = byId.get(rel.targetId)
+    return target ? [{ ...rel, targetName: target.name }] : []
+  })
   const image = getImage(character)
-  const journey = character.journey
-  const journeyBeats = [...(journey?.beats || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const journeyFields = characterJourneyFields(character.journey)
+  const renderFields = fields => fields.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><p>${escapeHtml(value)}</p></div>`).join('')
   return `
     <article class="dossier-card">
       <div class="portrait-frame">
         ${image ? `<img src="${escapeHtml(image)}" alt="" style="object-position:${escapeHtml(character.imagePosition || '50% 50%')}">` : `<span>${firstLetter(character.name)}</span>`}
       </div>
       <div class="dossier-body">
-        <div class="dossier-topline">
-          <span>${escapeHtml(character.role || 'Profile')}</span>
-          <strong>${escapeHtml(character.familyGroup || 'Independent')}</strong>
-        </div>
+        <div class="dossier-topline"><span>${escapeHtml(character.role || 'Profile')}</span><strong>${escapeHtml(character.familyGroup || 'Independent')}</strong></div>
         <h2>${escapeHtml(character.name || 'Unnamed Character')}</h2>
-        ${htmlMeta(valueList(character.age && `Age ${character.age}`, character.birthDate && `Born ${character.birthDate}`, character.deathDate && `Died ${character.deathDate}`, character.keywords?.join(', ')))}
-        <div class="dossier-grid">
-          ${[
-            ['External Goal', character.externalGoal],
-            ['Internal Goal', character.internalGoal],
-            ['Arc', character.arc || character.characterArc],
-            ['Status', character.status],
-          ].filter(([, value]) => value).map(([label, value]) => `<div><span>${escapeHtml(label)}</span><p>${escapeHtml(value)}</p></div>`).join('')}
-        </div>
-        <div class="copy">${prose(character.bio || character.description || character.notes) || '<p class="muted">No dossier notes recorded.</p>'}</div>
-        ${journey ? `<div class="copy"><h3>Character Journey · ${escapeHtml(journey.arcType || 'Custom arc')}</h3>
-          ${[
-            ['Starting state', journey.startingState], ['Ending state', journey.endingState], ['Core wound', journey.coreWound],
-            ['Lie believed', journey.lieBelieved], ['Truth to learn', journey.truthLearned], ['Want', journey.want],
-            ['Need', journey.need], ['Internal conflict', journey.internalConflict], ['External conflict', journey.externalConflict],
-          ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join('')}
-          ${journeyBeats.length ? `<h3>Journey Beats</h3>${journeyBeats.map(beat => `<p><strong>${escapeHtml(beat.title || 'Untitled beat')}</strong> · ${escapeHtml(beat.storyPhase === 'Custom' ? beat.customPhase || 'Custom phase' : beat.storyPhase || 'Story beat')}${beat.isMajorTurningPoint ? ' · Major turning point' : ''}<br>${escapeHtml(beat.description || beat.emotionalState || '')}</p>`).join('')}` : ''}
-        </div>` : ''}
-        ${relationships.length ? `<div class="relationship-tags"><strong>Known Links</strong>${relationships.slice(0, 8).map(rel => `<span>${escapeHtml(rel.type)}: ${escapeHtml(rel.targetName)}</span>`).join('')}</div>` : ''}
+        <div class="dossier-grid">${renderFields(characterDetailFields(character, projectData.project?.currentYear))}</div>
+        <div class="copy">${prose(character.bio) || '<p class="muted">No dossier notes recorded.</p>'}</div>
+        ${journeyFields.length ? `<div class="copy"><h3>Character Journey</h3><div class="dossier-grid">${renderFields(journeyFields)}</div></div>` : ''}
+        ${relationships.length ? `<div class="relationship-tags"><strong>Known Links</strong>${relationships.map(rel => `<span>${escapeHtml(rel.type)}: ${escapeHtml(rel.targetName)}</span>`).join('')}</div>` : ''}
       </div>
     </article>
   `
 }
+const getRelationshipExportRows = (characters, enabled) => {
+  const normalized = buildRelationshipIndex(characters).entries
+  const familyRows = enabled.has('familytree') ? getDirectFamilyRelationshipRows(normalized).map(row => ({
+    source: row.sourceName, target: row.targetName, type: `${row.sourceLabel} / ${row.targetLabel}`,
+  })) : []
+  const socialRows = enabled.has('relationships') ? getSocialRelationshipRows(normalized).map(row => ({
+    source: row.source, target: row.target, type: row.relationship, directed: true,
+  })) : []
+  return [...familyRows, ...socialRows]
+}
 
-const relationshipSection = (characters = []) => {
+const relationshipSection = (characters = [], enabled) => {
   const groups = new Map()
-  characters.forEach(character => {
+  if (enabled.has('familytree')) buildRelationshipIndex(characters).entries.forEach(character => {
     const key = character.familyGroup?.trim() || 'Unassigned'
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(character)
   })
-  const relationshipRows = characters.flatMap(character =>
-    getRelationshipLinks(character).map(rel => {
-      const target = characters.find(item => item.id === rel.targetId)
-      return target ? { source: character.name, target: target.name, type: rel.type } : null
-    }).filter(Boolean)
-  )
+  const relationshipRows = getRelationshipExportRows(characters, enabled)
 
   const familyCards = [...groups.entries()].map(([name, members]) => `
     <article class="family-card">
       <h2>${escapeHtml(name)}</h2>
       <p>${members.length} ${members.length === 1 ? 'member' : 'members'}</p>
-      <div>${members.slice(0, 10).map(member => `<span>${escapeHtml(member.name || 'Unnamed')}</span>`).join('')}</div>
+      <div>${members.map(member => `<span>${escapeHtml(member.name || 'Unnamed')}</span>`).join('')}</div>
     </article>
   `).join('')
 
-  const links = relationshipRows.slice(0, 28).map(row => `
+  const links = relationshipRows.map(row => `
     <div class="link-row">
       <strong>${escapeHtml(row.source || 'Unknown')}</strong>
-      <span>${escapeHtml(row.type || 'linked')}</span>
+      <span>${escapeHtml(row.type || 'linked')}${row.directed ? ' →' : ''}</span>
       <strong>${escapeHtml(row.target || 'Unknown')}</strong>
     </div>
   `).join('')
 
   return `
-    <div class="family-grid">${familyCards || emptyState('No family groups recorded.')}</div>
+    ${enabled.has('familytree') ? `<div class="family-grid">${familyCards || emptyState('No family groups recorded.')}</div>` : ''}
     <div class="relationship-board">
       <h2>Relationship Index</h2>
       ${links || emptyState('No direct relationships recorded.')}
@@ -622,7 +616,7 @@ const relationshipSection = (characters = []) => {
 }
 
 const timelineSpread = (items) => {
-  const events = sortByOrder(items).filter(Boolean)
+  const events = sortTimelineEntries(items)
   if (!events.length) return emptyState('No chronology entries yet.')
   const chunks = []
   for (let offset = 0; offset < events.length; offset += 8) {
@@ -630,7 +624,7 @@ const timelineSpread = (items) => {
         <article class="timeline-event">
           <div class="timeline-index">${String(offset + index + 1).padStart(2, '0')}</div>
           <div>
-            ${htmlMeta(valueList(event.year, event.date, event.era))}
+            ${htmlMeta(valueList(formatTimelineDate(event), event.era))}
             <h2>${escapeHtml(event.title || 'Untitled Event')}</h2>
           </div>
         </article>
@@ -661,22 +655,26 @@ const notesSection = (projectData) => {
   const structure = getProjectType(projectData.project?.type).structure || {}
   const level1 = structure.level1 || 'Act'
   const level2 = structure.level2 || 'Chapter'
+  const level3 = structure.level3 || 'Scene'
   const isCampaign = isCampaignProject(projectData.project)
   return outline.map(({ act, chapters }) => `
     <article class="outline-act">
       <h2>${escapeHtml(act.title || 'Untitled Act')}</h2>
-      <div class="copy">${prose(act.synopsis) || '<p class="muted">No act synopsis recorded.</p>'}</div>
+      ${htmlMeta(valueList(outlineStoryEventLabel(act, projectData.project)))}
+      <div class="copy">${prose(outlineSynopsis(act)) || `<p class="muted">No ${escapeHtml(level1.toLowerCase())} synopsis recorded.</p>`}</div>
       <div class="chapter-grid">
         ${chapters.map(({ chapter, scenes }, index) => `
           <div class="chapter-card">
             <span>${escapeHtml(level2)} ${index + 1}</span>
             <h3>${escapeHtml(chapter.title || `${level2} ${index + 1}`)}</h3>
-            <p>${escapeHtml(cleanText(chapter.synopsis || `${scenes.length} scenes`) || `${scenes.length} scenes`)}</p>
+            ${htmlMeta(valueList(outlineStoryEventLabel(chapter, projectData.project)))}
+            <div class="copy">${prose(outlineSynopsis(chapter)) || `<p class="muted">${scenes.length} ${escapeHtml(level3.toLowerCase())}${scenes.length === 1 ? '' : 's'}</p>`}</div>
             ${isCampaign && sessionExportRows(chapter).length ? `
               <div class="copy">
                 ${sessionExportRows(chapter).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(cleanText(value))}</p>`).join('')}
               </div>
             ` : ''}
+            ${scenes.length ? `<ol class="outline-scene-list">${scenes.map((scene, sceneIndex) => `<li><strong>${escapeHtml(scene.title && scene.title !== level3 ? scene.title : `${level3} ${sceneIndex + 1}`)}</strong>${outlineStoryEventLabel(scene, projectData.project) ? ` · ${escapeHtml(outlineStoryEventLabel(scene, projectData.project))}` : ''} · ${wordCount(scene.content).toLocaleString()} words${outlineSynopsis(scene).trim() ? `<div class="copy">${prose(outlineSynopsis(scene))}</div>` : ''}</li>`).join('')}</ol>` : ''}
             <small>${scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()} words</small>
           </div>
         `).join('')}
@@ -864,33 +862,15 @@ const drawImageFrame = (pdf, label, image, x, y, w, h, theme, initial = '', posi
   pdf.text(label.toUpperCase(), x + 12, y - h + 18, 7, { bold: true, color: theme.palette.muted, tracking: 0.7, maxWidth: w - 24 })
 }
 
-const characterFieldValue = (character, key) =>
-  character?.[key] || character?.traits?.[key] || ''
-
-const characterTextBlocks = (character, relationships) => [
-  ['Overview', character.bio || character.description || character.notes || 'No dossier notes recorded.'],
-  ['Role', character.role],
-  ['Pronouns', character.pronouns],
-  ['Family', character.familyGroup],
-  ['Species', character.species],
-  ['Title / Job', character.titleJob || character.title],
-  ['External Goal', characterFieldValue(character, 'externalGoal')],
-  ['Internal Goal', characterFieldValue(character, 'internalGoal')],
-  ['Arc', character.arc || character.characterArc],
-  ['Strengths', character.traits?.strengths],
-  ['Weaknesses', character.traits?.weaknesses],
-  ['Fears', character.traits?.fears],
-  ['Passions', character.traits?.passions],
-  ['Languages', character.traits?.languages || character.background?.language],
-  ['Hometown', character.background?.hometown],
-  ['Religion', character.background?.religion],
-  ['Life Events', character.background?.lifeEvents],
-  ['History Witnessed', character.background?.historicEventsWitnessed],
+const characterTextBlocks = (character, relationships, currentYear) => [
+  ['Overview', character.bio || 'No dossier notes recorded.'],
+  ...characterDetailFields(character, currentYear),
+  ...characterJourneyFields(character.journey),
   ['Known Links', relationships.join('\n')],
 ].filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
 
-const makeCharacterLineItems = (character, relationships, width) =>
-  characterTextBlocks(character, relationships).flatMap(([label, value]) => [
+const makeCharacterLineItems = (character, relationships, width, currentYear) =>
+  characterTextBlocks(character, relationships, currentYear).flatMap(([label, value]) => [
     { text: String(label).toUpperCase(), size: 8, lineHeight: 12, bold: true, colorRole: 'accent', tracking: 0.7, gapBefore: 5 },
     ...wrapPdfText(value, width, 9.2).map(line => ({ text: line, size: 9.2, lineHeight: 12.6, colorRole: 'text' })),
     { spacer: 4 },
@@ -937,12 +917,12 @@ const makeArticleLineItems = (body, related = [], width) => {
 }
 
 const eventYearLabel = (event = {}) =>
-  valueList(event.year, event.date, event.era).join(' / ') || 'Undated'
+  valueList(formatTimelineDate(event), event.era).join(' / ')
 
 const TIMELINE_EVENTS_PER_PDF_PAGE = 6
 
 const createVisualTimelinePages = (items, theme, eyebrow = 'Timeline', title = 'Timeline') => {
-  const events = sortByOrder(items).filter(Boolean)
+  const events = sortTimelineEntries(items)
   if (!events.length) {
     const pdf = makePdfCanvas(theme)
     pdf.pageBase(eyebrow, title, 'Event titles and years at a glance.')
@@ -982,6 +962,14 @@ const createVisualTimelinePages = (items, theme, eyebrow = 'Timeline', title = '
       pdf.textBox(event.title || 'Untitled Event', x - 60, titleY, 120, 9.4, { bold: true, color: theme.palette.text, lineHeight: 12.5, maxLines: 3 })
     })
     pages.push(pdfPage('Timeline', pageTitle, pdfContent(pdf)))
+  }
+  const abbreviated = events.filter(event => fitPdfText(eventYearLabel(event), 104, 8, 0.6) !== eventYearLabel(event)
+    || wrapPdfText(event.title || 'Untitled Event', 120, 9.4).length > 3)
+  if (abbreviated.length) {
+    pages.push(...createArticlePages({
+      section: 'Timeline', eyebrow, title: 'Timeline — full dates and titles',
+      body: abbreviated.map(event => `${eventYearLabel(event)}\n${event.title || 'Untitled Event'}`).join('\n\n'),
+    }, theme))
   }
   return pages
 }
@@ -1062,15 +1050,15 @@ const createTocPages = (records, theme, tocPageCount) => {
   return pages
 }
 
-const createCharacterPages = (character, projectData, theme, index) => {
+const createCharacterPages = (character, projectData, theme, index, byId) => {
   const title = character.name || `Character ${index + 1}`
   const pdf = makePdfCanvas(theme)
   const relationships = getRelationshipLinks(character).map(rel => {
-    const target = (projectData.characters ?? []).find(item => item.id === rel.targetId)
+    const target = byId.get(rel.targetId)
     return target ? `${rel.type || 'linked'}: ${target.name}` : ''
   }).filter(Boolean)
   const lineWidth = 500
-  const items = makeCharacterLineItems(character, relationships, lineWidth)
+  const items = makeCharacterLineItems(character, relationships, lineWidth, projectData.project?.currentYear)
   const pages = []
   const contentStartY = pdf.pageBase('Character Dossier', title, valueList(character.role, character.pronouns, character.familyGroup, character.keywords?.join(', ')).join(' - '))
   const panelTop = Math.min(488, contentStartY - 18)
@@ -1137,14 +1125,14 @@ const createArticlePages = ({ section, eyebrow, title, subtitle, body, related, 
 const createTimelinePages = (event, projectData, theme, index, eyebrow = 'Timeline & History', section = 'Timeline') => {
   const title = event.title || `Event ${index + 1}`
   const related = relatedEntries(event, projectData, 'timeline')
-  const items = makeArticleLineItems(event.description || event.content || event.notes || 'No chronicle text recorded.', related, 600)
+  const items = makeArticleLineItems(event.description ?? event.content ?? event.notes ?? 'No chronicle text recorded.', related, 600)
   const pages = []
   const pdf = makePdfCanvas(theme)
-  pdf.pageBase(eyebrow, title, valueList(event.era, event.date, event.year, event.tags?.join(', ')).join(' - '))
+  pdf.pageBase(eyebrow, title, valueList(event.era, formatTimelineDate(event), event.tags?.join(', ')).join(' - '))
   const panelBottom = 58
   pdf.rect(70, panelBottom, 700, 360, theme.palette.panel, theme.palette.accent, 1)
   pdf.text(String(index + 1).padStart(2, '0'), 100, 372, 34, { bold: true, color: theme.palette.accent, maxWidth: 95 })
-  pdf.text(valueList(event.era, event.date, event.year).join(' / ') || 'Undated', 100, 342, 11, { bold: true, color: theme.palette.muted, tracking: 1, maxWidth: 600 })
+  pdf.text(eventYearLabel(event), 100, 342, 11, { bold: true, color: theme.palette.muted, tracking: 1, maxWidth: 600 })
   let nextIndex = renderLineItems(pdf, items, 0, 100, 305, 600, panelBottom + 22, theme)
   pages.push(pdfPage(section, title, pdfContent(pdf)))
 
@@ -1184,11 +1172,17 @@ const createMapPages = (map, projectData, theme) => {
   return [pdfPage('Maps', title, pdfContent(pdf))]
 }
 
-const createRelationshipsPage = (characters, theme) => {
+const createRelationshipsPages = (characters, theme, enabled) => {
+  const rows = getRelationshipExportRows(characters, enabled)
+  if (!enabled.has('familytree')) return createArticlePages({
+    section: 'Relationships', eyebrow: 'Networks', title: 'Relationship Index',
+    subtitle: 'Directed social links: source to target. Family facts are managed in the Family Tree.',
+    body: rows.map(row => `${row.source} -> ${row.target}: ${row.type}`).join('\n\n') || 'No social relationships recorded.',
+  }, theme)
   const pdf = makePdfCanvas(theme)
   pdf.pageBase('Networks', 'Relationship Atlas', 'Family groups and direct relationship records.')
   const groups = new Map()
-  characters.forEach(character => {
+  buildRelationshipIndex(characters).entries.forEach(character => {
     const key = character.familyGroup?.trim() || 'Unassigned'
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(character)
@@ -1207,10 +1201,8 @@ const createRelationshipsPage = (characters, theme) => {
     pdf.text(`${members.length} ${members.length === 1 ? 'member' : 'members'}`.toUpperCase(), x + 14, metaY, 7, { bold: true, color: theme.palette.accent, tracking: 0.8, maxWidth: 180 })
     pdf.textBox(members.map(member => member.name).filter(Boolean).join(', '), x + 14, metaY - 16, 180, 8.4, { color: theme.palette.muted, lineHeight: 11, maxLines: 3 })
   })
-  const links = characters.flatMap(character => getRelationshipLinks(character).map(rel => {
-    const target = characters.find(item => item.id === rel.targetId)
-    return target ? `${character.name} - ${rel.type || 'linked'} - ${target.name}` : ''
-  })).filter(Boolean)
+  const links = rows.map(row => row.directed ? `${row.source} -> ${row.target}: ${row.type}` : `${row.source} - ${row.type} - ${row.target}`)
+  const needsFullIndex = links.slice(0, 12).some(link => fitPdfText(link, 320, 8.5) !== link)
   pdf.rect(55, 58, 730, 130, theme.palette.panel, theme.palette.accent, 1)
   pdf.text('RELATIONSHIP INDEX', 72, 164, 11, { bold: true, color: theme.palette.text, maxWidth: 690 })
   links.slice(0, 12).forEach((link, index) => {
@@ -1218,7 +1210,22 @@ const createRelationshipsPage = (characters, theme) => {
     const row = index % 6
     pdf.text(link, 72 + col * 355, 141 - row * 15, 8.5, { color: theme.palette.muted, maxWidth: 320 })
   })
-  return pdfContent(pdf)
+  const pages = [pdfPage('Relationships', 'Relationship Atlas', pdfContent(pdf))]
+  if (links.length > 12 || needsFullIndex) {
+    pages.push(...createArticlePages({
+      section: 'Relationships', eyebrow: 'Networks', title: needsFullIndex ? 'Complete Relationship Index' : 'Relationship Index — continued',
+      body: (needsFullIndex ? links : links.slice(12)).join('\n\n'),
+    }, theme))
+  }
+  // The cards are a visual overview. Keep the full membership list available
+  // when there are more groups or names than the overview can show.
+  if (groups.size > 6 || [...groups.entries()].some(([name, members]) => wrapPdfText(name, 180, 13).length > 2 || wrapPdfText(members.map(member => member.name || 'Unnamed').join(', '), 180, 8.4).length > 3)) {
+    pages.push(...createArticlePages({
+      section: 'Relationships', eyebrow: 'Networks', title: 'Family Group Membership',
+      body: [...groups.entries()].map(([name, members]) => `${name}\n${members.map(member => member.name || 'Unnamed').join(', ')}`).join('\n\n'),
+    }, theme))
+  }
+  return pages
 }
 
 const createOutlinePages = (projectData, theme) => {
@@ -1227,8 +1234,9 @@ const createOutlinePages = (projectData, theme) => {
   const structure = getProjectType(projectData.project?.type).structure || {}
   const sectionLabel = `${workspaceLabel} Structure`
   buildOutline(projectData).forEach(({ act, chapters }, actIndex) => {
+    const actTitle = act.title || `${structure.level1 || 'Act'} ${actIndex + 1}`
     const pdf = makePdfCanvas(theme)
-    const contentStartY = pdf.pageBase(sectionLabel, act.title || `${structure.level1 || 'Act'} ${actIndex + 1}`, act.synopsis || 'Outline structure and scene counts.')
+    const contentStartY = pdf.pageBase(sectionLabel, actTitle, outlineSynopsis(act) || 'Outline structure and scene counts.')
     chapters.slice(0, 8).forEach(({ chapter, scenes }, index) => {
       const col = index % 2
       const row = Math.floor(index / 2)
@@ -1240,91 +1248,33 @@ const createOutlinePages = (projectData, theme) => {
       pdf.textBox(sessionSummary || chapter.synopsis || `${scenes.length} scenes`, x + 14, y - 38, 290, 9, { color: theme.palette.muted, lineHeight: 12, maxLines: 2 })
       pdf.text(`${scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()} words`, x + 246, y - 20, 8, { bold: true, color: theme.palette.accent, maxWidth: 60 })
     })
-    pages.push(pdfPage(sectionLabel, act.title || `${structure.level1 || 'Act'} ${actIndex + 1}`, pdfContent(pdf)))
+    pages.push(pdfPage(sectionLabel, actTitle, pdfContent(pdf)))
+    const level2 = structure.level2 || 'Chapter'
+    const level3 = structure.level3 || 'Scene'
+    const details = [
+      outlineStoryEventLabel(act, projectData.project) ? `Story event: ${outlineStoryEventLabel(act, projectData.project)}` : '',
+      outlineSynopsis(act),
+      ...chapters.map(({ chapter, scenes }, chapterIndex) => [
+        `${level2} ${chapterIndex + 1}: ${chapter.title || `Untitled ${level2.toLowerCase()}`}`,
+        outlineStoryEventLabel(chapter, projectData.project) ? `Story event: ${outlineStoryEventLabel(chapter, projectData.project)}` : '',
+        outlineSynopsis(chapter),
+        isCampaignProject(projectData.project) ? sessionExportSummary(chapter) : '',
+        ...scenes.map((scene, sceneIndex) => {
+          const title = scene.title && scene.title !== level3 ? scene.title : `Untitled ${level3.toLowerCase()}`
+          return [
+            `${level3} ${sceneIndex + 1}: ${title} (${wordCount(scene.content).toLocaleString()} words)`,
+            outlineStoryEventLabel(scene, projectData.project) ? `Story event: ${outlineStoryEventLabel(scene, projectData.project)}` : '',
+            outlineSynopsis(scene),
+          ].filter(Boolean).join('\n')
+        }),
+      ].filter(Boolean).join('\n')),
+    ].filter(Boolean).join('\n\n')
+    if (details) pages.push(...createArticlePages({ section: sectionLabel, eyebrow: 'Complete outline', title: `${actTitle} — details`, body: details }, theme))
   })
   return pages
 }
 
-// Sections that gate whether a project data array is embedded in the PDF's
-// /YOW re-import stream, matching the enabled/disabled toggles a user sets in
-// Project Settings (see Layout.jsx ALL_SECTIONS / SETTINGS_GROUPS). A section
-// left disabled for this export must not have its data embedded either, even
-// though nothing on the visible pages depends on it (e.g. Schedule) — the
-// embed should never carry more than what the user opted into for this file.
-const YOW_EMBED_SECTION_FIELDS = [
-  ['locations', ['locations']],
-  ['factions', ['factions']],
-  ['lore', ['loreEntries']],
-  ['timeline', ['timeline']],
-  ['worldhistory', ['worldHistory']],
-  ['map', ['maps']],
-  ['ideas', ['ideaEntries']],
-  // 'outline' is the same section id for every project type — for comic
-  // projects it's labeled "Pages" (see projectTypes.js workspaceLabel) and
-  // its content lives in comicPages/comicPanels (volumes/issues reuse
-  // acts/chapters, already covered) rather than chapters/scenes, so both
-  // need to be scoped alongside acts/chapters/scenes.
-  ['outline', ['acts', 'chapters', 'scenes', 'comicPages', 'comicPanels']],
-  ['schedule', ['storySchedule']],
-  // 'characterbuilder' (D&D/Tabletop RPG projects — see projectTypes.js
-  // defaultSections) is its own toggle, separate from 'characters', and its
-  // records live in a separate rpgCharacters array (see
-  // useStore.js getProjectExportData) that createProjectPdfBlob never renders
-  // on any visible page. Without this entry, disabling Character Builder for
-  // an export did nothing to the embed: the full RPG sheet — hp, inventory,
-  // journal/session notes, and the secrets field below — still rode along.
-  ['characterbuilder', ['rpgCharacters']],
-]
-
-// The Character Builder's Secrets tab (CharacterSheet.jsx TabNotes) tells the
-// user directly: "Secrets are stored locally only — they won't appear in
-// exports unless you choose to include them." No export flow offers that
-// opt-in, so `secrets` must never leave the app via the embed, independent of
-// whether Character Builder itself is enabled for this export.
-const stripRpgCharacterSecrets = (character) => {
-  if (!character || typeof character !== 'object') return character
-  const { secrets, ...rest } = character
-  return rest
-}
-
-// `characters` also stays populated when only `familytree` is enabled, since
-// the Relationship Atlas page (createRelationshipsPage / relationshipSection)
-// reads directly from projectData.characters regardless of the `characters`
-// toggle. But that page — and the in-app Family Tree it mirrors on
-// re-import — only ever reads identity/lineage fields, never bio, traits,
-// background, or other narrative-profile data a user could have written
-// with Characters intentionally left off. So when `characters` itself is
-// disabled, the embed keeps only that minimal field set per character
-// instead of the full record, or the familytree exception would silently
-// smuggle private character data past a toggle the user explicitly turned off.
-const FAMILYTREE_ONLY_CHARACTER_FIELDS = [
-  'id', 'name', 'familyGroup', 'image', 'imagePosition', 'role',
-  'birthDate', 'deathDate', 'parentIds', 'childIds', 'spouseIds',
-  'familyLinks', 'relationships',
-]
-
-const pickFields = (obj, fields) =>
-  Object.fromEntries(fields.filter(field => field in obj).map(field => [field, obj[field]]))
-
-const scopeProjectDataForEmbed = (projectData) => {
-  const enabled = getEnabled(projectData)
-  const scoped = { ...projectData }
-  if (!enabled.has('characters')) {
-    scoped.characters = enabled.has('familytree')
-      ? (projectData.characters ?? []).map(character => pickFields(character, FAMILYTREE_ONLY_CHARACTER_FIELDS))
-      : []
-  }
-  YOW_EMBED_SECTION_FIELDS.forEach(([sectionId, fields]) => {
-    if (enabled.has(sectionId)) return
-    fields.forEach(field => { scoped[field] = [] })
-  })
-  if (scoped.rpgCharacters?.length) {
-    scoped.rpgCharacters = scoped.rpgCharacters.map(stripRpgCharacterSecrets)
-  }
-  return scoped
-}
-
-const createPdfBytes = (pageContents, title, projectData) => {
+const createPdfBytes = (pageContents, title) => {
   const pageDescriptors = pageContents.map(page => typeof page === 'string' ? { content: page, links: [] } : { links: [], ...page })
   const chunks = []
   const offsets = [0]
@@ -1425,50 +1375,9 @@ const createPdfBytes = (pageContents, title, projectData) => {
     addObject(outlinesId, `<< /Type /Outlines /First ${outlineSections[0].id} 0 R /Last ${outlineSections[outlineSections.length - 1].id} 0 R /Count ${outlineSections.length} >>`)
   }
 
-  // Embed the project JSON so a YOW PDF can be re-imported with connections intact —
-  // scoped to only the sections enabled for this export (scopeProjectDataForEmbed),
-  // the same way the visible pages are scoped, so a section the user turned off is
-  // not silently included in the file just because it's technically part of the
-  // project. See docs/ROADMAP.md Export ownership gate.
-  let yowDataId = null
-  if (projectData) {
-    try {
-      const embedData = scopeProjectDataForEmbed(projectData)
-      // Strip _pdfImage fields added by prepareProjectPdfData — render-only, not needed for re-import
-      const cleanData = {
-        ...embedData,
-        characters: (embedData.characters ?? []).map(character => {
-          const copy = { ...character }
-          delete copy._pdfImage
-          return copy
-        }),
-        factions: (embedData.factions ?? []).map(faction => {
-          const copy = { ...faction }
-          delete copy._pdfImage
-          delete copy._exportLogoImage
-          return copy
-        }),
-        maps: (embedData.maps ?? []).map(map => {
-          const copy = { ...map }
-          delete copy._pdfImage
-          return copy
-        }),
-      }
-      const json = JSON.stringify(cleanData)
-      const marker = '%%YOW-DATA-BEGIN%%'
-      const endMarker = '%%YOW-DATA-END%%'
-      const streamBody = `\n${marker}\n${json}\n${endMarker}\n`
-      const streamBytes = textEncoder.encode(streamBody)
-      yowDataId = nextId++
-      offsets[yowDataId] = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
-      write(`${yowDataId} 0 obj\n<< /Length ${streamBytes.length} >>\nstream`)
-      write(streamBytes)
-      write('\nendstream\nendobj\n')
-    } catch { yowDataId = null }
-  }
-
+  // Share-safe document: complete restorable data belongs only in ZIP backups.
   const catalogId = nextId++
-  addObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outlinesId ? ` /Outlines ${outlinesId} 0 R /PageMode /UseOutlines` : ''}${yowDataId ? ` /YOW ${yowDataId} 0 R` : ''} >>`)
+  addObject(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R${outlinesId ? ` /Outlines ${outlinesId} 0 R /PageMode /UseOutlines` : ''} >>`)
   const infoId = nextId++
   addObject(infoId, `<< /Title (${pdfText(title)}) /Producer (Your Own World) >>`)
   const xrefOffset = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
@@ -1485,12 +1394,13 @@ const createProjectPdfPages = (projectData, theme) => {
   const enabled = getEnabled(projectData)
   const records = []
   if (enabled.has('characters')) {
-    sortByTitle(projectData.characters, 'name').forEach((character, index) => {
-      records.push(...createCharacterPages(character, projectData, theme, index))
+    const characters = buildCharacterIndex(projectData.characters)
+    sortByTitle(characters.entries, 'name').forEach((character, index) => {
+      records.push(...createCharacterPages(character, projectData, theme, index, characters.byId))
     })
   }
-  if (enabled.has('familytree') && (projectData.characters ?? []).length) {
-    records.push(pdfPage('Relationships', 'Relationship Atlas', createRelationshipsPage(projectData.characters ?? [], theme)))
+  if ((enabled.has('familytree') || enabled.has('relationships')) && (projectData.characters ?? []).length) {
+    records.push(...createRelationshipsPages(projectData.characters ?? [], theme, enabled))
   }
   if (enabled.has('locations')) {
     sortByTitle(projectData.locations, 'name').forEach(location => {
@@ -1521,14 +1431,15 @@ const createProjectPdfPages = (projectData, theme) => {
     })
   }
   if (enabled.has('lore')) {
-    sortByTitle(projectData.loreEntries).forEach(entry => {
+    const loreIndex = createLoreReferenceIndex(projectData)
+    sortByTitle(loreIndex.entries).forEach(entry => {
       records.push(...createArticlePages({
         section: 'Lore',
         eyebrow: 'Lore Encyclopedia',
         title: entry.title || 'Untitled Lore Entry',
         subtitle: valueList(entry.category || 'Uncategorized', entry.tags?.join(', ')).join(' - '),
         body: entry.content,
-        related: relatedEntries(entry, projectData, 'lore'),
+        related: loreReferenceRows(entry, loreIndex),
       }, theme))
     })
   }
@@ -1536,8 +1447,19 @@ const createProjectPdfPages = (projectData, theme) => {
     records.push(...createVisualTimelinePages(projectData.timeline, theme, 'Timeline & History', 'Timeline'))
   }
   if (enabled.has('worldhistory')) {
-    sortByOrder(projectData.worldHistory).forEach((event, index) => {
+    sortTimelineEntries(projectData.worldHistory).map(normalizeHistoryEntry).forEach((event, index) => {
       records.push(...createTimelinePages(event, projectData, theme, index, 'World History', 'World History'))
+    })
+  }
+  if (enabled.has('schedule')) {
+    sortScheduleEvents(projectData.storySchedule, getScheduleCalendar(projectData.project)).forEach(rawEvent => {
+      const event = normalizeScheduleEvent(rawEvent)
+      const fields = scheduleExportFields(projectData, rawEvent)
+      records.push(...createArticlePages({
+        section: 'Schedule', eyebrow: 'Story Calendar', title: event.title || 'Untitled Schedule Event',
+        subtitle: fields.slice(0, 2).map(([label, value]) => `${label}: ${value}`).join(' - '),
+        body: [event.description, ...fields.map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'), related: [],
+      }, theme))
     })
   }
   if (enabled.has('map')) {
@@ -1547,13 +1469,14 @@ const createProjectPdfPages = (projectData, theme) => {
   }
   if (enabled.has('outline')) records.push(...createOutlinePages(projectData, theme))
   if (enabled.has('ideas')) {
-    sortByTitle(projectData.ideaEntries).forEach(entry => {
+    const entities = buildIdeaEntityIndex(projectData)
+    sortByTitle(buildIdeaIndex(projectData.ideaEntries).ideas).forEach(entry => {
       records.push(...createArticlePages({
         section: 'Ideas',
         eyebrow: 'Field Notes',
         title: entry.title || 'Untitled Note',
-        subtitle: valueList(entry.tags?.join(', ')).join(' - '),
-        body: entry.content || entry.text || entry.body,
+        subtitle: valueList(entry.tags.join(', ')).join(' - '),
+        body: [entry.description, ...ideaExportFields(entry, entities).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'),
         related: [],
       }, theme))
     })
@@ -1571,7 +1494,7 @@ export const createProjectPdfBlob = async (projectData, options = {}) => {
   const theme = getExportPdfTheme(options.themeId)
   const preparedData = await prepareProjectPdfData(projectData)
   const pages = createProjectPdfPages(preparedData, theme)
-  const bytes = createPdfBytes(pages, preparedData.project?.title || getProjectExportLabel(preparedData.project), preparedData)
+  const bytes = createPdfBytes(pages, preparedData.project?.title || getProjectExportLabel(preparedData.project))
   return new Blob([bytes], { type: 'application/pdf' })
 }
 
@@ -1613,12 +1536,13 @@ const makeProjectPages = (projectData, theme) => {
     <div class="toc-grid">
       ${[
         ['Characters', projectData.characters?.length ?? 0, enabled.has('characters')],
-        ['Relationships', projectData.characters?.filter(c => c.familyGroup || getRelationshipLinks(c).length)?.length ?? 0, enabled.has('familytree')],
+        ['Relationships', getRelationshipExportRows(projectData.characters ?? [], enabled).length, enabled.has('familytree') || enabled.has('relationships')],
         ['Factions', projectData.factions?.length ?? 0, enabled.has('factions')],
         ['Locations', projectData.locations?.length ?? 0, enabled.has('locations')],
         ['Lore', projectData.loreEntries?.length ?? 0, enabled.has('lore')],
         ['Timeline', projectData.timeline?.length ?? 0, enabled.has('timeline')],
         ['World History', projectData.worldHistory?.length ?? 0, enabled.has('worldhistory')],
+        ['Schedule', projectData.storySchedule?.length ?? 0, enabled.has('schedule')],
         ['Maps', projectData.maps?.length ?? 0, enabled.has('map')],
         ['Notes', (projectData.acts?.length ?? 0) + (projectData.ideaEntries?.length ?? 0), enabled.has('outline') || enabled.has('ideas')],
       ].filter(([, , isEnabled]) => isEnabled).map(([label, count], index) => `
@@ -1633,23 +1557,24 @@ const makeProjectPages = (projectData, theme) => {
   pages.push(sectionPage('contents', 'Index', 'Table of Contents', 'Sections generated from live project data', tocBody, 'toc-page'))
 
   if (enabled.has('characters')) {
+    const characters = buildCharacterIndex(projectData.characters)
     addSection(
       'characters',
       'Character Dossiers',
       'People',
       'Intelligence files, arcs, roles, and known links',
-      sortByTitle(projectData.characters, 'name').map(character => characterDossier(character, projectData)).join('') || emptyState('No characters yet.'),
+      sortByTitle(characters.entries, 'name').map(character => characterDossier(character, projectData, characters.byId)).join('') || emptyState('No characters yet.'),
       { modifier: 'dossier-section' },
     )
   }
 
-  if (enabled.has('familytree')) {
+  if (enabled.has('familytree') || enabled.has('relationships')) {
     addSection(
       'relationships',
       'Relationship Atlas',
       'Networks',
-      'Family groups and direct relationship records',
-      relationshipSection(projectData.characters ?? []),
+      enabled.has('familytree') ? 'Family groups and direct relationship records' : 'Directed social links: source to target',
+      relationshipSection(projectData.characters ?? [], enabled),
     )
   }
 
@@ -1690,17 +1615,18 @@ const makeProjectPages = (projectData, theme) => {
   }
 
   if (enabled.has('lore')) {
+    const loreIndex = createLoreReferenceIndex(projectData)
     addSection(
       'lore',
       'Lore Encyclopedia',
       'Codex Articles',
       'Collector edition world guide entries',
-      sortByTitle(projectData.loreEntries).map(entry =>
+      sortByTitle(loreIndex.entries).map(entry =>
         articleCard(
           entry.title || 'Untitled Lore Entry',
           valueList(entry.category || 'Uncategorized', entry.tags?.join(', ')),
           entry.content,
-          relatedEntries(entry, projectData, 'lore'),
+          loreReferenceRows(entry, loreIndex),
         )
       ).join('') || emptyState('No lore entries yet.'),
     )
@@ -1711,7 +1637,23 @@ const makeProjectPages = (projectData, theme) => {
   }
 
   if (enabled.has('worldhistory')) {
-    addSection('world-history', 'World History', 'Archive', 'Eras, conflicts, founding myths, and turning points', timelineSpread(projectData.worldHistory, projectData, 'history'), { modifier: 'timeline-section' })
+    addSection('world-history', 'World History', 'Archive', 'Eras, conflicts, founding myths, and turning points',
+      sortTimelineEntries(projectData.worldHistory).map(normalizeHistoryEntry).map(entry => articleCard(
+        entry.title || 'Untitled History Entry',
+        valueList(formatTimelineDate(entry), entry.era, entry.category || entry.type, entry.tags.join(', ')),
+        entry.description,
+        relatedEntries(entry, projectData, 'history'),
+      )).join('') || emptyState('No history entries yet.'),
+    )
+  }
+
+  if (enabled.has('schedule')) {
+    addSection('schedule', 'Schedule', 'Story Calendar', 'Planned scenes, journeys, meetings, and campaign events',
+      sortScheduleEvents(projectData.storySchedule, getScheduleCalendar(projectData.project)).map(rawEvent => {
+        const event = normalizeScheduleEvent(rawEvent)
+        return articleCard(event.title || 'Untitled Schedule Event', scheduleExportFields(projectData, rawEvent).map(([label, value]) => `${label}: ${value}`), event.description)
+      }).join('') || emptyState('No scheduled events yet.'),
+    )
   }
 
   if (enabled.has('map')) {
@@ -1720,9 +1662,10 @@ const makeProjectPages = (projectData, theme) => {
 
   if (enabled.has('outline') || enabled.has('ideas')) {
     const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
+    const entities = buildIdeaEntityIndex(projectData)
     const ideas = enabled.has('ideas')
-      ? sortByTitle(projectData.ideaEntries).map(entry =>
-        articleCard(entry.title || 'Untitled Note', valueList(entry.tags?.join(', ')), entry.content || entry.text || entry.body)
+      ? sortByTitle(buildIdeaIndex(projectData.ideaEntries).ideas).map(entry =>
+        articleCard(entry.title || 'Untitled Note', valueList(entry.tags.join(', ')), [entry.description, ...ideaExportFields(entry, entities).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'))
       ).join('')
       : ''
     addSection(
@@ -1856,6 +1799,9 @@ export const createProjectVisualPdfHtml = (projectData, options = {}) => {
     .map-preview { height: 132mm; border: 1px solid var(--pdf-border); background: var(--pdf-panel-soft); display: grid; place-items: center; overflow: hidden; }
     .map-preview img { object-fit: contain; }
     .outline-act { padding: 5mm; margin-bottom: 5mm; break-inside: avoid; }
+    .outline-scene-list { margin: 3mm 0 2mm; padding-left: 5mm; color: var(--muted); }
+    .outline-scene-list li { margin-bottom: 2mm; break-inside: avoid; }
+    .outline-scene-list .copy { margin-top: 1mm; color: var(--text); }
     .chapter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3mm; margin-top: 3mm; }
     .chapter-card { border: 1px solid var(--pdf-border); background: color-mix(in srgb, var(--pdf-panel-soft) 72%, transparent); padding: 3mm; min-height: 30mm; overflow: hidden; }
     .chapter-card p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font: 8.5pt/1.35 var(--pdf-ui-font); color: var(--pdf-muted); }

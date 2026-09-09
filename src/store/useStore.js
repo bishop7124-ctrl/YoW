@@ -4,6 +4,12 @@ import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
 import { clearJourneyLinks } from '../utils/characterJourney'
+import { buildCharacterAliases, relationshipValues } from '../utils/relationshipMap.js'
+import { IDEA_STATUS_IDS, ideaContentPatch, normalizeIdea, nextIdeaOrder, planIdeaMove } from '../utils/ideaEntries.js'
+import { getScheduleCalendar, normalizeScheduleEvent, prepareScheduleEvent } from '../utils/scheduleCalendar.js'
+import { normalizeOutlineItem, outlinePatch, outlineText, sortOutlineItems } from '../utils/outlineDisplay.js'
+import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/relationshipTypes.js'
+import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
@@ -16,7 +22,7 @@ import {
 } from '../storage/writeDurability'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
-import { deleteUserMedia } from '../utils/uploadUserMedia'
+import { deleteUserMedia, getUserMediaPath } from '../utils/uploadUserMedia'
 import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
 
 const load = (key, def) => loadValue(key, def)
@@ -596,6 +602,9 @@ export function useStore(userId = null, options = {}) {
   const [selectedLoreEntryId, setSelectedLoreEntryId] = useState(null)
   const [selectedIdeaEntryId, setSelectedIdeaEntryId] = useState(null)
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState(null)
+  const [selectedHistoryEntryId, setSelectedHistoryEntryId] = useState(null)
+  const selectTimelineEvent = useCallback(id => { setSelectedHistoryEntryId(null); setSelectedTimelineEventId(id) }, [])
+  const selectHistoryEntry = useCallback(id => { setSelectedTimelineEventId(null); setSelectedHistoryEntryId(id) }, [])
   const [selectedSceneId, setSelectedSceneId] = useState(null)
   // Which scene is open in writing mode — mirrored into the URL so a refresh
   // returns to the same scene instead of the top of the manuscript.
@@ -650,6 +659,12 @@ export function useStore(userId = null, options = {}) {
     storageMediaBytes, novels, characters, factions, locations, timeline, worldHistory,
     acts, chapters, scenes, loreEntries, ideaEntries, maps, whiteboards, series, storySchedule,
   ])
+
+  const notifyReadOnly = (reason = 'trial-ended', extra = {}) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('membership-read-only', { detail: { reason, ...extra } }))
+    }
+  }
 
   // Surfaces a UI warning when local storage can't keep up — quota exceeded,
   // or (audit P0-07) the IndexedDB/desktop-vault backend's real async
@@ -1330,29 +1345,10 @@ export function useStore(userId = null, options = {}) {
     }
     markLocalOwner(userId)
 
-    // Migrate orphan worldHistory entries into timeline so both sections share one store
+    // History reads its own records directly. Loading must not manufacture
+    // unlinked Timeline copies (which used to duplicate on every import).
     const rawTimeline = sourceData.timeline ?? []
     const rawHistory = sourceData.worldHistory ?? []
-    const linkedHistoryIds = new Set(rawTimeline.map(e => e.worldHistoryEntryId).filter(Boolean))
-    const orphans = rawHistory.filter(h => !h.timelineEventId && !linkedHistoryIds.has(h.id))
-    const mergedTimeline = orphans.length > 0
-      ? [
-          ...rawTimeline,
-          ...orphans.map(h => ({
-            id: uid(),
-            novelId: h.novelId,
-            createdAt: h.createdAt,
-            title: h.title,
-            date: h.dateRange || '',
-            era: h.era || '',
-            description: h.content || '',
-            category: h.category || '',
-            tags: h.tags || [],
-            linkedCharacters: [],
-            linkedLocations: [],
-          })),
-        ]
-      : rawTimeline
 
     const importedNovels = sourceData.novels ?? []
     const freeProjectExists = freeProjectId && importedNovels.some(novel => novel.id === freeProjectId)
@@ -1365,7 +1361,7 @@ export function useStore(userId = null, options = {}) {
     setCharacters(sourceData.characters ?? [])
     setFactions(sourceData.factions ?? [])
     setLocations(sourceData.locations ?? [])
-    setTimeline(mergedTimeline)
+    setTimeline(rawTimeline)
     setWorldHistory(rawHistory)
     setActs(sourceData.acts ?? [])
     setChapters(sourceData.chapters ?? [])
@@ -1435,7 +1431,7 @@ export function useStore(userId = null, options = {}) {
       characters: new Map((sourceData.characters ?? []).map(item => [item.id, item])),
       factions: new Map((sourceData.factions ?? []).map(item => [item.id, item])),
       locations: new Map((sourceData.locations ?? []).map(item => [item.id, item])),
-      timeline_events: new Map(mergedTimeline.map(item => [item.id, item])),
+      timeline_events: new Map(rawTimeline.map(item => [item.id, item])),
       world_history: new Map(rawHistory.map(item => [item.id, item])),
       acts: new Map((sourceData.acts ?? []).map(item => [item.id, item])),
       chapters: new Map((sourceData.chapters ?? []).map(item => [item.id, item])),
@@ -1631,50 +1627,78 @@ export function useStore(userId = null, options = {}) {
     return idx >= 0 ? new Set(order.slice(idx)) : new Set([fromProjectId])
   }
 
-  const saveSeriesSyncedItem = (ref, setter, category, data, id, buildNewItem) => {
+  const currentActiveProjectId = () => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return null
+    return novelsRef.current.some(novel => novel.id === activeNovelId) ? activeNovelId : null
+  }
+
+  const withoutRecordIdentity = (data = {}) => {
+    const {
+      id: _id,
+      novelId: _novelId,
+      syncRootId: _syncRootId,
+      syncSourceId: _syncSourceId,
+      syncHiddenInIds: _syncHiddenInIds,
+      syncDeleted: _syncDeleted,
+      createdAt: _createdAt,
+      ...safeData
+    } = data
+    return safeData
+  }
+
+  const saveSeriesSyncedItem = (ref, setter, category, data, id, buildNewItem, batch = null) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
     const config = SYNC_CATEGORY_CONFIG[category]
+    const items = batch ? batch.items : ref.current
+    const safeData = withoutRecordIdentity(data)
+    const commit = updater => {
+      if (batch) batch.items = updater(batch.items)
+      else commitLocal(ref, setter, config?.storageKey || '', updater)
+    }
     if (!config) {
-      commitLocal(ref, setter, '', prev => id
-        ? prev.map(item => item.id === id ? { ...item, ...data } : item)
+      commit(prev => id
+        ? prev.map(item => item.id === id ? { ...item, ...safeData } : item)
         : [...prev, buildNewItem()])
       return id
     }
 
     if (!id) {
       const created = buildNewItem()
-      const item = { ...created, syncRootId: created.syncRootId || created.id }
-      commitLocal(ref, setter, config.storageKey, prev => [...prev, item])
+      const item = { ...created, ...safeData, id: created.id, novelId: projectId, syncRootId: created.syncRootId || created.id }
+      commit(prev => [...prev, item])
       return item
     }
 
-    const existing = ref.current.find(item => item.id === id)
-    if (!existing) return null
+    const existing = items.find(item => item.id === id)
+    const visible = resolveSeriesScope(items, category, projectId)
+    if (!existing || !visible.some(item => item.id === id)) return null
     const project = novels.find(n => n.id === activeNovelId) ?? activeNovel
     const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
     const isSynced = Boolean(projectSeries?.syncCategories?.includes(category))
 
     if (!isSynced) {
-      const updated = { ...existing, ...data }
-      commitLocal(ref, setter, config.storageKey, prev => prev.map(item => item.id === id ? updated : item))
+      const updated = { ...existing, ...safeData }
+      commit(prev => prev.map(item => item.id === id ? updated : item))
       return updated
     }
 
     const rootId = existing.syncRootId || existing.syncSourceId || existing.id
-    const chain = getSyncChain(ref.current, category, existing)
+    const chain = getSyncChain(items, category, existing)
     const forwardIds = getForwardProjectIds(activeNovelId, projectSeries)
     let target = chain.find(item => item.novelId === activeNovelId)
     const forkId = target?.id || uid()
     const fork = target
-      ? { ...target, ...data, syncRootId: rootId, syncDeleted: false }
-      : { ...existing, id: forkId, novelId: activeNovelId, syncRootId: rootId, syncSourceId: existing.id, syncHiddenInIds: [], syncDeleted: false, ...data }
+      ? { ...target, ...safeData, syncRootId: rootId, syncDeleted: false }
+      : { ...existing, ...safeData, id: forkId, novelId: projectId, syncRootId: rootId, syncSourceId: existing.id, syncHiddenInIds: [], syncDeleted: false }
 
-    commitLocal(ref, setter, config.storageKey, prev => {
+    commit(prev => {
       const next = target ? prev : [...prev, fork]
       return next.map(item => {
         if (item.id === fork.id) return fork
         if (!forwardIds.has(item.novelId)) return item
         if (syncIdentity(item, category) !== syncIdentity(existing, category)) return item
-        return { ...item, ...data, syncRootId: item.syncRootId || rootId, syncDeleted: false }
+        return { ...item, ...safeData, syncRootId: item.syncRootId || rootId, syncDeleted: false }
       })
     })
 
@@ -1682,9 +1706,11 @@ export function useStore(userId = null, options = {}) {
   }
 
   const deleteSeriesSyncedItem = (ref, setter, category, id, options = {}) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return []
     const config = SYNC_CATEGORY_CONFIG[category]
     const existing = ref.current.find(item => item.id === id)
-    if (!existing || !config) return []
+    if (!existing || !config || !resolveSeriesScope(ref.current, category, projectId).some(item => item.id === id)) return []
     const project = novels.find(n => n.id === activeNovelId) ?? activeNovel
     const projectSeries = project?.seriesId ? series.find(s => s.id === project.seriesId) : null
     const isSynced = Boolean(projectSeries?.syncCategories?.includes(category))
@@ -1794,7 +1820,7 @@ export function useStore(userId = null, options = {}) {
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const updateMapProject = useCallback((updater) => {
-    if (!activeNovelId) return
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId || !novelsRef.current.some(novel => novel.id === activeNovelId)) return
     const currentMaps = maps.filter(m => m.novelId === activeNovelId)
     const currentActiveMapId = activeMapByNovel[activeNovelId] ?? currentMaps[0]?.id ?? null
     const currentWhiteboard = whiteboards.find(w => w.novelId === activeNovelId)?.whiteboard || { notes: [], groups: [] }
@@ -1834,8 +1860,8 @@ export function useStore(userId = null, options = {}) {
   }, [activeNovelId, activeNovel?.type, activeMapByNovel, locations, maps, whiteboards]) // eslint-disable-line react-hooks/preserve-manual-memoization
 
   const updateWhiteboard = useCallback((updater) => {
-    if (!activeNovelId) return
-    setWhiteboards(prev => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId || !novelsRef.current.some(novel => novel.id === activeNovelId)) return
+    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => {
       const existing = prev.find(w => w.novelId === activeNovelId)
       const currentWhiteboard = existing?.whiteboard || { notes: [], groups: [] }
       const nextWhiteboard = typeof updater === 'function'
@@ -1848,34 +1874,60 @@ export function useStore(userId = null, options = {}) {
       }
       return [...prev.filter(w => w.novelId !== activeNovelId), entry]
     })
+  }, [activeNovelId, commitLocal])
+
+  const activeOutlineProjectId = useCallback(() => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return null
+    return novelsRef.current.some(novel => novel.id === activeNovelId) ? activeNovelId : null
   }, [activeNovelId])
+  const nextOutlineOrder = items => items.reduce((max, item) => (
+    Number.isFinite(Number(item?.order)) ? Math.max(max, Number(item.order)) : max
+  ), -1) + 1
+  const outlineExpectedMatches = (item, type, expected) => {
+    const normalized = normalizeOutlineItem(item, type)
+    return !Object.entries(expected || {}).some(([field, value]) => (
+      JSON.stringify(Object.hasOwn(normalized, field) ? normalized[field] : item?.[field]) !== JSON.stringify(value)
+    ))
+  }
 
   const addAct = (title) => {
-    if (storageExceededCheck()) { return null }
-    const order = actsRef.current.filter(a => a.novelId === activeNovelId).length
-    const newAct = { id: uid(), novelId: activeNovelId, title, synopsis: '', order }
+    const projectId = activeOutlineProjectId()
+    if (!projectId || storageExceededCheck()) return null
+    const siblings = actsRef.current.filter(act => act.novelId === projectId)
+    const newAct = { id: uid(), novelId: projectId, title: outlineText(title), synopsis: '', order: nextOutlineOrder(siblings) }
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, newAct])
     return newAct
   }
 
-  const addChapter = (actId, title) => {
-    if (storageExceededCheck()) { return null }
-    const order = chaptersRef.current.filter(c => c.novelId === activeNovelId).length
-    const newChap = { id: uid(), novelId: activeNovelId, actId, title, synopsis: '', order }
+  const addChapter = (actId, title, data = {}) => {
+    const projectId = activeOutlineProjectId()
+    const parent = actsRef.current.find(act => act.id === actId && act.novelId === projectId)
+    if (!projectId || !parent || storageExceededCheck()) return null
+    const siblings = chaptersRef.current.filter(chapter => chapter.novelId === projectId && chapter.actId === actId)
+    const { id: _id, novelId: _novelId, actId: _actId, order: _order, ...safeData } = outlinePatch(data, 'chapter')
+    const newChap = {
+      ...safeData,
+      id: uid(), novelId: projectId, actId, title: outlineText(title),
+      synopsis: Object.hasOwn(safeData, 'synopsis') ? safeData.synopsis : '',
+      order: nextOutlineOrder(siblings),
+    }
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, newChap])
     return newChap
   }
 
   const addScene = (chapterId, title) => {
-    if (storageExceededCheck()) { return null }
+    const projectId = activeOutlineProjectId()
+    const parent = chaptersRef.current.find(chapter => chapter.id === chapterId && chapter.novelId === projectId)
+    if (!projectId || !parent || storageExceededCheck()) return null
+    const siblings = scenesRef.current.filter(scene => scene.novelId === projectId && scene.chapterId === chapterId)
     const newScene = {
       id: uid(),
-      novelId: activeNovelId,
+      novelId: projectId,
       chapterId,
-      title,
+      title: outlineText(title),
       synopsis: '',
       content: '',
-      order: scenesRef.current.filter(s => s.novelId === activeNovelId).length,
+      order: nextOutlineOrder(siblings),
       lastModified: Date.now() // eslint-disable-line react-hooks/purity
     }
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, newScene])
@@ -1884,139 +1936,166 @@ export function useStore(userId = null, options = {}) {
   }
 
   const reorderAct = (id, direction) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !['up', 'down'].includes(direction)) return false
+    let changed = false
     commitLocal(actsRef, setActs, 'nf_acts', prev => {
-      const scoped = prev.filter(a => a.novelId === activeNovelId).sort((a, b) => a.order - b.order)
+      const scoped = sortOutlineItems(prev.filter(act => act.novelId === projectId))
       const idx = scoped.findIndex(a => a.id === id)
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1
       if (swapIdx < 0 || swapIdx >= scoped.length) return prev
-      const newOrder = scoped[swapIdx].order
-      const oldOrder = scoped[idx].order
+      changed = true
+      const reordered = [...scoped]
+      ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
+      const byId = new Map(reordered.map((act, index) => [act.id, { ...act, order: index }]))
       return prev.map(a => {
-        if (a.id === id) return { ...a, order: newOrder }
-        if (a.id === scoped[swapIdx].id) return { ...a, order: oldOrder }
-        return a
+        return a.novelId === projectId && byId.has(a.id) ? byId.get(a.id) : a
       })
     })
+    return changed
   }
 
   const moveAct = useCallback((actId, toIndex) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId) return null
+    let moved = null
     commitLocal(actsRef, setActs, 'nf_acts', prev => {
-      const scoped = prev.filter(a => a.novelId === activeNovelId).sort((a, b) => a.order - b.order)
-      const others = prev.filter(a => a.novelId !== activeNovelId)
+      const scoped = sortOutlineItems(prev.filter(act => act.novelId === projectId))
       const fromIndex = scoped.findIndex(a => a.id === actId)
       if (fromIndex === -1) return prev
       const reordered = [...scoped]
       const [item] = reordered.splice(fromIndex, 1)
-      const clampedTo = Math.max(0, Math.min(toIndex, reordered.length))
+      const requested = Number.isFinite(Number(toIndex)) ? Number(toIndex) : fromIndex
+      const clampedTo = Math.max(0, Math.min(requested, reordered.length))
       reordered.splice(clampedTo, 0, item)
-      return [...others, ...reordered.map((a, i) => ({ ...a, order: i }))]
+      const byId = new Map(reordered.map((act, index) => [act.id, { ...act, order: index }]))
+      moved = byId.get(actId)
+      return prev.map(act => act.novelId === projectId && byId.has(act.id) ? byId.get(act.id) : act)
     })
-  }, [activeNovelId, commitLocal])
+    return moved
+  }, [activeOutlineProjectId, commitLocal])
 
   const reorderChapter = (id, direction) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !['up', 'down'].includes(direction)) return false
+    let changed = false
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => {
-      const chapter = prev.find(c => c.id === id)
+      const chapter = prev.find(c => c.id === id && c.novelId === projectId)
       if (!chapter) return prev
-      const scoped = prev.filter(c => c.actId === chapter.actId).sort((a, b) => a.order - b.order)
+      const scoped = sortOutlineItems(prev.filter(c => c.novelId === projectId && c.actId === chapter.actId))
       const idx = scoped.findIndex(c => c.id === id)
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1
       if (swapIdx < 0 || swapIdx >= scoped.length) return prev
-      const newOrder = scoped[swapIdx].order
-      const oldOrder = scoped[idx].order
-      return prev.map(c => {
-        if (c.id === id) return { ...c, order: newOrder }
-        if (c.id === scoped[swapIdx].id) return { ...c, order: oldOrder }
-        return c
-      })
+      changed = true
+      const reordered = [...scoped]
+      ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
+      const byId = new Map(reordered.map((item, index) => [item.id, { ...item, order: index }]))
+      return prev.map(item => item.novelId === projectId && byId.has(item.id) ? byId.get(item.id) : item)
     })
+    return changed
   }
 
   const moveChapter = useCallback((chapterId, toActId, toIndex) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !actsRef.current.some(act => act.id === toActId && act.novelId === projectId)) return null
+    let moved = null
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => {
-      const chapter = prev.find(c => c.id === chapterId)
+      const chapter = prev.find(c => c.id === chapterId && c.novelId === projectId)
       if (!chapter) return prev
       const updatedChapter = { ...chapter, actId: toActId }
-      const destChaps = prev.filter(c => c.actId === toActId && c.id !== chapterId).sort((a, b) => a.order - b.order)
-      const clampedTo = Math.max(0, Math.min(toIndex, destChaps.length))
+      const destChaps = sortOutlineItems(prev.filter(c => c.novelId === projectId && c.actId === toActId && c.id !== chapterId))
+      const requested = Number.isFinite(Number(toIndex)) ? Number(toIndex) : destChaps.length
+      const clampedTo = Math.max(0, Math.min(requested, destChaps.length))
       const reinserted = [...destChaps.slice(0, clampedTo), updatedChapter, ...destChaps.slice(clampedTo)]
         .map((c, i) => ({ ...c, order: i }))
+      moved = reinserted.find(item => item.id === chapterId)
       if (chapter.actId !== toActId) {
-        const srcChaps = prev.filter(c => c.actId === chapter.actId && c.id !== chapterId)
-          .sort((a, b) => a.order - b.order).map((c, i) => ({ ...c, order: i }))
-        const others = prev.filter(c => c.actId !== toActId && c.actId !== chapter.actId)
-        return [...others, ...srcChaps, ...reinserted]
+        const srcChaps = sortOutlineItems(prev.filter(c => c.novelId === projectId && c.actId === chapter.actId && c.id !== chapterId))
+          .map((c, i) => ({ ...c, order: i }))
+        const changed = new Map([...srcChaps, ...reinserted].map(item => [item.id, item]))
+        return prev.map(item => item.novelId === projectId && changed.has(item.id) ? changed.get(item.id) : item)
       }
-      const others = prev.filter(c => c.actId !== toActId)
-      return [...others, ...reinserted]
+      const changed = new Map(reinserted.map(item => [item.id, item]))
+      return prev.map(item => item.novelId === projectId && changed.has(item.id) ? changed.get(item.id) : item)
     })
-  }, [commitLocal])
+    return moved
+  }, [activeOutlineProjectId, commitLocal])
 
   const reorderScene = (id, direction) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !['up', 'down'].includes(direction)) return false
     let changedIds = []
     const next = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
-      const scene = prev.find(s => s.id === id)
+      const scene = prev.find(s => s.id === id && s.novelId === projectId)
       if (!scene) return prev
-      const scoped = prev.filter(s => s.chapterId === scene.chapterId).sort((a, b) => a.order - b.order)
+      const scoped = sortOutlineItems(prev.filter(s => s.novelId === projectId && s.chapterId === scene.chapterId))
       const idx = scoped.findIndex(s => s.id === id)
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1
       if (swapIdx < 0 || swapIdx >= scoped.length) return prev
-      const newOrder = scoped[swapIdx].order
-      const oldOrder = scoped[idx].order
       changedIds = [id, scoped[swapIdx].id]
-      return prev.map(s => {
-        if (s.id === id) return { ...s, order: newOrder }
-        if (s.id === scoped[swapIdx].id) return { ...s, order: oldOrder }
-        return s
-      })
+      const reordered = [...scoped]
+      ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
+      const byId = new Map(reordered.map((item, index) => [item.id, { ...item, order: index }]))
+      return prev.map(item => item.novelId === projectId && byId.has(item.id) ? byId.get(item.id) : item)
     })
     if (canSyncCloud) changedIds.forEach(sceneId => {
       const scene = next.find(s => s.id === sceneId)
       if (scene) debouncedSaveScene(sceneId, userId, scene)
     })
+    return changedIds.length > 0
   }
 
   const moveScene = useCallback((sceneId, toChapterId, toIndex) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !chaptersRef.current.some(chapter => chapter.id === toChapterId && chapter.novelId === projectId)) return null
     let changedIds = []
+    let moved = null
     const next = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
-      const scene = prev.find(s => s.id === sceneId)
+      const scene = prev.find(s => s.id === sceneId && s.novelId === projectId)
       if (!scene) return prev
       const updatedScene = { ...scene, chapterId: toChapterId }
-      const destScenes = prev.filter(s => s.chapterId === toChapterId && s.id !== sceneId).sort((a, b) => a.order - b.order)
-      const clampedTo = Math.max(0, Math.min(toIndex, destScenes.length))
+      const destScenes = sortOutlineItems(prev.filter(s => s.novelId === projectId && s.chapterId === toChapterId && s.id !== sceneId))
+      const requested = Number.isFinite(Number(toIndex)) ? Number(toIndex) : destScenes.length
+      const clampedTo = Math.max(0, Math.min(requested, destScenes.length))
       const reinserted = [...destScenes.slice(0, clampedTo), updatedScene, ...destScenes.slice(clampedTo)]
         .map((s, i) => ({ ...s, order: i }))
+      moved = reinserted.find(item => item.id === sceneId)
       changedIds = reinserted.map(s => s.id)
       if (scene.chapterId !== toChapterId) {
-        const srcScenes = prev.filter(s => s.chapterId === scene.chapterId && s.id !== sceneId)
-          .sort((a, b) => a.order - b.order).map((s, i) => ({ ...s, order: i }))
+        const srcScenes = sortOutlineItems(prev.filter(s => s.novelId === projectId && s.chapterId === scene.chapterId && s.id !== sceneId))
+          .map((s, i) => ({ ...s, order: i }))
         changedIds = changedIds.concat(srcScenes.map(s => s.id))
-        const others = prev.filter(s => s.chapterId !== toChapterId && s.chapterId !== scene.chapterId)
-        return [...others, ...srcScenes, ...reinserted]
+        const changed = new Map([...srcScenes, ...reinserted].map(item => [item.id, item]))
+        return prev.map(item => item.novelId === projectId && changed.has(item.id) ? changed.get(item.id) : item)
       }
-      const others = prev.filter(s => s.chapterId !== toChapterId)
-      return [...others, ...reinserted]
+      const changed = new Map(reinserted.map(item => [item.id, item]))
+      return prev.map(item => item.novelId === projectId && changed.has(item.id) ? changed.get(item.id) : item)
     })
     if (canSyncCloud) changedIds.forEach(id => {
       const scene = next.find(s => s.id === id)
       if (scene) debouncedSaveScene(id, userId, scene)
     })
-  }, [commitLocal, canSyncCloud, userId, debouncedSaveScene])
+    return moved
+  }, [activeOutlineProjectId, commitLocal, canSyncCloud, userId, debouncedSaveScene])
 
   const updateSceneContent = useCallback((sceneId, content) => {
+    const projectId = activeOutlineProjectId()
+    const previous = scenesRef.current.find(scene => scene.id === sceneId && scene.novelId === projectId)
+    if (!projectId || !previous) return null
+    const nextContent = outlineText(content)
     // Block growing a scene once storage is full — same gate as the add* actions
     // below (storageExceededCheck), but content edits aren't "add" calls so they
     // never hit that check. Only the growing direction is blocked: trimming or
     // rewriting existing text (deletes, replaces) must still go through, or a
     // full-quota account couldn't even edit its way back under the limit.
-    const previous = scenesRef.current.find(s => s.id === sceneId)
-    const isGrowing = content.length > (previous?.content?.length || 0)
+    const isGrowing = nextContent.length > outlineText(previous.content).length
     if (isGrowing && storageQuotaBytes && storageUsedBytes >= storageQuotaBytes) {
       notifyReadOnly('storage-exceeded', { usedBytes: storageUsedBytes, quotaBytes: storageQuotaBytes })
       return
     }
     const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return mergeSceneUpdateWithPersistedCopy(prev, sceneId, s => {
-        const updated = withSceneContentHistory(s, content)
+        const updated = withSceneContentHistory(s, nextContent)
         if (canSyncCloud) debouncedSaveScene(sceneId, userId, updated)
         return updated
       })
@@ -2026,21 +2105,26 @@ export function useStore(userId = null, options = {}) {
         .filter(scene => scene.conflictOf === sceneId)
         .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
-  }, [userId, canSyncCloud, debouncedSaveScene, commitLocal, storageQuotaBytes, storageUsedBytes])
+    return nextScenes.find(scene => scene.id === sceneId) || null
+  }, [activeOutlineProjectId, userId, canSyncCloud, debouncedSaveScene, commitLocal, storageQuotaBytes, storageUsedBytes])
 
   const deleteAct = (id) => {
-    const chapterIds = chaptersRef.current.filter(c => c.actId === id).map(c => c.id)
-    const sceneIds = scenesRef.current.filter(s => chapterIds.includes(s.chapterId)).map(s => s.id)
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !actsRef.current.some(act => act.id === id && act.novelId === projectId)) return false
+    const chapterIds = chaptersRef.current.filter(c => c.novelId === projectId && c.actId === id).map(c => c.id)
+    const chapterSet = new Set(chapterIds)
+    const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && chapterSet.has(s.chapterId)).map(s => s.id)
+    const sceneSet = new Set(sceneIds)
     sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
     if (canSyncCloud) {
       deleteItem('acts', userId, id).catch(console.error)
       chapterIds.forEach(cId => deleteItem('chapters', userId, cId).catch(console.error))
     }
-    commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => a.id !== id))
-    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.actId !== id))
+    commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => !(a.id === id && a.novelId === projectId)))
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.novelId === projectId && chapterSet.has(c.id))))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
-        const keep = !sceneIds.includes(s.id)
+        const keep = !(s.novelId === projectId && sceneSet.has(s.id))
         if (!keep && canSyncCloud) deleteSceneDoc(userId, s.id).catch(console.error)
         return keep
       })
@@ -2049,15 +2133,21 @@ export function useStore(userId = null, options = {}) {
       ...character,
       journey: clearJourneyLinks(character.journey, { chapterIds, sceneIds }),
     } : character))
+    if (sceneSet.has(selectedSceneId)) setSelectedSceneId(null)
+    if (sceneSet.has(writingSceneId)) setWritingSceneId(null)
+    return true
   }
   const deleteChapter = (id) => {
-    const sceneIds = scenesRef.current.filter(s => s.chapterId === id).map(s => s.id)
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !chaptersRef.current.some(chapter => chapter.id === id && chapter.novelId === projectId)) return false
+    const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && s.chapterId === id).map(s => s.id)
+    const sceneSet = new Set(sceneIds)
     sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
     if (canSyncCloud) deleteItem('chapters', userId, id).catch(console.error)
-    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.id !== id))
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.id === id && c.novelId === projectId)))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
-        const keep = !sceneIds.includes(s.id)
+        const keep = !(s.novelId === projectId && sceneSet.has(s.id))
         if (!keep && canSyncCloud) deleteSceneDoc(userId, s.id).catch(console.error)
         return keep
       })
@@ -2066,19 +2156,51 @@ export function useStore(userId = null, options = {}) {
       ...character,
       journey: clearJourneyLinks(character.journey, { chapterIds: [id], sceneIds }),
     } : character))
+    if (sceneSet.has(selectedSceneId)) setSelectedSceneId(null)
+    if (sceneSet.has(writingSceneId)) setWritingSceneId(null)
+    return true
   }
   const deleteScene = (id) => {
+    const projectId = activeOutlineProjectId()
+    if (!projectId || !scenesRef.current.some(scene => scene.id === id && scene.novelId === projectId)) return false
     debouncedSaveScene.cancel(id)
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== id))
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => !(s.id === id && s.novelId === projectId)))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
       journey: clearJourneyLinks(character.journey, { sceneIds: [id] }),
     } : character))
     if (canSyncCloud) deleteSceneDoc(userId, id).catch(console.error)
+    if (selectedSceneId === id) setSelectedSceneId(null)
+    if (writingSceneId === id) setWritingSceneId(null)
+    return true
   }
-  const updateAct = (id, data) => commitLocal(actsRef, setActs, 'nf_acts', prev => prev.map(a => a.id === id ? { ...a, ...data } : a))
-  const updateChapter = (id, data) => commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
-  const updateScene = (id, data) => {
+  const updateAct = (id, data, { expected = {} } = {}) => {
+    const projectId = activeOutlineProjectId()
+    const current = actsRef.current.find(act => act.id === id && act.novelId === projectId)
+    if (!projectId || !current || !outlineExpectedMatches(current, 'act', expected)) return null
+    const { id: _id, novelId: _novelId, order: _order, ...patch } = outlinePatch(data, 'act')
+    const updated = { ...current, ...patch }
+    commitLocal(actsRef, setActs, 'nf_acts', prev => prev.map(act => (
+      act.id === id && act.novelId === projectId ? updated : act
+    )))
+    return updated
+  }
+  const updateChapter = (id, data, { expected = {} } = {}) => {
+    const projectId = activeOutlineProjectId()
+    const current = chaptersRef.current.find(chapter => chapter.id === id && chapter.novelId === projectId)
+    if (!projectId || !current || !outlineExpectedMatches(current, 'chapter', expected)) return null
+    const { id: _id, novelId: _novelId, actId: _actId, order: _order, ...patch } = outlinePatch(data, 'chapter')
+    const updated = { ...current, ...patch }
+    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.map(chapter => (
+      chapter.id === id && chapter.novelId === projectId ? updated : chapter
+    )))
+    return updated
+  }
+  const updateScene = (id, data, { expected = {} } = {}) => {
+    const projectId = activeOutlineProjectId()
+    const current = scenesRef.current.find(scene => scene.id === id && scene.novelId === projectId)
+    if (!projectId || !current || !outlineExpectedMatches(current, 'scene', expected)) return null
+    let saved = null
     const nextScenes = commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return mergeSceneUpdateWithPersistedCopy(prev, id, s => {
         // A field's value in `data` may itself be a function (prevValue => nextValue)
@@ -2088,14 +2210,20 @@ export function useStore(userId = null, options = {}) {
         // freshest source scene mergeSceneUpdateWithPersistedCopy already picked),
         // before merging; otherwise the function itself gets written into the scene
         // record and corrupts that field for later readers.
-        const resolvedData = Object.fromEntries(
+        const resolvedData = outlinePatch(Object.fromEntries(
           Object.entries(data).map(([key, value]) => [key, typeof value === 'function' ? value(s[key]) : value])
-        )
+        ), 'scene')
+        delete resolvedData.id
+        delete resolvedData.novelId
+        delete resolvedData.chapterId
+        delete resolvedData.order
         const hasContent = Object.prototype.hasOwnProperty.call(resolvedData, 'content')
+        if (hasContent) resolvedData.content = outlineText(resolvedData.content)
         const updated = hasContent && resolvedData.content !== s.content
           ? withSceneContentHistory({ ...s, ...resolvedData }, resolvedData.content)
           : { ...s, ...resolvedData }
         if (canSyncCloud) debouncedSaveScene(id, userId, updated)
+        saved = updated
         return updated
       })
     })
@@ -2104,6 +2232,7 @@ export function useStore(userId = null, options = {}) {
         .filter(scene => scene.conflictOf === id)
         .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
+    return saved || nextScenes.find(scene => scene.id === id && scene.novelId === projectId) || null
   }
 
   const replaceProjectManuscript = useCallback((projectId, nextStructure) => {
@@ -2240,12 +2369,26 @@ export function useStore(userId = null, options = {}) {
     if (canSyncCloud) deleteSceneDoc(userId, conflictId).catch(console.error)
   }
 
+  const cleanupCharacterPortraits = (urls, overrides = {}) => {
+    const candidates = urls.filter(Boolean)
+    if (!candidates.length) return
+    const referenced = new Set()
+    const mediaKey = value => {
+      try { return getUserMediaPath(value) || value } catch { return value }
+    }
+    const collect = value => {
+      if (typeof value === 'string') referenced.add(mediaKey(value))
+      else if (value && typeof value === 'object') Object.values(value).forEach(collect)
+    }
+    // Save/delete update refs synchronously; the render snapshot may still
+    // contain the old character. Keep media used by any other saved record.
+    collect({ ...getCurrentSnapshot(), characters: charactersRef.current, ...overrides })
+    deleteMediaUrls(candidates.filter(url => !referenced.has(mediaKey(url))))
+  }
   const saveCharacter = (data, id) => {
     if (!id && storageExceededCheck()) { return null }
+    const previousImage = id ? charactersRef.current.find(character => character.id === id)?.image : null
     const characterId = id || uid()
-    const childIds = data.childIds || []
-    const parentIds = data.parentIds || []
-    const spouseIds = data.spouseIds || []
     const saved = saveSeriesSyncedItem(
       charactersRef,
       setCharacters,
@@ -2254,53 +2397,56 @@ export function useStore(userId = null, options = {}) {
       id,
       () => ({ id: characterId, novelId: activeNovelId, ...data })
     )
+    if (!saved) return null
+    if (Object.hasOwn(data, 'image') && previousImage !== saved.image) cleanupCharacterPortraits([previousImage])
     const savedId = saved?.id || characterId
+    // Partial edits (including Family Tree and Relationship Map) must not
+    // clear reciprocal links for fields that were not edited at all.
+    const familyFields = [
+      ['childIds', 'parentIds'],
+      ['parentIds', 'childIds'],
+      ['spouseIds', 'spouseIds'],
+    ].filter(([field]) => Object.hasOwn(data, field))
+    if (!familyFields.length) return savedId
 
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => {
-      const next = prev
-
-      return next.map(c => {
+      return prev.map(c => {
         if (c.id === savedId || c.novelId !== activeNovelId) return c
         let updated = c
-        let changed = false
-
-        // childIds → sync parentIds on children
-        const cParents = updated.parentIds || []
-        const shouldBeChild = childIds.includes(c.id)
-        if (shouldBeChild && !cParents.includes(savedId)) {
-          updated = { ...updated, parentIds: [...cParents, savedId] }
-          changed = true
-        } else if (!shouldBeChild && cParents.includes(savedId)) {
-          updated = { ...updated, parentIds: cParents.filter(p => p !== savedId) }
-          changed = true
-        }
-
-        // parentIds → sync childIds on parents
-        const cChildren = updated.childIds || []
-        const shouldBeParent = parentIds.includes(c.id)
-        if (shouldBeParent && !cChildren.includes(savedId)) {
-          updated = { ...updated, childIds: [...cChildren, savedId] }
-          changed = true
-        } else if (!shouldBeParent && cChildren.includes(savedId)) {
-          updated = { ...updated, childIds: cChildren.filter(ch => ch !== savedId) }
-          changed = true
-        }
-
-        // spouseIds → sync bidirectionally
-        const cSpouses = updated.spouseIds || []
-        const shouldBeSpouse = spouseIds.includes(c.id)
-        if (shouldBeSpouse && !cSpouses.includes(savedId)) {
-          updated = { ...updated, spouseIds: [...cSpouses, savedId] }
-          changed = true
-        } else if (!shouldBeSpouse && cSpouses.includes(savedId)) {
-          updated = { ...updated, spouseIds: cSpouses.filter(s => s !== savedId) }
-          changed = true
-        }
-
-        return changed ? updated : c
+        familyFields.forEach(([field, reciprocalField]) => {
+          const reciprocalIds = updated[reciprocalField] || []
+          const shouldLink = (data[field] || []).includes(c.id)
+          if (shouldLink && !reciprocalIds.includes(savedId)) {
+            updated = { ...updated, [reciprocalField]: [...reciprocalIds, savedId] }
+          } else if (!shouldLink && reciprocalIds.includes(savedId)) {
+            updated = { ...updated, [reciprocalField]: reciprocalIds.filter(value => value !== savedId) }
+          }
+        })
+        return updated
       })
     })
     return savedId
+  }
+  const saveRelationship = (sourceId, targetId, type, { remove = false } = {}) => {
+    // Read current records rather than replacing a rendered relationship array.
+    // A directed fact belongs to one source; never clear the reverse link.
+    if (activeNovelIdRef.current !== activeNovelId || !activeNovelId || !isCharacterLinkRelType(type)) return null
+    if (!remove && !CHARACTER_LINK_REL_TYPES.some(relationship => relationship.id === type)) return null
+    const visible = resolveSeriesScope(charactersRef.current, 'characters')
+    const aliases = buildCharacterAliases(visible, charactersRef.current)
+    const resolvedSourceId = aliases.get(sourceId)
+    const resolvedTargetId = aliases.get(targetId)
+    const source = visible.find(character => character.id === resolvedSourceId)
+    if (!source || source.readOnly || !resolvedTargetId || resolvedTargetId === resolvedSourceId) return null
+    const relationships = relationshipValues(source.relationships)
+    const matches = relationship => String(relationship?.type ?? '') === type && aliases.get(String(relationship?.targetId ?? '')) === resolvedTargetId
+    const exists = relationships.some(matches)
+    if (remove && !exists) return null
+    if (!remove && exists) return source.id
+    return saveCharacter({ relationships: remove
+      ? relationships.filter(relationship => !matches(relationship))
+      : [...relationships, { targetId: resolvedTargetId, type }],
+    }, source.id)
   }
   const saveCharacterJourney = (id, journey) => saveSeriesSyncedItem(
     charactersRef,
@@ -2318,53 +2464,66 @@ export function useStore(userId = null, options = {}) {
   const deleteCharacter = (id, options = {}) => {
     const beforeDelete = charactersRef.current
     const deletedIds = deleteSeriesSyncedItem(charactersRef, setCharacters, 'characters', id, options)
-    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
-    deleteMediaUrls(beforeDelete.filter(c => deletedSet.has(c.id)).map(c => c.image))
+    if (!deletedIds.length) return false
+    const remainingIds = new Set(charactersRef.current.map(character => character.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true // An inherited hide retains the source and its links/media.
+    cleanupCharacterPortraits(beforeDelete.filter(c => deletedSet.has(c.id)).map(c => c.image))
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('characters', userId, dId).catch(console.error))
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => {
-      return prev
-        .map(c => ({
-          ...c,
-          childIds: (c.childIds || []).filter(childId => !deletedSet.has(childId)),
-          parentIds: (c.parentIds || []).filter(parentId => !deletedSet.has(parentId)),
-          spouseIds: (c.spouseIds || []).filter(spouseId => !deletedSet.has(spouseId)),
-          relationships: (c.relationships || []).filter(rel => !deletedSet.has(rel.targetId)),
-          ...(c.journey ? { journey: clearJourneyLinks(c.journey, { characterIds: [...deletedSet] }) } : {}),
-        }))
-    })
-    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
-      return prev.map(entry => ({
-        ...entry,
-        characterIds: (entry.characterIds || []).filter(characterId => !deletedSet.has(characterId)),
-      }))
-    })
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => {
-      return prev.map(event => ({
-        ...event,
-        linkedCharacters: (event.linkedCharacters || []).filter(characterId => !deletedSet.has(characterId)),
-      }))
-    })
+    const removeLinks = (entry, field, matches = value => deletedSet.has(value)) => Array.isArray(entry[field]) && entry[field].some(matches)
+      ? { ...entry, [field]: entry[field].filter(value => !matches(value)) }
+      : entry
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => {
+      let next = character
+      ;['parentIds', 'childIds', 'spouseIds'].forEach(field => { next = removeLinks(next, field) })
+      next = removeLinks(next, 'relationships', rel => deletedSet.has(rel?.targetId))
+      next = removeLinks(next, 'familyLinks', link => deletedSet.has(link?.sourceCharacterId) || deletedSet.has(link?.targetCharacterId))
+      if (Array.isArray(next.journey?.beats) && next.journey.beats.some(beat => deletedSet.has(beat?.linkedCharacterId))) {
+        next = { ...next, journey: clearJourneyLinks(next.journey, { characterIds: [...deletedSet] }) }
+      }
+      return next
+    }))
+    ;[
+      [loreEntriesRef, setLoreEntries, 'nf_loreEntries', 'characterIds'],
+      [timelineRef, setTimeline, 'nf_timeline', 'linkedCharacters'],
+      [worldHistoryRef, setWorldHistory, 'nf_worldHistory', 'linkedCharacters'],
+      [storyScheduleRef, setStorySchedule, 'nf_storySchedule', 'linkedCharacters'],
+      [comicPagesRef, setComicPages, 'nf_comicPages', 'characterIds'],
+      [comicPanelsRef, setComicPanels, 'nf_comicPanels', 'characterIds'],
+    ].forEach(([ref, setter, key, field]) => commitLocal(ref, setter, key, prev => prev.map(entry => removeLinks(entry, field))))
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.map(entry => removeLinks(entry, 'npcRelationships', rel => deletedSet.has(rel?.characterId))))
+    return true
   }
 
   const saveRpgCharacter = (data, id) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
     if (!id && storageExceededCheck()) { return null }
     const characterId = id || uid()
+    const { id: _id, novelId: _novelId, createdAt: _createdAt, ...safeData } = data || {}
+    const existing = id ? rpgCharactersRef.current.find(character => character.id === id && character.novelId === projectId) : null
+    if (id && !existing) return null
+    const timestamp = new Date().toISOString()
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => {
-      if (id) return prev.map(c => c.id === id ? { ...c, ...data, updatedAt: new Date().toISOString() } : c)
-      return [...prev, normalizeRpgCharacter({ ...data, id: characterId, novelId: activeNovelId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })]
+      if (id) return prev.map(c => c.id === id ? normalizeRpgCharacter({ ...c, ...safeData, updatedAt: timestamp }) : c)
+      return [...prev, normalizeRpgCharacter({ ...safeData, id: characterId, novelId: projectId, createdAt: timestamp, updatedAt: timestamp })]
     })
     return characterId
   }
 
   const deleteRpgCharacter = (id) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !rpgCharactersRef.current.some(character => character.id === id && character.novelId === projectId)) return false
     if (canSyncCloud) deleteItem('rpg_characters', userId, id).catch(console.error)
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.id !== id))
+    return true
   }
 
   const saveFaction = (data, id) => {
     if (!id && storageExceededCheck()) { return null }
     const factionId = id || uid()
-    return saveSeriesSyncedItem(
+    const previousLogo = id ? factionsRef.current.find(faction => faction.id === id)?.logo?.image : null
+    const saved = saveSeriesSyncedItem(
       factionsRef,
       setFactions,
       'factions',
@@ -2372,17 +2531,31 @@ export function useStore(userId = null, options = {}) {
       id,
       () => ({ id: factionId, novelId: activeNovelId, ...data })
     )
+    if (!saved) return null
+    if (Object.hasOwn(data, 'logo') && previousLogo !== saved.logo?.image) {
+      cleanupCharacterPortraits([previousLogo], { factions: factionsRef.current })
+    }
+    return saved
   }
 
   const deleteFaction = (id, options = {}) => {
     const beforeDelete = factionsRef.current
     const deletedIds = deleteSeriesSyncedItem(factionsRef, setFactions, 'factions', id, options)
-    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
-    deleteMediaUrls(beforeDelete.filter(f => deletedSet.has(f.id)).map(f => f.logo?.image))
+    if (!deletedIds.length) return false
+    const remainingIds = new Set(factionsRef.current.map(faction => faction.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true
+    cleanupCharacterPortraits(beforeDelete.filter(f => deletedSet.has(f.id)).map(f => f.logo?.image), { factions: factionsRef.current })
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('factions', userId, dId).catch(console.error))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
       deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
     ))
+    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.map(character => (
+      character.factionIds?.some(factionId => deletedSet.has(factionId))
+        ? { ...character, factionIds: character.factionIds.filter(factionId => !deletedSet.has(factionId)) }
+        : character
+    )))
+    return true
   }
 
   const saveLocation = (data, id) => {
@@ -2399,7 +2572,10 @@ export function useStore(userId = null, options = {}) {
   }
   const deleteLocation = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(locationsRef, setLocations, 'locations', id, options)
-    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (!deletedIds.length) return false
+    const remainingIds = new Set(locationsRef.current.map(location => location.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('locations', userId, dId).catch(console.error))
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => ({
@@ -2413,23 +2589,74 @@ export function useStore(userId = null, options = {}) {
         linkedLocations: (event.linkedLocations || []).filter(locationId => !deletedSet.has(locationId)),
       }))
     })
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(entry => entry.linkedLocations?.some(locationId => deletedSet.has(locationId))
+      ? { ...entry, linkedLocations: entry.linkedLocations.filter(locationId => !deletedSet.has(locationId)) }
+      : entry))
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.map(event => event.linkedLocations?.some(locationId => deletedSet.has(locationId))
+      ? { ...event, linkedLocations: event.linkedLocations.filter(locationId => !deletedSet.has(locationId)) }
+      : event))
+    ;[
+      [comicPagesRef, setComicPages, 'nf_comicPages'],
+      [comicPanelsRef, setComicPanels, 'nf_comicPanels'],
+    ].forEach(([ref, setter, key]) => commitLocal(ref, setter, key, prev => prev.map(entry => entry.locationIds?.some(locationId => deletedSet.has(locationId))
+      ? { ...entry, locationIds: entry.locationIds.filter(locationId => !deletedSet.has(locationId)) }
+      : entry)))
+    return true
+  }
+
+  const applyChronicleLink = (eventId, historyId) => {
+    const linked = relinkChronicleRecords(timelineRef.current, worldHistoryRef.current, eventId, historyId)
+    commitLocal(timelineRef, setTimeline, 'nf_timeline', linked.timeline)
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', linked.history)
+  }
+
+  const syncChronicleCounterpart = (record, data, fromTimeline) => {
+    const ref = fromTimeline ? worldHistoryRef : timelineRef
+    const setter = fromTimeline ? setWorldHistory : setTimeline
+    const category = fromTimeline ? 'worldhistory' : 'timeline'
+    const linkField = fromTimeline ? 'worldHistoryEntryId' : 'timelineEventId'
+    const reverseField = fromTimeline ? 'timelineEventId' : 'worldHistoryEntryId'
+    const linkedId = record[linkField]
+    let counterpart = linkedId ? ref.current.find(item => item.id === linkedId) : null
+    if (counterpart && counterpart.novelId !== record.novelId) {
+      // A forward-series edit must fork its inherited mirror, not rewrite the
+      // earlier project's historical record through a shared ID.
+      const source = counterpart
+      counterpart = ref.current.find(item => item.novelId === record.novelId && !item.syncDeleted && syncIdentity(item, category) === syncIdentity(source, category))
+        || { ...source, id: uid(), novelId: record.novelId, syncRootId: source.syncRootId || source.id, syncSourceId: source.id, syncHiddenInIds: [], syncDeleted: false }
+    }
+    if (counterpart) {
+      const next = { ...counterpart, ...chronicleContentPatch(data), [reverseField]: record.id }
+      commitLocal(ref, setter, SYNC_CATEGORY_CONFIG[category].storageKey, prev => prev.some(item => item.id === next.id)
+        ? prev.map(item => item.id === next.id ? next : item)
+        : [...prev, next])
+    }
+    if (fromTimeline) applyChronicleLink(record.id, counterpart?.id || null)
+    else applyChronicleLink(counterpart?.id || null, record.id)
+  }
+
+  const chronicleEditTargets = (ref, category, existing, saved) => {
+    const project = novels.find(novel => novel.id === activeNovelId)
+    const projectSeries = series.find(item => item.id === project?.seriesId)
+    if (!projectSeries?.syncCategories?.includes(category)) return [saved]
+    const forwardIds = getForwardProjectIds(activeNovelId, projectSeries)
+    return ref.current.filter(item => item.id === saved.id || (forwardIds.has(item.novelId) && syncIdentity(item, category) === syncIdentity(existing, category)))
   }
 
   const addEvent = (data, options = {}) => {
+    if (!currentActiveProjectId()) return null
     if (storageExceededCheck()) { return null }
+    const safeData = withoutRecordIdentity(data)
     const eventId = uid()
-    const shouldCreateHistory = options.createHistory !== false && !data.linkedHistoryEntryId
-    const historyId = data.linkedHistoryEntryId || (shouldCreateHistory ? uid() : null)
+    const requestedHistoryId = chronicleLinkId(safeData, 'worldHistoryEntryId', 'linkedHistoryEntryId')
+    if (requestedHistoryId && !worldHistoryRef.current.some(entry => entry.id === requestedHistoryId && entry.novelId === activeNovelId)) return null
+    const shouldCreateHistory = options.createHistory !== false && !requestedHistoryId
+    const historyId = requestedHistoryId || (shouldCreateHistory ? uid() : null)
     const createdAt = Date.now() // eslint-disable-line react-hooks/purity
-    const event = { id: eventId, novelId: activeNovelId, syncRootId: eventId, createdAt, ...data, worldHistoryEntryId: historyId }
+    const event = { ...safeData, id: eventId, novelId: activeNovelId, syncRootId: eventId, createdAt, worldHistoryEntryId: historyId }
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, event])
-    if (data.linkedHistoryEntryId) {
-      commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => {
-        return prev.map(h => h.id === data.linkedHistoryEntryId
-        ? { ...h, timelineEventId: eventId }
-        : h
-        )
-      })
+    if (requestedHistoryId) {
+      applyChronicleLink(eventId, requestedHistoryId)
     } else if (shouldCreateHistory) {
       const historyEntry = {
         id: historyId,
@@ -2437,86 +2664,95 @@ export function useStore(userId = null, options = {}) {
         syncRootId: historyId,
         createdAt,
         timelineEventId: eventId,
-        title: data.title ?? '',
-        era: data.era ?? '',
-        dateRange: data.date ?? data.dateRange ?? '',
-        content: data.description ?? data.content ?? '',
-        category: data.category ?? data.type ?? '',
-        tags: data.tags ?? [],
-        startYear: data.startYear ?? null,
-        endYear: data.endYear ?? null,
+        ...chronicleContentPatch(safeData),
       }
       commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, historyEntry])
     }
     return event
   }
   const updateEvent = (id, data) => {
-    const linkedHistoryId = data.linkedHistoryEntryId ?? data.worldHistoryEntryId
+    const existing = timelineRef.current.find(event => event.id === id)
+    if (!existing) return null
+    const fallback = chronicleLinkId(existing, 'worldHistoryEntryId', 'linkedHistoryEntryId', worldHistoryRef.current.find(entry => entry.timelineEventId === id)?.id)
+    const linkedHistoryId = chronicleLinkId(data, 'worldHistoryEntryId', 'linkedHistoryEntryId', fallback)
+    const linkChanged = Object.hasOwn(data, 'linkedHistoryEntryId') || Object.hasOwn(data, 'worldHistoryEntryId')
+    if (linkChanged && linkedHistoryId && !worldHistoryRef.current.some(entry => entry.id === linkedHistoryId)) return null
+    if (linkChanged && linkedHistoryId && linkedHistoryId !== fallback && !worldHistoryRef.current.some(entry => entry.id === linkedHistoryId && entry.novelId === activeNovelId)) return null
     const savedEvent = saveSeriesSyncedItem(
       timelineRef,
       setTimeline,
       'timeline',
-      { ...data, worldHistoryEntryId: linkedHistoryId },
+      { ...chronicleContentPatch(data), ...data, ...(linkChanged ? { worldHistoryEntryId: linkedHistoryId } : {}) },
       id,
       () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data, worldHistoryEntryId: linkedHistoryId })
     )
-    const savedEventId = savedEvent?.id || id
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => {
-      return prev.map(h => {
-        if (linkedHistoryId && h.timelineEventId === savedEventId && h.id !== linkedHistoryId) {
-          return { ...h, timelineEventId: null }
-        }
-        if (h.timelineEventId === savedEventId || (linkedHistoryId && h.id === linkedHistoryId)) {
-          return {
-            ...h,
-            timelineEventId: savedEventId,
-            title: data.title ?? h.title,
-            era: data.era ?? h.era,
-            dateRange: data.date ?? data.dateRange ?? h.dateRange,
-            content: data.description ?? data.content ?? h.content,
-            category: data.category ?? data.type ?? h.category,
-            tags: data.tags ?? h.tags,
-            startYear: 'startYear' in data ? data.startYear : h.startYear,
-            endYear: 'endYear' in data ? data.endYear : h.endYear,
-          }
-        }
-        return h
-      })
-    })
-    return savedEvent
+    if (!savedEvent) return null
+    const targets = chronicleEditTargets(timelineRef, 'timeline', existing, savedEvent)
+    targets.forEach(event => syncChronicleCounterpart({ ...event, worldHistoryEntryId: linkChanged ? linkedHistoryId : chronicleLinkId(event, 'worldHistoryEntryId', 'linkedHistoryEntryId', linkedHistoryId) }, data, true))
+    return timelineRef.current.find(event => event.id === savedEvent.id)
   }
   const deleteEvent = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(timelineRef, setTimeline, 'timeline', id, options)
-    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (!deletedIds.length) return false
+    // A current-project hide of inherited data is not a physical deletion.
+    // Keep the earlier project's cloud row and reciprocal links intact.
+    const remainingIds = new Set(timelineRef.current.map(event => event.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('timeline_events', userId, dId).catch(console.error))
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => deletedSet.has(h.timelineEventId) ? { ...h, timelineEventId: null } : h))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
       journey: clearJourneyLinks(character.journey, { timelineEventIds: [...deletedSet] }),
     } : character))
+    return true
   }
 
   const addScheduleEvent = (data) => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return null
     if (storageExceededCheck()) { return null }
-    const entry = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), category: 'scene', duration: 1, tags: [], linkedCharacters: [], linkedLocations: [], ...data } // eslint-disable-line react-hooks/purity
+    const project = novelsRef.current.find(novel => novel.id === activeNovelId)
+    if (!project) return null
+    const prepared = prepareScheduleEvent({ year: 1, month: 1, day: 1, category: 'scene', duration: 1, tags: [], linkedCharacters: [], linkedLocations: [], ...data }, getScheduleCalendar(project))
+    if (prepared.error) return null
+    const timestamp = Date.now() // eslint-disable-line react-hooks/purity -- Timestamped only when this explicit store action runs.
+    const entry = { ...prepared.event, id: uid(), novelId: activeNovelId, createdAt: timestamp, updatedAt: timestamp }
     commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => [...prev, entry])
     return entry
   }
-  const updateScheduleEvent = (id, data) => commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
+  const updateScheduleEvent = (id, data, { expected = {} } = {}) => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return null
+    const existing = storyScheduleRef.current.find(event => event.id === id && event.novelId === activeNovelId)
+    const project = novelsRef.current.find(novel => novel.id === activeNovelId)
+    if (!existing || !project) return null
+    const current = normalizeScheduleEvent(existing)
+    if (Object.entries(expected).some(([field, value]) => JSON.stringify(current[field]) !== JSON.stringify(value))) return null
+    const prepared = prepareScheduleEvent({ ...current, ...data }, getScheduleCalendar(project))
+    if (prepared.error) return null
+    const updated = { ...existing, ...prepared.event, updatedAt: Date.now() } // eslint-disable-line react-hooks/purity -- Timestamped only when this explicit store action runs.
+    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.map(event => event.id === id ? updated : event))
+    return updated
+  }
   const deleteScheduleEvent = (id) => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return false
+    if (!storyScheduleRef.current.some(event => event.id === id && event.novelId === activeNovelId)) return false
     if (canSyncCloud) deleteItem('story_schedule', userId, id).catch(console.error)
     commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.id !== id))
+    return true
   }
 
   const addHistoryEntry = (data, options = {}) => {
+    if (!currentActiveProjectId()) return null
     if (storageExceededCheck()) { return null }
+    const safeData = withoutRecordIdentity(data)
     const createdAt = Date.now() // eslint-disable-line react-hooks/purity
-    const timelineEventId = data.linkedTimelineEventId || data.timelineEventId || null
+    const timelineEventId = chronicleLinkId(safeData, 'timelineEventId', 'linkedTimelineEventId')
+    if (timelineEventId && !timelineRef.current.some(event => event.id === timelineEventId && event.novelId === activeNovelId)) return null
     const entryId = uid()
-    const entry = { id: entryId, novelId: activeNovelId, syncRootId: entryId, createdAt, ...data, timelineEventId }
+    const entry = { ...safeData, id: entryId, novelId: activeNovelId, syncRootId: entryId, createdAt, timelineEventId }
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, entry])
     if (timelineEventId) {
-      commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => e.id === timelineEventId ? { ...e, worldHistoryEntryId: entry.id } : e))
+      applyChronicleLink(timelineEventId, entry.id)
     } else if (options.createTimeline) {
       const eventId = uid()
       const event = {
@@ -2524,92 +2760,86 @@ export function useStore(userId = null, options = {}) {
         novelId: activeNovelId,
         syncRootId: eventId,
         createdAt,
-        title: data.title ?? '',
-        date: data.dateRange ?? data.date ?? '',
-        description: data.content ?? data.description ?? '',
-        category: data.category ?? data.type ?? '',
-        tags: data.tags ?? [],
-        linkedCharacters: [],
-        linkedLocations: [],
+        ...chronicleContentPatch(safeData),
         worldHistoryEntryId: entryId,
-        startYear: data.startYear ?? null,
-        endYear: data.endYear ?? null,
       }
       const linkedEntry = { ...entry, timelineEventId: eventId }
       commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, event])
       commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => h.id === entryId ? linkedEntry : h))
     }
-    return entry
+    return worldHistoryRef.current.find(item => item.id === entry.id)
   }
   const updateHistoryEntry = (id, data) => {
-    const linkedTimelineId = data.linkedTimelineEventId ?? data.timelineEventId
+    const existing = worldHistoryRef.current.find(entry => entry.id === id)
+    if (!existing) return null
+    const fallback = chronicleLinkId(existing, 'timelineEventId', 'linkedTimelineEventId', timelineRef.current.find(event => event.worldHistoryEntryId === id)?.id)
+    const linkedTimelineId = chronicleLinkId(data, 'timelineEventId', 'linkedTimelineEventId', fallback)
+    const linkChanged = Object.hasOwn(data, 'linkedTimelineEventId') || Object.hasOwn(data, 'timelineEventId')
+    if (linkChanged && linkedTimelineId && !timelineRef.current.some(event => event.id === linkedTimelineId)) return null
+    if (linkChanged && linkedTimelineId && linkedTimelineId !== fallback && !timelineRef.current.some(event => event.id === linkedTimelineId && event.novelId === activeNovelId)) return null
     const savedHistory = saveSeriesSyncedItem(
       worldHistoryRef,
       setWorldHistory,
       'worldhistory',
-      { ...data, timelineEventId: linkedTimelineId },
+      { ...chronicleContentPatch(data), ...data, ...(linkChanged ? { timelineEventId: linkedTimelineId } : {}) },
       id,
       () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data, timelineEventId: linkedTimelineId })
     )
-    const savedHistoryId = savedHistory?.id || id
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => {
-      return prev.map(e => {
-        if (linkedTimelineId && e.id === linkedTimelineId) return { ...e, worldHistoryEntryId: savedHistoryId }
-        if (e.worldHistoryEntryId === savedHistoryId && linkedTimelineId && e.id !== linkedTimelineId) return { ...e, worldHistoryEntryId: null }
-        if (e.worldHistoryEntryId === savedHistoryId) {
-          return {
-            ...e,
-            title: data.title ?? e.title,
-            date: data.dateRange ?? data.date ?? e.date,
-            description: data.content ?? data.description ?? e.description,
-            category: data.category ?? data.type ?? e.category,
-            tags: data.tags ?? e.tags,
-            startYear: 'startYear' in data ? data.startYear : e.startYear,
-            endYear: 'endYear' in data ? data.endYear : e.endYear,
-          }
-        }
-        return e
-      })
-    })
-    return savedHistory
+    if (!savedHistory) return null
+    const targets = chronicleEditTargets(worldHistoryRef, 'worldhistory', existing, savedHistory)
+    targets.forEach(entry => syncChronicleCounterpart({ ...entry, timelineEventId: linkChanged ? linkedTimelineId : chronicleLinkId(entry, 'timelineEventId', 'linkedTimelineEventId', linkedTimelineId) }, data, false))
+    return worldHistoryRef.current.find(entry => entry.id === savedHistory.id)
   }
   const deleteHistoryEntry = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(worldHistoryRef, setWorldHistory, 'worldhistory', id, options)
-    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (!deletedIds.length) return false
+    const remainingIds = new Set(worldHistoryRef.current.map(entry => entry.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('world_history', userId, dId).catch(console.error))
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => deletedSet.has(e.worldHistoryEntryId) ? { ...e, worldHistoryEntryId: null } : e))
+    return true
   }
   const linkTimelineHistory = (timelineEventId, historyEntryId) => {
     if (!timelineEventId || !historyEntryId) return
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => e.id === timelineEventId ? { ...e, worldHistoryEntryId: historyEntryId } : e))
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => h.id === historyEntryId ? { ...h, timelineEventId } : (h.timelineEventId === timelineEventId ? { ...h, timelineEventId: null } : h)))
+    const event = timelineRef.current.find(item => item.id === timelineEventId)
+    const history = worldHistoryRef.current.find(item => item.id === historyEntryId)
+    if (!event || !history || event.novelId !== activeNovelId || history.novelId !== activeNovelId) return
+    applyChronicleLink(timelineEventId, historyEntryId)
   }
   const unlinkTimelineHistory = (timelineEventId, historyEntryId) => {
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => e.id === timelineEventId ? { ...e, worldHistoryEntryId: null } : e))
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => h.id === historyEntryId ? { ...h, timelineEventId: null } : h))
+    const event = timelineRef.current.find(item => item.id === timelineEventId)
+    if (!event || event.novelId !== activeNovelId || event.worldHistoryEntryId !== historyEntryId) return
+    applyChronicleLink(timelineEventId, null)
   }
 
   const addLoreEntry = (data) => {
+    if (!currentActiveProjectId()) return null
     if (storageExceededCheck()) { return null }
     const id = uid()
-    const entry = { id, novelId: activeNovelId, syncRootId: id, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data } // eslint-disable-line react-hooks/purity
+    const safeData = withoutRecordIdentity(data)
+    const entry = { characterIds: [], category: '', content: '', ...safeData, id, novelId: activeNovelId, syncRootId: id, createdAt: Date.now() } // eslint-disable-line react-hooks/purity
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => [...prev, entry])
     return entry
   }
   const updateLoreEntry = (id, data) => saveSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data }))
   const deleteLoreEntry = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', id, options)
-    const deletedSet = new Set(deletedIds.length ? deletedIds : [id])
+    if (!deletedIds.length) return false
+    const remainingIds = new Set(loreEntriesRef.current.map(entry => entry.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true // Current-project hide: keep earlier links/cloud rows.
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('lore_entries', userId, dId).catch(console.error))
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
-      return prev.map(entry => ({
-        ...entry,
-        loreIds: (entry.loreIds || []).filter(loreId => !deletedSet.has(loreId)),
-      }))
+      return prev.map(entry => Array.isArray(entry.loreIds) && entry.loreIds.some(loreId => deletedSet.has(loreId))
+        ? { ...entry, loreIds: entry.loreIds.filter(loreId => !deletedSet.has(loreId)) }
+        : entry)
     })
+    return true
   }
 
   const addIdeaEntry = (data) => {
+    if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return null
     if (storageExceededCheck()) { return null }
     const entry = {
       id: uid(),
@@ -2622,30 +2852,67 @@ export function useStore(userId = null, options = {}) {
       group: '',
       tags: [],
       status: 'raw',
-      order: ideaEntriesRef.current.filter(entry => entry.novelId === activeNovelId).length,
+      order: nextIdeaOrder(resolveSeriesScope(ideaEntriesRef.current, 'ideas'), normalizeIdea(data).status),
       isFavourite: false,
       isPinned: false,
       aiExpanded: false,
       linkedEntities: [],
       linkedIdeas: [],
       convertedTo: null,
-      ...data,
+      ...ideaContentPatch(data),
     }
     entry.syncRootId = entry.id
     commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => [...prev, entry])
     return entry
   }
-  const updateIdeaEntry = (id, data) => saveSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), updatedAt: Date.now(), title: '', description: '', body: '', group: '', tags: [], status: 'raw', order: 0, isFavourite: false, isPinned: false, aiExpanded: false, linkedEntities: [], linkedIdeas: [], convertedTo: null, ...data }))
+  const updateIdeaEntry = (id, data, { expected = {} } = {}) => {
+    if (activeNovelIdRef.current !== activeNovelId) return null
+    const existing = resolveSeriesScope(ideaEntriesRef.current, 'ideas').find(entry => entry.id === id)
+    if (!existing) return null
+    const normalized = normalizeIdea(existing)
+    if (Object.entries(expected).some(([field, value]) => JSON.stringify(normalized[field]) !== JSON.stringify(value))) return null
+    const updatedAt = Date.now() // eslint-disable-line react-hooks/purity -- Timestamped only when this store action is invoked, never during render.
+    return saveSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', { ...ideaContentPatch(data), updatedAt }, id, () => null)
+  }
+  const moveIdeaEntry = (id, status, beforeId = null) => {
+    if (activeNovelIdRef.current !== activeNovelId) return null
+    const visible = resolveSeriesScope(ideaEntriesRef.current, 'ideas')
+    const source = visible.find(entry => entry.id === id)
+    if (!source || !IDEA_STATUS_IDS.has(status)) return null
+    if (beforeId && beforeId !== id && !visible.some(entry => entry.id === beforeId && normalizeIdea(entry).status === status)) return null
+    const plan = planIdeaMove(visible, id, status, beforeId)
+    if (!plan.length) return source
+    const batch = { items: ideaEntriesRef.current }
+    let moved
+    const updatedAt = Date.now() // eslint-disable-line react-hooks/purity -- One timestamp for this explicit reorder action.
+    for (const change of plan) {
+      const saved = saveSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', { ...change.data, updatedAt }, change.id, () => null, batch)
+      if (!saved) return null
+      if (change.id === id) moved = saved
+    }
+    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', () => batch.items)
+    return moved || visible.find(entry => entry.id === id)
+  }
   const deleteIdeaEntry = (id, options = {}) => {
+    if (activeNovelIdRef.current !== activeNovelId || !resolveSeriesScope(ideaEntriesRef.current, 'ideas').some(entry => entry.id === id)) return false
     const deletedIds = deleteSeriesSyncedItem(ideaEntriesRef, setIdeaEntries, 'ideas', id, options)
-    if (canSyncCloud) (deletedIds.length ? deletedIds : [id]).forEach(dId => deleteItem('idea_entries', userId, dId).catch(console.error))
+    const remainingIds = new Set(ideaEntriesRef.current.map(entry => entry.id))
+    const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
+    if (!deletedSet.size) return true
+    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('idea_entries', userId, dId).catch(console.error))
+    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.map(entry => Array.isArray(entry.linkedIdeas) && entry.linkedIdeas.some(linkedId => deletedSet.has(linkedId))
+      ? { ...entry, linkedIdeas: entry.linkedIdeas.filter(linkedId => !deletedSet.has(linkedId)) } : entry))
+    return true
   }
 
   const addMap = (name, mapType, options = {}) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
     if (storageExceededCheck()) { return null }
     const normalizedMapType = mapType || 'region'
     const isInterior = normalizedMapType === 'interior'
-    const isCampaignInterior = ['dnd_campaign', 'tabletop_rpg'].includes(activeNovel?.type)
+    const project = novelsRef.current.find(novel => novel.id === projectId)
+    const isCampaignInterior = ['dnd_campaign', 'tabletop_rpg'].includes(project?.type)
     const metadata = {
       // Region and local maps start land-first (you are usually inside a
       // continent); world maps start as open water. Existing maps without
@@ -2668,7 +2935,7 @@ export function useStore(userId = null, options = {}) {
     if (options.stylePreset) metadata.stylePreset = options.stylePreset
     const map = {
       id: uid(),
-      novelId: activeNovelId,
+      novelId: projectId,
       name,
       mapType: normalizedMapType,
       mapPins: [],
@@ -2678,56 +2945,84 @@ export function useStore(userId = null, options = {}) {
       metadata,
       created: Date.now(), // eslint-disable-line react-hooks/purity
     }
-    setMaps(prev => [...prev, map])
-    setActiveMapByNovel(prev => ({ ...prev, [activeNovelId]: map.id }))
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => [...prev, map])
+    const nextActiveMaps = { ...activeMapByNovelRef.current, [projectId]: map.id }
+    activeMapByNovelRef.current = nextActiveMaps
+    setActiveMapByNovel(nextActiveMaps)
+    saveSettingsNow({ activeMapByNovel: nextActiveMaps })
     return map.id
   }
 
   const selectMap = (mapId) => {
-    setActiveMapByNovel(prev => ({ ...prev, [activeNovelId]: mapId }))
+    const projectId = currentActiveProjectId()
+    if (!projectId || !mapsRef.current.some(map => map.id === mapId && map.novelId === projectId)) return false
+    const nextActiveMaps = { ...activeMapByNovelRef.current, [projectId]: mapId }
+    activeMapByNovelRef.current = nextActiveMaps
+    setActiveMapByNovel(nextActiveMaps)
+    saveSettingsNow({ activeMapByNovel: nextActiveMaps })
+    return true
   }
 
   const deleteMap = (mapId) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !mapsRef.current.some(map => map.id === mapId && map.novelId === projectId)) return false
     if (canSyncCloud) deleteItem('maps_data', userId, mapId).catch(console.error)
-    setMaps(prev => prev.filter(m => m.id !== mapId))
-    setActiveMapByNovel(prev => {
-      if (prev[activeNovelId] !== mapId) return prev
-      const nextMap = maps.find(m => m.novelId === activeNovelId && m.id !== mapId)
-      return { ...prev, [activeNovelId]: nextMap?.id || null }
-    })
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.filter(m => m.id !== mapId))
+    if (activeMapByNovelRef.current[projectId] === mapId) {
+      const nextMap = mapsRef.current.find(map => map.novelId === projectId)
+      const nextActiveMaps = { ...activeMapByNovelRef.current, [projectId]: nextMap?.id || null }
+      activeMapByNovelRef.current = nextActiveMaps
+      setActiveMapByNovel(nextActiveMaps)
+      saveSettingsNow({ activeMapByNovel: nextActiveMaps })
+    }
+    return true
   }
 
   const renameMap = (mapId, name) => {
-    setMaps(prev => prev.map(m => m.id === mapId ? { ...m, name } : m))
+    const projectId = currentActiveProjectId()
+    const existing = mapsRef.current.find(map => map.id === mapId && map.novelId === projectId)
+    if (!existing) return null
+    const updated = { ...existing, name: String(name || '').trim() || existing.name }
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.map(map => map.id === mapId ? updated : map))
+    return updated
   }
 
   // Patches a specific map by id. Unlike updateActiveMapData, this doesn't rely on
   // activeMapByNovel/maps state having caught up with a just-created map — safe to
   // call right after addMap() in the same tick (e.g. importing multiple maps in a loop).
   const updateMapData = (mapId, updater) => {
-    if (!mapId) return
-    setMaps(prev => prev.map(m => {
+    const projectId = currentActiveProjectId()
+    const existing = mapsRef.current.find(map => map.id === mapId && map.novelId === projectId)
+    if (!existing || typeof updater !== 'function') return null
+    const rawPatch = updater(existing) || {}
+    const { id: _id, novelId: _novelId, created: _created, ...safePatch } = rawPatch
+    delete safePatch.mapData
+    delete safePatch.mapOverlay
+    const updated = { ...existing, ...safePatch }
+    commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.map(m => {
       if (m.id !== mapId) return m
-      const patch = updater(m) || {}
+      const patch = safePatch
       delete patch.mapData
       delete patch.mapOverlay
       return { ...m, ...patch }
     }))
+    return updated
   }
 
   const updateActiveMapData = (updater) => {
-    const currentActiveMapId = activeMapByNovel[activeNovelId] ?? maps.find(m => m.novelId === activeNovelId)?.id
-    updateMapData(currentActiveMapId, updater)
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
+    const currentActiveMapId = activeMapByNovelRef.current[projectId] ?? mapsRef.current.find(m => m.novelId === projectId)?.id
+    return updateMapData(currentActiveMapId, updater)
   }
 
   const updateCurrentYear = (value) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
     const next = Number(value)
     const normalized = Number.isFinite(next) ? next : 0
-    if (activeNovelId) {
-      setNovels(prev => prev.map(n => n.id === activeNovelId ? { ...n, currentYear: normalized } : n))
-    } else {
-      setCurrentYear(normalized)
-    }
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(n => n.id === projectId ? { ...n, currentYear: normalized } : n))
+    return normalized
   }
 
   // Comic page CRUD
@@ -2735,11 +3030,15 @@ export function useStore(userId = null, options = {}) {
   const novelComicPanels = comicPanels.filter(p => p.novelId === activeNovelId)
 
   const addComicPage = (issueId, data = {}) => {
+    const projectId = currentActiveProjectId()
+    const issue = chaptersRef.current.find(chapter => chapter.id === issueId && chapter.novelId === projectId)
+    if (!projectId || !issue) return null
     if (storageExceededCheck()) { return null }
-    const pagesInIssue = comicPagesRef.current.filter(p => p.novelId === activeNovelId && p.issueId === issueId)
+    const pagesInIssue = comicPagesRef.current.filter(p => p.novelId === projectId && p.issueId === issueId)
+    const { id: _id, novelId: _novelId, issueId: _issueId, createdAt: _createdAt, updatedAt: _updatedAt, ...safeData } = data || {}
     const page = {
       id: uid(),
-      novelId: activeNovelId,
+      novelId: projectId,
       issueId,
       order: pagesInIssue.length,
       title: '',
@@ -2754,43 +3053,61 @@ export function useStore(userId = null, options = {}) {
       productionNotes: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...data,
+      ...safeData,
     }
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, page])
     return page
   }
 
   const updateComicPage = (pageId, data) => {
+    const projectId = currentActiveProjectId()
+    const existing = comicPagesRef.current.find(page => page.id === pageId && page.novelId === projectId)
+    if (!existing) return null
+    const { id: _id, novelId: _novelId, issueId: _issueId, createdAt: _createdAt, ...safeData } = data || {}
+    const updated = { ...existing, ...safeData, updatedAt: new Date().toISOString() }
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev =>
-      prev.map(p => p.id === pageId ? { ...p, ...data, updatedAt: new Date().toISOString() } : p)
+      prev.map(p => p.id === pageId ? updated : p)
     )
+    return updated
   }
 
   const deleteComicPage = (pageId) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !comicPagesRef.current.some(page => page.id === pageId && page.novelId === projectId)) return false
+    const panelIds = comicPanelsRef.current.filter(panel => panel.pageId === pageId && panel.novelId === projectId).map(panel => panel.id)
     if (canSyncCloud) {
       deleteItem('comic_pages', userId, pageId).catch(console.error)
-      comicPanelsRef.current.filter(p => p.pageId === pageId).forEach(p => deleteItem('comic_panels', userId, p.id).catch(console.error))
+      panelIds.forEach(id => deleteItem('comic_panels', userId, id).catch(console.error))
     }
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.id !== pageId))
-    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.pageId !== pageId))
+    const panelIdSet = new Set(panelIds)
+    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => !panelIdSet.has(p.id)))
+    return true
   }
 
   const reorderComicPage = (issueId, orderedIds) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !chaptersRef.current.some(chapter => chapter.id === issueId && chapter.novelId === projectId) || !Array.isArray(orderedIds)) return false
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => {
-      const inIssue = new Map(prev.filter(p => p.issueId === issueId).map(p => [p.id, p]))
-      const rest = prev.filter(p => p.issueId !== issueId)
-      const reordered = orderedIds.map((id, i) => inIssue.has(id) ? { ...inIssue.get(id), order: i } : null).filter(Boolean)
-      return [...rest, ...reordered]
+      const scoped = prev.filter(p => p.novelId === projectId && p.issueId === issueId).sort((a, b) => a.order - b.order)
+      const byId = new Map(scoped.map(page => [page.id, page]))
+      const seen = new Set()
+      const requested = orderedIds.filter(id => byId.has(id) && !seen.has(id) && seen.add(id))
+      const finalIds = [...requested, ...scoped.map(page => page.id).filter(id => !seen.has(id))]
+      const reordered = new Map(finalIds.map((id, order) => [id, { ...byId.get(id), order }]))
+      return prev.map(page => reordered.get(page.id) || page)
     })
+    return true
   }
 
   const duplicateComicPage = (pageId) => {
-    const src = comicPagesRef.current.find(p => p.id === pageId)
+    const projectId = currentActiveProjectId()
+    const src = comicPagesRef.current.find(p => p.id === pageId && p.novelId === projectId)
     if (!src) return null
     const newPageId = uid()
-    const pagesInIssue = comicPagesRef.current.filter(p => p.issueId === src.issueId)
+    const pagesInIssue = comicPagesRef.current.filter(p => p.novelId === projectId && p.issueId === src.issueId)
     const newPage = { ...src, id: newPageId, order: pagesInIssue.length, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
-    const srcPanels = comicPanelsRef.current.filter(p => p.pageId === pageId)
+    const srcPanels = comicPanelsRef.current.filter(p => p.novelId === projectId && p.pageId === pageId)
     const newPanels = srcPanels.map(p => ({ ...p, id: uid(), pageId: newPageId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => [...prev, newPage])
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, ...newPanels])
@@ -2799,11 +3116,15 @@ export function useStore(userId = null, options = {}) {
 
   // Comic panel CRUD
   const addComicPanel = (pageId, data = {}) => {
+    const projectId = currentActiveProjectId()
+    const parent = comicPagesRef.current.find(page => page.id === pageId && page.novelId === projectId)
+    if (!projectId || !parent) return null
     if (storageExceededCheck()) { return null }
-    const panelsOnPage = comicPanelsRef.current.filter(p => p.pageId === pageId)
+    const panelsOnPage = comicPanelsRef.current.filter(p => p.novelId === projectId && p.pageId === pageId)
+    const { id: _id, novelId: _novelId, pageId: _pageId, createdAt: _createdAt, updatedAt: _updatedAt, ...safeData } = data || {}
     const panel = {
       id: uid(),
-      novelId: activeNovelId,
+      novelId: projectId,
       pageId,
       order: panelsOnPage.length,
       layoutHint: 'standard',
@@ -2819,40 +3140,56 @@ export function useStore(userId = null, options = {}) {
       status: 'outline',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...data,
+      ...safeData,
     }
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => [...prev, panel])
     return panel
   }
 
   const updateComicPanel = (panelId, data) => {
+    const projectId = currentActiveProjectId()
+    const existing = comicPanelsRef.current.find(panel => panel.id === panelId && panel.novelId === projectId)
+    if (!existing) return null
+    const { id: _id, novelId: _novelId, pageId: _pageId, createdAt: _createdAt, ...safeData } = data || {}
+    const updated = { ...existing, ...safeData, updatedAt: new Date().toISOString() }
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev =>
-      prev.map(p => p.id === panelId ? { ...p, ...data, updatedAt: new Date().toISOString() } : p)
+      prev.map(p => p.id === panelId ? updated : p)
     )
+    return updated
   }
 
   const deleteComicPanel = (panelId) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !comicPanelsRef.current.some(panel => panel.id === panelId && panel.novelId === projectId)) return false
     if (canSyncCloud) deleteItem('comic_panels', userId, panelId).catch(console.error)
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.id !== panelId))
+    return true
   }
 
   const reorderComicPanel = (pageId, orderedIds) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !comicPagesRef.current.some(page => page.id === pageId && page.novelId === projectId) || !Array.isArray(orderedIds)) return false
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => {
-      const onPage = new Map(prev.filter(p => p.pageId === pageId).map(p => [p.id, p]))
-      const rest = prev.filter(p => p.pageId !== pageId)
-      const reordered = orderedIds.map((id, i) => onPage.has(id) ? { ...onPage.get(id), order: i } : null).filter(Boolean)
-      return [...rest, ...reordered]
+      const scoped = prev.filter(p => p.novelId === projectId && p.pageId === pageId).sort((a, b) => a.order - b.order)
+      const byId = new Map(scoped.map(panel => [panel.id, panel]))
+      const seen = new Set()
+      const requested = orderedIds.filter(id => byId.has(id) && !seen.has(id) && seen.add(id))
+      const finalIds = [...requested, ...scoped.map(panel => panel.id).filter(id => !seen.has(id))]
+      const reordered = new Map(finalIds.map((id, order) => [id, { ...byId.get(id), order }]))
+      return prev.map(panel => reordered.get(panel.id) || panel)
     })
+    return true
   }
 
-  const addNovel = (data) => {
+  const addNovel = (data, { seedManuscript = true } = {}) => {
     if (freeProjectId !== null) {
       notifyReadOnly('free-limit')
       return null
     }
     if (storageExceededCheck()) { return null }
-    const novel = { id: uid(), createdAt: new Date().toISOString(), ...data }
-    const starter = buildStarterStructure(novel.id, novel.type)
+    const { id: _id, createdAt: _createdAt, ...safeData } = data || {}
+    const novel = { ...safeData, id: uid(), createdAt: new Date().toISOString() }
+    const starter = seedManuscript ? buildStarterStructure(novel.id, novel.type) : { acts: [], chapters: [], scenes: [] }
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...starter.chapters])
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...starter.scenes])
@@ -2868,8 +3205,13 @@ export function useStore(userId = null, options = {}) {
   const isFreeLockedProject = (id) => freeProjectId !== null && id !== freeProjectId
 
   const updateNovel = (id, data) => {
-    if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return }
-    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(n => n.id === id ? { ...n, ...data } : n))
+    if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return null }
+    const existing = novelsRef.current.find(novel => novel.id === id)
+    if (!existing) return null
+    const { id: _id, createdAt: _createdAt, type: _type, ...safeData } = data || {}
+    const updated = { ...existing, ...safeData }
+    commitLocal(novelsRef, setNovels, 'nf_novels', prev => prev.map(n => n.id === id ? updated : n))
+    return updated
   }
 
   const getProjectExportData = (id) => {
@@ -2908,52 +3250,98 @@ export function useStore(userId = null, options = {}) {
   const novelEras = eras.filter(e => e.novelId === activeNovelId)
 
   const addEra = (data) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
     if (storageExceededCheck()) { return null }
-    const era = { id: uid(), novelId: activeNovelId, createdAt: Date.now(), ...data } // eslint-disable-line react-hooks/purity
+    const { id: _id, novelId: _novelId, createdAt: _createdAt, ...safeData } = data || {}
+    const era = { ...safeData, id: uid(), novelId: projectId, createdAt: Date.now() } // eslint-disable-line react-hooks/purity
     setEras(prev => [...prev, era])
     return era
   }
-  const updateEra = (id, data) => setEras(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
+  const updateEra = (id, data) => {
+    const projectId = currentActiveProjectId()
+    const existing = eras.find(era => era.id === id && era.novelId === projectId)
+    if (!existing) return null
+    const { id: _id, novelId: _novelId, createdAt: _createdAt, ...safeData } = data || {}
+    const updated = { ...existing, ...safeData }
+    setEras(prev => prev.map(era => era.id === id ? updated : era))
+    if (Object.hasOwn(safeData, 'name')) {
+      const rename = prev => prev.map(entry => entry.eraId === id ? { ...entry, era: data.name } : entry)
+      commitLocal(timelineRef, setTimeline, 'nf_timeline', rename)
+      commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', rename)
+    }
+    return updated
+  }
   const deleteEra = (id) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !eras.some(era => era.id === id && era.novelId === projectId)) return false
     if (canSyncCloud) deleteItem('eras', userId, id).catch(console.error)
     setEras(prev => prev.filter(e => e.id !== id))
     // clear era reference from timeline entries
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev =>
       prev.map(e => e.eraId === id ? { ...e, eraId: null, era: '' } : e)
     )
+    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev =>
+      prev.map(entry => entry.eraId === id ? { ...entry, eraId: null, era: '' } : entry)
+    )
+    return true
   }
 
   const addSeries = (name) => {
-    const s = { id: uid(), name, createdAt: new Date().toISOString() }
+    if (storageExceededCheck()) return null
+    const normalizedName = String(name || '').trim()
+    if (!normalizedName) return null
+    const s = { id: uid(), name: normalizedName, createdAt: new Date().toISOString() }
     setSeries(prev => [...prev, s])
     return s
   }
   const deleteSeries = (id) => {
-    deleteMediaUrls([series.find(s => s.id === id)?.coverPhoto])
+    const existing = series.find(item => item.id === id)
+    if (!existing) return false
+    deleteMediaUrls([existing.coverPhoto])
     if (canSyncCloud) deleteItem('series_items', userId, id).catch(console.error)
     setSeries(prev => prev.filter(s => s.id !== id))
     setNovels(prev => prev.map(n => n.seriesId === id ? { ...n, seriesId: null } : n))
+    return true
   }
-  const updateSeries = (id, data) => setSeries(prev => prev.map(s => s.id === id ? { ...s, ...data } : s))
-  const updateSeriesContinuity = (id, patch) => setSeries(prev => prev.map(s => s.id === id ? {
-    ...s,
+  const updateSeries = (id, data) => {
+    const existing = series.find(item => item.id === id)
+    if (!existing) return null
+    const { id: _id, createdAt: _createdAt, ...safeData } = data || {}
+    const updated = { ...existing, ...safeData }
+    setSeries(prev => prev.map(item => item.id === id ? updated : item))
+    return updated
+  }
+  const updateSeriesContinuity = (id, patch) => {
+    const existing = series.find(item => item.id === id)
+    if (!existing) return null
+    const updated = {
+    ...existing,
     continuity: {
-      ...(s.continuity || {}),
+      ...(existing.continuity || {}),
       ...patch,
     },
     updatedAt: new Date().toISOString(),
-  } : s))
+    }
+    setSeries(prev => prev.map(item => item.id === id ? updated : item))
+    return updated
+  }
   const reorderSeries = (orderedIds) => setSeries(prev => {
     const map = new Map(prev.map(s => [s.id, s]))
-    return orderedIds.map(id => map.get(id)).filter(Boolean)
+    const seen = new Set()
+    const ordered = (orderedIds || []).filter(id => map.has(id) && !seen.has(id) && seen.add(id)).map(id => map.get(id))
+    return [...ordered, ...prev.filter(item => !seen.has(item.id))]
   })
   const reorderNovels = (orderedIds) => setNovels(prev => {
     const map = new Map(prev.map(n => [n.id, n]))
-    return orderedIds.map(id => map.get(id)).filter(Boolean)
+    const seen = new Set()
+    const ordered = (orderedIds || []).filter(id => map.has(id) && !seen.has(id) && seen.add(id)).map(id => map.get(id))
+    return [...ordered, ...prev.filter(item => !seen.has(item.id))]
   })
   const deleteNovel = (id) => {
-    if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return }
+    if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return false }
     const deletedNovel = novelsRef.current.find(n => n.id === id)
+    if (!deletedNovel) return false
     deleteMediaUrls([
       deletedNovel?.coverPhoto,
       deletedNovel?.bannerImage,
@@ -2995,6 +3383,7 @@ export function useStore(userId = null, options = {}) {
     setSelectedLoreEntryId(null)
     setSelectedIdeaEntryId(null)
     setSelectedSceneId(null)
+    return true
   }
 
   const importProjectFromData = (data) => {
@@ -3100,15 +3489,14 @@ export function useStore(userId = null, options = {}) {
       ...own(scene, sceneIdMap),
       chapterId: scene.chapterId ? at(chapterIdMap, scene.chapterId) : scene.chapterId,
     })
-    // { type: 'character'|'location'|'faction'|'lore', id, name } — see
-    // IdeasKanban.jsx's allEntities.
-    const linkedEntityIdMaps = { character: characterIdMap, location: locationIdMap, faction: factionIdMap, lore: loreIdMap }
+    const linkedEntityIdMaps = { character: characterIdMap, location: locationIdMap, faction: factionIdMap, lore: loreIdMap, event: timelineIdMap, chapter: chapterIdMap }
+    const remapIdeaEntity = entity => entity && linkedEntityIdMaps[entity.type]
+      ? { ...entity, id: at(linkedEntityIdMaps[entity.type], entity.id) } : entity
     const remapIdea = (idea) => ({
       ...own(idea, ideaIdMap),
-      linkedEntities: (idea.linkedEntities || []).map(entity => {
-        const idMap = linkedEntityIdMaps[entity.type]
-        return idMap ? { ...entity, id: at(idMap, entity.id) } : entity
-      }),
+      linkedEntities: (idea.linkedEntities || []).map(remapIdeaEntity),
+      linkedIdeas: mapIds(ideaIdMap, idea.linkedIdeas),
+      convertedTo: remapIdeaEntity(idea.convertedTo),
     })
     // Only 'location' is a currently-supported linkedEntity.entityType (see
     // YOWMapBuilder.jsx), but remap defensively by type in case that grows.
@@ -3348,12 +3736,6 @@ export function useStore(userId = null, options = {}) {
     freeProjectId !== null && activeNovelId !== null && activeNovelId !== freeProjectId
   )
 
-  const notifyReadOnly = (reason = 'trial-ended', extra = {}) => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('membership-read-only', { detail: { reason, ...extra } }))
-    }
-  }
-
   const storageExceededCheck = () => {
     if (!storageQuotaBytes) return false
     const used = storageUsedBytes
@@ -3387,7 +3769,7 @@ export function useStore(userId = null, options = {}) {
     },
     allProjectStats, activeProjectStats,
     characters: seriesScope(characters, 'characters'),
-    saveCharacter, saveCharacterJourney, updateCharacterJourneyForSeries, deleteCharacter,
+    saveCharacter, saveRelationship, saveCharacterJourney, updateCharacterJourneyForSeries, deleteCharacter,
     factions: novelFactions,
     saveFaction, deleteFaction,
     setFactions: (updater) => {
@@ -3407,7 +3789,7 @@ export function useStore(userId = null, options = {}) {
     eras: novelEras, addEra, updateEra, deleteEra,
     currentYear: activeNovel?.currentYear ?? currentYear, updateCurrentYear,
     loreEntries: novelLoreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
-    ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, deleteIdeaEntry,
+    ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, moveIdeaEntry, deleteIdeaEntry,
     whiteboard, updateWhiteboard, mapProject, updateMapProject, addMap, selectMap, deleteMap, renameMap, updateActiveMapData, updateMapData,
     addLocation: saveLocation,
     acts: novelActs, addAct, deleteAct, updateAct, reorderAct, moveAct,
@@ -3422,7 +3804,10 @@ export function useStore(userId = null, options = {}) {
     selectedLocationId, setSelectedLocationId,
     selectedLoreEntryId, setSelectedLoreEntryId,
     selectedIdeaEntryId, setSelectedIdeaEntryId,
-    selectedTimelineEventId, setSelectedTimelineEventId,
+    selectedTimelineEventId,
+    setSelectedTimelineEventId: selectTimelineEvent,
+    selectedHistoryEntryId,
+    setSelectedHistoryEntryId: selectHistoryEntry,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
     storySchedule: novelStorySchedule, addScheduleEvent, updateScheduleEvent, deleteScheduleEvent,
@@ -3443,11 +3828,11 @@ export function useStore(userId = null, options = {}) {
 
   const guardedMethods = [
     'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'ensureSampleProject', 'enrichSampleProject', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
-    'saveCharacter', 'saveCharacterJourney', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
+    'saveCharacter', 'saveRelationship', 'saveCharacterJourney', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
     'addEvent', 'updateEvent', 'deleteEvent', 'linkTimelineHistory', 'unlinkTimelineHistory', 'addHistoryEntry', 'updateHistoryEntry', 'deleteHistoryEntry',
     'addEra', 'updateEra', 'deleteEra',
     'updateCurrentYear', 'addLoreEntry', 'updateLoreEntry', 'deleteLoreEntry',
-    'addIdeaEntry', 'updateIdeaEntry', 'deleteIdeaEntry', 'updateWhiteboard', 'updateMapProject',
+    'addIdeaEntry', 'updateIdeaEntry', 'moveIdeaEntry', 'deleteIdeaEntry', 'updateWhiteboard', 'updateMapProject',
     'addMap', 'deleteMap', 'renameMap', 'updateActiveMapData', 'updateMapData', 'addLocation',
     'addAct', 'deleteAct', 'updateAct', 'reorderAct', 'moveAct',
     'addChapter', 'deleteChapter', 'updateChapter', 'reorderChapter', 'moveChapter',
