@@ -160,15 +160,40 @@ Deno.serve(async (req) => {
   const userId = record?.user_id as string | undefined
   if (!userId) return jsonResponse({ error: 'No user_id in payload', payload }, 400)
 
-  // Email can be passed directly from the frontend, or we look it up via admin API
-  let email = record?.email as string | undefined
-  if (!email) {
+  // Two legitimate callers, both trusted differently — audit finding P0-03:
+  // this previously trusted a caller-supplied `email` outright (with no
+  // check that it belonged to `user_id` at all), letting anyone with the
+  // public anon key make YOW send a real Supabase signup-confirmation link
+  // to an address of their choosing. Email is now NEVER taken from the
+  // request body — always derived server-side from a verified source:
+  //
+  // 1. The `on_user_profile_created` DB trigger (trigger_welcome_email(),
+  //    supabase/migrations/20260801_fix_welcome_email_http_post.sql) calls
+  //    this with the service-role key and only ever sends { user_id } — no
+  //    email at all — so look it up via the admin API in that case.
+  // 2. The browser client (AuthContext.jsx's sendWelcomeEmail) calls this
+  //    right after the user's own signup with their own fresh session
+  //    token — verify it and require the token's user id to match the
+  //    requested user_id, then use the verified token's own email.
+  const authHeader = req.headers.get('Authorization') || ''
+  const bearer = authHeader.replace(/^Bearer\s+/i, '')
+  let email: string | undefined
+
+  if (SUPABASE_SERVICE_ROLE_KEY && bearer === SUPABASE_SERVICE_ROLE_KEY) {
     const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)
     if (error || !data?.user?.email) {
-      console.error('getUserById error:', error?.message, 'userId:', userId, 'hasServiceKey:', !!SUPABASE_SERVICE_ROLE_KEY)
-      return jsonResponse({ error: 'User not found', detail: error?.message }, 404)
+      console.error('getUserById error:', error?.message, 'userId:', userId)
+      return jsonResponse({ error: 'User not found' }, 404)
     }
     email = data.user.email
+  } else if (bearer) {
+    const { data, error } = await supabaseAdmin.auth.getUser(bearer)
+    if (error || !data?.user || data.user.id !== userId || !data.user.email) {
+      return jsonResponse({ error: 'Unauthorized' }, 401)
+    }
+    email = data.user.email
+  } else {
+    return jsonResponse({ error: 'Unauthorized' }, 401)
   }
 
   // Generate a confirmation link so our email can verify the account
@@ -199,7 +224,7 @@ Deno.serve(async (req) => {
 
   if (!res.ok) {
     const body = await res.text()
-    console.error('Resend error:', body, 'key prefix:', RESEND_API_KEY.slice(0, 8))
+    console.error('Resend error:', body)
     return jsonResponse({ error: 'Failed to send email', detail: body }, 500)
   }
 

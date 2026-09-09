@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { StudioBoard, StudioButton, StudioEmpty } from '../presentation/Studio'
 import { getEnabledSections, getProjectTypeStage } from '../../constants/projectTypes'
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
+import { relativeTimeFromNow } from '../../utils/relativeTime'
+import { buildWritingGoalStreak, withDailyGoalHistory } from '../../utils/writingStreak'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
@@ -113,16 +115,17 @@ const getSceneHistory = scene => {
 const buildWritingAnalytics = (stats, dailyGoal) => {
   const today = startOfDay(Date.now())
   const dateKeys = Array.from({ length: 35 }, (_, index) => toDateKey(shiftDate(today, index - 34)))
-  const dailyWords = Object.fromEntries(dateKeys.map(key => [key, 0]))
+  const allDailyWords = {}
 
   stats.scenes.forEach(scene => {
     const history = getSceneHistory(scene)
     history.forEach((entry, index) => {
       const previous = index > 0 ? history[index - 1].words : 0
       const delta = Math.max(0, entry.words - previous)
-      if (dailyWords[entry.date] !== undefined) dailyWords[entry.date] += delta
+      allDailyWords[entry.date] = (allDailyWords[entry.date] || 0) + delta
     })
   })
+  const dailyWords = Object.fromEntries(dateKeys.map(key => [key, allDailyWords[key] || 0]))
 
   const progression = dateKeys.slice(-14).map(key => {
     const end = Date.parse(`${key}T23:59:59`)
@@ -141,6 +144,7 @@ const buildWritingAnalytics = (stats, dailyGoal) => {
 
   return {
     dailyWords,
+    allDailyWords,
     progression,
     todayWords,
     goalProgress: Math.min(100, Math.round((todayWords / goal) * 100)),
@@ -490,19 +494,27 @@ const openWriting = () =>
 const openProjectSettings = () =>
   window.dispatchEvent(new CustomEvent('open-project-settings'))
 
+// Left-nav redesign, Phase 2 (2026-08-18): "Jump back in" cards restyled to
+// match the Dashboard mockup's eyebrow/title/detail stack ("CONTINUE" /
+// "Outline" / "12 chapters planned") instead of the previous icon+label+
+// summary+link-style-cta layout. The per-room `cta` copy ("Open outline",
+// "View characters"...) is no longer rendered — the mockup uses the same
+// "Continue" eyebrow on every card — and `room.description` moved from an
+// always-visible line to the button's title attribute (still available on
+// hover, just not taking permanent space) rather than being deleted outright.
 const NavCard = ({ room, stats }) => (
   <button
     className={`overview-nav-card overview-nav-card-${room.accent}`}
     onClick={() => teleport(room.primarySection)}
     aria-label={`Open ${room.label}`}
+    title={room.description}
   >
     <span className="overview-nav-card-icon">{room.icon}</span>
     <span className="overview-nav-card-label">
+      <small className="overview-nav-card-eyebrow">Continue</small>
       <span>{room.label}</span>
       <small>{room.getSummary(stats)}</small>
     </span>
-    <span className="overview-nav-card-summary">{room.description}</span>
-    <span className="overview-nav-card-cta">{room.cta}</span>
   </button>
 )
 
@@ -528,8 +540,8 @@ const Sparkline = ({ points }) => {
   )
 }
 
-const ActivityHeatmap = ({ dailyWords, heatmapMax }) => (
-  <div className="analytics-heatmap" aria-label="Writing activity heatmap">
+const ActivityHeatmap = ({ dailyWords, heatmapMax, className = '' }) => (
+  <div className={`analytics-heatmap${className ? ` ${className}` : ''}`} aria-label="Writing activity heatmap">
     {Object.entries(dailyWords).map(([date, words]) => (
       <span
         key={date}
@@ -539,6 +551,109 @@ const ActivityHeatmap = ({ dailyWords, heatmapMax }) => (
     ))}
   </div>
 )
+
+// Left-nav redesign, Phase 2 (2026-08-18): the mockup's "front door" stat
+// row, writing-streak card, and recent-activity card, inserted above the
+// existing Story Snapshot/Manuscript Shape/Worldbuilding ledger panels
+// (which stay — they cover detail the mockup's simpler stat row doesn't).
+// Reuses existing data (stats, analytics.dailyWords, recentScenes) rather
+// than introducing a new data source, per the design handoff's own
+// instruction for this screen.
+const StatTile = ({ label, value, meta, progress }) => (
+  <div className="overview-stat-tile">
+    <span className="overview-stat-label">{label}</span>
+    <strong className="overview-stat-value">{value}</strong>
+    {progress != null && (
+      <div className="overview-stat-meter" aria-hidden="true">
+        <span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+      </div>
+    )}
+    {meta && <small className="overview-stat-meta">{meta}</small>}
+  </div>
+)
+
+// "Recent activity" is scoped to manuscript/session scene edits only — the
+// only record type in this codebase that currently tracks an edit
+// timestamp (lastModified/updatedAt/createdAt). Characters, Locations,
+// Lore, etc. have no such field today, so a genuine cross-entity activity
+// feed (as sketched in the mockup's sample copy, e.g. "Mira Kestrel —
+// Character updated yesterday") isn't buildable without adding that
+// tracking first — a real feature addition, not a layout change, and out
+// of scope for this pass. Flagged in PROGRESS.md as a known gap/decision.
+const RecentActivityCard = ({ scenes, stats, unitLabelLower, workspaceLabel }) => (
+  <section className="overview-activity-card panel-soft" aria-label="Recent activity">
+    <div className="overview-section-head">
+      <div>
+        <p className="studio-kicker">{workspaceLabel}</p>
+        <h2>Recent activity</h2>
+      </div>
+    </div>
+    <div className="overview-activity-list">
+      {scenes.length ? scenes.map(scene => (
+        <div key={scene.id} className="overview-activity-row">
+          <div>
+            <strong>{scene.title || 'Untitled scene'}</strong>
+            <small>{getRecentSceneContext(scene, stats) || pluralize(countWords(scene.content || ''), 'word')}</small>
+          </div>
+          <small>{relativeTimeFromNow(getSceneTimestamp(scene))}</small>
+        </div>
+      )) : (
+        <p className="analytics-empty">{`No ${unitLabelLower}s edited yet.`}</p>
+      )}
+    </div>
+  </section>
+)
+
+const WritingStreakCard = ({ dailyWords, dailyGoal, goalHistory, onSetGoal, days = 14 }) => {
+  const streak = buildWritingGoalStreak(dailyWords, dailyGoal, goalHistory, undefined, days)
+  const caption = !streak.enabled
+    ? 'Set a daily word goal to start a consecutive-day streak.'
+    : streak.todayMet
+      ? `Today's ${formatNumber(streak.goal)}-word goal is complete.`
+      : streak.currentStreak > 0
+        ? `${formatNumber(streak.remaining)} words today will keep your ${streak.currentStreak}-day streak alive.`
+        : `${formatNumber(streak.remaining)} words to start a new streak today.`
+
+  return (
+    <section className="overview-streak-card panel-soft" aria-label="Writing goal streak">
+      <div className="overview-section-head">
+        <div>
+          <p className="studio-kicker">Momentum</p>
+          <h2>Goal streak</h2>
+        </div>
+        <span className="overview-streak-range">{streak.enabled ? `${formatNumber(streak.goal)} words / day` : 'No daily goal'}</span>
+      </div>
+      <div className="overview-streak-summary">
+        <div><strong>{streak.currentStreak}</strong><span>Current streak</span></div>
+        <div><strong>{streak.bestStreak}</strong><span>Best streak</span></div>
+        <div><strong>{streak.totalGoalDays}</strong><span>Goals met</span></div>
+      </div>
+      <div className="overview-streak-days" role="list" aria-label={`Goal results for the last ${days} days`}>
+        {streak.recentDays.map(day => {
+          const weekday = new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })
+          const dayNumber = Number(day.date.slice(-2))
+          const status = day.goal <= 0 ? 'No goal set' : day.met ? 'Goal met' : 'Goal not met'
+          return (
+            <span
+              key={day.date}
+              role="listitem"
+              className={`${day.met ? 'is-met' : 'is-missed'}${day.isToday ? ' is-today' : ''}${day.goal <= 0 ? ' is-untracked' : ''}`}
+              title={`${formatShortDate(day.date)}: ${formatNumber(day.words)} of ${formatNumber(day.goal)} words — ${status}`}
+              aria-label={`${formatShortDate(day.date)}: ${status}, ${formatNumber(day.words)} of ${formatNumber(day.goal)} words`}
+            >
+              <small>{weekday}</small>
+              <b>{dayNumber}</b>
+            </span>
+          )
+        })}
+      </div>
+      <div className="overview-streak-footer">
+        <p className="overview-streak-caption">{caption}</p>
+        {!streak.enabled && onSetGoal && <button type="button" onClick={onSetGoal}>Set daily goal</button>}
+      </div>
+    </section>
+  )
+}
 
 const InsightMetric = ({ label, value, detail }) => (
   <div className="analytics-metric">
@@ -685,7 +800,6 @@ const CampaignProgressCard = ({ stats }) => {
 
 export default function ProjectDashboard({ store }) {
   const stats = store.activeProjectStats
-  const [dailyGoal, setDailyGoal] = useState(() => localStorage.getItem('nf-daily-word-goal') || '500')
   const [viewMode, setViewMode] = useState('overview')
   const [insightsCtaSeen, setInsightsCtaSeen] = useState(() => localStorage.getItem('nf-insights-cta-seen') === 'true')
   const openInsights = () => {
@@ -693,7 +807,15 @@ export default function ProjectDashboard({ store }) {
     setInsightsCtaSeen(true)
     setViewMode('insights')
   }
+  const project = stats?.project
+  const writingGoals = project?.writingGoals || {}
+  const dailyGoal = Number(writingGoals.daily) > 0 ? String(writingGoals.daily) : ''
+  const projectWordTarget = Number(writingGoals.manuscript || project?.wordCountTarget || project?.wordTarget || project?.targetWords || stats?.projectType.defaultWordTarget || 0)
   const analytics = useMemo(() => stats ? buildWritingAnalytics(stats, dailyGoal) : null, [stats, dailyGoal])
+  const goalStreak = useMemo(
+    () => analytics ? buildWritingGoalStreak(analytics.allDailyWords, dailyGoal, writingGoals.dailyHistory) : null,
+    [analytics, dailyGoal, writingGoals.dailyHistory]
+  )
   const readability = useMemo(() => stats ? buildReadability(stats.scenes) : null, [stats])
   const characterFocus = useMemo(() => stats ? buildCharacterFocus(stats) : [], [stats])
   const structureInsights = useMemo(() => stats ? buildStructureInsights(stats) : [], [stats])
@@ -720,7 +842,6 @@ export default function ProjectDashboard({ store }) {
     )
   }
 
-  const project = stats.project
   const isCampaign = Boolean(stats.campaignStats)
   const availableSections = new Set(getEnabledSections(project))
   const visibleRooms = NAV_ROOMS.filter(room => room.requires.some(id => availableSections.has(id)))
@@ -732,7 +853,6 @@ export default function ProjectDashboard({ store }) {
   const maxCharacterWords = Math.max(1, ...characterFocus.map(item => item.words))
   const maxStructureWords = Math.max(1, ...structureInsights.map(item => item.value))
   const maxLongestSceneWords = Math.max(1, ...(sceneInsights?.longest || []).map(item => item.words))
-  const projectWordTarget = Number(project.wordCountTarget || project.wordTarget || project.targetWords || stats.projectType.defaultWordTarget || 0)
   const projectWordProgress = projectWordTarget
     ? Math.round((stats.manuscriptWords / projectWordTarget) * 100)
     : null
@@ -750,8 +870,19 @@ export default function ProjectDashboard({ store }) {
 
   const updateDailyGoal = value => {
     const next = value.replace(/[^\d]/g, '')
-    setDailyGoal(next)
-    localStorage.setItem('nf-daily-word-goal', next)
+    store.updateNovel?.(project.id, {
+      writingGoals: withDailyGoalHistory(writingGoals, Number(next) || 0),
+    })
+  }
+
+  const updateManuscriptGoal = value => {
+    const next = value.replace(/[^\d]/g, '')
+    const numeric = Number(next) || 0
+    store.updateNovel?.(project.id, {
+      writingGoals: { ...writingGoals, manuscript: numeric },
+      wordCountTarget: numeric || null,
+      wordTarget: numeric || null,
+    })
   }
 
   return (
@@ -840,6 +971,42 @@ export default function ProjectDashboard({ store }) {
               </nav>
             )}
 
+            <div className="overview-stat-row" data-tour="dashboard-stat-row">
+              {isCampaign ? (
+                <StatTile
+                  label={`${(stats.projectType.structure?.level2 || 'Session').toLowerCase()}s planned`}
+                  value={formatNumber(stats.campaignStats.plannedSessions)}
+                  meta={stats.campaignStats.sessionTarget > 0 ? `${formatCompletion(stats.campaignStats.sessionProgress)} of target` : 'No target set'}
+                  progress={stats.campaignStats.sessionTarget > 0 ? stats.campaignStats.sessionProgress : null}
+                />
+              ) : (
+                <StatTile
+                  label="Words written"
+                  value={formatNumber(stats.manuscriptWords)}
+                  meta={projectWordTarget > 0 ? `of ${formatNumber(projectWordTarget)} target` : 'No target set'}
+                  progress={projectWordTarget > 0 ? projectWordProgress : null}
+                />
+              )}
+              <StatTile label={`${unitLabel}s`} value={formatNumber(stats.scenes.length)} />
+              <StatTile label="Characters" value={formatNumber(stats.characters.length)} />
+              <StatTile label="Locations" value={formatNumber(stats.locations.length)} />
+            </div>
+
+            <div className="overview-momentum-row">
+              <WritingStreakCard
+                dailyWords={analytics.allDailyWords}
+                dailyGoal={dailyGoal}
+                goalHistory={writingGoals.dailyHistory}
+                onSetGoal={openInsights}
+              />
+              <RecentActivityCard
+                scenes={recentScenes}
+                stats={stats}
+                unitLabelLower={unitLabelLower}
+                workspaceLabel={workspaceLabel}
+              />
+            </div>
+
             <div className="overview-columns">
               <section className="overview-section panel-soft">
                 <div className="overview-section-head">
@@ -904,28 +1071,6 @@ export default function ProjectDashboard({ store }) {
                   <LedgerRow label="Ideas" value={formatNumber(stats.ideaEntries.length)} />
                 </div>
               </section>
-
-              <section className="overview-section overview-section-wide panel-soft">
-                <div className="overview-section-head">
-                  <div>
-                    <p className="studio-kicker">{workspaceLabel}</p>
-                    <h2>{isCampaign ? 'Recent Session Notes' : 'Recent Writing'}</h2>
-                  </div>
-                </div>
-                <div className="overview-scene-list">
-                  {recentScenes.length > 0 ? recentScenes.map(scene => (
-                    <div key={scene.id} className="overview-scene">
-                      <span>
-                        <strong>{scene.title || 'Untitled scene'}</strong>
-                        {getRecentSceneContext(scene, stats) && <small>{getRecentSceneContext(scene, stats)}</small>}
-                      </span>
-                      <small>{pluralize(countWords(scene.content || ''), 'word')}</small>
-                    </div>
-                  )) : (
-                    <StudioEmpty title={`No ${unitLabelLower}s yet`} body={isCampaign ? `Add a ${unitLabelLower} when you are ready to plan the table action.` : `Start a ${unitLabelLower} when you are ready to put words on the page.`} />
-                  )}
-                </div>
-              </section>
             </div>
           </>
         ) : (
@@ -944,6 +1089,17 @@ export default function ProjectDashboard({ store }) {
                   aria-label="Daily writing goal"
                 />
               </label>
+              {!isCampaign && (
+                <label className="analytics-goal">
+                  <span>Word goal</span>
+                  <input
+                    value={projectWordTarget > 0 ? String(projectWordTarget) : ''}
+                    onChange={event => updateManuscriptGoal(event.target.value)}
+                    inputMode="numeric"
+                    aria-label="Manuscript word goal"
+                  />
+                </label>
+              )}
             </div>
 
             <div className="analytics-grid">
@@ -974,6 +1130,17 @@ export default function ProjectDashboard({ store }) {
                 </div>
                 <ActivityHeatmap dailyWords={analytics.dailyWords} heatmapMax={analytics.heatmapMax} />
                 <small>Last 35 days</small>
+              </div>
+
+              <div className="analytics-card">
+                <div className="analytics-card-head">
+                  <span>Goal streak <InfoTip title="Goal streak">Counts consecutive local-calendar days that reached the daily word goal. An unfinished today does not break yesterday's streak; changing the goal keeps earlier days tied to the target that applied then.</InfoTip></span>
+                  <strong>{goalStreak.enabled ? `${goalStreak.currentStreak} days` : 'Set goal'}</strong>
+                </div>
+                <div className="analytics-metric-stack">
+                  <InsightMetric label="Current" value={`${goalStreak.currentStreak} days`} detail={goalStreak.todayMet ? 'Goal met today' : goalStreak.enabled ? `${formatNumber(goalStreak.remaining)} words to keep it` : 'Add a daily goal above'} />
+                  <InsightMetric label="Personal best" value={`${goalStreak.bestStreak} days`} detail={`${goalStreak.totalGoalDays} total goal days`} />
+                </div>
               </div>
 
               <div className="analytics-card">

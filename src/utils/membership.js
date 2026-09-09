@@ -1,6 +1,7 @@
-import { BILLING } from './billingConfig'
+import { BILLING } from './billingConfig.js'
 
 export const TRIAL_DAYS = 28
+export const BETA_NOTICE_DAYS = 30
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const PAID_STATUSES = new Set(['active', 'trialing'])
@@ -20,10 +21,16 @@ const BETA_TESTER_PLAN = {
     'Full app access during beta',
     'Unlimited projects',
     'AI tools and advanced features unlocked',
-    'Beta access may be revoked when YOW leaves beta',
+    '30 days of full web access after launch, then Free unless you upgrade',
   ],
   badge: 'Beta',
   highlight: false,
+}
+
+// Legacy Supabase plan keys mapped to the current key used for display and quotas.
+// The raw key stays in `subscriptionPlan` — it identifies live entitlements, never rename it.
+const LEGACY_PLAN_KEY_ALIASES = {
+  premium_lifetime: 'premium_plus_lifetime', // £149 Lifetime Launch plan
 }
 
 // Storage quotas in bytes per plan key.
@@ -128,15 +135,14 @@ export const PLANS = [
     priceSuffix: 'once',
     storageLabelShort: '15 GB',
     description: 'Everything in Lifetime, plus permanent recognition as one of the first believers in YOW.',
-    longDescription: `Everything in Lifetime, plus more storage and lifetime cloud sync with no renewal, ever. Founder status is permanent and limited to ${FOUNDER_SLOTS_TOTAL} writers, ever.`,
-    keyBenefit: { icon: '✦', label: `Limited to ${FOUNDER_SLOTS_TOTAL} writers, ever` },
+    longDescription: `Everything in Lifetime, plus more storage and lifetime cloud sync with no renewal, ever. There are ${FOUNDER_SLOTS_TOTAL} Founder slots; full refunds or lost chargebacks remove access and return the slot.`,
+    keyBenefit: { icon: '✦', label: `Limited to ${FOUNDER_SLOTS_TOTAL} Founder slots` },
     features: [
       'Everything in Lifetime, plus:',
       '15 GB cloud storage',
       'Lifetime cloud sync — no renewal, ever',
       'Permanent Founder badge',
-      'Feature your debut work on YOW',
-      'Priority say in what we build next',
+      'Your work featured on a YOW-managed Founder profile',
     ],
     badge: 'Exclusive',
     highlight: false,
@@ -149,25 +155,78 @@ const dateFrom = (value) => {
   return date && !Number.isNaN(date.getTime()) ? date : null
 }
 
+// ── Client-writable profile fields ──────────────────────────────────────────
+// The account owner can write user_metadata directly via
+// supabase.auth.updateUser() — through this app's AuthContext.updateProfile()
+// or by calling the Supabase client SDK directly (devtools, a script with the
+// anon key, etc.). Nothing in user_metadata is trustworthy for entitlement,
+// which is why getMembership() above reads plan/status/beta/wasMonthly only
+// from server-controlled app_metadata. This allowlist is a second, defensive
+// layer: it keeps updateProfile() from ever writing (or round-tripping) an
+// entitlement-shaped key into user_metadata in the first place, and — because
+// every caller currently spreads the full existing user_metadata back in
+// alongside the field it's actually changing — it also quietly drops any
+// stale entitlement field a legacy write already left there. Only harmless,
+// genuinely user-owned profile/preference fields belong here.
+// See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
+export const PROFILE_METADATA_ALLOWLIST = new Set([
+  'full_name',
+  'theme',
+  'theme_radius_unit',
+  'theme_visual_strength',
+  'custom_theme_colors',
+  'tour_progress',
+  'reengagement_opt_out',
+  // The one free-tier project the user has chosen to keep editable — a
+  // self-service pick among the user's own projects, not a privilege.
+  'free_project_id',
+])
+
+export function sanitizeProfileMetadata(profile) {
+  const clean = {}
+  for (const key of Object.keys(profile || {})) {
+    if (PROFILE_METADATA_ALLOWLIST.has(key)) clean[key] = profile[key]
+  }
+  return clean
+}
+
 export function getMembership(user) {
   const createdAt = dateFrom(user?.created_at || user?.createdAt)
-  const trialStartedAt = dateFrom(user?.user_metadata?.trial_started_at) || createdAt || new Date()
+  const serverMetadata = user?.app_metadata || {}
+  const trialStartedAt = dateFrom(serverMetadata.trial_started_at) || createdAt || new Date()
   const trialEndsAt = new Date(trialStartedAt.getTime() + TRIAL_DAYS * DAY_MS)
   const now = new Date()
 
-  const subscriptionStatus = user?.app_metadata?.subscription_status || user?.user_metadata?.subscription_status || 'none'
-  const subscriptionPlan = user?.app_metadata?.subscription_plan || user?.user_metadata?.subscription_plan || null
-  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || user?.app_metadata?.beta_tester === true || user?.user_metadata?.beta_tester === true
+  // Entitlement data is server-controlled. Supabase user_metadata is editable
+  // by the signed-in browser client and must never grant paid or beta access.
+  const subscriptionStatus = serverMetadata.subscription_status || 'none'
+  const subscriptionPlan = serverMetadata.subscription_plan || null
+  // Whether this account has a real Stripe customer record. An account whose
+  // plan was set directly via SQL (support/manual comps) is paid locally but
+  // has no real Stripe subscription — the billing portal has nothing to act
+  // on for it (see api/create-customer-portal.js).
+  const hasStripeCustomer = !!serverMetadata.stripe_customer_id
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
   const isFounder = subscriptionPlan === 'founder'
-
-  const isPaid = PAID_STATUSES.has(subscriptionStatus) || isLifetime || isBetaTester
-  const isTrialActive = !isPaid && now < trialEndsAt
+  // A paid purchase takes precedence over a stale beta flag.
+  const hasPaidSubscription = subscriptionPlan !== BETA_TESTER_PLAN_KEY && PAID_STATUSES.has(subscriptionStatus)
+    && serverMetadata.beta_tester !== true
+  const hasPaidPlan = isLifetime || (subscriptionPlan === 'premium_monthly' && PAID_STATUSES.has(subscriptionStatus))
+  const hasBetaStatus = !hasPaidPlan && (subscriptionPlan === BETA_TESTER_PLAN_KEY || serverMetadata.beta_tester === true)
+  const betaNoticeStartedAt = dateFrom(serverMetadata.beta_notice_started_at)
+  const betaNoticeEndsAt = betaNoticeStartedAt ? new Date(betaNoticeStartedAt.getTime() + BETA_NOTICE_DAYS * DAY_MS) : null
+  // Invalid server notice dates fail closed; browser-editable dates never count.
+  const isBetaExpired = hasBetaStatus && !!serverMetadata.beta_notice_started_at && (!betaNoticeEndsAt || now >= betaNoticeEndsAt)
+  const isBetaTester = hasBetaStatus && !isBetaExpired
+  const isBetaNoticeActive = isBetaTester && !!betaNoticeStartedAt && now >= betaNoticeStartedAt
+  const betaDaysRemaining = isBetaNoticeActive ? Math.max(0, Math.ceil((betaNoticeEndsAt - now) / DAY_MS)) : null
+  const isPaid = hasPaidPlan || (!hasBetaStatus && hasPaidSubscription) || isBetaTester
+  const isTrialActive = !isPaid && !isBetaExpired && !serverMetadata.access_revoked_at && now < trialEndsAt
   const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS))
   const isFree = !isPaid && !isTrialActive
 
   // wasMonthly: downgraded from a monthly subscription — active project is locked
-  const wasMonthly = isFree && (user?.user_metadata?.was_monthly === true)
+  const wasMonthly = isFree && (serverMetadata.was_monthly === true)
 
   // 'plan' is the tier category used for CSS badge classes
   const plan = isPaid ? 'paid' : isTrialActive ? 'trial' : 'free'
@@ -175,7 +234,7 @@ export function getMembership(user) {
   const activePlanKey = isBetaTester
     ? BETA_TESTER_PLAN_KEY
     : isPaid
-      ? (subscriptionPlan || 'premium_monthly')
+      ? (LEGACY_PLAN_KEY_ALIASES[subscriptionPlan] || subscriptionPlan || 'premium_monthly')
     : isTrialActive
       ? 'trial'
       : 'free'
@@ -248,8 +307,15 @@ export function getMembership(user) {
     subscriptionStatus,
     isPaid,
     isBetaTester,
+    isBetaExpired,
+    isBetaNoticeActive,
+    betaNoticeStartedAt,
+    betaNoticeEndsAt,
+    betaDaysRemaining,
+    canDownloadDesktop: isLifetime || (isBetaTester && !isBetaNoticeActive),
     isLifetime,
     isFounder,
+    hasStripeCustomer,
     // Desktop app access is a Lifetime/Founder entitlement (PRD Phase 4).
     // Browser plan behavior is unchanged — this only gates the desktop shell.
     isDesktopEntitled: isLifetime || isBetaTester,
