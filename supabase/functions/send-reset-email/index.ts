@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
 import { jsonResponse } from '../_shared/cors.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -97,7 +98,7 @@ function resetEmailHtml(email: string, resetUrl: string) {
               </h1>
 
               <p style="margin:0 0 28px;font-size:15px;line-height:1.75;color:#7ab8b4;">
-                We received a request to reset the password for <span style="color:#e2f0ee;">${email}</span>.
+                We received a request to reset the password for <span style="color:#e2f0ee;">${escapeHtml(email)}</span>.
                 Click the button below to choose a new one. This link expires in 1 hour.
               </p>
 
@@ -135,7 +136,7 @@ function resetEmailHtml(email: string, resetUrl: string) {
                 Your Own World &middot; <a href="https://www.yourownworld.co.uk" style="color:#7ab8b4;text-decoration:none;">yourownworld.co.uk</a>
               </p>
               <p style="margin:0;font-size:11px;color:#4a8a86;">
-                You're receiving this because a reset was requested for ${email}
+                You're receiving this because a reset was requested for ${escapeHtml(email)}
               </p>
             </td>
           </tr>

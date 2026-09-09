@@ -28,7 +28,7 @@ function waitForServer(url, timeoutMs = 30000) {
       try {
         const res = await fetch(url)
         if (res.ok || res.status === 404) return resolve()
-      } catch {}
+      } catch { /* server not up yet — retry on next tick */ }
       if (Date.now() - start > timeoutMs) return reject(new Error('dev server did not start in time'))
       setTimeout(tick, 500)
     }

@@ -28,6 +28,10 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await editor.fill(sentence)
   await expect(editor).toHaveValue(sentence)
 
+  // Flush before reload — the IndexedDB backend persists asynchronously, so
+  // reloading immediately after typing can race it and lose the write (see
+  // autosave.spec.js's identical pattern for this same scenario).
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()
@@ -65,6 +69,11 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await expect.poll(async () => page.evaluate(() => {
     const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
     const novels = JSON.parse(raw || '[]')
+    if (novels.length !== 2) return novels.length
+    for (const key of ['nf_acts', 'nf_chapters', 'nf_scenes']) {
+      const rows = JSON.parse(window.__yowStorageBridge?.getItem(key) ?? localStorage.getItem(key) ?? '[]')
+      if (novels.some(novel => rows.filter(row => row.novelId === novel.id).length !== 1)) return -1
+    }
     return novels.length
   }), { timeout: 20_000 }).toBe(2)
 })

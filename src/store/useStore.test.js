@@ -24,7 +24,8 @@ vi.mock('../utils/projectStats', () => ({
 vi.mock('../utils/storageQuota', () => ({
   estimateStoreSize: vi.fn().mockReturnValue(0),
 }))
-vi.mock('../utils/uploadUserMedia', () => ({
+vi.mock('../utils/uploadUserMedia', async importOriginal => ({
+  ...(await importOriginal()),
   deleteUserMedia: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -267,15 +268,28 @@ describe('novel CRUD', () => {
     expect(result.current.novels[0].type).toBe('novel')
   })
 
+  it('can create an import destination without adding starter manuscript rows', () => {
+    const { result } = renderHook(() => useStore(null))
+    let novel
+    act(() => { novel = result.current.addNovel({ title: 'Restore', type: 'novel' }, { seedManuscript: false }) })
+    const data = result.current.getProjectExportData(novel.id)
+    expect(data.acts).toHaveLength(0)
+    expect(data.chapters).toHaveLength(0)
+    expect(data.scenes).toHaveLength(0)
+    expect(data.project.seedManuscript).toBeUndefined()
+  })
+
   it('updateNovel merges fields without losing existing data', () => {
     const { result } = renderHook(() => useStore(null))
 
     act(() => { result.current.addNovel({ title: 'Original', type: 'novel' }) })
     const id = result.current.novels[0].id
 
-    act(() => { result.current.updateNovel(id, { title: 'Updated' }) })
+    let updated
+    act(() => { updated = result.current.updateNovel(id, { id: 'hijack', type: 'comic', createdAt: 'replaced', title: 'Updated' }) })
 
     const novel = result.current.novels[0]
+    expect(updated).toBe(novel)
     expect(novel.title).toBe('Updated')
     expect(novel.type).toBe('novel')
     expect(novel.id).toBe(id)
@@ -287,11 +301,14 @@ describe('novel CRUD', () => {
     act(() => { result.current.addNovel({ title: 'To Delete', type: 'novel' }) })
     const id = result.current.novels[0].id
 
-    act(() => { result.current.deleteNovel(id) })
+    let deleted
+    act(() => { deleted = result.current.deleteNovel(id) })
 
+    expect(deleted).toBe(true)
     expect(result.current.novels).toHaveLength(0)
     const stored = JSON.parse(localStorage.getItem('nf_novels'))
     expect(stored).toHaveLength(0)
+    expect(result.current.deleteNovel('missing')).toBe(false)
   })
 
   it('updateNovel blocks edits to a non-active project on the free tier even while a different project is active', () => {
@@ -1067,7 +1084,7 @@ describe('getProjectExportData', () => {
     act(() => { result.current.addNovel({ title: 'A Comic', type: 'comic' }) })
     const id = result.current.novels[0].id
     act(() => { result.current.setActiveNovelId(id) })
-    act(() => { result.current.addComicPage('issue-1') })
+    act(() => { result.current.addComicPage(result.current.chapters[0].id) })
 
     const data = result.current.getProjectExportData(id)
     expect(data.comicPages).toHaveLength(1)
@@ -1075,9 +1092,557 @@ describe('getProjectExportData', () => {
   })
 })
 
+describe('remaining workspace integrity boundaries', () => {
+  it('keeps RPG character updates and deletes inside the active project', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n1', title: 'One', type: 'dnd_campaign' }, { id: 'n2', title: 'Two', type: 'dnd_campaign' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n1'))
+    localStorage.setItem('nf_rpg_characters', JSON.stringify([{ id: 'pc1', novelId: 'n1', name: 'One' }, { id: 'pc2', novelId: 'n2', name: 'Two' }]))
+    const { result } = renderHook(() => useStore(null))
+    const staleSave = result.current.saveRpgCharacter
+
+    let saved
+    act(() => { saved = result.current.saveRpgCharacter({ id: 'hijack', novelId: 'n2', name: 'Updated' }, 'pc1') })
+    expect(saved).toBe('pc1')
+    expect(result.current.rpgCharacters[0]).toMatchObject({ id: 'pc1', novelId: 'n1', name: 'Updated' })
+    expect(result.current.saveRpgCharacter({ name: 'Foreign' }, 'pc2')).toBeNull()
+    expect(result.current.deleteRpgCharacter('pc2')).toBe(false)
+
+    act(() => { result.current.setActiveNovelId('n2') })
+    act(() => { expect(staleSave({ name: 'Stale' }, 'pc1')).toBeNull() })
+    expect(JSON.parse(localStorage.getItem('nf_rpg_characters')).find(character => character.id === 'pc1').name).toBe('Updated')
+  })
+
+  it('hides inherited factions without deleting shared media or links, then cleans links on physical deletion', () => {
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', projectOrder: ['n1', 'n2'], syncCategories: ['factions'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    localStorage.setItem('nf_factions', JSON.stringify([{ id: 'f', novelId: 'n1', name: 'Guild', logo: { image: 'yow-media:u/factions/guild.webp' } }]))
+    localStorage.setItem('nf_characters', JSON.stringify([{ id: 'c', novelId: 'n1', name: 'Member', factionId: 'f' }]))
+    localStorage.setItem('nf_rpg_characters', JSON.stringify([{ id: 'pc', novelId: 'n1', name: 'Member', factionIds: ['f', 'kept'] }]))
+    const { result } = renderHook(() => useStore(null))
+    vi.mocked(deleteUserMedia).mockClear()
+
+    act(() => { expect(result.current.deleteFaction('f', { scope: 'current' })).toBe(true) })
+    expect(JSON.parse(localStorage.getItem('nf_factions'))[0]).toMatchObject({ id: 'f', syncHiddenInIds: ['n2'] })
+    expect(JSON.parse(localStorage.getItem('nf_characters'))[0].factionId).toBe('f')
+    expect(JSON.parse(localStorage.getItem('nf_rpg_characters'))[0].factionIds).toEqual(['f', 'kept'])
+    expect(deleteUserMedia).not.toHaveBeenCalled()
+
+    act(() => { result.current.setActiveNovelId('n1') })
+    act(() => { expect(result.current.deleteFaction('f', { scope: 'all' })).toBe(true) })
+    expect(JSON.parse(localStorage.getItem('nf_characters'))[0].factionId).toBe('')
+    expect(JSON.parse(localStorage.getItem('nf_rpg_characters'))[0].factionIds).toEqual(['kept'])
+    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:u/factions/guild.webp')
+    expect(result.current.deleteFaction('missing')).toBe(false)
+  })
+
+  it('validates comic parents, protects identity, and preserves omitted records during partial reorders', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n1', title: 'One', type: 'comic' }, { id: 'n2', title: 'Two', type: 'comic' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n1'))
+    localStorage.setItem('nf_chapters', JSON.stringify([{ id: 'i1', novelId: 'n1', title: 'Issue One' }, { id: 'i2', novelId: 'n2', title: 'Issue Two' }]))
+    localStorage.setItem('nf_comicPages', JSON.stringify([{ id: 'a', novelId: 'n1', issueId: 'i1', order: 0 }, { id: 'b', novelId: 'n1', issueId: 'i1', order: 1 }, { id: 'c', novelId: 'n1', issueId: 'i1', order: 2 }, { id: 'foreign', novelId: 'n2', issueId: 'i2', order: 0 }]))
+    localStorage.setItem('nf_comicPanels', JSON.stringify([{ id: 'p1', novelId: 'n1', pageId: 'a', order: 0 }, { id: 'p2', novelId: 'n1', pageId: 'a', order: 1 }, { id: 'pf', novelId: 'n2', pageId: 'foreign', order: 0 }]))
+    const { result } = renderHook(() => useStore(null))
+
+    expect(result.current.addComicPage('i2')).toBeNull()
+    expect(result.current.addComicPanel('foreign')).toBeNull()
+    expect(result.current.updateComicPage('foreign', { title: 'Wrong' })).toBeNull()
+    expect(result.current.deleteComicPanel('pf')).toBe(false)
+    act(() => { result.current.updateComicPage('a', { id: 'hijack', novelId: 'n2', issueId: 'i2', title: 'Safe' }) })
+    expect(result.current.comicPages.find(page => page.id === 'a')).toMatchObject({ id: 'a', novelId: 'n1', issueId: 'i1', title: 'Safe' })
+
+    act(() => { expect(result.current.reorderComicPage('i1', ['c'])).toBe(true) })
+    expect([...result.current.comicPages].sort((a, b) => a.order - b.order).map(page => page.id)).toEqual(['c', 'a', 'b'])
+    act(() => { expect(result.current.reorderComicPanel('a', ['p2'])).toBe(true) })
+    expect([...result.current.comicPanels].sort((a, b) => a.order - b.order).map(panel => panel.id)).toEqual(['p2', 'p1'])
+    expect(JSON.parse(localStorage.getItem('nf_comicPages')).find(page => page.id === 'foreign')).toMatchObject({ novelId: 'n2', issueId: 'i2' })
+    expect(JSON.parse(localStorage.getItem('nf_comicPanels')).find(panel => panel.id === 'pf')).toMatchObject({ novelId: 'n2', pageId: 'foreign' })
+  })
+
+  it('keeps unlisted series and projects when an ordering payload is partial', () => {
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2', 'n3'].map(id => ({ id, title: id }))))
+    localStorage.setItem('nf_series', JSON.stringify(['s1', 's2', 's3'].map(id => ({ id, name: id }))))
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.reorderSeries(['s3']); result.current.reorderNovels(['n2']) })
+    expect(result.current.series.map(item => item.id)).toEqual(['s3', 's1', 's2'])
+    expect(result.current.novels.map(item => item.id)).toEqual(['n2', 'n1', 'n3'])
+  })
+})
+
+describe('timeline and history consistency', () => {
+  const setup = () => {
+    const hook = renderHook(() => useStore(null))
+    act(() => { hook.result.current.addNovel({ title: 'Chronicle', type: 'novel' }) })
+    return hook
+  }
+
+  it('loads standalone history repeatedly without manufacturing unlinked timeline copies', () => {
+    const { result } = renderHook(() => useStore(null))
+    const history = [{ id: 'h', novelId: 'n', title: 'Myth', startYear: 0, endYear: 9, eraId: 'era', linkedCharacters: ['c'], linkedLocations: ['l'], content: 'Original' }]
+    const snapshot = { novels: [{ id: 'n', title: 'World', type: 'novel' }], activeNovelId: 'n', timeline: [], worldHistory: history }
+    act(() => { result.current.importData(snapshot) })
+    act(() => { result.current.importData(result.current.getLocalSnapshot()) })
+    expect(result.current.timeline).toEqual([])
+    expect(result.current.worldHistory).toEqual(history)
+    expect(JSON.parse(localStorage.getItem('nf_timeline'))).toEqual([])
+  })
+
+  it('keeps history and timeline selection identities separate even when IDs collide', () => {
+    const { result } = setup()
+    act(() => { result.current.setSelectedTimelineEventId('same') })
+    expect(result.current.selectedHistoryEntryId).toBeNull()
+    act(() => { result.current.setSelectedHistoryEntryId('same') })
+    expect(result.current.selectedHistoryEntryId).toBe('same')
+    expect(result.current.selectedTimelineEventId).toBeNull()
+    act(() => { result.current.setSelectedTimelineEventId('next') })
+    expect(result.current.selectedHistoryEntryId).toBeNull()
+  })
+
+  it.each(['timeline', 'history'])('hides inherited %s in one project without deleting the earlier row or clearing its links', source => {
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', name: 'Saga', projectOrder: ['n1', 'n2'], syncCategories: ['timeline', 'worldhistory'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    localStorage.setItem('nf_timeline', JSON.stringify([{ id: 't', novelId: 'n1', title: 'Event', worldHistoryEntryId: 'h' }]))
+    localStorage.setItem('nf_worldHistory', JSON.stringify([{ id: 'h', novelId: 'n1', title: 'History', timelineEventId: 't' }]))
+    const { result } = renderHook(() => useStore(null))
+    act(() => {
+      if (source === 'timeline') expect(result.current.deleteEvent('t', { scope: 'current' })).toBe(true)
+      else expect(result.current.deleteHistoryEntry('h', { scope: 'current' })).toBe(true)
+    })
+    expect(JSON.parse(localStorage.getItem('nf_timeline'))).toEqual([expect.objectContaining({ id: 't', worldHistoryEntryId: 'h' })])
+    expect(JSON.parse(localStorage.getItem('nf_worldHistory'))).toEqual([expect.objectContaining({ id: 'h', timelineEventId: 't' })])
+    expect(source === 'timeline' ? result.current.timeline : result.current.worldHistory).toEqual([])
+  })
+
+  it('deletes a history record while keeping its timeline event and clearing only its mirror pointer', () => {
+    const { result } = setup()
+    let entry
+    act(() => { entry = result.current.addHistoryEntry({ title: 'History' }, { createTimeline: true }) })
+    act(() => { expect(result.current.deleteHistoryEntry(entry.id)).toBe(true) })
+    expect(result.current.worldHistory).toEqual([])
+    expect(result.current.timeline).toEqual([expect.objectContaining({ id: entry.timelineEventId, title: 'History', worldHistoryEntryId: null })])
+    act(() => { expect(result.current.deleteHistoryEntry('missing')).toBe(false) })
+  })
+
+  it('mirrors content, ranges, eras and entity links and preserves the link through partial edits', () => {
+    const { result } = setup()
+    let event
+    act(() => { event = result.current.addEvent({ title: 'Founding', date: 'Year 0', startYear: 0, endYear: 10, eraId: 'era', era: 'Old', linkedCharacters: ['c'], linkedLocations: ['l'], description: 'First text' }) })
+    expect(result.current.worldHistory[0]).toMatchObject({ id: event.worldHistoryEntryId, timelineEventId: event.id, startYear: 0, endYear: 10, eraId: 'era', linkedCharacters: ['c'], linkedLocations: ['l'], content: 'First text' })
+    act(() => { result.current.updateEvent(event.id, { description: 'Changed' }) })
+    expect(result.current.timeline[0].worldHistoryEntryId).toBe(event.worldHistoryEntryId)
+    expect(result.current.worldHistory[0]).toMatchObject({ content: 'Changed', endYear: 10, eraId: 'era', timelineEventId: event.id })
+    act(() => { result.current.updateHistoryEntry(event.worldHistoryEntryId, { content: 'Changed from history', endYear: null }) })
+    expect(result.current.timeline[0]).toMatchObject({ description: 'Changed from history', endYear: null, worldHistoryEntryId: event.worldHistoryEntryId })
+    expect(JSON.parse(localStorage.getItem('nf_timeline'))[0].description).toBe('Changed from history')
+  })
+
+  it('keeps ordinary timeline entries independent and returns the linked history entry on mirrored creation', () => {
+    const { result } = setup()
+    act(() => { result.current.addEvent({ title: 'Plot beat' }, { createHistory: false }) })
+    expect(result.current.worldHistory).toHaveLength(0)
+    let entry
+    act(() => { entry = result.current.addHistoryEntry({ title: 'History', content: 'Text', linkedCharacters: ['c'] }, { createTimeline: true }) })
+    expect(entry.timelineEventId).toBeTruthy()
+    expect(result.current.timeline.find(event => event.id === entry.timelineEventId)).toMatchObject({ description: 'Text', linkedCharacters: ['c'], worldHistoryEntryId: entry.id })
+  })
+
+  it.each(['timeline', 'history'])('supports explicit unlink from %s without reconnecting on the next edit', source => {
+    const { result } = setup()
+    let event
+    act(() => { event = result.current.addEvent({ title: 'Linked' }) })
+    act(() => {
+      if (source === 'timeline') result.current.updateEvent(event.id, { linkedHistoryEntryId: null })
+      else result.current.updateHistoryEntry(event.worldHistoryEntryId, { linkedTimelineEventId: null })
+    })
+    act(() => { result.current.updateEvent(event.id, { description: 'Independent' }) })
+    expect(result.current.timeline[0].worldHistoryEntryId).toBeNull()
+    expect(result.current.worldHistory[0].timelineEventId).toBeNull()
+    expect(result.current.worldHistory[0].content).not.toBe('Independent')
+  })
+
+  it('relinks one-to-one and clears both previous counterpart references', () => {
+    const { result } = setup()
+    let first, second
+    act(() => { first = result.current.addEvent({ title: 'First' }) })
+    act(() => { second = result.current.addEvent({ title: 'Second' }) })
+    act(() => { result.current.linkTimelineHistory(first.id, second.worldHistoryEntryId) })
+    expect(result.current.timeline.find(event => event.id === first.id).worldHistoryEntryId).toBe(second.worldHistoryEntryId)
+    expect(result.current.timeline.find(event => event.id === second.id).worldHistoryEntryId).toBeNull()
+    expect(result.current.worldHistory.find(entry => entry.id === first.worldHistoryEntryId).timelineEventId).toBeNull()
+    expect(result.current.worldHistory.find(entry => entry.id === second.worldHistoryEntryId).timelineEventId).toBe(first.id)
+  })
+
+  it('ignores updates to missing records or explicit missing counterpart targets', () => {
+    const { result } = setup()
+    let event
+    act(() => { event = result.current.addEvent({ title: 'Independent' }, { createHistory: false }) })
+    const before = localStorage.getItem('nf_timeline')
+    act(() => { expect(result.current.updateEvent('missing', { title: 'No' })).toBeNull() })
+    act(() => { expect(result.current.updateEvent(event.id, { worldHistoryEntryId: 'missing' })).toBeNull() })
+    expect(localStorage.getItem('nf_timeline')).toBe(before)
+  })
+
+  it.each(['timeline', 'history'])('clears an orphaned %s mirror pointer on an ordinary edit', source => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'Chronicle', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    const key = source === 'timeline' ? 'nf_timeline' : 'nf_worldHistory'
+    const linkField = source === 'timeline' ? 'worldHistoryEntryId' : 'timelineEventId'
+    localStorage.setItem(key, JSON.stringify([{ id: 'orphan', novelId: 'n', title: 'Old', [linkField]: 'missing' }]))
+    const { result } = renderHook(() => useStore(null))
+    act(() => {
+      if (source === 'timeline') result.current.updateEvent('orphan', { title: 'Changed' })
+      else result.current.updateHistoryEntry('orphan', { title: 'Changed' })
+    })
+    expect(JSON.parse(localStorage.getItem(key))[0]).toMatchObject({ title: 'Changed', [linkField]: null })
+  })
+
+  it('only unlinks the requested current pair, preserving unrelated mirrors', () => {
+    const { result } = setup()
+    let first, second
+    act(() => { first = result.current.addEvent({ title: 'First' }) })
+    act(() => { second = result.current.addEvent({ title: 'Second' }) })
+    act(() => { result.current.unlinkTimelineHistory(first.id, second.worldHistoryEntryId) })
+    expect(result.current.timeline.find(event => event.id === first.id).worldHistoryEntryId).toBe(first.worldHistoryEntryId)
+    act(() => { result.current.unlinkTimelineHistory(first.id, first.worldHistoryEntryId) })
+    expect(result.current.timeline.find(event => event.id === first.id).worldHistoryEntryId).toBeNull()
+    expect(result.current.worldHistory.find(entry => entry.id === first.worldHistoryEntryId).timelineEventId).toBeNull()
+    expect(result.current.worldHistory.find(entry => entry.id === second.worldHistoryEntryId).timelineEventId).toBe(second.id)
+  })
+
+  it('cleans deleted character and location references from both mirrored records', () => {
+    const { result } = setup()
+    let characterId, location
+    act(() => { characterId = result.current.saveCharacter({ name: 'Character' }) })
+    act(() => { location = result.current.saveLocation({ name: 'Location' }) })
+    act(() => { result.current.addEvent({ title: 'Event', linkedCharacters: [characterId, 'kept-character'], linkedLocations: [location.id, 'kept-location'] }) })
+    act(() => { result.current.deleteCharacter(characterId) })
+    act(() => { result.current.deleteLocation(location.id) })
+    for (const key of ['nf_timeline', 'nf_worldHistory']) {
+      expect(JSON.parse(localStorage.getItem(key))[0]).toMatchObject({ linkedCharacters: ['kept-character'], linkedLocations: ['kept-location'] })
+    }
+  })
+
+  it('renames and deletes eras on both mirrored records', () => {
+    const { result } = setup()
+    let era
+    act(() => { era = result.current.addEra({ name: 'Old', startYear: 0, endYear: 10 }) })
+    act(() => { result.current.addEvent({ title: 'Founding', eraId: era.id, era: 'Old' }) })
+    act(() => { result.current.updateEra(era.id, { name: 'Renamed' }) })
+    expect(result.current.timeline[0].era).toBe('Renamed')
+    expect(result.current.worldHistory[0].era).toBe('Renamed')
+    act(() => { result.current.deleteEra(era.id) })
+    expect(result.current.timeline[0]).toMatchObject({ eraId: null, era: '' })
+    expect(result.current.worldHistory[0]).toMatchObject({ eraId: null, era: '' })
+  })
+
+  it.each(['timeline', 'history'])('forks inherited %s mirrors and updates later copies without modifying earlier projects', source => {
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2', 'n3'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', name: 'Saga', projectOrder: ['n1', 'n2', 'n3'], syncCategories: ['timeline', 'worldhistory'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    localStorage.setItem('nf_timeline', JSON.stringify([1, 3].map(index => ({ id: `t${index}`, novelId: `n${index}`, syncRootId: 't1', title: 'Old', worldHistoryEntryId: `h${index}` }))))
+    localStorage.setItem('nf_worldHistory', JSON.stringify([1, 3].map(index => ({ id: `h${index}`, novelId: `n${index}`, syncRootId: 'h1', title: 'Old', timelineEventId: `t${index}` }))))
+    const { result } = renderHook(() => useStore(null))
+    act(() => {
+      if (source === 'timeline') result.current.updateEvent('t1', { title: 'Changed', description: 'New content' })
+      else result.current.updateHistoryEntry('h1', { title: 'Changed', content: 'New content' })
+    })
+    const events = JSON.parse(localStorage.getItem('nf_timeline'))
+    const history = JSON.parse(localStorage.getItem('nf_worldHistory'))
+    expect(events.find(event => event.id === 't1')).toMatchObject({ title: 'Old', worldHistoryEntryId: 'h1' })
+    expect(history.find(entry => entry.id === 'h1')).toMatchObject({ title: 'Old', timelineEventId: 't1' })
+    const localEvent = events.find(event => event.novelId === 'n2')
+    const localHistory = history.find(entry => entry.novelId === 'n2')
+    expect(localEvent).toMatchObject({ title: 'Changed', description: 'New content', worldHistoryEntryId: localHistory.id })
+    expect(localHistory).toMatchObject({ title: 'Changed', content: 'New content', timelineEventId: localEvent.id })
+    expect(events.find(event => event.id === 't3')).toMatchObject({ title: 'Changed', worldHistoryEntryId: 'h3' })
+    expect(history.find(entry => entry.id === 'h3')).toMatchObject({ title: 'Changed', timelineEventId: 't3' })
+  })
+})
+
 // ─── character CRUD ──────────────────────────────────────────────────────────
 
+describe('Ideas Board persistence', () => {
+  const seed = (ideas = []) => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'World', type: 'novel' }, { id: 'other', title: 'Other', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    localStorage.setItem('nf_ideaEntries', JSON.stringify(ideas))
+  }
+  it('keeps legacy captures and explicit content clears consistent without touching unrelated fields', () => {
+    seed()
+    const { result } = renderHook(() => useStore(null))
+    let created
+    act(() => { created = result.current.addIdeaEntry({ title: 'Idea', body: 'Legacy capture', tags: ['keep'], linkedIdeas: ['other'] }) })
+    expect(created).toMatchObject({ body: 'Legacy capture', description: 'Legacy capture' })
+    act(() => { result.current.updateIdeaEntry(created.id, { description: '' }) })
+    expect(result.current.ideaEntries[0]).toMatchObject({ description: '', body: '', tags: ['keep'], linkedIdeas: ['other'] })
+    act(() => { result.current.updateIdeaEntry(created.id, { title: 'Renamed' }) })
+    expect(result.current.ideaEntries[0]).toMatchObject({ description: '', body: '', title: 'Renamed' })
+  })
+  it('allocates new positions from fresh column data and atomically rebalances duplicate ranks', () => {
+    seed(['a', 'b', 'c', 'd'].map(id => ({ id, title: id, novelId: 'n', order: 0, status: id === 'd' ? 'developing' : 'raw', tags: [id] })))
+    const { result } = renderHook(() => useStore(null))
+    act(() => { expect(result.current.moveIdeaEntry('d', 'raw', 'b').id).toBe('d') })
+    const ideas = [...result.current.ideaEntries].sort((a, b) => a.order - b.order)
+    expect(ideas.map(idea => idea.id)).toEqual(['a', 'd', 'b', 'c'])
+    expect(ideas.every(idea => idea.status === 'raw' && idea.tags[0] === idea.id)).toBe(true)
+    act(() => {
+      const first = result.current.addIdeaEntry({ title: 'First', status: 'raw' })
+      const second = result.current.addIdeaEntry({ title: 'Second', status: 'raw' })
+      expect(second.order).toBe(first.order + 1)
+    })
+    act(() => { expect(result.current.moveIdeaEntry('a', 'raw').id).toBe('a') })
+    expect([...result.current.ideaEntries].sort((a, b) => a.order - b.order).at(-1).id).toBe('a')
+  })
+  it('refuses stale expected content, missing/foreign targets, invalid moves and old-project callbacks', () => {
+    seed([{ id: 'a', novelId: 'n', title: 'A', description: 'Newer' }, { id: 'foreign', novelId: 'other', title: 'Other' }])
+    const { result } = renderHook(() => useStore(null))
+    const oldUpdate = result.current.updateIdeaEntry
+    act(() => {
+      expect(result.current.updateIdeaEntry('a', { description: 'Stale AI result' }, { expected: { description: 'Old' } })).toBeNull()
+      expect(result.current.updateIdeaEntry('foreign', { title: 'Wrong' })).toBeNull()
+      expect(result.current.deleteIdeaEntry('missing')).toBe(false)
+      expect(result.current.moveIdeaEntry('a', '__proto__')).toBeNull()
+      expect(result.current.moveIdeaEntry('a', 'raw', 'foreign')).toBeNull()
+    })
+    act(() => { result.current.setActiveNovelId('other') })
+    act(() => { expect(oldUpdate('a', { description: 'Wrong project' })).toBeNull() })
+    expect(JSON.parse(localStorage.getItem('nf_ideaEntries'))[0].description).toBe('Newer')
+  })
+  it('preserves earlier synced records and links on a hide, and cleans references only after physical deletion', () => {
+    seed()
+    localStorage.setItem('nf_localOwner', 'idea-user')
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2', 'n3'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', projectOrder: ['n1', 'n2', 'n3'], syncCategories: ['ideas'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    const original = { id: 'a', novelId: 'n1', syncRootId: 'a', title: 'Earlier', description: 'Original', order: 0 }
+    localStorage.setItem('nf_ideaEntries', JSON.stringify([original, { ...original, id: 'a3', novelId: 'n3' }, { id: 'ref', novelId: 'n1', title: 'Reference', linkedIdeas: ['a'] }]))
+    const { result } = renderHook(() => useStore('idea-user', { cloudSyncEnabled: true }))
+    vi.mocked(deleteItem).mockClear()
+    act(() => { expect(result.current.deleteIdeaEntry('a', { scope: 'current' })).toBe(true) })
+    expect(deleteItem).not.toHaveBeenCalled()
+    let raw = JSON.parse(localStorage.getItem('nf_ideaEntries'))
+    expect(raw.find(idea => idea.id === 'a')).toMatchObject({ description: 'Original', syncHiddenInIds: ['n2'] })
+    expect(raw.find(idea => idea.id === 'ref').linkedIdeas).toEqual(['a'])
+    act(() => { result.current.setActiveNovelId('n1') })
+    act(() => { expect(result.current.deleteIdeaEntry('a', { scope: 'all' })).toBe(true) })
+    raw = JSON.parse(localStorage.getItem('nf_ideaEntries'))
+    expect(raw.find(idea => idea.id === 'ref').linkedIdeas).toEqual([])
+    expect(deleteItem).toHaveBeenCalledWith('idea_entries', 'idea-user', 'a')
+    expect(deleteItem).toHaveBeenCalledWith('idea_entries', 'idea-user', 'a3')
+  })
+  it('uses the shared series-save path for batched ranking while preserving earlier projects', () => {
+    seed()
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2', 'n3'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', projectOrder: ['n1', 'n2', 'n3'], syncCategories: ['ideas'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    const earlier = ['a', 'b', 'c'].map(id => ({ id, syncRootId: id, novelId: 'n1', title: id, order: 0, status: 'raw' }))
+    localStorage.setItem('nf_ideaEntries', JSON.stringify([...earlier, ...earlier.map(idea => ({ ...idea, id: `${idea.id}3`, novelId: 'n3' }))]))
+    const { result } = renderHook(() => useStore(null))
+    let saved
+    act(() => { saved = result.current.moveIdeaEntry('c', 'raw', 'b') })
+    expect(saved.id).not.toBe('c')
+    const raw = JSON.parse(localStorage.getItem('nf_ideaEntries'))
+    expect(raw.filter(idea => idea.novelId === 'n1')).toEqual(earlier)
+    expect([...result.current.ideaEntries].sort((a, b) => a.order - b.order).map(idea => idea.syncRootId)).toEqual(['a', 'c', 'b'])
+    expect(raw.find(idea => idea.id === 'c3').order).toBe(saved.order)
+  })
+  it('guards every idea mutation for read-only projects', () => {
+    seed([{ id: 'a', novelId: 'n', title: 'A' }])
+    const { result } = renderHook(() => useStore(null, { readOnly: true }))
+    act(() => {
+      result.current.addIdeaEntry({ title: 'No' })
+      result.current.updateIdeaEntry('a', { title: 'No' })
+      result.current.moveIdeaEntry('a', 'developing')
+      result.current.deleteIdeaEntry('a')
+    })
+    expect(result.current.ideaEntries).toEqual([{ id: 'a', novelId: 'n', title: 'A' }])
+  })
+  it('round-trips chapter/event conversions and inter-idea references with fresh IDs', () => {
+    const { result } = renderHook(() => useStore(null))
+    const data = { project: { id: 'original', title: 'Imported', type: 'novel' },
+      acts: [{ id: 'act', title: 'Act' }], chapters: [{ id: 'chapter', actId: 'act', title: 'Chapter' }], timeline: [{ id: 'event', title: 'Event' }],
+      ideaEntries: [{ id: 'idea', title: 'Idea', linkedIdeas: ['other'], linkedEntities: [{ type: 'chapter', id: 'chapter' }, { type: 'event', id: 'event' }], convertedTo: { type: 'chapter', id: 'chapter', name: 'Chapter' } }, { id: 'other', title: 'Other' }],
+    }
+    let imported
+    act(() => { imported = result.current.importProjectFromData(data) })
+    const exported = result.current.getProjectExportData(imported.id)
+    const idea = exported.ideaEntries.find(entry => entry.title === 'Idea')
+    expect(idea.linkedIdeas).toEqual([exported.ideaEntries.find(entry => entry.title === 'Other').id])
+    expect(idea.linkedEntities).toEqual([{ type: 'chapter', id: exported.chapters[0].id }, { type: 'event', id: exported.timeline[0].id }])
+    expect(idea.convertedTo.id).toBe(exported.chapters[0].id)
+    expect(idea.convertedTo.id).not.toBe('chapter')
+  })
+  it('returns a real chapter record with a plain title and initial synopsis', () => {
+    seed()
+    const { result } = renderHook(() => useStore(null))
+    let parent
+    act(() => { parent = result.current.addAct('Act') })
+    let chapter
+    act(() => { chapter = result.current.addChapter(parent.id, 'Converted title', { synopsis: 'Idea text' }) })
+    expect(result.current.chapters.find(item => item.id === chapter.id)).toMatchObject({ title: 'Converted title', synopsis: 'Idea text' })
+  })
+})
+
+describe('directed relationship edits', () => {
+  const seed = () => {
+    const characters = [
+      { id: 'a', novelId: 'n', name: 'Ada', bio: 'Keep this', childIds: ['b'], relationships: { first: { targetId: 'b', type: 'friend', notes: 'First' }, duplicate: { targetId: 'b', type: 'friend' }, custom: { targetId: 'b', type: 'mentor', notes: 'Keep custom' } } },
+      { id: 'b', novelId: 'n', name: 'Ben', parentIds: ['a'], relationships: [{ targetId: 'a', type: 'enemy' }] },
+      { id: 'other', novelId: 'other-project', name: 'Other' },
+    ]
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'World', type: 'novel' }, { id: 'other-project', title: 'Other', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    localStorage.setItem('nf_characters', JSON.stringify(characters))
+    return characters
+  }
+
+  it('adds one directed type using fresh records and preserves all unrelated fields and reverse links', () => {
+    const original = seed()
+    const { result } = renderHook(() => useStore(null))
+    act(() => {
+      expect(result.current.saveRelationship('a', 'b', 'ally')).toBe('a')
+      expect(result.current.saveRelationship('a', 'b', 'romantic')).toBe('a')
+    })
+    const records = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(records[0].relationships).toEqual([...Object.values(original[0].relationships), { targetId: 'b', type: 'ally' }, { targetId: 'b', type: 'romantic' }])
+    expect(records[0]).toMatchObject({ bio: 'Keep this', childIds: ['b'] })
+    expect(records.slice(1)).toEqual(original.slice(1))
+  })
+
+  it('removes only the exact source/type, including duplicates, without clearing the opposite direction', () => {
+    const original = seed()
+    const { result } = renderHook(() => useStore(null))
+    act(() => { expect(result.current.saveRelationship('a', 'b', 'friend', { remove: true })).toBe('a') })
+    const records = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(records[0].relationships).toEqual([{ targetId: 'b', type: 'mentor', notes: 'Keep custom' }])
+    expect(records[0].childIds).toEqual(['b'])
+    expect(records[1]).toEqual(original[1])
+    act(() => { expect(result.current.saveRelationship('a', 'b', 'mentor', { remove: true })).toBe('a') })
+    expect(result.current.characters.find(character => character.id === 'a').relationships).toEqual([])
+  })
+
+  it('rejects missing, foreign, self, family and unsupported additions and no-ops existing facts', () => {
+    const original = seed()
+    const { result } = renderHook(() => useStore(null))
+    act(() => {
+      for (const args of [['a', 'gone', 'friend'], ['gone', 'a', 'ally'], ['a', 'other', 'friend'], ['a', 'a', 'ally'], ['a', 'b', 'spouse'], ['a', 'b', 'invented'], ['a', 'b', 'ally', { remove: true }]]) expect(result.current.saveRelationship(...args)).toBeNull()
+      expect(result.current.saveRelationship('a', 'b', 'friend')).toBe('a')
+    })
+    expect(JSON.parse(localStorage.getItem('nf_characters'))).toEqual(original)
+  })
+
+  it('guards read-only edits and refuses stale callbacks after a project switch', () => {
+    const original = seed()
+    const { result, rerender } = renderHook(({ readOnly }) => useStore(null, { readOnly }), { initialProps: { readOnly: true } })
+    act(() => { expect(result.current.saveRelationship('a', 'b', 'ally')).toBeUndefined() })
+    rerender({ readOnly: false })
+    const oldSave = result.current.saveRelationship
+    act(() => { result.current.setActiveNovelId('other-project') })
+    act(() => { expect(oldSave('a', 'b', 'ally')).toBeNull() })
+    expect(JSON.parse(localStorage.getItem('nf_characters'))).toEqual(original)
+  })
+
+  it('forks only the source, returns its real ID and resolves incoming links after both characters fork', () => {
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2', 'n3'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', projectOrder: ['n1', 'n2', 'n3'], syncCategories: ['characters'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    const a = { id: 'a', novelId: 'n1', name: 'Ada', syncRootId: 'a', relationships: [{ targetId: 'b', type: 'friend' }] }
+    const b = { id: 'b', novelId: 'n1', name: 'Ben', syncRootId: 'b', relationships: [{ targetId: 'a', type: 'enemy' }] }
+    localStorage.setItem('nf_characters', JSON.stringify([a, b, { ...b, id: 'b2', novelId: 'n2', syncSourceId: 'b' }, { ...a, id: 'a3', novelId: 'n3', syncSourceId: 'a' }]))
+    const { result } = renderHook(() => useStore(null))
+    // An existing fact addressed via an alias must not fork anything.
+    act(() => { expect(result.current.saveRelationship('a', 'b2', 'friend')).toBe('a') })
+    expect(JSON.parse(localStorage.getItem('nf_characters'))).toHaveLength(4)
+    let savedId
+    act(() => { savedId = result.current.saveRelationship('a', 'b', 'ally') })
+    expect(savedId).not.toBe('a')
+    const records = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(records).toHaveLength(5)
+    expect(records.find(character => character.id === 'a')).toEqual(a)
+    expect(records.find(character => character.id === 'b')).toEqual(b)
+    expect(records.find(character => character.id === 'b2').relationships).toEqual(b.relationships)
+    expect(records.find(character => character.id === savedId)).toMatchObject({ novelId: 'n2', syncRootId: 'a', relationships: [{ targetId: 'b', type: 'friend' }, { targetId: 'b2', type: 'ally' }] })
+    expect(records.find(character => character.id === 'a3').relationships).toEqual(records.find(character => character.id === savedId).relationships)
+    act(() => { expect(result.current.saveRelationship('b2', savedId, 'enemy', { remove: true })).toBe('b2') })
+    expect(result.current.characters.find(character => character.id === 'b2').relationships).toEqual([])
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(character => character.id === 'b')).toEqual(b)
+    act(() => { result.current.deleteCharacter('b2', { scope: 'current' }) })
+    act(() => { expect(result.current.saveRelationship(savedId, 'b', 'romantic')).toBeNull() })
+  })
+
+  it('rejects links to characters deleted since the form was opened', () => {
+    seed()
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.deleteCharacter('b') })
+    act(() => { expect(result.current.saveRelationship('a', 'b', 'ally')).toBeNull() })
+  })
+})
+
 describe('character CRUD', () => {
+  it('hides an inherited character without deleting its earlier record, portrait or references', () => {
+    localStorage.setItem('nf_localOwner', 'character-user')
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', projectOrder: ['n1', 'n2'], syncCategories: ['characters'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    localStorage.setItem('nf_characters', JSON.stringify([{ id: 'source', novelId: 'n1', name: 'Earlier', image: 'yow-media:u/characters/portrait.webp' }, { id: 'child', novelId: 'n1', name: 'Child', parentIds: ['source'], journey: { beats: [{ id: 'b', linkedCharacterId: 'source' }] } }]))
+    localStorage.setItem('nf_loreEntries', JSON.stringify([{ id: 'l', novelId: 'n1', characterIds: ['source'] }]))
+    vi.mocked(deleteItem).mockClear()
+    vi.mocked(deleteUserMedia).mockClear()
+    const { result } = renderHook(() => useStore('character-user', { cloudSyncEnabled: true }))
+    act(() => { expect(result.current.deleteCharacter('source', { scope: 'current' })).toBe(true) })
+    expect(result.current.characters.find(character => character.id === 'source')).toBeUndefined()
+    const raw = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(raw.find(character => character.id === 'source')).toMatchObject({ novelId: 'n1', syncHiddenInIds: ['n2'], image: 'yow-media:u/characters/portrait.webp' })
+    expect(raw.find(character => character.id === 'child')).toMatchObject({ parentIds: ['source'], journey: { beats: [{ id: 'b', linkedCharacterId: 'source' }] } })
+    expect(JSON.parse(localStorage.getItem('nf_loreEntries'))[0].characterIds).toEqual(['source'])
+    expect(deleteItem).not.toHaveBeenCalled()
+    expect(deleteUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('only deletes a replaced portrait after a successful save and when no saved record still uses it', () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    let first, second
+    const image = 'yow-media:u/characters/shared.webp'
+    act(() => { first = result.current.saveCharacter({ name: 'First', image }) })
+    act(() => { second = result.current.saveCharacter({ name: 'Second', image }) })
+    vi.mocked(deleteUserMedia).mockClear()
+    act(() => { result.current.saveCharacter({ image: '' }, 'missing') })
+    expect(deleteUserMedia).not.toHaveBeenCalled()
+    act(() => { result.current.saveCharacter({ image: '' }, first) })
+    expect(deleteUserMedia).not.toHaveBeenCalled()
+    act(() => { result.current.saveCharacter({ image: '' }, second) })
+    expect(deleteUserMedia).toHaveBeenCalledExactlyOnceWith(image)
+  })
+
+  it('retains portraits used by another entity even when private and legacy references differ', () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    let id
+    act(() => { id = result.current.saveCharacter({ name: 'Character', image: 'yow-media:u/characters/shared.webp' }) })
+    act(() => { result.current.saveLocation({ name: 'Gallery', image: 'https://x/storage/v1/object/public/user-media/u/characters/shared.webp' }) })
+    vi.mocked(deleteUserMedia).mockClear()
+    act(() => { result.current.deleteCharacter(id) })
+    expect(deleteUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('cleans affected references on physical deletion without rewriting unrelated records or missing targets', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'World', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    localStorage.setItem('nf_characters', JSON.stringify([{ id: 'c', novelId: 'n', name: 'Target' }, { id: 'kept', novelId: 'n', name: 'Kept' }]))
+    const collections = [['nf_loreEntries', 'characterIds'], ['nf_timeline', 'linkedCharacters'], ['nf_worldHistory', 'linkedCharacters'], ['nf_storySchedule', 'linkedCharacters'], ['nf_comicPages', 'characterIds'], ['nf_comicPanels', 'characterIds']]
+    collections.forEach(([key, field]) => localStorage.setItem(key, JSON.stringify([{ id: key, novelId: 'n', [field]: ['c', 'kept'] }])))
+    const { result } = renderHook(() => useStore(null))
+    const kept = result.current.characters.find(character => character.id === 'kept')
+    act(() => { expect(result.current.deleteCharacter('c')).toBe(true) })
+    expect(result.current.characters[0]).toBe(kept)
+    collections.forEach(([key, field]) => expect(JSON.parse(localStorage.getItem(key))[0][field]).toEqual(['kept']))
+    const before = localStorage.getItem('nf_characters')
+    act(() => { expect(result.current.deleteCharacter('missing')).toBe(false) })
+    expect(localStorage.getItem('nf_characters')).toBe(before)
+  })
+
   it('saveCharacter assigns a unique id per character', () => {
     const { result } = renderHook(() => useStore(null))
 
@@ -1118,6 +1683,45 @@ describe('character CRUD', () => {
     expect(sam.relationships).toEqual([])
   })
 
+  it('preserves reciprocal family fields during partial character and family-link saves', () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    const ids = {}
+    for (const name of ['Parent', 'Child', 'Partner', 'Focus']) {
+      act(() => { ids[name] = result.current.saveCharacter({ name }) })
+    }
+    act(() => { result.current.saveCharacter({ parentIds: [ids.Parent], childIds: [ids.Child], spouseIds: [ids.Partner] }, ids.Focus) })
+    const fact = { id: 'guardian-fact', sourceCharacterId: ids.Focus, targetCharacterId: ids.Child, kind: 'guardian', type: 'chosen' }
+    act(() => { result.current.saveCharacter({ familyLinks: [fact] }, ids.Focus) })
+    act(() => { result.current.saveCharacter({ bio: 'Updated biography' }, ids.Focus) })
+    const byName = Object.fromEntries(result.current.characters.map(character => [character.name, character]))
+    expect(byName.Parent.childIds).toEqual([ids.Focus])
+    expect(byName.Child.parentIds).toEqual([ids.Focus])
+    expect(byName.Partner.spouseIds).toEqual([ids.Focus])
+    expect(byName.Focus.familyLinks).toEqual([fact])
+
+    // An explicitly emptied field must still remove its reciprocal link only.
+    act(() => { result.current.saveCharacter({ spouseIds: [] }, ids.Focus) })
+    expect(result.current.characters.find(character => character.id === ids.Partner).spouseIds).toEqual([])
+    expect(result.current.characters.find(character => character.id === ids.Parent).childIds).toEqual([ids.Focus])
+    expect(result.current.characters.find(character => character.id === ids.Child).parentIds).toEqual([ids.Focus])
+  })
+
+  it('deletion removes structured facts from either endpoint and preserves unrelated facts', () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    const ids = []
+    for (const name of ['Deleted', 'Kept', 'Other']) {
+      act(() => { ids.push(result.current.saveCharacter({ name })) })
+    }
+    const link = (id, source, target) => ({ id, sourceCharacterId: source, targetCharacterId: target, kind: 'sibling' })
+    const unrelated = link('kept', ids[1], ids[2])
+    act(() => { result.current.saveCharacter({ familyLinks: [link('outgoing', ids[0], ids[1]), link('incoming', ids[1], ids[0]), unrelated] }, ids[1]) })
+    act(() => { result.current.deleteCharacter(ids[0]) })
+    expect(result.current.characters.find(character => character.id === ids[1]).familyLinks).toEqual([unrelated])
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(character => character.id === ids[1]).familyLinks).toEqual([unrelated])
+  })
+
   it('deleteCharacter cleans up the character\'s uploaded Storage portrait', () => {
     vi.mocked(deleteUserMedia).mockClear()
     const { result } = renderHook(() => useStore(null))
@@ -1133,6 +1737,47 @@ describe('character CRUD', () => {
 })
 
 describe('lore CRUD', () => {
+  it('preserves omitted references during partial edits and honors explicit clearing', () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    let entry
+    act(() => { entry = result.current.addLoreEntry({ title: 'Lore', characterIds: ['c'], locationIds: ['l'], loreIds: ['other'], tags: ['Magic'] }) })
+    act(() => { result.current.updateLoreEntry(entry.id, { content: 'Changed' }) })
+    expect(result.current.loreEntries[0]).toMatchObject({ characterIds: ['c'], locationIds: ['l'], loreIds: ['other'], tags: ['Magic'], content: 'Changed' })
+    act(() => { result.current.updateLoreEntry(entry.id, { loreIds: [] }) })
+    expect(JSON.parse(localStorage.getItem('nf_loreEntries'))[0]).toMatchObject({ loreIds: [], characterIds: ['c'], locationIds: ['l'] })
+    act(() => { expect(result.current.updateLoreEntry('missing', { title: 'No' })).toBeNull() })
+  })
+
+  it('hides inherited lore only in the current project, keeping the earlier record and incoming references', () => {
+    localStorage.setItem('nf_localOwner', 'lore-user')
+    localStorage.setItem('nf_novels', JSON.stringify(['n1', 'n2'].map(id => ({ id, title: id, type: 'novel', seriesId: 's' }))))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 's', projectOrder: ['n1', 'n2'], syncCategories: ['lore'] }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n2'))
+    localStorage.setItem('nf_loreEntries', JSON.stringify([{ id: 'source', novelId: 'n1', title: 'Earlier' }, { id: 'ref', novelId: 'n1', title: 'Reference', loreIds: ['source'] }]))
+    vi.mocked(deleteItem).mockClear()
+    const { result } = renderHook(() => useStore('lore-user', { cloudSyncEnabled: true }))
+    act(() => { expect(result.current.deleteLoreEntry('source', { scope: 'current' })).toBe(true) })
+    expect(result.current.loreEntries.find(entry => entry.id === 'source')).toBeUndefined()
+    const raw = JSON.parse(localStorage.getItem('nf_loreEntries'))
+    expect(raw.find(entry => entry.id === 'source')).toMatchObject({ novelId: 'n1', title: 'Earlier', syncHiddenInIds: ['n2'] })
+    expect(raw.find(entry => entry.id === 'ref').loreIds).toEqual(['source'])
+    expect(deleteItem).not.toHaveBeenCalled()
+  })
+
+  it('preserves unrelated records when physically deleting lore and ignores missing targets', () => {
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    let source, unrelated
+    act(() => { source = result.current.addLoreEntry({ title: 'Source' }) })
+    act(() => { unrelated = result.current.addLoreEntry({ title: 'Unrelated', loreIds: ['kept'] }) })
+    act(() => { expect(result.current.deleteLoreEntry(source.id)).toBe(true) })
+    expect(result.current.loreEntries.find(entry => entry.id === unrelated.id)).toBe(unrelated)
+    const before = localStorage.getItem('nf_loreEntries')
+    act(() => { expect(result.current.deleteLoreEntry('missing')).toBe(false) })
+    expect(localStorage.getItem('nf_loreEntries')).toBe(before)
+  })
+
   it('deleteLoreEntry strips the deleted entry out of other entries\' loreIds', () => {
     const { result } = renderHook(() => useStore(null))
 
@@ -1392,6 +2037,85 @@ describe('multi-tab structured record sync', () => {
     act(() => { tabB.result.current.discardRecordConflict(tabB.result.current.recordConflicts[0].id) })
     expect(tabB.result.current.recordConflicts).toHaveLength(0)
     expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab B')
+  })
+})
+
+describe('outline structure integrity', () => {
+  const setup = () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'Outline', type: 'novel' }, { id: 'other', title: 'Other', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    return renderHook(() => useStore(null))
+  }
+
+  it('requires active-project parents and starts ordering within each parent', () => {
+    const { result } = setup()
+    expect(result.current.addChapter('missing', 'Lost')).toBeNull()
+    expect(result.current.addScene('missing', 'Lost')).toBeNull()
+    let firstAct, secondAct, firstChapter, secondChapter
+    act(() => { firstAct = result.current.addAct('Act One'); secondAct = result.current.addAct('Act Two') })
+    act(() => { firstChapter = result.current.addChapter(firstAct.id, 'One'); secondChapter = result.current.addChapter(secondAct.id, 'Two') })
+    expect(firstChapter.order).toBe(0)
+    expect(secondChapter.order).toBe(0)
+    expect(result.current.moveChapter(firstChapter.id, 'missing', 0)).toBeNull()
+    expect(result.current.moveScene('missing', secondChapter.id, 0)).toBeNull()
+  })
+
+  it('refuses stale expected fields, foreign records, and callbacks from a previous project', () => {
+    const { result } = setup()
+    let outlineAct, outlineChapter, outlineScene
+    act(() => { outlineAct = result.current.addAct('Original') })
+    act(() => { outlineChapter = result.current.addChapter(outlineAct.id, 'Chapter') })
+    act(() => { outlineScene = result.current.addScene(outlineChapter.id, 'Scene') })
+    const oldUpdateAct = result.current.updateAct
+    const oldMoveChapter = result.current.moveChapter
+    const oldDeleteScene = result.current.deleteScene
+    const oldUpdateContent = result.current.updateSceneContent
+
+    act(() => {
+      expect(result.current.updateAct(outlineAct.id, { title: 'Stale' }, { expected: { title: 'Different' } })).toBeNull()
+      expect(result.current.updateChapter('missing', { title: 'No' })).toBeNull()
+    })
+    act(() => { result.current.setActiveNovelId('other') })
+    act(() => {
+      expect(oldUpdateAct(outlineAct.id, { title: 'Wrong project' })).toBeNull()
+      expect(oldMoveChapter(outlineChapter.id, outlineAct.id, 0)).toBeNull()
+      expect(oldDeleteScene(outlineScene.id)).toBe(false)
+      expect(oldUpdateContent(outlineScene.id, 'Wrong project')).toBeNull()
+    })
+    const storedAct = JSON.parse(localStorage.getItem('nf_acts')).find(item => item.id === outlineAct.id)
+    expect(storedAct.title).toBe('Original')
+    expect(localStorage.getItem(`nf_scene_content:${outlineScene.id}`)).toBe('')
+  })
+
+  it('returns saved records, normalizes metadata, and rebalances duplicate positions', () => {
+    const { result } = setup()
+    let firstAct, secondAct, chapter, scene
+    act(() => { firstAct = result.current.addAct(1); secondAct = result.current.addAct(2) })
+    act(() => { chapter = result.current.addChapter(firstAct.id, 3, { synopsis: 4, sessionPlan: { hooks: 5 } }) })
+    act(() => { scene = result.current.addScene(chapter.id, 6) })
+    act(() => {
+      expect(result.current.updateAct(firstAct.id, { synopsis: 7 })).toMatchObject({ synopsis: '7' })
+      expect(result.current.updateChapter(chapter.id, { sessionRecap: { summary: 8 } })).toMatchObject({ sessionRecap: { summary: '8' } })
+      expect(result.current.updateScene(scene.id, { synopsis: 9 })).toMatchObject({ synopsis: '9' })
+      expect(result.current.moveAct(secondAct.id, 0)).toMatchObject({ id: secondAct.id, order: 0 })
+    })
+    expect(result.current.acts.map(item => item.order).sort()).toEqual([0, 1])
+  })
+
+  it('deletes only the active hierarchy and clears affected journey links and selection', () => {
+    const { result } = setup()
+    let outlineAct, outlineChapter, outlineScene, characterId
+    act(() => { outlineAct = result.current.addAct('Act') })
+    act(() => { outlineChapter = result.current.addChapter(outlineAct.id, 'Chapter') })
+    act(() => { outlineScene = result.current.addScene(outlineChapter.id, 'Scene') })
+    act(() => { characterId = result.current.saveCharacter({ name: 'Hero', journey: { beats: [{ id: 'b', chapterId: outlineChapter.id, sceneId: outlineScene.id }] } }) })
+    act(() => { result.current.setWritingSceneId(outlineScene.id); result.current.setSelectedSceneId(outlineScene.id) })
+    act(() => { expect(result.current.deleteChapter(outlineChapter.id)).toBe(true) })
+    expect(result.current.scenes).toHaveLength(0)
+    expect(result.current.characters.find(item => item.id === characterId).journey.beats[0]).toMatchObject({ chapterId: '', sceneId: '' })
+    expect(result.current.writingSceneId).toBeNull()
+    expect(result.current.selectedSceneId).toBeNull()
+    expect(result.current.deleteChapter(outlineChapter.id)).toBe(false)
   })
 })
 
@@ -1729,6 +2453,75 @@ describe('immediate data-safety persistence', () => {
   })
 })
 
+describe('Schedule event persistence', () => {
+  it('normalizes valid creates and rejects incomplete or impossible dates', () => {
+    const { result } = renderHook(() => useStore('schedule-user', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Calendar', type: 'novel', scheduleCalendar: { months: [{ name: 'Short', days: 3 }], weekLength: 2 } }) })
+    let saved
+    act(() => { saved = result.current.addScheduleEvent({ title: 42, description: '', notes: 'STALE', year: '2', month: '1', day: '3', tags: [' #Plot ', 'plot'], linkedCharacters: ['c', 'c'] }) })
+    expect(saved).toMatchObject({ title: '42', description: '', year: 2, month: 1, day: 3, tags: ['plot'], linkedCharacters: ['c'] })
+    let invalid
+    act(() => { invalid = result.current.addScheduleEvent({ title: 'Outside', month: 2, day: 1 }) })
+    expect(invalid).toBeNull()
+    expect(result.current.storySchedule).toHaveLength(1)
+  })
+
+  it('refuses stale field expectations without overwriting newer event data', () => {
+    const { result } = renderHook(() => useStore('schedule-user', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Calendar', type: 'novel' }) })
+    let created
+    act(() => { created = result.current.addScheduleEvent({ title: 'Original', description: 'First' }) })
+    let firstSave
+    act(() => { firstSave = result.current.updateScheduleEvent(created.id, { description: 'Second' }, { expected: { description: 'First' } }) })
+    expect(firstSave.description).toBe('Second')
+    let refused
+    act(() => { refused = result.current.updateScheduleEvent(created.id, { title: 'Stale overwrite' }, { expected: { description: 'First' } }) })
+    expect(refused).toBeNull()
+    expect(result.current.storySchedule[0]).toMatchObject({ title: 'Original', description: 'Second' })
+  })
+
+  it('blocks old-project callbacks and foreign deletes', () => {
+    const { result } = renderHook(() => useStore('schedule-user', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'First', type: 'novel' }) })
+    let firstEvent
+    act(() => { firstEvent = result.current.addScheduleEvent({ title: 'First event' }) })
+    const staleAdd = result.current.addScheduleEvent
+    act(() => { result.current.addNovel({ title: 'Second', type: 'novel' }) })
+    let staleResult
+    act(() => { staleResult = staleAdd({ title: 'Wrong project' }) })
+    expect(staleResult).toBeNull()
+    let deleted
+    act(() => { deleted = result.current.deleteScheduleEvent(firstEvent.id) })
+    expect(deleted).toBe(false)
+    expect(JSON.parse(localStorage.getItem('nf_storySchedule')).some(item => item.id === firstEvent.id)).toBe(true)
+  })
+
+  it('cleans Schedule links only when a location is physically deleted', () => {
+    const { result } = renderHook(() => useStore('schedule-user', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Calendar', type: 'novel' }) })
+    let location
+    act(() => { location = result.current.saveLocation({ name: 'Old Keep' }) })
+    act(() => { result.current.addScheduleEvent({ title: 'Arrival', linkedLocations: [location.id] }) })
+    expect(result.current.storySchedule[0].linkedLocations).toEqual([location.id])
+    let deleted
+    act(() => { deleted = result.current.deleteLocation(location.id) })
+    expect(deleted).toBe(true)
+    expect(result.current.storySchedule[0].linkedLocations).toEqual([])
+    expect(result.current.deleteLocation('missing')).toBe(false)
+  })
+
+  it('keeps schedule mutations inert in read-only mode', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'Locked' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    localStorage.setItem('nf_localOwner', 'schedule-user')
+    const { result } = renderHook(() => useStore('schedule-user', { cloudSyncEnabled: false, readOnly: true }))
+    expect(result.current.addScheduleEvent({ title: 'Blocked' })).toBeNull()
+    expect(result.current.updateScheduleEvent('missing', { title: 'Blocked' })).toBeUndefined()
+    expect(result.current.deleteScheduleEvent('missing')).toBeUndefined()
+    expect(result.current.storySchedule).toEqual([])
+  })
+})
+
 // ─── storage quota enforcement ───────────────────────────────────────────────
 // A full-quota account could still type indefinitely into an existing scene —
 // storageExceededCheck only ever gated the add* actions (new scene/chapter/
@@ -1873,6 +2666,8 @@ describe('flushPendingSync', () => {
   it('sends a still-debounced push immediately instead of waiting out the delay', async () => {
     const { result } = renderHook(() => useStore('user-flush', { cloudSyncEnabled: true }))
     act(() => { result.current.finishRemoteLoad(true) })
+    act(() => { result.current.addNovel({ title: 'Campaign', type: 'dnd_campaign' }) })
+    vi.mocked(upsertItems).mockClear()
     act(() => { result.current.saveRpgCharacter({ name: 'Quick Exit' }) })
 
     // Still inside the 2s debounce window — nothing should have gone out yet.
