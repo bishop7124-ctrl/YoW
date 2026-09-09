@@ -963,6 +963,14 @@ export default function ProjectDashboard({ store }) {
               </section>
             )}
 
+            {visibleRooms.length > 0 && (
+              <nav className="overview-nav" data-tour="dashboard-quick-links" aria-label="Project areas">
+                {visibleRooms.map(room => (
+                  <NavCard key={room.id} room={room} stats={stats} />
+                ))}
+              </nav>
+            )}
+
             <div className="overview-stat-row" data-tour="dashboard-stat-row">
               {isCampaign ? (
                 <StatTile
@@ -998,14 +1006,6 @@ export default function ProjectDashboard({ store }) {
                 workspaceLabel={workspaceLabel}
               />
             </div>
-
-            {visibleRooms.length > 0 && (
-              <nav className="overview-nav" data-tour="dashboard-quick-links" aria-label="Project areas">
-                {visibleRooms.map(room => (
-                  <NavCard key={room.id} room={room} stats={stats} />
-                ))}
-              </nav>
-            )}
 
             <div className="overview-columns">
               <section className="overview-section panel-soft">
