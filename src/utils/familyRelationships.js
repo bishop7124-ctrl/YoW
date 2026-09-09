@@ -5,7 +5,7 @@ const FAMILY_SCOPES = new Set(['direct', 'immediate', 'extended', 'full'])
 
 const toArray = value => Array.isArray(value) ? value : []
 
-const fallbackId = (parts) => `family-${parts.filter(Boolean).join('-')}`
+const fallbackId = parts => `family-${parts.map(part => encodeURIComponent(String(part ?? ''))).join(':')}`
 
 export const FAMILY_FILTER_DEFAULTS = {
   scope: 'extended',
@@ -31,7 +31,7 @@ export const makeFamilyLink = ({
   knownPublicly = true,
   notes = '',
 }) => ({
-  id: id || fallbackId([sourceCharacterId, targetCharacterId, kind, direction, Date.now()]),
+  id: id || fallbackId([sourceCharacterId, targetCharacterId, kind, direction, type, status, Date.now()]),
   sourceCharacterId,
   targetCharacterId,
   kind: FAMILY_LINK_KINDS.has(kind) ? kind : 'parent_child',
@@ -69,10 +69,11 @@ const getOrientedLinkIds = (link) => {
   return [link.sourceCharacterId, link.targetCharacterId].sort()
 }
 
-const familyLinkFactKey = (link) => {
+const familyLinkPairKey = (link) => {
   const [firstId, secondId] = getOrientedLinkIds(link)
-  return [link.kind, firstId, secondId, link.type, link.status].join('|')
+  return JSON.stringify([link.kind, firstId, secondId])
 }
+const familyLinkFactKey = link => JSON.stringify([familyLinkPairKey(link), link.type, link.status])
 
 export function getFamilyLinks(characters = []) {
   const byId = new Set(characters.map(character => character.id))
@@ -82,7 +83,6 @@ export function getFamilyLinks(characters = []) {
   const add = (link) => {
     const normalized = normalizeExplicitLink(link)
     if (!normalized || !byId.has(normalized.sourceCharacterId) || !byId.has(normalized.targetCharacterId)) return
-    if (seenIds.has(normalized.id)) return
     const factKey = familyLinkFactKey(normalized)
     const existingIndex = indexByFact.get(factKey)
     if (existingIndex !== undefined) {
@@ -100,6 +100,9 @@ export function getFamilyLinks(characters = []) {
       seenIds.add(normalized.id)
       return
     }
+    // Reused imported IDs are not proof of identical facts. Disambiguate the
+    // read model rather than silently losing a different relationship.
+    if (seenIds.has(normalized.id)) normalized.id = fallbackId(['collision', normalized.id, factKey])
     indexByFact.set(factKey, links.length)
     seenIds.add(normalized.id)
     links.push(normalized)
@@ -110,9 +113,15 @@ export function getFamilyLinks(characters = []) {
   characters.forEach(character => {
     toArray(character.familyLinks).forEach(add)
   })
+  const explicitPairs = new Set(links.map(familyLinkPairKey))
+  const addLegacy = link => {
+    // Legacy arrays carry no type/status/privacy. They must not reintroduce a
+    // public biological edge over a structured secret/adoptive/former fact.
+    if (!explicitPairs.has(familyLinkPairKey(link))) add(link)
+  }
 
   characters.forEach(character => {
-    toArray(character.parentIds).forEach(parentId => add({
+    toArray(character.parentIds).forEach(parentId => addLegacy({
       id: fallbackId(['legacy-parent', parentId, character.id]),
       sourceCharacterId: parentId,
       targetCharacterId: character.id,
@@ -123,7 +132,7 @@ export function getFamilyLinks(characters = []) {
       knownPublicly: true,
     }))
 
-    toArray(character.childIds).forEach(childId => add({
+    toArray(character.childIds).forEach(childId => addLegacy({
       id: fallbackId(['legacy-child', character.id, childId]),
       sourceCharacterId: character.id,
       targetCharacterId: childId,
@@ -136,7 +145,7 @@ export function getFamilyLinks(characters = []) {
 
     toArray(character.spouseIds).forEach(spouseId => {
       const ordered = [character.id, spouseId].sort()
-      add({
+      addLegacy({
         id: fallbackId(['legacy-partner', ...ordered]),
         sourceCharacterId: ordered[0],
         targetCharacterId: ordered[1],
@@ -218,7 +227,7 @@ export function buildFamilyLookups(characters = [], filters = FAMILY_FILTER_DEFA
   sharedParentsBySiblingPair.forEach(({ leftId, rightId, parents }) => {
     const biological = parents.filter(parent => parent.leftLink.type === 'biological' && parent.rightLink.type === 'biological')
     const sourceLinks = parents.flatMap(parent => [parent.leftLink, parent.rightLink])
-    const type = biological.length ? 'biological' : parents[0].leftLink.type
+    const type = biological.length ? 'biological' : sourceLinks.find(link => link.type !== 'biological')?.type || 'unknown'
     const status = sourceLinks.some(link => link.status === 'disputed')
       ? 'disputed'
       : sourceLinks.some(link => link.status === 'secret' || link.status === 'hidden') ? 'secret' : 'active'
@@ -239,6 +248,7 @@ export function buildFamilyLookups(characters = [], filters = FAMILY_FILTER_DEFA
   return {
     links,
     linksById,
+    byId: new Map(characters.map(character => [character.id, character])),
     allLinkedCharacterIds,
     parentsByChild,
     childrenByParent,
@@ -249,8 +259,8 @@ export function buildFamilyLookups(characters = [], filters = FAMILY_FILTER_DEFA
   }
 }
 
-const typePrefix = (type, { forSibling = false } = {}) => {
-  if (type === 'adoptive') return forSibling ? 'Adoptive ' : 'Adoptive '
+const typePrefix = (type) => {
+  if (type === 'adoptive') return 'Adoptive '
   if (type === 'step') return 'Step-'
   if (type === 'chosen') return 'Chosen '
   if (type === 'magical') return 'Magical '
@@ -335,19 +345,10 @@ export function getFamilyScopeCharacterIds(lookups, focusId, scope = FAMILY_FILT
   if (!focusId) return included
 
   if (normalizedScope === 'direct') {
-    const queue = [focusId]
-    for (let cursor = 0; cursor < queue.length; cursor += 1) {
-      const id = queue[cursor]
-      const relatives = [
-        ...(lookups.parentsByChild.get(id) || []),
-        ...(lookups.childrenByParent.get(id) || []),
-      ]
-      relatives.forEach(relative => {
-        if (included.has(relative.id)) return
-        included.add(relative.id)
-        queue.push(relative.id)
-      })
-    }
+    // Walk up and down separately: turning back down from an ancestor would
+    // incorrectly include siblings, aunts/uncles and cousins in direct lineage.
+    walkAncestors(focusId, lookups, Infinity).forEach(relative => included.add(relative.id))
+    walkDescendants(focusId, lookups, Infinity).forEach(relative => included.add(relative.id))
     return included
   }
 
@@ -373,14 +374,14 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
   if (!focusId) return []
   const mergedFilters = { ...FAMILY_FILTER_DEFAULTS, ...filters }
   const scope = FAMILY_SCOPES.has(mergedFilters.scope) ? mergedFilters.scope : FAMILY_FILTER_DEFAULTS.scope
-  const byId = new Map(characters.map(character => [character.id, character]))
+  const byId = lookups.byId || new Map(characters.map(character => [character.id, character]))
   const relationships = new Map()
   const lineageDistance = scope === 'immediate' ? 1 : scope === 'extended' ? 3 : characters.length + 1
 
   walkAncestors(focusId, lookups, lineageDistance).forEach(item => addRelationship(relationships, {
     fromCharacterId: focusId,
     toCharacterId: item.id,
-    label: ancestorLabel(item.distance, 'up', item.type),
+    label: item.distance === 1 ? directLabel('Parent', item.links[0]) : ancestorLabel(item.distance, 'up', item.type),
     category: 'ancestor',
     distance: item.distance,
     viaCharacterIds: item.via,
@@ -391,7 +392,7 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
   walkDescendants(focusId, lookups, lineageDistance).forEach(item => addRelationship(relationships, {
     fromCharacterId: focusId,
     toCharacterId: item.id,
-    label: ancestorLabel(item.distance, 'down', item.type),
+    label: item.distance === 1 ? directLabel('Child', item.links[0]) : ancestorLabel(item.distance, 'down', item.type),
     category: 'descendant',
     distance: item.distance,
     viaCharacterIds: item.via,
@@ -403,7 +404,10 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
     const focusParents = lookups.parentsByChild.get(focusId) || []
     const siblingParents = lookups.parentsByChild.get(sibling.id) || []
     const sharedBio = focusParents.filter(parent => parent.link.type === 'biological' && siblingParents.some(other => other.id === parent.id && other.link.type === 'biological'))
-    const label = sharedBio.length === 1 ? 'Half-sibling' : directLabel('Sibling', sibling.link)
+    const hasDistinctOtherParents = sharedBio.length === 1
+      && focusParents.some(parent => parent.link.type === 'biological' && !siblingParents.some(other => other.id === parent.id && other.link.type === 'biological'))
+      && siblingParents.some(parent => parent.link.type === 'biological' && !focusParents.some(other => other.id === parent.id && other.link.type === 'biological'))
+    const label = hasDistinctOtherParents && sibling.link.type === 'biological' ? directLabel('Half-sibling', sibling.link) : directLabel('Sibling', sibling.link)
     addRelationship(relationships, {
       fromCharacterId: focusId,
       toCharacterId: sibling.id,
@@ -412,7 +416,7 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
       distance: 1,
       viaCharacterIds: sharedBio.map(parent => parent.id),
       sourceLinkIds: sibling.link.sourceLinkIds || [sibling.link.id],
-      confidence: sibling.link.id.startsWith('derived') ? 'derived' : 'direct',
+      confidence: sibling.link.sourceLinkIds ? 'derived' : 'direct',
     })
   })
 
@@ -462,7 +466,7 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
         category: parentSibling.link.type === 'step' ? 'step' : 'aunt_uncle',
         distance: 2,
         viaCharacterIds: [parent.id],
-        sourceLinkIds: [parent.link.id, parentSibling.link.id],
+        sourceLinkIds: [parent.link.id, ...(parentSibling.link.sourceLinkIds || [parentSibling.link.id])],
         confidence: 'derived',
       })
     })
@@ -478,7 +482,7 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
         category: sibling.link.type === 'step' ? 'step' : 'niece_nephew',
         distance: 2,
         viaCharacterIds: [sibling.id],
-        sourceLinkIds: [sibling.link.id, child.link.id],
+        sourceLinkIds: [...(sibling.link.sourceLinkIds || [sibling.link.id]), child.link.id],
         confidence: 'derived',
       })
     })
@@ -495,14 +499,14 @@ export function deriveFamilyRelationshipsFromLookups(characters = [], focusId, f
           category: 'cousin',
           distance: 3,
           viaCharacterIds: [parent.id, parentSibling.id],
-          sourceLinkIds: [parent.link.id, parentSibling.link.id, cousin.link.id],
+          sourceLinkIds: [parent.link.id, ...(parentSibling.link.sourceLinkIds || [parentSibling.link.id]), cousin.link.id],
           confidence: 'derived',
         })
       })
     })
   })
 
-  const partnerParents = (scope === 'extended' || scope === 'full') ? (lookups.parentsByChild.get(focusId) || [])
+  const partnerParents = mergedFilters.includeStep && !mergedFilters.bloodOnly && (scope === 'extended' || scope === 'full') ? (lookups.parentsByChild.get(focusId) || [])
     .flatMap(parent => lookups.partnersByCharacter.get(parent.id) || [])
     .filter(partner => !focusParents.some(parent => parent.id === partner.id))
     : []
@@ -552,7 +556,7 @@ export function groupDerivedFamilyRelationships(derived = []) {
       if (key === 'parents') return relationship.category === 'ancestor' && relationship.distance === 1
       if (key === 'children') return relationship.category === 'descendant' && relationship.distance === 1
       if (key === 'siblings') return relationship.distance === 1 && relationship.label.toLowerCase().includes('sibling')
-      if (key === 'extended') return !relationship.label.toLowerCase().includes('sibling') && (relationship.distance > 1 || categories.includes(relationship.category))
+      if (key === 'extended') return relationship.distance > 1
       return categories.includes(relationship.category)
     }),
   ]))
@@ -593,7 +597,8 @@ const directLabelsForLink = (link) => {
 
 export function getDirectFamilyRelationshipRows(characters = [], filters = FAMILY_FILTER_DEFAULTS) {
   const byId = new Map(characters.map(character => [character.id, character]))
-  return buildFamilyLookups(characters, filters).links.map(link => {
+  const mergedFilters = { ...FAMILY_FILTER_DEFAULTS, ...filters }
+  return getFamilyLinks(characters).filter(link => shouldIncludeLink(link, mergedFilters)).map(link => {
     const [sourceLabel, targetLabel] = directLabelsForLink(link)
     return {
       id: link.id,
@@ -654,7 +659,7 @@ export function validateFamilyLink(characters = [], newLink) {
     }
   }
 
-  if (links.some(link => link.sourceCharacterId === sourceId && link.targetCharacterId === targetId && link.kind === normalized.kind && link.type !== normalized.type && link.status !== 'disputed' && normalized.status !== 'disputed')) {
+  if (links.some(link => familyLinkPairKey(link) === familyLinkPairKey(normalized) && link.type !== normalized.type && link.status !== 'disputed' && normalized.status !== 'disputed')) {
     warnings.push('A different relationship type already exists for this pair; mark it disputed or allow an unusual structure.')
   }
 
