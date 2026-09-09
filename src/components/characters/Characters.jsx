@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useId } from 'react'
 import Modal from '../shared/Modal'
 import SegmentedControl from '../shared/SegmentedControl'
 import { FACTION_ICONS } from '../../constants/factionIcons'
-import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, REL_TYPES } from '../../constants/Constants'
+import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType } from '../../constants/relationshipTypes.js'
+import { buildCharacterAliases } from '../../utils/relationshipMap.js'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
-import { allRefsFor } from '../../utils/worldLinks'
+import { buildCharacterIndex, filterCharacters, characterReferences, normalizeCharacter, normalizeCharacterKeywords, getCharacterStatus, CHARACTER_TRAIT_FIELDS as TRAIT_FIELDS, CHARACTER_BACKGROUND_FIELDS as BACKGROUND_FIELDS } from '../../utils/characterEntries'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from '../../utils/characterAge'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { groupFamilyRelationships } from '../../utils/familyRelationships'
@@ -16,7 +17,6 @@ import CharacterInterview from '../aitools/CharacterInterview'
 import { AIToolsUpgradeWall } from '../aitools/AITools'
 import AIStar from '../ai/AIStar'
 
-// The Fix: uses theme variables so all 4 themes apply correctly
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 const SECTION_HEAD = 'text-[10px] text-[var(--text-muted)] uppercase tracking-widest pb-2 mb-3 border-b border-[var(--border)]'
@@ -40,27 +40,6 @@ const CHARACTER_ROLE_PRESETS = [
   'Background character',
 ]
 
-const TRAIT_FIELDS = [
-  ['strengths', 'Strengths'],
-  ['weaknesses', 'Weaknesses'],
-  ['internalGoal', 'Internal Goal'],
-  ['externalGoal', 'External Goal'],
-  ['disabilities', 'Disabilities'],
-  ['qualifications', 'Qualifications'],
-  ['talents', 'Talents'],
-  ['languages', 'Languages'],
-  ['fears', 'Fears'],
-  ['passions', 'Passions'],
-]
-
-const BACKGROUND_FIELDS = [
-  ['hometown', 'Hometown'],
-  ['religion', 'Religion'],
-  ['language', 'Primary Language'],
-  ['historicEventsWitnessed', 'Historic Events Witnessed'],
-  ['lifeEvents', 'Life Events'],
-]
-
 const CHARACTER_TABS = [
   ['overview', 'Overview'],
   ['journey', 'Journey'],
@@ -77,19 +56,6 @@ const CHAT_TAB = ['chat', (
     Chat
   </span>
 )]
-
-function getChildIds(character, characters) {
-  const explicit = character?.childIds || []
-  const derived = characters.filter(c => (c.parentIds || []).includes(character?.id)).map(c => c.id)
-  return [...new Set([...explicit, ...derived])]
-}
-
-// Older characters predate the `status` field — infer it from deathDate so
-// they still display and behave sensibly until re-saved.
-function getCharacterStatus(character) {
-  if (character?.status) return character.status
-  return character?.deathDate ? 'dead' : 'alive'
-}
 
 function formatCharacterStatus(status) {
   if (status === 'alive') return 'Alive'
@@ -189,7 +155,9 @@ function TabStrip({ tabs, activeTab, onChange }) {
   )
 }
 
-function ComboSelect({ value, onChange, options, placeholder, allowCustom = false }) {
+function ComboSelect({ value, onChange, options, placeholder, label, allowCustom = false }) {
+  const listId = useId()
+  const rootRef = useRef(null)
   const [query, setQuery] = useState(null)
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
@@ -198,7 +166,7 @@ function ComboSelect({ value, onChange, options, placeholder, allowCustom = fals
   const selectedLabel = options.find(o => o.value === value)?.label ?? (allowCustom ? (value || '') : '')
   const displayValue = query !== null ? query : selectedLabel
   const filtered = query
-    ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
+    ? options.filter(o => String(o.label).toLowerCase().includes(query.toLowerCase()))
     : options
 
   useEffect(() => {
@@ -206,9 +174,13 @@ function ComboSelect({ value, onChange, options, placeholder, allowCustom = fals
   }, [highlighted])
 
   const commit = (opt) => {
-    onChange(opt.value)
+    commitValue(opt.value)
     setQuery(null)
     setOpen(false)
+  }
+  const commitValue = nextValue => {
+    onChange(nextValue)
+    if (nextValue !== value) rootRef.current?.dispatchEvent(new Event('input', { bubbles: true }))
   }
 
   const handleKeyDown = (e) => {
@@ -225,34 +197,54 @@ function ComboSelect({ value, onChange, options, placeholder, allowCustom = fals
     else if (e.key === 'Enter') {
       e.preventDefault()
       if (filtered[highlighted]) commit(filtered[highlighted])
-      else if (allowCustom && query?.trim()) { onChange(query.trim()); setQuery(null); setOpen(false) }
+      else if (allowCustom && query?.trim()) { commitValue(query.trim()); setQuery(null); setOpen(false) }
     }
-    else if (e.key === 'Escape') { setOpen(false); setQuery(null) }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); setQuery(null) }
     else if (e.key === 'Tab') {
-      if (filtered[highlighted]) commit(filtered[highlighted])
-      setOpen(false); setQuery(null)
+      commitQuery()
     }
   }
 
+  const commitQuery = () => {
+    if (query !== null) {
+      const match = options.find(option => String(option.label).toLowerCase() === query.trim().toLowerCase())
+      if (allowCustom) commitValue(match ? match.value : query.trim())
+      else if (match) commitValue(match.value)
+    }
+    setOpen(false)
+    setQuery(null)
+  }
+
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <input
         className={INPUT}
+        role="combobox"
+        aria-label={label || placeholder}
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open && filtered[highlighted] ? `${listId}-${highlighted}` : undefined}
         value={displayValue}
         onChange={e => { setQuery(e.target.value); setHighlighted(0); setOpen(true) }}
         onFocus={() => { setOpen(true); setHighlighted(Math.max(0, options.findIndex(o => o.value === value))) }}
-        onBlur={() => setTimeout(() => { setOpen(false); setQuery(null) }, 150)}
+        onBlur={commitQuery}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         autoComplete="off"
       />
       {open && (
-        <ul ref={listRef} className="absolute z-50 top-full left-0 right-0 mt-1 max-h-44 overflow-y-auto bg-[var(--bg-nav)] border border-[var(--border)] rounded-lg shadow-xl py-1">
+        <ul id={listId} role="listbox" ref={listRef} className="absolute z-50 top-full left-0 right-0 mt-1 max-h-44 overflow-y-auto bg-[var(--bg-nav)] border border-[var(--border)] rounded-lg shadow-xl py-1">
           {filtered.length > 0 ? filtered.map((opt, i) => (
             <li
               key={String(opt.value)}
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={opt.value === value}
+              data-dirties-form
               className={`px-3 py-1.5 text-sm cursor-pointer transition-colors ${i === highlighted ? 'bg-[var(--accent-fade)] text-[var(--accent)]' : 'text-[var(--text-main)] hover:bg-[var(--bg-main)]'}`}
-              onMouseDown={() => commit(opt)}
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => commit(opt)}
               onMouseEnter={() => setHighlighted(i)}
             >
               {opt.label}
@@ -294,6 +286,11 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
 
   return (
     <Modal title="Edit Portrait" onClose={onClose} wide centered>
+      <form data-confirms-save onSubmit={event => {
+        event.preventDefault()
+        onSave(pos, zoom)
+        event.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
+      }}>
       <div className="flex gap-6 items-start">
         {/* Main drag-to-position area */}
         <div className="flex-1 min-w-0">
@@ -302,11 +299,12 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
           </p>
           <div
             ref={pickerRef}
-            className="relative h-72 rounded-lg overflow-hidden cursor-crosshair select-none border border-[var(--border)]"
-            onMouseDown={(e) => { setIsDragging(true); handleInteraction(e) }}
-            onMouseMove={(e) => { if (isDragging) handleInteraction(e) }}
-            onMouseUp={() => setIsDragging(false)}
-            onMouseLeave={() => setIsDragging(false)}
+            data-dirties-form
+            className="relative h-72 rounded-lg overflow-hidden cursor-crosshair select-none touch-none border border-[var(--border)]"
+            onPointerDown={(e) => { setIsDragging(true); e.currentTarget.setPointerCapture?.(e.pointerId); handleInteraction(e) }}
+            onPointerMove={(e) => { if (isDragging) handleInteraction(e) }}
+            onPointerUp={() => setIsDragging(false)}
+            onPointerCancel={() => setIsDragging(false)}
           >
             <img
               src={resolvedImage || image}
@@ -332,13 +330,14 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
               <span className="text-[10px] text-[var(--text-muted)]">{zoom.toFixed(1)}×</span>
             </div>
             <input
-              type="range" min="1" max="3" step="0.05" value={zoom}
+              aria-label="Portrait zoom" type="range" min="1" max="3" step="0.05" value={zoom}
               onChange={e => setZoom(Number(e.target.value))}
               className="w-full h-1 accent-[var(--accent)]"
             />
             {zoom > 1 && (
               <button
                 type="button"
+                data-dirties-form
                 onClick={() => setZoom(1)}
                 className="mt-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
               >
@@ -373,62 +372,30 @@ function PhotoEditorModal({ image, imagePosition, imageZoom, onSave, onClose }) 
 
       <div className="flex gap-2 mt-5 pt-4 border-t border-[var(--border)]">
         <button
-          onClick={() => onSave(pos, zoom)}
+          type="submit"
           className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded hover:opacity-90"
         >
           Apply
         </button>
-        <button onClick={onClose} className="px-4 py-2 text-[var(--text-muted)]">
+        <button type="button" onClick={onClose} className="px-4 py-2 text-[var(--text-muted)]">
           Cancel
         </button>
       </div>
+      </form>
     </Modal>
   )
 }
 
 function CharacterForm({ initial, onSave, onCancel, factions, characters, currentYear, initialTab = 'overview', store }) {
-  const initialChildIds = getChildIds(initial, characters)
-  const [form, setForm] = useState({
-    name: initial?.name || '',
-    familyGroup: initial?.familyGroup || '',
-    factionId: initial?.factionId || '',
-    role: initial?.role || '',
-    pronouns: initial?.pronouns || '',
-    species: initial?.species || '',
-    titleJob: initial?.titleJob || initial?.title || '',
-    bio: initial?.bio || '',
-    age: getAgeInputValue(initial, currentYear),
-    status: getCharacterStatus(initial),
-    deathDate: initial?.deathDate || '',
-    parentIds: initial?.parentIds || [],
-    childIds: initialChildIds,
-    spouseIds: initial?.spouseIds || [],
-    relationships: Array.isArray(initial?.relationships) ? initial.relationships : [],
-    keywords: initial?.keywords || [],
-    traits: {
-      strengths: initial?.traits?.strengths || '',
-      weaknesses: initial?.traits?.weaknesses || '',
-      internalGoal: initial?.traits?.internalGoal || '',
-      externalGoal: initial?.traits?.externalGoal || '',
-      disabilities: initial?.traits?.disabilities || '',
-      qualifications: initial?.traits?.qualifications || '',
-      talents: initial?.traits?.talents || '',
-      languages: initial?.traits?.languages || '',
-      fears: initial?.traits?.fears || '',
-      passions: initial?.traits?.passions || '',
-    },
-    background: {
-      hometown: initial?.background?.hometown || '',
-      religion: initial?.background?.religion || '',
-      language: initial?.background?.language || '',
-      historicEventsWitnessed: initial?.background?.historicEventsWitnessed || '',
-      lifeEvents: initial?.background?.lifeEvents || '',
-    },
-    extraAbilities: initial?.extraAbilities?.length ? initial.extraAbilities : [],
-    image: initial?.image || '',
-    imagePosition: initial?.imagePosition || '50% 50%',
-    imageZoom: initial?.imageZoom || 1,
+  const formRef = useRef(null)
+  const [form, setForm] = useState(() => {
+    const character = normalizeCharacter(initial || {})
+    const fields = ['name', 'familyGroup', 'factionId', 'role', 'pronouns', 'species', 'titleJob', 'bio', 'status', 'deathDate', 'relationships', 'keywords', 'traits', 'background', 'extraAbilities', 'imagePosition', 'imageZoom']
+    return { ...Object.fromEntries(fields.map(field => [field, character[field]])), image: character.image || '', age: getAgeInputValue(initial, currentYear) }
   })
+  const [ageChanged, setAgeChanged] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [uploading, setUploading] = useState(false)
   const [editorTab, setEditorTab] = useState(
     CHARACTER_FORM_TABS.some(([id]) => id === initialTab) ? initialTab : 'overview'
   )
@@ -438,11 +405,19 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
   // Tracks a freshly uploaded-but-unsaved portrait so it can be cleaned up
   // from Storage if it's replaced again or the form is cancelled.
   const pendingUploadRef = useRef(null)
+  const uploadVersionRef = useRef(0)
+  useEffect(() => () => {
+    uploadVersionRef.current += 1
+    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
+    pendingUploadRef.current = null
+  }, [])
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0]
     e.target.value = ''
     if (!file) return
+    const version = ++uploadVersionRef.current
+    setUploading(true)
     try {
       setImageError('')
       const image = await uploadUserMedia(file, {
@@ -451,27 +426,27 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
         currentUsedBytes: store?.storageUsedBytes,
         quotaBytes: store?.storageQuotaBytes,
       })
+      if (version !== uploadVersionRef.current) { deleteUserMedia(image).catch(console.error); return }
       if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
       pendingUploadRef.current = image
-      store?.refreshStorageUsedBytes().catch(console.error)
+      store?.refreshStorageUsedBytes?.()?.catch(console.error)
       setForm(prev => ({ ...prev, image, imagePosition: '50% 50%', imageZoom: 1 }))
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : 'Could not use that image.')
+      if (version === uploadVersionRef.current) setImageError(error instanceof Error ? error.message : 'Could not use that image.')
+    } finally {
+      if (version === uploadVersionRef.current) setUploading(false)
     }
   }
 
   const handleRemoveImage = () => {
+    uploadVersionRef.current += 1
+    setUploading(false)
     if (pendingUploadRef.current) {
       deleteUserMedia(pendingUploadRef.current).catch(console.error)
       pendingUploadRef.current = null
-      store?.refreshStorageUsedBytes().catch(console.error)
+      store?.refreshStorageUsedBytes?.()?.catch(console.error)
     }
     setForm(prev => ({ ...prev, image: '', imagePosition: '50% 50%', imageZoom: 1 }))
-  }
-
-  const handleCancel = () => {
-    if (pendingUploadRef.current) deleteUserMedia(pendingUploadRef.current).catch(console.error)
-    onCancel()
   }
 
   const handleChange = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
@@ -492,19 +467,12 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     setForm(prev => ({ ...prev, extraAbilities: prev.extraAbilities.filter((_, i) => i !== index) }))
   }
   const openFamilyTree = () => {
-    if (initial?.id) store?.setSelectedCharacterId?.(initial.id)
+    if (!saveForm()) return
     window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'familytree' } }))
   }
   const upsertRelationship = (index, patch) => {
     setForm(prev => {
       const next = [...prev.relationships]
-      if (patch.targetId) {
-        next.forEach((relationship, relationshipIndex) => {
-          if (relationshipIndex !== index && relationship.targetId === patch.targetId) {
-            next[relationshipIndex] = { ...relationship, targetId: '' }
-          }
-        })
-      }
       next[index] = { ...next[index], ...patch }
       return { ...prev, relationships: next }
     })
@@ -526,29 +494,32 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
     if ((e.key === 'Enter' || e.key === ',') && keywordInput.trim()) {
       e.preventDefault()
       const kw = keywordInput.trim().replace(/,$/, '')
-      if (kw && !form.keywords.includes(kw)) setForm(prev => ({ ...prev, keywords: [...prev.keywords, kw] }))
+      if (kw) setForm(prev => ({ ...prev, keywords: normalizeCharacterKeywords([...prev.keywords, kw]) }))
       setKeywordInput('')
     }
   }
   const removeKeyword = (kw) => setForm(prev => ({ ...prev, keywords: prev.keywords.filter(k => k !== kw) }))
-  const familyGroupOptions = [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort()
-  const relationshipTargets = characters.filter(c => c.id !== initial?.id)
-  const validRelationships = [...new Map(
-    form.relationships.filter(r => r.targetId && r.type).map(relationship => [relationship.targetId, relationship]),
-  ).values()]
-  const validAbilities = form.extraAbilities
-    .map(ability => ({ name: ability.name?.trim() || '', description: ability.description?.trim() || '' }))
-    .filter(ability => ability.name || ability.description)
+  const familyGroupOptions = useMemo(() => [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort(), [characters])
+  const relationshipTargets = useMemo(() => characters.filter(c => c.id !== initial?.id), [characters, initial?.id])
   const saveForm = () => {
-    const birthDate = form.age === '' ? '' : getBirthDateFromAge(form.age, currentYear, form.deathDate)
+    if (uploading) { setSaveError('Wait for the portrait upload to finish.'); return false }
+    if (!form.name.trim()) { setSaveError('Enter a name for this character.'); setEditorTab('overview'); return false }
+    const birthDate = ageChanged ? getBirthDateFromAge(form.age, currentYear, form.deathDate) : undefined
+    if (ageChanged && form.age !== '' && !birthDate) { setSaveError('Enter a whole, non-negative age and a known current or death year.'); setEditorTab('overview'); return false }
     const rest = { ...form }
     delete rest.age
-    onSave({ ...rest, birthDate, relationships: validRelationships, extraAbilities: validAbilities }, editorTab)
+    const relationships = normalizeCharacter({ relationships: form.relationships }).relationships.filter(rel => rel.targetId && rel.type)
+    const extraAbilities = form.extraAbilities.map(ability => ({ ...ability, name: ability.name.trim(), description: ability.description.trim() })).filter(ability => ability.name || ability.description)
+    const saved = onSave({ ...rest, name: form.name.trim(), familyGroup: form.familyGroup.trim(), ...(ageChanged ? { birthDate } : {}), relationships, extraAbilities, keywords: normalizeCharacterKeywords([...form.keywords, keywordInput.replace(/,$/, '')]) }, editorTab)
+    if (!saved) { setSaveError('This character could not be saved. Your draft is still here.'); return false }
+    pendingUploadRef.current = null
+    formRef.current?.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
+    return true
   }
 
   return (
     <>
-      <form onSubmit={(e) => { e.preventDefault(); saveForm(); }} className="space-y-4 text-left">
+      <form ref={formRef} data-confirms-save onChange={() => setSaveError('')} onSubmit={(e) => { e.preventDefault(); saveForm(); }} className="space-y-4 text-left">
         <TabStrip tabs={CHARACTER_FORM_TABS} activeTab={editorTab} onChange={setEditorTab} />
 
         {editorTab === 'overview' && (
@@ -560,11 +531,12 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <label className={LABEL}>Name</label>
-                  <input className={INPUT} value={form.name} onChange={handleChange('name')} required />
+                  <input aria-label="Name" className={INPUT} value={form.name} onChange={handleChange('name')} required />
                 </div>
                 <div>
                   <label className={LABEL}>Role</label>
                   <ComboSelect
+                    label="Role"
                     value={form.role}
                     onChange={v => setForm(prev => ({ ...prev, role: v }))}
                     options={[{ value: '', label: 'Select role' }, ...CHARACTER_ROLE_PRESETS.map(r => ({ value: r, label: r }))]}
@@ -602,6 +574,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                 <div>
                   <label className={LABEL}>Family Group</label>
                   <ComboSelect
+                    label="Family Group"
                     value={form.familyGroup}
                     onChange={v => setForm(prev => ({ ...prev, familyGroup: v }))}
                     options={[{ value: '', label: 'No Family Group' }, ...familyGroupOptions.map(fg => ({ value: fg, label: fg }))]}
@@ -612,6 +585,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                 <div>
                   <label className={LABEL}>Faction / Allegiance</label>
                   <ComboSelect
+                    label="Faction / Allegiance"
                     value={form.factionId}
                     onChange={v => setForm(prev => ({ ...prev, factionId: v }))}
                     options={[{ value: '', label: 'No Faction' }, ...factions.map(f => ({ value: f.id, label: f.name }))]}
@@ -627,11 +601,12 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={LABEL}>Age</label>
-                  <input className={INPUT} type="number" min="0" step="1" value={form.age} onChange={handleChange('age')} placeholder="32" />
+                  <input aria-label="Age" className={INPUT} type="number" min="0" step="1" value={ageChanged ? form.age : getAgeInputValue({ ...initial, deathDate: form.deathDate }, currentYear)} onChange={event => { setAgeChanged(true); handleChange('age')(event) }} placeholder="32" />
                 </div>
                 <div>
                   <label className={LABEL}>Status</label>
                   <ComboSelect
+                    label="Status"
                     value={form.status}
                     onChange={v => setForm(prev => ({ ...prev, status: v, deathDate: v === 'alive' ? '' : prev.deathDate }))}
                     options={[{ value: 'alive', label: 'Alive' }, { value: 'dead', label: 'Dead' }]}
@@ -642,7 +617,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                 {form.status !== 'alive' && (
                   <div className="col-span-2">
                     <label className={LABEL}>Death Year (Optional)</label>
-                    <input className={INPUT} value={form.deathDate} onChange={handleChange('deathDate')} placeholder="Year 98" />
+                  <input aria-label="Death Year (Optional)" className={INPUT} value={form.deathDate} onChange={handleChange('deathDate')} placeholder="Year 98" />
                   </div>
                 )}
               </div>
@@ -656,11 +631,12 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                 {form.keywords.map(kw => (
                   <span key={kw} className="bg-[var(--accent-fade)] border border-[var(--accent)]/30 text-[var(--accent)] px-2 py-0.5 rounded text-xs flex items-center gap-1">
                     {kw}
-                    <button type="button" onClick={() => removeKeyword(kw)} className="opacity-60 hover:opacity-100 leading-none">×</button>
+                    <button type="button" data-dirties-form aria-label={`Remove alias ${kw}`} onClick={() => removeKeyword(kw)} className="opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 ))}
               </div>
               <input
+                aria-label="Alias / Keywords"
                 className={INPUT}
                 value={keywordInput}
                 onChange={e => setKeywordInput(e.target.value)}
@@ -689,6 +665,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                     <button
                       type="button"
                       onClick={handleRemoveImage}
+                      data-dirties-form
                       className="text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors"
                     >
                       Remove
@@ -725,7 +702,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
             {/* Biography */}
             <div>
               <h3 className={SECTION_HEAD}>Biography</h3>
-              <textarea className={INPUT + ' h-44 resize-none'} value={form.bio} onChange={handleChange('bio')} placeholder="Describe their history..." />
+              <textarea aria-label="Biography" className={INPUT + ' h-44 resize-none'} value={form.bio} onChange={handleChange('bio')} placeholder="Describe their history..." />
             </div>
 
           </div>
@@ -743,14 +720,14 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                 onClick={openFamilyTree}
                 className="flex-shrink-0 text-xs font-bold text-[var(--accent)] border border-[var(--accent)]/30 hover:border-[var(--accent)] px-3 py-1.5 rounded transition-colors"
               >
-                Open Family Tree →
+                Save & Open Family Tree →
               </button>
             </div>
 
             <div className="border border-[var(--border)] rounded p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <label className={LABEL + ' mb-0'}>Relationship Links</label>
-                <button type="button" onClick={addRelationship} className="text-xs text-[var(--accent)] font-bold">+ Add Link</button>
+                <button type="button" data-dirties-form onClick={addRelationship} className="text-xs text-[var(--accent)] font-bold">+ Add Link</button>
               </div>
               {form.relationships.length === 0 && (
                 <p className="text-xs text-[var(--text-muted)]">Add links like allies, enemies, lovers, etc.</p>
@@ -769,7 +746,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                     options={CHARACTER_LINK_REL_TYPES.map(t => ({ value: t.id, label: t.label }))}
                     placeholder="Relationship type"
                   />
-                  <button type="button" onClick={() => removeRelationship(index)} className="px-3 text-red-400 hover:text-red-300">✕</button>
+                  <button type="button" data-dirties-form aria-label={`Remove relationship ${index + 1}`} onClick={() => removeRelationship(index)} className="px-3 text-red-400 hover:text-red-300">✕</button>
                 </div>
               ))}
             </div>
@@ -797,7 +774,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
             <div className="border border-[var(--border)] rounded p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest">Extra Abilities</h3>
-                <button type="button" onClick={addAbility} className="text-xs text-[var(--accent)] font-bold">+ Add Ability</button>
+                <button type="button" data-dirties-form onClick={addAbility} className="text-xs text-[var(--accent)] font-bold">+ Add Ability</button>
               </div>
               {form.extraAbilities.length === 0 && (
                 <p className="text-xs text-[var(--text-muted)]">Optional: add magic, powers, enhanced skills, unusual senses, or other ability notes.</p>
@@ -816,7 +793,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                     onChange={(e) => updateAbility(index, { description: e.target.value })}
                     placeholder="Free text description"
                   />
-                  <button type="button" onClick={() => removeAbility(index)} className="px-3 text-red-400 hover:text-red-300">✕</button>
+                  <button type="button" data-dirties-form aria-label={`Remove ability ${index + 1}`} onClick={() => removeAbility(index)} className="px-3 text-red-400 hover:text-red-300">✕</button>
                 </div>
               ))}
             </div>
@@ -845,11 +822,13 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
           </div>
         )}
 
+        {saveError && <p role="alert" className="text-sm">{saveError}</p>}
+        {uploading && <p role="status" className="text-sm">Uploading portrait…</p>}
         <div className="flex gap-2 pt-4 border-t border-[var(--border)]">
           <button type="submit" className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded hover:opacity-90">
             Save Character
           </button>
-          <button type="button" onClick={handleCancel} className="px-4 py-2 text-[var(--text-muted)]">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)]">
             Cancel
           </button>
         </div>
@@ -862,6 +841,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
           imageZoom={form.imageZoom}
           onSave={(pos, zoom) => {
             setForm(prev => ({ ...prev, imagePosition: pos, imageZoom: zoom }))
+            formRef.current?.dispatchEvent(new Event('input', { bubbles: true }))
             setShowPhotoEditor(false)
           }}
           onClose={() => setShowPhotoEditor(false)}
@@ -889,8 +869,7 @@ function DetailBlock({ label, value }) {
   )
 }
 
-function FamilyRelationshipNames({ label, items, characters }) {
-  const byId = new Map(characters.map(character => [character.id, character]))
+function FamilyRelationshipNames({ label, items, byId }) {
   return (
     <div>
       <div className="text-xs text-[var(--text-muted)] mb-1.5">{label}</div>
@@ -914,34 +893,34 @@ function FamilyRelationshipNames({ label, items, characters }) {
 }
 
 export default function Characters({ store, userId, membership }) {
-  const { characters, saveCharacter, saveCharacterJourney, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions, currentYear, loreEntries = [], timeline = [], chapters = [], scenes = [], setSelectedLoreEntryId } = store
+  return <CharactersWorkspace key={store.activeNovelId || 'characters'} store={store} userId={userId} membership={membership} />
+}
+
+function CharactersWorkspace({ store, userId, membership }) {
+  const { characters: rawCharacters = [], saveCharacter, saveCharacterJourney, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions: rawFactions = [], currentYear, loreEntries = [], timeline = [], worldHistory = [], chapters = [], scenes = [] } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name-asc')
   const [filterFamily, setFilterFamily] = useState('')
-  const [filterFaction, setFilterFaction] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [editTarget, setEditTarget] = useState(null)
+  const [filterFaction, setFilterFaction] = useState('all')
+  const [formState, setFormState] = useState(null)
+  const [journeyEditing, setJourneyEditing] = useState(false)
+  const showForm = Boolean(formState)
+  const editTarget = formState?.entry
+  const [notice, setNotice] = useState('')
   const [profileTab, setProfileTab] = useState('overview')
-  const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
-
-  // Unique family groups for the filter dropdown
-  const familyGroups = [...new Set(characters.map(c => c.familyGroup).filter(Boolean))].sort()
-
-  const filtered = characters
-    .filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
-    .filter(c => !filterFamily || c.familyGroup === filterFamily)
-    .filter(c => {
-      if (!filterFaction) return true
-      if (filterFaction === '__none__') return !c.factionId
-      return c.factionId === filterFaction
-    })
-    .sort((a, b) => {
-      if (sortBy === 'name-asc') return a.name.localeCompare(b.name)
-      if (sortBy === 'name-desc') return b.name.localeCompare(a.name)
-      if (sortBy === 'role') return (a.role || '').localeCompare(b.role || '')
-      if (sortBy === 'faction') return (a.factionId || '').localeCompare(b.factionId || '')
-      return 0
-    })
+  const [imagePreviewId, setImagePreviewId] = useState(null)
+  const index = useMemo(() => buildCharacterIndex(rawCharacters, rawFactions), [rawCharacters, rawFactions])
+  const characters = index.entries
+  const factions = useMemo(() => [...index.factions.values()], [index])
+  const familyGroups = index.familyGroups
+  const effectiveFamily = familyGroups.includes(filterFamily) ? filterFamily : ''
+  const effectiveFaction = filterFaction.startsWith('id:') && !index.factions.has(filterFaction.slice(3)) ? 'all' : filterFaction
+  const filtered = useMemo(() => filterCharacters(index, { search, family: effectiveFamily, faction: effectiveFaction, sortBy }), [index, search, effectiveFamily, effectiveFaction, sortBy])
+  const visibleIds = useMemo(() => new Set(filtered.map(character => character.id)), [filtered])
+  const clearFilters = () => { setSearch(''); setFilterFamily(''); setFilterFaction('all') }
+  const openNew = () => { setNotice(''); setFormState({ type: 'new' }) }
+  const openEdit = () => { setNotice(''); setFormState({ type: 'edit', entry: selected }) }
+  const closeForm = () => setFormState(null)
 
   useEffect(() => {
     if (!selectedCharacterId) return
@@ -951,74 +930,71 @@ export default function Characters({ store, userId, membership }) {
     setSelectedCharacterId(fallbackId)
   }, [characters, filtered, selectedCharacterId, setSelectedCharacterId])
 
-  useEffect(() => {
-    setImagePreviewOpen(false)
-  }, [selectedCharacterId])
-
-  const selected = characters.find(c => c.id === selectedCharacterId)
-  const selectedChildren = selected ? getChildIds(selected, characters).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
-  const selectedParents = selected ? (selected.parentIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
-  const selectedSpouses = selected ? (selected.spouseIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean) : []
+  const selected = visibleIds.has(selectedCharacterId) ? index.byId.get(selectedCharacterId) : null
+  const knownCharacters = store.continuityRecords?.characters || rawCharacters
+  const relationshipAliases = useMemo(() => profileTab === 'relationships'
+    ? buildCharacterAliases(characters, knownCharacters) : new Map(), [characters, knownCharacters, profileTab])
   const selectedFamilyGroups = useMemo(
-    () => selected ? groupFamilyRelationships(characters, selected.id, { showHidden: true }) : null,
-    [characters, selected],
+    () => selected && profileTab === 'relationships' ? groupFamilyRelationships(characters, selected.id, { showHidden: true }) : null,
+    [characters, selected, profileTab],
   )
-  const selectedRelationships = selected
-    ? (Array.isArray(selected.relationships) ? selected.relationships : []).map(rel => ({
+  const selectedRelationships = selected && profileTab === 'relationships'
+    ? [...new Map(selected.relationships.map(rel => ({
       ...rel,
-      target: characters.find(c => c.id === rel.targetId),
-      label: REL_TYPES.find(type => type.id === rel.type)?.label || rel.type,
-    })).filter(rel => rel.target)
+      targetId: relationshipAliases.get(rel.targetId),
+      target: index.byId.get(relationshipAliases.get(rel.targetId)),
+      label: getRelType(rel.type).label,
+    })).filter(rel => rel.target && rel.targetId !== selected.id).map(rel => [JSON.stringify([rel.targetId, rel.type]), rel])).values()]
     : []
   const selectedAge = getCharacterAge(selected, currentYear)
   const selectedStatus = getCharacterStatus(selected)
   const incomingRefs = useMemo(() => selected
-    ? allRefsFor(selected.id, { loreEntries, timeline, characters })
-    : { lore: [], timeline: [], characters: [] },
-    [selected, loreEntries, timeline, characters]
+    ? characterReferences(selected.id, { loreEntries, timeline, worldHistory })
+    : { lore: [], timeline: [], history: [] },
+    [selected, loreEntries, timeline, worldHistory]
   )
   const profileTabs = [...CHARACTER_TABS, CHAT_TAB]
   const activeProfileTab = profileTabs.some(([id]) => id === profileTab) ? profileTab : 'overview'
 
   const handleSave = (formData, savedEditorTab) => {
-    const previousImage = editTarget?.image
-    if (previousImage && previousImage !== formData.image) deleteUserMedia(previousImage).catch(console.error)
     const savedId = saveCharacter(formData, editTarget?.id || null)
-    store.refreshStorageUsedBytes?.().catch(console.error)
-    if (!savedId) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
-    setShowForm(false)
-    setEditTarget(null)
+    if (!savedId) return false
+    store.refreshStorageUsedBytes?.()?.catch(console.error)
+    closeForm()
+    clearFilters()
     setSelectedCharacterId(savedId)
     if (!editTarget) setProfileTab('overview')
     else if (profileTabs.some(([id]) => id === savedEditorTab)) setProfileTab(savedEditorTab)
+    return true
   }
 
-  const getCharacterFaction = (char) => char?.factionId ? factions.find(f => f.id === char.factionId) : null
-  const selectedFaction = getCharacterFaction(selected)
+  const selectedFaction = index.factions.get(selected?.factionId)
+  const activeFilters = Boolean(search || effectiveFamily || effectiveFaction !== 'all')
+  const editingDisabled = store.readOnly || selected?.readOnly || showForm || journeyEditing
+  const jumpTo = (section, id) => {
+    if (showForm || journeyEditing) return
+    if (section === 'lore') store.setSelectedLoreEntryId(id)
+    if (section === 'timeline') store.setSelectedTimelineEventId(id)
+    if (section === 'worldhistory') store.setSelectedHistoryEntryId(id)
+    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section } }))
+  }
 
-  const activeFilters = (filterFamily ? 1 : 0) + (filterFaction ? 1 : 0)
-
-  // Editing the currently-open character used to always render below the
-  // read-only Overview/Journey/Relationships/etc. tabs and their content —
-  // on mobile that meant scrolling past a full (sometimes long) dossier to
-  // reach the editor. When the edit target is the character already open,
-  // swap the tabs and their content out for the editor right where they'd
-  // be instead, so it appears immediately after the name/portrait header.
-  // Creating a brand-new character (no dossier open yet, or a different one
-  // than what's showing) still uses the fallback placement below.
+  // Hide the long dossier during editing, but keep the modal in one stable
+  // location so filtering cannot remount it and discard its draft.
   const isEditingSelected = Boolean(showForm && editTarget && selected && editTarget.id === selected.id)
   const editorModal = showForm && (
     <Modal
       title={editTarget ? `Edit ${editTarget.name}` : "Create Character"}
-      onClose={() => setShowForm(false)}
+      onClose={closeForm}
       wide
       centered
       closeOnBackdrop={false}
     >
       <CharacterForm
+        key={editTarget?.id || 'new'}
         initial={editTarget}
         onSave={handleSave}
-        onCancel={() => setShowForm(false)}
+        onCancel={closeForm}
         factions={factions}
         characters={characters}
         currentYear={currentYear}
@@ -1032,13 +1008,15 @@ export default function Characters({ store, userId, membership }) {
     <StudioSplit variant="dossier" data-tour="characters-header">
       <StudioIndex
         title="Characters"
-        tools={<StudioButton data-tour="characters-add" tone="primary" size="sm" onClick={() => { setEditTarget(null); setShowForm(true); }}>New</StudioButton>}
+        tools={<StudioButton data-tour="characters-add" tone="primary" size="sm" disabled={store.readOnly || showForm || journeyEditing} onClick={openNew}>New</StudioButton>}
       >
         <input
+          aria-label="Search characters"
+          disabled={journeyEditing}
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]"
         />
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base" aria-label="Sort by">
+        <select aria-label="Sort characters" value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
           <option value="name-asc">Name A→Z</option>
           <option value="name-desc">Name Z→A</option>
           <option value="role">Role</option>
@@ -1047,7 +1025,7 @@ export default function Characters({ store, userId, membership }) {
 
         {/* Family group filter */}
         {familyGroups.length > 0 && (
-          <select value={filterFamily} onChange={e => setFilterFamily(e.target.value)} className="field w-full px-2 py-1.5 text-base">
+          <select aria-label="Filter by family" disabled={journeyEditing} value={effectiveFamily} onChange={e => setFilterFamily(e.target.value)} className="field w-full px-2 py-1.5 text-base">
             <option value="">All families</option>
             {familyGroups.map(fg => (
               <option key={fg} value={fg}>{fg}</option>
@@ -1057,22 +1035,22 @@ export default function Characters({ store, userId, membership }) {
 
         {/* Faction filter */}
         {factions.length > 0 && (
-          <select value={filterFaction} onChange={e => setFilterFaction(e.target.value)} className="field w-full px-2 py-1.5 text-base">
-            <option value="">All factions</option>
-            <option value="__none__">No faction</option>
+          <select aria-label="Filter by faction" disabled={journeyEditing} value={effectiveFaction} onChange={e => setFilterFaction(e.target.value)} className="field w-full px-2 py-1.5 text-base">
+            <option value="all">All factions</option>
+            <option value="none">No faction</option>
             {factions.map(f => (
-              <option key={f.id} value={f.id}>{f.name}</option>
+              <option key={f.id} value={`id:${f.id}`}>{f.name}</option>
             ))}
           </select>
         )}
 
         {/* Active filter indicator + clear */}
-        {activeFilters > 0 && (
+        {activeFilters && (
           <div className="flex items-center justify-between px-1">
             <span className="text-[10px] text-[var(--accent)]">{filtered.length} of {characters.length} shown</span>
             <button
               type="button"
-              onClick={() => { setFilterFamily(''); setFilterFaction('') }}
+              onClick={clearFilters}
               className="text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
             >
               Clear filters
@@ -1080,6 +1058,7 @@ export default function Characters({ store, userId, membership }) {
           </div>
         )}
 
+        {notice && <p role="status" className="px-4 text-sm">{notice}</p>}
         {characters.length === 0 && (
           <div className="px-4 py-6 text-center space-y-1">
             <p className="text-sm text-[var(--text-main)]">No characters yet.</p>
@@ -1095,6 +1074,7 @@ export default function Characters({ store, userId, membership }) {
         {filtered.map(c => (
           <StudioRecord
             key={c.id}
+            disabled={showForm || journeyEditing}
             onClick={() => setSelectedCharacterId(c.id)}
             active={selectedCharacterId === c.id}
           >
@@ -1125,7 +1105,7 @@ export default function Characters({ store, userId, membership }) {
           <StudioEmpty
             title="Select a dossier"
             body="Choose a character from the characters list or add someone new."
-            action={<StudioButton tone="primary" className="mt-4" onClick={() => { setEditTarget(null); setShowForm(true); }}>Add Character</StudioButton>}
+            action={<StudioButton tone="primary" className="mt-4" disabled={store.readOnly || showForm} onClick={openNew}>Add Character</StudioButton>}
           />
         ) : (
           <div className="max-w-5xl">
@@ -1135,11 +1115,11 @@ export default function Characters({ store, userId, membership }) {
               meta={[selected.role, selected.pronouns, selectedAge ? `Age ${selectedAge}` : null].filter(Boolean).join(' · ') || 'Character'}
               actions={(
                 <>
-                  <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(selected); setShowForm(true); }}>Edit</StudioButton>
-                  <StudioButton tone="secondary" size="sm" onClick={() => {
+                  <StudioButton tone="secondary" size="sm" disabled={editingDisabled} onClick={openEdit}>Edit</StudioButton>
+                  <StudioButton tone="secondary" size="sm" disabled={editingDisabled} onClick={() => {
                     if (!confirm('Delete this character?')) return
                     const scope = confirm('Delete this character from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
-                    deleteCharacter(selected.id, { scope })
+                    if (!deleteCharacter(selected.id, { scope })) { setNotice('This character could not be deleted.'); return }
                     setSelectedCharacterId(null)
                   }}>Delete</StudioButton>
                 </>
@@ -1149,7 +1129,7 @@ export default function Characters({ store, userId, membership }) {
                 {selected.image && (
                   <button
                     type="button"
-                    onClick={() => setImagePreviewOpen(true)}
+                    onClick={() => setImagePreviewId(selected.id)}
                     aria-label={`View full-size photo of ${selected.name}`}
                     className="flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] cursor-zoom-in"
                   >
@@ -1164,7 +1144,8 @@ export default function Characters({ store, userId, membership }) {
                 {!selected.image && (
                   <button
                     type="button"
-                    onClick={() => { setEditTarget(selected); setShowForm(true) }}
+                    disabled={editingDisabled}
+                    onClick={openEdit}
                     className="character-cover-placeholder"
                     aria-label={`Add cover photo for ${selected.name}`}
                   >
@@ -1186,10 +1167,10 @@ export default function Characters({ store, userId, membership }) {
                 {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
               </div>
             </StudioPageHeader>
-            {isEditingSelected ? editorModal : (
+            {!isEditingSelected && (
               <>
                 <div className="mb-5">
-                  <TabStrip tabs={profileTabs} activeTab={activeProfileTab} onChange={setProfileTab} />
+                  <TabStrip tabs={profileTabs} activeTab={activeProfileTab} onChange={tab => { if (!journeyEditing) setProfileTab(tab) }} />
                 </div>
 
                 <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -1225,14 +1206,14 @@ export default function Characters({ store, userId, membership }) {
                   <StudioNote className="lg:col-span-2">
                     <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Family Links</h3>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <FamilyRelationshipNames label="Parents" items={selectedFamilyGroups?.parents || []} characters={characters} />
-                      <FamilyRelationshipNames label="Partners" items={selectedFamilyGroups?.partners || []} characters={characters} />
-                      <FamilyRelationshipNames label="Children" items={selectedFamilyGroups?.children || []} characters={characters} />
-                      <FamilyRelationshipNames label="Siblings" items={selectedFamilyGroups?.siblings || []} characters={characters} />
-                      <FamilyRelationshipNames label="Extended family" items={selectedFamilyGroups?.extended || []} characters={characters} />
-                      <FamilyRelationshipNames label="Guardians and wards" items={selectedFamilyGroups?.guardians || []} characters={characters} />
+                      <FamilyRelationshipNames label="Parents" items={selectedFamilyGroups?.parents || []} byId={index.byId} />
+                      <FamilyRelationshipNames label="Partners" items={selectedFamilyGroups?.partners || []} byId={index.byId} />
+                      <FamilyRelationshipNames label="Children" items={selectedFamilyGroups?.children || []} byId={index.byId} />
+                      <FamilyRelationshipNames label="Siblings" items={selectedFamilyGroups?.siblings || []} byId={index.byId} />
+                      <FamilyRelationshipNames label="Extended family" items={selectedFamilyGroups?.extended || []} byId={index.byId} />
+                      <FamilyRelationshipNames label="Guardians and wards" items={selectedFamilyGroups?.guardians || []} byId={index.byId} />
                     </div>
-                    {(selectedParents.length > 0 || selectedChildren.length > 0 || selectedSpouses.length > 0) && (
+                    {(selected.parentIds.length > 0 || selected.childIds.length > 0 || selected.spouseIds.length > 0) && (
                       <p className="text-[10px] text-[var(--text-muted)] mt-3">Legacy parent, child, and spouse fields are included in the calculated family groups.</p>
                     )}
                   </StudioNote>
@@ -1248,7 +1229,7 @@ export default function Characters({ store, userId, membership }) {
                       </div>
                     )}
                   </StudioNote>
-                  {(incomingRefs.lore.length > 0 || incomingRefs.timeline.length > 0) && (
+                  {(incomingRefs.lore.length > 0 || incomingRefs.timeline.length > 0 || incomingRefs.history.length > 0) && (
                     <StudioNote className="lg:col-span-2">
                       <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Referenced in</h3>
                       {incomingRefs.lore.length > 0 && (
@@ -1256,23 +1237,23 @@ export default function Characters({ store, userId, membership }) {
                           <div className="text-xs text-[var(--text-muted)] mb-1.5">Lore</div>
                           <div className="flex flex-wrap gap-1">
                             {incomingRefs.lore.map(e => (
-                              <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedLoreEntryId(e.id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'lore' } })) }}>
+                              <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo('lore', e.id)}>
                                 {e.title}
                               </button>
                             ))}
                           </div>
                         </div>
                       )}
-                      {incomingRefs.timeline.length > 0 && (
-                        <div>
-                          <div className="text-xs text-[var(--text-muted)] mb-1.5">Timeline / History</div>
+                      {[['timeline', 'Timeline', incomingRefs.timeline], ['worldhistory', 'History', incomingRefs.history]].filter(([, , entries]) => entries.length).map(([section, label, entries]) => (
+                        <div key={section}>
+                          <div className="text-xs text-[var(--text-muted)] mb-1.5">{label}</div>
                           <div className="flex flex-wrap gap-1">
-                            {incomingRefs.timeline.map(e => (
-                              <span key={e.id} className="chip">{e.title}</span>
+                            {entries.map(e => (
+                              <button key={e.id} className="chip" onClick={() => jumpTo(section, e.id)}>{e.title}</button>
                             ))}
                           </div>
                         </div>
-                      )}
+                      ))}
                     </StudioNote>
                   )}
                 </>
@@ -1280,12 +1261,19 @@ export default function Characters({ store, userId, membership }) {
 
               {activeProfileTab === 'journey' && (
                 <CharacterJourney
+                  key={selected.id}
+                  readOnly={store.readOnly || selected.readOnly}
+                  onEditingChange={setJourneyEditing}
                   character={selected}
                   characters={characters}
                   timeline={timeline}
                   chapters={chapters}
                   scenes={scenes}
-                  onSave={data => saveCharacterJourney(selected.id, data.journey)}
+                  onSave={data => {
+                    const saved = saveCharacterJourney(selected.id, data.journey)
+                    if (saved?.id) setSelectedCharacterId(saved.id)
+                    return saved
+                  }}
                 />
               )}
 
@@ -1338,13 +1326,13 @@ export default function Characters({ store, userId, membership }) {
         )}
       </StudioDetail>
 
-      {showForm && !isEditingSelected && editorModal}
+      {editorModal}
 
-      {imagePreviewOpen && selected?.image && (
+      {imagePreviewId === selected?.id && selected?.image && (
         <ImageLightbox
           src={selected.image}
           alt={selected.name}
-          onClose={() => setImagePreviewOpen(false)}
+          onClose={() => setImagePreviewId(null)}
         />
       )}
 

@@ -79,6 +79,8 @@ jobs:
             spec: tests/e2e/autosave.spec.js
           - name: manuscript-structure
             spec: tests/e2e/manuscript-structure.spec.js
+          - name: atlas-builder
+            spec: tests/e2e/atlas-builder.spec.js
           - name: worldbuilding
             spec: tests/e2e/worldbuilding.spec.js
           - name: dashboard
@@ -99,6 +101,8 @@ jobs:
             spec: tests/e2e/merge-project.spec.js
           - name: accessibility
             spec: tests/e2e/accessibility.spec.js
+          - name: workspace-loading
+            spec: tests/e2e/workspace-loading.spec.js
           # Added 2026-08-28. This spec existed in tests/e2e/ from the start but
           # was never listed here, so CI ran 13 of the directory's 14 files and
           # nothing flagged the gap — it had rotted to 4/4 failing against the

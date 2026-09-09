@@ -199,7 +199,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     deleteAct, deleteChapter, deleteScene,
     moveAct, moveChapter, moveScene,
     characters, locations, loreEntries = [], worldHistory = [], timeline = [], factions = [], currentYear,
-    setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId,
+    setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId, setSelectedHistoryEntryId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
     retireManuscript, restoreManuscriptCopy,
@@ -549,26 +549,27 @@ export default function Manuscript({ store, userId, membership = null }) {
     localStorage.setItem('nf-format-settings', JSON.stringify(next))
   }, [])
 
+  const selectCatalogueHistory = worldHistory?.length ? setSelectedHistoryEntryId : setSelectedTimelineEventId
   const handleEntityClick = useCallback(entity => {
     if (!entity?.id || !entity?.section) return
     if (entity.section === 'characters') setSelectedCharacterId(entity.id)
     if (entity.section === 'locations') setSelectedLocationId(entity.id)
     if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
-    if (entity.section === 'worldhistory') setSelectedTimelineEventId?.(entity.id)
+    if (entity.section === 'worldhistory') selectCatalogueHistory?.(entity.id)
     setSelectedCatalogueEntity(entity)
     setInspectorTab('catalogue')
     setInspectorOpen(true)
     setSurfaceId(null)
-  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId])
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, selectCatalogueHistory])
 
   const handleOpenEntitySection = useCallback(entity => {
     if (!entity?.id || !entity?.section) return
     if (entity.section === 'characters') setSelectedCharacterId(entity.id)
     if (entity.section === 'locations') setSelectedLocationId(entity.id)
     if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
-    if (entity.section === 'worldhistory') setSelectedTimelineEventId?.(entity.id)
+    if (entity.section === 'worldhistory') selectCatalogueHistory?.(entity.id)
     window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: entity.section } }))
-  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId])
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, selectCatalogueHistory])
 
   const chapterGlobalNumbers = useMemo(() => {
     const map = {}
@@ -753,6 +754,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   const handleSplitScene = (sceneId, chapterId, before, after) => {
     updateSceneContent(sceneId, before)
     const newScene = addScene(chapterId, labels.level3)
+    if (!newScene) return
     pinScene(newScene.id, 2000)
     setTimeout(() => {
       updateSceneContent(newScene.id, after)
@@ -763,6 +765,7 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const handleAddScene = chapterId => {
     const newScene = addScene(chapterId, labels.level3)
+    if (!newScene) return
     pinScene(newScene.id, 2000)
     setTimeout(() => {
       editorRefs.current[newScene.id]?.focus({ placeCursor: 'end' })
@@ -832,12 +835,14 @@ export default function Manuscript({ store, userId, membership = null }) {
     for (let ai = 0; ai < template.acts.length; ai++) {
       const tAct = template.acts[ai]
       const newAct = addAct(tAct.title)
+      if (!newAct) continue
       if (tAct.guidance) updateAct(newAct.id, { guidance: tAct.guidance })
 
       if (withChapters) {
         for (let ci = 0; ci < tAct.chapters.length; ci++) {
           const tChap = tAct.chapters[ci]
           const newChap = addChapter(newAct.id, tChap.title)
+          if (!newChap) continue
           if (isCampaignProject && tChap.guidance) {
             updateChapter(newChap.id, {
               guidance: tChap.guidance,
@@ -863,10 +868,13 @@ export default function Manuscript({ store, userId, membership = null }) {
   const handleDocxImport = useCallback(async (importedActs) => {
     for (const tAct of importedActs) {
       const newAct = addAct(tAct.title)
+      if (!newAct) continue
       for (const tChap of tAct.chapters) {
         const newChap = addChapter(newAct.id, tChap.title)
+        if (!newChap) continue
         for (const tScene of tChap.scenes) {
           const newScene = addScene(newChap.id, tScene.title || labels.level3)
+          if (!newScene) continue
           if (tScene.content?.trim()) {
             updateSceneContent(newScene.id, tScene.content)
           }
