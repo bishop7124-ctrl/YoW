@@ -86,6 +86,20 @@ export async function createProject(page, { title, type = 'novel' } = {}) {
   }
   await page.getByRole('button', { name: 'Create' }).click()
   await page.waitForURL(/\/project\//)
+  // The URL changes as soon as the app navigates, but the new project record
+  // is persisted to the IndexedDB-backed vault asynchronously and can still
+  // be in flight at this point. Callers that immediately do a hard
+  // navigation (page.goto/page.reload) can otherwise race that write and
+  // lose the just-created project entirely — observed directly in
+  // url-persistence.spec.js under full-suite load (passed in isolation,
+  // failed once when run alongside the rest of the suite). Waiting here,
+  // once, fixes the race for every caller instead of patching each call site.
+  await waitForStorage(page, (expectedTitle) => {
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    const novels = JSON.parse(get('nf_novels') || '[]')
+    return novels.some(n => n.title === expectedTitle)
+  }, projectTitle)
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   return projectTitle
 }
 
