@@ -105,10 +105,7 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
   await page.getByRole('button', { name: '+ balloon' }).first().click()
 
   const dialogueField = page.getByPlaceholder(/dialogue|speech|balloon/i).first()
-  if (!(await dialogueField.isVisible({ timeout: 3000 }).catch(() => false))) {
-    test.skip()
-    return
-  }
+  await expect(dialogueField).toBeVisible({ timeout: 3000 })
 
   const dialogueText = `Panel dialogue ${Date.now()}`
   await dialogueField.fill(dialogueText)
