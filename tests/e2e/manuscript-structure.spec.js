@@ -125,9 +125,15 @@ test('scene status cycles and persists', async ({ page }) => {
     return
   }
 
-  const before = await statusBtn.textContent()
-  await statusBtn.click()
-  const after = await statusBtn.textContent()
+  const statusRow = page.locator('.ms-insp-row').first()
+  await expect(statusRow).toBeVisible()
+  const before = await statusRow.locator('.ms-opt.is-on').first().textContent()
+  // Click the next status in the cycle (not currently active) rather than
+  // assuming a fixed index, so this doesn't depend on the scene's starting status.
+  const nextOption = statusRow.locator('.ms-opt:not(.is-on)').first()
+  const after = await nextOption.textContent()
+  await nextOption.click()
+  await expect(statusRow.locator('.ms-opt.is-on')).toHaveText(after)
   expect(after).not.toBe(before)
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
@@ -138,10 +144,15 @@ test('scene status cycles and persists', async ({ page }) => {
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
 })
 
-// ─── Finalize draft ───────────────────────────────────────────────────────────
+// ─── Finalised mode ───────────────────────────────────────────────────────────
 
 test('finalized draft can be created and viewed', async ({ page }) => {
-  // Write some content first
+  // The 2026-08-27 manuscript-editor-redesign replaced the old one-off
+  // "Finalize draft" action button with a persistent "Finalised" mode
+  // alongside Write/Edit in the topbar's mode switcher (ManuscriptTopbar.jsx
+  // MODES, `[role=group][aria-label="Editor mode"]`) — a live read view of
+  // the current manuscript, not a saved snapshot. Write some content first
+  // so there's something to see in that read view.
   const placeholder = page.getByText('Begin writing here…')
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
   await page.getByPlaceholder('Begin writing here…').fill('Draft content for finalization.')
