@@ -99,6 +99,8 @@ jobs:
             spec: tests/e2e/import-into-existing-project.spec.js
           - name: merge-project
             spec: tests/e2e/merge-project.spec.js
+          - name: accessibility
+            spec: tests/e2e/accessibility.spec.js
           - name: workspace-loading
             spec: tests/e2e/workspace-loading.spec.js
           # Added 2026-08-28. This spec existed in tests/e2e/ from the start but
