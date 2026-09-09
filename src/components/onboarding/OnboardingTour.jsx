@@ -1,3 +1,4 @@
+import { useDialogFocus } from '../../utils/useDialogFocus'
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 
 function getRect(selector) {
@@ -76,12 +77,12 @@ export default function OnboardingTour({ steps, onFinish, onSkip, onDisableTours
         const r = node.getBoundingClientRect()
         return r.width > 4 && r.height > 4
       })
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    el?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }, [step.target])
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onSkip?.()
+      if (e.defaultPrevented) return
       if (e.key === 'ArrowRight' && !isLast) setIdx(i => i + 1)
       if (e.key === 'ArrowLeft' && idx > 0) setIdx(i => i - 1)
     }
@@ -89,10 +90,13 @@ export default function OnboardingTour({ steps, onFinish, onSkip, onDisableTours
     return () => window.removeEventListener('keydown', onKey)
   }, [isLast, idx, onSkip])
 
+  const dialogRef = useRef(null)
+  useDialogFocus(dialogRef, onSkip)
+
   const tip = placeTip(vpW, vpH, rect)
 
   return (
-    <div className="tour-root" role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
+    <div ref={dialogRef} tabIndex={-1} className="tour-root" role="dialog" aria-modal="true" aria-label={`Tour: ${step.title}`}>
       {/* Backdrop stays light enough that users can keep their spatial context. */}
       <div className="tour-backdrop" />
 

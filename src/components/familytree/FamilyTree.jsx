@@ -13,7 +13,7 @@ import {
 } from "../../utils/familyRelationships";
 import { extractYear } from "../../utils/characterAge";
 import { getFamilyGenerations } from "../../utils/familyTreeLayout";
-import { UserMediaImage, UserMediaSvgImage } from "../shared/UserMedia";
+import { CharacterPortrait, CharacterAvatar } from "../shared/CharacterPortrait";
 
 const NODE_W = 190;
 const NODE_H = 78;
@@ -581,7 +581,6 @@ export default function FamilyTree({ store }) {
                         const photoY = p.y + (NODE_H - photoSize) / 2;
                         const textX = hasPhoto ? p.x + photoSize + 14 : p.x + 10;
                         const textMaxWidth = NODE_W - (textX - p.x) - 8;
-                        const clipId = `clip-${char.id}`;
                         const relativeLabel = selectedRelationshipLabels.get(char.id)?.label;
                         const relationshipMeta = selectedRelationshipLabels.get(char.id);
                         const isSecret = relationshipMeta?.sourceLinkIds?.some(linkId => {
@@ -610,22 +609,23 @@ export default function FamilyTree({ store }) {
                             }}
                             onMouseLeave={() => setHoveredCharId(null)}
                           >
-                            {hasPhoto && (
-                              <defs>
-                                <clipPath id={clipId}>
-                                  <rect x={photoX} y={photoY} width={photoSize} height={photoSize} rx="6" />
-                                </clipPath>
-                              </defs>
-                            )}
                             <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx="9" fill={isDeceased ? "color-mix(in srgb, var(--bg-nav) 70%, #000 30%)" : "var(--bg-nav)"} stroke={focusCharacterId === char.id ? "var(--accent)" : isDeceased ? "color-mix(in srgb, var(--border) 60%, #000 40%)" : "var(--border)"} strokeWidth={focusCharacterId === char.id ? "2.6" : "1.4"} />
                             {isDeceased && (
                               <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx="9" fill="none" stroke="color-mix(in srgb, var(--border) 50%, #888 50%)" strokeWidth="1" strokeDasharray="4 3" style={{ pointerEvents: "none" }} />
                             )}
                             {hasPhoto && (
-                              <>
-                                <UserMediaSvgImage href={char.image} x={photoX} y={photoY} width={photoSize} height={photoSize} clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid slice" style={{ pointerEvents: "none", filter: isDeceased ? "grayscale(0.6)" : undefined }} />
-                                <rect x={photoX} y={photoY} width={photoSize} height={photoSize} rx="6" fill="none" stroke="var(--border)" strokeWidth="1" style={{ pointerEvents: "none" }} />
-                              </>
+                              // foreignObject (not a clipPath+xMidYMid-slice <image>) so the node photo
+                              // honors the same focal point/zoom as every other portrait in the app —
+                              // see CharacterPortrait in shared/CharacterPortrait.jsx.
+                              <foreignObject x={photoX} y={photoY} width={photoSize} height={photoSize} style={{ pointerEvents: "none" }}>
+                                <CharacterPortrait
+                                  src={char.image}
+                                  position={char.imagePosition}
+                                  zoom={char.imageZoom}
+                                  className="rounded-md border border-[var(--border)]"
+                                  style={{ width: photoSize, height: photoSize, filter: isDeceased ? "grayscale(0.6)" : undefined }}
+                                />
+                              </foreignObject>
                             )}
                             <text x={textX} y={p.y + 22} fill={isDeceased ? "var(--text-muted)" : "var(--text-main)"} fontSize="12" fontWeight="700">{truncateForWidth(char.name, 12, textMaxWidth - (isDeceased ? 10 : 0), true)}{isDeceased ? " †" : ""}</text>
                             <text x={textX} y={p.y + 38} fill="var(--text-muted)" fontSize="10">{truncateForWidth(char.role || "Character", 10, textMaxWidth)}</text>
@@ -653,13 +653,7 @@ export default function FamilyTree({ store }) {
                   <div>
                     <div className="text-xs text-[var(--text-muted)] mb-1">Selected</div>
                     <div className="flex items-center gap-2">
-                      {selectedCharacter.image ? (
-                        <UserMediaImage src={selectedCharacter.image} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-[var(--border)]" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-[var(--accent-fade)] border border-[var(--accent)]/20 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] font-bold text-[var(--accent)]">{selectedCharacter.name.charAt(0)}</span>
-                        </div>
-                      )}
+                      <CharacterAvatar character={selectedCharacter} size={32} />
                       <div className="text-sm text-[var(--text-main)] font-semibold">{selectedCharacter.name}</div>
                     </div>
                     {(() => {
@@ -779,7 +773,12 @@ export default function FamilyTree({ store }) {
           >
             <div className="w-64 bg-[var(--bg-nav)]/95 backdrop-blur-md border-2 border-[var(--accent)]/60 rounded-xl p-4 shadow-2xl text-left">
               {hoveredCharacter.image && (
-                <UserMediaImage src={hoveredCharacter.image} alt={hoveredCharacter.name} className="w-full h-28 object-cover rounded-lg mb-3" />
+                <CharacterPortrait
+                  src={hoveredCharacter.image}
+                  position={hoveredCharacter.imagePosition}
+                  zoom={hoveredCharacter.imageZoom}
+                  className="w-full h-28 rounded-lg mb-3"
+                />
               )}
               <div className="flex items-center gap-2 mb-2">
                 {icon && <img src={icon} alt="" className="w-5 h-5 opacity-80" />}

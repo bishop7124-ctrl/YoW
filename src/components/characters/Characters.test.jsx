@@ -215,8 +215,15 @@ describe('Characters', () => {
     render(<Characters store={editStore({ characters: [{ ...person, image: 'data:image/png;base64,old' }] })} />)
     fireEvent.click(screen.getByRole('button', { name: 'Edit', exact: true }))
     fireEvent.click(screen.getByRole('button', { name: 'Edit Photo', exact: true }))
-    change('Portrait zoom', '2')
     const photo = screen.getByRole('dialog', { name: 'Edit Portrait' })
+    // Drag the crop box's resize handle inward (a real browser fires a click after
+    // a pointer press-drag-release on the same target, which is what the sheet's
+    // dirty-tracking listens for).
+    const handle = within(photo).getByTitle('Drag to resize')
+    fireEvent.pointerDown(handle, { clientX: 280, clientY: 280, pointerId: 1 })
+    fireEvent.pointerMove(handle, { clientX: 140, clientY: 140, pointerId: 1 })
+    fireEvent.pointerUp(handle, { pointerId: 1 })
+    fireEvent.click(handle)
     fireEvent.click(within(photo).getByRole('button', { name: 'Close', exact: true }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Save', exact: true }))
     expect(screen.queryByRole('dialog', { name: 'Edit Portrait' })).toBeNull()
