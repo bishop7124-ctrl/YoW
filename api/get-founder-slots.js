@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 
 /**
  * GET /api/get-founder-slots
@@ -11,10 +12,7 @@ import { createClient } from '@supabase/supabase-js'
  *   { total: number, taken: number, remaining: number }
  */
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'content-type')
+  applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'content-type' })
   // Short cache — stale by up to 60 s is acceptable for a slot counter.
   res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120')
 

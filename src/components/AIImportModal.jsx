@@ -3,6 +3,7 @@ import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk } from '../utils/archiveImportLimits'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -19,12 +20,14 @@ function readTextFile(file) {
   })
 }
 
-async function readZipFile(file) {
+export async function readZipFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
       if (err) { reject(err); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const results = []
       for (const [path, data] of Object.entries(files)) {
         const basename = path.split('/').pop()
@@ -41,12 +44,15 @@ async function readZipFile(file) {
 
 // Attempt to read a ZIP as a native YOW project export.
 // Returns parsed projectData object, or null if not a YOW export.
-async function tryReadYowZip(file) {
+export async function tryReadYowZip(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
-  return new Promise((resolve) => {
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
-      if (err || !files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
+      if (err) { resolve(null); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
+      if (!files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
       try {
         const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
         if (manifest?.app !== 'YOW' || manifest?.format !== 'yow-project-export') { resolve(null); return }
@@ -94,12 +100,14 @@ async function readPdfFile(file) {
 }
 
 // Extract plain text from a .docx file (OOXML — ZIP of XML files).
-async function readDocxFile(file) {
+export async function readDocxFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
       if (err) { reject(new Error(`Could not read ${file.name}`)); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const xmlBytes = files['word/document.xml']
       if (!xmlBytes) { reject(new Error(`${file.name} doesn't appear to be a valid .docx file`)); return }
       const xml = new TextDecoder('utf-8').decode(xmlBytes)
@@ -115,7 +123,7 @@ async function readDocxFile(file) {
   })
 }
 
-async function processFiles(fileList) {
+export async function processFiles(fileList) {
   const results = []
   for (const file of fileList) {
     const lower = file.name.toLowerCase()
@@ -543,9 +551,11 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
   if (sel.acts) {
     for (const act of relabelActsForType(data.acts, typeKey)) {
       const newAct = store.addAct(act.title || structure.level1)
+      if (!newAct) continue
       if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
       for (const chap of act.chapters || []) {
         const newChap = store.addChapter(newAct.id, chap.title || structure.level2)
+        if (!newChap) continue
         if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
         for (const scene of chap.scenes || []) {
           if (typeKey === 'comic') {
@@ -557,7 +567,7 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
             })
           } else {
             const newScene = store.addScene(newChap.id, scene.title || structure.level3)
-            if (scene.synopsis || scene.content)
+            if (newScene && (scene.synopsis || scene.content))
               store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
           }
         }
@@ -573,6 +583,9 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
 export function populateYowProject(store, data, sel) {
   const idMap = {}
   const eraIdMap = {}
+  const actIdMap = {}
+  const chapterIdMap = {}
+  const sceneIdMap = {}
   const ord = (arr) => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   const remap = (oldId) => (oldId && idMap[oldId]) ? idMap[oldId] : oldId
   const remapEra = (oldEraId) => (oldEraId && eraIdMap[oldEraId]) ? eraIdMap[oldEraId] : null
@@ -599,7 +612,7 @@ export function populateYowProject(store, data, sel) {
   if (sel.characters) {
     // Pass 1: create characters with no cross-references (avoids broken links mid-loop)
     for (const c of data.characters || []) {
-      const { id: oldId, novelId: _nid, relationships: _r, parentIds: _p, childIds: _c, spouseIds: _sp, factionId: _f, ...rest } = c
+      const { id: oldId, novelId: _nid, relationships: _r, parentIds: _p, childIds: _c, spouseIds: _sp, factionId: _f, journey: _j, ...rest } = c
       const newId = store.saveCharacter(rest)
       idMap[oldId] = newId
     }
@@ -644,13 +657,14 @@ export function populateYowProject(store, data, sel) {
 
   if (sel.timeline) {
     for (const ev of ord(data.timeline)) {
-      const { id: _id, novelId: _nid, worldHistoryEntryId, eraId, ...rest } = ev
+      const { id: oldId, novelId: _nid, worldHistoryEntryId, eraId, ...rest } = ev
       // Link to the newly-created world history entry if both were imported
       const linkedHistoryEntryId = (sel.worldHistory && worldHistoryEntryId) ? idMap[worldHistoryEntryId] : undefined
-      store.addEvent(
+      const created = store.addEvent(
         { ...rest, eraId: remapEra(eraId), ...(linkedHistoryEntryId ? { linkedHistoryEntryId } : {}) },
         { createHistory: false },
       )
+      if (created?.id) idMap[oldId] = created.id
     }
   }
 
@@ -662,25 +676,49 @@ export function populateYowProject(store, data, sel) {
   }
 
   if (sel.acts) {
+    let recoveryAct = null
+    let recoveryChapter = null
+    const ensureRecoveryAct = () => {
+      if (!recoveryAct) recoveryAct = store.addAct('Recovered outline items')
+      return recoveryAct
+    }
     for (const act of ord(data.acts)) {
-      const newAct = store.addAct(act.title || 'Act')
-      idMap[act.id] = newAct.id
-      if (act.synopsis) store.updateAct(newAct.id, { synopsis: act.synopsis })
-      for (const chap of ord((data.chapters || []).filter(c => c.actId === act.id))) {
-        const newChap = store.addChapter(newAct.id, chap.title || 'Chapter')
-        idMap[chap.id] = newChap.id
-        if (chap.synopsis) store.updateChapter(newChap.id, { synopsis: chap.synopsis })
-        for (const scene of ord((data.scenes || []).filter(s => s.chapterId === chap.id))) {
-          const newScene = store.addScene(newChap.id, scene.title || 'Scene')
-          if (scene.synopsis || scene.content)
-            store.updateScene(newScene.id, { synopsis: scene.synopsis || '', content: scene.content || '' })
-        }
+      const { id: oldId, novelId: _nid, title, order: _order, ...rest } = act
+      const created = store.addAct(title || 'Act')
+      if (!created) continue
+      actIdMap[oldId] = created.id
+      idMap[oldId] ||= created.id
+      if (Object.keys(rest).length) store.updateAct(created.id, rest)
+    }
+    for (const chap of ord(data.chapters)) {
+      const targetActId = actIdMap[chap.actId] || ensureRecoveryAct()?.id
+      if (!targetActId) continue
+      const { id: oldId, novelId: _nid, actId: _actId, title, order: _order, ...rest } = chap
+      const created = store.addChapter(targetActId, title || 'Chapter', rest)
+      if (!created) continue
+      chapterIdMap[oldId] = created.id
+      idMap[oldId] ||= created.id
+      if (Object.keys(rest).length) store.updateChapter(created.id, rest)
+    }
+    for (const scene of ord(data.scenes)) {
+      let targetChapterId = chapterIdMap[scene.chapterId]
+      if (!targetChapterId) {
+        const targetAct = ensureRecoveryAct()
+        if (targetAct && !recoveryChapter) recoveryChapter = store.addChapter(targetAct.id, 'Recovered scenes')
+        targetChapterId = recoveryChapter?.id
       }
+      if (!targetChapterId) continue
+      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, ...rest } = scene
+      const created = store.addScene(targetChapterId, title || 'Scene')
+      if (!created) continue
+      sceneIdMap[oldId] = created.id
+      idMap[oldId] ||= created.id
+      if (Object.keys(rest).length) store.updateScene(created.id, rest)
     }
     // Comic pages/panels belong to the Volume/Issue structure imported above.
     for (const page of ord(data.comicPages)) {
       const { id: oldId, novelId: _nid, issueId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = page
-      const created = store.addComicPage(remap(issueId), {
+      const created = store.addComicPage(chapterIdMap[issueId] || remap(issueId), {
         ...rest,
         characterIds: (characterIds || []).map(remap),
         locationIds: (locationIds || []).map(remap),
@@ -694,6 +732,27 @@ export function populateYowProject(store, data, sel) {
         characterIds: (characterIds || []).map(remap),
         locationIds: (locationIds || []).map(remap),
       })
+    }
+
+  }
+
+  // Character journeys are created before structure so their chapter/scene
+  // references can only be restored after the new outline IDs are known.
+  if (sel.characters) {
+    for (const character of data.characters || []) {
+      if (!character.journey || !idMap[character.id]) continue
+      store.saveCharacter({
+        journey: {
+          ...character.journey,
+          beats: (character.journey.beats || []).map(beat => ({
+            ...beat,
+            timelineEventId: remap(beat.timelineEventId),
+            chapterId: chapterIdMap[beat.chapterId] || beat.chapterId,
+            sceneId: sceneIdMap[beat.sceneId] || beat.sceneId,
+            linkedCharacterId: remap(beat.linkedCharacterId),
+          })),
+        },
+      }, idMap[character.id])
     }
   }
 
@@ -718,8 +777,12 @@ export function populateYowProject(store, data, sel) {
 
   if (sel.storySchedule) {
     for (const ev of ord(data.storySchedule)) {
-      const { id: _id, novelId: _nid, ...rest } = ev
-      store.addScheduleEvent(rest)
+      const { id: _id, novelId: _nid, linkedCharacters, linkedLocations, ...rest } = ev
+      store.addScheduleEvent({
+        ...rest,
+        linkedCharacters: (linkedCharacters || []).map(remap),
+        linkedLocations: (linkedLocations || []).map(remap),
+      })
     }
   }
 
@@ -730,12 +793,14 @@ export function populateYowProject(store, data, sel) {
 
 // Compatible structured ZIP import
 
-async function tryReadStructuredZip(file) {
+export async function tryReadStructuredZip(file) {
   const { unzip, unzipSync } = await import('fflate')
   const buffer = await file.arrayBuffer()
-  return new Promise((resolve) => {
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), (err, files) => {
       if (err) { resolve(null); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const paths = Object.keys(files)
       const isNC = paths.some(p =>
         /^(characters|locations|lore|items|other|snippets|notes)\/[^/]+\/metadata\.json$/.test(p)
@@ -792,7 +857,9 @@ async function tryReadStructuredZip(file) {
       const docxBytes = files['novel.docx']
       if (docxBytes) {
         try {
+          assertArchiveInputSizeOk(docxBytes.byteLength, `"${file.name}" (novel.docx)`)
           const docxFiles = unzipSync(docxBytes)
+          assertUnzippedResultOk(docxFiles, `"${file.name}" (novel.docx)`)
           const xmlBytes = docxFiles['word/document.xml']
           if (xmlBytes) {
             const xml = new TextDecoder('utf-8').decode(xmlBytes)
@@ -817,7 +884,13 @@ async function tryReadStructuredZip(file) {
               }
             }
           }
-        } catch { /* manuscript extraction failed — skip */ }
+        } catch (manuscriptErr) {
+          // A limit-exceeded guard must abort the whole import with a clear
+          // error rather than being treated like an ordinary corrupt/invalid
+          // novel.docx (which we tolerate by just skipping the manuscript).
+          if (manuscriptErr?.isArchiveLimitError) { reject(manuscriptErr); return }
+          /* manuscript extraction failed — skip */
+        }
       }
 
       // Extract project name from ZIP filename
@@ -1339,8 +1412,9 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (yowImport?.project?.wordTarget) extras.wordTarget = yowImport.project.wordTarget
     if (Array.isArray(yowImport?.project?.enabledSections)) extras.enabledSections = yowImport.project.enabledSections
     if (yowImport?.project?.scheduleCalendar) extras.scheduleCalendar = yowImport.project.scheduleCalendar
+    if (yowImport?.project?.scheduleViewSettings) extras.scheduleViewSettings = yowImport.project.scheduleViewSettings
     if (yowImport?.project?.categoryOptions) extras.categoryOptions = yowImport.project.categoryOptions
-    const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras })
+    const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras }, { seedManuscript: !selections.acts })
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
     setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport, isNewProject: true })
