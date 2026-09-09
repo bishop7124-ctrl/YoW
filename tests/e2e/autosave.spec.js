@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
-  seedCleanStorage, waitForStorage, writeInDefaultScene,
+  seedCleanStorage, waitForManuscriptReady, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -53,7 +53,7 @@ test('multi-scene: scenes written in different chapters are isolated in localSto
   await page.reload()
   // Wait for real hydration before reading storage — a read right after
   // page.reload can race the app's own async backend-swap in main.jsx.
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
 
   // readScenesWithContent, not readStorage — scene prose lives under its own
   // nf_scene_content:<id> key, not inline on the nf_scenes record.
@@ -67,7 +67,7 @@ test('multi-scene: scenes written in different chapters are isolated in localSto
 
 test('rapid typing is fully captured before reload', async ({ page }) => {
   await createProject(page, { title: 'Rapid Type Test' })
-  await page.getByRole('button', { name: 'Write' }).click()
+  await page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' }).click()
 
   const placeholder = page.getByText('Begin writing here…')
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
@@ -121,4 +121,36 @@ test('autosave timestamp is written to nf_localWriteAt', async ({ page }) => {
 
   const ts = await readStorage(page, 'nf_localWriteAt')
   expect(ts).toBeGreaterThanOrEqual(before)
+})
+
+// Regression test for the 2026-08-07 "false 'edited in two tabs' scene-conflict
+// copy on every normal typing pause, in a single tab" bug (docs/ROADMAP.md Bugs
+// table): the store's conflict detection used to compare a debounced draft write
+// against a fresher in-progress commit and read the lag itself as "another tab
+// changed this." Fixed by flushing the draft synchronously before that comparison
+// (SceneEditor.jsx's debouncedUpdate). This is the browser-QA pass that row's
+// Next Action called for, promoted into a permanent regression guard.
+test('typing with pauses in a single tab never raises a false sync-conflict banner', async ({ page }) => {
+  await createProject(page, { title: 'Conflict Banner Test' })
+  await page.getByRole('button', { name: 'Write' }).click()
+  await page.getByText('Begin writing here…').click()
+  const editor = page.getByPlaceholder('Begin writing here…')
+
+  // Bursts separated by 1-10s pauses, single tab/session — the exact scenario
+  // the roadmap row's Next Action asks for.
+  const bursts = ['First burst of writing.', 'Second burst after a pause.', 'Third burst, longer pause before this one.']
+  const pauses = [1000, 4000, 8000]
+  for (let i = 0; i < bursts.length; i++) {
+    await editor.pressSequentially(bursts[i], { delay: 30 })
+    await page.waitForTimeout(pauses[i])
+    await expect(page.locator('.ms-toolbar-conflict-btn')).toHaveCount(0)
+  }
+
+  // Crash-safety guarantee from the 2026-08-06 row must still hold: a blur
+  // still flushes the draft immediately, so content survives a reload.
+  await page.locator('body').click({ position: { x: 5, y: 5 } })
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
+  await page.reload()
+  await expect(page.locator('.ms-preview').filter({ hasText: bursts[0].slice(0, 15) })).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('.ms-toolbar-conflict-btn')).toHaveCount(0)
 })

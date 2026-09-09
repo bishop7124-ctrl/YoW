@@ -102,6 +102,20 @@ test('writing view can be reached via direct URL without losing content', async 
   await writeInDefaultScene(page, text)
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
 
+  // Wait for the debounced save to actually land in storage before
+  // navigating away — mirrors writeInDefaultScene's own wait. Without this,
+  // page.goto('/') below can fire before the write reaches storage, which
+  // isn't what this test means to verify (see the 2026-08-25 ROADMAP note on
+  // whether beforeunload/pagehide flushing alone is fast enough for a real
+  // user who navigates within the debounce window — a separate, still-open
+  // question this test intentionally isn't exercising).
+  await page.waitForFunction((expected) => {
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    const scenes = JSON.parse(get('nf_scenes') || '[]')
+    const matches = (content) => content === expected || (content || '').includes(expected.slice(0, 40))
+    return scenes.some(s => matches(s.content) || matches(get(`nf_scene_content:${s.id}`)))
+  }, text, { timeout: 8000 })
+
   const writingUrl = page.url()
   // Flush the storage backend's own async persist queue before navigating
   // away. The app's active backend can be an IndexedDB-backed vault whose
@@ -113,11 +127,35 @@ test('writing view can be reached via direct URL without losing content', async 
   // this one didn't, which is what made it intermittently fail (confirmed:
   // it failed 13/20 runs without this flush, 0/20 with it).
   await page.evaluate(() => window.__yowStorageBridge?.flush())
-
   await page.goto('/')
   await page.goto(writingUrl)
 
   // Should be in writing view, content should have been saved
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   await expect(page.locator('.ms-preview').filter({ hasText: text.slice(0, 15) })).toBeVisible({ timeout: 10_000 })
+})
+
+// Roadmap bug: "Dashboard had no dedicated URL — shared `/` with the
+// marketing homepage." Fixed via buildRoute returning `/dashboard` for
+// viewMode === 'manager' plus a redirect from bare `/`. This suite runs
+// under VITE_OFFLINE_MODE, which has no logged-out state to reach the
+// marketing homepage from (see the top-of-file note in accessibility.spec.js)
+// — so only the logged-in-state QA from that row's Next Action is coverable
+// here: log in -> URL becomes /dashboard, project-nav-and-back, and
+// bookmark/reload. The logged-out `/` behavior still needs manual QA.
+test('dashboard has its own /dashboard URL, survives navigation and reload', async ({ page }) => {
+  await expect(page).toHaveURL(/\/dashboard$/)
+
+  await createProject(page, { title: 'Dashboard URL Test' })
+  await expect(page).toHaveURL(/\/project\/.+/)
+
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByRole('heading', { name: 'Dashboard URL Test' })).toBeVisible()
+
+  // Bookmark/reload: reloading directly at /dashboard should land back on
+  // the dashboard, not bounce to a project or the marketing homepage.
+  await page.reload()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByRole('heading', { name: 'Dashboard URL Test' })).toBeVisible()
 })

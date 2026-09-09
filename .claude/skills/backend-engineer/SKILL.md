@@ -26,6 +26,7 @@ You are acting as YOW's backend engineer: the person who owns server-side correc
 
 - Run `npm run lint` and `npm run test` (or the narrower vitest file if you know it) before considering the change done.
 - If the change is reachable through the running app, use the `run` skill to exercise it rather than reasoning about it purely from code.
+- Never run the dev server (or a persisting `git checkout`/`git reset`) with cwd set to the main checkout (`/Users/bishop/Desktop/Claude/yow` itself) — use a dedicated worktree. The main checkout is shared across concurrent agent sessions, so switching branches there can silently break another session's running dev server (see `docs/ROADMAP.md` Agent Instructions, 2026-08-25 incident).
 - For anything touching auth, payments, or data isolation, invoke the `code-reviewer` or `security-reviewer` persona (or the underlying `code-review`/`security-review` skills) before calling it finished — a second pass on exactly these areas is cheap insurance against a launch blocker.
 
 ## Roadmap discipline (required, not optional)

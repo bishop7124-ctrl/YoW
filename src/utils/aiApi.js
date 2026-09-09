@@ -1,4 +1,8 @@
+import { supabase } from '../supabase'
 import { buildProjectTypePromptContext } from './aiToolPrompts'
+import { isDesktopAppRuntime } from './runtime.js'
+import { OFFLINE_MODE, mockStreamMessage } from './offlineMock'
+import { normalizeAiUsage } from './aiUsage'
 
 export const DEFAULT_CREATIVE_CHAT_DIRECTIVE = `Help with writing, plot, character development, world-building, and creative problem-solving.
 
@@ -15,20 +19,43 @@ export const PROVIDERS = {
   google: {
     name: 'Google AI Studio',
     keyPlaceholder: 'AIza...',
+    setupUrl: 'https://aistudio.google.com/app/apikey',
+    bestFor: 'Fast drafting, brainstorming, and general-purpose creative help.',
+    freeUsage: 'May offer free usage or allowances depending on Google pricing, region, and account configuration.',
+    billing: 'Users in the UK, EEA, or Switzerland must use a key for a Google Cloud project with active billing where Google requires Paid Services.',
+    limitations: 'Model access and quotas vary by account; Google may change or retire Gemini model IDs.',
+    // Starter/fallback list only — Google retires Gemini model IDs on a few
+    // months' notice, and has been cutting new-user access to old IDs even
+    // faster than its own published shutdown dates (2.0 Flash/Flash-Lite:
+    // shut down June 2026; 2.5 Pro/Flash/Flash-Lite: still listed by
+    // ListModels but already 404ing for new keys as "no longer available to
+    // new users", well ahead of their October 2026 shutdown date). Because
+    // ListModels can say a model is available when generateContent will
+    // reject it, the live catalog from fetchGoogleModels() below is
+    // necessary but not sufficient — friendlyErrorMessage() below also
+    // special-cases that rejection so switching models is a one-message fix
+    // instead of a mystery. This list is what renders before the live
+    // catalog resolves, or if it fails.
     models: [
-      { id: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
-      { id: 'gemini-1.5-pro',        label: 'Gemini 1.5 Pro' },
-      { id: 'gemini-1.5-flash',      label: 'Gemini 1.5 Flash' },
-      { id: 'gemma-3-27b-it',        label: 'Gemma 3 27B' },
-      { id: 'gemma-3-12b-it',        label: 'Gemma 3 12B' },
-      { id: 'gemma-3-4b-it',         label: 'Gemma 3 4B' },
+      { id: 'gemini-3.6-flash',           label: 'Gemini 3.6 Flash' },
+      { id: 'gemini-3.5-flash',           label: 'Gemini 3.5 Flash' },
+      { id: 'gemini-2.5-pro',             label: 'Gemini 2.5 Pro' },
+      { id: 'gemini-2.5-flash',           label: 'Gemini 2.5 Flash' },
+      { id: 'gemini-2.5-flash-lite',      label: 'Gemini 2.5 Flash Lite' },
+      { id: 'gemma-3-27b-it',             label: 'Gemma 3 27B' },
+      { id: 'gemma-3-12b-it',             label: 'Gemma 3 12B' },
+      { id: 'gemma-3-4b-it',              label: 'Gemma 3 4B' },
     ],
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-3.6-flash',
   },
   openrouter: {
     name: 'OpenRouter',
     keyPlaceholder: 'sk-or-...',
+    setupUrl: 'https://openrouter.ai/keys',
+    bestFor: 'Trying many model families from one account, including models with large context windows.',
+    freeUsage: 'Offers some free or free-labelled models when available, usually with tighter rate limits and reliability limits.',
+    billing: 'Paid credits may be required for higher reliability, larger models, or exhausted free quotas.',
+    limitations: 'Availability, limits, and data handling can vary by the upstream model provider behind OpenRouter.',
     models: [
       { id: 'google/gemma-3-27b-it',              label: 'Gemma 3 27B' },
       { id: 'google/gemma-3-12b-it',              label: 'Gemma 3 12B' },
@@ -45,6 +72,11 @@ export const PROVIDERS = {
   anthropic: {
     name: 'Anthropic',
     keyPlaceholder: 'sk-ant-...',
+    setupUrl: 'https://console.anthropic.com/settings/keys',
+    bestFor: 'Long-form story reasoning, editorial critique, and character/world consistency work.',
+    freeUsage: 'API access usually requires an Anthropic Console account and may require credits or billing.',
+    billing: 'Billing or prepaid credits may be required before some models can be used.',
+    limitations: 'Model access, rate limits, and context limits vary by account and current Anthropic policy.',
     models: [
       { id: 'claude-sonnet-4-6',          label: 'Claude Sonnet 4.6' },
       { id: 'claude-opus-4-7',            label: 'Claude Opus 4.7' },
@@ -53,9 +85,14 @@ export const PROVIDERS = {
     defaultModel: 'claude-sonnet-4-6',
   },
   openai: {
-    name: 'OpenAI-compatible',
+    name: 'OpenAI, Groq, Mistral or Together',
     keyPlaceholder: 'sk-...',
     hasBaseUrl: true,
+    setupUrl: 'https://platform.openai.com/api-keys',
+    bestFor: 'OpenAI API models and the named Groq, Mistral and Together integrations.',
+    freeUsage: 'Depends entirely on the selected endpoint; some providers offer trial credits or free tiers.',
+    billing: 'Billing may be required by the selected endpoint before API requests or specific models work.',
+    limitations: 'Model IDs, limits, pricing and data practices vary by provider. Custom endpoints are not supported.',
     models: [
       { id: 'gpt-4o',                    label: 'GPT-4o' },
       { id: 'gpt-4o-mini',               label: 'GPT-4o mini' },
@@ -67,33 +104,142 @@ export const PROVIDERS = {
   },
 }
 
-// ── OpenRouter live model catalog ───────────────────────────────────────────
-// OpenRouter hosts 300+ models and adds/retires them continuously — the
-// hardcoded PROVIDERS.openrouter.models list above is just a curated starter
-// set, not a reflection of any given account. This fetches the real, current
-// catalog from OpenRouter's public models endpoint (no API key required,
-// CORS-enabled) so the settings UI can show what's actually available.
-let openRouterModelsCache = null
-let openRouterModelsPromise = null
+// ── Live model catalogs ──────────────────────────────────────────────────────
+// Every provider here retires and ships model IDs faster than this file gets
+// edited (OpenRouter alone hosts 300+ and churns continuously; Google has
+// shut down or renamed a whole model generation more than once this year).
+// The PROVIDERS[...].models lists above are just curated starter/fallback
+// sets — these functions fetch each provider's real, current catalog so the
+// settings UI reflects what's actually callable right now. Results are
+// cached per cache key (provider, plus API key/base URL for providers whose
+// catalog depends on the account) so re-rendering the settings panel doesn't
+// re-fetch on every keystroke.
+const modelCatalogCache = new Map() // cacheKey -> models[] | Promise<models[]>
+export const NAMED_OPENAI_ENDPOINTS = [
+  { label: 'OpenAI', url: 'https://api.openai.com/v1' },
+  { label: 'Groq', url: 'https://api.groq.com/openai/v1' },
+  { label: 'Mistral', url: 'https://api.mistral.ai/v1' },
+  { label: 'Together', url: 'https://api.together.xyz/v1' },
+]
+const PROXIED_OPENAI_BASE_URLS = new Set(NAMED_OPENAI_ENDPOINTS.map(endpoint => endpoint.url))
+const UNSUPPORTED_ENDPOINT = 'Custom AI endpoints are not supported. Choose OpenAI, Groq, Mistral or Together in AI Settings.'
 
+const aiProxyEndpoint = () => {
+  const base = import.meta.env.VITE_DESKTOP_API_BASE_URL
+    || (isDesktopAppRuntime() ? 'https://www.yourownworld.co.uk' : '')
+  return `${base}/api/ai-proxy`
+}
+
+function normalizeBaseUrl(baseUrl) {
+  try {
+    const url = new URL(baseUrl || PROVIDERS.openai.defaultBaseUrl)
+    if (url.hash || url.search || url.username || url.password) return ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return ''
+  }
+}
+
+function canProxyProvider(provider, baseUrl) {
+  if (provider !== 'openai') return ['google', 'anthropic', 'openrouter'].includes(provider)
+  return PROXIED_OPENAI_BASE_URLS.has(normalizeBaseUrl(baseUrl))
+}
+
+async function proxyHeaders() {
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !data?.session?.access_token) throw new Error('Please sign in to YOW again to use AI tools.')
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }
+}
+
+async function proxyJson(action, payload) {
+  const res = await fetch(aiProxyEndpoint(), {
+    method: 'POST',
+    headers: await proxyHeaders(),
+    body: JSON.stringify({ action, ...payload }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = parseProviderError(res.status, data)
+    throw new Error(friendlyErrorMessage(err.status, err.message, {
+      provider: payload.provider,
+      metadata: err.metadata,
+      retryAfter: readRetryAfter(res),
+    }))
+  }
+  return data
+}
+
+function cachedModelFetch(cacheKey, fetcher) {
+  const cached = modelCatalogCache.get(cacheKey)
+  if (cached) return Promise.resolve(cached)
+  const promise = fetcher()
+    .then(list => { modelCatalogCache.set(cacheKey, list); return list })
+    .catch(err => { modelCatalogCache.delete(cacheKey); throw err })
+  modelCatalogCache.set(cacheKey, promise)
+  return promise
+}
+
+// OpenRouter: public, key-less, CORS-enabled — same catalog for everyone.
 export function fetchOpenRouterModels() {
-  if (openRouterModelsCache) return Promise.resolve(openRouterModelsCache)
-  if (openRouterModelsPromise) return openRouterModelsPromise
-  openRouterModelsPromise = fetch('https://openrouter.ai/api/v1/models')
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json()
-    })
-    .then(data => {
-      const list = (data?.data || [])
-        .map(m => ({ id: m.id, label: m.name || m.id, contextLength: m.context_length }))
-        .filter(m => m.id)
-        .sort((a, b) => a.label.localeCompare(b.label))
-      openRouterModelsCache = list
-      return list
-    })
-    .catch(err => { openRouterModelsPromise = null; throw err })
-  return openRouterModelsPromise
+  return cachedModelFetch('openrouter', async () => {
+    const data = await proxyJson('models', { provider: 'openrouter' })
+    return (data?.data || [])
+      .map(m => ({ id: m.id, label: m.name || m.id, contextLength: m.context_length }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// Google AI Studio: ListModels requires the caller's own key and only
+// returns models that key can actually use, so cache per key.
+export function fetchGoogleModels(apiKey) {
+  if (!apiKey) return Promise.reject(new Error('An API key is required to load Google\'s live model list.'))
+  return cachedModelFetch(`google:${apiKey}`, async () => {
+    const data = await proxyJson('models', { provider: 'google', apiKey })
+    return (data?.models || [])
+      .filter(m => m.supportedGenerationMethods?.some(g => g === 'generateContent' || g === 'streamGenerateContent'))
+      .map(m => ({ id: (m.name || '').replace(/^models\//, ''), label: m.displayName || m.name, contextLength: m.inputTokenLimit }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// Anthropic: model access varies by account, so cache per key.
+export function fetchAnthropicModels(apiKey) {
+  if (!apiKey) return Promise.reject(new Error('An API key is required to load Anthropic\'s live model list.'))
+  return cachedModelFetch(`anthropic:${apiKey}`, async () => {
+    const data = await proxyJson('models', { provider: 'anthropic', apiKey })
+    return (data?.data || [])
+      .map(m => ({ id: m.id, label: m.display_name || m.id }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// OpenAI-compatible: the /models list endpoint is part of the OpenAI spec
+// most compatible backends (Groq, Together, Mistral, Ollama, ...) implement,
+// but not all do — callers should fall back to the curated list on failure.
+export function fetchOpenAIModels(apiKey, baseUrl) {
+  if (!apiKey) return Promise.reject(new Error('An API key is required to load the live model list.'))
+  if (!canProxyProvider('openai', baseUrl)) return Promise.reject(new Error(UNSUPPORTED_ENDPOINT))
+  return cachedModelFetch(`openai:${normalizeBaseUrl(baseUrl)}:${apiKey}`, async () => {
+    const data = await proxyJson('models', { provider: 'openai', apiKey, baseUrl })
+    return (data?.data || [])
+      .map(m => ({ id: m.id, label: m.id }))
+      .filter(m => m.id)
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
+}
+
+// Single entry point the settings UI calls regardless of which provider is
+// active, so it doesn't need a per-provider branch for "how do I refresh
+// this catalog".
+export function fetchLiveModels(provider, { apiKey, baseUrl } = {}) {
+  if (provider === 'openrouter') return fetchOpenRouterModels()
+  if (provider === 'google')     return fetchGoogleModels(apiKey)
+  if (provider === 'anthropic')  return fetchAnthropicModels(apiKey)
+  if (provider === 'openai')     return fetchOpenAIModels(apiKey, baseUrl)
+  return Promise.reject(new Error(`No live model catalog for provider: ${provider}`))
 }
 
 // ── Error messages ────────────────────────────────────────────────────────────
@@ -101,17 +247,70 @@ export function fetchOpenRouterModels() {
 // a bad key, a rate limit, and a provider outage all rendered as the same
 // generic red box with whatever raw string the provider happened to send.
 
-export function friendlyErrorMessage(status, rawMessage) {
+export function friendlyErrorMessage(status, rawMessage, options = {}) {
+  const { provider, metadata = {}, retryAfter } = options
+  const message = redactSensitiveText(rawMessage || '')
+  const errorType = metadata.error_type || metadata.errorType
+  const providerCode = metadata.provider_code || metadata.providerCode
+  const waitText = retryAfter ? ` Wait ${retryAfter} second${Number(retryAfter) === 1 ? '' : 's'} before retrying.` : ''
+  const isOpenRouter = provider === 'openrouter'
+  const openRouterSuffix = isOpenRouter
+    ? ' For OpenRouter free models, try a different model ending in :free, wait for the quota window to reset, add OpenRouter credits, or switch to a paid model variant.'
+    : ''
+
+  // Providers retire model IDs faster than users update their settings —
+  // and Google in particular has been cutting new-key access to a model
+  // before its own published shutdown date, so this isn't even rare. Catch
+  // it by phrasing rather than status code since providers don't agree on
+  // one (Google: 404 "no longer available to new users"; others: 400/410).
+  if (/no longer available|has been (deprecated|retired|removed|shut ?down)|model not found/i.test(message)) {
+    return `This model isn't available anymore. Open AI Settings and pick another from the live model list. (${message})`
+  }
   if (status === 401 || status === 403) {
-    return `Your API key looks invalid or doesn't have permission for this model. Check it in AI Settings. (${rawMessage})`
+    return `Your API key looks invalid or doesn't have permission for this model. Check it in AI Settings. (${message})`
+  }
+  if (status === 402 || errorType === 'payment_required') {
+    return `Your AI provider account or API key is out of credits. Check the provider billing/limits page or choose a free model your key can use. (${message})`
+  }
+  if (status === 400 || status === 413 || /context|token|too (long|large)|maximum|exceeds/i.test(message)) {
+    return `The request is too large or malformed for this model. Try a smaller context selection, a shorter excerpt, or a model with a larger context window. (${message})`
   }
   if (status === 429) {
-    return `The AI provider is rate-limiting requests — wait a moment and try again. (${rawMessage})`
+    if (isOpenRouter && (providerCode || /provider returned error|upstream|provider/i.test(message))) {
+      return `OpenRouter reached the selected model, but the upstream provider is rate-limiting or at capacity.${waitText}${openRouterSuffix} (${message})`
+    }
+    return `The AI provider is rate-limiting requests.${waitText || ' Wait a moment and try again.'}${openRouterSuffix} (${message})`
+  }
+  if (errorType === 'provider_overloaded' || errorType === 'provider_unavailable') {
+    return `OpenRouter couldn't get a usable response from the selected model provider.${waitText} Try another model or a paid model variant if this keeps happening. (${message})`
   }
   if (status >= 500) {
-    return `The AI provider is having issues right now — this isn't something you can fix, try again shortly. (${rawMessage})`
+    return `The AI provider is having issues right now — this isn't something you can fix, try again shortly. (${message})`
   }
-  return rawMessage
+  return message
+}
+
+function readRetryAfter(res) {
+  const value = res.headers?.get?.('Retry-After')
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null
+}
+
+function redactSensitiveText(value = '') {
+  return String(value)
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[redacted API key]')
+    .replace(/sk-(?:or|ant|proj)?-[0-9A-Za-z_-]{12,}/g, '[redacted API key]')
+    .replace(/(api[_-]?key=)[^&\s)]+/gi, '$1[redacted]')
+    .slice(0, 1000)
+}
+
+function parseProviderError(status, data) {
+  const error = data?.error || {}
+  return {
+    status: Number(error.code) || status,
+    message: redactSensitiveText(error.message || `HTTP ${status}`),
+    metadata: error.metadata || {},
+  }
 }
 
 // ── Shared SSE reader ─────────────────────────────────────────────────────────
@@ -140,109 +339,69 @@ async function readSSE(body, onEvent) {
 
 // ── Provider implementations ──────────────────────────────────────────────────
 
-async function streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
+async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens = 4096, signal, promptMetadata, cacheControl }) {
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const makeRequest = async (nextCacheControl) => fetch(aiProxyEndpoint(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: systemPrompt, messages }),
+      headers: await proxyHeaders(),
+      body: JSON.stringify({ action: 'stream', provider, apiKey, model, baseUrl, systemPrompt, messages, jsonMode, maxTokens, promptMetadata, cacheControl: nextCacheControl }),
       signal,
     })
+    let res = await makeRequest(cacheControl)
     if (!res.ok) {
-      let msg = `HTTP ${res.status}`
-      try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(res.status, msg))
+      let err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} }
+      try { err = parseProviderError(res.status, await res.json()) } catch { /* ignore */ }
+      if (cacheControl?.eligible && /cache|cached|cache_control|cacheControl/i.test(err.message)) {
+        res = await makeRequest({ ...cacheControl, eligible: false, fallbackReason: err.message })
+        if (res.ok) {
+          // Continue with the normal stream reader below using the successful
+          // uncached response. Do not issue a second provider request.
+        } else {
+        try { err = parseProviderError(res.status, await res.json()) } catch { err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} } }
+        }
+      }
+      if (!res.ok) return onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata, retryAfter: readRetryAfter(res) }))
     }
     let done = false
     const onceDone = () => { if (!done) { done = true; onDone() } }
     await readSSE(res.body, (parsed) => {
-      if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') onChunk(parsed.delta.text)
-      if (parsed.type === 'message_stop') { onceDone(); return true }
-    })
-    onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
-}
-
-async function streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens = 4096, signal }) {
-  try {
-    const contents = messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }))
-    const generationConfig = { maxOutputTokens: maxTokens }
-    if (jsonMode) generationConfig.response_mime_type = 'application/json'
-    const body = { contents, generationConfig }
-    if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    })
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`
-      try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(res.status, msg))
-    }
-    let done = false
-    const onceDone = () => { if (!done) { done = true; onDone() } }
-    await readSSE(res.body, (parsed) => {
-      const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text
-      if (text) onChunk(text)
-      if (parsed.candidates?.[0]?.finishReason === 'STOP') { onceDone(); return true }
-    })
-    onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
-}
-
-async function streamOpenAI({ apiKey, model, baseUrl, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, maxTokens = 4096, signal }) {
-  try {
-    const url        = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/chat/completions`
-    const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages]
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, messages: apiMessages }),
-      signal,
-    })
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`
-      try { const d = await res.json(); msg = d.error?.message || msg } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(res.status, msg))
-    }
-    let done = false
-    const onceDone = () => { if (!done) { done = true; onDone() } }
-    await readSSE(res.body, (parsed) => {
+      if (provider === 'google') {
+        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) onChunk(text)
+        if (parsed.usageMetadata) onUsage?.(normalizeAiUsage(provider, parsed.usageMetadata, { model, contextMode: promptMetadata?.contextMode }))
+        if (parsed.candidates?.[0]?.finishReason === 'STOP') { onceDone(); return true }
+        return false
+      }
+      if (provider === 'anthropic') {
+        if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') onChunk(parsed.delta.text)
+        if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
+        if (parsed.type === 'message_delta' && parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
+        if (parsed.type === 'message_stop') { onceDone(); return true }
+        return false
+      }
+      if (parsed.error) {
+        const err = parseProviderError(parsed.error.code || 500, parsed)
+        onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata }))
+        done = true
+        return true
+      }
+      if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
       const text = parsed.choices?.[0]?.delta?.content
       if (text) onChunk(text)
       if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
+      return false
     })
-    onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
+    if (!done) onceDone()
+  } catch (e) {
+    if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`)
+  }
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-import { OFFLINE_MODE, mockStreamMessage } from './offlineMock'
-
-export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens, signal }) {
+export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl }) {
   if (OFFLINE_MODE)         return mockStreamMessage({ onChunk, onDone, onError })
   if (!apiKey)              return onError('No API key configured.')
-  if (provider === 'anthropic')   return streamAnthropic({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
-  if (provider === 'google')      return streamGoogle({ apiKey, model, systemPrompt, messages, onChunk, onDone, onError, jsonMode, maxTokens, signal })
-  if (provider === 'openrouter')  return streamOpenAI({
-    apiKey, model, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal,
-    baseUrl: 'https://openrouter.ai/api/v1',
-    extraHeaders: { 'HTTP-Referer': 'https://yow.app', 'X-Title': 'Your Own World' },
-  })
-  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, maxTokens, signal })
+  if (canProxyProvider(provider, baseUrl)) return streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl })
+  if (provider === 'openai') return onError(UNSUPPORTED_ENDPOINT)
   onError(`Unknown provider: ${provider}`)
 }
 
@@ -252,6 +411,16 @@ export function buildSystemPrompt(novel, context, store, agentDirective) {
     buildProjectTypePromptContext(novel),
     agentDirective?.trim() || DEFAULT_CREATIVE_CHAT_DIRECTIVE,
   ].filter(Boolean)
+
+  if (context?.builtContext || context?.stableContext || context?.requestContext) {
+    if (context.stableContext) lines.push(`\n--- STABLE PROJECT CONTEXT ---\n${context.stableContext}`)
+    if (context.requestContext) lines.push(`\n--- SELECTED REQUEST CONTEXT ---\n${context.requestContext}`)
+    if (!context.stableContext && context.builtContext) lines.push(`\n--- PROJECT CONTEXT ---\n${context.builtContext}`)
+    if (context.customInstruction?.trim()) {
+      lines.push(`\n--- ADDITIONAL CONTEXT ---\n${context.customInstruction.trim()}`)
+    }
+    return lines.join('\n')
+  }
 
   const { characterIds, locationIds, loreEntryIds, worldHistoryIds, chapterIds, ideaEntryIds, customInstruction } = context
 

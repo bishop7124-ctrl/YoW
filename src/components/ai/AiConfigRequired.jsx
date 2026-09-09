@@ -65,7 +65,7 @@ export function AiUpgradeRequiredNotice({
           background: 'var(--accent)',
           border: 'none',
           borderRadius: 7,
-          color: 'var(--bg-main)',
+          color: 'var(--accent-contrast)',
           cursor: 'pointer',
           fontFamily: 'inherit',
           fontSize: 12,

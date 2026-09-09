@@ -73,7 +73,7 @@ function buildSystemPrompt(activeNovel, activeScene, characters, locations, sele
   return lines.join('\n')
 }
 
-export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, selectedText = '', onAppendToScene, userId = null, membership = null }) {
+export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, selectedText = '', onAppendToScene, onReplaceSelection, userId = null, membership = null }) {
   const [prompt, setPrompt] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -119,6 +119,12 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   const handleAppend = () => {
     if (!suggestion.trim() || !activeScene) return
     onAppendToScene(activeScene.id, suggestion.trim())
+    setSuggestion('')
+  }
+
+  const handleReplace = () => {
+    if (!suggestion.trim() || !activeScene || !hasSelectedText) return
+    onReplaceSelection(activeScene.id, suggestion.trim())
     setSuggestion('')
   }
 
@@ -267,6 +273,14 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
                 title={activeScene ? undefined : 'Focus a scene first'}
               >
 	                Insert at cursor
+              </button>
+              <button
+                className="ai-btn"
+                onClick={handleReplace}
+                disabled={!activeScene || !hasSelectedText}
+                title={hasSelectedText ? 'Replace the highlighted text' : 'Highlight text in the scene first'}
+              >
+                Replace
               </button>
               <button className="ai-btn" onClick={handleCopy}>Copy</button>
               <button className="ai-btn ai-btn--muted" onClick={() => setSuggestion('')}>Discard</button>

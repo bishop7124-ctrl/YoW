@@ -3,9 +3,9 @@ import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { supabase } from '../../supabase'
 
-// Desktop app download page (/download). Lifetime and Founder members only —
-// everyone else sees a sign-in or upgrade prompt. The installer links are
-// fetched from the entitlement-gated API, never embedded in the bundle.
+// Desktop app download page (/download). Lifetime, Founder, and temporary beta
+// members only — everyone else sees a sign-in or upgrade prompt. The installer
+// links are fetched from the entitlement-gated API, never embedded in the bundle.
 
 const PLATFORM_HINTS = {
   macos: 'macOS 12 or later · Apple Silicon',
@@ -44,7 +44,7 @@ function StatusPanel({ title, body, children }) {
 }
 
 export default function DownloadPage({ user, membership, authLoading, onLogin, onGetStarted }) {
-  const entitled = !!user && !!membership?.isLifetime
+  const entitled = !!user && !!membership?.canDownloadDesktop
   const [links, setLinks] = useState(null)
   const [linksError, setLinksError] = useState(false)
   const [linksLoading, setLinksLoading] = useState(false)
@@ -100,7 +100,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
       return (
         <StatusPanel
           title="Available on Lifetime and Founder plans"
-          body="The desktop app — with its local project vault and permanent Local Mode — is part of the Lifetime and Founder tiers. Upgrade to download it."
+          body={membership?.isBetaNoticeActive ? "Your 30-day beta notice retains full web access. Desktop downloads require Lifetime or Founder membership during this period." : "The desktop app — with its local project vault and permanent Local Mode — is part of the Lifetime and Founder tiers. Upgrade to download it."}
         >
           <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>
             View plans
@@ -121,7 +121,9 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
       return (
         <StatusPanel
           title="Your builds are being prepared"
-          body="Your Lifetime licence includes the desktop app. The installers aren't available for download just yet — check back here soon."
+          body={membership?.isBetaTester
+            ? "Your beta access includes the desktop app. The installers aren't available for download just yet — check back here soon."
+            : "Your Lifetime licence includes the desktop app. The installers aren't available for download just yet — check back here soon."}
         >
           <a href="mailto:support@yourownworld.co.uk" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
             Contact support

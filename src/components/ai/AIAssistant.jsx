@@ -3,6 +3,7 @@ import { streamMessage, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, appendAiBarExchange, appendAiBarExchangeToSessions, getAiChatStorageKey } from '../../utils/aiChatHistory'
 import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
+import { buildAIContext } from '../../utils/aiContext'
 import { AI_CONFIG_REQUIRED_TEXT, AiSettingsLink } from './AiConfigRequired'
 import AIStar from './AIStar'
 
@@ -20,7 +21,7 @@ const SECTION_CONFIG = {
   worldhistory: { label: 'World History', createType: 'history',   placeholder: 'Add a historical entry, or ask about your world history…' },
   ideas:        { label: 'Notes',         createType: 'idea',      placeholder: 'Add a note or idea, or brainstorm with AI…' },
   factions:     { label: 'Factions',      createType: 'faction',   placeholder: 'Add a faction, or ask about your groups…' },
-  schedule:     { label: 'Schedule',      createType: 'schedule',  placeholder: 'Add a schedule event, or ask about your writing calendar…' },
+  schedule:     { label: 'Schedule',      createType: 'schedule',  placeholder: 'Add a schedule event, or ask about your story calendar…' },
   manuscript:   { label: 'Manuscript',    createType: 'scene',     placeholder: 'Ask about your story, add a scene, or brainstorm ideas…' },
   outline:      { label: 'Outline',       createType: null,        placeholder: 'Ask about your story structure…' },
   dashboard:    { label: 'Overview',      createType: null,        placeholder: 'Ask about your project…' },
@@ -38,16 +39,25 @@ const CREATE_SCHEMAS = {
   history:   { title: '', era: '', dateRange: '', content: '', tags: [] },
   idea:      { title: '', body: '', group: '', color: 'amber', tags: [] },
   faction:   { name: '', description: '', motto: '' },
-  schedule:  { title: '', date: '', category: 'scene', duration: 1 },
+  schedule:  { title: '', description: '', year: 1, month: 1, day: 1, category: 'scene', duration: 1, tags: [] },
   scene:     { title: '', synopsis: '', content: '' },
 }
 
 // ── System prompt builder ─────────────────────────────────────────────────────
 
-function buildSystemPrompt(section, store) {
+function buildSystemPrompt(section, store, options = {}) {
   const cfg   = SECTION_CONFIG[section] || {}
   const novel = store.activeNovel
   const createType = cfg.createType
+  const projectContext = buildAIContext({
+    projectId: store.activeNovelId || novel?.id,
+    mode: 'smart',
+    userPrompt: options.userPrompt,
+    activeCharacterId: store.selectedCharacterId,
+    provider: options.provider,
+    model: options.model,
+    store,
+  })
 
   const lines = [
     'You are an AI assistant embedded in Your Own World, a creative writing platform.',
@@ -70,7 +80,7 @@ function buildSystemPrompt(section, store) {
     '',
   )
 
-  const ctx = buildContext(section, store)
+  const ctx = projectContext.context || buildContext(section, store)
   if (ctx) lines.push(ctx)
 
   return lines.filter(l => l !== null).join('\n')
@@ -150,7 +160,10 @@ function executeCreate(type, data, store) {
     case 'schedule':  store.addScheduleEvent(data); break
     case 'scene': {
       const firstChapter = store.chapters?.[0]
-      if (firstChapter) store.addScene(firstChapter.id, data.title || 'New Scene')
+      if (firstChapter) {
+        const scene = store.addScene(firstChapter.id, data.title || 'New Scene')
+        if (scene) store.updateScene(scene.id, { synopsis: data.synopsis || '', content: data.content || '' })
+      }
       break
     }
     default: break
@@ -294,15 +307,17 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
     setStatus('loading')
     setInput('')
     setParsed(null)
+    setErrMsg('')
 
-    const systemPrompt = buildSystemPrompt(section, store)
+    const model = provCfg.model || PROVIDERS[provider]?.defaultModel
+    const systemPrompt = buildSystemPrompt(section, store, { userPrompt: text, provider, model })
     const isGoogle = provider === 'google'
     let accumulated = ''
 
     streamMessage({
       provider,
       apiKey:   provCfg.apiKey,
-      model:    provCfg.model || PROVIDERS[provider]?.defaultModel,
+      model,
       baseUrl:  provCfg.baseUrl,
       systemPrompt,
       messages: [{ role: 'user', content: text }],
@@ -348,6 +363,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
             setStatus('answer')
           } else {
             setErrMsg(`No response. ${AI_CONFIG_REQUIRED_TEXT}`)
+            setInput(text)
             setStatus('error')
           }
         }
@@ -355,6 +371,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
       },
       onError: (err) => {
         setErrMsg(err)
+        setInput(text)
         setStatus('error')
         inputRef.current?.focus()
       },
@@ -435,7 +452,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send() } }}
           placeholder={isLoading ? 'Thinking…' : cfg.placeholder}
           disabled={isLoading}
-          className="flex-1 bg-transparent text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none min-w-0 disabled:opacity-40 transition-opacity"
+          className="flex-1 bg-transparent text-base text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none min-w-0 disabled:opacity-40 transition-opacity"
         />
         {isLoading ? (
           <span className="w-4 h-4 border-2 border-[var(--border)] border-t-[var(--accent)] rounded-full animate-spin flex-shrink-0" />

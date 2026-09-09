@@ -438,7 +438,7 @@ function StatusQueue({ stats, series = [], onOpenProject }) {
           </label>
           <label className="status-sort-control">
             <span>Sort</span>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} aria-label="Sort by">
               {STATUS_SORTS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </label>
@@ -738,7 +738,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
                 onKeyDown={handleTagKey}
                 onBlur={commitTag}
                 placeholder={form.tags.length ? '' : 'fantasy, sci-fi… (Enter or comma to add)'}
-                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: 'var(--text-main)', padding: '1px 0' }}
+                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--text-main)', padding: '1px 0' }}
               />
             </div>
           </div>
@@ -819,7 +819,7 @@ function EditSeriesModal({ series, allStats, store, onSave, onDelete, onClose })
             Cancel
           </button>
           <button type="submit"
-            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
             Save
           </button>
         </div>
@@ -1081,7 +1081,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
                 onKeyDown={handleTagKey}
                 onBlur={commitTag}
                 placeholder={form.tags.length ? '' : 'fantasy, sci-fi... (Enter or comma to add)'}
-                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: 'var(--text-main)', padding: '1px 0' }}
+                style={{ flex: 1, minWidth: 140, background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--text-main)', padding: '1px 0' }}
               />
             </div>
           </div>
@@ -1099,7 +1099,7 @@ function EditProjectModal({ project, series, store, onSave, onDelete, onClose })
             Cancel
           </button>
           <button type="submit"
-            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+            style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
             Save
           </button>
         </div>
@@ -1337,6 +1337,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     const type = isProjectTypeSelectable(form.type) ? form.type : DEFAULT_TYPE
     const typeCfg = getProjectType(type)
     const sessionTarget = getDefaultSessionTarget(type)
+    trackEvent('project_create_started', { source: 'library', project_type: type })
     const novel = store.addNovel({
       ...form,
       type,
@@ -1349,6 +1350,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
     setForm({ title: '', description: '', type: DEFAULT_TYPE, seriesId: '' })
     setShowForm(false)
     if (novel) onOpenProject(novel.id)
+    else trackEvent('project_create_error', { source: 'library', project_type: type })
   }
 
   const handleCloseProjectForm = () => {
@@ -1710,6 +1712,9 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
       {/* New series modal */}
       {showSeriesForm && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-series-modal-title"
           style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={handleCloseSeriesForm}
         >
@@ -1723,7 +1728,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
             }}
             onClick={e => e.stopPropagation()}
           >
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-main)' }}>New Series</p>
+            <p id="new-series-modal-title" style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-main)' }}>New Series</p>
             <input
               autoFocus
               placeholder="Series name *"
@@ -1736,7 +1741,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               <button type="submit"
                 style={{
                   flex: 1, padding: '10px 0', borderRadius: 7, border: 'none',
-                  background: 'var(--accent)', color: 'var(--bg-main)',
+                  background: 'var(--accent)', color: 'var(--accent-contrast)',
                   fontSize: 13, fontWeight: 800, cursor: 'pointer',
                 }}>
                 Create
@@ -1764,6 +1769,9 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
       {/* New project modal */}
       {showForm && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-project-modal-title"
           style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={handleCloseProjectForm}
         >
@@ -1777,7 +1785,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
             }}
             onClick={e => e.stopPropagation()}
           >
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-main)' }}>New Project</p>
+            <p id="new-project-modal-title" style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-main)' }}>New Project</p>
 
             <input
               autoFocus
@@ -1841,7 +1849,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               <button type="submit"
                 style={{
                   flex: 1, padding: '10px 0', borderRadius: 7, border: 'none',
-                  background: 'var(--accent)', color: 'var(--bg-main)',
+                  background: 'var(--accent)', color: 'var(--accent-contrast)',
                   fontSize: 13, fontWeight: 800, cursor: 'pointer',
                 }}>
                 Create
