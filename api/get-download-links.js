@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 import { getMembership } from '../src/utils/membership.js'
 
 // Vercel API route — desktop app download delivery.
@@ -9,10 +10,7 @@ import { getMembership } from '../src/utils/membership.js'
 
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
