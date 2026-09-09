@@ -44,7 +44,7 @@ function StatusPanel({ title, body, children }) {
 }
 
 export default function DownloadPage({ user, membership, authLoading, onLogin, onGetStarted }) {
-  const entitled = !!user && !!membership?.isDesktopEntitled
+  const entitled = !!user && !!membership?.canDownloadDesktop
   const [links, setLinks] = useState(null)
   const [linksError, setLinksError] = useState(false)
   const [linksLoading, setLinksLoading] = useState(false)
@@ -100,7 +100,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
       return (
         <StatusPanel
           title="Available on Lifetime and Founder plans"
-          body="The desktop app — with its local project vault and permanent Local Mode — is part of the Lifetime and Founder tiers. Upgrade to download it."
+          body={membership?.isBetaNoticeActive ? "Your 30-day beta notice retains full web access. Desktop downloads require Lifetime or Founder membership during this period." : "The desktop app — with its local project vault and permanent Local Mode — is part of the Lifetime and Founder tiers. Upgrade to download it."}
         >
           <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>
             View plans
