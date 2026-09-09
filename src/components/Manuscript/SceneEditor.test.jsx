@@ -2,7 +2,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { SceneEditor } from './SceneEditor.jsx'
-import { DEFAULT_FORMAT, LARGE_SCENE_CHAR_THRESHOLD } from './manuscriptUtils.js'
+import { DEFAULT_FORMAT } from './manuscriptUtils.js'
 
 // This file wasn't cleaning up the DOM between tests (each `render()` call left its
 // output mounted), which every existing test tolerated only because it scopes its
