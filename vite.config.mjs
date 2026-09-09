@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Routes handled by the React SPA — do not serve static files for these
 const SPA_ROUTES = new Set(['/features', '/features/', '/pricing', '/pricing/', '/faq', '/faq/', '/founders', '/founders/'])
 
-// Serve static marketing HTML pages from public/ in dev (e.g. /founders/, /about/)
+// Serve static marketing HTML pages from public/ in dev (e.g. /about/ and the SEO landing pages)
 function staticHtmlMiddleware() {
   return {
     name: 'static-html-middleware',

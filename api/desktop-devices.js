@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { getMembership } from '../src/utils/membership.js'
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_lib/cors.js'
 
@@ -12,7 +13,6 @@ import { applyCors } from './_lib/cors.js'
 // The registry is advisory by design: it powers the cap, the devices UI, and
 // offline-grace re-verification. It never gates editing or export client-side.
 
-const DESKTOP_ENTITLED_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
 const DEFAULT_DEVICE_CAP = 3
 
 const deviceCap = () => {
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
 
     const serverMetadata = user.app_metadata || {}
     const plan = serverMetadata.subscription_plan || (serverMetadata.beta_tester === true ? 'beta_tester' : null)
-    if (!DESKTOP_ENTITLED_PLAN_KEYS.has(plan)) {
+    if (!getMembership(user).isDesktopEntitled) {
       return res.status(403).json({ error: 'Your account does not include desktop access.' })
     }
 
