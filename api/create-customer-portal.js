@@ -49,6 +49,8 @@ export async function downgradeToFreeLocally(supabaseAdmin, user) {
       ...existingApp,
       subscription_status: 'none',
       subscription_plan: null,
+      beta_tester: false,
+      access_revoked_at: new Date().toISOString(),
       ...(wasMonthly ? { was_monthly: true } : {}),
     },
   }
