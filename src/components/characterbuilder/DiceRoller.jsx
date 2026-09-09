@@ -502,7 +502,18 @@ export default function DiceRoller({ onClose }) {
             position: 'relative',
             cursor: stageEmpty ? 'default' : 'pointer',
             flexShrink: 0,
-          }} onClick={stageEmpty ? undefined : clearStage}>
+          }}
+            onClick={stageEmpty ? undefined : clearStage}
+            role={stageEmpty ? undefined : 'button'}
+            tabIndex={stageEmpty ? undefined : 0}
+            aria-label={stageEmpty ? undefined : 'Clear rolled dice'}
+            onKeyDown={stageEmpty ? undefined : event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                clearStage()
+              }
+            }}
+          >
             {stageEmpty ? (
               <div style={{ textAlign: 'center', opacity: 0.4 }}>
                 <svg viewBox="0 0 64 64" width="52" height="52" fill="none" stroke="var(--text-muted)" strokeWidth="2" style={{ display: 'block', margin: '0 auto 10px' }}>
