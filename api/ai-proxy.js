@@ -1,4 +1,3 @@
-/* global process, Buffer */
 import { createClient } from '@supabase/supabase-js'
 import { buildOpenAiTokenLimit } from '../src/utils/aiTokenParams.js'
 import { getMembership } from '../src/utils/membership.js'
