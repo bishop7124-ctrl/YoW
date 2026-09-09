@@ -1,13 +1,21 @@
 /**
- * Seed script for mbishoptesting@gmail.com
- * Wipes all existing user data then writes a fresh Testing Series
- * with one populated project for each active launch project type.
+ * Destructive QA seed script.
+ *
+ * Wipes all app data owned by the explicitly supplied test account, then
+ * writes a fresh Testing Series with one populated project for every active
+ * launch project type. It intentionally has no default account or credential.
+ *
+ * Required environment:
+ *   SUPABASE_URL (or VITE_SUPABASE_URL)
+ *   SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY)
+ *   YOW_SEED_EMAIL
+ *   YOW_SEED_PASSWORD
+ *   YOW_SEED_CONFIRM=WIPE_USER_DATA
+ *   YOW_SEED_CONFIRM_EMAIL=<same value as YOW_SEED_EMAIL>
  */
-import { createClient } from '/Users/bishop/Desktop/Claude/yow/node_modules/@supabase/supabase-js/dist/index.mjs'
+import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://cwifaklpjqutlcwvkxpp.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3aWZha2xwanF1dGxjd3ZreHBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NTcwODEsImV4cCI6MjA5MzAzMzA4MX0.Nia6Zuypi91kr1CwloAZq0hUMQ_dUboqLEH4cQKVbBk'
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const WIPE_CONFIRMATION = 'WIPE_USER_DATA'
 
 const USER_TABLES = ['novels', 'series_items']
 const NOVEL_TABLES = [
@@ -1546,10 +1554,30 @@ function buildStructure(novelId, type, contentFn) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+  const seedEmail = process.env.YOW_SEED_EMAIL
+  const seedPassword = process.env.YOW_SEED_PASSWORD
+  const required = {
+    'SUPABASE_URL or VITE_SUPABASE_URL': supabaseUrl,
+    'SUPABASE_ANON_KEY or VITE_SUPABASE_ANON_KEY': supabaseAnonKey,
+    YOW_SEED_EMAIL: seedEmail,
+    YOW_SEED_PASSWORD: seedPassword,
+  }
+  const missing = Object.entries(required).filter(([, value]) => !value).map(([name]) => name)
+  if (missing.length) throw new Error(`Missing required environment: ${missing.join(', ')}`)
+  if (process.env.YOW_SEED_CONFIRM !== WIPE_CONFIRMATION) {
+    throw new Error(`Refusing destructive seed. Set YOW_SEED_CONFIRM=${WIPE_CONFIRMATION}.`)
+  }
+  if (process.env.YOW_SEED_CONFIRM_EMAIL !== seedEmail) {
+    throw new Error('Refusing destructive seed. YOW_SEED_CONFIRM_EMAIL must exactly match YOW_SEED_EMAIL.')
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
   console.log('Authenticating...')
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: 'mbishoptesting@gmail.com',
-    password: 'testing1234',
+    email: seedEmail,
+    password: seedPassword,
   })
   if (authError) { console.error('Auth failed:', authError.message); process.exit(1) }
   const userId = authData.user.id
@@ -1725,4 +1753,7 @@ async function main() {
   console.log('\nDone. Reload the app and clear browser localStorage for this account if stale local data appears.')
 }
 
-main().catch(console.error)
+main().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})

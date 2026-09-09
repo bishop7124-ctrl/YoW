@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
+import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 function mockStore() {
   const calls = {
     characters: [], locations: [], lore: [], history: [], events: [], ideas: [],
-    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [], maps: [],
+    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [], maps: [], schedule: [],
   }
   let n = 0
   const nid = (p) => `${p}-${++n}`
@@ -42,7 +42,7 @@ function mockStore() {
       if (!map) return
       Object.assign(map, updater(map))
     },
-    addScheduleEvent: () => {},
+    addScheduleEvent: (data) => { const item = { ...data, id: nid('schedule') }; calls.schedule.push(item); return item },
     addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
     updateWhiteboard: (board) => { calls.whiteboards.push(board) },
   }
@@ -198,6 +198,43 @@ describe('populateYowProject', () => {
     expect(store.calls.rpgCharacters).toHaveLength(1)
     expect(store.calls.rpgCharacters[0].name).toBe('Thorn')
     expect(store.calls.rpgCharacters[0]).not.toHaveProperty('novelId')
+  })
+
+  it('remaps Schedule links to the imported character and location records', () => {
+    const store = mockStore()
+    populateYowProject(store, {
+      characters: [{ id: 'old-character', name: 'Hero' }], locations: [{ id: 'old-location', name: 'Keep' }],
+      storySchedule: [{ id: 'old-schedule', novelId: 'old-project', title: 'Arrival', linkedCharacters: ['old-character'], linkedLocations: ['old-location'] }],
+    }, { characters: true, locations: true, storySchedule: true })
+    expect(store.calls.schedule[0].linkedCharacters).toEqual([store.calls.characters[0].id])
+    expect(store.calls.schedule[0].linkedLocations).toEqual([store.calls.locations[0].id])
+  })
+
+  it('preserves Outline metadata, recovers orphan records, and remaps journey structure links', () => {
+    const store = mockStore()
+    populateYowProject(store, {
+      characters: [{ id: 'old-character', name: 'Hero', journey: { beats: [{ id: 'beat', chapterId: 'old-chapter', sceneId: 'old-scene' }] } }],
+      acts: [{ id: 'old-act', novelId: 'old-project', title: 'Act', synopsis: '', storyEvent: 'setup', order: 0 }],
+      chapters: [
+        { id: 'old-chapter', novelId: 'old-project', actId: 'old-act', title: 'Chapter', synopsis: '', storyEvent: 'turning-point', sessionPlan: { hooks: 'A clue' }, order: 0 },
+        { id: 'orphan-chapter', novelId: 'old-project', actId: 'missing-act', title: 'Lost chapter', synopsis: 'Recovered', order: 1 },
+      ],
+      scenes: [
+        { id: 'old-scene', novelId: 'old-project', chapterId: 'old-chapter', title: 'Scene', synopsis: '', content: 'Words', storyEvent: 'climax', status: 'draft', order: 0 },
+        { id: 'orphan-scene', novelId: 'old-project', chapterId: 'missing-chapter', title: 'Lost scene', content: 'Recovered words', order: 1 },
+      ],
+    }, { acts: true, characters: true })
+
+    const chapter = store.calls.chapters.find(item => item.title === 'Chapter')
+    const scene = store.calls.scenes.find(item => item.title === 'Scene')
+    const hero = store.calls.characters.find(item => item.name === 'Hero')
+    expect(store.calls.acts.find(item => item.title === 'Act')).toMatchObject({ synopsis: '', storyEvent: 'setup' })
+    expect(chapter).toMatchObject({ synopsis: '', storyEvent: 'turning-point', sessionPlan: { hooks: 'A clue' } })
+    expect(scene).toMatchObject({ synopsis: '', content: 'Words', storyEvent: 'climax', status: 'draft' })
+    expect(hero.journey.beats[0]).toMatchObject({ chapterId: chapter.id, sceneId: scene.id })
+    expect(store.calls.acts.some(item => item.title === 'Recovered outline items')).toBe(true)
+    expect(store.calls.chapters.some(item => item.title === 'Lost chapter')).toBe(true)
+    expect(store.calls.scenes.some(item => item.title === 'Lost scene')).toBe(true)
   })
 })
 
@@ -384,6 +421,82 @@ describe('countLabel', () => {
   it('keeps lore as "entries"/"entry"', () => {
     expect(countLabel({ lore: Array(7).fill({}) }, 'lore')).toBe('7 entries')
     expect(countLabel({ lore: [{}] }, 'lore')).toBe('1 entry')
+  })
+})
+
+describe('isNewProjectImport (import-into-existing-project rollback guard)', () => {
+  // This guard decides whether a failed import population is allowed to
+  // delete the project it was populating — it must NEVER return true for an
+  // existing project the user chose as an import destination, since a false
+  // positive here would delete real, pre-existing user data on an import
+  // failure that has nothing to do with that project's other content.
+  it('says "safe to delete" for a brand-new project created by this import', () => {
+    expect(isNewProjectImport({ novelId: 'n1', isNewProject: true })).toBe(true)
+  })
+
+  it('says "do not delete" for an existing project chosen as the destination', () => {
+    expect(isNewProjectImport({ novelId: 'existing-1', isNewProject: false })).toBe(false)
+  })
+
+  it('defaults to "safe to delete" (matches pre-existing create-new-project behavior) when isNewProject is absent', () => {
+    expect(isNewProjectImport({ novelId: 'n1' })).toBe(true)
+  })
+})
+
+describe('filterYowCompatibleDestinations', () => {
+  // populateYowProject() (unlike populateProject) is not destination-type-aware:
+  // it writes acts/chapters/scenes and comicPages/comicPanels purely based on what
+  // the source export contains. A comic project's workspace only ever renders Comic
+  // Pages and a non-comic project's workspace only ever renders Manuscript scenes,
+  // so a cross-type "import into" would silently write content nowhere the user can
+  // see it. The destination list must exclude those mismatched projects.
+  const novels = [
+    { id: 'novel-1', type: 'novel' },
+    { id: 'dnd-1', type: 'dnd_campaign' },
+    { id: 'comic-1', type: 'comic' },
+    { id: 'comic-2', type: 'comic' },
+  ]
+
+  it('keeps only non-comic destinations for a non-comic source export', () => {
+    const result = filterYowCompatibleDestinations(novels, { project: { type: 'novel' } })
+    expect(result.map(n => n.id)).toEqual(['novel-1', 'dnd-1'])
+  })
+
+  it('keeps only comic destinations for a comic source export', () => {
+    const result = filterYowCompatibleDestinations(novels, { project: { type: 'comic' } })
+    expect(result.map(n => n.id)).toEqual(['comic-1', 'comic-2'])
+  })
+
+  it('treats a missing/unknown source type as non-comic', () => {
+    expect(filterYowCompatibleDestinations(novels, {}).map(n => n.id)).toEqual(['novel-1', 'dnd-1'])
+    expect(filterYowCompatibleDestinations(novels, null).map(n => n.id)).toEqual(['novel-1', 'dnd-1'])
+  })
+
+  it('handles an empty/missing novel list', () => {
+    expect(filterYowCompatibleDestinations(null, { project: { type: 'novel' } })).toEqual([])
+    expect(filterYowCompatibleDestinations([], { project: { type: 'novel' } })).toEqual([])
+  })
+})
+
+describe('filterImportableNovels (Free-plan single-editable-project lock)', () => {
+  // A Free account can only edit membership.freeProjectId — every other project is
+  // view-only elsewhere in the app (NovelManager.jsx ProjectCard, useStore.js
+  // isFreeLockedProject). "Import into" must never let a Free user write new
+  // records into a project the rest of the app treats as locked/view-only.
+  const novels = [{ id: 'novel-1' }, { id: 'novel-2' }, { id: 'novel-3' }]
+
+  it('allows every project when there is no membership / no free lock', () => {
+    expect(filterImportableNovels(novels, null).map(n => n.id)).toEqual(['novel-1', 'novel-2', 'novel-3'])
+    expect(filterImportableNovels(novels, {}).map(n => n.id)).toEqual(['novel-1', 'novel-2', 'novel-3'])
+  })
+
+  it('restricts to only the free-locked project when freeProjectId is set', () => {
+    expect(filterImportableNovels(novels, { freeProjectId: 'novel-2' }).map(n => n.id)).toEqual(['novel-2'])
+  })
+
+  it('handles an empty/missing novel list', () => {
+    expect(filterImportableNovels(null, { freeProjectId: 'novel-2' })).toEqual([])
+    expect(filterImportableNovels([], { freeProjectId: 'novel-2' })).toEqual([])
   })
 })
 

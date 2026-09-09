@@ -69,7 +69,7 @@ export default function CloudExpiryWarningModal({ membership, store, novels, des
         <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           {desktopApp
             ? "When it ends, cloud sync is fully turned off on this device — there's no toggle to switch it back on. Your writing stays safely in the local vault, and cloud sync resumes automatically the moment you renew."
-            : "When it ends, your web account falls back to Free cloud limits (one project, 5 MB) until you renew Cloud Mode. Nothing is deleted, but it's a good time to grab a full backup."}
+            : "When it ends, your web account falls back to Free cloud limits (one editable project, 250 MB) until you renew Cloud Mode. Nothing is deleted, but it's a good time to grab a full backup."}
         </p>
         <p style={{ margin: '0 0 18px', fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           Renew for £{HOSTING_RENEWAL_FEE_GBP}/year to keep hosted sync, storage, and backups — or export everything now just in case.

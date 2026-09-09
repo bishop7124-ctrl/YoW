@@ -3,7 +3,7 @@ import Modal from '../shared/Modal'
 import { StudioButton } from '../presentation/Studio'
 import { ARC_TYPE_OPTIONS, normalizeJourney } from '../../utils/characterJourney'
 
-const INPUT = 'field w-full px-3 py-2 text-sm placeholder:text-[var(--text-muted)]'
+const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const groups = [
@@ -50,11 +50,16 @@ const groups = [
 
 export default function CharacterJourneyForm({ character, onSave, onClose }) {
   const [form, setForm] = useState(() => normalizeJourney(character.journey))
+  const [error, setError] = useState('')
   const set = (field, value) => setForm(current => ({ ...current, [field]: value }))
 
   return (
     <Modal title={`Shape ${character.name}'s journey`} onClose={onClose} wide centered>
-      <form className="space-y-6" onSubmit={event => { event.preventDefault(); onSave(form) }}>
+      <form data-confirms-save className="space-y-6" onSubmit={event => {
+        event.preventDefault()
+        if (!onSave(form)) setError('The journey could not be saved. Your draft is still here.')
+        else event.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
+      }}>
         <div className="grid gap-4 sm:grid-cols-2">
           <label>
             <span className={LABEL}>Arc type</span>
@@ -87,6 +92,7 @@ export default function CharacterJourneyForm({ character, onSave, onClose }) {
           </section>
         ))}
 
+        {error && <p role="alert">{error}</p>}
         <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
           <StudioButton type="button" tone="secondary" onClick={onClose}>Cancel</StudioButton>
           <StudioButton type="submit" tone="primary">Save journey</StudioButton>
