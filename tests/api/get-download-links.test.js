@@ -91,6 +91,14 @@ describe('get-download-links handler', () => {
     }
   )
 
+  it('denies downloads during the launch notice even with active beta metadata', async () => {
+    getUser.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'beta_tester', subscription_status: 'active', beta_notice_started_at: new Date().toISOString() } } }, error: null })
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(res.json).not.toHaveBeenCalledWith(expect.objectContaining({ platforms: expect.anything() }))
+  })
+
   it('returns download links for a server beta flag without a duplicated plan key', async () => {
     getUser.mockResolvedValue({ data: { user: { app_metadata: { beta_tester: true } } }, error: null })
     const res = makeRes()

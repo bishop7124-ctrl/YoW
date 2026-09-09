@@ -404,6 +404,7 @@ export default function ManuscriptRail({
 
   const handleAddScene = useCallback((chapId) => {
     const newScene = addScene(chapId, labels.level3)
+    if (!newScene) return
     requestAnimationFrame(() => {
       document.getElementById(`ms-scene-${newScene.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
@@ -622,21 +623,6 @@ export default function ManuscriptRail({
           </nav>
 
           <div className="ms-rail-f">
-            <button
-              type="button"
-              className="ms-rail-f-btn"
-              onClick={() => {
-                const lastAct = sortedActs[sortedActs.length - 1]
-                const lastChap = lastAct
-                  ? chapters.filter(c => c.actId === lastAct.id).sort((a, b) => a.order - b.order).slice(-1)[0]
-                  : null
-                if (lastChap) handleAddScene(lastChap.id)
-              }}
-              disabled={chapters.length === 0}
-              title={chapters.length === 0 ? `Add a ${labels.level2.toLowerCase()} first` : `Add a ${labels.level3.toLowerCase()} to the end of the manuscript`}
-            >
-              + {labels.level3}
-            </button>
             <button
               type="button"
               className="ms-rail-f-btn"

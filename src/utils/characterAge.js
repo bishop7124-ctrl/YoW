@@ -1,8 +1,6 @@
-export function extractYear(value) {
-  if (value === null || value === undefined) return null
-  const match = String(value).match(/-?\d+/)
-  return match ? Number(match[0]) : null
-}
+import { parseTimelineYear } from './timelineYear.js'
+
+export const extractYear = parseTimelineYear
 
 export function getCharacterAge(character, currentYear) {
   const birthYear = extractYear(character?.birthDate)
@@ -10,7 +8,7 @@ export function getCharacterAge(character, currentYear) {
   const endYear = extractYear(character?.deathDate) ?? extractYear(currentYear)
   if (endYear === null) return null
   if (birthYear > endYear) return `Born ${birthYear}`
-  return `${endYear - birthYear}${character?.deathDate ? ' at death' : ''}`
+  return `${endYear - birthYear}${extractYear(character?.deathDate) !== null ? ' at death' : ''}`
 }
 
 export function getAgeInputValue(character, currentYear) {
@@ -23,6 +21,6 @@ export function getAgeInputValue(character, currentYear) {
 export function getBirthDateFromAge(age, currentYear, deathDate = '') {
   const parsedAge = Number(age)
   const endYear = extractYear(deathDate) ?? extractYear(currentYear)
-  if (!Number.isFinite(parsedAge) || parsedAge < 0 || endYear === null) return ''
-  return `Year ${endYear - Math.floor(parsedAge)}`
+  if (age == null || String(age).trim() === '' || !Number.isSafeInteger(parsedAge) || parsedAge < 0 || endYear === null) return ''
+  return `Year ${endYear - parsedAge}`
 }
