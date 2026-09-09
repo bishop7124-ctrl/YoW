@@ -26,11 +26,14 @@ test('project settings exports DOCX and visual PDF', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Project settings' }).click()
 
+  // The readable Word export ships as a ZIP of separate .docx files per
+  // section (see getProjectDocxZipFilename / downloadProjectDocx in
+  // projectExportDocx.js — product decision 2026-07-20), not a bare .docx —
+  // the button label and downloaded filename both reflect that.
   const docxDownloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: /Word docs ZIP/ }).click()
   const docxDownload = await docxDownloadPromise
-  // "Word docs ZIP" bundles separate .docx files (story, characters, etc.) into one archive.
-  expect(docxDownload.suggestedFilename()).toMatch(/\.zip$/)
+  expect(docxDownload.suggestedFilename()).toMatch(/-word-docs\.zip$/)
   const docxPath = await docxDownload.path()
   expect(docxPath).toBeTruthy()
   expect(fs.statSync(docxPath).size).toBeGreaterThan(100)

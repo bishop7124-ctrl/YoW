@@ -41,3 +41,8 @@ scripts/interest-sync/logs/
 *.sw?
 .claude/*
 !.claude/skills
+
+# Stray local Claude memory directory — never belongs in the repo (found
+# committed at 334d744, 2026-06-23; contained a plaintext test-account
+# credential, see docs/ROADMAP.md Priority -1 P0-04 audit item)
+/memory/

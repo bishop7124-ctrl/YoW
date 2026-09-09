@@ -1,6 +1,7 @@
 import { createIndexedDbBackend } from './indexedDbBackend.js'
 import { setStorageBackend } from './projectStorage.js'
 import { isDesktopAppRuntime } from '../utils/runtime.js'
+import { markLocalWriteFailed, clearLocalWriteFailed, hasLocalWriteFailed } from './writeDurability.js'
 
 // Exported so anything that needs to talk to this database directly (e.g.
 // tests/e2e/helpers.js's seedIndexedDbEntries, which seeds pre-boot data via
@@ -116,7 +117,20 @@ function installFlushHandlers(backend) {
   const flush = () => { backend.flush?.() }
 
   window.addEventListener('pagehide', flush)
-  window.addEventListener('beforeunload', flush)
+  // beforeunload gets its own handler (not the shared `flush` above): a
+  // browser cannot be made to guarantee an in-flight async IndexedDB write
+  // finishes before the page actually unloads (audit finding P0-07), so the
+  // one real protection available here is blocking navigation with a
+  // confirmation prompt when a write is already known to have failed and
+  // hasn't recovered — giving the user a chance to wait/retry instead of
+  // silently losing it.
+  window.addEventListener('beforeunload', (event) => {
+    flush()
+    if (hasLocalWriteFailed()) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush()
   })
@@ -127,7 +141,7 @@ function installFlushHandlers(backend) {
 // Any failure here (indexedDB missing, blocked in a locked-down/private context,
 // etc.) leaves the existing browser-local (localStorage) default backend in
 // place rather than throwing, matching projectStorage.js's own fallback shape.
-export async function initializeIndexedDbStorage({ onWriteError = console.error } = {}) {
+export async function initializeIndexedDbStorage({ onWriteError = console.error, retry } = {}) {
   if (isDesktopAppRuntime()) return null
   if (!isIndexedDbAvailable()) return null
 
@@ -138,7 +152,19 @@ export async function initializeIndexedDbStorage({ onWriteError = console.error 
       entries,
       persistItem: (key, value) => putEntry(db, key, value),
       removePersistedItem: key => deleteEntry(db, key),
-      onWriteError,
+      // Feeds writeDurability.js's tracking (audit P0-07) — this is what
+      // turns a real async persist failure into the same persistent,
+      // dismissible warning banner (App.jsx) that already existed for the
+      // synchronous localStorage-quota case, and what makes hasLocalWriteFailed()
+      // (checked above by the beforeunload handler, and polled by
+      // useStore.js) actually reflect production reality instead of only
+      // ever being true for a code path IndexedDB never takes.
+      onWriteError: (error, key) => {
+        markLocalWriteFailed(key)
+        onWriteError(error, key)
+      },
+      onWriteSuccess: key => clearLocalWriteFailed(key),
+      retry,
     }))
     activeIndexedDbBackend = setStorageBackend(backend)
     installFlushHandlers(activeIndexedDbBackend)

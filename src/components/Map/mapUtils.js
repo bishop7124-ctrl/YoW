@@ -53,11 +53,17 @@ export function getObjectBounds(object) {
   if (object.geometry?.type === 'polygon' || object.geometry?.type === 'path') {
     const pts = object.geometry.points || []
     if (!pts.length) return { x: object.x || 0, y: object.y || 0, width: 0, height: 0 }
-    const xs = pts.map(p => p.x)
-    const ys = pts.map(p => p.y)
-    const minX = Math.min(...xs)
-    const minY = Math.min(...ys)
-    return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY }
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const point of pts) {
+      minX = Math.min(minX, point.x)
+      minY = Math.min(minY, point.y)
+      maxX = Math.max(maxX, point.x)
+      maxY = Math.max(maxY, point.y)
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
   }
   const w = object.width || 80
   const h = object.height || 80
@@ -77,6 +83,11 @@ export function objectContainsPoint(object, point) {
   const cx = object.x || 0
   const cy = object.y || 0
   return Math.abs(point.x - cx) <= w / 2 && Math.abs(point.y - cy) <= h / 2
+}
+
+export function isMapObjectExportable(object) {
+  if (object.type !== 'note') return true
+  return object.properties?.visibility === 'public' && !object.properties?.gmOnly
 }
 
 function pointInPolygon(point, polygon) {
