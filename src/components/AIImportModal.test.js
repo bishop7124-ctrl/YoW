@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels } from './AIImportModal'
+import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels, clearStarterManuscriptScaffold } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 function mockStore() {
@@ -117,6 +117,36 @@ describe('populateProject', () => {
     populateProject(store, proseData, { ideaEntries: true }, 'novel')
     expect(store.calls.ideas).toHaveLength(1)
     expect(store.calls.ideas[0].title).toBe('Loose note')
+  })
+})
+
+describe('clearStarterManuscriptScaffold', () => {
+  // Every new project seeds one starter Act/Chapter/Scene via
+  // buildStarterStructure (see useStore.js addNovel). When an import into a
+  // brand-new project also brings its own manuscript structure, that starter
+  // scaffold must be removed first or the outline ends up with a duplicate,
+  // empty Act 1 sitting next to the real imported one.
+  function mockActStore(acts) {
+    let currentActs = acts
+    return {
+      get acts() { return currentActs },
+      deleteAct: (id) => { currentActs = currentActs.filter(a => a.id !== id) },
+    }
+  }
+
+  it('removes only the acts belonging to the target novel', () => {
+    const store = mockActStore([
+      { id: 'act-1', novelId: 'novel-new', title: 'Act 1' },
+      { id: 'act-2', novelId: 'novel-other', title: 'Act 1' },
+    ])
+    clearStarterManuscriptScaffold(store, 'novel-new')
+    expect(store.acts.map(a => a.id)).toEqual(['act-2'])
+  })
+
+  it('is a no-op when the novel has no acts yet', () => {
+    const store = mockActStore([])
+    expect(() => clearStarterManuscriptScaffold(store, 'novel-new')).not.toThrow()
+    expect(store.acts).toEqual([])
   })
 })
 
