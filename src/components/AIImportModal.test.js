@@ -5,7 +5,7 @@ import { populateProject, populateYowProject, relabelActsForType, parseManuscrip
 function mockStore() {
   const calls = {
     characters: [], locations: [], lore: [], history: [], events: [], ideas: [],
-    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [], maps: [],
+    acts: [], chapters: [], scenes: [], comicPages: [], comicPanels: [], rpgCharacters: [], eras: [], whiteboards: [], maps: [], schedule: [],
   }
   let n = 0
   const nid = (p) => `${p}-${++n}`
@@ -42,7 +42,7 @@ function mockStore() {
       if (!map) return
       Object.assign(map, updater(map))
     },
-    addScheduleEvent: () => {},
+    addScheduleEvent: (data) => { const item = { ...data, id: nid('schedule') }; calls.schedule.push(item); return item },
     addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
     updateWhiteboard: (board) => { calls.whiteboards.push(board) },
   }
@@ -198,6 +198,43 @@ describe('populateYowProject', () => {
     expect(store.calls.rpgCharacters).toHaveLength(1)
     expect(store.calls.rpgCharacters[0].name).toBe('Thorn')
     expect(store.calls.rpgCharacters[0]).not.toHaveProperty('novelId')
+  })
+
+  it('remaps Schedule links to the imported character and location records', () => {
+    const store = mockStore()
+    populateYowProject(store, {
+      characters: [{ id: 'old-character', name: 'Hero' }], locations: [{ id: 'old-location', name: 'Keep' }],
+      storySchedule: [{ id: 'old-schedule', novelId: 'old-project', title: 'Arrival', linkedCharacters: ['old-character'], linkedLocations: ['old-location'] }],
+    }, { characters: true, locations: true, storySchedule: true })
+    expect(store.calls.schedule[0].linkedCharacters).toEqual([store.calls.characters[0].id])
+    expect(store.calls.schedule[0].linkedLocations).toEqual([store.calls.locations[0].id])
+  })
+
+  it('preserves Outline metadata, recovers orphan records, and remaps journey structure links', () => {
+    const store = mockStore()
+    populateYowProject(store, {
+      characters: [{ id: 'old-character', name: 'Hero', journey: { beats: [{ id: 'beat', chapterId: 'old-chapter', sceneId: 'old-scene' }] } }],
+      acts: [{ id: 'old-act', novelId: 'old-project', title: 'Act', synopsis: '', storyEvent: 'setup', order: 0 }],
+      chapters: [
+        { id: 'old-chapter', novelId: 'old-project', actId: 'old-act', title: 'Chapter', synopsis: '', storyEvent: 'turning-point', sessionPlan: { hooks: 'A clue' }, order: 0 },
+        { id: 'orphan-chapter', novelId: 'old-project', actId: 'missing-act', title: 'Lost chapter', synopsis: 'Recovered', order: 1 },
+      ],
+      scenes: [
+        { id: 'old-scene', novelId: 'old-project', chapterId: 'old-chapter', title: 'Scene', synopsis: '', content: 'Words', storyEvent: 'climax', status: 'draft', order: 0 },
+        { id: 'orphan-scene', novelId: 'old-project', chapterId: 'missing-chapter', title: 'Lost scene', content: 'Recovered words', order: 1 },
+      ],
+    }, { acts: true, characters: true })
+
+    const chapter = store.calls.chapters.find(item => item.title === 'Chapter')
+    const scene = store.calls.scenes.find(item => item.title === 'Scene')
+    const hero = store.calls.characters.find(item => item.name === 'Hero')
+    expect(store.calls.acts.find(item => item.title === 'Act')).toMatchObject({ synopsis: '', storyEvent: 'setup' })
+    expect(chapter).toMatchObject({ synopsis: '', storyEvent: 'turning-point', sessionPlan: { hooks: 'A clue' } })
+    expect(scene).toMatchObject({ synopsis: '', content: 'Words', storyEvent: 'climax', status: 'draft' })
+    expect(hero.journey.beats[0]).toMatchObject({ chapterId: chapter.id, sceneId: scene.id })
+    expect(store.calls.acts.some(item => item.title === 'Recovered outline items')).toBe(true)
+    expect(store.calls.chapters.some(item => item.title === 'Lost chapter')).toBe(true)
+    expect(store.calls.scenes.some(item => item.title === 'Lost scene')).toBe(true)
   })
 })
 
