@@ -86,16 +86,15 @@ Review `LegalModal.jsx` and the static Beta Disclaimer against implementation fo
 - Beta data-loss disclaimer versus affirmative “securely stored/always intact” marketing.
 - Hidden JSON embedded in PDF exports.
 
-Obtain qualified legal review before paid launch; this audit identifies implementation/copy inconsistencies, not legal compliance advice.
+Owner review and approval of the final customer-facing legal and promise copy is required before paid launch. External qualified legal review is optional and may happen after launch (product decision 2026-09-02); this audit identifies implementation/copy inconsistencies, not legal compliance advice.
 
 ## URL/rendering conflicts
 
-- `/features/` and `/faq/` render React pages, while older `public/features/index.html` and `public/faq/index.html` remain in the repository.
-- `/founders/` and `/founders/:slug/` are explicitly rewritten to static pages while React Founders/Profile components also exist.
+- Resolved 2026-09-07: `/features/`, `/faq/`, `/founders/`, and `/founders/:slug/` now have one React owner. The four obsolete static HTML copies and the two Founders-specific Vercel rewrites were removed, with route/config regressions covering the boundary.
 - Home has an inline footer while other React pages use `MarketingFooter`.
 - Static pages each duplicate navigation/footer/meta/schema markup.
 
-Choose one canonical copy data source and generate both static SEO pages and React pages from it, or remove the unused representation. Add a route-level test that asserts a unique phrase/version at every production URL.
+The remaining duplication is between distinct SEO pages rather than multiple implementations of the same production URL. Prefer shared/generated navigation, footer and metadata sources when those pages are next revised.
 
 ## Approval checklist
 

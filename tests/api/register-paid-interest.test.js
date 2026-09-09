@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getMissingEnv, getSupabaseAdminConfig, validatePaidInterestBody } from '../../api/register-paid-interest.js'
+import { canGrantBetaAccess, getMissingEnv, getSupabaseAdminConfig, validatePaidInterestBody } from '../../api/register-paid-interest.js'
 
 describe('validatePaidInterestBody', () => {
   it('accepts a normal interest submission', () => {
@@ -45,5 +45,17 @@ describe('getMissingEnv', () => {
     expect(getMissingEnv(['FEEDBACK_EMAIL', 'FEEDBACK_EMAIL_PASSWORD'], {
       FEEDBACK_EMAIL: 'owner@example.com',
     })).toEqual(['FEEDBACK_EMAIL_PASSWORD'])
+  })
+})
+
+
+describe('beta enrollment restrictions', () => {
+  const user = app_metadata => ({ created_at: '2020-01-01', app_metadata })
+  it('preserves paid plans and refuses re-enrollment after launch, expiry or downgrade', () => {
+    expect(canGrantBetaAccess(user({ subscription_plan: 'founder' }), {})).toBe(false)
+    expect(canGrantBetaAccess(user({ beta_notice_started_at: '2020-01-01' }), {})).toBe(false)
+    expect(canGrantBetaAccess(user({ access_revoked_at: '2020-01-01' }), {})).toBe(false)
+    expect(canGrantBetaAccess(user({}), { YOW_BETA_ENROLLMENT_CLOSED: 'true' })).toBe(false)
+    expect(canGrantBetaAccess(user({}), {})).toBe(true)
   })
 })
