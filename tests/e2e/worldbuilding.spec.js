@@ -172,7 +172,7 @@ test.describe('Characters', () => {
 
     await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
-    await waitForStorageHydrated(page)
+    await waitForStorageHydration(page)
     const savedChars = await readStorage(page, 'nf_characters')
     const saved = savedChars?.find(c => c.name === draftName)
     expect(saved?.pronouns).toBe('she/her')
