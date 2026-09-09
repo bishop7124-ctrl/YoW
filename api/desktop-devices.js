@@ -1,5 +1,7 @@
 import crypto from 'node:crypto'
+import { getMembership } from '../src/utils/membership.js'
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 
 // Vercel API route — desktop device activation registry (PRD Phase 4).
 // POST   { deviceId, deviceName?, platform? } → activate or re-verify this
@@ -11,7 +13,6 @@ import { createClient } from '@supabase/supabase-js'
 // The registry is advisory by design: it powers the cap, the devices UI, and
 // offline-grace re-verification. It never gates editing or export client-side.
 
-const DESKTOP_ENTITLED_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
 const DEFAULT_DEVICE_CAP = 3
 
 const deviceCap = () => {
@@ -41,10 +42,7 @@ const normalizeDeviceId = (value) => {
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'GET, POST, DELETE, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
@@ -63,7 +61,7 @@ export default async function handler(req, res) {
 
     const serverMetadata = user.app_metadata || {}
     const plan = serverMetadata.subscription_plan || (serverMetadata.beta_tester === true ? 'beta_tester' : null)
-    if (!DESKTOP_ENTITLED_PLAN_KEYS.has(plan)) {
+    if (!getMembership(user).isDesktopEntitled) {
       return res.status(403).json({ error: 'Your account does not include desktop access.' })
     }
 

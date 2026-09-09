@@ -29,6 +29,8 @@ export function buildSubscriptionAppMetadata(existing, subscription, customerId,
     stripe_subscription_id: subscription.id,
     subscription_status: subscription.status,
     subscription_plan: plan,
+    beta_tester: false,
+    access_revoked_at: ['active', 'trialing'].includes(subscription.status) ? null : new Date().toISOString(),
     subscription_current_period_end: getCurrentPeriodEnd(subscription),
     subscription_cancel_at_period_end: subscription.cancel_at_period_end,
     ...(subscription.status === 'canceled' ? { was_monthly: true } : {}),
@@ -154,6 +156,8 @@ async function activateLifetimePlan(supabaseAdmin, session) {
       stripe_customer_id:      customerId,
       subscription_status:     'active',
       subscription_plan:       plan,
+      beta_tester:             false,
+      lifetime_payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id || existing.lifetime_payment_intent || null,
       lifetime_purchased_at:   purchasedAt,
       hosting_included_until:  existing.hosting_included_until || hostingIncludedUntil,
     },
@@ -199,10 +203,8 @@ async function extendMaintenance(supabaseAdmin, userId) {
 }
 
 // --------------------------------------------------------------------------
-// Release a Founder slot on a full refund. Only frees the slot counter
-// (is_founder = false) so get_founder_slot_info/claim_founder_slot see it
-// as available again — whether a refund also revokes the user's paid
-// access/plan is a separate product decision this does not make.
+// Owner policy: revoke Founder access and release its slot on full refund
+// or a lost chargeback. Preserve projects for reading and export.
 // --------------------------------------------------------------------------
 async function releaseFounderSlotForCharge(stripe, supabaseAdmin, charge) {
   if (!charge.refunded) return // partial refund — the charge isn't fully refunded yet
@@ -211,17 +213,32 @@ async function releaseFounderSlotForCharge(stripe, supabaseAdmin, charge) {
   let userId = charge.metadata?.user_id || null
   let plan = charge.metadata?.plan || null
 
-  if (!userId && charge.payment_intent) {
+  if ((!userId || !plan) && charge.payment_intent) {
     const piId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent.id
     const pi = await stripe.paymentIntents.retrieve(piId)
-    userId = pi.metadata?.user_id || null
+    userId = userId || pi.metadata?.user_id || null
     plan = plan || pi.metadata?.plan || null
   }
 
   if (!userId || plan !== 'founder') return
 
+  const { data, error: readError } = await supabaseAdmin.auth.admin.getUserById(userId)
+  if (readError || !data?.user) throw readError || new Error('Founder account could not be loaded')
+  const existing = data.user.app_metadata || {}
+  const paymentIntent = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+  // An old refund must not revoke a newer purchase. A retry after metadata
+  // succeeded may still need to release the slot.
+  if (existing.lifetime_payment_intent && existing.lifetime_payment_intent !== paymentIntent) return
+  if (existing.subscription_plan === 'founder') {
+    const { error: revokeError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      app_metadata: { ...existing, subscription_plan: null, subscription_status: 'none', beta_tester: false,
+        access_revoked_at: new Date().toISOString(), founder_revoked_charge: charge.id },
+    })
+    if (revokeError) throw revokeError
+  } else if (existing.subscription_plan && existing.founder_revoked_charge !== charge.id) return
+
   const { error } = await supabaseAdmin.rpc('release_founder_slot', { p_user_id: userId })
-  if (error) console.error('[stripe-webhook] release_founder_slot failed for', userId, error.message)
+  if (error) throw error
   else console.log('[stripe-webhook] Released Founder slot on full refund for', userId)
 }
 
@@ -358,6 +375,16 @@ export default async function handler(req, res) {
       case 'customer.subscription.deleted':
         await updateSubscriptionMembership(supabaseAdmin, event.data.object)
         break
+
+      case 'charge.dispute.closed': {
+        const dispute = event.data.object
+        if (dispute.status !== 'lost') break
+        const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id
+        if (!chargeId) throw new Error('Dispute has no charge')
+        const charge = await stripe.charges.retrieve(chargeId)
+        await releaseFounderSlotForCharge(stripe, supabaseAdmin, { ...charge, refunded: true })
+        break
+      }
 
       case 'charge.refunded':
         await releaseFounderSlotForCharge(stripe, supabaseAdmin, event.data.object)
