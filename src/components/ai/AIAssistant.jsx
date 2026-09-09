@@ -21,7 +21,7 @@ const SECTION_CONFIG = {
   worldhistory: { label: 'World History', createType: 'history',   placeholder: 'Add a historical entry, or ask about your world history…' },
   ideas:        { label: 'Notes',         createType: 'idea',      placeholder: 'Add a note or idea, or brainstorm with AI…' },
   factions:     { label: 'Factions',      createType: 'faction',   placeholder: 'Add a faction, or ask about your groups…' },
-  schedule:     { label: 'Schedule',      createType: 'schedule',  placeholder: 'Add a schedule event, or ask about your writing calendar…' },
+  schedule:     { label: 'Schedule',      createType: 'schedule',  placeholder: 'Add a schedule event, or ask about your story calendar…' },
   manuscript:   { label: 'Manuscript',    createType: 'scene',     placeholder: 'Ask about your story, add a scene, or brainstorm ideas…' },
   outline:      { label: 'Outline',       createType: null,        placeholder: 'Ask about your story structure…' },
   dashboard:    { label: 'Overview',      createType: null,        placeholder: 'Ask about your project…' },
@@ -39,7 +39,7 @@ const CREATE_SCHEMAS = {
   history:   { title: '', era: '', dateRange: '', content: '', tags: [] },
   idea:      { title: '', body: '', group: '', color: 'amber', tags: [] },
   faction:   { name: '', description: '', motto: '' },
-  schedule:  { title: '', date: '', category: 'scene', duration: 1 },
+  schedule:  { title: '', description: '', year: 1, month: 1, day: 1, category: 'scene', duration: 1, tags: [] },
   scene:     { title: '', synopsis: '', content: '' },
 }
 
@@ -160,7 +160,10 @@ function executeCreate(type, data, store) {
     case 'schedule':  store.addScheduleEvent(data); break
     case 'scene': {
       const firstChapter = store.chapters?.[0]
-      if (firstChapter) store.addScene(firstChapter.id, data.title || 'New Scene')
+      if (firstChapter) {
+        const scene = store.addScene(firstChapter.id, data.title || 'New Scene')
+        if (scene) store.updateScene(scene.id, { synopsis: data.synopsis || '', content: data.content || '' })
+      }
       break
     }
     default: break

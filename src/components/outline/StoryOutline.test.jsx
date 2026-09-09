@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import '@testing-library/jest-dom/vitest'
 import StoryOutline from './StoryOutline.jsx'
 
 const baseStore = {
@@ -108,5 +109,73 @@ describe('StoryOutline', () => {
     })
 
     expect(store.moveScene).toHaveBeenCalledWith('scene-1', 'chapter-2', 0)
+  })
+
+  it('retains a refused edit and protects it from Cancel', () => {
+    const updateAct = vi.fn(() => null)
+    renderOutline({ updateAct })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit act' })[0])
+    const title = screen.getByLabelText('Title')
+    fireEvent.change(title, { target: { value: 'Unsaved change' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('draft is still here')
+    expect(title).toHaveValue('Unsaved change')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('heading', { name: 'Save changes?' })).toBeInTheDocument()
+    expect(updateAct).toHaveBeenCalledWith('act-1', { title: 'Unsaved change' }, { expected: { title: 'Act 1' } })
+  })
+
+  it('does not reset an open draft when the record changes in the background', () => {
+    const updateAct = vi.fn(() => null)
+    const store = { ...baseStore, updateAct }
+    const view = render(<StoryOutline store={store} />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit act' })[0])
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My draft' } })
+    view.rerender(<StoryOutline store={{ ...store, acts: [{ ...store.acts[0], title: 'Remote title' }, store.acts[1]] }} />)
+    expect(screen.getByLabelText('Title')).toHaveValue('My draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(updateAct).toHaveBeenCalledWith('act-1', { title: 'My draft' }, { expected: { title: 'Act 1' } })
+  })
+
+  it('uses explicit deletion confirmation and retains the editor on failure', () => {
+    const deleteScene = vi.fn(() => false)
+    renderOutline({ deleteScene })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit scene' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel deletion' }))
+    expect(deleteScene).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete scene' }))
+    expect(deleteScene).toHaveBeenCalledWith('scene-1')
+    expect(screen.getByRole('alert')).toHaveTextContent('could not be deleted')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('keeps malformed and unavailable-parent records visible and movable', () => {
+    const moveChapter = vi.fn(() => ({ id: 'orphan-chapter' }))
+    const moveScene = vi.fn(() => ({ id: 'orphan-scene' }))
+    renderOutline({
+      activeNovel: { id: 'novel-1', type: 'dnd_campaign' },
+      acts: [{ id: 'act-1', title: 7, order: 0 }],
+      chapters: [{ id: 'orphan-chapter', actId: 'missing', title: 9, sessionPlan: { hooks: 4 }, order: 0 }],
+      scenes: [{ id: 'orphan-scene', chapterId: 'missing', title: 11, content: 123, order: 0 }],
+      moveChapter,
+      moveScene,
+    })
+    expect(screen.getByRole('heading', { name: 'Unplaced outline items' })).toBeInTheDocument()
+    expect(screen.getByText(/1 prep\/recap fields/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Move session to story arc'), { target: { value: 'act-1' } })
+    expect(moveChapter).toHaveBeenCalledWith('orphan-chapter', 'act-1', 0)
+  })
+
+  it('allows viewing but exposes no write controls in read-only mode', () => {
+    renderOutline({ readOnly: true })
+    expect(screen.queryByRole('button', { name: '+ Act' })).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText('Drag to reorder act')[0]).toBeDisabled()
+    fireEvent.click(screen.getAllByRole('button', { name: 'View act' })[0])
+    expect(screen.getByLabelText('Title')).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 })

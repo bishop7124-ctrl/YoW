@@ -1,89 +1,75 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
 import EraManager from './EraManager'
-import { parseTimelineYear } from '../../utils/timelineYear'
+import { formatTimelineDate, sortTimelineEras } from '../../utils/timelineYear'
+import { createEraLookup, groupTimelineEntries, matchesTimelineSearch, resolveTimelineEra } from '../../utils/timelineEntries'
+import { buildHistoryEntries } from '../../utils/historyEntries'
 
 export default function WorldHistory({ store }) {
-  const { timeline, characters, locations, addEvent, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId, selectedTimelineEventId, setSelectedTimelineEventId, eras, addEra, updateEra, deleteEra } = store
+  return <HistoryWorkspace key={store.activeNovelId || 'history'} store={store} />
+}
+
+function HistoryWorkspace({ store }) {
+  const { timeline, worldHistory, characters, locations, addHistoryEntry, updateHistoryEntry, deleteHistoryEntry, updateEvent, deleteEvent, setSelectedCharacterId, setSelectedLocationId, selectedTimelineEventId, setSelectedTimelineEventId, selectedHistoryEntryId, setSelectedHistoryEntryId, eras, addEra, updateEra, deleteEra } = store
   const [search, setSearch] = useState('')
-  const selectedId = selectedTimelineEventId
-  const setSelectedId = setSelectedTimelineEventId
-  const [showForm, setShowForm] = useState(false)
-  const [editTarget, setEditTarget] = useState(null)
-  const [showEraManager, setShowEraManager] = useState(false)
+  const [formState, setFormState] = useState(null)
+  const [notice, setNotice] = useState('')
+  const editTarget = formState?.item
 
   useEffect(() => {
-    const openNewHistoryForm = () => { setEditTarget(null); setShowForm(true) }
+    // Repeating the quick-add event must not replace an open edit draft.
+    const openNewHistoryForm = () => { if (!store.readOnly) setFormState(current => current || { type: 'new' }) }
     window.addEventListener('open-history-form', openNewHistoryForm)
     return () => window.removeEventListener('open-history-form', openNewHistoryForm)
-  }, [])
+  }, [store.readOnly])
 
-  const filtered = (timeline || []).filter(e =>
-    e.title.toLowerCase().includes(search.toLowerCase()) ||
-    (e.era || '').toLowerCase().includes(search.toLowerCase()) ||
-    (e.description || e.content || '').toLowerCase().includes(search.toLowerCase())
-  )
+  const query = search.trim().toLowerCase()
+  const entries = useMemo(() => buildHistoryEntries(timeline, worldHistory), [timeline, worldHistory])
+  const filtered = useMemo(() => entries.filter(entry => matchesTimelineSearch(entry, query)), [entries, query])
+  const sortedEras = useMemo(() => sortTimelineEras(eras || []), [eras])
+  const eraLookup = useMemo(() => createEraLookup(sortedEras), [sortedEras])
+  const sections = useMemo(() => groupTimelineEntries(filtered, sortedEras, { includeEmpty: !query }), [filtered, sortedEras, query])
+  const characterById = useMemo(() => new Map((characters || []).map(character => [character.id, character])), [characters])
+  const locationById = useMemo(() => new Map((locations || []).map(location => [location.id, location])), [locations])
 
-  const parseYear = (e) => {
-    if (e.startYear != null) return e.startYear
-    const year = parseTimelineYear(e.date)
-    return year != null ? year : Infinity
+  const closeForm = () => setFormState(null)
+  const openNew = () => { setNotice(''); setFormState({ type: 'new' }) }
+  const selectEntry = entry => {
+    if (entry.sourceType === 'history') setSelectedHistoryEntryId(entry.id)
+    else setSelectedTimelineEventId(entry.id)
   }
-
-  // Sort eras by startYear, then entries within each era by year
-  const sortedEras = [...(eras || [])].sort((a, b) => (a.startYear ?? Infinity) - (b.startYear ?? Infinity))
-
-  // Group entries: matched by eraId first, fallback to era string name, then unassigned
-  const eraMap = {}
-  const unassigned = []
-
-  for (const e of filtered) {
-    if (e.eraId) {
-      if (!eraMap[e.eraId]) eraMap[e.eraId] = []
-      eraMap[e.eraId].push(e)
-    } else if (e.era) {
-      // legacy string era — show under "Other"
-      if (!eraMap['__other__']) eraMap['__other__'] = []
-      eraMap['__other__'].push(e)
-    } else {
-      unassigned.push(e)
-    }
-  }
-
-  // Sort entries within each group by year
-  const sortGroup = (arr) => [...arr].sort((a, b) => parseYear(a) - parseYear(b))
-
-  const closeForm = () => { setShowForm(false); setEditTarget(null) }
 
   const handleSave = (data) => {
-    if (editTarget) {
-      const event = updateEvent(editTarget.id, data)
-      setSelectedId(event?.id || editTarget.id)
-    } else {
-      // Unlike the plain Timeline tab (which opts out of the mirrored
-      // worldHistory record so ordinary plot beats don't clutter world-lore
-      // AI context), this IS the History tab — its entries need a linked
-      // `worldHistory` record so they show up in the AI chat context
-      // selector's History section (AIPanel.jsx's ContextSelector reads
-      // `store.worldHistory`, not `timeline`) and in history-aware exports.
-      const event = addEvent(data, { createHistory: true })
-      if (!event) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
-      setSelectedId(event.id)
-    }
+    const sourceType = editTarget?.sourceType || 'history'
+    const saved = editTarget
+      ? (sourceType === 'history' ? updateHistoryEntry : updateEvent)(editTarget.id, data)
+      : addHistoryEntry(data, { createTimeline: true })
+    if (!saved) return false
+    selectEntry({ ...saved, sourceType })
     closeForm()
+    setSearch('')
+    setNotice('')
+    return true
   }
 
-  const handleDelete = (id) => {
-    if (!confirm('Delete this chronicle entry?')) return
-    const scope = confirm('Delete this chronicle entry from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
-    deleteEvent(id, { scope })
-    if (selectedId === id) setSelectedId(null)
+  const handleDelete = entry => {
+    const isHistory = entry.sourceType === 'history'
+    const retained = isHistory && entry.timelineId ? ' Its linked Timeline event will be kept.' : ''
+    if (!confirm(`Delete this ${isHistory ? 'History record' : 'Timeline event'}?${retained}`)) return
+    const scope = confirm('Delete from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
+    const deleted = (isHistory ? deleteHistoryEntry : deleteEvent)(entry.id, { scope })
+    if (!deleted) { setNotice('This entry could not be deleted.'); return }
+    if (isHistory) setSelectedHistoryEntryId(null)
+    else setSelectedTimelineEventId(null)
+    setNotice(isHistory && entry.timelineId ? 'History record deleted. Its Timeline event was kept.' : 'Entry deleted.')
   }
 
-  const liveSelected = selectedId ? (timeline || []).find(e => e.id === selectedId) : null
-  const selectedEra = liveSelected?.eraId ? (eras || []).find(er => er.id === liveSelected.eraId) : null
+  const liveSelected = filtered.find(entry => selectedHistoryEntryId
+    ? entry.historyId === selectedHistoryEntryId
+    : selectedTimelineEventId && entry.timelineId === selectedTimelineEventId)
+  const selectedEra = liveSelected ? resolveTimelineEra(liveSelected, eraLookup) : null
 
   return (
     <StudioSplit>
@@ -93,8 +79,8 @@ export default function WorldHistory({ store }) {
         data-tour="worldhistory-header"
         tools={
           <div className="flex gap-1">
-            <StudioButton tone="secondary" size="sm" onClick={() => setShowEraManager(true)}>Eras</StudioButton>
-            <StudioButton tone="primary" size="sm" data-tour="worldhistory-new" onClick={() => { setEditTarget(null); setShowForm(true) }}>New</StudioButton>
+            <StudioButton tone="secondary" size="sm" disabled={store.readOnly} onClick={() => setFormState({ type: 'eras' })}>Eras</StudioButton>
+            <StudioButton tone="primary" size="sm" disabled={store.readOnly} data-tour="worldhistory-new" onClick={openNew}>New</StudioButton>
           </div>
         }
       >
@@ -102,10 +88,12 @@ export default function WorldHistory({ store }) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search…"
+          aria-label="Search history"
           className="field w-full px-2.5 py-1.5 text-base placeholder:text-[var(--text-muted)]"
         />
 
-        {filtered.length === 0 && (timeline || []).length === 0 && (
+        {notice && <p role="status" className="text-xs p-3">{notice}</p>}
+        {filtered.length === 0 && entries.length === 0 && (
           <div className="p-4 text-center space-y-2">
             <p className="text-[var(--text-muted)] text-xs">No chronicle entries yet.</p>
             <p className="text-[var(--text-muted)] text-[10px] leading-relaxed">
@@ -113,42 +101,24 @@ export default function WorldHistory({ store }) {
             </p>
           </div>
         )}
-        {filtered.length === 0 && (timeline || []).length > 0 && (
-          <p className="text-[var(--text-muted)] text-xs p-4 text-center">No matches.</p>
+        {filtered.length === 0 && entries.length > 0 && (
+          <div className="text-[var(--text-muted)] text-xs p-4 text-center">
+            <p>No matches.</p>
+            <StudioButton size="sm" className="mt-2" onClick={() => setSearch('')}>Clear search</StudioButton>
+          </div>
         )}
 
         {/* Era-grouped timeline */}
-        {sortedEras.map(era => {
-          const entries = eraMap[era.id] ?? []
-          return (
+        {sections.map(({ era, events }) => (
             <EraSection
-              key={era.id}
-              label={era.name}
-              range={era.startYear != null || era.endYear != null ? `${era.startYear ?? '?'} – ${era.endYear ?? '?'}` : null}
-              entries={sortGroup(entries)}
-              selectedId={liveSelected?.id}
-              onSelect={setSelectedId}
+              key={era?.id || '__unassigned'}
+              label={era?.name || 'Unassigned'}
+              range={era && (era.startYear != null || era.endYear != null) ? `${era.startYear ?? '?'} – ${era.endYear ?? '?'}` : null}
+              entries={events}
+              selectedKey={liveSelected?.recordKey}
+              onSelect={selectEntry}
             />
-          )
-        })}
-
-        {eraMap['__other__']?.length > 0 && (
-          <EraSection
-            label="Other"
-            entries={sortGroup(eraMap['__other__'])}
-            selectedId={liveSelected?.id}
-            onSelect={setSelectedId}
-          />
-        )}
-
-        {unassigned.length > 0 && (
-          <EraSection
-            label="Unassigned"
-            entries={sortGroup(unassigned)}
-            selectedId={liveSelected?.id}
-            onSelect={setSelectedId}
-          />
-        )}
+        ))}
       </StudioIndex>
 
       <StudioDetail>
@@ -156,35 +126,30 @@ export default function WorldHistory({ store }) {
           <StudioEmpty
             title="Select a chronicle entry"
             body="Choose a period from the history wall or create a new one."
-            action={<StudioButton tone="primary" className="mt-4" onClick={() => { setEditTarget(null); setShowForm(true) }}>Add Entry</StudioButton>}
+            action={<StudioButton tone="primary" className="mt-4" disabled={store.readOnly} onClick={openNew}>Add Entry</StudioButton>}
           />
         ) : (
           <div className="max-w-4xl">
             <StudioPageHeader
-              eyebrow="Historical record"
+              eyebrow={liveSelected.sourceType === 'history' ? 'Historical record' : 'Timeline event'}
               title={liveSelected.title}
               actions={(
                 <>
-                  <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(liveSelected); setShowForm(true) }}>Edit</StudioButton>
-                  <StudioButton tone="secondary" size="sm" onClick={() => handleDelete(liveSelected.id)}>Delete</StudioButton>
+                  <StudioButton tone="secondary" size="sm" disabled={store.readOnly || liveSelected.readOnly} onClick={() => setFormState({ type: 'edit', item: liveSelected })}>Edit</StudioButton>
+                  <StudioButton tone="secondary" size="sm" disabled={store.readOnly || liveSelected.readOnly} onClick={() => handleDelete(liveSelected)}>Delete</StudioButton>
                 </>
               )}
             >
-              <div className="flex items-center gap-3 mt-1.5">
-                {selectedEra && <span className="text-xs text-[var(--accent)]">{selectedEra.name}</span>}
-                {liveSelected.startYear != null ? (
-                  <span className="text-xs text-[var(--text-muted)]">
-                    {liveSelected.endYear != null ? `${liveSelected.startYear} – ${liveSelected.endYear}` : String(liveSelected.startYear)}
-                  </span>
-                ) : liveSelected.date ? (
-                  <span className="text-xs text-[var(--text-muted)]">{liveSelected.date}</span>
-                ) : null}
+              <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                {(selectedEra || liveSelected.era) && <span className="text-xs text-[var(--accent)]">{selectedEra?.name || liveSelected.era}</span>}
+                <span className="text-xs text-[var(--text-muted)]">{formatTimelineDate(liveSelected)}</span>
+                {(liveSelected.category || liveSelected.type) && <span className="chip">{liveSelected.category || liveSelected.type}</span>}
               </div>
             </StudioPageHeader>
 
-            {(liveSelected.description || liveSelected.content) && (
-              <StudioNote className="text-sm text-[var(--text-main)] leading-relaxed whitespace-pre-wrap mb-4">
-                {liveSelected.description || liveSelected.content}
+            {liveSelected.description && (
+              <StudioNote className="text-sm text-[var(--text-main)] leading-relaxed whitespace-pre-wrap break-words mb-4">
+                {liveSelected.description}
               </StudioNote>
             )}
 
@@ -201,7 +166,7 @@ export default function WorldHistory({ store }) {
                 <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Characters</div>
                 <div className="flex flex-wrap gap-1">
                   {liveSelected.linkedCharacters.map(id => {
-                    const c = characters.find(x => x.id === id)
+                    const c = characterById.get(id)
                     if (!c) return null
                     return (
                       <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedCharacterId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } })) }}>
@@ -218,7 +183,7 @@ export default function WorldHistory({ store }) {
                 <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Locations</div>
                 <div className="flex flex-wrap gap-1">
                   {liveSelected.linkedLocations.map(id => {
-                    const l = locations.find(x => x.id === id)
+                    const l = locationById.get(id)
                     if (!l) return null
                     return (
                       <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedLocationId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>
@@ -233,9 +198,10 @@ export default function WorldHistory({ store }) {
         )}
       </StudioDetail>
 
-      {showForm && (
+      {formState && formState.type !== 'eras' && (
         <Modal title={editTarget ? `Edit — ${editTarget.title}` : 'New History Entry'} onClose={closeForm} wide>
           <ChronicleEntryForm
+            key={editTarget?.recordKey || 'new'}
             kind="worldhistory"
             initial={editTarget}
             characters={characters}
@@ -247,8 +213,8 @@ export default function WorldHistory({ store }) {
         </Modal>
       )}
 
-      {showEraManager && (
-        <Modal title="Manage Eras" onClose={() => setShowEraManager(false)}>
+      {formState?.type === 'eras' && (
+        <Modal title="Manage Eras" onClose={closeForm}>
           <EraManager eras={eras} addEra={addEra} updateEra={updateEra} deleteEra={deleteEra} />
         </Modal>
       )}
@@ -256,27 +222,22 @@ export default function WorldHistory({ store }) {
   )
 }
 
-function EraSection({ label, range, entries, selectedId, onSelect }) {
+function EraSection({ label, range, entries, selectedKey, onSelect }) {
   return (
     <div>
-      <div className="px-3 py-1.5 flex items-baseline gap-2 border-b border-[var(--border)] bg-[var(--bg-nav)] sticky top-0 z-10">
+      <div className="px-3 py-1.5 flex flex-wrap items-baseline gap-2 border-b border-[var(--border)] bg-[var(--bg-nav)] sticky top-0 z-10">
         <span className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider">{label}</span>
         {range && <span className="text-[10px] text-[var(--text-muted)]">{range}</span>}
       </div>
       {entries.map(e => (
         <StudioRecord
-          key={e.id}
-          onClick={() => onSelect(e.id)}
-          active={selectedId === e.id}
+          key={e.recordKey}
+          onClick={() => onSelect(e)}
+          active={selectedKey === e.recordKey}
         >
           <div className="text-sm font-medium text-[var(--text-main)] truncate">{e.title}</div>
-          {(e.startYear != null || e.date) && (
-            <div className="text-xs text-[var(--text-muted)] mt-0.5">
-              {e.startYear != null
-                ? e.endYear != null ? `${e.startYear} – ${e.endYear}` : String(e.startYear)
-                : e.date}
-            </div>
-          )}
+          <div className="text-xs text-[var(--text-muted)] mt-0.5">{formatTimelineDate(e)}</div>
+          {e.sourceType === 'timeline' && <div className="text-[10px] text-[var(--text-muted)]">Timeline only</div>}
         </StudioRecord>
       ))}
     </div>

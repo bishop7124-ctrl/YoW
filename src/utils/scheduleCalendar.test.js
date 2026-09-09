@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   getScheduleCalendar, defaultScheduleCalendar, monthName, daysInMonth, absoluteDay,
   getScheduleViewSettings, SCHEDULE_OPEN_MODES,
+  getScheduleCategories, normalizeScheduleEvent, prepareScheduleEvent,
+  scheduleDateOrdinal, scheduleDateFromOrdinal, scheduleRangeLabel,
+  scheduleEventSegments, sortScheduleEvents, scheduleExportFields,
 } from './scheduleCalendar.js'
 
 describe('getScheduleCalendar', () => {
@@ -135,5 +138,57 @@ describe('getScheduleViewSettings', () => {
       defaultMonth: 2,
       lastViewedMonth: 2,
     })
+  })
+})
+
+describe('schedule entries', () => {
+  const calendar = getScheduleCalendar({ scheduleCalendar: {
+    months: [{ name: 'Longnight', days: 5 }, { name: 'Dawn', days: 4 }],
+    weekLength: 3, dayNames: ['A', 'B', 'C'],
+  } })
+
+  it('normalizes malformed text, aliases, tags and links without mutating input', () => {
+    const input = { title: 42, notes: 'Legacy body', year: '2', month: '2', day: '3', duration: '4', category: ' War Council ', tags: [' #Plot ', 'plot', 7], linkedCharacters: ['c', 'c', null] }
+    const before = structuredClone(input)
+    expect(normalizeScheduleEvent(input)).toMatchObject({ title: '42', description: 'Legacy body', year: 2, month: 2, day: 3, duration: 4, category: 'war_council', tags: ['plot', '7'], linkedCharacters: ['c'] })
+    expect(input).toEqual(before)
+    expect(normalizeScheduleEvent({ description: '', notes: 'STALE' }).description).toBe('')
+  })
+
+  it('deduplicates configured categories and safely restores defaults for blank configuration', () => {
+    expect(getScheduleCategories({ categoryOptions: { schedule: [' War ', 'war!', 'Ritual'] } }).map(item => item.id)).toEqual(['war', 'ritual'])
+    expect(getScheduleCategories({ categoryOptions: { schedule: [' ', null] } })).toHaveLength(6)
+  })
+
+  it('validates dates and duration rather than silently moving them', () => {
+    expect(prepareScheduleEvent({ title: 'Outside', month: 3, day: 1 }, calendar).error).toContain('Month')
+    expect(prepareScheduleEvent({ title: 'Outside', month: 2, day: 5 }, calendar).error).toContain('Day')
+    expect(prepareScheduleEvent({ title: ' ', month: 1, day: 1 }, calendar).error).toContain('Title')
+    expect(prepareScheduleEvent({ title: 'Valid', month: 2, day: 4 }, calendar).error).toBe('')
+  })
+
+  it('round-trips ordinals and formats ranges across months and years', () => {
+    const endOfYear = { year: 1, month: 2, day: 4, duration: 3 }
+    expect(scheduleDateFromOrdinal(calendar, scheduleDateOrdinal(calendar, endOfYear) + 2)).toEqual({ year: 2, month: 1, day: 2 })
+    expect(scheduleRangeLabel(calendar, endOfYear)).toContain('Longnight, Day 2 · Year 2')
+    expect(scheduleRangeLabel(calendar, { date: 'Sometime after dusk' })).toBe('Sometime after dusk')
+  })
+
+  it('aligns month cells to the continuous week and segments cross-year overlaps without lane collisions', () => {
+    const result = scheduleEventSegments([
+      { id: 'cross', title: 'Cross', year: 1, month: 2, day: 4, duration: 3 },
+      { id: 'overlap', title: 'Overlap', year: 2, month: 1, day: 1, duration: 2 },
+    ], calendar, 2, 1)
+    expect(result.leadingDays).toBe(0)
+    expect(result.segments.map(segment => segment.event.id)).toEqual(['cross', 'overlap'])
+    expect(new Set(result.segments.map(segment => segment.lane)).size).toBe(2)
+    expect(scheduleEventSegments([], calendar, 1, 2).leadingDays).toBe(2)
+  })
+
+  it('sorts numeric titles safely and exports live linked names with current prose', () => {
+    expect(sortScheduleEvents([{ id: 'b', title: 2, year: 2 }, { id: 'a', title: 1, year: 1 }], calendar).map(item => item.id)).toEqual(['a', 'b'])
+    const fields = scheduleExportFields({ project: { scheduleCalendar: { months: calendar.months, weekLength: 3 } }, characters: [{ id: 'c', name: 'Current hero' }], locations: [] }, { title: 'E', year: 1, month: 1, day: 1, linkedCharacters: ['c'], linkedLocations: ['gone'] })
+    expect(fields).toContainEqual(['Characters', 'Current hero'])
+    expect(fields).toContainEqual(['Locations', 'Location gone (unavailable)'])
   })
 })
