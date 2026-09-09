@@ -30,7 +30,7 @@ vi.mock('../utils/firestoreSync', () => ({
 }))
 vi.mock('../utils/projectStats', () => ({ buildProjectStats: vi.fn().mockReturnValue({}) }))
 vi.mock('../utils/storageQuota', () => ({ estimateStoreSize: vi.fn().mockReturnValue(0) }))
-vi.mock('../utils/uploadUserMedia', () => ({ deleteUserMedia: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../utils/uploadUserMedia', async importOriginal => ({ ...(await importOriginal()), deleteUserMedia: vi.fn().mockResolvedValue(undefined) }))
 
 afterEach(() => {
   vi.resetModules()

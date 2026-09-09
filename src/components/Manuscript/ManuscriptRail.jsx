@@ -404,6 +404,7 @@ export default function ManuscriptRail({
 
   const handleAddScene = useCallback((chapId) => {
     const newScene = addScene(chapId, labels.level3)
+    if (!newScene) return
     requestAnimationFrame(() => {
       document.getElementById(`ms-scene-${newScene.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })

@@ -44,8 +44,14 @@ describe('tauri vault adapter', () => {
     expect(readItem('nf_activeNovel')).toBe('novel-1')
     await backend.flush()
 
+    // `vault_list_snapshots` is the fire-and-forget snapshot scrub (audit
+    // P0-10 follow-up) kicked off as part of activation; the mock returns
+    // `null` (not an array) for it, so the scrub bails out immediately with
+    // no further calls — see the dedicated `scrubDesktopVaultSnapshots`
+    // tests below for its actual scrub behavior.
     expect(calls).toEqual([
       ['vault_read_all', undefined],
+      ['vault_list_snapshots', undefined],
       ['vault_set_item', { key: 'nf_activeNovel', value: 'novel-1' }],
     ])
     resetStorageBackend()
@@ -201,6 +207,81 @@ describe('tauri vault adapter', () => {
     expect(removedKeys).toEqual(expect.arrayContaining(['nf_aiSettings', 'sb-abcdefgh-auth-token']))
 
     resetStorageBackend()
+  })
+
+  it('scrubs sensitive keys out of existing snapshot/backup files, leaving clean ones and non-sensitive keys untouched (audit P0-10 follow-up)', async () => {
+    const removals = []
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async (command, payload) => {
+          if (command === 'vault_list_snapshots') {
+            return [{ name: 'vault-auto-1.db' }, { name: 'vault-snapshot-2.db' }, { name: 'vault-before-restore-3.db' }]
+          }
+          if (command === 'vault_snapshot_read_all') {
+            if (payload.name === 'vault-auto-1.db') {
+              return [
+                { key: 'nf_novels', value: '[{"id":"novel-1"}]' },
+                { key: 'nf_aiSettings', value: JSON.stringify({ apiKey: 'sk-leaked-in-snapshot' }) },
+              ]
+            }
+            if (payload.name === 'vault-snapshot-2.db') {
+              // No sensitive keys in this one — must be left alone entirely.
+              return [{ key: 'nf_novels', value: '[{"id":"novel-1"}]' }]
+            }
+            if (payload.name === 'vault-before-restore-3.db') {
+              return [{ key: 'sb-abcdefgh-auth-token', value: JSON.stringify({ access_token: 'leaked-session' }) }]
+            }
+            return []
+          }
+          if (command === 'vault_snapshot_remove_keys') {
+            removals.push([payload.name, payload.keys])
+            return payload.keys.length
+          }
+          return null
+        }),
+      },
+    }
+
+    const { scrubDesktopVaultSnapshots } = await import('./tauriVaultAdapter.js')
+    const summary = await scrubDesktopVaultSnapshots()
+
+    expect(summary).toEqual({ scannedSnapshots: 3, scrubbedSnapshots: 2, scrubbedKeys: 2 })
+    expect(removals).toEqual(
+      expect.arrayContaining([
+        ['vault-auto-1.db', ['nf_aiSettings']],
+        ['vault-before-restore-3.db', ['sb-abcdefgh-auth-token']],
+      ]),
+    )
+    // The clean snapshot's name never appears in a removal call at all.
+    expect(removals.some(([name]) => name === 'vault-snapshot-2.db')).toBe(false)
+  })
+
+  it('keeps scrubbing remaining snapshots after one fails to read or scrub (audit P0-10 follow-up)', async () => {
+    const removals = []
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async (command, payload) => {
+          if (command === 'vault_list_snapshots') {
+            return [{ name: 'vault-auto-locked.db' }, { name: 'vault-auto-2.db' }]
+          }
+          if (command === 'vault_snapshot_read_all') {
+            if (payload.name === 'vault-auto-locked.db') throw new Error('file is locked')
+            return [{ key: 'nf_aiSettings', value: JSON.stringify({ apiKey: 'sk-leaked' }) }]
+          }
+          if (command === 'vault_snapshot_remove_keys') {
+            removals.push([payload.name, payload.keys])
+            return payload.keys.length
+          }
+          return null
+        }),
+      },
+    }
+
+    const { scrubDesktopVaultSnapshots } = await import('./tauriVaultAdapter.js')
+    const summary = await scrubDesktopVaultSnapshots()
+
+    expect(summary).toEqual({ scannedSnapshots: 2, scrubbedSnapshots: 1, scrubbedKeys: 1 })
+    expect(removals).toEqual([['vault-auto-2.db', ['nf_aiSettings']]])
   })
 
   it('records a failed vault write and blocks beforeunload navigation until it recovers (audit P0-07)', async () => {
