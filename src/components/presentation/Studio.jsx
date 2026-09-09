@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import YOWLogo from '../brand/YOWLogo'
 import { useIsMobile, useIsPhone, isMobileViewport } from '../../utils/useMediaQuery'
@@ -114,6 +114,15 @@ export function StudioFrame({
           </div>
         )}
 
+        {/* Left-nav redesign, Phase 1b fix (2026-08-18): this used to be
+            absolutely positioned to poke out of .studio-spine's right edge
+            (mirroring .context-rail-toggle), but .studio-spine has
+            overflow:hidden (intentionally — see the comment near
+            .studio-room-hamburger below about why the mobile room menu is
+            portaled to <body> instead of rendered in place) which silently
+            clipped it entirely. Real user report: "it's not there." Now a
+            normal in-flow row instead of an edge nub — always visible,
+            can't be clipped, and easier to find. */}
         <nav className="studio-room-list" aria-label="Workspace">
           {rooms.map(room => (
             <button
@@ -360,11 +369,23 @@ export function StudioEmpty({ title, body, action, variant = 'page' }) {
 }
 
 export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narrow = false, centered = false, closeOnBackdrop = true }) {
+  const headingId = useId()
   const dialogRef = useRef(null)
   const pendingSubmitRef = useRef(false)
   const [dirty, setDirty] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const isPhone = useIsPhone()
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const saved = event => {
+      if (event.target.closest('[data-studio-sheet]') !== dialog) return
+      pendingSubmitRef.current = false
+      setDirty(false)
+      setConfirmClose(false)
+    }
+    dialog?.addEventListener('studio-form-saved', saved)
+    return () => dialog?.removeEventListener('studio-form-saved', saved)
+  }, [])
   // On phones this no longer renders as a fixed-position overlay at all (see
   // the CSS for `.is-mobile-sheet`) — it's a normal in-flow, full-height
   // block appended where the editor was opened from, and we scroll it into
@@ -393,7 +414,8 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
 
   useEffect(() => {
     const handler = (event) => {
-      if (event.key === 'Escape') requestClose()
+      const sheets = document.querySelectorAll('[data-studio-sheet]')
+      if (event.key === 'Escape' && !event.defaultPrevented && sheets[sheets.length - 1] === dialogRef.current) requestClose()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -415,9 +437,12 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
     form.requestSubmit()
   }
 
-  const handleSubmitCapture = () => {
+  const handleSubmitCapture = (event) => {
+    if (event.target.closest('[data-studio-sheet]') !== dialogRef.current) return
     pendingSubmitRef.current = false
-    setDirty(false)
+    // Opt-in forms acknowledge a successful save explicitly. A failed or
+    // custom-invalid submission must not disable the unsaved-draft prompt.
+    setDirty(event.target.hasAttribute('data-confirms-save'))
     setConfirmClose(false)
   }
 
@@ -430,6 +455,7 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
 
   const handleClickCapture = (event) => {
     if (event.target.closest?.('.save-changes-prompt')) return
+    if (event.target.closest?.('[data-dirties-form]')) setDirty(true)
     const button = event.target.closest?.('button')
     if (!button || button.type !== 'button') return
     if (button.textContent?.trim().toLowerCase() !== 'cancel') return
@@ -444,10 +470,11 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
       onClick={closeOnBackdrop && !isPhone ? requestClose : undefined}
     >
       <section
+        data-studio-sheet
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="studio-sheet-heading"
+        aria-labelledby={headingId}
         tabIndex={-1}
         className={cx('studio-sheet', narrow && 'is-narrow', centered && 'is-centered', isPhone && 'is-mobile-sheet')}
         onClick={e => e.stopPropagation()}
@@ -460,16 +487,16 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
         <header>
           <div>
             <p className="studio-kicker">{eyebrow}</p>
-            <h2 id="studio-sheet-heading">{title}</h2>
+            <h2 id={headingId}>{title}</h2>
           </div>
           <button type="button" onClick={requestClose} aria-label="Close">×</button>
         </header>
         <div className="studio-sheet-body">{children}</div>
         {confirmClose && (
-          <div className="save-changes-prompt" role="alertdialog" aria-modal="true" aria-labelledby="save-changes-title">
+          <div className="save-changes-prompt" role="alertdialog" aria-modal="true" aria-labelledby={`${headingId}-discard`}>
             <div className="save-changes-card">
               <p className="studio-kicker">Unsaved changes</p>
-              <h3 id="save-changes-title">Save changes?</h3>
+              <h3 id={`${headingId}-discard`}>Save changes?</h3>
               <p>There are changes in this editor that have not been saved yet.</p>
               <div className="save-changes-actions">
                 <button type="button" className="btn btn-primary" onClick={saveAndClose}>Save</button>

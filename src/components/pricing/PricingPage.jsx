@@ -3,6 +3,7 @@ import { HOSTING_INCLUDED_YEARS, HOSTING_RENEWAL_FEE_GBP, PLANS, FOUNDER_SLOTS_T
 import BetaInterestModal from '../account/BetaInterestModal'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { usePageMeta } from '../../utils/usePageMeta'
 import './PricingPage.css'
 
@@ -315,6 +316,13 @@ function cellClass(val) {
   return ''
 }
 
+function getInterestPlanFromLocation() {
+  const params = new URLSearchParams(window.location.search)
+  const requestedPlanKey = params.get('interest')
+  if (!requestedPlanKey) return null
+  return PLANS.find(plan => plan.key === requestedPlanKey && plan.key !== 'free') || null
+}
+
 // --------------------------------------------------------------------------
 // Main page
 // --------------------------------------------------------------------------
@@ -322,7 +330,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const founderSlots = useFounderSlots()
   const [openFaq, setOpenFaq]   = useState(null)
   const [billingError, setBillingError] = useState('')
-  const [interestPlan, setInterestPlan] = useState(null)
+  const [interestPlan, setInterestPlan] = useState(() => getInterestPlanFromLocation())
 
   usePageMeta({
     path: '/pricing/',
@@ -392,7 +400,20 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const handleSelect = async (planKey) => {
     if (!planKey) return
     setBillingError('')
+    const params = new URLSearchParams(window.location.search)
+    params.set('interest', planKey)
+    const nextUrl = `${window.location.pathname}?${params.toString()}`
+    window.history.replaceState(null, '', nextUrl)
     setInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
+  }
+
+  const closeInterest = () => {
+    setInterestPlan(null)
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has('interest')) return
+    params.delete('interest')
+    const query = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
   }
 
   const displayPlans = [freePlanDef, monthlyPlanDef, lifetimePlanDef, founderPlanDef].filter(Boolean)
@@ -446,7 +467,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               onClick={onGetStarted}
               style={{
                 background: 'var(--accent)', border: 'none',
-                color: 'var(--bg-main)', borderRadius: 9,
+                color: 'var(--accent-contrast)', borderRadius: 9,
                 padding: '13px 28px', fontSize: 15, fontWeight: 800, cursor: 'pointer',
               }}
             >
@@ -693,6 +714,11 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           </div>
         </section>
 
+        {/* ── Support development ── */}
+        <section aria-label="Support development" style={{ maxWidth: 640, margin: '0 auto', padding: '0 24px 8px' }}>
+          <SupportDevelopmentLink variant="banner" />
+        </section>
+
         {/* ── Final CTA ── */}
         <section
           aria-label="Sign-up call to action"
@@ -720,7 +746,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             onClick={onGetStarted}
             style={{
               background: 'var(--accent)', border: 'none',
-              color: 'var(--bg-main)', borderRadius: 9,
+              color: 'var(--accent-contrast)', borderRadius: 9,
               padding: '14px 36px', fontSize: 16, fontWeight: 900, cursor: 'pointer',
             }}
           >
@@ -735,7 +761,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         user={user}
         planKey={interestPlan?.key}
         planLabel={interestPlan?.label}
-        onClose={() => setInterestPlan(null)}
+        onClose={closeInterest}
+        onCreateAccount={!user ? (email) => { closeInterest(); onGetStarted?.(email) } : undefined}
       />
     </div>
   )

@@ -7,7 +7,6 @@ export const MAX_ZOOM = 3
 export const WHEEL_ZOOM_INTENSITY = 0.0016
 export const DRAG_THRESHOLD_PX = 4
 export const MIN_SIZE = 16
-export const SNAP_SIZES = [20, 40, 80]
 
 export const STYLE_PRESETS = [
   { value: 'parchment', label: 'Parchment' },
@@ -33,13 +32,6 @@ export function territoryNounFor(mapType) {
 export function territoryNounPluralFor(mapType) {
   const noun = territoryNounFor(mapType)
   return noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`
-}
-
-// Default background base per map type: world maps start as open water,
-// region/local maps start as land (you are usually inside a continent).
-// Only applied to newly created maps; existing maps keep 'water'.
-export function defaultBaseLayerFor(mapType) {
-  return mapType === 'region' || mapType === 'local' ? 'land' : 'water'
 }
 
 // Default movement-scale labels per map type (interior is set at creation).
@@ -82,10 +74,9 @@ export const TOOLS = [
 // 'terrain' draws filled terrain regions; 'region' draws named political territories/rooms
 export const POINT_DRAW_TOOLS = new Set(['shape', 'terrain', 'region', 'wall', 'water', 'river', 'road', 'path', 'border'])
 
-// 'note' is intentionally absent from every toolset (product decision
-// 2026-07-04: no Note tool in the left rail). Existing placed notes still
-// render, select, and edit through Object Properties.
-const ALL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'water', 'river', 'road', 'border', 'stamp', 'location', 'label']
+// Notes belong on world and region maps. Local and interior maps keep their
+// scale-specific toolsets intentionally focused.
+const ALL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'water', 'river', 'road', 'border', 'stamp', 'location', 'label', 'note']
 const LOCAL_DRAWING_TOOLS = ['select', 'pan', 'shape', 'terrain', 'region', 'water', 'river', 'path', 'wall', 'stamp', 'location', 'label']
 const INTERIOR_DRAWING_TOOLS = ['select', 'pan', 'wall', 'opening', 'region', 'stamp', 'label']
 export const MAP_TYPE_TOOLS = {
@@ -95,7 +86,7 @@ export const MAP_TYPE_TOOLS = {
   interior: INTERIOR_DRAWING_TOOLS,
 }
 
-export const stampAssetCache = new Map()
+const stampAssetCache = new Map()
 
 export function loadStampAsset(src) {
   if (!src || typeof Image === 'undefined') return null

@@ -7,7 +7,7 @@
  */
 import { expect, test } from '@playwright/test'
 import { PROJECT_TYPES } from '../../src/constants/projectTypes.js'
-import { createProject, dismissLaunchPrompts, readStorage, seedCleanStorage } from './helpers.js'
+import { createProject, dismissLaunchPrompts, enterWritingMode, readStorage, seedCleanStorage } from './helpers.js'
 
 // Types that have non-Novel structure labels — the ones QA_PLAN flags as needing verification.
 const LABEL_TYPES = [
@@ -32,7 +32,7 @@ for (const typeId of LABEL_TYPES) {
     await createProject(page, { title, type: typeId })
 
     // Navigate to Write mode so the structure sidebar renders
-    await page.getByRole('button', { name: 'Write' }).click()
+    await enterWritingMode(page)
     await expect(page).toHaveURL(/\/project\/.+\/writing/)
 
     // The sidebar renders "+ {level1}", "+ {level2}", "+ {level3}" as button text
@@ -55,6 +55,11 @@ for (const typeId of LABEL_TYPES) {
       const title = `WordTarget ${cfg.label} ${Date.now()}`
       await createProject(page, { title, type: typeId })
 
+      // Raw `localStorage` isn't where the app actually writes `nf_novels`
+      // once the IndexedDB-backed vault is active (window.__yowStorageBridge,
+      // src/storage/browserVaultAdapter.js) — same root cause already fixed
+      // in other e2e specs (see docs/ROADMAP.md's 2026-08-24 CI-red row) but
+      // missed here.
       const novels = (await readStorage(page, 'nf_novels')) || []
       const project = novels.find(n => n.title === title)
 

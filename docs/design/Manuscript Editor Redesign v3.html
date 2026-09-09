@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manuscript editor — redesign prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+:root{--ui:"Figtree",system-ui,sans-serif;--prose:"Spectral",Georgia,serif;--r:10px;--rail-w:268px;--insp-w:320px}
+html[data-theme="dark"]{--bg:#0e1a18;--surface:#132220;--raise:#1a2b28;--text:#ece6da;--muted:#8ea19b;--faint:#5c706b;--line:rgba(255,255,255,.09);--line-strong:rgba(255,255,255,.16);--accent:#e07a4f;--accent-soft:rgba(224,122,79,.14);--accent-text:#f0a180;--accent-2:#9db07a;--prose-c:#f2ece0;--display:var(--ui);--display-w:700;--display-tr:.02em;--display-tt:none;--pill:8px;--shadow:0 10px 30px rgba(0,0,0,.35)}
+html[data-theme="organic"]{--bg:#f5ead8;--surface:#ebddc5;--raise:#fffaf0;--text:#201e1d;--muted:#6f6759;--faint:#8b8271;--line:rgba(32,30,29,.13);--line-strong:rgba(32,30,29,.25);--accent:#c67139;--accent-soft:#ffe1d0;--accent-text:#8c491a;--accent-2:#7a8a5e;--prose-c:#2a2724;--display:"Caprasimo",system-ui,sans-serif;--display-w:400;--display-tr:0;--display-tt:none;--pill:999px;--shadow:0 12px 32px rgba(46,43,37,.18)}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--accent-text)}a:hover{color:var(--accent)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+::selection{background:var(--accent-soft)}
+.app{height:100%;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── top bar: three zones, one row ───────────────────────────── */
+.top{display:flex;align-items:center;gap:14px;padding:0 14px;height:52px;flex:0 0 auto;border-bottom:1px solid var(--line);background:var(--surface);position:relative;z-index:30}
+.zone{display:flex;align-items:center;gap:8px;min-width:0;flex-shrink:1}
+.zone.left{flex:0 1 auto;overflow:hidden}
+.zone.tools{flex:0 0 auto}
+.zone.mid{flex:1;justify-content:center;min-width:0}
+.iconbtn{width:32px;height:32px;display:grid;place-items:center;border-radius:var(--pill);color:var(--muted)}
+.iconbtn:hover{background:var(--accent-soft);color:var(--accent-text)}
+.iconbtn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-text)}
+.crumb{display:flex;align-items:baseline;gap:8px;min-width:0;padding:4px 6px;border-radius:var(--pill)}
+.crumb:hover{background:var(--accent-soft)}
+.crumb-title{font-family:var(--display);font-weight:var(--display-w);letter-spacing:var(--display-tr);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb-path{font-size:12px;color:var(--muted);white-space:nowrap}
+.status{display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap;overflow:hidden;flex-shrink:1;font-size:12px;color:var(--muted);padding:5px 12px;border-radius:var(--pill);background:color-mix(in srgb,var(--text) 5%,transparent)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent-2)}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:var(--pill);font-size:13px;font-weight:500;color:var(--muted)}
+.btn:hover{background:color-mix(in srgb,var(--text) 7%,transparent);color:var(--text)}
+.btn.on,.btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-text)}
+.btn.primary{background:var(--accent);color:#fff9f3;font-weight:600}
+.btn.primary:hover{background:color-mix(in srgb,var(--accent) 86%,#000)}
+.sep{width:1px;height:20px;background:var(--line);margin:0 2px}
+.menu-wrap{position:relative}
+.menu{position:absolute;top:38px;right:0;width:236px;padding:6px;border-radius:14px;background:var(--raise);border:1px solid var(--line);box-shadow:var(--shadow);display:none;z-index:40}
+.menu.open{display:block}
+.menu-h{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);padding:8px 10px 4px}
+.menu-i{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:8px;font-size:13px;text-align:left;color:var(--text)}
+.menu-i:hover{background:var(--accent-soft);color:var(--accent-text)}
+.menu-i kbd{margin-left:auto;font:11px var(--ui);color:var(--faint)}
+.avatar{width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--line)}
+.avatar:hover{border-color:var(--accent);color:var(--accent)}
+
+.body{flex:1;display:flex;min-height:0;position:relative}
+
+/* ── left rail: the manuscript spine ─────────────────────────── */
+.rail{width:var(--rail-w);flex:0 0 auto;border-right:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;min-height:0;transition:width .18s ease}
+.rail-h{display:flex;align-items:center;gap:6px;padding:12px 12px 8px}
+.rail-h b{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.rail-h .iconbtn{margin-left:auto;width:26px;height:26px}
+.tree{flex:1;overflow-y:auto;padding:0 8px 8px}
+.act{margin-top:10px}
+.act-h{display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.act-h .n{margin-left:auto;font-size:11px;letter-spacing:0;color:var(--faint);text-transform:none}
+.chap{margin:2px 0 6px}
+.chap-h{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:8px;text-align:left;font-size:13px;font-weight:600}
+.chap-h:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
+.chap-h .caret{width:12px;color:var(--faint);transition:transform .15s}
+.chap.closed .caret{transform:rotate(-90deg)}
+.chap.closed .scenes{display:none}
+.chap-h .n{margin-left:auto;font-size:11px;font-weight:400;color:var(--faint)}
+.scenes{display:flex;flex-direction:column;gap:1px;padding-left:8px;margin-left:11px;border-left:1px solid var(--line)}
+.scene-i{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;text-align:left;width:100%;color:var(--muted);font-size:13px}
+.scene-i:hover{background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--text)}
+.scene-i.active{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.scene-i .sq{width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:var(--line-strong)}
+.scene-i .sq.done{background:var(--accent-2)}
+.scene-i .sq.draft{background:var(--accent)}
+.scene-i .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scene-i .w{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+.addrow{display:flex;justify-content:center;height:6px;margin:0 8px;opacity:0;transition:opacity .12s}
+.addrow:hover,.scenes:hover .addrow{opacity:1}
+.addrow button{height:16px;margin-top:-5px;padding:0 10px;border-radius:999px;font-size:11px;line-height:16px;color:var(--faint);background:var(--raise);border:1px solid var(--line)}
+.addrow button:hover{color:var(--accent-text);border-color:var(--accent)}
+.rail-f{padding:8px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px}
+.rail-f .btn{flex:1 1 72px;justify-content:center;white-space:nowrap;padding:7px 8px}
+
+/* collapsed rail = position spine */
+.rail.collapsed{width:44px}
+.rail.collapsed .tree,.rail.collapsed .rail-f,.rail.collapsed .rail-h b{display:none}
+.rail.collapsed .rail-h{justify-content:center;padding:12px 0 0}
+.rail.collapsed .rail-h .iconbtn{margin:0}
+.spine{display:none;flex:1;flex-direction:column;gap:3px;align-items:center;padding:14px 0;overflow:hidden}
+.rail.collapsed .spine{display:flex}
+.spine i{width:14px;height:3px;border-radius:2px;background:var(--line-strong)}
+.spine i.active{background:var(--accent);width:20px}
+
+/* ── writing surface ─────────────────────────────────────────── */
+.sheet{flex:1;overflow-y:auto;min-width:0;scroll-behavior:smooth;container-type:inline-size}
+.doc{max-width:900px;margin:0 auto;padding:56px 32px 45vh}
+.act-mark,.chap-title,.chap-sub,.scene-break,.addscene,.prose{max-width:620px}
+.gutter{grid-column:2;grid-row:2;position:relative;align-self:stretch;min-height:1px}
+.gnote{position:absolute;left:0;right:0;text-align:left;font-size:11px;line-height:1.45;color:var(--muted);background:var(--accent-soft);border-left:2px solid var(--accent);border-radius:0 8px 8px 0;padding:6px 9px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.gnote:hover{color:var(--accent-text)}
+.gnote b{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-text);margin-bottom:2px}
+.act-mark{display:flex;align-items:center;gap:14px;margin:0 0 40px}
+.act-mark span{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+.act-mark i{flex:1;height:1px;background:var(--line)}
+.chap-title{margin:0 0 6px;font-family:var(--display);font-weight:var(--display-w);letter-spacing:var(--display-tr);font-size:26px;color:var(--text)}
+.chap-sub{margin:0 0 34px;font-size:13px;color:var(--muted)}
+.scene{scroll-margin-top:20px;padding:6px 0 34px;display:grid;grid-template-columns:minmax(0,620px) 188px;gap:0 28px;align-items:start}
+.scene>.scene-head,.scene>.prose{grid-column:1}
+.scene-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 0;border-bottom:1px solid var(--line);margin-bottom:22px;color:var(--muted);font-size:12px}
+.scene.on .scene-head{border-bottom-color:var(--accent)}
+.scene-n{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-variant-numeric:tabular-nums}
+.scene-t{font-weight:600;color:var(--text);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:var(--pill);font-size:11px;color:var(--muted);background:color-mix(in srgb,var(--text) 6%,transparent)}
+.chip.done{color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 16%,transparent)}
+.chip:hover{color:var(--text)}
+.scene-head .right{margin-left:auto;display:flex;align-items:center;gap:8px;opacity:.55;transition:opacity .15s}
+.scene:hover .scene-head .right,.scene.on .scene-head .right{opacity:1}
+.scene-head .w{font-variant-numeric:tabular-nums;font-size:11px;color:var(--faint)}
+.prose{font-family:var(--prose);font-size:19px;line-height:1.85;color:var(--prose-c)}
+.prose p{margin:0 0 1.15em;text-wrap:pretty}
+.prose p+p{text-indent:1.6em}
+.prose .ent{border-bottom:1px dotted color-mix(in srgb,var(--accent) 60%,transparent);cursor:pointer}
+.prose .ent:hover{background:var(--accent-soft)}
+.notemark{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:3px;border-radius:50%;vertical-align:super;font-family:var(--ui);font-size:10px;font-weight:600;color:var(--accent-text);background:var(--accent-soft);cursor:pointer}
+.scene-break{display:flex;justify-content:center;gap:6px;padding:26px 0}
+.scene-break i{width:4px;height:4px;border-radius:50%;background:var(--line-strong)}
+.addscene{display:block;margin:6px auto 0;padding:7px 16px;border-radius:var(--pill);font-size:12px;color:var(--muted);border:1px dashed var(--line-strong)}
+.addscene:hover{color:var(--accent-text);border-color:var(--accent);border-style:solid}
+
+/* ── inspector: one level of navigation ─────────────────────── */
+.insp{width:var(--insp-w);flex:0 0 auto;border-left:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;min-height:0}
+.insp[hidden]{display:none}
+.insp-tabs{display:flex;gap:2px;padding:8px;border-bottom:1px solid var(--line)}
+.insp-tabs button{flex:1;padding:7px 4px;border-radius:var(--pill);font-size:12px;font-weight:500;color:var(--muted)}
+.insp-tabs button:hover{background:color-mix(in srgb,var(--text) 6%,transparent);color:var(--text)}
+.insp-tabs button.on{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.insp-body{flex:1;overflow-y:auto;padding:16px}
+.pane{display:none}.pane.on{display:block}
+.f-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 8px}
+.group{margin-bottom:22px}
+.row{display:flex;flex-wrap:wrap;gap:6px}
+.opt{padding:6px 11px;border-radius:var(--pill);font-size:12px;color:var(--muted);border:1px solid var(--line)}
+.opt:hover{border-color:var(--line-strong);color:var(--text)}
+.opt.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-text);font-weight:600}
+.field{display:block;margin-bottom:12px}
+.field span{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.field input,.field textarea{width:100%;padding:8px 12px;border-radius:var(--pill);border:1px solid var(--line);background:var(--bg);color:var(--text);font:14px var(--ui)}
+.field textarea{border-radius:12px;resize:vertical;min-height:64px}
+.field input:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.goal{margin-bottom:18px}
+.goal-top{display:flex;align-items:baseline;gap:8px;margin-bottom:7px}
+.goal-top b{font-family:var(--display);font-weight:var(--display-w);font-size:24px;line-height:1}
+.goal-top small{color:var(--muted);font-size:12px}
+.goal-top a{margin-left:auto;font-size:11px;text-decoration:none}
+.bar{height:7px;border-radius:999px;background:color-mix(in srgb,var(--text) 9%,transparent);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:999px;background:var(--accent)}
+.meta{display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--faint)}
+.spark{display:flex;align-items:flex-end;gap:5px;height:44px;margin:10px 0 4px}
+.spark i{flex:1;border-radius:3px 3px 0 0;background:color-mix(in srgb,var(--text) 12%,transparent)}
+.spark i.now{background:var(--accent)}
+.spark-x{display:flex;gap:5px;font-size:10px;color:var(--faint)}
+.spark-x span{flex:1;text-align:center}
+.tgt{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line);font-size:12px}
+.tgt b{font-weight:600}
+.tgt .n{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+.note{padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);margin-bottom:10px}
+.note-h{display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-text);margin-bottom:6px}
+.note-h button{margin-left:auto;color:var(--faint);letter-spacing:0}
+.note p{margin:0;font-size:13px;color:var(--text)}
+.empty{padding:28px 8px;text-align:center;font-size:12px;color:var(--faint)}
+
+/* ── AI: a separate surface, not editor chrome ───────────────── */
+.ai{position:absolute;inset:0 0 0 auto;width:min(520px,100%);background:var(--raise);border-left:1px solid var(--line-strong);box-shadow:var(--shadow);display:flex;flex-direction:column;transform:translateX(101%);transition:transform .22s ease;z-index:20}
+.ai.open{transform:none}
+.ai-h{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.ai-h b{font-family:var(--display);font-weight:var(--display-w);font-size:16px}
+.ai-h .chip{margin-left:auto}
+.ai-b{flex:1;overflow-y:auto;padding:16px}
+.ai-card{padding:14px;border-radius:14px;background:var(--bg);border:1px solid var(--line);margin-bottom:12px}
+.ai-card h4{margin:0 0 6px;font-family:var(--ui);font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.ai-card p{margin:0;font-family:var(--prose);font-size:15px;line-height:1.7;color:var(--prose-c)}
+.ai-card .acts{display:flex;gap:6px;margin-top:12px}
+.ai-f{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center}
+.ai-f input{flex:1;padding:10px 14px;border-radius:var(--pill);border:1px solid var(--line);background:var(--surface);color:var(--text);font:14px var(--ui)}
+
+/* ── focus mode ──────────────────────────────────────────────── */
+.app[data-focus="1"] .rail,.app[data-focus="1"] .insp,.app[data-focus="1"] .zone.left .crumb,.app[data-focus="1"] .tools{display:none}
+.app[data-focus="1"] .top{height:40px;background:transparent;border-bottom-color:transparent}
+.app[data-focus="1"] .doc{max-width:620px;padding-top:16vh}
+.app[data-focus="1"] .gutter{display:none}
+.app[data-focus="1"] .scene{grid-template-columns:minmax(0,1fr)}
+.app[data-focus="1"] .scene-head{opacity:.25}
+.app[data-focus="1"] .scene-head:hover{opacity:1}
+.focus-exit{display:none;margin-left:auto;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.app[data-focus="1"] .focus-exit{display:flex}
+
+/* ── narrow desktop / tablet: inspector overlays instead of stealing width ── */
+@media (min-width:901px) and (max-width:1250px){
+  .insp{width:min(320px,34vw)}
+  .status .long{display:none}
+  .crumb-title{max-width:150px}
+  .doc{padding-left:24px;padding-right:24px}
+}
+
+/* ── mobile ──────────────────────────────────────────────────── */
+.tabbar{display:none}
+@media (max-width:900px){
+  .rail{position:absolute;z-index:25;top:0;bottom:0;left:0;transform:translateX(-101%);transition:transform .2s;box-shadow:var(--shadow)}
+  .rail.sheet-open{transform:none}
+  .rail.collapsed{width:var(--rail-w)}
+  .rail.collapsed .tree,.rail.collapsed .rail-f,.rail.collapsed .rail-h b{display:revert}
+  .rail.collapsed .spine{display:none}
+  .insp{position:absolute;z-index:25;inset:auto 0 0 0;width:100%;height:62vh;border-left:0;border-top:1px solid var(--line-strong);border-radius:18px 18px 0 0;box-shadow:var(--shadow)}
+  .doc{padding:28px 20px 40vh}
+  .prose{font-size:18px}
+  .zone.mid,.tools .desktop-only{display:none}
+  .tabbar{display:flex;flex:0 0 auto;border-top:1px solid var(--line);background:var(--surface)}
+  .tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 11px;font-size:10px;color:var(--muted)}
+  .tabbar button.on{color:var(--accent-text)}
+  .app[data-focus="1"] .tabbar{display:none}
+}
+
+.selbar{position:fixed;z-index:45;display:none;align-items:center;gap:2px;padding:4px;border-radius:999px;background:var(--raise);border:1px solid var(--line-strong);box-shadow:var(--shadow)}
+.selbar.on{display:flex}
+.selbar button{padding:5px 11px;border-radius:999px;font-size:12px;color:var(--muted)}
+.selbar button:hover{background:var(--accent-soft);color:var(--accent-text)}
+.selbar i{width:1px;height:16px;background:var(--line);margin:0 3px}
+.toast{position:fixed;bottom:64px;left:50%;transform:translate(-50%,14px);z-index:65;display:flex;align-items:center;gap:14px;padding:10px 10px 10px 16px;border-radius:999px;background:var(--raise);border:1px solid var(--line-strong);box-shadow:var(--shadow);font-size:13px;opacity:0;pointer-events:none;transition:opacity .16s,transform .16s}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--accent-text);background:var(--accent-soft)}
+.spane{display:none}.spane.on{display:block}
+.res{width:100%;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);margin-bottom:8px;font-size:13px;color:var(--text);display:block}
+.res:hover{border-color:var(--accent)}
+.res b{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+.res mark{background:var(--accent-soft);color:var(--accent-text);border-radius:3px;padding:0 2px}
+.ver{display:flex;align-items:center;gap:10px;padding:11px 2px;border-top:1px solid var(--line);font-size:13px}
+.ver .when{flex:1}.ver .when small{display:block;color:var(--faint);font-size:11px}
+.reader{position:fixed;inset:0;z-index:55;background:var(--bg);display:none;flex-direction:column}
+.reader.on{display:flex}
+.reader-h{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.reader-h b{font-family:var(--display);font-weight:var(--display-w);font-size:15px}
+.reader-h .chip{margin-left:auto}
+.reader-b{flex:1;overflow-y:auto;padding:60px 24px 30vh}
+.reader-b .inner{max-width:620px;margin:0 auto;font-family:var(--prose);font-size:19px;line-height:1.85;color:var(--prose-c)}
+.reader-b h3{font-family:var(--display);font-weight:var(--display-w);font-size:22px;margin:48px 0 18px}
+.reader-b p{margin:0 0 1.15em;text-wrap:pretty}.reader-b p+p{text-indent:1.6em}
+@media (max-width:900px){.scene{grid-template-columns:minmax(0,1fr)}.gutter{display:none}}
+@container (max-width:880px){.scene{grid-template-columns:minmax(0,1fr)}.gutter{display:none}.doc{max-width:660px}}
+
+.modes{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:color-mix(in srgb,var(--text) 6%,transparent)}
+.modes button{padding:5px 13px;border-radius:999px;font-size:12px;font-weight:500;color:var(--muted)}
+.modes button:hover{color:var(--text)}
+.modes button.on{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+
+/* WRITE — bare surface */
+.app[data-mode="write"] .insp,.app[data-mode="write"] #aiBtn,.app[data-mode="write"] #inspBtn,.app[data-mode="write"] .gutter,.app[data-mode="write"] .notemark,.app[data-mode="write"] .scene-head .right,.app[data-mode="write"] .scene-head .chip{display:none}
+.app[data-mode="write"] .scene{grid-template-columns:minmax(0,1fr)}
+.app[data-mode="write"] .doc{max-width:684px}
+.app[data-mode="write"] .scene-head{border-bottom-color:transparent;margin-bottom:12px;padding:4px 0}
+.app[data-mode="write"] .scene-t{color:var(--muted);font-weight:400}
+.app[data-mode="write"] .addscene{border-style:solid;border-color:var(--line)}
+
+/* FINALISED — read-only */
+.app[data-mode="final"] .sheet,.app[data-mode="final"] .rail,.app[data-mode="final"] .insp,.app[data-mode="final"] .ai,.app[data-mode="final"] #aiBtn,.app[data-mode="final"] #inspBtn,.app[data-mode="final"] #focusBtn,.app[data-mode="final"] #railBtn{display:none}
+.fin{display:none;flex:1;flex-direction:column;min-width:0;background:var(--bg)}
+.app[data-mode="final"] .fin{display:flex}
+.fin-h{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.fin-h b{font-family:var(--display);font-weight:var(--display-w);font-size:15px}
+.fin-h .modes{margin-left:auto}
+.fin-b{flex:1;overflow-y:auto;padding:64px 24px 30vh;display:none}
+.fin-b.on{display:block}
+.fin-b .inner{max-width:620px;margin:0 auto;font-family:var(--prose);font-size:19px;line-height:1.85;color:var(--prose-text,var(--prose-c))}
+.fin-b h3{font-family:var(--display);font-weight:var(--display-w);font-size:22px;margin:52px 0 18px}
+.fin-b p{margin:0 0 1.15em;text-wrap:pretty}.fin-b p+p{text-indent:1.6em}
+.fin-b .notemark{display:none}
+.fin-b .ent{border:0;cursor:default}
+.fin-b .ent:hover{background:none}
+.book{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:26px 20px;min-height:0;overflow:hidden}
+.book.on{display:flex}
+.spread{position:relative;width:min(940px,100%);flex:1;min-height:0;max-height:660px;border-radius:6px;background:var(--raise);box-shadow:var(--shadow);padding:46px 52px 40px;overflow:hidden;scroll-behavior:smooth}
+.spread:before{content:"";position:absolute;top:26px;bottom:26px;left:50%;width:1px;background:var(--line)}
+.bookflow{height:100%;column-count:2;column-gap:76px;column-fill:auto;font-family:var(--prose);font-size:15.5px;line-height:1.72;color:var(--prose-text,var(--prose-c));transition:transform .26s ease;will-change:transform}
+.bookflow h3{font-family:var(--display);font-weight:var(--display-w);font-size:17px;margin:0 0 14px;break-after:avoid}
+.bookflow p{margin:0 0 .9em;text-wrap:pretty}.bookflow p+p{text-indent:1.4em}
+.bookflow .ent{border:0}
+.bookflow .notemark{display:none}
+.booknav{display:flex;align-items:center;gap:14px;font-size:12px;color:var(--muted)}
+.booknav button{width:30px;height:30px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:15px;line-height:1}
+.booknav button:hover{border-color:var(--accent);color:var(--accent-text)}
+@media (max-width:900px){.spread{padding:26px 22px}.bookflow{column-count:1}}
+
+/* prototype controls */
+.proto{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:4px;padding:5px;border-radius:999px;background:var(--raise);border:1px solid var(--line);box-shadow:var(--shadow);font-size:12px}
+.proto button{padding:6px 12px;border-radius:999px;color:var(--muted)}
+.proto button.on{background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.proto span{padding:0 8px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.overlay{position:fixed;inset:0;z-index:70;background:rgba(10,14,13,.55);display:none;align-items:center;justify-content:center;padding:24px}
+.overlay.open{display:flex}
+.sheetbox{width:min(560px,100%);max-height:80vh;overflow-y:auto;padding:26px;border-radius:20px;background:var(--raise);box-shadow:var(--shadow)}
+.sheetbox h3{margin:0 0 4px;font-family:var(--display);font-weight:var(--display-w);font-size:20px}
+.sheetbox p.lede{margin:0 0 18px;color:var(--muted);font-size:13px}
+.sheetbox ol{margin:0;padding-left:20px}
+.sheetbox li{margin-bottom:12px;font-size:13px;line-height:1.6}
+.sheetbox li b{display:block;font-weight:600}
+.sheetbox li span{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-focus="0">
+
+  <!-- ── top bar ─────────────────────────────────────────────── -->
+  <header class="top">
+    <div class="zone left">
+      <button class="iconbtn" id="railBtn" title="Manuscript structure (⌘\)" aria-pressed="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+      </button>
+      <button class="crumb" id="crumb" title="Jump to another scene (⌘K)">
+        <span class="crumb-title">The Map That Lied</span>
+        <span class="crumb-path" id="crumbPath">Act I · Chapter 1 · Scene 1</span>
+      </button>
+      <div class="modes" id="modes"><button data-mode="write">Write</button><button data-mode="edit" class="on">Edit</button><button data-mode="final">Finalised</button></div>
+    </div>
+    <div class="status"><i class="dot"></i><span id="saveTxt">Saved</span><span>·</span><span id="wordTxt">3,401 words</span><span class="long">·</span><span class="long">178 today</span></div>
+    <div class="zone mid">
+    </div>
+    <div class="zone tools">
+      <button class="btn desktop-only" id="aiBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c-1.5 5.1-4.4 8-9.5 9.5 5.1 1.5 8 4.4 9.5 9.5 1.5-5.1 4.4-8 9.5-9.5-5.1-1.5-8-4.4-9.5-9.5Z"/></svg>AI</button>
+      <button class="btn" id="inspBtn" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>Inspector</button>
+      <div class="sep"></div>
+      <button class="btn" id="homeBtn" title="Back to the project dashboard"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Project</button>
+      <button class="btn primary" id="focusBtn">Focus</button>
+      <div class="menu-wrap">
+        <button class="iconbtn" id="moreBtn" title="More">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+        </button>
+        <div class="menu" id="moreMenu">
+          <div class="menu-h">Find</div>
+          <button class="menu-i" data-surf="search">Search &amp; replace<kbd>⌘F</kbd></button>
+          <button class="menu-i">Go to scene<kbd>⌘K</kbd></button>
+          <div class="menu-h">Manuscript</div>
+          <button class="menu-i">Pacing chart</button>
+          <button class="menu-i">Apply a template</button>
+          <button class="menu-i">Import a document</button>
+          <button class="menu-i" data-surf="history">Version history</button>
+          <div class="menu-h">Finish</div>
+          <button class="menu-i" data-surf="finalise">Finalise draft</button>
+          <button class="menu-i" data-surf="finalise">Export…<kbd>⌘E</kbd></button>
+          <button class="menu-i" data-surf="finalise">Retired drafts</button>
+        </div>
+      </div>
+      <button class="avatar" id="userBtn" title="Morgan — account and settings">MV</button>
+    </div>
+    <div class="focus-exit"><span id="focusWords">3,401 words · 178 today</span><button class="btn" id="focusExit">Exit focus · Esc</button></div>
+  </header>
+
+  <div class="body">
+
+    <!-- ── left rail ─────────────────────────────────────────── -->
+    <aside class="rail" id="rail">
+      <div class="rail-h">
+        <b>Manuscript</b>
+        <button class="iconbtn" id="railCollapse" title="Collapse">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M14 6l-6 6 6 6"/></svg>
+        </button>
+      </div>
+      <div class="spine" id="spine"></div>
+      <nav class="tree" id="tree"></nav>
+      <div class="rail-f">
+        <button class="btn" id="addScene">+ Scene</button>
+        <button class="btn" id="addChapter">+ Chapter</button>
+        <button class="btn" id="addAct">+ Act</button>
+      </div>
+    </aside>
+
+    <!-- ── writing surface ───────────────────────────────────── -->
+    <main class="sheet" id="sheet">
+      <div class="doc" id="doc"></div>
+    </main>
+
+    <section class="fin" id="final" aria-label="Finalised draft">
+      <div class="fin-h">
+        <b>The Map That Lied</b><span class="chip">Frozen 17 Aug · 3,401 words</span>
+        <div class="modes" id="finView"><button data-v="ms" class="on">Manuscript</button><button data-v="book">Book</button></div>
+        <button class="btn">Export…</button>
+      </div>
+      <div class="fin-b on" id="finMs"><div class="inner" id="finFlow"></div></div>
+      <div class="book" id="finBook">
+        <div class="spread" id="spread"><div class="bookflow" id="bookFlow"></div></div>
+        <div class="booknav"><button id="bPrev">‹</button><span id="bPages">Pages 1–2</span><button id="bNext">›</button></div>
+      </div>
+    </section>
+
+    <!-- ── inspector ─────────────────────────────────────────── -->
+    <aside class="insp" id="insp">
+      <div class="insp-tabs" id="inspTabs">
+        <button data-pane="scene" class="on">Scene</button>
+        <button data-pane="notes">Notes <small id="noteCount">2</small></button>
+        <button data-pane="format">Format</button>
+        <button data-pane="progress">Progress</button>
+      </div>
+      <div class="insp-body">
+
+        <div class="pane on" data-pane="scene">
+          <div class="group">
+            <label class="field"><span>Title</span><input value="The Impossible Map" id="sceneTitleInput"></label>
+            <div class="f-label">Status</div>
+            <div class="row" data-single>
+              <button class="opt">Outline</button><button class="opt">Draft</button><button class="opt on">Done</button>
+            </div>
+          </div>
+          <div class="group">
+            <label class="field"><span>Point of view</span><input value="Rowan Vale" placeholder="Whose eyes?"></label>
+            <label class="field"><span>Location</span><input value="Northwatch scriptorium" placeholder="Where?"></label>
+            <label class="field"><span>Summary</span><textarea placeholder="One line you'd tell a friend.">Rowan copies the border for the sixth time and finds the road bending the wrong way.</textarea></label>
+          </div>
+          <div class="group">
+            <div class="f-label">In this scene</div>
+            <div class="row"><span class="chip">Rowan Vale</span><span class="chip">Kestrel Market</span><span class="chip">the dragon war</span></div>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="notes">
+          <div id="notesList"></div>
+          <p class="empty">Select prose in the manuscript and choose “Note” to anchor a new one.</p>
+        </div>
+
+        <div class="pane" data-pane="format">
+          <div class="group">
+            <div class="f-label">Typeface</div>
+            <div class="row" data-single><button class="opt on" style="font-family:var(--prose)">Spectral</button><button class="opt" style="font-family:Georgia,serif">Georgia</button><button class="opt" style="font-family:var(--ui)">Figtree</button><button class="opt" style="font-family:ui-monospace,monospace">Mono</button></div>
+          </div>
+          <div class="group">
+            <div class="f-label">Size &amp; spacing</div>
+            <div class="row" data-single><button class="opt">17</button><button class="opt on">19</button><button class="opt">21</button><button class="opt">24</button></div>
+            <div class="row" data-single style="margin-top:6px"><button class="opt">Tight</button><button class="opt on">Relaxed</button><button class="opt">Double</button></div>
+          </div>
+          <div class="group">
+            <div class="f-label">Paragraphs</div>
+            <div class="row" data-single><button class="opt on">Indent first line</button><button class="opt">Space between</button></div>
+          </div>
+          <div class="group">
+            <div class="f-label">While writing</div>
+            <div class="row"><button class="opt on">Scene headers</button><button class="opt on">Entity links</button><button class="opt">Typewriter scroll</button></div>
+          </div>
+          <button class="btn" style="padding-left:0">Reset to defaults</button>
+        </div>
+
+        <div class="pane" data-pane="progress">
+          <div class="goal">
+            <div class="goal-top"><b>178</b><small>of 500 today</small><a href="#">Edit goal</a></div>
+            <div class="bar"><i style="width:36%"></i></div>
+            <div class="meta"><span>3-day streak</span><span>231 avg / day</span></div>
+          </div>
+          <div class="group">
+            <div class="f-label">Last 7 days</div>
+            <div class="spark"><i style="height:36%"></i><i style="height:28%"></i><i style="height:82%"></i><i style="height:12%"></i><i style="height:40%"></i><i style="height:56%"></i><i class="now" style="height:34%"></i></div>
+            <div class="spark-x"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>Today</span></div>
+          </div>
+          <div class="group">
+            <div class="f-label">Targets</div>
+            <div class="tgt"><b>Manuscript</b><span class="n">3,401 / 90,000</span></div>
+            <div class="tgt"><b>Act I</b><span class="n">3,401 / 30,000</span></div>
+            <div class="tgt"><b>Chapter 1</b><span class="n">1,502 / 3,000</span></div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- ── AI surface ────────────────────────────────────────── -->
+    <section class="ai" id="ai" aria-label="AI workspace">
+      <div class="ai-h">
+        <b id="surfTitle">AI workspace</b>
+        <span class="chip" id="surfMeta">Scene 1 · 779 words in context</span>
+        <button class="iconbtn" id="aiClose" title="Close">✕</button>
+      </div>
+      <div class="ai-b"><div class="spane on" data-s="ai">
+        <div class="ai-card">
+          <h4>Continuity check</h4>
+          <p>Chapter 3 places the toll bridge west of Northwatch; this scene has the road bending east beyond it. One of the two needs to move.</p>
+          <div class="acts"><button class="btn on">Open chapter 3</button><button class="btn">Dismiss</button></div>
+        </div>
+        <div class="ai-card">
+          <h4>Suggested continuation</h4>
+          <p>He set the pen down and let the candle gutter. Six copies, six honest hands, and the same lie in each of them — which meant the lie had come from somewhere older than his desk.</p>
+          <div class="acts"><button class="btn on">Insert at cursor</button><button class="btn">Rewrite</button><button class="btn">Discard</button></div>
+        </div>
+        <p class="empty">Nothing is written to your manuscript until you insert it.</p>
+        </div>
+
+        <div class="spane" data-s="search">
+          <label class="field"><span>Find</span><input value="bent east" id="findInput"></label>
+          <label class="field"><span>Replace with</span><input value="bent west" id="replInput"></label>
+          <div class="row" style="margin-bottom:18px"><button class="opt">Match case</button><button class="opt">Whole words</button><button class="opt on">This manuscript</button></div>
+          <div class="f-label">3 matches in 2 scenes</div>
+          <button class="res"><b>Ch 1 · Scene 1</b>The road to Northwatch should have <mark>bent east</mark> beyond the toll bridge.</button>
+          <button class="res"><b>Ch 2 · The Toll Bridge</b>…every survey since had it <mark>bent east</mark>, and every survey was wrong.</button>
+          <button class="res"><b>Ch 2 · What the Clerks Stamped</b>The ledger said <mark>bent east</mark> in three hands.</button>
+          <button class="btn primary" id="replaceAll" style="margin-top:8px">Replace all 3</button>
+        </div>
+
+        <div class="spane" data-s="history">
+          <p class="empty" style="padding:0 0 14px;text-align:left">Snapshots of <b>The Impossible Map</b>, kept for 30 days.</p>
+          <div class="ver"><span class="when">Today, 09:41 <small>779 words · +112</small></span><span class="chip done">Current</span></div>
+          <div class="ver"><span class="when">Today, 08:02 <small>667 words · +54</small></span><button class="btn restore">Restore</button></div>
+          <div class="ver"><span class="when">Yesterday, 22:18 <small>613 words · −41</small></span><button class="btn restore">Restore</button></div>
+          <div class="ver"><span class="when">Yesterday, 19:50 <small>654 words · first draft</small></span><button class="btn restore">Restore</button></div>
+        </div>
+
+        <div class="spane" data-s="finalise">
+          <div class="ai-card">
+            <h4>Ready to finalise</h4>
+            <p style="font-family:var(--ui);font-size:13px">2 acts · 4 chapters · 9 scenes · 3,401 words. One scene is still on outline; finalising freezes a copy you can read and export without touching the draft.</p>
+            <div class="acts"><button class="btn on" id="readBtn">Open reader</button><button class="btn">Freeze a copy</button></div>
+          </div>
+          <div class="f-label">Export</div>
+          <div class="row"><button class="opt">DOCX</button><button class="opt">PDF</button><button class="opt">EPUB</button><button class="opt">Plain text</button></div>
+          <div class="f-label" style="margin-top:20px">Retired drafts</div>
+          <div class="ver"><span class="when">Draft 2 · 12 Jul <small>3,120 words</small></span><button class="btn">Read</button></div>
+          <div class="ver"><span class="when">Draft 1 · 28 Jun <small>2,406 words</small></span><button class="btn">Read</button></div>
+        </div>
+      </div>
+      <div class="ai-f" id="surfFoot"><input placeholder="Ask about this scene, or describe what should happen next…"><button class="btn primary">Send</button></div>
+    </section>
+
+  </div>
+
+  <!-- ── mobile bottom bar ───────────────────────────────────── -->
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="outline"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>Outline</button>
+    <button data-tab="write" class="on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><path d="M4 20h4l10-10-4-4L4 16z"/></svg>Write</button>
+    <button data-tab="inspect"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>Inspector</button>
+    <button data-tab="ai"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c-1.5 5.1-4.4 8-9.5 9.5 5.1 1.5 8 4.4 9.5 9.5 1.5-5.1 4.4-8 9.5-9.5-5.1-1.5-8-4.4-9.5-9.5Z"/></svg>AI</button>
+  </nav>
+</div>
+
+<div class="selbar" id="selbar">
+  <button data-sel="note">Note</button><i></i><button data-sel="ai">Ask AI</button><i></i><button>B</button><button><em>I</em></button>
+</div>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastUndo">Undo</button></div>
+<div class="proto">
+  <span>Theme</span>
+  <button id="tDark" class="on">Dark refined</button>
+  <button id="tOrg">Organic</button>
+  <span>·</span>
+  <button id="changesBtn">What changed</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheetbox">
+    <h3>What changed, and why</h3>
+    <p class="lede">Sixteen decisions across the four rounds.</p>
+    <ol>
+      <li><b>Top bar has three zones instead of twelve buttons.</b><span>Where you are (left), how you're doing (centre), what you can do (right). Focus is the only filled button; Search, Pacing, Template, Import, Export, Finalise and version history moved into one overflow menu.</span></li>
+      <li><b>A persistent, collapsible left rail.</b><span>Acts, chapters and scenes with word counts and status squares. Collapsed it becomes a spine of ticks that still shows your position in the draft.</span></li>
+      <li><b>The breadcrumb answers "where am I".</b><span>Act · Chapter · Scene updates as you scroll or select, and doubles as the jump-to-scene control.</span></li>
+      <li><b>One level of navigation on the right.</b><span>The icon rail plus panel is now a single inspector with four tabs — Scene, Notes, Format, Progress — toggled by one button.</span></li>
+      <li><b>Scene chrome is one quiet line.</b><span>Number, title, status and word count on a single baseline above a hairline. POV, location and summary live in the inspector instead of interrupting the prose; notes become superscript marks in the text.</span></li>
+      <li><b>Progress reads as one sentence.</b><span>Words today against the goal in a single bar, streak and average as small text, one seven-day sparkline, three targets in a list. The three-stat grid and target accordions are gone.</span></li>
+      <li><b>Adding structure is where the structure is.</b><span>Hover between scenes in the rail for an inline +, or use the three explicit buttons at its foot. No modal to add a chapter.</span></li>
+      <li><b>Mobile is one bar, not a rail plus tabs.</b><span>Outline, Write, Inspector and AI; the rail slides in as a sheet, the inspector as a bottom sheet.</span></li>
+      <li><b>Search, version history, finalise and AI share one surface.</b><span>One full-height panel on the right, one at a time, at a fixed width; it overlays the inspector and reopens whatever you had last (⌘J). Four modals become one place.</span></li>
+      <li><b>A narrower measure with a note gutter.</b><span>Prose sits left-set at roughly 58 characters; notes live in the margin beside the line they belong to, with their bodies in the inspector.</span></li>
+      <li><b>Notes start from the writing, not a panel.</b><span>Select prose and a small bar offers Note or Ask AI; the note appears in the gutter and the inspector at once.</span></li>
+      <li><b>Destructive actions are immediate, with one undo.</b><span>Replace-all, restoring a snapshot and deleting a scene all confirm afterwards in a single toast rather than asking first.</span></li>
+      <li><b>A finalised draft is a reading mode, not a modal.</b><span>Finalise prepares and exports inside the surface; “Open reader” gives the frozen copy the whole screen, and Esc returns you to the draft.</span></li>
+      <li><b>Three modes instead of one crowded surface.</b><span><b>Write</b> is bare: no inspector, no gutter, no note marks, no metadata beyond a faint scene name, rail collapsed to its spine. <b>Edit</b> is the full apparatus — notes, scene fields, format, progress, search, AI. <b>Finalised</b> is read-only.</span></li>
+      <li><b>Notes are an editing tool.</b><span>Note marks, the gutter and the “Note” action only exist in Edit; Write mode's selection bar offers formatting alone.</span></li>
+      <li><b>Finalised reads two ways.</b><span>A continuous manuscript flow, or a book spread — two justified pages, running page numbers, arrow navigation — with export beside the view switch. Esc returns you to Edit.</span></li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const DATA=[{act:'Act I — The Map That Lied',chapters:[
+  {t:'Chapter 1 · The Impossible Map',scenes:[{t:'The Impossible Map',w:779,s:'done'},{t:'Six Copies by Candlelight',w:723,s:'draft'}]},
+  {t:'Chapter 2 · Northwatch',scenes:[{t:'The Toll Bridge',w:612,s:'draft'},{t:'What the Clerks Stamped',w:498,s:'draft'},{t:'A Road Bending West',w:289,s:''}]},
+  {t:'Chapter 3 · The Burned Survey',scenes:[{t:'Kestrel Market',w:500,s:''},{t:'The Dragon War Ledger',w:0,s:''}]}]},
+ {act:'Act II — Everything the Ink Betrayed',chapters:[
+  {t:'Chapter 4 · The Long Ride',scenes:[{t:'Untitled scene',w:0,s:''}]}]}];
+
+const PROSE=[
+ [`<span class="ent">Rowan Vale</span> had copied the northern border six times by candlelight, and each time the ink betrayed him.<span class="notemark">1</span>`,
+  `The road to Northwatch should have bent east beyond the toll bridge. Everyone knew that. The royal surveyors had written it in green ink. The tax clerks had stamped it into their ledgers. Every trader who came through <span class="ent">Kestrel Market</span> complained about that miserable eastern bend as if the stones themselves had personally insulted them.`,
+  `But on the vellum before Rowan, the road curved west into empty mountain, toward a place the old surveys insisted had burned in <span class="ent">the dragon war</span>.<span class="notemark">2</span>`],
+ [`He weighted the corners with river stones and started the seventh copy before the wax had cooled.`,
+  `A cartographer's hand is a witness, his master had told him, and a witness who changes his story twice is worth nothing to anyone. Rowan had changed nothing. The line had changed under him, patient as weather.`]];
+
+const doc=document.getElementById('doc'),tree=document.getElementById('tree'),spine=document.getElementById('spine');
+let flat=[];
+// build document
+let html='';
+DATA.forEach((a,ai)=>{
+  html+=`<div class="act-mark"><span>${a.act}</span><i></i></div>`;
+  a.chapters.forEach((c,ci)=>{
+    const parts=c.t.split(' · ');
+    html+=`<h2 class="chap-title">${parts[1]||c.t}</h2><p class="chap-sub">${parts[0]} · ${c.scenes.reduce((s,x)=>s+x.w,0).toLocaleString()} words</p>`;
+    c.scenes.forEach((s,si)=>{
+      const id=`s-${ai}-${ci}-${si}`;flat.push({id,path:`${a.act.split(' —')[0]} · ${parts[0]} · Scene ${si+1}`,title:s.t});
+      const body=(ai===0&&ci===0)?PROSE[si]||null:null;
+      if(si>0)html+=`<div class="scene-break"><i></i><i></i><i></i></div>`;
+      html+=`<section class="scene" id="${id}" data-i="${flat.length-1}">
+        <div class="scene-head"><span class="scene-n">Scene ${si+1}</span><span class="scene-t">${s.t}</span>
+        <span class="chip${s.s==='done'?' done':''}">${s.s==='done'?'Done':s.s==='draft'?'Draft':'Outline'}</span>
+        <span class="right"><span class="w">${s.w.toLocaleString()} words</span><span class="chip">POV ${si%2?'—':'Rowan'}</span><span class="chip">Details</span></span></div>
+        <div class="prose">${body?body.map(p=>`<p>${p}</p>`).join(''):`<p>${s.w?'She had not expected the road to argue with her.':'<span style="opacity:.45">Start writing…</span>'}</p>`}</div><div class="gutter" data-gutter="${id}"></div>
+      </section>`;
+    });
+    html+=`<button class="addscene">+ Scene in ${parts[0]}</button>`;
+  });
+});
+doc.innerHTML=html;
+
+// build rail tree + spine
+let t='';
+DATA.forEach((a,ai)=>{
+  t+=`<div class="act"><div class="act-h">${a.act.split(' —')[0]}<span class="n">${a.chapters.reduce((s,c)=>s+c.scenes.reduce((x,y)=>x+y.w,0),0).toLocaleString()}</span></div>`;
+  a.chapters.forEach((c,ci)=>{
+    t+=`<div class="chap"><button class="chap-h"><svg class="caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>${c.t.split(' · ')[1]||c.t}<span class="n">${c.scenes.length}</span></button><div class="scenes">`;
+    c.scenes.forEach((s,si)=>{
+      const id=`s-${ai}-${ci}-${si}`;
+      t+=`<div class="addrow"><button>+ scene</button></div><button class="scene-i" data-goto="${id}"><i class="sq ${s.s}"></i><span class="t">${s.t}</span><span class="w">${s.w||''}</span></button>`;
+    });
+    t+=`<div class="addrow"><button>+ scene</button></div></div></div>`;
+  });
+  t+='</div>';
+});
+tree.innerHTML=t;
+spine.innerHTML=flat.map(()=>'<i></i>').join('');
+
+// active scene tracking
+const scenes=[...document.querySelectorAll('.scene')],railItems=[...document.querySelectorAll('.scene-i')],spineTicks=[...spine.children];
+function setActive(i){
+  scenes.forEach((s,n)=>s.classList.toggle('on',n===i));
+  railItems.forEach((r,n)=>r.classList.toggle('active',n===i));
+  spineTicks.forEach((s,n)=>s.classList.toggle('active',n===i));
+  document.getElementById('crumbPath').textContent=flat[i].path;
+  document.getElementById('sceneTitleInput').value=flat[i].title;
+}
+const io=new IntersectionObserver(es=>{const v=es.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top)[0];if(v)setActive(+v.target.dataset.i)},{root:document.getElementById('sheet'),rootMargin:'-15% 0px -60% 0px'});
+scenes.forEach(s=>io.observe(s));
+setActive(0);
+railItems.forEach(r=>r.onclick=()=>{const el=document.getElementById(r.dataset.goto);document.getElementById('sheet').scrollTo({top:el.offsetTop-24,behavior:'smooth'});if(innerWidth<=900)rail.classList.remove('sheet-open')});
+document.querySelectorAll('.chap-h').forEach(b=>b.onclick=()=>b.parentElement.classList.toggle('closed'));
+
+// chrome behaviour
+const app=document.getElementById('app'),rail=document.getElementById('rail'),insp=document.getElementById('insp'),ai=document.getElementById('ai');
+const railBtn=document.getElementById('railBtn'),inspBtn=document.getElementById('inspBtn');
+let userRail=false,userInsp=false;
+function railOpen(v){if(innerWidth<=900){rail.classList.toggle('sheet-open',v)}else{rail.classList.toggle('collapsed',!v)}railBtn.setAttribute('aria-pressed',v)}
+railBtn.onclick=()=>{userRail=true;railOpen(innerWidth<=900?!rail.classList.contains('sheet-open'):rail.classList.contains('collapsed'))};
+document.getElementById('railCollapse').onclick=()=>{userRail=true;railOpen(false)};
+inspBtn.onclick=()=>{userInsp=true;const v=insp.hasAttribute('hidden');insp.toggleAttribute('hidden',!v);inspBtn.setAttribute('aria-pressed',v)};
+document.getElementById('inspTabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#inspTabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.dataset.pane===b.dataset.pane))};
+document.querySelectorAll('[data-single]').forEach(g=>g.onclick=e=>{const b=e.target.closest('.opt');if(b)[...g.children].forEach(x=>x.classList.toggle('on',x===b))});
+document.querySelectorAll('.row:not([data-single]) .opt').forEach(o=>o.onclick=()=>o.classList.toggle('on'));
+const moreMenu=document.getElementById('moreMenu');
+document.getElementById('moreBtn').onclick=e=>{e.stopPropagation();moreMenu.classList.toggle('open')};
+document.addEventListener('click',()=>moreMenu.classList.remove('open'));
+function aiOpen(v){ai.classList.toggle('open',v);document.getElementById('aiBtn').setAttribute('aria-pressed',v)}
+const SURF={ai:['AI workspace','Scene 1 · 779 words in context'],search:['Search & replace','Across this manuscript'],history:['Version history','The Impossible Map'],finalise:['Finalise & export','Draft 3 · in progress']};
+let lastSurf='ai';
+function openSurface(name){lastSurf=name;
+  document.querySelectorAll('.spane').forEach(p=>p.classList.toggle('on',p.dataset.s===name));
+  document.getElementById('surfTitle').textContent=SURF[name][0];
+  document.getElementById('surfMeta').textContent=SURF[name][1];
+  document.getElementById('surfFoot').style.display=name==='ai'?'flex':'none';
+  aiOpen(true)}
+document.getElementById('aiBtn').onclick=()=>ai.classList.contains('open')?aiOpen(false):openSurface('ai');
+document.querySelectorAll('[data-surf]').forEach(b=>b.onclick=()=>openSurface(b.dataset.surf));
+addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='j'){e.preventDefault();ai.classList.contains('open')?aiOpen(false):openSurface(lastSurf)}
+  if((e.metaKey||e.ctrlKey)&&e.key==='f'){e.preventDefault();openSurface('search')}});
+
+/* toast with undo */
+const toast=document.getElementById('toast');let toastT,undoFn=null;
+function say(msg,undo){document.getElementById('toastMsg').textContent=msg;undoFn=undo||null;
+  document.getElementById('toastUndo').style.display=undo?'':'none';
+  toast.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>toast.classList.remove('on'),5000)}
+document.getElementById('toastUndo').onclick=()=>{if(undoFn)undoFn();toast.classList.remove('on')};
+document.getElementById('replaceAll').onclick=()=>say('Replaced 3 matches in 2 scenes.',()=>say('Replacement undone.'));
+document.querySelectorAll('.restore').forEach(b=>b.onclick=()=>say('Restored the 08:02 snapshot.',()=>say('Back to the current version.')));
+
+/* notes: data-driven, created from a selection */
+const NOTES=[{seq:1,scene:'s-0-0-0',line:4,text:"Check the surveyors' ink colour against the guild chapter — green may be reserved for water."},
+             {seq:2,scene:'s-0-0-0',line:18,text:"Rowan shouldn't know about the burning yet. Move this reveal after Northwatch."}];
+function drawNotes(){
+  document.getElementById('notesList').innerHTML=NOTES.map(n=>`<div class="note"><div class="note-h">Note ${n.seq} · line ${n.line}<button data-del="${n.seq}">✕</button></div><p>${n.text}</p></div>`).join('');
+  document.getElementById('noteCount').textContent=NOTES.length;
+  document.querySelectorAll('.gutter').forEach(g=>{
+    g.innerHTML=NOTES.filter(n=>n.scene===g.dataset.gutter).map(n=>`<button class="gnote" data-go="${n.seq}"><b>Note ${n.seq}</b>${n.text}</button>`).join('')});
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const i=NOTES.findIndex(n=>n.seq==b.dataset.del),gone=NOTES.splice(i,1)[0];drawNotes();say('Note '+gone.seq+' deleted.',()=>{NOTES.splice(i,0,gone);drawNotes()})});
+  document.querySelectorAll('[data-go]').forEach(b=>b.onclick=openNotes);placeNotes()}
+function placeNotes(){document.querySelectorAll('.gutter').forEach(g=>{
+  const prose=g.parentElement.querySelector('.prose');if(!prose)return;
+  [...g.children].forEach(el=>{
+    const mark=[...prose.querySelectorAll('.notemark')].find(m=>m.textContent===el.dataset.go);
+    const n=NOTES.find(x=>String(x.seq)===el.dataset.go);
+    const y=mark?mark.offsetTop-prose.offsetTop:Math.round(prose.offsetHeight*Math.min(.85,(n?n.line:1)/34));
+    el.style.top=Math.max(0,y-2)+'px'})})}
+function openPane(name){insp.removeAttribute('hidden');inspBtn.setAttribute('aria-pressed','true');userInsp=true;document.querySelector('#inspTabs [data-pane="'+name+'"]').click()}
+function openNotes(){openPane('notes')}
+drawNotes();
+
+/* selection toolbar */
+const selbar=document.getElementById('selbar');
+document.getElementById('sheet').addEventListener('mouseup',()=>{
+  const s=getSelection();if(!s.rangeCount||s.isCollapsed||!s.anchorNode?.parentElement?.closest('.prose')){selbar.classList.remove('on');return}
+  if(app.dataset.mode==='final'){selbar.classList.remove('on');return}
+  selbar.querySelectorAll('[data-sel]').forEach(b=>b.style.display=app.dataset.mode==='write'?'none':'');
+  const r=s.getRangeAt(0).getBoundingClientRect();
+  selbar.style.left=Math.max(12,Math.min(innerWidth-260,r.left+r.width/2-120))+'px';
+  selbar.style.top=Math.max(60,r.top-46)+'px';selbar.classList.add('on')});
+selbar.onclick=e=>{const b=e.target.closest('button');if(!b)return;selbar.classList.remove('on');
+  if(b.dataset.sel==='ai'){openSurface('ai');return}
+  if(b.dataset.sel!=='note')return;
+  const sel=getSelection(),text=sel.toString().trim().slice(0,90),seq=Math.max(0,...NOTES.map(n=>n.seq))+1,scene=sel.anchorNode.parentElement.closest('.scene').id;
+  NOTES.push({seq,scene,line:Math.ceil(Math.random()*30),text:'On “'+text+'” — '});drawNotes();openNotes();
+  say('Note '+seq+' added.',()=>{NOTES.pop();drawNotes()});sel.removeAllRanges()};
+
+/* delete a scene from the rail, undoably */
+railItems.forEach(r=>r.oncontextmenu=e=>{e.preventDefault();const parent=r.parentElement,next=r.nextSibling,name=r.querySelector('.t').textContent;
+  r.remove();say('“'+name+'” deleted.',()=>parent.insertBefore(r,next))});
+
+/* three modes: write · edit · finalised */
+function draftHTML(){let out='';DATA.forEach((a,ai)=>a.chapters.forEach((c,ci)=>{
+  const written=c.scenes.map((s,si)=>({s,si})).filter(x=>x.s.w>0);
+  if(!written.length)return;
+  out+='<h3>'+(c.t.split(' · ')[1]||c.t)+'</h3>';
+  written.forEach(({si})=>{const p=document.querySelector('#s-'+ai+'-'+ci+'-'+si+' .prose');if(p)out+=p.innerHTML})}));return out}
+let builtFinal=false;
+function buildFinal(){if(builtFinal)return;const html=draftHTML();
+  document.getElementById('finFlow').innerHTML=html;
+  document.getElementById('bookFlow').innerHTML=html;builtFinal=true}
+function setMode(m){app.dataset.mode=m;localStorage.setItem('ms-proto-mode',m);
+  document.querySelectorAll('#modes button').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
+  if(m==='final'){aiOpen(false);buildFinal()}
+  if(m==='write'){aiOpen(false);app.dataset.focus='0'}
+  fit()}
+document.getElementById('modes').onclick=e=>{const b=e.target.closest('button');if(b)setMode(b.dataset.mode)};
+document.getElementById('readBtn').onclick=()=>setMode('final');
+
+/* book view: two-page spread, paged horizontally */
+const spread=document.getElementById('spread'),bookFlow=document.getElementById('bookFlow');
+let sp=0;
+function geom(){const gap=parseFloat(getComputedStyle(bookFlow).columnGap)||76,
+    step=bookFlow.clientWidth+gap;
+  return {step,spreads:Math.max(1,Math.ceil(bookFlow.scrollWidth/step))}}
+function paginate(){const {step,spreads}=geom();
+  sp=Math.max(0,Math.min(sp,spreads-1));
+  bookFlow.style.transform='translateX('+(-sp*step)+'px)';
+  document.getElementById('bPages').textContent='Pages '+(sp*2+1)+'–'+(sp*2+2)+' of '+(spreads*2)}
+document.getElementById('bNext').onclick=()=>{if(sp<geom().spreads-1){sp++;paginate()}};
+document.getElementById('bPrev').onclick=()=>{if(sp>0){sp--;paginate()}};
+if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>{if(app.dataset.mode==='final')paginate()}).observe(bookFlow);
+document.getElementById('finView').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#finView button').forEach(x=>x.classList.toggle('on',x===b));
+  const book=b.dataset.v==='book';
+  document.getElementById('finMs').classList.toggle('on',!book);
+  document.getElementById('finBook').classList.toggle('on',book);
+  if(book)paginate()};
+addEventListener('resize',()=>{if(app.dataset.mode==='final')paginate()});
+document.getElementById('aiClose').onclick=()=>aiOpen(false);
+document.getElementById('focusBtn').onclick=()=>{app.dataset.focus='1';aiOpen(false)};
+document.getElementById('focusExit').onclick=()=>app.dataset.focus='0';
+document.querySelectorAll('.notemark').forEach(n=>n.onclick=openNotes);
+document.querySelectorAll('.scene-head .right .chip').forEach(c=>c.onclick=()=>openPane('scene'));
+document.getElementById('tabbar').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#tabbar button').forEach(x=>x.classList.toggle('on',x===b));
+  const t=b.dataset.tab;rail.classList.toggle('sheet-open',t==='outline');insp.toggleAttribute('hidden',t!=='inspect');aiOpen(t==='ai')};
+addEventListener('keydown',e=>{if(e.key==='Escape'){if(app.dataset.mode==='final')setMode('edit');else if(app.dataset.focus==='1')app.dataset.focus='0';else if(ai.classList.contains('open'))aiOpen(false);else document.getElementById('overlay').classList.remove('open')}});
+
+// prototype controls
+const overlay=document.getElementById('overlay');
+document.getElementById('changesBtn').onclick=()=>overlay.classList.add('open');
+overlay.onclick=e=>{if(e.target===overlay)overlay.classList.remove('open')};
+function theme(t){document.documentElement.dataset.theme=t;document.getElementById('tDark').classList.toggle('on',t==='dark');document.getElementById('tOrg').classList.toggle('on',t==='organic');localStorage.setItem('ms-proto-theme',t)}
+document.getElementById('tDark').onclick=()=>theme('dark');
+document.getElementById('tOrg').onclick=()=>theme('organic');
+theme(localStorage.getItem('ms-proto-theme')||'dark');
+function fit(){const w=innerWidth,m=app.dataset.mode;
+  if(m!=='edit'){if(m==='write'&&w>900&&!userRail)rail.classList.add('collapsed');return}
+  if(w<=900){insp.setAttribute('hidden','');inspBtn.setAttribute('aria-pressed','false');rail.classList.remove('collapsed')}
+  else{if(!userInsp){insp.removeAttribute('hidden');inspBtn.setAttribute('aria-pressed','true')}
+    if(!userRail){const narrow=w<=1250;rail.classList.toggle('collapsed',narrow);railBtn.setAttribute('aria-pressed',String(!narrow))}}
+  placeNotes()}
+setMode(localStorage.getItem('ms-proto-mode')||'edit');
+addEventListener('resize',fit);
+</script>
+</body>
+</html>

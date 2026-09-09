@@ -29,7 +29,6 @@ const staticRoutes = [
   ['/family-tree-builder/', 'Family Tree Builder for Writers'],
   ['/map-builder-for-writers/', 'Map Builder for Writers'],
   ['/lore-management/', 'Lore Management Software'],
-  ['/founders/example-founder/', 'A. N. Writer — YOW Founder'],
   ['/beta-disclaimer/', 'Beta Disclaimer'],
 ]
 
@@ -43,8 +42,12 @@ for (const [path, expectedTitleFragment] of staticRoutes) {
 
 // /founders/ (no slug) and /features/, /pricing/, /faq/ are intentionally
 // SPA-routed (see SPA_ROUTES in vite.config.mjs), not served from public/ —
-// confirm they render the app shell rather than a stray static file.
-for (const path of ['/founders/', '/features/', '/pricing/', '/faq/']) {
+// confirm they render the app shell rather than a stray static file. A
+// per-founder profile path (/founders/<slug>/) isn't in SPA_ROUTES either,
+// but there's no matching static file under public/founders/<slug>/ (only
+// an image asset), so it falls through to the SPA shell the same way —
+// confirmed against a real dev server, not assumed.
+for (const path of ['/founders/', '/founders/morgan-bishop/', '/features/', '/pricing/', '/faq/']) {
   test(`${path} renders the SPA shell, not a static file`, async ({ page }) => {
     await page.goto(path)
     await expectSpaShellRendered(page)

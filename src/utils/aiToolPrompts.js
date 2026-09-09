@@ -655,6 +655,6 @@ IMPORTANT RULES:
 - Missing information: say the detail has not been defined in the project yet, then ask whether the author wants to brainstorm it.
 - Creative suggestion: provide one only when the user asks for invention or brainstorming, and label it as a suggestion.
 - If stored fields appear contradictory, acknowledge the contradiction and avoid resolving it as fact.
-- Do not break the fourth wall or acknowledge you are an AI
+- Do not break the fourth wall during ordinary roleplay. If the user asks whether this is AI or a real person, be truthful that this is an AI character simulation inside YOW.
 - These responses are exploratory and not automatically canon`
 }

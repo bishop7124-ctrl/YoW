@@ -1,4 +1,7 @@
+import { useMembership } from './utils/useMembership'
+import AccessChangeNotice from './components/account/AccessChangeNotice'
 import { Component, useCallback, useMemo, useState, useEffect, useRef } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
 import { loadUserData, replaceUserData } from './utils/firestoreSync'
@@ -27,7 +30,6 @@ import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
 import DownloadPage from './components/download/DownloadPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
-import { getMembership } from './utils/membership'
 import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
@@ -38,12 +40,15 @@ import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
 import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
+import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
+import { isStandalonePublicRoute, parsePublicRoute } from './utils/appRoutes'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
   DEFAULT_THEME_TUNING,
+  SYSTEM_THEME,
   applyThemeToDocument,
   applyThemeTuning,
   getThemeColors,
@@ -58,39 +63,6 @@ const APP_FONT_OPTIONS = {
   serif: 'Georgia, "Times New Roman", serif',
   mono: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
   dyslexia: 'Dyslexie, "OpenDyslexic", "Atkinson Hyperlegible", Verdana, Arial, sans-serif',
-}
-
-function isPricingPath(path) {
-  return path === '/pricing' || path === '/pricing/'
-}
-
-function isFeaturesPath(path) {
-  return path === '/features' || path === '/features/'
-}
-
-function isFAQPath(path) {
-  return path === '/faq' || path === '/faq/'
-}
-
-function isFoundersPath(path) {
-  return path === '/founders' || path === '/founders/'
-}
-
-function isDownloadPath(path) {
-  return path === '/download' || path === '/download/'
-}
-
-function getFounderProfileSlug(path) {
-  const m = path.match(/^\/founders\/([^/]+)\/?$/)
-  if (!m) return null
-  const slug = m[1]
-  return (slug === '' || slug === 'founders') ? null : slug
-}
-
-function getAuthRouteMode(path) {
-  if (path === '/login' || path === '/login/') return 'login'
-  if (path === '/signup' || path === '/signup/') return 'signup'
-  return null
 }
 
 const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
@@ -199,13 +171,13 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="min-h-screen bg-[#0f1115] flex flex-col items-center justify-center gap-4 p-8 text-center">
-          <span className="w-12 h-12 text-[#f59e0b]"><YOWLogo /></span>
-          <p className="text-[#f8fafc] font-semibold">Something went wrong.</p>
-          <p className="text-[#64748b] text-sm max-w-sm">{this.state.error?.message}</p>
+        <div className="min-h-screen bg-[var(--bg-main)] flex flex-col items-center justify-center gap-4 p-8 text-center">
+          <span className="w-12 h-12 text-[var(--accent)]"><YOWLogo /></span>
+          <p className="text-[var(--text-main)] font-semibold">Something went wrong.</p>
+          <p className="text-[var(--text-muted)] text-sm max-w-sm">{this.state.error?.message}</p>
           <button
             onClick={() => { this.setState({ error: null }); window.location.reload() }}
-            className="mt-2 px-4 py-2 rounded-lg bg-[#f59e0b] text-[#0f1115] font-bold text-sm"
+            className="mt-2 px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-contrast,var(--bg-main))] font-bold text-sm hover:opacity-90 transition-opacity"
           >
             Reload
           </button>
@@ -231,7 +203,7 @@ function AppInner() {
     if (user) { setSignedOut(false); setOpenLoginAfterSignOut(false); prevUserRef.current = user }
   }, [user, authLoading, recoveryMode])
   const userId = user?.uid || user?.id || null
-  const membership = getMembership(user)
+  const membership = useMembership(user)
   const [storageModeState, setStorageModeState] = useState(() => loadStorageModeState(userId))
   const storageMode = storageModeState.userId === (userId || null)
     ? storageModeState.mode
@@ -261,13 +233,14 @@ function AppInner() {
   const [activeSeriesId, setActiveSeriesId] = useState(() => initialRouteSnapshot.seriesId || null)
   const [seriesEntryNovelId, setSeriesEntryNovelId] = useState(null)
   const [layoutViewMode, setLayoutViewMode] = useState(() => initialRouteSnapshot.layoutViewMode)
-  const [showPricing, setShowPricing] = useState(() => isPricingPath(window.location.pathname))
-  const [showFeatures, setShowFeatures] = useState(() => isFeaturesPath(window.location.pathname))
-  const [showFAQ, setShowFAQ] = useState(() => isFAQPath(window.location.pathname))
-  const [showFounders, setShowFounders] = useState(() => isFoundersPath(window.location.pathname))
-  const [showDownload, setShowDownload] = useState(() => isDownloadPath(window.location.pathname))
-  const [founderProfileSlug, setFounderProfileSlug] = useState(() => getFounderProfileSlug(window.location.pathname))
-  const [authRouteMode, setAuthRouteMode] = useState(() => getAuthRouteMode(window.location.pathname))
+  const [publicRoute, setPublicRoute] = useState(() => parsePublicRoute(window.location.pathname))
+  const showPricing = publicRoute.page === 'pricing'
+  const showFeatures = publicRoute.page === 'features'
+  const showFAQ = publicRoute.page === 'faq'
+  const showFounders = publicRoute.page === 'founders'
+  const showDownload = publicRoute.page === 'download'
+  const founderProfileSlug = publicRoute.founderProfileSlug
+  const authRouteMode = publicRoute.authRouteMode
   const [libraryAiOpen, setLibraryAiOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(() => initialRouteSnapshot.accountOpen)
   const [accountTab, setAccountTab] = useState(() => initialRouteSnapshot.accountTab)
@@ -276,6 +249,7 @@ function AppInner() {
   const [readOnlyNotice, setReadOnlyNotice] = useState(null)
   const [dismissedLocalModeNotices, setDismissedLocalModeNotices] = useState({})
   const [localStorageWarningDismissed, setLocalStorageWarningDismissed] = useState(false)
+  const [localDataCorruptedDismissed, setLocalDataCorruptedDismissed] = useState(false)
   const [emailConfirmed, setEmailConfirmed] = useState(() => {
     const hash = window.location.hash
     const search = window.location.search
@@ -296,7 +270,7 @@ function AppInner() {
     for (const key of Object.keys(nextState)) {
       if (key.startsWith('welcome_') || key.startsWith('wizard_') || key.startsWith('tour_')) durable[key] = nextState[key]
     }
-    updateProfile({ ...(user.user_metadata || {}), tour_progress: durable }).catch(console.error)
+    updateProfile({ tour_progress: durable }).catch(console.error)
   }, [user, updateProfile])
   const tourStore = useTourStore({ remoteFlags: user?.user_metadata?.tour_progress, onPersist: persistTourProgress })
   const firstUrlSync = useRef(true)
@@ -550,13 +524,7 @@ function AppInner() {
 
   const navigatePublic = (path) => {
     window.history.pushState(null, '', path)
-    setShowPricing(isPricingPath(path))
-    setShowFeatures(isFeaturesPath(path))
-    setShowFAQ(isFAQPath(path))
-    setShowFounders(isFoundersPath(path))
-    setShowDownload(isDownloadPath(path))
-    setFounderProfileSlug(getFounderProfileSlug(path))
-    setAuthRouteMode(getAuthRouteMode(path))
+    setPublicRoute(parsePublicRoute(path))
   }
 
   const goToSignup = (email) => {
@@ -613,7 +581,13 @@ function AppInner() {
       }
       return
     }
-    if (!user && authRouteMode) return
+    // Logged-out visitors are shown by <LoginPage>, not the authenticated app
+    // shell this URL sync targets. Letting this run while signed out rewrites
+    // the marketing homepage from "/" to "/dashboard".
+    if (!user) return
+    // Public standalone pages own the URL; don't rewrite it out from under them
+    // when auth/data loading changes the app-side navigation state.
+    if (isStandalonePublicRoute(publicRoute)) return
     const url = buildRoute(viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, {
       accountOpen,
       accountTab,
@@ -621,44 +595,15 @@ function AppInner() {
     })
     const current = `${window.location.pathname}${window.location.search}`
     if (current !== url) history.pushState(null, '', url)
-  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, authRouteMode])
+  }, [viewMode, store.activeNovelId, activeSeriesId, section, layoutViewMode, store.writingSceneId, accountOpen, accountTab, projectSettingsOpen, user, publicRoute])
 
   // Restore state from browser back/forward navigation (including /pricing)
   useEffect(() => {
     const handlePop = () => {
       const path = window.location.pathname
-      setShowDownload(isDownloadPath(path))
-      if (isDownloadPath(path)) {
-        setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setFounderProfileSlug(null); setAuthRouteMode(null)
-        return
-      }
-      if (isPricingPath(path)) {
-        setShowPricing(true); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
-        return
-      }
-      if (isFeaturesPath(path)) {
-        setShowFeatures(true); setShowPricing(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
-        return
-      }
-      if (isFAQPath(path)) {
-        setShowFAQ(true); setShowPricing(false); setShowFeatures(false); setShowFounders(false); setAuthRouteMode(null)
-        return
-      }
-      if (isFoundersPath(path)) {
-        setShowFounders(true); setFounderProfileSlug(null); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
-        return
-      }
-      const profileSlug = getFounderProfileSlug(path)
-      if (profileSlug) {
-        setFounderProfileSlug(profileSlug); setShowFounders(false); setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(null)
-        return
-      }
-      const nextAuthRouteMode = getAuthRouteMode(path)
-      if (nextAuthRouteMode) {
-        setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setAuthRouteMode(nextAuthRouteMode)
-        return
-      }
-      setShowPricing(false); setShowFeatures(false); setShowFAQ(false); setShowFounders(false); setAuthRouteMode(null)
+      const nextPublicRoute = parsePublicRoute(path)
+      setPublicRoute(nextPublicRoute)
+      if (isStandalonePublicRoute(nextPublicRoute) || (nextPublicRoute.page === 'auth' && !user)) return
       const route = parseRoute()
       setSection(route.section)
       setLayoutViewMode(route.layoutViewMode)
@@ -681,7 +626,7 @@ function AppInner() {
     }
     window.addEventListener('popstate', handlePop)
     return () => window.removeEventListener('popstate', handlePop)
-  }, [store])
+  }, [store, user])
 
   useEffect(() => {
     const handleOpenAccount = (event) => {
@@ -733,14 +678,17 @@ function AppInner() {
     setReadOnlyNotice(null)
   }, [userId])
 
-  // Force default theme on all public/marketing pages so user theme choices
+  // Use the product default on public/marketing pages so user theme choices
   // never leak into the landing experience.
-  const isPublicPage = showPricing || showFeatures || showFAQ || showFounders || showDownload || !!founderProfileSlug || !user
+  const isPublicPage = isStandalonePublicRoute(publicRoute) || !user
   useEffect(() => {
-    if (isPublicPage) {
-      applyThemeToDocument(DEFAULT_THEME, {})
-      applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
-    } else {
+    const applyCurrentTheme = () => {
+      if (isPublicPage) {
+        applyThemeToDocument(DEFAULT_THEME, {})
+        applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
+        return
+      }
+
       const savedTheme = loadThemeChoice()
       const customColors = (() => {
         try { return JSON.parse(localStorage.getItem('nf-custom-colors') || '{}') }
@@ -749,7 +697,41 @@ function AppInner() {
       applyThemeToDocument(savedTheme, customColors)
       applyThemeTuning(loadThemeTuning(), getThemeColors(savedTheme, customColors))
     }
-  }, [isPublicPage]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    applyCurrentTheme()
+  }, [isPublicPage])
+
+  useEffect(() => {
+    const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : null
+    if (!media) return undefined
+
+    const handleSystemThemeChange = () => {
+      const activeTheme = isPublicPage ? DEFAULT_THEME : loadThemeChoice()
+      if (activeTheme !== SYSTEM_THEME) return
+
+      if (isPublicPage) {
+        applyThemeToDocument(DEFAULT_THEME, {})
+        applyThemeTuning(DEFAULT_THEME_TUNING, getThemeColors(DEFAULT_THEME, {}))
+        return
+      }
+
+      const customColors = (() => {
+        try { return JSON.parse(localStorage.getItem('nf-custom-colors') || '{}') }
+        catch { return {} }
+      })()
+      applyThemeToDocument(activeTheme, customColors)
+      applyThemeTuning(loadThemeTuning(), getThemeColors(activeTheme, customColors))
+    }
+
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', handleSystemThemeChange)
+    else if (typeof media.addListener === 'function') media.addListener(handleSystemThemeChange)
+    return () => {
+      if (typeof media.removeEventListener === 'function') media.removeEventListener('change', handleSystemThemeChange)
+      else if (typeof media.removeListener === 'function') media.removeListener(handleSystemThemeChange)
+    }
+  }, [isPublicPage])
 
   // Apply account-owned appearance on login. New accounts should not inherit
   // a previous user's browser-local theme choice.
@@ -1035,12 +1017,12 @@ function AppInner() {
     )
   }
 
-  const showFreeSelector = membership.isFree && !membership.freeProjectId && store.novels.length >= 1
+  const showFreeSelector = !desktopApp && membership.usesFreeCloudLimits && !membership.freeProjectId && store.novels.length >= 1
 
   const handleFreeProjectConfirm = async (projectId) => {
     try {
       setFreeProjectBusy(true)
-      await updateProfile({ ...(user.user_metadata || {}), free_project_id: projectId })
+      await updateProfile({ free_project_id: projectId })
       if (store.setDashboardActiveProject) store.setDashboardActiveProject(projectId)
       else store.setActiveNovelId(projectId)
       setActiveSeriesId(null)
@@ -1118,9 +1100,9 @@ function AppInner() {
       {store.localStorageWarning && !localStorageWarningDismissed && !(desktopApp && desktopVaultError) && (
         <div role="alert" className="membership-toast">
           <span>
-            Your browser's local storage is full, so this device may not be keeping a reliable local copy of recent edits.
+            This device isn't keeping a reliable local copy of recent edits — a save didn't fully go through, most often because storage is full.
             {membership.canSyncCloud ? ' Your work is still syncing to your account. ' : ' '}
-            Close unused browser tabs or clear old site data to free up space.
+            Close unused browser tabs or clear old site data to free up space, then keep this tab open a moment for it to retry.
           </span>
           <button
             type="button"
@@ -1130,6 +1112,17 @@ function AppInner() {
             Storage settings
           </button>
           <button type="button" className="membership-toast-link" onClick={() => setLocalStorageWarningDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {store.localDataCorrupted && !localDataCorruptedDismissed && (
+        <div role="alert" className="membership-toast">
+          <span>
+            Some locally stored data on this device didn't load correctly and was skipped rather than shown incorrectly.
+            {membership.canSyncCloud ? ' If it also exists in your account, reloading after a fresh sync may recover it — otherwise contact support.' : ' Contact support if this repeats.'}
+          </span>
+          <button type="button" className="membership-toast-link" onClick={() => setLocalDataCorruptedDismissed(true)}>
             Dismiss
           </button>
         </div>
@@ -1232,9 +1225,11 @@ function AppInner() {
           </button>
         </div>
       )}
+      <AccessChangeNotice membership={membership} store={store} desktopApp={desktopApp} onManageMembership={() => { setAccountTab('membership'); setAccountOpen(true) }} />
       {showFreeSelector && (
         <FreeProjectSelector
           novels={store.novels}
+          store={store}
           onConfirm={handleFreeProjectConfirm}
           busy={freeProjectBusy}
         />
@@ -1349,6 +1344,8 @@ function AppInner() {
   }
 
   const handleOpenProject = (id) => {
+    const project = store.novels.find(item => item.id === id)
+    trackEvent('project_opened', { source: 'library_or_onboarding', project_type: project?.type || 'unknown' })
     store.setActiveNovelId(id)
     setSection('dashboard')
     setViewMode('editor')
@@ -1381,7 +1378,10 @@ function AppInner() {
       : ensureSampleProject?.()
     tourStore.markWizardShown(userId)
     tourStore.markWelcomeShown(userId)
-    if (sample?.id) handleOpenProject(sample.id)
+    if (sample?.id) {
+      trackEvent('sample_project_opened', { source: existingSample ? 'existing_sample' : 'created_sample' })
+      handleOpenProject(sample.id)
+    }
     window.setTimeout(maybeOpenAiSetupPrompt, 0)
   }
 
@@ -1390,12 +1390,15 @@ function AppInner() {
     if (target.type === 'character') store.setSelectedCharacterId?.(target.itemId)
     if (target.type === 'location') store.setSelectedLocationId?.(target.itemId)
     if (target.type === 'lore') store.setSelectedLoreEntryId?.(target.itemId)
-    if (target.type === 'timeline' || target.type === 'history') store.setSelectedTimelineEventId?.(target.itemId)
+    if (target.type === 'timeline') store.setSelectedTimelineEventId?.(target.itemId)
+    if (target.type === 'history') store.setSelectedHistoryEntryId?.(target.itemId)
     if (target.type === 'map') store.selectMap?.(target.itemId)
   }
 
   // Open a book from within a Series Dashboard — remembers which series to return to
   const handleOpenBookFromSeries = (novelId, target = {}) => {
+    const project = store.novels.find(item => item.id === novelId)
+    trackEvent('project_opened', { source: 'series_dashboard', project_type: project?.type || 'unknown', target: target?.type || 'dashboard' })
     setSeriesEntryNovelId(activeSeriesId)
     applyProjectEntryTarget(target)
     store.setActiveNovelId(novelId)
@@ -1547,6 +1550,7 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <AppInner />
+        <Analytics />
       </AuthProvider>
     </ErrorBoundary>
   )

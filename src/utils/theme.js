@@ -1,8 +1,12 @@
 // ─── Theme Registry ────────────────────────────────────────────────────────────
 //
-// Each theme has:
-//   swatches  – six preview colours shown in the theme picker
-//   atmos     – atmosphere tokens that drive gradients, textures, and shadows
+// Each theme has six semantic swatches:
+//   bgMain/textMain       – canvas and readable body ink
+//   bgNav/textMuted       – panel surface and secondary ink
+//   accent/border         – action colour and structural line colour
+//
+// CSS maps these swatches into richer semantic roles (`--color-canvas`,
+// `--color-surface`, `--color-line`, etc.) and keeps legacy aliases alive.
 //
 // The heavy lifting happens in index.css via [data-theme="..."] blocks which
 // override both primitive and atmosphere CSS vars, letting every derived
@@ -10,6 +14,32 @@
 //
 
 export const BUILT_IN_THEMES = [
+  {
+    id: 'dark-refined',
+    label: 'Nocturne Grove',
+    description: 'Dark green signature — coral action colour & muted sage',
+    radiusUnit: 9,
+    visualStrength: 1.25,
+    glowIntensity: 7,
+    glowPos: '82% 9%',
+    swatches: {
+      bgMain: '#0e1a18', bgNav: '#132220', textMain: '#ece6da',
+      textMuted: '#8ea19b', accent: '#9c4935', border: 'rgba(255, 255, 255, 0.09)',
+    },
+  },
+  {
+    id: 'light-refined',
+    label: 'Sage Grove',
+    description: 'Light green signature — leafy surfaces & terracotta action colour',
+    radiusUnit: 9,
+    visualStrength: 0.82,
+    glowIntensity: 4,
+    glowPos: '78% 8%',
+    swatches: {
+      bgMain: '#e8f3ec', bgNav: '#dceae2', textMain: '#16261f',
+      textMuted: '#51675c', accent: '#8f3f2d', border: 'rgba(22, 38, 31, 0.16)',
+    },
+  },
   {
     id: 'tropical',
     label: 'Tropical',
@@ -21,58 +51,6 @@ export const BUILT_IN_THEMES = [
     swatches: {
       bgMain: '#0d282e', bgNav: '#133840', textMain: '#e2f0ee',
       textMuted: '#7ab8b4', accent: '#e8724e', border: '#1e4a50',
-    },
-  },
-  {
-    id: 'sage-modern',
-    label: 'Sage Modern',
-    description: 'Natural light studio — sage green & soft white',
-    radiusUnit: 6,
-    visualStrength: 0.75,
-    glowIntensity: 4,
-    glowPos: '80% 90%',
-    swatches: {
-      bgMain: '#f5f8f3', bgNav: '#eaeee6', textMain: '#1e2922',
-      textMuted: '#5a7060', accent: '#4a8c68', border: '#ced8ca',
-    },
-  },
-  {
-    id: 'industrial-loft',
-    label: 'Industrial Loft',
-    description: 'Concrete & steel — amber & dark slate',
-    radiusUnit: 3,
-    visualStrength: 1.15,
-    glowIntensity: 2,
-    glowPos: '50% 50%',
-    swatches: {
-      bgMain: '#141720', bgNav: '#1c2028', textMain: '#dce0e8',
-      textMuted: '#6a7282', accent: '#d08820', border: '#282c38',
-    },
-  },
-  {
-    id: 'caramel-latte',
-    label: 'Caramel Latte',
-    description: 'Warm café afternoon — caramel & cream',
-    radiusUnit: 10,
-    visualStrength: 0.9,
-    glowIntensity: 5,
-    glowPos: '80% 90%',
-    swatches: {
-      bgMain: '#fef8f0', bgNav: '#f4e8d8', textMain: '#28200c',
-      textMuted: '#7a6840', accent: '#b87830', border: '#e0c8a0',
-    },
-  },
-  {
-    id: 'ocean-depth',
-    label: 'Ocean Depth',
-    description: 'Bioluminescent deep sea — teal & midnight navy',
-    radiusUnit: 5,
-    visualStrength: 1.45,
-    glowIntensity: 7,
-    glowPos: '88% 12%',
-    swatches: {
-      bgMain: '#07151c', bgNav: '#0e2432', textMain: '#d4eef8',
-      textMuted: '#4888a8', accent: '#189ab0', border: '#143848',
     },
   },
   {
@@ -92,16 +70,49 @@ export const BUILT_IN_THEMES = [
 
 export const QUICK_PALETTES = []
 
-export const DEFAULT_THEME = BUILT_IN_THEMES[0].id
-export const DEFAULT_CUSTOM_COLORS = BUILT_IN_THEMES[0].swatches
+export const SYSTEM_THEME = 'system'
+export const SYSTEM_LIGHT_THEME = 'light-refined'
+export const SYSTEM_DARK_THEME = 'dark-refined'
+export const DEFAULT_THEME = SYSTEM_THEME
+
+export const getSystemResolvedTheme = () => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return SYSTEM_LIGHT_THEME
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? SYSTEM_DARK_THEME : SYSTEM_LIGHT_THEME
+}
+
+export const resolveThemeChoice = (theme) => theme === SYSTEM_THEME ? getSystemResolvedTheme() : theme
+
+export const SYSTEM_THEME_OPTION = {
+  id: SYSTEM_THEME,
+  label: 'Match system',
+  description: 'Uses Sage Grove in light mode and Nocturne Grove in dark mode',
+  radiusUnit: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.radiusUnit ?? 9,
+  visualStrength: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.visualStrength ?? 0.82,
+  swatches: {
+    bgMain: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches.bgMain ?? '#e8f3ec',
+    bgNav: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_DARK_THEME)?.swatches.bgNav ?? '#132220',
+    textMain: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_DARK_THEME)?.swatches.textMain ?? '#ece6da',
+    textMuted: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches.textMuted ?? '#51675c',
+    accent: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_DARK_THEME)?.swatches.accent ?? '#9c4935',
+    border: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches.border ?? 'rgba(22, 38, 31, 0.16)',
+  },
+}
+
+export const DEFAULT_CUSTOM_COLORS = BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.swatches || BUILT_IN_THEMES[0].swatches
 export const DEFAULT_THEME_TUNING = {
-  radiusUnit: BUILT_IN_THEMES[0].radiusUnit,
+  radiusUnit: BUILT_IN_THEMES.find(theme => theme.id === SYSTEM_LIGHT_THEME)?.radiusUnit || BUILT_IN_THEMES[0].radiusUnit,
   visualStrength: 1,
 }
 
 const ALL_CSS_VARS = [
-  '--bg-main', '--bg-nav', '--bg-hover', '--text-main', '--text-muted',
-  '--accent', '--accent-fade', '--accent-contrast', '--border', '--logo-filter', '--accent2',
+  '--color-canvas', '--color-surface', '--color-surface-muted', '--color-surface-raised',
+  '--color-surface-hover', '--color-text', '--color-text-muted', '--color-text-faint',
+  '--color-prose', '--color-accent', '--color-accent-soft', '--color-accent-text',
+  '--color-accent-secondary', '--color-accent-contrast', '--color-line',
+  '--color-line-strong',
+  '--bg-main', '--bg-nav', '--bg-raise', '--bg-hover', '--text-main', '--text-muted',
+  '--text-faint', '--prose-text', '--accent', '--accent-fade', '--accent-text',
+  '--accent-2', '--accent-contrast', '--border', '--border-strong', '--logo-filter', '--accent2',
   '--atmos-warm', '--atmos-cool', '--atmos-paper', '--atmos-paper-line',
   '--atmos-wood', '--atmos-cork', '--atmos-spine-tint',
   '--atmos-glow-pos', '--atmos-glow-size', '--atmos-glow-intensity',
@@ -113,7 +124,7 @@ const THEME_OPTIONS = [...BUILT_IN_THEMES, ...QUICK_PALETTES]
 const THEME_IDS = new Set(THEME_OPTIONS.map(t => t.id))
 
 export const normalizeThemeChoice = (theme) => (
-  THEME_IDS.has(theme) || theme === 'custom' ? theme : DEFAULT_THEME
+  THEME_IDS.has(theme) || theme === SYSTEM_THEME || theme === 'custom' ? theme : DEFAULT_THEME
 )
 
 export const loadThemeChoice = () => normalizeThemeChoice(localStorage.getItem('nf-theme'))
@@ -123,11 +134,11 @@ export const getThemeOption = (theme) => THEME_OPTIONS.find(option => option.id 
 export const getThemeColors = (theme, customColors = {}) => {
   const normalized = normalizeThemeChoice(theme)
   if (normalized === 'custom') return { ...DEFAULT_CUSTOM_COLORS, ...customColors }
-  return getThemeOption(normalized)?.swatches || DEFAULT_CUSTOM_COLORS
+  return getThemeOption(resolveThemeChoice(normalized))?.swatches || DEFAULT_CUSTOM_COLORS
 }
 
 export const getThemeTuning = (theme, fallback = DEFAULT_THEME_TUNING) => {
-  const option = getThemeOption(theme)
+  const option = getThemeOption(resolveThemeChoice(normalizeThemeChoice(theme)))
   if (!option) return fallback
   return {
     radiusUnit: option.radiusUnit ?? fallback.radiusUnit,
@@ -173,7 +184,12 @@ const mixHex = (a, b, amount = 0.5) => {
 
 const luminanceFromHex = (hex, fallback = 0) => {
   const rgb = hexToRgb(hex)
-  return rgb ? (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255 : fallback
+  if (!rgb) return fallback
+  const toLinear = channel => {
+    const value = channel / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * toLinear(rgb.r) + 0.7152 * toLinear(rgb.g) + 0.0722 * toLinear(rgb.b)
 }
 
 export const rgbaFromHex = (hex, alpha) => {
@@ -186,9 +202,14 @@ const logoFilterForBackground = (hex) => {
   return luminanceFromHex(hex) > 0.56 ? 'brightness(0)' : 'none'
 }
 
-export const getAccentContrast = (accent) => (
-  luminanceFromHex(accent, 0.5) > 0.58 ? '#151713' : '#ffffff'
-)
+export const getAccentContrast = (accent) => {
+  const accentLum = luminanceFromHex(accent, 0.5)
+  const darkLum = luminanceFromHex('#151713')
+  const lightLum = luminanceFromHex('#ffffff')
+  const darkRatio = (Math.max(accentLum, darkLum) + 0.05) / (Math.min(accentLum, darkLum) + 0.05)
+  const lightRatio = (Math.max(accentLum, lightLum) + 0.05) / (Math.min(accentLum, lightLum) + 0.05)
+  return darkRatio >= lightRatio ? '#151713' : '#ffffff'
+}
 
 export const deriveCustomThemeTokens = (colors = DEFAULT_CUSTOM_COLORS, tuning = DEFAULT_THEME_TUNING) => {
   const bgMain = colors.bgMain || DEFAULT_CUSTOM_COLORS.bgMain
@@ -202,6 +223,22 @@ export const deriveCustomThemeTokens = (colors = DEFAULT_CUSTOM_COLORS, tuning =
   const depth = light ? '#ffffff' : '#030405'
 
   return {
+    '--color-canvas': bgMain,
+    '--color-surface': bgNav,
+    '--color-surface-muted': mixHex(bgNav, bgMain, light ? 0.38 : 0.24),
+    '--color-surface-raised': light ? mixHex(bgNav, '#ffffff', 0.72) : mixHex(bgNav, textMain, 0.09),
+    '--color-surface-hover': rgbaFromHex(textMain, clamp(0.025 + strength * 0.035, 0.03, 0.09)),
+    '--color-text': textMain,
+    '--color-text-muted': textMuted,
+    '--color-text-faint': mixHex(textMuted, bgMain, light ? 0.34 : 0.3),
+    '--color-prose': textMain,
+    '--color-accent': accent,
+    '--color-accent-soft': rgbaFromHex(accent, clamp(0.08 + strength * 0.08, 0.08, 0.24)),
+    '--color-accent-text': light ? mixHex(accent, textMain, 0.16) : mixHex(accent, '#ffffff', 0.32),
+    '--color-accent-secondary': mixHex(accent, textMuted, 0.42),
+    '--color-accent-contrast': getAccentContrast(accent),
+    '--color-line': border,
+    '--color-line-strong': light ? rgbaFromHex(textMain, 0.28) : rgbaFromHex('#ffffff', 0.16),
     '--bg-main': bgMain,
     '--bg-nav': bgNav,
     '--text-main': textMain,
@@ -231,7 +268,6 @@ export const applyThemeTuning = (tuning = {}, colors = DEFAULT_CUSTOM_COLORS) =>
   const visualStrength = clamp(Number(tuning.visualStrength) || DEFAULT_THEME_TUNING.visualStrength, 0.45, 1.7)
   const bg = hexToRgb(colors.bgMain)
   const isLight = bg ? (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 > 0.58 : false
-  const base = isLight ? 0.075 : 0.22
   const shadowTone = isLight ? '20,24,28' : '0,0,0'
 
   root.style.setProperty('--radius-unit', `${radiusUnit}px`)
@@ -239,6 +275,15 @@ export const applyThemeTuning = (tuning = {}, colors = DEFAULT_CUSTOM_COLORS) =>
   root.style.setProperty('--accent-fade', rgbaFromHex(colors.accent, clamp(0.08 + visualStrength * 0.08, 0.08, 0.24)))
   root.style.setProperty('--bg-hover', rgbaFromHex(colors.textMain, clamp(0.025 + visualStrength * 0.035, 0.03, 0.09)))
   root.style.setProperty('--atmos-glow-intensity', `${Math.round(visualStrength * 7)}%`)
+  if (isLight) {
+    root.style.setProperty('--shadow-sm', `0 4px 12px rgba(${shadowTone},${clamp(0.11 * visualStrength, 0.06, 0.2)}), 0 1px 1px rgba(255,255,255,.68) inset`)
+    root.style.setProperty('--shadow-md', `0 14px 34px rgba(${shadowTone},${clamp(0.17 * visualStrength, 0.1, 0.3)}), 0 2px 8px rgba(${shadowTone},${clamp(0.07 * visualStrength, 0.04, 0.16)})`)
+    root.style.setProperty('--shadow-lg', `0 30px 68px rgba(${shadowTone},${clamp(0.22 * visualStrength, 0.13, 0.38)}), 0 10px 24px rgba(${shadowTone},${clamp(0.09 * visualStrength, 0.05, 0.18)})`)
+    root.style.setProperty('--shadow-overlay', `0 34px 86px rgba(${shadowTone},${clamp(0.36 * visualStrength, 0.2, 0.52)}), 0 10px 28px rgba(${shadowTone},${clamp(0.14 * visualStrength, 0.08, 0.26)})`)
+    return
+  }
+
+  const base = 0.22
   root.style.setProperty('--shadow-sm', `0 2px 8px rgba(${shadowTone},${clamp(base * visualStrength, 0.04, 0.45)})`)
   root.style.setProperty('--shadow-md', `0 10px 28px rgba(${shadowTone},${clamp((base + 0.08) * visualStrength, 0.08, 0.6)})`)
   root.style.setProperty('--shadow-lg', `0 24px 62px rgba(${shadowTone},${clamp((base + 0.16) * visualStrength, 0.12, 0.72)})`)
@@ -269,9 +314,11 @@ const syncThemeColorMeta = (bgMain) => {
 export const applyThemeToDocument = (theme, customColors = {}) => {
   const root = document.documentElement
   const normalized = normalizeThemeChoice(theme)
+  const resolved = resolveThemeChoice(normalized)
 
   if (normalized === 'custom') {
     root.setAttribute('data-theme', 'custom')
+    root.setAttribute('data-theme-choice', 'custom')
     const colors = { ...DEFAULT_CUSTOM_COLORS, ...customColors }
     const tokens = deriveCustomThemeTokens(colors, loadThemeTuning())
     Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value))
@@ -285,6 +332,7 @@ export const applyThemeToDocument = (theme, customColors = {}) => {
   const quickPalette = QUICK_PALETTES.find(option => option.id === normalized)
   if (quickPalette) {
     root.setAttribute('data-theme', normalized)
+    root.setAttribute('data-theme-choice', normalized)
     setThemeVars(root, quickPalette.swatches)
     syncThemeColorMeta(quickPalette.swatches.bgMain)
     return normalized
@@ -292,8 +340,9 @@ export const applyThemeToDocument = (theme, customColors = {}) => {
 
   // Built-in theme — remove any inline overrides and let the CSS block handle everything
   ALL_CSS_VARS.forEach(variable => root.style.removeProperty(variable))
-  root.setAttribute('data-theme', normalized)
-  syncThemeColorMeta(getThemeOption(normalized)?.swatches?.bgMain)
+  root.setAttribute('data-theme', resolved)
+  root.setAttribute('data-theme-choice', normalized)
+  syncThemeColorMeta(getThemeOption(resolved)?.swatches?.bgMain)
   return normalized
 }
 
