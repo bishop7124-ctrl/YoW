@@ -24,6 +24,7 @@ export function createMemoryBackend(initial = {}) {
     getItem: key => (entries.has(key) ? entries.get(key) : null),
     setItem: (key, value) => { entries.set(key, String(value)) },
     removeItem: key => { entries.delete(key) },
+    keys: () => Array.from(entries.keys()),
   }
 }
 
@@ -33,6 +34,7 @@ function createBrowserBackend() {
     getItem: key => window.localStorage.getItem(key),
     setItem: (key, value) => { window.localStorage.setItem(key, value) },
     removeItem: key => { window.localStorage.removeItem(key) },
+    keys: () => Object.keys(window.localStorage),
   }
 }
 
@@ -74,6 +76,32 @@ export function writeItem(key, value) {
 
 export function removeItem(key) {
   activeBackend.removeItem(key)
+}
+
+// Every backend that actually holds project data (browser localStorage, the
+// IndexedDB-backed vault, the desktop Tauri vault — see indexedDbBackend.js
+// and desktopVaultBackend.js) keeps a full, synchronous, in-memory mirror of
+// every key it holds (localStorage always has, and the other two hydrate a
+// complete mirror from disk at startup specifically so reads stay
+// synchronous). `keys()` is the read-only enumeration half of that same
+// mirror, exposed through the shared abstraction — it lets a caller query the
+// storage backend itself for "every key matching this prefix" instead of only
+// ever knowing about whatever subset happens to be tracked in some in-memory
+// React ref right now (see sceneContentStore.js's deleteAllSceneContentForNovel,
+// written for audit finding #16 — project deletion previously only cleaned up
+// per-scene content keys the current tab's session already knew about).
+// Optional on the backend contract (unlike getItem/setItem/removeItem, which
+// setStorageBackend requires): a caller-injected test backend that doesn't
+// implement it degrades to "nothing found" rather than throwing.
+export function listKeys(prefix) {
+  let all
+  try {
+    all = typeof activeBackend.keys === 'function' ? activeBackend.keys() : []
+  } catch {
+    return []
+  }
+  if (!Array.isArray(all)) return []
+  return prefix ? all.filter(key => typeof key === 'string' && key.startsWith(prefix)) : all
 }
 
 // ── JSON value helper (never throws) ─────────────────────────────────────────
