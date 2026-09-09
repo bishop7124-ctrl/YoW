@@ -54,7 +54,7 @@ export default function FoundersPage({ user, onGetStarted, onLogin }) {
   usePageMeta({
     path: '/founders/',
     title: 'Founders — Your Own World | Worldbuilding & Writing Software',
-    description: 'Meet the Founder members of Your Own World and learn about limited Founder slots — lifetime Cloud Mode, a Founder badge, and priority feature input.',
+    description: 'Meet the Founder members of Your Own World and learn about limited Founder slots — lifetime Cloud Mode, a Founder badge, and a YOW-managed profile showcasing their work.',
   })
 
   return (
@@ -70,10 +70,15 @@ export default function FoundersPage({ user, onGetStarted, onLogin }) {
             The writers who believed first.
           </h1>
           <p style={{ fontSize: 17, color: 'var(--text-muted)', maxWidth: 580, lineHeight: 1.7, margin: 0 }}>
-            Founder membership is limited to a small number of slots — once they're gone, they're gone. These are the writers who supported Your Own World from the start. Explore their work and follow their worlds.
+            Founder membership is limited to a small number of slots — refunded or charged-back memberships can return a slot to availability. These are the writers who supported Your Own World from the start. Explore their work and follow their worlds.
           </p>
         </section>
 
+        <p style={{ color: 'var(--text-muted)', lineHeight: 1.7 }}>
+          YOW manages Founder profiles and displays submitted work on those profiles with your permission.
+          For profile updates, removal requests, or Founder questions, contact{' '}
+          <a href="mailto:founders@yourownworld.co.uk">founders@yourownworld.co.uk</a>.
+        </p>
         {/* Founders grid */}
         <section style={{ paddingBottom: 80 }}>
           {FOUNDERS.length > 0 ? (
@@ -98,7 +103,7 @@ export default function FoundersPage({ user, onGetStarted, onLogin }) {
           }}>
             <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>Become a Founder</h3>
             <p style={{ color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24, fontSize: 15 }}>
-              Founder membership is a limited, one-time purchase. It includes a permanent profile on this page, lifetime app access, lifetime Cloud Mode within the published fair-use cap, and early input on the platform's direction. Once slots are gone, this tier closes.
+              Founder membership is a limited, one-time purchase. It includes a permanent profile on this page, lifetime app access, lifetime Cloud Mode within the published fair-use cap, and a YOW-managed profile featuring your work. A full refund or lost chargeback removes Founder access and returns the slot to availability.
             </p>
             <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>See Founder pricing</a>
           </div>
