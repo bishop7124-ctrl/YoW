@@ -63,7 +63,7 @@ function SupportForm({ user, onClose }) {
           onClick={onClose}
           style={{
             padding: '9px 20px', borderRadius: 6,
-            background: 'var(--accent)', color: 'var(--bg-main)',
+            background: 'var(--accent)', color: 'var(--accent-contrast)',
             border: 'none', fontWeight: 800, fontSize: 12,
             letterSpacing: '.06em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit',
           }}
@@ -137,7 +137,7 @@ function SupportForm({ user, onClose }) {
           disabled={status === 'sending'}
           style={{
             padding: '9px 20px', borderRadius: 6,
-            background: 'var(--accent)', color: 'var(--bg-main)',
+            background: 'var(--accent)', color: 'var(--accent-contrast)',
             border: 'none', fontWeight: 800, fontSize: 12,
             letterSpacing: '.06em', textTransform: 'uppercase', cursor: status === 'sending' ? 'default' : 'pointer',
             opacity: status === 'sending' ? 0.7 : 1, fontFamily: 'inherit',
@@ -187,7 +187,7 @@ function SuggestionsForm({ user }) {
         <button
           type="button"
           onClick={() => { setStatus('idle'); setForm({ title: '', description: '', category: 'feature', email: '' }) }}
-          style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--bg-main)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+          style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: 'var(--accent-contrast)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
         >
           Submit another
         </button>
@@ -264,7 +264,7 @@ function SuggestionsForm({ user }) {
             disabled={status === 'sending'}
             style={{
               padding: '9px 20px', borderRadius: 6, border: 'none',
-              background: 'var(--accent)', color: 'var(--bg-main)',
+              background: 'var(--accent)', color: 'var(--accent-contrast)',
               fontSize: 12, fontWeight: 800, cursor: status === 'sending' ? 'default' : 'pointer',
               opacity: status === 'sending' ? 0.7 : 1, fontFamily: 'inherit',
             }}

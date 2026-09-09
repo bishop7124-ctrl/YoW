@@ -1,16 +1,24 @@
 import { useState, useRef } from 'react'
+import { normalizeIdeaTags } from '../../utils/ideaEntries.js'
 
 export default function QuickCapture({ onAdd, readOnly, allTags }) {
   const [value, setValue] = useState('')
   const [showTagInput, setShowTagInput] = useState(false)
   const [tagDraft, setTagDraft] = useState('')
   const [pendingTags, setPendingTags] = useState([])
+  const [error, setError] = useState('')
   const inputRef = useRef(null)
 
   const commit = () => {
     const title = value.trim()
     if (!title || readOnly) return
-    onAdd(title, pendingTags)
+    setError('')
+    try {
+      if (!onAdd(title, normalizeIdeaTags([...pendingTags, tagDraft]))) {
+        setError('This idea could not be saved. Your capture is still here.')
+        return
+      }
+    } catch { setError('This idea could not be saved. Your capture is still here.'); return }
     setValue('')
     setPendingTags([])
     setTagDraft('')
@@ -24,14 +32,12 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
       commit()
     }
     if (e.key === 'Escape') {
-      setValue('')
-      setPendingTags([])
       setShowTagInput(false)
     }
   }
 
   const addTag = (tag) => {
-    const clean = tag.trim().toLowerCase().replace(/\s+/g, '-')
+    const [clean] = normalizeIdeaTags([tag])
     if (clean && !pendingTags.includes(clean)) {
       setPendingTags(prev => [...prev, clean])
     }
@@ -57,6 +63,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
     <div data-tour="ideas-capture" style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
       <div style={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         gap: 8,
         background: 'var(--bg-nav)',
@@ -65,8 +72,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
         padding: '10px 14px',
         transition: 'border-color .15s, box-shadow .15s',
       }}
-        onFocus={() => {}}
-        className="quick-capture-wrap"
+        className="quick-capture-wrap focus-within:ring-2 focus-within:ring-[var(--accent)]"
       >
         {/* Spark icon */}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.8 }}>
@@ -75,6 +81,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
 
         <input
           ref={inputRef}
+          aria-label="Capture an idea"
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -82,18 +89,19 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
           disabled={readOnly}
           style={{
             flex: 1,
+            minWidth: 160,
             background: 'none',
             border: 'none',
             outline: 'none',
             color: 'var(--text-main)',
-            fontSize: 14,
+            fontSize: 16,
             fontFamily: 'inherit',
           }}
         />
 
         {/* Pending tags */}
         {pendingTags.map(tag => (
-          <span
+          <button type="button" disabled={readOnly}
             key={tag}
             onClick={() => setPendingTags(prev => prev.filter(t => t !== tag))}
             style={{
@@ -109,7 +117,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
             title="Click to remove"
           >
             #{tag}
-          </span>
+          </button>
         ))}
 
         {/* Tag toggle */}
@@ -157,11 +165,14 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
         )}
       </div>
 
+      {error && <p role="alert" className="text-sm text-red-400 mt-2">{error}</p>}
+
       {/* Tag input row */}
-      {showTagInput && (
+      {showTagInput && !readOnly && (
         <div style={{ marginTop: 8, paddingLeft: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <input
             autoFocus
+            aria-label="Capture tags"
             value={tagDraft}
             onChange={e => setTagDraft(e.target.value)}
             onKeyDown={handleTagKeyDown}
@@ -172,7 +183,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
               border: 'none',
               outline: 'none',
               color: 'var(--text-muted)',
-              fontSize: 12,
+              fontSize: 16,
               fontFamily: 'inherit',
             }}
           />

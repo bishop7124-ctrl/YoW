@@ -1,27 +1,39 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
-import { isPhoneViewport } from '../../utils/useMediaQuery'
-import WritingSidebar from './WritingSidebar'
+import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
+import ManuscriptRail from './ManuscriptRail.jsx'
+import AIStar from '../ai/AIStar'
+import ManuscriptInspector from './ManuscriptInspector.jsx'
+import ManuscriptTopbar from './ManuscriptTopbar.jsx'
+import ManuscriptSurface from './ManuscriptSurface.jsx'
+import ManuscriptBookView from './ManuscriptBookView.jsx'
+import { useToast } from './Toast.jsx'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
-import AISuggestionPanel from './AISuggestionPanel'
-import AIStar from '../ai/AIStar'
-import SceneVersionHistory from './SceneVersionHistory'
-import ManuscriptSearch from './ManuscriptSearch'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
 import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
 import ManuscriptCatalogue from './ManuscriptCatalogue.jsx'
-import { FormatContent, NotesPanel, SaveIndicator } from './ManuscriptToolbar.jsx'
 import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
-import FocusedWritingShell, { ManuscriptZoomControl } from './FocusedWritingShell.jsx'
-import { useFocusedWritingMode } from './useFocusedWritingMode.js'
+import ManuscriptZoomControl from './ManuscriptZoomControl.jsx'
 import SceneConflictReview from './SceneConflictReview.jsx'
 import { useSceneWindow } from './useSceneWindow.js'
+import { withDailyGoalHistory } from '../../utils/writingStreak.js'
 
 const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
+
+// Prose column target width (at the default 19px font) -- shared by Write
+// and Edit mode via the --ms-prose-w custom property set below, so the line
+// length is identical in both. Edit mode's document is simply this much
+// wider again, reserved for the note gutter (.ms-scene-gutter's own 188px
+// plus its 28px gap from the prose column) -- see .ms-scene-body/
+// .ms-scene-body--write in index.css.
+const PROSE_WIDTH_BASE = 1080
+const PROSE_GUTTER_RESERVE = 216
+// Matches .manuscript-document's own md:px-12 Tailwind padding (48px each side).
+const MANUSCRIPT_DOC_PADDING = 96
 
 // Rough placeholder height for a scene that hasn't been mounted (and measured) yet —
 // see useSceneWindow.js and the SceneSlot component below. Doesn't need to be exact:
@@ -35,9 +47,12 @@ function estimateSceneHeight(scene, formatSettings) {
   const fontSize = formatSettings?.fontSize || 19
   const lineHeight = formatSettings?.lineHeight || 2
   const lineHeightPx = fontSize * lineHeight
-  // ~68 characters/line at the default 19px font in the ~960px column; a bigger font
-  // fits fewer characters per line, so scale the estimate down as fontSize grows.
-  const charsPerLine = Math.max(30, 68 * (19 / fontSize))
+  // ~77 characters/line at the default 19px font in the ~1080px prose column (Edit's
+  // width, and also Write's since they share --ms-prose-w — see PROSE_WIDTH_BASE); a
+  // bigger font fits fewer characters per line, so scale the estimate down as fontSize
+  // grows. This is a rough placeholder estimate either way (see SceneSlot below), not a
+  // hard layout constraint, so it doesn't need to track Write's wider 1fr fill exactly.
+  const charsPerLine = Math.max(30, 77 * (19 / fontSize))
   const estimatedLines = Math.max(2, Math.ceil(length / charsPerLine))
   return Math.round(PLACEHOLDER_HEADER_PX + estimatedLines * lineHeightPx)
 }
@@ -183,10 +198,8 @@ export default function Manuscript({ store, userId, membership = null }) {
     updateSceneContent, updateScene, updateAct, updateChapter,
     deleteAct, deleteChapter, deleteScene,
     moveAct, moveChapter, moveScene,
-    characters, locations,
-    setSelectedCharacterId, setSelectedLocationId,
-    loreEntries, factions, timeline, worldHistory, ideaEntries, storySchedule, rpgCharacters,
-    setSelectedLoreEntryId, setSelectedIdeaEntryId, setSelectedTimelineEventId,
+    characters, locations, loreEntries = [], worldHistory = [], timeline = [], factions = [], currentYear,
+    setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId, setSelectedHistoryEntryId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
     retireManuscript, restoreManuscriptCopy,
@@ -194,6 +207,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     sceneConflicts = [], restoreSceneConflict, discardSceneConflict,
     syncStatus,
     recordLocalWrite,
+    localStorageWarning,
   } = store
 
   const projectTypeConfig = getProjectType(activeNovel?.type)
@@ -203,15 +217,109 @@ export default function Manuscript({ store, userId, membership = null }) {
   // mode returns to this scene instead of the top of the manuscript.
   const activeSceneId = writingSceneId
   const setActiveSceneId = setWritingSceneId
-  // On mobile the sidebar becomes a bottom-sheet overlay instead of a persistent side
-  // panel, so defaulting it open (as desktop does) buries the manuscript behind it the
-  // moment a scene opens. Land on the manuscript there and let the tab strip open it.
-  const [activeSidebarTab, setActiveSidebarTab] = useState(() => (
-    isPhoneViewport() ? null : 'structure'
-  )) // null | 'structure' | 'goals' | 'progress' | 'notes'
+  // Redesign chrome state. `activeSidebarTab` (one string covering structure/
+  // status/notes/format/ai) is gone — replaced by three independent pieces
+  // matching the new layout: the rail's own collapse state, the inspector's
+  // open flag + which of its four tabs is active, and the surface's which-
+  // panel-if-any (AI/Search/History/Finalise, mutually exclusive with each
+  // other but independent of the inspector, which it overlays rather than
+  // replaces). On mobile the inspector becomes a bottom-sheet overlay instead
+  // of a persistent side panel, so defaulting it open (as desktop does)
+  // buries the manuscript behind it the moment a scene opens — same reasoning
+  // the old activeSidebarTab default had.
+  // Breakpoints per spec §3/§7 step 7: ≥1251px rail expanded, 901-1250px
+  // auto-collapsed to the spine (unless the user's explicitly toggled it —
+  // railUserToggledRef below), ≤900px rail becomes an off-canvas sheet
+  // (railSheetOpen) instead of collapsing at all.
+  const isNarrowBand = useMediaQuery(1250)
+  const isMobileBand = useMediaQuery(BREAKPOINT_MS_OVERLAY)
+  const [railCollapsed, setRailCollapsed] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth <= 1250
+  ))
+  const [railSheetOpen, setRailSheetOpen] = useState(false)
+  const railUserToggledRef = useRef(false)
+  // Auto-collapse follows the breakpoint until the user makes an explicit
+  // choice, at which point it stops overriding them (matches the
+  // prototype's `if (!userRail) …` behavior) — this only runs above the
+  // mobile band, where collapse-to-spine doesn't apply at all (rail is an
+  // off-canvas sheet there instead, driven by railSheetOpen).
+  useEffect(() => {
+    if (railUserToggledRef.current || isMobileBand) return
+    setRailCollapsed(isNarrowBand)
+  }, [isNarrowBand, isMobileBand])
+  const handleToggleRail = useCallback(() => {
+    if (isMobileBand) { setRailSheetOpen(v => !v); return }
+    railUserToggledRef.current = true
+    setRailCollapsed(v => !v)
+  }, [isMobileBand])
+  // Matches `isMobileBand` (900px), not `isPhoneViewport` (640px) — below
+  // 900px the inspector renders as an absolute-positioned, 62vh bottom-sheet
+  // overlay (.ms-insp's own `@media (max-width: 900px)` rule in index.css),
+  // not a side panel. Defaulting this to the phone-only breakpoint meant it
+  // opened eagerly on tablet widths (641-900px) as that overlay, covering
+  // the writing area's own placeholder/content underneath it on first load
+  // (2026-08-27 manuscript-editor-redesign regression, caught by CI's
+  // responsive-smoke spec failing at 768px — see docs/ROADMAP.md Bugs table).
+  const [inspectorOpen, setInspectorOpen] = useState(() => !isMobileBand)
+  // Also close if a later resize crosses into the overlay band. This catches
+  // tablet rotation from landscape to portrait without fighting a user who
+  // deliberately opens the inspector after already being in that band.
+  useEffect(() => {
+    if (!isMobileBand) return
+    const timeout = window.setTimeout(() => {
+      setInspectorOpen(prev => (prev ? false : prev))
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [isMobileBand])
+  const [inspectorTab, setInspectorTab] = useState('scene') // 'scene' | 'notes' | 'format' | 'progress'
+  const [surfaceId, setSurfaceId] = useState(null) // null | 'ai' | 'search' | 'history' | 'finalise'
+  const [selectedCatalogueEntity, setSelectedCatalogueEntity] = useState(null)
+  // Lazy initializer (not an effect) so this reads localStorage once, on
+  // first render, rather than mounting with 'ai' and then correcting itself
+  // a tick later via a setState-in-effect.
+  const [lastSurfaceId, setLastSurfaceId] = useState(() => {
+    try {
+      return (activeNovel?.id && localStorage.getItem(`nf-manuscript-last-surface:${activeNovel.id}`)) || 'ai'
+    } catch {
+      return 'ai'
+    }
+  })
+  // Three modes per spec §8 — persisted per project, same lazy-initializer
+  // pattern as lastSurfaceId above (reads once on mount, no hydration
+  // effect). 'edit' is the full apparatus and was this component's only
+  // behavior before this step, so it's the fallback for a first-ever visit.
+  const [mode, setMode] = useState(() => {
+    try {
+      return (activeNovel?.id && localStorage.getItem(`nf-manuscript-mode:${activeNovel.id}`)) || 'edit'
+    } catch {
+      return 'edit'
+    }
+  })
+  const modeStorageKey = activeNovel?.id ? `nf-manuscript-mode:${activeNovel.id}` : null
+  useEffect(() => {
+    if (!modeStorageKey) return
+    try { localStorage.setItem(modeStorageKey, mode) } catch { /* ignore */ }
+  }, [modeStorageKey, mode])
+  const [finalisedSubView, setFinalisedSubView] = useState('manuscript') // 'manuscript' | 'book'
+  const handleSetMode = useCallback((next) => {
+    setMode(next)
+    // Surface closed in both Write ("Surface closed; AI + Inspector buttons
+    // hidden") and Finalised ("Surface hidden") per the mode table — only
+    // Edit leaves it as the user had it.
+    if (next !== 'edit') { setSurfaceId(null) }
+    // Write's rail defaults to the spine ("collapsed to spine (expandable)"
+    // per the mode table) — a one-time default on entering the mode, not a
+    // standing restriction, so the user can still expand it afterward via
+    // the normal toggle.
+    if (next === 'write') { setRailCollapsed(true) }
+  }, [])
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [formatSettings, setFormatSettings] = useState(loadFormat)
+  // Scales with font size like the old single-mode column used to, so a
+  // bigger font still gets a sensible measure instead of a fixed character
+  // count regardless of size.
+  const proseWidth = Math.round(Math.max(PROSE_WIDTH_BASE, PROSE_WIDTH_BASE * (formatSettings.fontSize / 19)))
   const [fullscreen, setFullscreen] = useState(false)
   const [saveState, setSaveState] = useState('saved') // 'saving' | 'saved'
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
@@ -221,11 +329,11 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [finalizedReaderView, setFinalizedReaderView] = useState('scroll')
   const [finalizedPageIndex, setFinalizedPageIndex] = useState(0)
   const [versionHistorySceneId, setVersionHistorySceneId] = useState(null)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [pacingOpen, setPacingOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [liveSceneContent, setLiveSceneContent] = useState({})
   const [aiSelectionContext, setAiSelectionContext] = useState({ sceneId: null, text: '' })
+  const { toast, toastNode } = useToast()
   // Scenes forced to mount a real SceneEditor regardless of viewport position — see
   // pinScene below. Bridges the gap between a programmatic jump/creation (which needs
   // editorRefs populated *now*, synchronously-ish) and the IntersectionObserver in
@@ -235,7 +343,6 @@ export default function Manuscript({ store, userId, membership = null }) {
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
   const editorRefs = useRef({})
-  const focusedWriting = useFocusedWritingMode(userId)
   const { inView: scenesInView, registerElement: registerSceneElement, supported: virtualizationSupported } = useSceneWindow(scrollContainerRef)
   const sceneHeightCacheRef = useRef(new Map())
   const handleHeightMeasured = useCallback((sceneId, height) => {
@@ -253,24 +360,17 @@ export default function Manuscript({ store, userId, membership = null }) {
     }, duration)
   }, [])
 
-  const handleOpenReferenceEntry = useCallback((entry) => {
-    if (!entry) return
-    if (entry.type === 'character') setSelectedCharacterId?.(entry.rawId)
-    if (entry.type === 'location') setSelectedLocationId?.(entry.rawId)
-    if (entry.type === 'lore') setSelectedLoreEntryId?.(entry.rawId)
-    if (entry.type === 'idea') setSelectedIdeaEntryId?.(entry.rawId)
-    if (entry.type === 'timeline' || entry.type === 'history') setSelectedTimelineEventId?.(entry.rawId)
-
-    window.dispatchEvent(new CustomEvent('switch-section', {
-      detail: { section: entry.section },
-    }))
-  }, [
-    setSelectedCharacterId,
-    setSelectedLocationId,
-    setSelectedLoreEntryId,
-    setSelectedIdeaEntryId,
-    setSelectedTimelineEventId,
-  ])
+  // handleOpenReferenceEntry (jump from a reference-panel click to a
+  // character/location/lore/idea/timeline entry) is deliberately not carried
+  // over here — WritingSidebar's Reference tab (ManuscriptReferencePanel,
+  // the browse-everything panel this fed) has no home in the new inspector;
+  // the handoff spec defers "reference" to the breadcrumb's ⌘K palette and
+  // entity clicks. Entity clicks already work (handleEntityClick, used by
+  // both SceneEditor's inline entity links and the inspector's Scene tab
+  // chips) — the palette only searches scenes so far, not the full
+  // character/location/lore/timeline set ManuscriptReferencePanel browsed.
+  // That's a real, disclosed gap versus today, not an oversight: flagged in
+  // the redesign's final report rather than rebuilt under time pressure.
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
   const activeSceneForAI = activeScene
@@ -316,15 +416,25 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const entityMap = useMemo(() => {
     const map = {}
+    const put = (name, entity) => {
+      if (name?.trim().length >= 2) map[name.trim().toLowerCase()] = entity
+    }
     ;(characters || []).forEach(c => {
-      if (c.name?.length >= 2) map[c.name.toLowerCase()] = { id: c.id, section: 'characters', name: c.name }
-      ;(c.keywords || []).forEach(kw => { if (kw?.length >= 2) map[kw.toLowerCase()] = { id: c.id, section: 'characters', name: c.name } })
+      const entity = { id: c.id, section: 'characters', sectionLabel: 'Character', name: c.name, preview: c.summary || c.description || c.notes || c.role || '' }
+      put(c.name, entity)
+      ;(c.keywords || []).forEach(kw => put(kw, entity))
     })
     ;(locations || []).forEach(l => {
-      if (l.name?.length >= 2) map[l.name.toLowerCase()] = { id: l.id, section: 'locations', name: l.name }
+      put(l.name, { id: l.id, section: 'locations', sectionLabel: 'Location', name: l.name, preview: l.description || l.notes || l.summary || '' })
+    })
+    ;(loreEntries || []).forEach(entry => {
+      put(entry.title, { id: entry.id, section: 'lore', sectionLabel: 'Lore', name: entry.title, preview: entry.content || entry.summary || entry.category || '' })
+    })
+    ;[...(worldHistory || []), ...(timeline || [])].forEach(entry => {
+      put(entry.title, { id: entry.id, section: 'worldhistory', sectionLabel: 'History', name: entry.title, preview: entry.content || entry.summary || entry.dateRange || entry.era || '' })
     })
     return map
-  }, [characters, locations])
+  }, [characters, locations, loreEntries, worldHistory, timeline])
 
   // Autosave state tracking — wraps updateSceneContent with UI feedback. The
   // indicator itself only clears back to "saved" once the store's syncStatus
@@ -372,10 +482,21 @@ export default function Manuscript({ store, userId, membership = null }) {
   // canSyncCloud-less sessions (offline/local-only) never leave 'idle', so
   // they fall through to "saved" immediately, matching the old timer's
   // behavior there.
+  //
+  // localStorageWarning also gates this (audit P0-07): it reflects whether
+  // the *local* IndexedDB/desktop-vault write actually landed, which cloud
+  // syncStatus knows nothing about — a browser tab with no cloud sync at all
+  // (Free/local-only) used to always read "Saved" the moment the debounce
+  // timer cleared, with zero connection to whether the on-device write
+  // itself succeeded. A failed local write always wins over a successful
+  // cloud sync here: the point of "Saved" is that this device won't lose the
+  // edit, and a stale local write can still be true even while cloud sync
+  // reports success from an earlier value.
   useEffect(() => {
+    if (localStorageWarning) { setSaveState('error'); return }
     if (!syncStatus) return
     setSaveState(syncStatus.state === 'syncing' ? 'saving' : 'saved')
-  }, [syncStatus])
+  }, [syncStatus, localStorageWarning])
 
   const handleReplaceInScene = useCallback((sceneId, newContent) => {
     handleContentUpdate(sceneId, newContent)
@@ -418,32 +539,37 @@ export default function Manuscript({ store, userId, membership = null }) {
     })
   }, [activeSceneId, scenes])
 
-  useEffect(() => {
-    if (!focusedWriting.enabled) return undefined
-    const handleEscape = event => {
-      if (event.key !== 'Escape') return
-      if (activeSidebarTab) {
-        event.preventDefault()
-        setActiveSidebarTab(null)
-        return
-      }
-      event.preventDefault()
-      focusedWriting.setEnabled(false)
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [activeSidebarTab, focusedWriting])
+  const [pageZoom, setPageZoom] = useState(1)
+  const handlePageZoomChange = useCallback((nextZoom) => {
+    setPageZoom(Math.min(1.5, Math.max(0.8, Number(nextZoom) || 1)))
+  }, [])
 
   const handleFormatChange = useCallback((next) => {
     setFormatSettings(next)
     localStorage.setItem('nf-format-settings', JSON.stringify(next))
   }, [])
 
+  const selectCatalogueHistory = worldHistory?.length ? setSelectedHistoryEntryId : setSelectedTimelineEventId
   const handleEntityClick = useCallback(entity => {
+    if (!entity?.id || !entity?.section) return
     if (entity.section === 'characters') setSelectedCharacterId(entity.id)
     if (entity.section === 'locations') setSelectedLocationId(entity.id)
+    if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
+    if (entity.section === 'worldhistory') selectCatalogueHistory?.(entity.id)
+    setSelectedCatalogueEntity(entity)
+    setInspectorTab('catalogue')
+    setInspectorOpen(true)
+    setSurfaceId(null)
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, selectCatalogueHistory])
+
+  const handleOpenEntitySection = useCallback(entity => {
+    if (!entity?.id || !entity?.section) return
+    if (entity.section === 'characters') setSelectedCharacterId(entity.id)
+    if (entity.section === 'locations') setSelectedLocationId(entity.id)
+    if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
+    if (entity.section === 'worldhistory') selectCatalogueHistory?.(entity.id)
     window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: entity.section } }))
-  }, [setSelectedCharacterId, setSelectedLocationId])
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, selectCatalogueHistory])
 
   const chapterGlobalNumbers = useMemo(() => {
     const map = {}
@@ -495,6 +621,21 @@ export default function Manuscript({ store, userId, membership = null }) {
     scenes: scenes.length,
     words: totalWordCount,
   }), [acts.length, chapters.length, scenes.length, totalWordCount])
+
+  // Finalised MODE (spec §8) is a live, read-only view of the *current*
+  // manuscript — distinct from the Surface's Finalise pane / "Open reader",
+  // which shows a specific frozen buildFinalizedDraft snapshot saved to
+  // activeNovel.finalizedDrafts. This one is never persisted; it's rebuilt
+  // whenever the underlying content changes, same as everything else this
+  // component already derives live from acts/chapters/scenes.
+  const liveFinalizedDraft = useMemo(() => {
+    if (mode !== 'final' || !isNovelProject) return null
+    return buildFinalizedDraft({
+      novel: activeNovel,
+      acts, chapters, scenes, labels,
+      title: activeNovel?.title || 'Untitled',
+    })
+  }, [mode, isNovelProject, activeNovel, acts, chapters, scenes, labels])
 
   const handleRetireManuscript = useCallback((title) => {
     const copy = retireManuscript?.(title)
@@ -613,6 +754,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   const handleSplitScene = (sceneId, chapterId, before, after) => {
     updateSceneContent(sceneId, before)
     const newScene = addScene(chapterId, labels.level3)
+    if (!newScene) return
     pinScene(newScene.id, 2000)
     setTimeout(() => {
       updateSceneContent(newScene.id, after)
@@ -623,6 +765,7 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const handleAddScene = chapterId => {
     const newScene = addScene(chapterId, labels.level3)
+    if (!newScene) return
     pinScene(newScene.id, 2000)
     setTimeout(() => {
       editorRefs.current[newScene.id]?.focus({ placeCursor: 'end' })
@@ -648,14 +791,43 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
   }, [scenes, handleContentUpdate])
 
+  const handleReplaceSelection = useCallback((sceneId, text) => {
+    const ref = editorRefs.current[sceneId]
+    if (ref?.replaceSelection) {
+      ref.replaceSelection(text)
+      return
+    }
+    const scene = scenes.find(s => s.id === sceneId)
+    if (!scene) return
+    handleContentUpdate(sceneId, text)
+  }, [scenes, handleContentUpdate])
+
   // Writing goals — persisted on activeNovel via updateNovel
   const activeNovelId = activeNovel?.id
-  const writingGoals = useMemo(() => activeNovel?.writingGoals ?? {}, [activeNovel?.writingGoals])
+  const writingGoals = useMemo(() => {
+    const goals = activeNovel?.writingGoals ?? {}
+    const manuscript = goals.manuscript ?? activeNovel?.wordCountTarget ?? activeNovel?.wordTarget ?? activeNovel?.targetWords ?? projectTypeConfig.defaultWordTarget ?? 0
+    return { ...goals, manuscript: Number(manuscript) || 0 }
+  }, [activeNovel?.writingGoals, activeNovel?.wordCountTarget, activeNovel?.wordTarget, activeNovel?.targetWords, projectTypeConfig.defaultWordTarget])
 
   const handleUpdateGoals = useCallback((newGoals) => {
     if (!activeNovelId) return
-    updateNovel(activeNovelId, { writingGoals: newGoals })
-  }, [activeNovelId, updateNovel])
+    let goalsToSave = { ...writingGoals, ...newGoals }
+    if (Object.prototype.hasOwnProperty.call(newGoals, 'daily')) {
+      const recordedDailyGoal = withDailyGoalHistory(writingGoals, newGoals.daily)
+      goalsToSave = {
+        ...goalsToSave,
+        daily: recordedDailyGoal.daily,
+        dailyHistory: recordedDailyGoal.dailyHistory,
+      }
+    }
+    updateNovel(activeNovelId, {
+      writingGoals: goalsToSave,
+      ...(Object.prototype.hasOwnProperty.call(goalsToSave, 'manuscript')
+        ? { wordCountTarget: Number(goalsToSave.manuscript) || null, wordTarget: Number(goalsToSave.manuscript) || null }
+        : {}),
+    })
+  }, [activeNovelId, updateNovel, writingGoals])
 
   // Template application
   const handleApplyTemplate = useCallback(async (template, { withChapters, withScenes }) => {
@@ -663,12 +835,14 @@ export default function Manuscript({ store, userId, membership = null }) {
     for (let ai = 0; ai < template.acts.length; ai++) {
       const tAct = template.acts[ai]
       const newAct = addAct(tAct.title)
+      if (!newAct) continue
       if (tAct.guidance) updateAct(newAct.id, { guidance: tAct.guidance })
 
       if (withChapters) {
         for (let ci = 0; ci < tAct.chapters.length; ci++) {
           const tChap = tAct.chapters[ci]
           const newChap = addChapter(newAct.id, tChap.title)
+          if (!newChap) continue
           if (isCampaignProject && tChap.guidance) {
             updateChapter(newChap.id, {
               guidance: tChap.guidance,
@@ -694,10 +868,13 @@ export default function Manuscript({ store, userId, membership = null }) {
   const handleDocxImport = useCallback(async (importedActs) => {
     for (const tAct of importedActs) {
       const newAct = addAct(tAct.title)
+      if (!newAct) continue
       for (const tChap of tAct.chapters) {
         const newChap = addChapter(newAct.id, tChap.title)
+        if (!newChap) continue
         for (const tScene of tChap.scenes) {
           const newScene = addScene(newChap.id, tScene.title || labels.level3)
+          if (!newScene) continue
           if (tScene.content?.trim()) {
             updateSceneContent(newScene.id, tScene.content)
           }
@@ -710,7 +887,11 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
   }, [addAct, addChapter, addScene, updateSceneContent, labels.level3])
 
-  const handleExport = async () => {
+  // useCallback (this wasn't memoized before the redesign) so
+  // handleOverflowAction below — which now needs to call the current
+  // handleExport for the overflow menu's Export item — doesn't get a new
+  // function identity on every render as a side effect of depending on it.
+  const handleExport = useCallback(async () => {
     setExporting(true)
     try {
       await exportToDocx(activeNovel, acts, chapters, scenes, chapterGlobalNumbers)
@@ -720,17 +901,17 @@ export default function Manuscript({ store, userId, membership = null }) {
     } finally {
       setExporting(false)
     }
-  }
+  }, [activeNovel, acts, chapters, scenes, chapterGlobalNumbers])
 
   // Navigate from sidebar click
   const handleSelectScene = useCallback((sceneId) => {
     setActiveSceneId(sceneId)
     requestAnimationFrame(() => {
       document.getElementById(`ms-scene-${sceneId}`)
-        ?.scrollIntoView({ behavior: focusedWriting.enabled ? 'auto' : 'smooth', block: 'center' })
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
     setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: 'end' }), 200)
-  }, [focusedWriting.enabled, setActiveSceneId])
+  }, [setActiveSceneId])
 
   // Clicking a virtualized-away scene's placeholder (see SceneSlot above) — setting it
   // active forces a real SceneEditor to mount (same as any other click-to-activate
@@ -752,269 +933,210 @@ export default function Manuscript({ store, userId, membership = null }) {
     })
   }, [])
 
+  // Breadcrumb: act · chapter · scene for whichever scene last took focus
+  // (onFocus on every SceneEditor already keeps activeSceneId current — see
+  // handleSelectScene/the SceneEditor render below — so this satisfies "the
+  // scene under the caret, including after a rail jump" without a second
+  // scroll-position observer; scenesInView from useSceneWindow remains the
+  // one and only IntersectionObserver in this file).
+  const activeAct = activeChapter ? acts.find(a => a.id === activeChapter.actId) : null
+  const breadcrumbPath = activeAct || activeChapter || activeScene
+    ? [
+        activeAct?.title,
+        activeChapter ? getChapterTitle(activeChapter) : null,
+        activeScene ? (activeScene.title && activeScene.title !== 'Scene' ? activeScene.title : labels.level3) : null,
+      ].filter(Boolean).join(' · ')
+    : ''
+
+  // Surfaces: one at a time, opening another replaces it, closing remembers
+  // lastSurfaceId (persisted per project, hydrated by the lazy useState
+  // initializer above) so ⌘J/re-opening the AI button returns to whatever
+  // was last open — spec §5.1.
+  const lastSurfaceStorageKey = activeNovel?.id ? `nf-manuscript-last-surface:${activeNovel.id}` : null
+  useEffect(() => {
+    if (!lastSurfaceStorageKey) return
+    try { localStorage.setItem(lastSurfaceStorageKey, lastSurfaceId) } catch { /* ignore */ }
+  }, [lastSurfaceStorageKey, lastSurfaceId])
+
+  // A surface (AI/Search/History/Finalise) and the inspector are never open
+  // at once — opening one closes the other, in every entry point below.
+  const handleToggleSurface = useCallback((id) => {
+    setSurfaceId(current => {
+      if (current === id) return null
+      setLastSurfaceId(id)
+      setInspectorOpen(false)
+      return id
+    })
+  }, [])
+
+  const handleOpenLastSurface = useCallback(() => {
+    setSurfaceId(current => {
+      const next = current ? null : lastSurfaceId
+      if (next) setInspectorOpen(false)
+      return next
+    })
+  }, [lastSurfaceId])
+
+  const handleCloseSurface = useCallback(() => setSurfaceId(null), [])
+
+  // Mobile bottom bar (≤900px): one of four surfaces at a time — Outline
+  // (rail sheet), Write (bare manuscript), Inspector (bottom sheet), AI.
+  // Only one is ever open at a time, matching the desktop rule above that a
+  // topbar surface and the inspector are mutually exclusive.
+  const mobileTab = railSheetOpen ? 'outline' : surfaceId === 'ai' ? 'ai' : inspectorOpen ? 'inspect' : 'write'
+  const handleMobileTab = useCallback((tab) => {
+    setRailSheetOpen(tab === 'outline')
+    setInspectorOpen(tab === 'inspect')
+    setSurfaceId(tab === 'ai' ? 'ai' : null)
+  }, [])
+
+  // Details (SceneEditor's new header button) and Ask AI (the selection bar)
+  // both need the inspector/surface open AND pointed at the scene the user
+  // was just looking at, not necessarily whatever activeSceneId already was.
+  const handleOpenSceneDetails = useCallback((sceneId) => {
+    setActiveSceneId(sceneId)
+    setInspectorTab('scene')
+    setInspectorOpen(true)
+    setSurfaceId(null)
+  }, [setActiveSceneId])
+
+  const handleAskAI = useCallback((sceneId) => {
+    setActiveSceneId(sceneId)
+    handleToggleSurface('ai')
+  }, [setActiveSceneId, handleToggleSurface])
+
+  const handleOpenNotesInspector = useCallback(() => {
+    setInspectorTab('notes')
+    setInspectorOpen(true)
+    setSurfaceId(null)
+  }, [])
+
+  const handleOverflowAction = useCallback((actionId) => {
+    switch (actionId) {
+      case 'search': handleToggleSurface('search'); break
+      case 'pacing': setPacingOpen(true); break
+      case 'template': setTemplateModalOpen(true); break
+      case 'import': setImportModalOpen(true); break
+      case 'history':
+        setVersionHistorySceneId(activeSceneId)
+        handleToggleSurface('history')
+        break
+      case 'finalise': handleToggleSurface('finalise'); break
+      case 'export': handleExport(); break
+      case 'catalogue': setCatalogueOpen(true); break
+      default: break
+    }
+  }, [handleToggleSurface, activeSceneId, handleExport])
+
+  // Global shortcuts not already owned by a child (⌘K's go-to-scene palette
+  // and ⌘' 's note action are local to ManuscriptTopbar/SceneEditor
+  // respectively — see their own keydown handling).
+  useEffect(() => {
+    const handler = event => {
+      const meta = event.metaKey || event.ctrlKey
+      // Esc chain: reader before surfaces.
+      if (event.key === 'Escape' && mode === 'final') {
+        event.preventDefault()
+        handleSetMode('edit')
+        return
+      }
+      if (event.key === 'Escape' && surfaceId) {
+        event.preventDefault()
+        handleCloseSurface()
+        return
+      }
+      if (!meta) return
+      if (event.key === '\\') { event.preventDefault(); setRailCollapsed(v => !v); return }
+      if (event.key.toLowerCase() === 'f' && !activeFinalizedDraft) { event.preventDefault(); handleToggleSurface('search'); return }
+      if (event.key.toLowerCase() === 'j') { event.preventDefault(); handleOpenLastSurface(); return }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surfaceId, activeFinalizedDraft, mode])
+
   if (isComicProject) return <ComicPlanner store={store} />
 
   return (
-    <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}${focusedWriting.enabled ? ' is-focused-writing' : ''}`}>
+    <div ref={containerRef} className={`manuscript-processor flex flex-col h-full bg-[var(--bg-main)] text-[var(--text-main)] overflow-hidden font-serif${fullscreen ? ' is-fullscreen' : ''}`}>
 
       {/* ── Toolbar ─────────────────────────────────────────── */}
-      {focusedWriting.enabled ? (
-        <FocusedWritingShell
+      {activeFinalizedDraft ? (
+        // Transitional reading header for the current activeFinalizedDraft
+        // swap — step 8 replaces this whole branch with FinalizedReader as a
+        // proper full-screen reader over the editor (Esc exits back to Edit)
+        // per the handoff spec's three-modes work; this preserves today's
+        // working "view a finalized draft" behavior in the meantime rather
+        // than dropping it while that's still unbuilt.
+        <div className="ms-topbar font-sans" data-tour="manuscript-toolbar">
+          <div className="ms-topbar-zone ms-topbar-zone-left">
+            <button type="button" className="ms-topbar-btn" onClick={() => setReaderDraft({ projectId: null, draftId: null })}>
+              ← Working draft
+            </button>
+            <span className="ms-topbar-crumb-title">{decodeHtmlEntities(activeFinalizedDraft.title) || 'Final draft'}</span>
+          </div>
+          <div className="ms-topbar-zone ms-topbar-zone-mid">
+            <div className="ms-modes" role="group" aria-label="Finalized reader view">
+              <button type="button" className={finalizedReaderView === 'scroll' ? 'is-on' : ''} onClick={() => setFinalizedReaderView('scroll')}>Scroll</button>
+              <button type="button" className={finalizedReaderView === 'pages' ? 'is-on' : ''} onClick={() => { setFinalizedReaderView('pages'); setFinalizedPageIndex(0) }}>Pages</button>
+            </div>
+          </div>
+          <div className="ms-topbar-zone ms-topbar-zone-tools">
+            {finalizedDrafts.length > 1 && (
+              <select
+                className="ms-toolbar-select"
+                value={readerDraftId || ''}
+                onChange={event => {
+                  setReaderDraft({ projectId: activeNovel?.id || null, draftId: event.target.value || null })
+                  setFinalizedPageIndex(0)
+                }}
+                title="View a different finalized draft"
+                aria-label="View a different finalized draft"
+              >
+                {finalizedDrafts.map(draft => (
+                  <option key={draft.id} value={draft.id}>{decodeHtmlEntities(draft.title) || 'Final draft'}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+      ) : (
+        <ManuscriptTopbar
           projectTitle={activeNovel?.title}
+          breadcrumbPath={breadcrumbPath}
+          acts={acts}
+          chapters={chapters}
+          scenes={scenes}
+          labels={labels}
+          onSelectScene={handleSelectScene}
+          railCollapsed={railCollapsed}
+          onToggleRail={handleToggleRail}
+          mode={mode}
+          onSetMode={handleSetMode}
           saveState={saveState}
           wordCount={totalWordCount}
-          breadcrumb={activeChapter || activeScene
-            ? [activeChapter ? getChapterTitle(activeChapter) : null, activeScene?.title || labels.level3].filter(Boolean).join(' / ')
-            : ''}
-          activePanelId={activeSidebarTab}
-          onSetPanel={setActiveSidebarTab}
-          onExit={() => focusedWriting.setEnabled(false)}
-          pageZoom={focusedWriting.pageZoom}
-          onPageZoomChange={focusedWriting.setPageZoom}
-        />
-      ) : (
-      <div data-tour="manuscript-toolbar" className="ms-toolbar font-sans flex items-center gap-2 flex-shrink-0 px-3">
-
-        {!activeFinalizedDraft && (
-          <>
-            {/* Template picker */}
-            <button
-              onClick={() => setTemplateModalOpen(true)}
-              className="ms-toolbar-btn"
-              title="Choose a structural template"
-            >
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="0.9" y="0.9" width="3.5" height="3.5" rx="0.8" />
-                <rect x="6.6" y="0.9" width="3.5" height="3.5" rx="0.8" />
-                <rect x="0.9" y="6.6" width="3.5" height="3.5" rx="0.8" />
-                <rect x="6.6" y="6.6" width="3.5" height="3.5" rx="0.8" />
-              </svg>
-              Template
-            </button>
-
-            {/* Import */}
-            <button
-              onClick={() => setImportModalOpen(true)}
-              className="ms-toolbar-btn"
-              title={importTitle}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Import
-            </button>
-
-            <div className="w-px h-4 bg-[var(--border)] mx-1" />
-          </>
-        )}
-
-        {/* Save state */}
-        <SaveIndicator state={saveState} />
-
-        {/* Word count */}
-        <span data-tour="manuscript-word-count" className="ms-toolbar-wordcount">
-          {totalWordCount > 0 ? `${totalWordCount.toLocaleString()} words` : 'No content yet'}
-        </span>
-
-        {isScriptProject && !activeFinalizedDraft && (
-          <span
-            className="ms-toolbar-badge"
-            title="Readable script export is available; industry formatting is still in progress."
-          >
-            Script beta
-          </span>
-        )}
-
-        {sceneConflicts.length > 0 && (
-          <button
-            type="button"
-            className="ms-toolbar-conflict-btn"
-            onClick={() => setConflictReviewOpen(true)}
-            title="A scene was edited in two browser tabs at once — both versions were kept"
-          >
-            ⚠ {sceneConflicts.length} conflict {sceneConflicts.length === 1 ? 'copy' : 'copies'}
-          </button>
-        )}
-
-        <div className="flex-1" />
-
-        {!activeFinalizedDraft && (
-          <button
-            type="button"
-            onClick={() => setCatalogueOpen(true)}
-            className="ms-toolbar-btn"
-            title="Retire or restore manuscript copies"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7h18" /><path d="M5 7l1 13h12l1-13" /><path d="M9 7V4h6v3" /><path d="M10 12h4" />
-            </svg>
-            Catalogue
-          </button>
-        )}
-
-        {isNovelProject && finalizedDrafts.length > 0 && (
-          <select
-            className="ms-toolbar-select"
-            value={readerDraftId || ''}
-            onChange={event => {
-              setReaderDraft({ projectId: activeNovel?.id || null, draftId: event.target.value || null })
-              setFinalizedPageIndex(0)
-            }}
-            title="View a finalized draft"
-            aria-label="View a finalized draft"
-          >
-            <option value="">Working draft</option>
-            {finalizedDrafts.map(draft => (
-              <option key={draft.id} value={draft.id}>
-                {decodeHtmlEntities(draft.title) || 'Final draft'}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {isNovelProject && !activeFinalizedDraft && (
-          <button
-            onClick={handleFinaliseDraft}
-            className="ms-toolbar-btn"
-            title="Copy this manuscript into an uneditable reader view"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />
-              <path d="M8 7h8" /><path d="M8 11h6" />
-            </svg>
-            Finalise
-          </button>
-        )}
-
-        {activeFinalizedDraft && (
-          <div className="ms-toolbar-segment" role="group" aria-label="Finalized reader view">
-            <button
-              type="button"
-              className={finalizedReaderView === 'scroll' ? 'is-active' : ''}
-              onClick={() => setFinalizedReaderView('scroll')}
-            >
-              Scroll
-            </button>
-            <button
-              type="button"
-              className={finalizedReaderView === 'pages' ? 'is-active' : ''}
-              onClick={() => {
-                setFinalizedReaderView('pages')
-                setFinalizedPageIndex(0)
-              }}
-            >
-              Pages
-            </button>
-          </div>
-        )}
-
-        {/* Search */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setSearchOpen(v => !v)}
-            className={`ms-toolbar-btn${searchOpen ? ' is-active' : ''}`}
-            title="Search and replace across all scenes"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-            Search
-          </button>
-        )}
-
-        {/* Pacing */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setPacingOpen(v => !v)}
-            className={`ms-toolbar-btn${pacingOpen ? ' is-active' : ''}`}
-            title="Pacing chart — word count by scene or chapter"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M8 17V13M12 17v-6M16 17V9" />
-            </svg>
-            Pacing
-          </button>
-        )}
-
-        {/* Notes toggle — duplicates the mobile bottom tab bar's Notes tab, so it's hidden there */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setActiveSidebarTab(v => v === 'notes' ? null : 'notes')}
-            className={`ms-toolbar-btn ms-toolbar-btn-notes${activeSidebarTab === 'notes' ? ' is-active' : ''}`}
-            title="Scene notes"
-          >
-            Notes{activeScene?.notes?.length ? ` (${activeScene.notes.length})` : ''}
-          </button>
-        )}
-
-        {/* AI assistant — duplicates the mobile bottom tab bar's AI tab, so it's hidden there */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => setActiveSidebarTab(v => v === 'ai' ? null : 'ai')}
-            className={`ms-toolbar-btn ms-toolbar-btn-ai${activeSidebarTab === 'ai' ? ' is-active' : ''}`}
-            title="AI writing assistant"
-          >
-            <AIStar size={11} />
-            AI
-          </button>
-        )}
-
-        {/* Export */}
-        {!activeFinalizedDraft && (
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="ms-toolbar-btn disabled:opacity-50"
-            title={exportTitle}
-          >
-            {exporting ? 'Exporting…' : (
-              <span className="flex items-center gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                {exportButtonLabel}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Fullscreen toggle */}
-        {!activeFinalizedDraft && (
-          <ManuscriptZoomControl
-            pageZoom={focusedWriting.pageZoom}
-            onPageZoomChange={focusedWriting.setPageZoom}
-          />
-        )}
-
-        {!activeFinalizedDraft && (
-          <button
-            onClick={() => { setActiveSidebarTab(null); focusedWriting.setEnabled(true) }}
-            className="ms-toolbar-btn"
-            title="Focused writing mode"
-            aria-label="Enter focused writing mode"
-          >
-            Focus
-          </button>
-        )}
-
-        <button
-          onClick={toggleFullscreen}
-          className="ms-toolbar-btn"
-          title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
-          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {fullscreen ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M4.5 1.5H1.5v3M7.5 1.5h3v3M4.5 10.5H1.5v-3M7.5 10.5h3v-3" />
-            </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M1.5 4.5V1.5h3M10.5 4.5V1.5h-3M1.5 7.5v3h3M10.5 7.5v3h-3" />
-            </svg>
+          aiOpen={surfaceId === 'ai'}
+          onToggleAI={() => handleToggleSurface('ai')}
+          inspectorOpen={inspectorOpen}
+          onToggleInspector={() => setInspectorOpen(v => {
+            const next = !v
+            if (next) setSurfaceId(null)
+            return next
+          })}
+          hideAIAndInspector={mode !== 'edit'}
+          onOverflowAction={handleOverflowAction}
+          conflictCount={sceneConflicts.length}
+          onOpenConflicts={() => setConflictReviewOpen(true)}
+          fullscreen={fullscreen}
+          onToggleFullscreen={toggleFullscreen}
+          zoomControl={<ManuscriptZoomControl pageZoom={pageZoom} onPageZoomChange={handlePageZoomChange} />}
+          scriptBetaBadge={isScriptProject && (
+            <span className="ms-toolbar-badge" title="Readable script export is available; industry formatting is still in progress.">
+              Script beta
+            </span>
           )}
-        </button>
-      </div>
+          overflowItemTitles={{ import: importTitle, export: exportTitle }}
+        />
       )}
 
       {/* ── Body: writing area + right sidebar ──────────────── */}
@@ -1027,21 +1149,95 @@ export default function Manuscript({ store, userId, membership = null }) {
             onPageIndexChange={setFinalizedPageIndex}
           />
         </div>
+      ) : mode === 'final' ? (
+        // Finalised MODE (not activeFinalizedDraft above, a saved snapshot —
+        // this is the live current manuscript, read-only, rail/inspector/
+        // surface all hidden per the mode table). Its own Manuscript/Book
+        // switch sits next to Export, per spec §8.
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="ms-topbar font-sans">
+            <div className="ms-topbar-zone ms-topbar-zone-left">
+              <div className="ms-modes" role="group" aria-label="Finalised view">
+                <button type="button" className={finalisedSubView === 'manuscript' ? 'is-on' : ''} onClick={() => setFinalisedSubView('manuscript')}>Manuscript</button>
+                <button type="button" className={finalisedSubView === 'book' ? 'is-on' : ''} onClick={() => setFinalisedSubView('book')}>Book</button>
+              </div>
+            </div>
+            <div className="ms-topbar-zone ms-topbar-zone-tools">
+              <button type="button" className="ms-topbar-btn" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting…' : exportButtonLabel}
+              </button>
+            </div>
+          </div>
+          {!isNovelProject ? (
+            <div className="ms-insp-empty">Finalised mode's read view is available for novel-type projects.</div>
+          ) : finalisedSubView === 'book' ? (
+            <ManuscriptBookView draft={liveFinalizedDraft} projectTitle={activeNovel?.title} />
+          ) : (
+            <FinalizedReader draft={liveFinalizedDraft} viewMode="scroll" pageIndex={0} onPageIndexChange={() => {}} />
+          )}
+        </div>
       ) : (
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
+
+        {/* Left rail. Write mode's rail defaults to
+            the spine on entry (see handleSetMode) but stays user-togglable
+            ("expandable" per the mode table); Finalised hides it entirely,
+            handled by the branch above rather than a prop here. */}
+        {(
+          <ManuscriptRail
+            acts={acts}
+            chapters={chapters}
+            scenes={scenes}
+            addAct={addAct}
+            addChapter={addChapter}
+            addScene={addScene}
+            updateAct={updateAct}
+            updateChapter={updateChapter}
+            updateScene={updateScene}
+            deleteAct={deleteAct}
+            deleteChapter={deleteChapter}
+            deleteScene={deleteScene}
+            moveAct={moveAct}
+            moveChapter={moveChapter}
+            moveScene={moveScene}
+            activeSceneId={activeSceneId}
+            onSelectScene={handleSelectScene}
+            onSelectChapter={handleSelectChapter}
+            labels={labels}
+            totalWordCount={totalWordCount}
+            collapsed={railCollapsed && !isMobileBand}
+            onToggleCollapsed={handleToggleRail}
+            mobileSheetOpen={railSheetOpen}
+          />
+        )}
 
         {/* Writing area */}
         <main ref={scrollContainerRef} data-tour="manuscript-editor" className="manuscript-page ms-scroll-container workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
           <div
             className="manuscript-document mx-auto py-16 px-6 md:px-12"
             style={{
-              zoom: focusedWriting.pageZoom,
-              // The base 960px column is tuned for the default 19px font. Scale it up with
-              // larger text sizes so a bigger font still gets a sensible line length instead
-              // of the column staying capped and wasting the extra width the page has to give.
-              // min(100%, …) keeps this from fighting the mobile full-width override below 640px,
-              // since inline styles otherwise take precedence over that media query.
-              maxWidth: `min(100%, ${Math.round(Math.max(960, 960 * (formatSettings.fontSize / 19)))}px)`,
+              zoom: pageZoom,
+              // Prose width is shared between Write and Edit via --ms-prose-w
+              // (see .ms-scene-body/.ms-scene-body--write in index.css) so the
+              // line length never changes between modes -- Edit's document is
+              // simply PROSE_GUTTER_RESERVE px wider than Write's, and that
+              // extra width belongs to the note gutter, not the prose column.
+              // The 1080 base is tuned to read as "nearly the whole page" on a
+              // typical wide laptop/desktop screen rather than a traditional
+              // narrow reading column, per an explicit request, while still
+              // leaving enough room next to it for the gutter (see
+              // PROSE_GUTTER_RESERVE) to actually fit on a common ~1920px
+              // screen with both the rail and inspector open -- a wider base
+              // reads nicer alone but pushes the gutter's container-query
+              // drop-out threshold past what most desktop screens can offer.
+              // Still scales with font size like before so bigger text keeps
+              // a sensible measure instead of a fixed character count
+              // regardless of size.
+              // min(100%, …) keeps this from fighting the mobile full-width
+              // override below 640px, since inline styles otherwise take
+              // precedence over that media query.
+              '--ms-prose-w': `${proseWidth}px`,
+              maxWidth: `min(100%, ${proseWidth + MANUSCRIPT_DOC_PADDING + (mode === 'write' ? 0 : PROSE_GUTTER_RESERVE)}px)`,
             }}
           >
 
@@ -1081,11 +1277,16 @@ export default function Manuscript({ store, userId, membership = null }) {
 
               if (item.type === 'chapter') return (
                 <div key={`chap-${item.chap.id}`} id={`ms-chap-${item.chap.id}`} className="pt-14 pb-8 text-center font-sans">
-                  <h2 className="text-[var(--accent)] text-xs font-black uppercase tracking-[0.5em] mb-1 opacity-80">
+                  {/* No opacity utility on either label below: axe flagged the
+                      accent heading at 4.07:1 (needs 4.5:1) with opacity-80,
+                      and --text-muted is already tuned to the AA floor on its
+                      own (see .gs-snippet-label's 2026-09-02 fix) — stacking
+                      opacity-70 on it here would fail the same way. */}
+                  <h2 className="text-[var(--accent)] text-xs font-black uppercase tracking-[0.5em] mb-1">
                     {getChapterTitle(item.chap)}
                   </h2>
                   {item.chap.title && !item.chap.title.toLowerCase().startsWith(labels.level2.toLowerCase()) && (
-                    <p className="text-[var(--text-muted)] text-sm italic mt-1 opacity-70">{item.chap.title}</p>
+                    <p className="text-[var(--text-muted)] text-sm italic mt-1">{item.chap.title}</p>
                   )}
                   <div className="w-8 h-px bg-[var(--border)] mx-auto mt-4 rounded-full" />
                   {!item.hasScenes && (
@@ -1160,28 +1361,22 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onFocus={() => setActiveSceneId(scene.id)}
                         entityMap={entityMap}
                         onEntityClick={handleEntityClick}
-	                        onOpenNotes={() => setActiveSidebarTab('notes')}
+	                        onOpenNotes={handleOpenNotesInspector}
 	                        onNoteClick={handleNoteClick}
 	                        highlightedNoteSeq={highlightedNoteSeq}
 	                        formatSettings={formatSettings}
-                        characterNames={characterNames}
-                        locationNames={locationNames}
                         onPersistDraft={handlePersistDraft}
                         onLiveContentChange={handleLiveContentChange}
                         onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
-                        onOpenVersionHistory={setVersionHistorySceneId}
+                        onOpenVersionHistory={id => { setVersionHistorySceneId(id); handleToggleSurface('history') }}
+                        onOpenSceneDetails={handleOpenSceneDetails}
+                        onAskAI={handleAskAI}
+                        mode={mode === 'write' ? 'write' : 'edit'}
                         projectType={activeNovel?.type || 'novel'}
-                        // Reverted: enabling the continuous per-keystroke comfort-scroll
-                        // (useCaretComfortScroll's 'input'-driven centering) for the regular
-                        // editor made things *worse*, not better — it re-centers on every
-                        // keystroke during completely normal typing, not just after a
-                        // click/Enter jump, which read as constant unwanted scrolling. Back to
-                        // Focused-Writing-only for the continuous behavior; the click/Enter
-                        // jump itself is being root-caused separately (see SceneEditor.jsx).
-                        caretFollowEnabled={focusedWriting.enabled && focusedWriting.caretFollow}
+                        caretFollowEnabled={false}
                         scrollContainerRef={scrollContainerRef}
-                        pageZoom={focusedWriting.pageZoom}
-                        keepEditingOnExternalBlur={activeSidebarTab === 'ai'}
+                        pageZoom={pageZoom}
+                        keepEditingOnExternalBlur={surfaceId === 'ai'}
                       />
                     </SceneSlot>
 
@@ -1204,67 +1399,107 @@ export default function Manuscript({ store, userId, membership = null }) {
           </div>
         </main>
 
-        {/* Right writing sidebar */}
-        <WritingSidebar
-          focusedMode={focusedWriting.enabled}
-          activePanelId={activeSidebarTab}
-          onSetPanel={setActiveSidebarTab}
-          acts={acts}
-          chapters={chapters}
-          scenes={scenes}
-          addAct={addAct}
-          addChapter={addChapter}
-          addScene={addScene}
-          updateAct={updateAct}
-          updateChapter={updateChapter}
-          updateScene={updateScene}
-          deleteAct={deleteAct}
-          deleteChapter={deleteChapter}
-          deleteScene={deleteScene}
-          moveAct={moveAct}
-          moveChapter={moveChapter}
-          moveScene={moveScene}
-          activeSceneId={activeSceneId}
-          onSelectScene={handleSelectScene}
-          onSelectChapter={handleSelectChapter}
-          labels={labels}
-          totalWordCount={totalWordCount}
-          writingGoals={writingGoals}
-          onUpdateGoals={handleUpdateGoals}
+        {/* Inspector — Scene/Notes/Catalogue/Format/Progress. */}
+        {inspectorOpen && (
+          <ManuscriptInspector
+            activeTab={inspectorTab}
+            onSetTab={setInspectorTab}
+            onClose={() => setInspectorOpen(false)}
+            scene={activeScene}
+            onUpdateScene={updateScene}
+            characterNames={characterNames}
+            locationNames={locationNames}
+            entityMap={entityMap}
+            onEntityClick={handleEntityClick}
+            characters={characters}
+            locations={locations}
+            factions={factions}
+            currentYear={currentYear}
+            loreEntries={loreEntries}
+            worldHistory={worldHistory?.length ? worldHistory : timeline}
+            selectedCatalogueEntity={selectedCatalogueEntity}
+            onOpenEntitySection={handleOpenEntitySection}
+            highlightedNoteSeq={highlightedNoteSeq}
+            formatSettings={formatSettings}
+            onFormatChange={handleFormatChange}
+            scenes={scenes}
+            chapters={chapters}
+            writingGoals={writingGoals}
+            onUpdateGoals={handleUpdateGoals}
+          />
+        )}
+
+        {/* Surface — AI/Search/History/Finalise, one at a time. Sits in normal
+            flex flow now (see .ms-surface in index.css) rather than
+            absolutely overlaying the inspector — the two are mutually
+            exclusive (never both open, see handleToggleSurface etc. above),
+            so there's nothing left to overlay, and opening either now makes
+            room for itself the same way. */}
+        <ManuscriptSurface
+          activeSurface={surfaceId}
+          onClose={handleCloseSurface}
+          contextLabel={activeScene ? (activeScene.title && activeScene.title !== 'Scene' ? activeScene.title : labels.level3) : undefined}
+          activeScene={activeSceneForAI}
           activeNovel={activeNovel}
           characters={characters}
           locations={locations}
-          loreEntries={loreEntries}
-          factions={factions}
-          timeline={timeline}
-          worldHistory={worldHistory}
-          ideaEntries={ideaEntries}
-          storySchedule={storySchedule}
-          rpgCharacters={rpgCharacters}
-          onOpenReferenceEntry={handleOpenReferenceEntry}
-          formatSlot={<FormatContent settings={formatSettings} onChange={handleFormatChange} />}
-          notesSlot={
-            <NotesPanel
-	              scene={activeScene}
-	              onUpdateScene={updateScene}
-	              highlightedSeq={highlightedNoteSeq}
-	            />
-          }
-	          aiSlot={
-	            <AISuggestionPanel
-	              activeScene={activeSceneForAI}
-	              activeNovel={activeNovel}
-	              characters={characters}
-	              locations={locations}
-	              selectedText={activeAISelectionText}
-	              onAppendToScene={handleAppendToScene}
-	              userId={userId}
-	              membership={membership}
-            />
-          }
+          selectedText={activeAISelectionText}
+          onAppendToScene={handleAppendToScene}
+          onReplaceSelection={handleReplaceSelection}
+          userId={userId}
+          membership={membership}
+          scenes={scenes}
+          chapters={chapters}
+          acts={acts}
+          activeNovelId={activeNovel?.id}
+          onOpenScene={handleSelectScene}
+          onReplaceInScene={handleReplaceInScene}
+          historyScene={scenes.find(s => s.id === versionHistorySceneId) ?? null}
+          onRestoreVersion={handleRestoreVersion}
+          labels={labels}
+          finaliseStats={manuscriptCopyStats}
+          isNovelProject={isNovelProject}
+          finalizedDrafts={finalizedDrafts}
+          onFinalise={handleFinaliseDraft}
+          onOpenFinalizedDraft={(draftId) => {
+            setReaderDraft({ projectId: activeNovel?.id || null, draftId })
+            setFinalizedReaderView('pages')
+            setFinalizedPageIndex(0)
+            handleCloseSurface()
+          }}
+          onOpenCatalogue={() => setCatalogueOpen(true)}
+          onExport={handleExport}
+          exporting={exporting}
+          exportButtonLabel={exportButtonLabel}
+          onToast={toast}
         />
       </div>
       )}
+
+      {/* Mobile-only (≤900px, CSS-hidden above that) bottom bar — hidden
+          during focused writing and while viewing a finalized draft, same
+          as the desktop chrome those two states already hide. */}
+      {!activeFinalizedDraft && (
+        <nav className="ms-tabbar font-sans" aria-label="Manuscript navigation">
+          <button type="button" className={mobileTab === 'outline' ? 'is-on' : ''} onClick={() => handleMobileTab('outline')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+            Outline
+          </button>
+          <button type="button" className={mobileTab === 'write' ? 'is-on' : ''} onClick={() => handleMobileTab('write')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M4 20h4l10-10-4-4L4 16z" /></svg>
+            Write
+          </button>
+          <button type="button" className={mobileTab === 'inspect' ? 'is-on' : ''} onClick={() => handleMobileTab('inspect')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></svg>
+            Inspector
+          </button>
+          <button type="button" className={mobileTab === 'ai' ? 'is-on' : ''} onClick={() => handleMobileTab('ai')}>
+            <AIStar size={18} />
+            AI
+          </button>
+        </nav>
+      )}
+      {toastNode}
 
       {/* Template modal */}
       {templateModalOpen && (
@@ -1295,27 +1530,9 @@ export default function Manuscript({ store, userId, membership = null }) {
         />
       )}
 
-      {/* Version history modal */}
-      {versionHistorySceneId && (
-        <SceneVersionHistory
-          scene={scenes.find(s => s.id === versionHistorySceneId) ?? null}
-          onRestore={handleRestoreVersion}
-          onClose={() => setVersionHistorySceneId(null)}
-        />
-      )}
-
-      {/* Global search & replace */}
-      {searchOpen && (
-        <ManuscriptSearch
-          scenes={scenes}
-          chapters={chapters}
-          acts={acts}
-          activeNovelId={activeNovel?.id}
-          onOpenScene={handleSelectScene}
-          onReplaceInScene={handleReplaceInScene}
-          onClose={() => setSearchOpen(false)}
-        />
-      )}
+      {/* Version history and Search & replace are no longer separate modals —
+          both now render embedded inside ManuscriptSurface above
+          (surfaceId === 'history' / 'search'), sharing its chrome. */}
 
       {/* Pacing chart */}
       {pacingOpen && (

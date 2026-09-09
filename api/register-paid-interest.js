@@ -1,10 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
+import { checkDurableRateLimit, maybeCleanupRateLimitLog } from '../src/utils/durableRateLimit.js'
+import { applyCors } from './_lib/cors.js'
+import { getMembership } from '../src/utils/membership.js'
 
 const MAX_LENGTHS = { name: 120, email: 254, projectType: 160, message: 1200, plan: 80, planLabel: 120, page: 240 }
 const ADMIN_EMAIL = 'yourownworld.admin@gmail.com'
 const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
+const RATE_LIMIT_WINDOW_MINUTES = RATE_LIMIT_WINDOW_MS / (60 * 1000)
+
+// In-memory per-IP sliding-window rate limit. Serverless instances don't
+// share memory, so this resets on every cold instance — kept only as a
+// defense-in-depth floor for a deployment missing Supabase env vars (see
+// `isRateLimited` below), not as the primary abuse boundary anymore.
+// Audit finding #23 (docs/YOW_CODE_AUDIT_2026-09-01.md): this used to be
+// the *only* limiter for this route.
 const rateBuckets = new Map()
 
 export function getMissingEnv(required, env = process.env) {
@@ -23,6 +34,27 @@ export function checkRateLimit(ip, now = Date.now()) {
     }
   }
   return true
+}
+
+// Durable per-IP rate limit backed by Supabase (audit finding #23), with
+// the in-memory limiter above as a fallback only when Supabase isn't
+// configured — never silently unprotected, but a real deployment always
+// gets the durable check since env vars are expected to be set. Uses the
+// same `getSupabaseAdminConfig` env-lookup this route already relies on
+// for the beta-tester grant below, rather than a second way to find them.
+export async function isRateLimited(ip, env = process.env) {
+  const { url, serviceRoleKey } = getSupabaseAdminConfig(env)
+  if (!url || !serviceRoleKey) return !checkRateLimit(ip)
+
+  const supabase = createClient(url, serviceRoleKey)
+  await maybeCleanupRateLimitLog(supabase)
+  const allowed = await checkDurableRateLimit(supabase, {
+    bucket: 'register-paid-interest',
+    rateKey: ip,
+    max: RATE_LIMIT_MAX,
+    windowMinutes: RATE_LIMIT_WINDOW_MINUTES,
+  })
+  return !allowed
 }
 
 export function validatePaidInterestBody(body) {
@@ -47,17 +79,20 @@ export function getSupabaseAdminConfig(env = process.env) {
   }
 }
 
+export function canGrantBetaAccess(user, env = process.env) {
+  const metadata = user.app_metadata || {}
+  return !getMembership(user).isPaid && !metadata.beta_notice_started_at
+    && !metadata.access_revoked_at && env.YOW_BETA_ENROLLMENT_CLOSED !== 'true'
+}
+
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim()
-  if (!checkRateLimit(ip)) return res.status(429).json({ error: 'Too many submissions. Please try again later.' })
+  if (await isRateLimited(ip)) return res.status(429).json({ error: 'Too many submissions. Please try again later.' })
 
   const invalid = validatePaidInterestBody(req.body)
   if (invalid) return res.status(400).json({ error: invalid })
@@ -73,6 +108,7 @@ export default async function handler(req, res) {
   const { name = '', email, projectType = '', message = '', plan = '', planLabel = 'Paid plan', page = '' } = req.body
   const token = getBearerToken(req)
   let authedUser = null
+  let betaTester = false
 
   if (token) {
     const { url, serviceRoleKey } = getSupabaseAdminConfig()
@@ -93,9 +129,15 @@ export default async function handler(req, res) {
     if (!error && data?.user) {
       authedUser = data.user
       const existingAppMeta = authedUser.app_metadata || {}
-      const existingUserMeta = authedUser.user_metadata || {}
       const now = new Date().toISOString()
-      const { error: updateError } = await supabase.auth.admin.updateUserById(authedUser.id, {
+      // app_metadata only. This previously also wrote the same beta_tester
+      // fields into user_metadata, which the account owner can edit directly
+      // via the client SDK — redundant at best, a self-service entitlement
+      // bypass at worst if any code ever again trusted user_metadata for
+      // entitlement. See docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
+      const membership = getMembership(authedUser)
+      const canGrantBeta = canGrantBetaAccess(authedUser)
+      const { error: updateError } = canGrantBeta ? await supabase.auth.admin.updateUserById(authedUser.id, {
         app_metadata: {
           ...existingAppMeta,
           subscription_status: 'active',
@@ -105,12 +147,8 @@ export default async function handler(req, res) {
           beta_tester_source: 'paid_plan_interest',
           beta_tester_requested_plan: plan || null,
         },
-        user_metadata: {
-          ...existingUserMeta,
-          beta_tester: true,
-          beta_tester_requested_plan: plan || null,
-        },
-      })
+      }) : { error: null }
+      betaTester = canGrantBeta || membership.isBetaTester
       if (updateError) {
         console.error('[register-paid-interest] metadata update failed:', updateError)
         return res.status(500).json({ error: 'Interest was received, but beta access could not be activated.' })
@@ -145,5 +183,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: `Failed to send interest email: ${err.message}` })
   }
 
-  return res.status(200).json({ ok: true, betaTester: !!authedUser })
+  return res.status(200).json({ ok: true, betaTester })
 }
