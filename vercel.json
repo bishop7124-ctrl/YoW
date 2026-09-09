@@ -15,8 +15,6 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/beta-disclaimer/", "destination": "/beta-disclaimer/index.html" },
-    { "source": "/founders/", "destination": "/founders/index.html" },
-    { "source": "/founders/:slug/", "destination": "/founders/:slug/index.html" },
     { "source": "/about/", "destination": "/about/index.html" },
     { "source": "/ai-overview/", "destination": "/ai-overview/index.html" },
     { "source": "/worldbuilding-software/", "destination": "/worldbuilding-software/index.html" },

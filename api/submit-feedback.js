@@ -1,13 +1,20 @@
+import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
+import { checkDurableRateLimit, maybeCleanupRateLimitLog } from '../src/utils/durableRateLimit.js'
 
 // Field caps keep a scripted client from stuffing megabytes into the owner inbox.
 const MAX_LENGTHS = { title: 200, message: 8000, category: 100, email: 254, name: 120 }
 
-// Per-IP sliding-window rate limit. Serverless instances don't share memory, so
-// this is best-effort per warm instance — enough to stop naive flood scripts
-// without adding a storage dependency.
 const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
+const RATE_LIMIT_WINDOW_MINUTES = RATE_LIMIT_WINDOW_MS / (60 * 1000)
+
+// In-memory per-IP sliding-window rate limit. Serverless instances don't
+// share memory, so this resets on every cold instance — kept only as a
+// defense-in-depth floor for a deployment missing Supabase env vars (see
+// `isRateLimited` below), not as the primary abuse boundary anymore.
+// Audit finding #23 (docs/YOW_CODE_AUDIT_2026-09-01.md): this used to be
+// the *only* limiter for this route.
 const rateBuckets = new Map()
 
 export function checkRateLimit(ip, now = Date.now(), buckets = rateBuckets) {
@@ -24,6 +31,26 @@ export function checkRateLimit(ip, now = Date.now(), buckets = rateBuckets) {
   return true
 }
 
+// Durable per-IP rate limit backed by Supabase (audit finding #23), with
+// the in-memory limiter above as a fallback only when Supabase isn't
+// configured — never silently unprotected, but a real deployment always
+// gets the durable check since env vars are expected to be set.
+export async function isRateLimited(ip, env = process.env) {
+  const url = env.SUPABASE_URL || env.VITE_SUPABASE_URL
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceRoleKey) return !checkRateLimit(ip)
+
+  const supabase = createClient(url, serviceRoleKey)
+  await maybeCleanupRateLimitLog(supabase)
+  const allowed = await checkDurableRateLimit(supabase, {
+    bucket: 'submit-feedback',
+    rateKey: ip,
+    max: RATE_LIMIT_MAX,
+    windowMinutes: RATE_LIMIT_WINDOW_MINUTES,
+  })
+  return !allowed
+}
+
 export function validateFeedbackBody(body) {
   const { type, title, message } = body || {}
   if (!type || !title?.trim() || !message?.trim()) return 'Missing required fields.'
@@ -38,7 +65,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim()
-  if (!checkRateLimit(ip)) {
+  if (await isRateLimited(ip)) {
     return res.status(429).json({ error: 'Too many submissions. Please try again later.' })
   }
 
