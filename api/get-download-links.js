@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_lib/cors.js'
+import { getMembership } from '../src/utils/membership.js'
 
 // Vercel API route — desktop app download delivery.
 // Called by DownloadPage.jsx. The installer URLs live only in server env vars
@@ -7,7 +8,6 @@ import { applyCors } from './_lib/cors.js'
 // shipped in the client bundle; entitlement is verified server-side before
 // they are returned.
 
-const DESKTOP_ENTITLED_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
 
 export default async function handler(req, res) {
   applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'authorization, content-type' })
@@ -25,9 +25,7 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const serverMetadata = user.app_metadata || {}
-    const plan = serverMetadata.subscription_plan || (serverMetadata.beta_tester === true ? 'beta_tester' : null)
-    if (!DESKTOP_ENTITLED_PLAN_KEYS.has(plan)) {
+    if (!getMembership(user).canDownloadDesktop) {
       return res.status(403).json({ error: 'Your account does not include desktop access.' })
     }
 

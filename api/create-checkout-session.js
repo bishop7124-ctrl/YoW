@@ -86,6 +86,10 @@ export default async function handler(req, res) {
       sessionParams.subscription_data = { metadata: { user_id: user.id, plan } }
     }
 
+    if (planConfig.mode === 'payment') {
+      sessionParams.payment_intent_data = { metadata: { user_id: user.id, plan } }
+    }
+
     const session = await stripe.checkout.sessions.create(sessionParams)
     return res.status(200).json({ url: session.url })
   } catch (err) {
