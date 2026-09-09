@@ -3,6 +3,7 @@ import { HOSTING_INCLUDED_YEARS, HOSTING_RENEWAL_FEE_GBP, PLANS, FOUNDER_SLOTS_T
 import BetaInterestModal from '../account/BetaInterestModal'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { usePageMeta } from '../../utils/usePageMeta'
 import './PricingPage.css'
 
@@ -711,6 +712,11 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               />
             ))}
           </div>
+        </section>
+
+        {/* ── Support development ── */}
+        <section aria-label="Support development" style={{ maxWidth: 640, margin: '0 auto', padding: '0 24px 8px' }}>
+          <SupportDevelopmentLink variant="banner" />
         </section>
 
         {/* ── Final CTA ── */}
