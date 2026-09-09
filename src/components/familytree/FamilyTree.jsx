@@ -12,6 +12,7 @@ import {
   validateFamilyLink,
 } from "../../utils/familyRelationships";
 import { extractYear } from "../../utils/characterAge";
+import { getFamilyGenerations } from "../../utils/familyTreeLayout";
 import { UserMediaImage, UserMediaSvgImage } from "../shared/UserMedia";
 
 const NODE_W = 190;
@@ -160,6 +161,13 @@ export default function FamilyTree({ store }) {
   const factionById = useMemo(() => new Map(factions.map(faction => [faction.id, faction])), [factions]);
 
   const focusCharacterId = byId.has(selectedCharacterId) ? selectedCharacterId : characters[0]?.id || "";
+  const [connectionOwnerId, setConnectionOwnerId] = useState(focusCharacterId);
+  if (connectionOwnerId !== focusCharacterId) {
+    setConnectionOwnerId(focusCharacterId);
+    setConnectionForm(newConnectionForm());
+    setConnectionWarnings([]);
+    setConnectionNotice("");
+  }
   const selectedCharacter = byId.get(focusCharacterId) || null;
   const hoveredCharacter = hoveredCharId ? byId.get(hoveredCharId) : null;
   const familyLookups = useMemo(() => buildFamilyLookups(characters, filters), [characters, filters]);
@@ -191,10 +199,8 @@ export default function FamilyTree({ store }) {
     // linked characters follow the selected focal scope.
     return scopedCharacterIds.has(character.id) || !familyLookups.allLinkedCharacterIds.has(character.id);
   }), [characters, familyLookups, filters.includeDeceased, focusCharacterId, scopedCharacterIds]);
-  const layoutById = useMemo(() => new Map(layoutCharacters.map(character => [character.id, character])), [layoutCharacters]);
 
   const getParentIds = useCallback((characterId) => uniqueIds(familyLookups.parentsByChild.get(characterId) || []), [familyLookups]);
-  const getChildIds = useCallback((characterId) => uniqueIds(familyLookups.childrenByParent.get(characterId) || []), [familyLookups]);
   const getPartnerIds = useCallback((characterId) => uniqueIds(familyLookups.partnersByCharacter.get(characterId) || []), [familyLookups]);
 
   useEffect(() => {
@@ -212,63 +218,10 @@ export default function FamilyTree({ store }) {
     });
   };
 
-  const generations = useMemo(() => {
-    const gen = new Map();
-    const childrenByParent = new Map();
-
-    layoutCharacters.forEach((c) => {
-      getParentIds(c.id).forEach((pid) => {
-        if (!layoutById.has(pid)) return;
-        if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
-        if (!childrenByParent.get(pid).includes(c.id)) childrenByParent.get(pid).push(c.id);
-      });
-    });
-
-    const queue = [];
-    layoutCharacters.forEach((c) => {
-      const validParents = getParentIds(c.id).filter((pid) => layoutById.has(pid));
-      if (validParents.length === 0) {
-        gen.set(c.id, 0);
-        queue.push(c.id);
-      }
-    });
-
-    for (let cursor = 0; cursor < queue.length; cursor += 1) {
-      const id = queue[cursor];
-      const base = gen.get(id) ?? 0;
-      (childrenByParent.get(id) || []).forEach((childId) => {
-        const next = base + 1;
-        const current = gen.get(childId);
-        if (current == null || next > current) {
-          gen.set(childId, next);
-          queue.push(childId);
-        }
-      });
-    }
-
-    layoutCharacters.forEach((c) => {
-      if (!gen.has(c.id)) gen.set(c.id, 0);
-    });
-
-    for (let pass = 0; pass < layoutCharacters.length; pass++) {
-      let changed = false;
-      layoutCharacters.forEach((char) => {
-        const hasParents = getParentIds(char.id).some((pid) => layoutById.has(pid));
-        if (hasParents) return;
-        const spouseIds = new Set(getPartnerIds(char.id));
-        const spouseGenerations = [...spouseIds].map((sid) => gen.get(sid)).filter((g) => g != null);
-        if (spouseGenerations.length === 0) return;
-        const nextGen = Math.min(...spouseGenerations);
-        if (gen.get(char.id) !== nextGen) {
-          gen.set(char.id, nextGen);
-          changed = true;
-        }
-      });
-      if (!changed) break;
-    }
-
-    return gen;
-  }, [getParentIds, getPartnerIds, layoutById, layoutCharacters]);
+  const generations = useMemo(
+    () => getFamilyGenerations(layoutCharacters, familyLookups),
+    [familyLookups, layoutCharacters],
+  );
 
   const familySections = useMemo(() => {
     const groups = new Map();
@@ -280,22 +233,19 @@ export default function FamilyTree({ store }) {
 
     const sections = Array.from(groups.entries()).map(([familyGroup, members]) => {
       const label = familyGroup === "unassigned" ? "Ungrouped Characters" : familyGroup;
-      const hasFamilyLink = (member) => {
-        const parentLinked = getParentIds(member.id).some((pid) => layoutById.has(pid));
-        const childLinked = getChildIds(member.id).some((cid) => layoutById.has(cid));
-        const spouseLinked = getPartnerIds(member.id).some((sid) => layoutById.has(sid));
-        return parentLinked || childLinked || spouseLinked;
-      };
+      const hasFamilyLink = (member) => familyLookups.allLinkedCharacterIds.has(member.id);
       const linkedMembers = members.filter(hasFamilyLink);
       const unlinkedMembers = members.filter((member) => !hasFamilyLink(member));
-      const maxGeneration = linkedMembers.reduce((max, m) => Math.max(max, generations.get(m.id) ?? 0), 0);
+      const peopleByGeneration = new Map();
+      linkedMembers.forEach(member => {
+        const generation = generations.get(member.id) ?? 0;
+        if (!peopleByGeneration.has(generation)) peopleByGeneration.set(generation, []);
+        peopleByGeneration.get(generation).push(member);
+      });
       let yCursor = PAD;
       const generationRows = [];
-      if (linkedMembers.length > 0) {
-        Array.from({ length: maxGeneration + 1 }, (_, i) => i).forEach((generation) => {
-          const people = linkedMembers
-            .filter((m) => (generations.get(m.id) ?? 0) === generation);
-          if (people.length === 0) return;
+      if (peopleByGeneration.size > 0) {
+        [...peopleByGeneration.entries()].sort(([left], [right]) => left - right).forEach(([generation, people]) => {
           const rows = Math.max(1, Math.ceil(people.length / treeColumnCount));
           const row = { id: `gen-${generation}`, label: `Generation ${generation + 1}`, generation, people, y: yCursor, rows };
           yCursor += rows * NODE_H + Math.max(0, rows - 1) * ROW_GAP + Y_GAP;
@@ -362,25 +312,6 @@ export default function FamilyTree({ store }) {
         });
       });
 
-      // Center a single child directly under the midpoint of its parents' trunk
-      const parentGroupsSeen = new Map();
-      members.forEach((child) => {
-        const pIds = getParentIds(child.id).filter((pid) => positions.has(pid));
-        if (pIds.length < 2) return;
-        const key = [...pIds].sort().join(",");
-        if (!parentGroupsSeen.has(key)) parentGroupsSeen.set(key, { parentIds: pIds, childIds: [] });
-        parentGroupsSeen.get(key).childIds.push(child.id);
-      });
-      parentGroupsSeen.forEach(({ parentIds, childIds }) => {
-        if (childIds.length !== 1) return;
-        const pCenters = parentIds.map((pid) => positions.get(pid).x + NODE_W / 2);
-        const minParentX = pCenters.reduce((min, value) => Math.min(min, value), Infinity);
-        const maxParentX = pCenters.reduce((max, value) => Math.max(max, value), -Infinity);
-        const trunkX = Math.round((minParentX + maxParentX) / 2);
-        const childPos = positions.get(childIds[0]);
-        positions.set(childIds[0], { ...childPos, x: trunkX - Math.round(NODE_W / 2) });
-      });
-
       const rowWidth = displayRows.reduce((maxWidth, row) => {
           const columns = Math.min(treeColumnCount, Math.max(1, row.people.length));
           return Math.max(maxWidth, PAD * 2 + columns * NODE_W + Math.max(0, columns - 1) * X_GAP);
@@ -399,7 +330,7 @@ export default function FamilyTree({ store }) {
       if (b.familyGroup === "unassigned") return -1;
       return a.label.localeCompare(b.label);
     });
-  }, [generations, getChildIds, getParentIds, getPartnerIds, layoutById, layoutCharacters, treeColumnCount]);
+  }, [familyLookups, generations, getParentIds, getPartnerIds, layoutCharacters, treeColumnCount]);
 
   const jumpToCharacters = (characterId) => {
     if (characterId) setSelectedCharacterId(characterId);
@@ -411,9 +342,9 @@ export default function FamilyTree({ store }) {
     setConnectionWarnings([]);
     setConnectionNotice("");
     setConnectionForm((current) => {
-      if (key !== "role") return { ...current, [key]: value };
+      if (key !== "role") return { ...current, allowUnusual: false, [key]: value };
       const defaultType = value === "partner" ? "legal" : value === "guardian" || value === "ward" ? "chosen" : current.type === "legal" || current.type === "chosen" ? "biological" : current.type;
-      return { ...current, role: value, type: defaultType };
+      return { ...current, role: value, type: defaultType, allowUnusual: false };
     });
   };
 
@@ -433,7 +364,11 @@ export default function FamilyTree({ store }) {
     }
     const source = byId.get(link.sourceCharacterId);
     if (!source) return;
-    saveCharacter({ familyLinks: [...(source.familyLinks || []), link] }, source.id);
+    const savedId = saveCharacter({ familyLinks: [...(source.familyLinks || []), link] }, source.id);
+    if (!savedId) {
+      setConnectionNotice("The relationship could not be saved. Your draft is still here.");
+      return;
+    }
     const targetName = byId.get(connectionForm.targetCharacterId)?.name || "Relative";
     setConnectionNotice(`${targetName} was added as ${connectionForm.role.replace("_", " ")}. The grouped lists below update automatically.`);
     setConnectionForm(newConnectionForm());
@@ -480,6 +415,7 @@ export default function FamilyTree({ store }) {
                 </select>
               </label>
             </div>
+            <p className="text-xs text-[var(--text-muted)]">Views follow the focus character: direct ancestors and descendants, immediate relatives, extended family within three connections, or the full connected dynasty. Standalone characters remain in their own row.</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
               {[
                 ["bloodOnly", "Blood only"],
@@ -617,17 +553,21 @@ export default function FamilyTree({ store }) {
                         return lines;
                       })()}
 
-                      {section.members.map((char) => {
-                        const p1 = section.positions.get(char.id);
-                        if (!p1) return null;
-                        const spouseIds = new Set(getPartnerIds(char.id));
-                        return [...spouseIds]
-                          .filter((sid) => sid > char.id && section.positions.has(sid))
-                          .map((sid) => {
-                            const p2 = section.positions.get(sid);
-                            const partnerLink = (familyLookups.partnersByCharacter.get(char.id) || []).find(partner => partner.id === sid)?.link;
-                            return <line key={`spouse-${char.id}-${sid}`} x1={p1.x + NODE_W} y1={p1.y + NODE_H / 2} x2={p2.x} y2={p2.y + NODE_H / 2} stroke="var(--accent)" strokeWidth="2.2" strokeDasharray={partnerLink?.status === "former" ? "7 4" : undefined} />;
-                          });
+                      {familyLookups.links.filter(link => link.kind !== "parent_child").map(link => {
+                        const source = section.positions.get(link.sourceCharacterId);
+                        const target = section.positions.get(link.targetCharacterId);
+                        if (!source || !target) return null;
+                        const [left, right] = source.x <= target.x ? [source, target] : [target, source];
+                        const sameRow = left.y === right.y;
+                        const dash = link.kind === "guardian" ? "2 4" : link.kind === "sibling" || link.status === "former" ? "7 4" : undefined;
+                        return (
+                          <line key={link.id} data-family-kind={link.kind}
+                            x1={sameRow ? left.x + NODE_W : left.x + NODE_W / 2} y1={left.y + NODE_H / 2}
+                            x2={sameRow ? right.x : right.x + NODE_W / 2} y2={right.y + NODE_H / 2}
+                            stroke={link.kind === "partner" ? "var(--accent)" : "var(--border)"} strokeWidth="2.2" strokeDasharray={dash}>
+                            <title>{`${byId.get(link.sourceCharacterId)?.name} — ${link.kind} (${link.type}, ${link.status}) — ${byId.get(link.targetCharacterId)?.name}`}</title>
+                          </line>
+                        );
                       })}
 
                       {section.members.map((char) => {
@@ -653,8 +593,17 @@ export default function FamilyTree({ store }) {
                           <g
                             key={`node-${char.id}`}
                             className="tree-node"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Focus ${char.name || "Unnamed character"}`}
                             style={{ cursor: "pointer" }}
                             onClick={() => setSelectedCharacterId(char.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setSelectedCharacterId(char.id);
+                              }
+                            }}
                             onMouseEnter={(e) => {
                               updateHoverPosition(e.currentTarget);
                               setHoveredCharId(char.id);
@@ -788,7 +737,7 @@ export default function FamilyTree({ store }) {
                       </div>
                     )}
                     {connectionNotice && (
-                      <p className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-2 py-1.5 text-[10px] text-emerald-200">{connectionNotice}</p>
+                      <p role="status" className="rounded-lg border border-[var(--border)] bg-[var(--bg-main)] px-2 py-1.5 text-xs text-[var(--text-main)]">{connectionNotice}</p>
                     )}
                     <button
                       onClick={saveFamilyConnection}
