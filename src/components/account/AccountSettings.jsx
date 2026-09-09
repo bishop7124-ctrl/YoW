@@ -13,7 +13,8 @@ import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
-import { PROVIDERS, fetchLiveModels } from '../../utils/aiApi'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
+import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, fetchLiveModels } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
   deleteSyncedAiSettings,
@@ -2110,18 +2111,22 @@ function AISettingsPanel({ userId, membership }) {
         </label>
       )}
 
-      {/* Base URL for OpenAI-compatible */}
       {prov?.hasBaseUrl && (
         <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Base URL</p>
-          <input
-            value={cfg.baseUrl || ''}
-            onChange={e => update('baseUrl', e.target.value)}
-            placeholder={PROVIDERS.openai.defaultBaseUrl}
-            className="account-appearance-input"
-            style={{ width: '100%' }}
-          />
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Works with Groq, Together, Mistral, Ollama, and any OpenAI-compatible endpoint.</p>
+          <label htmlFor="named-ai-provider">AI provider</label>
+          <select id="named-ai-provider"
+            value={cfg.baseUrl || PROVIDERS.openai.defaultBaseUrl}
+            onChange={e => {
+              const baseUrl = e.target.value
+              setSettings(prev => ({ ...prev, [active]: { ...prev[active], baseUrl, apiKey: '', model: '' } }))
+              setKeyDrafts(prev => ({ ...prev, [active]: '' }))
+            }}
+            className="account-appearance-input" style={{ width: '100%' }}>
+            {cfg.baseUrl && !NAMED_OPENAI_ENDPOINTS.some(endpoint => endpoint.url === cfg.baseUrl) &&
+              <option value={cfg.baseUrl} disabled>Unsupported saved endpoint — choose a provider</option>}
+            {NAMED_OPENAI_ENDPOINTS.map(endpoint => <option key={endpoint.url} value={endpoint.url}>{endpoint.label}</option>)}
+          </select>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Choose a named provider and use an API key issued by that provider. Custom endpoints are not supported.</p>
         </div>
       )}
 
@@ -3033,7 +3038,7 @@ export default function AccountSettings({
                   {membership.isBetaTester && (
                     <div>
                       <span>Beta notice</span>
-                      <strong>Revoked when beta ends</strong>
+                      <strong>{membership.isBetaNoticeActive ? `${membership.betaDaysRemaining} days remaining` : '30 days of full web access after launch'}</strong>
                     </div>
                   )}
                 </>
@@ -3209,7 +3214,7 @@ export default function AccountSettings({
             )}
 
             {/* Stripe customer portal: cancellation for subscribers, billing history/receipts for one-time purchasers */}
-            {membership.isPaid && !membership.isBetaTester && (
+            {membership.isPaid && (
               <div className="account-actions">
                 <button
                   type="button"
@@ -3235,6 +3240,10 @@ export default function AccountSettings({
               </a>
             </div>}
 
+            <div style={{ marginTop: 18 }}>
+              <SupportDevelopmentLink variant="banner" />
+            </div>
+
             {billingMessage && <p className="account-success">{billingMessage}</p>}
             {billingError && <p className="account-error">{billingError}</p>}
           </section>
@@ -3255,8 +3264,8 @@ export default function AccountSettings({
         planKey={betaInterestPlan?.key}
         planLabel={betaInterestPlan?.label}
         onClose={() => setBetaInterestPlan(null)}
-        onGranted={async () => {
-          setBillingMessage('Beta tester access is active. Full product access is unlocked during beta.')
+        onGranted={async (result) => {
+          setBillingMessage(result?.betaTester ? 'Beta tester access is active. Full product access is unlocked during beta.' : 'Your interest is registered. Your membership has not changed.')
           await refreshUser()
         }}
       />

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getMissingEnv, getSupabaseAdminConfig, validatePaidInterestBody } from '../../api/register-paid-interest.js'
+import { canGrantBetaAccess, getMissingEnv, getSupabaseAdminConfig, validatePaidInterestBody } from '../../api/register-paid-interest.js'
 
 // Supabase mock for the `isRateLimited` durable-limiter tests below. Declared
 // at true module top level (not nested in a describe block) because
@@ -125,5 +125,16 @@ describe('isRateLimited', () => {
     queueResult({ error: null })
     expect(await isRateLimited('3.3.3.3', env)).toBe(false)
     expect(from).toHaveBeenCalledWith('email_action_rate_limits')
+  })
+})
+
+describe('beta enrollment restrictions', () => {
+  const user = app_metadata => ({ created_at: '2020-01-01', app_metadata })
+  it('preserves paid plans and refuses re-enrollment after launch, expiry or downgrade', () => {
+    expect(canGrantBetaAccess(user({ subscription_plan: 'founder' }), {})).toBe(false)
+    expect(canGrantBetaAccess(user({ beta_notice_started_at: '2020-01-01' }), {})).toBe(false)
+    expect(canGrantBetaAccess(user({ access_revoked_at: '2020-01-01' }), {})).toBe(false)
+    expect(canGrantBetaAccess(user({}), { YOW_BETA_ENROLLMENT_CLOSED: 'true' })).toBe(false)
+    expect(canGrantBetaAccess(user({}), {})).toBe(true)
   })
 })
