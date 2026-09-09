@@ -61,6 +61,7 @@ const CONTENT = {
         </Section>
         <Section title="Data storage">
           <P>Your data is stored via Supabase infrastructure (supabase.com). Payments are processed by Stripe — we never store your card details. Neither Supabase nor Stripe is permitted to use your data beyond what is necessary to provide their service to us.</P>
+          <P>In desktop Local Mode, your projects are stored in a local database file on your device. That file is not separately encrypted by YOW — its protection depends on your operating system's own disk encryption (FileVault on Mac, BitLocker on Windows). We recommend enabling full-disk encryption and keeping your device locked when unattended, particularly if you sync backups to a shared or cloud-synced folder.</P>
         </Section>
         <Section title="Cookies">
           <P>See our Cookie Policy for details on how we use browser storage and cookies.</P>
