@@ -39,8 +39,14 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
 
   useEffect(() => { trackEvent('onboarding_wizard_shown') }, [])
 
+  const handleSkip = () => {
+    trackEvent('onboarding_skip', { step: String(step) })
+    onSkip()
+  }
+
   const handleStartSample = () => {
     trackEvent('onboarding_path_chosen', { path: 'sample' })
+    trackEvent('onboarding_sample_started')
     onStartSample()
   }
 
@@ -52,6 +58,7 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
   const handleCreate = () => {
     if (!title.trim() || busy) return
     setBusy(true)
+    trackEvent('project_create_started', { source: 'onboarding_wizard', project_type: type })
     trackEvent('onboarding_project_created', { project_type: type })
     const novel = store.addNovel({
       title: title.trim(),
@@ -63,10 +70,14 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
       seriesId: null,
     })
     if (novel) onOpenProject(novel.id)
+    else {
+      setBusy(false)
+      trackEvent('project_create_error', { source: 'onboarding_wizard', project_type: type })
+    }
   }
 
   return (
-    <div className="wizard-backdrop" onClick={onSkip}>
+    <div className="wizard-backdrop" onClick={handleSkip}>
       <div className="wizard-modal" onClick={e => e.stopPropagation()}>
 
         {step !== 'choice' && (
@@ -99,7 +110,7 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
               </button>
             </div>
             <div className="wizard-footer">
-              <button className="wizard-skip-link" onClick={onSkip}>Skip for now</button>
+              <button className="wizard-skip-link" onClick={handleSkip}>Skip for now</button>
             </div>
           </div>
         )}

@@ -1,4 +1,5 @@
 import YOWLogo from '../brand/YOWLogo'
+import SupportDevelopmentLink from './SupportDevelopmentLink'
 
 const PRODUCT_LINKS = [
   { href: '/features/', label: 'Features' },
@@ -81,10 +82,11 @@ export default function MarketingFooter() {
           fontSize: '0.78rem', color: 'var(--text-muted)',
         }}>
           <span>© {new Date().getFullYear()} Your Own World. All rights reserved.</span>
-          <span style={{ display: 'flex', gap: 12 }}>
+          <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <a href="/faq/" style={linkStyle}>FAQ</a>
             <a href="/beta-disclaimer/" style={linkStyle}>Beta Disclaimer</a>
             <a href="mailto:support@yourownworld.co.uk" style={linkStyle}>Contact</a>
+            <SupportDevelopmentLink />
           </span>
         </div>
       </div>

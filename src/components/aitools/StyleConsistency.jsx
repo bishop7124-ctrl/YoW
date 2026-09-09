@@ -178,7 +178,7 @@ export default function StyleConsistency({ store, userId }) {
             style={{
               flexShrink: 0, padding: '7px 16px', borderRadius: 8, fontWeight: 700, fontSize: 13,
               background: (running || loading) ? 'color-mix(in srgb, var(--accent) 50%, transparent)' : 'var(--accent)',
-              color: 'var(--bg-main)', border: 'none', cursor: (running || loading || !hasContent) ? 'default' : 'pointer',
+              color: 'var(--accent-contrast)', border: 'none', cursor: (running || loading || !hasContent) ? 'default' : 'pointer',
             }}
           >
             {running ? 'Analysing…' : loading ? 'Loading…' : result ? 'Re-run' : 'Analyse Style'}

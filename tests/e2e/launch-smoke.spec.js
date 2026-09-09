@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, enterWritingMode, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -21,7 +21,7 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await expect(page).toHaveURL(/\/project\//)
   await expect(page.getByText(projectTitle).first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
   await page.getByText('Begin writing here…').click()
   const editor = page.getByPlaceholder('Begin writing here…')
   await expect(editor).toBeVisible()
@@ -47,7 +47,10 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)
 
-  await page.getByRole('button', { name: 'Done' }).click()
+  // Scoped to the Project Settings dialog specifically — the redesigned
+  // Scene Inspector's own Format-tab "Done" button (`.ms-opt`) coincidentally
+  // shares this label and can be present at the same time.
+  await page.getByLabel('Project Settings', { exact: true }).getByRole('button', { name: 'Done' }).click()
   await page.getByRole('button', { name: 'Back to projects' }).click()
 
   // 'Import ▾' dropdown replaced the old bare 'Restore' button
@@ -61,12 +64,16 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await page.getByRole('button', { name: 'Create Project' }).click({ timeout: 15_000 })
 
   // After import, storage should have 2 projects (original + restored copy).
-  // Read through window.__yowStorageBridge — the app's real storage backend
-  // is an IndexedDB-backed vault, not raw localStorage (see docs/ROADMAP.md's
-  // 2026-08-24 part 2 / 2026-08-25 Bugs row).
+  // Goes through window.__yowStorageBridge — the app's active backend can be
+  // an IndexedDB-backed vault, which raw localStorage reads can't see.
   await expect.poll(async () => page.evaluate(() => {
     const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
     const novels = JSON.parse(raw || '[]')
+    if (novels.length !== 2) return novels.length
+    for (const key of ['nf_acts', 'nf_chapters', 'nf_scenes']) {
+      const rows = JSON.parse(window.__yowStorageBridge?.getItem(key) ?? localStorage.getItem(key) ?? '[]')
+      if (novels.some(novel => rows.filter(row => row.novelId === novel.id).length !== 1)) return -1
+    }
     return novels.length
   }), { timeout: 20_000 }).toBe(2)
 })

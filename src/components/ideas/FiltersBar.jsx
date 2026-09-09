@@ -47,6 +47,7 @@ export default function FiltersBar({
     }}>
       {/* Sort */}
       <select
+        aria-label="Sort ideas"
         value={sortBy}
         onChange={e => setSortBy(e.target.value)}
         style={{
@@ -55,7 +56,7 @@ export default function FiltersBar({
           borderRadius: 8,
           padding: '3px 8px',
           color: 'var(--text-muted)',
-          fontSize: 11,
+          fontSize: 16,
           fontFamily: 'inherit',
           cursor: 'pointer',
           outline: 'none',
@@ -102,16 +103,10 @@ export default function FiltersBar({
       <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
 
       {/* Tag filters */}
-      {allTags.slice(0, 8).map(tag => (
-        <button
-          key={tag}
-          type="button"
-          style={chipStyle(filterTag === tag)}
-          onClick={() => setFilterTag(filterTag === tag ? '' : tag)}
-        >
-          #{tag}
-        </button>
-      ))}
+      <select aria-label="Filter ideas by tag" className="field text-base" value={filterTag} onChange={event => setFilterTag(event.target.value)}>
+        <option value="">All tags</option>
+        {allTags.map(tag => <option key={tag} value={tag}>#{tag}</option>)}
+      </select>
 
       {/* Clear */}
       {hasActiveFilter && (

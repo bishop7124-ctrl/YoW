@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readScenesWithContent, readStorage,
-  seedCleanStorage, waitForStorage,
+  createProject, dismissLaunchPrompts, enterWritingMode, readScenesWithContent, readStorage,
+  seedCleanStorage, waitForManuscriptReady, waitForStorage,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -9,13 +9,14 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await dismissLaunchPrompts(page)
   await createProject(page, { title: 'Manuscript Structure Test' })
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 })
 
 // ─── Scene CRUD ───────────────────────────────────────────────────────────────
 
 test('add a scene and verify it persists after reload', async ({ page }) => {
-  await page.locator('.ms-sidebar-add-btn').first().click()
+  // Scene creation now lives at the end of each expanded chapter.
+  await page.locator('.ms-rail-add-scene').first().getByRole('button', { name: 'scene', exact: true }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_scenes') ?? localStorage.getItem('nf_scenes')
@@ -25,7 +26,7 @@ test('add a scene and verify it persists after reload', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.length).toBeGreaterThanOrEqual(2)
 })
@@ -56,7 +57,7 @@ test('rename a scene and verify it persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const scenes = await readStorage(page, 'nf_scenes')
   expect(scenes.some(s => (s.title || '').includes(prefix))).toBe(true)
 })
@@ -84,8 +85,8 @@ test('word count updates when content is added', async ({ page }) => {
 // ─── Chapter CRUD ─────────────────────────────────────────────────────────────
 
 test('add a chapter and verify it appears and persists', async ({ page }) => {
-  // Use the sidebar add-chapter button (text is the level2 label, e.g. "Chapter")
-  await page.locator('.ms-sidebar-add-chapter').first().click()
+  // ManuscriptRail's footer "+ Chapter" button (see the scene-add comment above).
+  await page.locator('.ms-rail-f-btn', { hasText: '+ Chapter' }).click()
 
   await waitForStorage(page, () => {
     const raw = window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')
@@ -95,7 +96,7 @@ test('add a chapter and verify it appears and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const chapters = await readStorage(page, 'nf_chapters')
   expect(chapters.length).toBeGreaterThanOrEqual(2)
 })
@@ -113,8 +114,12 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
-  // Scene status badge is clickable in the scene meta bar
-  const statusBtn = page.locator('.scene-status, [data-status]').first()
+  // The status chip (SceneEditor.jsx's `.ms-meta-status`) is hidden by CSS
+  // while the editor is in Write mode (`.ms-scene-header--write .ms-meta-status
+  // { display: none }`) — it only renders in Edit mode.
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Edit' }).click()
+
+  const statusBtn = page.locator('.ms-meta-status').first()
   if (!(await statusBtn.isVisible().catch(() => false))) {
     test.skip() // status control not visible in this layout, skip gracefully
     return
@@ -127,7 +132,7 @@ test('scene status cycles and persists', async ({ page }) => {
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
-  await page.getByRole('button', { name: 'Write' }).waitFor()
+  await waitForManuscriptReady(page)
   const scenes = await readStorage(page, 'nf_scenes')
   // At least one scene should have a non-default status
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
@@ -151,20 +156,31 @@ test('finalized draft can be created and viewed', async ({ page }) => {
     return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
-  // Look for Finalize / Final Draft button
-  const finalizeBtn = page
-    .getByRole('button', { name: /Final(ize|ised)? draft|Create final|Compile/i })
-    .first()
+  // Finalise lives behind the topbar overflow ("More") menu, under the
+  // "Finish" section, as "Finalise draft" (British spelling — the previous
+  // regex only matched "Finalize"/"Finalised", never plain "Finalise").
+  // Opening it there swaps the surface to the FinalisePane, which has its
+  // own "Finalise draft" button that actually calls handleFinaliseDraft().
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menu').getByRole('button', { name: 'Finalise draft' }).click()
 
+  const finalizeBtn = page.getByRole('button', { name: 'Finalise draft' }).first()
   if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
   }
 
+  // handleFinaliseDraft() names the copy via window.prompt then confirms via
+  // window.confirm — both are native dialogs Playwright auto-dismisses
+  // unless handled, which is why this used to silently no-op. One `on`
+  // handler (not two `once`s — both `once`s would fire on the first dialog
+  // and the second would error "already handled") covers both dialogs.
+  page.on('dialog', dialog => dialog.accept())
   await finalizeBtn.click()
 
-  // The finalized reader or success state should appear
+  // The finalized reader (FinalizedReader.jsx's `.ms-final-reader`, shared by
+  // both its scroll and paged view modes) should appear.
   await expect(
-    page.locator('.finalized-reader, .final-draft, [data-finalized]').first(),
+    page.locator('.ms-final-reader').first(),
   ).toBeVisible({ timeout: 8000 })
 })

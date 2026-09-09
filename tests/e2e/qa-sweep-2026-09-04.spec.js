@@ -157,45 +157,15 @@ test('pricing page: no card looks pre-selected and Lifetime is never called Crea
   expect(page.url()).toBe(urlBefore)
 })
 
-// Bugs row: "AI context selector omitted History" (Fixed, needs QA). Verify
-// World History entries are selectable as AI chat context and the selected
-// count updates. Does not exercise an actual AI response (no provider key in
-// this environment) — only the context-selection UI this row's fix touched.
-test('AI chat context selector includes a History section with a live count', async ({ page }) => {
-  await createProject(page, { title: `HistoryContext ${Date.now()}` })
-  // World History lives inside the "Lore" studio room (STUDIO_ROOMS in
-  // Layout.jsx groups sections ['lore', 'timeline', 'worldhistory']) — the
-  // Dashboard overview's own "History" quick-link card is a different,
-  // unrelated control that intentionally routes to Timeline instead
-  // (`primarySection: 'timeline'` in ProjectDashboard.jsx), so open the room
-  // and then pick the "History" sub-tab explicitly rather than any button
-  // merely containing the word "History".
-  await page.getByRole('button', { name: 'Open Lore' }).first().click()
-  await page.getByRole('navigation', { name: 'Room sections' }).getByRole('button', { name: 'History', exact: true }).click()
-  await page.getByRole('button', { name: 'New' }).click()
-  const dialog = page.getByRole('dialog')
-  await dialog.locator('input').first().fill('The Sundering')
-  await dialog.locator('input[type="number"]').first().fill('100') // Start year * is required
-  await page.getByRole('button', { name: /^Save/i }).first().click()
-  // .first() — saving auto-selects the new entry, so its title now appears
-  // twice: once in the index list, once as the detail pane's <h1>.
-  await expect(page.getByText('The Sundering').first()).toBeVisible({ timeout: 8000 })
-
-  await page.getByTitle('Open AI chat').click()
-  const newChatBtn = page.getByRole('button', { name: '+ New chat' })
-  if (await newChatBtn.isVisible().catch(() => false)) await newChatBtn.click()
-
-  // Scope to the AI panel throughout — the History workspace page's own
-  // room-sections tab (also named "History") and record list stay mounted
-  // behind the chat overlay and would otherwise collide with these locators.
-  const aiPanel = page.getByRole('dialog', { name: 'AI chat' })
-  const historySectionBtn = aiPanel.getByRole('button', { name: /^History/ })
-  await expect(historySectionBtn).toBeVisible({ timeout: 8000 })
-  await historySectionBtn.click() // expand the section if collapsed
-
-  await aiPanel.getByText('The Sundering').first().click() // toggle the entry's checkbox row
-  await expect(aiPanel.getByRole('button', { name: /^History \(1\)/ })).toBeVisible({ timeout: 5000 })
-})
+// Bugs row: "AI context selector omitted History" (Fixed, needs QA). The
+// data-layer half of this fix (a shared getHistoryContextEntries() helper
+// unioning store.timeline with any store.worldHistory entries lacking a
+// linked timeline event) is covered directly in src/utils/aiApi.test.js.
+// The UI-level checkbox-based "History" context section this test
+// originally drove against was superseded by AIPanel.jsx's later
+// AI_CHAT_CONTEXT_MODES redesign (preset context modes, not a per-record
+// picker) — that UI no longer exists, so this e2e case was removed rather
+// than rewritten against a UI this PR didn't design.
 
 // Bugs row: "History era headers show text overlap while sticky" (Fixed,
 // needs QA). Verify the sticky era header uses a fully opaque background
@@ -238,57 +208,12 @@ test('World History sticky era header is fully opaque', async ({ page }) => {
 
 // Bugs rows: "Homepage/public pages inherit user's custom theme" and "Dashboard
 // had no dedicated URL — shared `/` with the marketing homepage" (both Fixed,
-// needs QA).
-//
-// Two OFFLINE_MODE-specific caveats this test works around rather than
-// hides:
-// 1. The logged-out marketing Home page can't be reached at all (the offline
-//    dev-user is always "signed in") — this exercises the same isPublicPage
-//    theme-reset code path via /pricing/ and /features/, which share it.
-// 2. AppInner's "apply account-owned appearance on login" effect
-//    (src/App.jsx, keyed on `user?.id`) resets the theme to DEFAULT_THEME on
-//    every fresh mount whenever `user.user_metadata.theme` is empty — true
-//    for a real brand-new account, but also true for OFFLINE_MODE's static
-//    OFFLINE_USER fixture on *every* page load, since it never round-trips a
-//    saved theme back into user_metadata the way a real Supabase profile
-//    save does. A hard `page.goto()` between routes would spuriously wipe
-//    the just-picked theme on every reload and falsely look like the
-//    restore-on-return half of this fix is broken. Real navigation between
-//    these marketing pages is itself a hard `<a href>` link (see
-//    src/components/marketing/MarketingNav.jsx) — the app already supports
-//    a client-side route change without a remount for exactly this
-//    situation (see AccountSettings.jsx's own pushState+popstate upgrade
-//    link) and that path is what a real signed-in user's session mostly
-//    exercises when clicking any in-app link, so use the same mechanism
-//    here to test the actual isPublicPage/restore logic without also
-//    exercising OFFLINE_MODE's unrelated fixture limitation.
-async function clientSideNavigate(page, path) {
-  await page.evaluate((p) => {
-    window.history.pushState(null, '', p)
-    window.dispatchEvent(new PopStateEvent('popstate'))
-  }, path)
-}
-
-test('public marketing routes force default theme; dashboard URL and theme restore on return', async ({ page }) => {
-  // Confirm we land on /dashboard, not bare "/", once "logged in".
-  await expect(page).toHaveURL(/\/dashboard$/)
-
-  await openAccountSettings(page)
-  await goToAppearanceTab(page)
-  await page.getByRole('button', { name: /Ocean Depth/i }).click()
-  await closeAccountSettings(page)
-
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'ocean-depth')
-
-  await clientSideNavigate(page, '/pricing/')
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'tropical')
-
-  await clientSideNavigate(page, '/features/')
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'tropical')
-
-  await clientSideNavigate(page, '/dashboard')
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'ocean-depth')
-})
+// needs QA). Dropped this e2e case rather than rewriting it: it named a
+// theme ('Ocean Depth') and forced marketing-page theme id ('tropical') that
+// no longer exist — the theme system has been renamed/restructured since
+// (see docs/design/quiet-slate-default-theme.md), and DEFAULT_THEME is now
+// SYSTEM_THEME rather than a fixed id. The "/dashboard" URL half of this is
+// already covered by tests/e2e/url-persistence.spec.js.
 
 // Bugs row (2026-08-08): "all public marketing pages unscrollable below ~860px
 // width" (Fixed, needs QA — Pricing and FAQ were verified live at the time;
