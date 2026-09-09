@@ -1,6 +1,7 @@
 import { BILLING } from './billingConfig.js'
 
 export const TRIAL_DAYS = 28
+export const BETA_NOTICE_DAYS = 30
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const PAID_STATUSES = new Set(['active', 'trialing'])
@@ -20,7 +21,7 @@ const BETA_TESTER_PLAN = {
     'Full app access during beta',
     'Unlimited projects',
     'AI tools and advanced features unlocked',
-    'Beta access may be revoked when YOW leaves beta',
+    '30 days of full web access after launch, then Free unless you upgrade',
   ],
   badge: 'Beta',
   highlight: false,
@@ -134,15 +135,14 @@ export const PLANS = [
     priceSuffix: 'once',
     storageLabelShort: '15 GB',
     description: 'Everything in Lifetime, plus permanent recognition as one of the first believers in YOW.',
-    longDescription: `Everything in Lifetime, plus more storage and lifetime cloud sync with no renewal, ever. Founder status is permanent and limited to ${FOUNDER_SLOTS_TOTAL} writers, ever.`,
-    keyBenefit: { icon: '✦', label: `Limited to ${FOUNDER_SLOTS_TOTAL} writers, ever` },
+    longDescription: `Everything in Lifetime, plus more storage and lifetime cloud sync with no renewal, ever. There are ${FOUNDER_SLOTS_TOTAL} Founder slots; full refunds or lost chargebacks remove access and return the slot.`,
+    keyBenefit: { icon: '✦', label: `Limited to ${FOUNDER_SLOTS_TOTAL} Founder slots` },
     features: [
       'Everything in Lifetime, plus:',
       '15 GB cloud storage',
       'Lifetime cloud sync — no renewal, ever',
       'Permanent Founder badge',
-      'Feature your debut work on YOW',
-      'Priority say in what we build next',
+      'Your work featured on a YOW-managed Founder profile',
     ],
     badge: 'Exclusive',
     highlight: false,
@@ -206,12 +206,22 @@ export function getMembership(user) {
   // has no real Stripe subscription — the billing portal has nothing to act
   // on for it (see api/create-customer-portal.js).
   const hasStripeCustomer = !!serverMetadata.stripe_customer_id
-  const isBetaTester = subscriptionPlan === BETA_TESTER_PLAN_KEY || serverMetadata.beta_tester === true
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
   const isFounder = subscriptionPlan === 'founder'
-
-  const isPaid = PAID_STATUSES.has(subscriptionStatus) || isLifetime || isBetaTester
-  const isTrialActive = !isPaid && now < trialEndsAt
+  // A paid purchase takes precedence over a stale beta flag.
+  const hasPaidSubscription = subscriptionPlan !== BETA_TESTER_PLAN_KEY && PAID_STATUSES.has(subscriptionStatus)
+    && serverMetadata.beta_tester !== true
+  const hasPaidPlan = isLifetime || (subscriptionPlan === 'premium_monthly' && PAID_STATUSES.has(subscriptionStatus))
+  const hasBetaStatus = !hasPaidPlan && (subscriptionPlan === BETA_TESTER_PLAN_KEY || serverMetadata.beta_tester === true)
+  const betaNoticeStartedAt = dateFrom(serverMetadata.beta_notice_started_at)
+  const betaNoticeEndsAt = betaNoticeStartedAt ? new Date(betaNoticeStartedAt.getTime() + BETA_NOTICE_DAYS * DAY_MS) : null
+  // Invalid server notice dates fail closed; browser-editable dates never count.
+  const isBetaExpired = hasBetaStatus && !!serverMetadata.beta_notice_started_at && (!betaNoticeEndsAt || now >= betaNoticeEndsAt)
+  const isBetaTester = hasBetaStatus && !isBetaExpired
+  const isBetaNoticeActive = isBetaTester && !!betaNoticeStartedAt && now >= betaNoticeStartedAt
+  const betaDaysRemaining = isBetaNoticeActive ? Math.max(0, Math.ceil((betaNoticeEndsAt - now) / DAY_MS)) : null
+  const isPaid = hasPaidPlan || (!hasBetaStatus && hasPaidSubscription) || isBetaTester
+  const isTrialActive = !isPaid && !isBetaExpired && !serverMetadata.access_revoked_at && now < trialEndsAt
   const daysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS))
   const isFree = !isPaid && !isTrialActive
 
@@ -297,6 +307,12 @@ export function getMembership(user) {
     subscriptionStatus,
     isPaid,
     isBetaTester,
+    isBetaExpired,
+    isBetaNoticeActive,
+    betaNoticeStartedAt,
+    betaNoticeEndsAt,
+    betaDaysRemaining,
+    canDownloadDesktop: isLifetime || (isBetaTester && !isBetaNoticeActive),
     isLifetime,
     isFounder,
     hasStripeCustomer,

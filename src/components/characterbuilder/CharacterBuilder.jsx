@@ -17,14 +17,17 @@ function PartyCard({ character, onClick }) {
   const conditions = character.conditions || []
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
+      aria-label={`Open ${character.name || 'character'} sheet`}
       style={{
         padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
         border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
         background: 'color-mix(in srgb, var(--bg-nav) 70%, transparent)',
         transition: 'all .15s ease',
         display: 'flex', flexDirection: 'column', gap: 10,
+        width: '100%', textAlign: 'left', fontFamily: 'inherit', color: 'inherit',
       }}
       onMouseEnter={e => {
         e.currentTarget.style.border = '1px solid color-mix(in srgb, var(--accent) 45%, transparent)'
@@ -107,7 +110,7 @@ function PartyCard({ character, onClick }) {
       {character.status !== 'active' && (
         <div style={{ fontSize: 10, fontWeight: 700, color: status.color, textTransform: 'uppercase', letterSpacing: '.06em' }}>{status.label}</div>
       )}
-    </div>
+    </button>
   )
 }
 

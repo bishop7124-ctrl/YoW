@@ -65,6 +65,11 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await expect.poll(async () => page.evaluate(() => {
     const raw = window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')
     const novels = JSON.parse(raw || '[]')
+    if (novels.length !== 2) return novels.length
+    for (const key of ['nf_acts', 'nf_chapters', 'nf_scenes']) {
+      const rows = JSON.parse(window.__yowStorageBridge?.getItem(key) ?? localStorage.getItem(key) ?? '[]')
+      if (novels.some(novel => rows.filter(row => row.novelId === novel.id).length !== 1)) return -1
+    }
     return novels.length
   }), { timeout: 20_000 }).toBe(2)
 })

@@ -1,6 +1,32 @@
 import { STAMP_LIBRARY, loadStampAsset, TERRAIN_TYPES } from './mapConstants.js'
 import { colorWithAlpha, drawSmoothPath, smoothPathPoints, hashString, organicPoints, seededNoise, clamp } from './mapUtils.js'
 
+const SOLID_OBJECT_TYPES = new Set(['shape', 'region', 'territory', 'wall', 'opening', 'water', 'river', 'road', 'path', 'border', 'mountain', 'location', 'note'])
+const renderedPathCache = new WeakMap()
+
+function getRenderedPathPoints(object, { enabled = true, closed = false, amplitude, spacing }) {
+  const points = object.geometry?.points || []
+  if (!enabled) return points
+
+  let cachedPaths = renderedPathCache.get(object)
+  if (!cachedPaths) {
+    cachedPaths = new Map()
+    renderedPathCache.set(object, cachedPaths)
+  }
+  const key = `${closed ? 'closed' : 'open'}:${amplitude}:${spacing}`
+  if (!cachedPaths.has(key)) {
+    cachedPaths.set(key, organicPoints(points, hashString(object.id), { closed, amplitude, spacing }))
+  }
+  return cachedPaths.get(key)
+}
+
+function strokeSquareGrid(ctx, width, height, size) {
+  ctx.beginPath()
+  for (let x = 0; x <= width; x += size) { ctx.moveTo(x, 0); ctx.lineTo(x, height) }
+  for (let y = 0; y <= height; y += size) { ctx.moveTo(0, y); ctx.lineTo(width, y) }
+  ctx.stroke()
+}
+
 // ─── Background / paper ──────────────────────────────────────────────────────
 
 export function drawBackground(ctx, width, height, style = 'parchment', baseLayer = 'water') {
@@ -18,13 +44,11 @@ export function drawBackground(ctx, width, height, style = 'parchment', baseLaye
     ctx.strokeStyle = colorWithAlpha('#4a80cc', 0.14)
     ctx.lineWidth = 0.5
     const gs = 60
-    for (let x = 0; x <= width; x += gs) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke() }
-    for (let y = 0; y <= height; y += gs) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke() }
+    strokeSquareGrid(ctx, width, height, gs)
     // major grid
     ctx.strokeStyle = colorWithAlpha('#5090dd', 0.22)
     ctx.lineWidth = 1
-    for (let x = 0; x <= width; x += gs * 5) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke() }
-    for (let y = 0; y <= height; y += gs * 5) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke() }
+    strokeSquareGrid(ctx, width, height, gs * 5)
 
   } else if (style === 'atlas') {
     paper.addColorStop(0, land ? '#4a7440' : '#cce0ea')
@@ -43,9 +67,11 @@ export function drawBackground(ctx, width, height, style = 'parchment', baseLaye
     ctx.strokeStyle = colorWithAlpha('#7a6240', 0.06)
     ctx.lineWidth = 0.8
     const ls = 38
+    ctx.beginPath()
     for (let y = ls; y < height; y += ls) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
+      ctx.moveTo(0, y); ctx.lineTo(width, y)
     }
+    ctx.stroke()
 
   } else {
     // parchment (default) — land base uses the lighter tone that matches the
@@ -98,22 +124,22 @@ export function drawMovementGrid(ctx, width, height, settings = {}) {
     const rowH = radius * 1.5
     const rows = Math.ceil(height / rowH) + 2
     const cols = Math.ceil(width / hexW) + 2
+    ctx.beginPath()
     for (let row = -1; row <= rows; row++) {
       const off = Math.abs(row % 2) * hexW / 2
       for (let col = -1; col <= cols; col++) {
         const cx = col * hexW + off, cy = row * rowH
-        ctx.beginPath()
         for (let s = 0; s < 6; s++) {
           const angle = -Math.PI / 2 + s * Math.PI / 3
           const px = cx + Math.cos(angle) * radius, py = cy + Math.sin(angle) * radius
           if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
         }
-        ctx.closePath(); ctx.stroke()
+        ctx.closePath()
       }
     }
+    ctx.stroke()
   } else {
-    for (let x = 0; x <= width; x += size) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke() }
-    for (let y = 0; y <= height; y += size) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke() }
+    strokeSquareGrid(ctx, width, height, size)
   }
   if (settings.scale) {
     ctx.globalAlpha = Math.min(0.9, alpha + 0.3)
@@ -129,8 +155,7 @@ export function drawMovementGrid(ctx, width, height, settings = {}) {
 export function drawObject(ctx, object, isSelected, opts = {}) {
   if (object.visible === false) return
   ctx.save()
-  const solidObjectTypes = new Set(['shape', 'region', 'territory', 'wall', 'opening', 'water', 'river', 'road', 'path', 'border', 'mountain', 'location', 'note'])
-  const objectOpacity = solidObjectTypes.has(object.type)
+  const objectOpacity = SOLID_OBJECT_TYPES.has(object.type)
     ? 1
     : (Number.isFinite(object.properties?.opacity) ? object.properties.opacity : 1)
   ctx.globalAlpha = objectOpacity
@@ -158,15 +183,16 @@ export function drawObject(ctx, object, isSelected, opts = {}) {
 export function drawRiverGroup(ctx, riverObjects, selectedIds = [], opts = {}) {
   const rivers = riverObjects.filter(object => object.visible !== false && object.geometry?.points?.length >= 2)
   if (!rivers.length) return
-  const selected = new Set(selectedIds)
+  const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds)
+  const riverPaints = rivers.map(object => getRiverPaint(object, opts))
 
   ctx.save()
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
-  drawRiverLayer(ctx, rivers, opts, 'outer')
-  drawRiverLayer(ctx, rivers, opts, 'body')
-  drawRiverLayer(ctx, rivers, opts, 'inner')
+  drawRiverLayer(ctx, riverPaints, 'outer')
+  drawRiverLayer(ctx, riverPaints, 'body')
+  drawRiverLayer(ctx, riverPaints, 'inner')
 
   rivers.forEach(object => {
     if (selected.has(object.id)) {
@@ -188,9 +214,7 @@ function drawLandShape(ctx, object, isSelected, opts) {
   const organic = object.properties?.organicEdges !== false && !isBlueprint
 
   // Single moderate jitter pass — visible but not chaotic
-  const jitter = organic
-    ? organicPoints(pts, seed, { closed: true, amplitude: 16, spacing: 36 })
-    : pts
+  const jitter = getRenderedPathPoints(object, { enabled: organic, closed: true, amplitude: 16, spacing: 36 })
 
   const fill = object.properties?.fill || '#1e3d20'
   const stroke = object.properties?.stroke || '#142a16'
@@ -283,9 +307,7 @@ function drawRegion(ctx, object, isSelected, opts) {
   const isBlueprint = opts.style === 'blueprint'
   const isParchment = !opts.style || opts.style === 'parchment' || opts.style === 'campaign'
   const organic = !isBlueprint
-  const jitter = organic
-    ? organicPoints(pts, seed, { closed: true, amplitude: 10, spacing: 34 })
-    : pts
+  const jitter = getRenderedPathPoints(object, { enabled: organic, closed: true, amplitude: 10, spacing: 34 })
 
   ctx.save()
 
@@ -326,7 +348,6 @@ function drawRegion(ctx, object, isSelected, opts) {
 function drawTerritory(ctx, object, isSelected, opts) {
   const pts = object.geometry?.points
   if (!pts || pts.length < 3) return
-  const seed = hashString(object.id)
   const isRoom = object.properties?.semanticType === 'room'
   const roomLineStyle = object.properties?.lineStyle || 'straight'
   const fill = object.properties?.fill || '#7050a8'
@@ -342,7 +363,7 @@ function drawTerritory(ctx, object, isSelected, opts) {
   const name = object.properties?.name || ''
   const isBlueprint = opts.style === 'blueprint'
   const organic = !isRoom && !isBlueprint
-  const jitter = organic ? organicPoints(pts, seed, { closed: true, amplitude: 6, spacing: 28 }) : pts
+  const jitter = getRenderedPathPoints(object, { enabled: organic, closed: true, amplitude: 6, spacing: 28 })
   const b = getBoundsFromPoints(pts)
   const drawTerritoryPath = () => {
     if (isRoom && roomLineStyle !== 'curved') {
@@ -1428,7 +1449,7 @@ function drawMountainRidge(ctx, object, isSelected, opts) {
   const fill = object.properties?.fill || '#7a7060'
   const stroke = object.properties?.stroke || '#3a3228'
   const cleanEdges = opts.style === 'blueprint' || opts.style === 'atlas'
-  const ridgePts = cleanEdges ? pts : organicPoints(pts, seed, { closed: false, amplitude: 8, spacing: 36 })
+  const ridgePts = getRenderedPathPoints(object, { enabled: !cleanEdges, closed: false, amplitude: 8, spacing: 36 })
 
   ctx.save()
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'
@@ -1495,7 +1516,7 @@ function drawWaterMass(ctx, object, isSelected, opts) {
   const stroke = object.properties?.stroke || '#2f769f'
   const fill = object.properties?.fill || '#73b8cf'
   const organic = object.properties?.organicEdges !== false && opts.style !== 'blueprint'
-  const waterPts = organic ? organicPoints(pts, seed, { closed: true, amplitude: 9, spacing: 32 }) : pts
+  const waterPts = getRenderedPathPoints(object, { enabled: organic, closed: true, amplitude: 9, spacing: 32 })
   const b = getBoundsFromPoints(pts)
   const isBlueprint = opts.style === 'blueprint'
 
@@ -1555,60 +1576,60 @@ function drawWaterMass(ctx, object, isSelected, opts) {
 function drawRiver(ctx, object, isSelected, opts) {
   const pts = object.geometry?.points
   if (!pts || pts.length < 2) return
-  const seed = hashString(object.id)
-  const thickness = object.properties?.lineThickness || 6
-  const stroke = object.properties?.stroke === '#3a80b0' ? '#2f5f78' : (object.properties?.stroke || '#2f5f78')
-  const fill = ['#c8eeff', '#73b8cf'].includes(object.properties?.fill) ? '#7faec0' : (object.properties?.fill || '#7faec0')
-  const organic = opts.style !== 'blueprint'
-  const riverPts = organic ? organicPoints(pts, seed, { closed: false, amplitude: 10, spacing: 34 }) : pts
-  const outerWidth = thickness * 1.45
-  const midWidth = Math.max(1, thickness * 1.12)
-  const innerWidth = Math.max(1, thickness * 0.82)
+  const paint = getRiverPaint(object, opts)
 
   ctx.save()
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
-  ctx.strokeStyle = stroke
-  ctx.lineWidth = outerWidth
-  drawSmoothPath(ctx, riverPts, false); ctx.stroke()
+  ctx.strokeStyle = paint.outerStroke
+  ctx.lineWidth = paint.outerWidth
+  drawSmoothPath(ctx, paint.points, false); ctx.stroke()
 
-  ctx.strokeStyle = isSelected ? '#1677ff' : stroke
-  ctx.lineWidth = midWidth
-  drawSmoothPath(ctx, riverPts, false); ctx.stroke()
+  ctx.strokeStyle = isSelected ? '#1677ff' : paint.stroke
+  ctx.lineWidth = paint.bodyWidth
+  drawSmoothPath(ctx, paint.points, false); ctx.stroke()
 
-  ctx.strokeStyle = fill
-  ctx.lineWidth = innerWidth
-  drawSmoothPath(ctx, riverPts, false); ctx.stroke()
+  ctx.strokeStyle = paint.fill
+  ctx.lineWidth = paint.innerWidth
+  drawSmoothPath(ctx, paint.points, false); ctx.stroke()
 
   if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
-function drawRiverLayer(ctx, rivers, opts, layer) {
-  rivers.forEach(object => {
-    const pts = object.geometry?.points || []
-    const seed = hashString(object.id)
-    const thickness = object.properties?.lineThickness || 6
-    const stroke = object.properties?.stroke === '#3a80b0' ? '#2f5f78' : (object.properties?.stroke || '#2f5f78')
-    const fill = ['#c8eeff', '#73b8cf'].includes(object.properties?.fill) ? '#7faec0' : (object.properties?.fill || '#7faec0')
-    const organic = opts.style !== 'blueprint'
-    const riverPts = organic ? organicPoints(pts, seed, { closed: false, amplitude: 10, spacing: 34 }) : pts
-    const outerWidth = thickness * 1.45
-    const bodyWidth = Math.max(1, thickness * 1.12)
-    const innerWidth = Math.max(1, thickness * 0.82)
+function getRiverPaint(object, opts) {
+  return {
+    points: getRenderedPathPoints(object, { enabled: opts.style !== 'blueprint', closed: false, amplitude: 10, spacing: 34 }),
+    ...getRiverStyle(object.properties),
+  }
+}
 
+function getRiverStyle(properties = {}, fallbackThickness = 6) {
+  const thickness = properties.lineThickness || fallbackThickness
+  return {
+    outerStroke: '#203f52',
+    stroke: properties.stroke === '#3a80b0' ? '#2f5f78' : (properties.stroke || '#2f5f78'),
+    fill: ['#c8eeff', '#73b8cf'].includes(properties.fill) ? '#7faec0' : (properties.fill || '#7faec0'),
+    outerWidth: thickness * 1.45,
+    bodyWidth: Math.max(1, thickness * 1.12),
+    innerWidth: Math.max(1, thickness * 0.82),
+  }
+}
+
+function drawRiverLayer(ctx, riverPaints, layer) {
+  riverPaints.forEach(paint => {
     if (layer === 'outer') {
-      ctx.strokeStyle = stroke
-      ctx.lineWidth = outerWidth
+      ctx.strokeStyle = paint.outerStroke
+      ctx.lineWidth = paint.outerWidth
     } else if (layer === 'body') {
-      ctx.strokeStyle = stroke
-      ctx.lineWidth = bodyWidth
+      ctx.strokeStyle = paint.stroke
+      ctx.lineWidth = paint.bodyWidth
     } else {
-      ctx.strokeStyle = fill
-      ctx.lineWidth = innerWidth
+      ctx.strokeStyle = paint.fill
+      ctx.lineWidth = paint.innerWidth
     }
-    drawSmoothPath(ctx, riverPts, false)
+    drawSmoothPath(ctx, paint.points, false)
     ctx.stroke()
   })
 }
@@ -1618,70 +1639,83 @@ function drawRiverLayer(ctx, rivers, opts, layer) {
 function drawRoad(ctx, object, isSelected, opts) {
   const pts = object.geometry?.points
   if (!pts || pts.length < 2) return
-  const seed = hashString(object.id)
-  const thickness = object.properties?.lineThickness || 5
-  const stroke = object.properties?.stroke || '#8b6030'
-  const dashed = Boolean(object.properties?.dashed)
+  const paint = getRoadStyle(object.properties)
   const organic = opts.style !== 'blueprint'
-  const roadPts = organic ? organicPoints(pts, seed, { closed: false, amplitude: 6, spacing: 32 }) : pts
+  const roadPts = getRenderedPathPoints(object, { enabled: organic, closed: false, amplitude: 6, spacing: 32 })
 
-  const borderStroke = object.properties?.borderStroke || '#2c1a0a'
-  const highlight = object.properties?.highlight || '#f0d8a0'
-  const outerWidth = thickness * 1.4
-  const borderPx = Math.max(2, thickness * 0.15)
-  const strokeRingPx = Math.max(2, thickness * 0.18)
   ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
   // outer dark border — thin ring
-  if (isSelected || borderStroke !== 'transparent') {
-    ctx.strokeStyle = isSelected ? '#1677ff' : borderStroke
-    ctx.lineWidth = outerWidth
-    ctx.setLineDash(dashed ? [thickness * 2, thickness * 1.5] : [])
+  if (isSelected || paint.borderStroke !== 'transparent') {
+    ctx.strokeStyle = isSelected ? '#1677ff' : paint.borderStroke
+    ctx.lineWidth = paint.outerWidth
+    ctx.setLineDash(paint.dash)
     drawSmoothPath(ctx, roadPts, false); ctx.stroke()
   }
   // stroke colour — thin ring inside border
-  ctx.strokeStyle = isSelected ? '#1677ff' : stroke
-  ctx.lineWidth = outerWidth - borderPx * 2
+  ctx.strokeStyle = isSelected ? '#1677ff' : paint.stroke
+  ctx.lineWidth = paint.bodyWidth
   drawSmoothPath(ctx, roadPts, false); ctx.stroke()
   // highlight — widest inner fill (the dominant bulk)
-  ctx.strokeStyle = highlight
-  ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2
+  ctx.strokeStyle = paint.highlight
+  ctx.lineWidth = paint.innerWidth
   ctx.setLineDash([])
   drawSmoothPath(ctx, roadPts, false); ctx.stroke()
   if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
 }
 
+function getRoadStyle(properties = {}, fallbackThickness = 5) {
+  const thickness = properties.lineThickness || fallbackThickness
+  return {
+    stroke: properties.stroke || '#8b6030',
+    borderStroke: properties.borderStroke || '#2c1a0a',
+    highlight: properties.highlight || '#f0d8a0',
+    outerWidth: thickness * 1.4,
+    bodyWidth: Math.max(1, thickness * 1.1),
+    innerWidth: Math.max(1, thickness * 0.74),
+    dash: properties.dashed ? [thickness * 2, thickness * 1.5] : [],
+  }
+}
+
 function drawPathBrush(ctx, object, isSelected, opts) {
   const pts = object.geometry?.points
   if (!pts || pts.length < 2) return
-  const seed = hashString(object.id)
-  const thickness = object.properties?.lineThickness || 14
-  const stroke = object.properties?.stroke || '#8f7652'
-  const borderStroke = object.properties?.borderStroke || '#6a4b2d'
-  const highlight = object.properties?.highlight || '#d8c095'
-  const pathPts = opts.style === 'blueprint' ? pts : organicPoints(pts, seed, { closed: false, amplitude: 3, spacing: 26 })
+  const paint = getPathStyle(object.properties)
+  const pathPts = getRenderedPathPoints(object, { enabled: opts.style !== 'blueprint', closed: false, amplitude: 3, spacing: 26 })
 
   ctx.save()
   ctx.lineCap = 'butt'
   ctx.lineJoin = 'bevel'
   ctx.setLineDash([])
-  ctx.strokeStyle = isSelected ? '#1677ff' : colorWithAlpha(borderStroke, 0.72)
-  ctx.lineWidth = thickness + Math.max(1, thickness * 0.14)
+  ctx.strokeStyle = isSelected ? '#1677ff' : paint.borderStroke
+  ctx.lineWidth = paint.outerWidth
   drawSmoothPath(ctx, pathPts, false)
   ctx.stroke()
 
-  ctx.strokeStyle = stroke
-  ctx.lineWidth = thickness
+  ctx.strokeStyle = paint.stroke
+  ctx.lineWidth = paint.bodyWidth
   drawSmoothPath(ctx, pathPts, false)
   ctx.stroke()
 
-  ctx.strokeStyle = colorWithAlpha(highlight, 0.78)
-  ctx.lineWidth = Math.max(2, thickness * 0.7)
+  ctx.strokeStyle = paint.highlight
+  ctx.lineWidth = paint.innerWidth
   drawSmoothPath(ctx, pathPts, false)
   ctx.stroke()
 
   if (isSelected) drawGeometryHandles(ctx, pts, opts.zoom, opts.geometryEditMode)
   ctx.restore()
+}
+
+function getPathStyle(properties = {}, fallbackThickness = 14) {
+  const thickness = properties.lineThickness || fallbackThickness
+  return {
+    stroke: properties.stroke || '#8f7652',
+    borderStroke: colorWithAlpha(properties.borderStroke || '#6a4b2d', 0.72),
+    highlight: colorWithAlpha(properties.highlight || '#d8c095', 0.78),
+    outerWidth: thickness + Math.max(1, thickness * 0.14),
+    bodyWidth: thickness,
+    innerWidth: Math.max(2, thickness * 0.7),
+  }
 }
 
 // ─── Border ───────────────────────────────────────────────────────────────────
@@ -1689,12 +1723,11 @@ function drawPathBrush(ctx, object, isSelected, opts) {
 function drawBorderLine(ctx, object, isSelected, opts) {
   const pts = object.geometry?.points
   if (!pts || pts.length < 2) return
-  const seed = hashString(object.id)
   const thickness = object.properties?.lineThickness || 4
   const stroke = object.properties?.stroke || '#9050a0'
   const hasStroke = stroke !== 'transparent'
   const organic = opts.style !== 'blueprint'
-  const borderPts = organic ? organicPoints(pts, seed, { closed: false, amplitude: 4, spacing: 28 }) : pts
+  const borderPts = getRenderedPathPoints(object, { enabled: organic, closed: false, amplitude: 4, spacing: 28 })
 
   ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
   if (hasStroke) {
@@ -2869,41 +2902,26 @@ export function drawDraft(ctx, draft, zoom) {
       ctx.fill()
       ctx.stroke()
     } else if (draft.kind === 'river' && allPts.length >= 2) {
-      const stroke = draft.properties?.stroke === '#3a80b0' ? '#2f5f78' : (draft.properties?.stroke || '#2f5f78')
-      const fill = ['#c8eeff', '#73b8cf'].includes(draft.properties?.fill) ? '#7faec0' : (draft.properties?.fill || '#7faec0')
-      const thickness = draft.properties?.lineThickness || 7
-      const outerWidth = thickness * 1.4
-      const borderPx = Math.max(2, thickness * 0.15)
-      const strokeRingPx = Math.max(2, thickness * 0.18)
+      const paint = getRiverStyle(draft.properties, 7)
       ctx.setLineDash([])
-      ctx.strokeStyle = '#203f52'; ctx.lineWidth = outerWidth; drawLine(allPts)
-      ctx.strokeStyle = stroke; ctx.lineWidth = outerWidth - borderPx * 2; drawLine(allPts)
-      ctx.strokeStyle = fill; ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2; drawLine(allPts)
+      ctx.strokeStyle = paint.outerStroke; ctx.lineWidth = paint.outerWidth; drawLine(allPts)
+      ctx.strokeStyle = paint.stroke; ctx.lineWidth = paint.bodyWidth; drawLine(allPts)
+      ctx.strokeStyle = paint.fill; ctx.lineWidth = paint.innerWidth; drawLine(allPts)
     } else if (draft.kind === 'road' && allPts.length >= 2) {
-      const stroke = draft.properties?.stroke || '#8b6030'
-      const borderStroke = draft.properties?.borderStroke || '#2c1a0a'
-      const highlight = draft.properties?.highlight || '#f0d8a0'
-      const thickness = draft.properties?.lineThickness || 5
-      const outerWidth = thickness * 1.4
-      const borderPx = Math.max(2, thickness * 0.15)
-      const strokeRingPx = Math.max(2, thickness * 0.18)
-      const dashed = Boolean(draft.properties?.dashed)
-      ctx.setLineDash(dashed ? [thickness * 2, thickness * 1.5] : [])
-      ctx.strokeStyle = borderStroke; ctx.lineWidth = outerWidth; drawLine(allPts)
-      ctx.strokeStyle = stroke; ctx.lineWidth = outerWidth - borderPx * 2; drawLine(allPts)
+      const paint = getRoadStyle(draft.properties)
+      ctx.setLineDash(paint.dash)
+      ctx.strokeStyle = paint.borderStroke; ctx.lineWidth = paint.outerWidth; drawLine(allPts)
+      ctx.strokeStyle = paint.stroke; ctx.lineWidth = paint.bodyWidth; drawLine(allPts)
       ctx.setLineDash([])
-      ctx.strokeStyle = highlight; ctx.lineWidth = outerWidth - borderPx * 2 - strokeRingPx * 2; drawLine(allPts)
+      ctx.strokeStyle = paint.highlight; ctx.lineWidth = paint.innerWidth; drawLine(allPts)
     } else if (draft.kind === 'path' && allPts.length >= 2) {
-      const stroke = draft.properties?.stroke || '#8f7652'
-      const borderStroke = draft.properties?.borderStroke || '#6a4b2d'
-      const highlight = draft.properties?.highlight || '#d8c095'
-      const thickness = draft.properties?.lineThickness || 14
+      const paint = getPathStyle(draft.properties)
       ctx.setLineDash([])
       ctx.lineCap = 'butt'
       ctx.lineJoin = 'bevel'
-      ctx.strokeStyle = colorWithAlpha(borderStroke, 0.72); ctx.lineWidth = thickness + Math.max(1, thickness * 0.14); drawLine(allPts)
-      ctx.strokeStyle = stroke; ctx.lineWidth = thickness; drawLine(allPts)
-      ctx.strokeStyle = colorWithAlpha(highlight, 0.78); ctx.lineWidth = Math.max(2, thickness * 0.7); drawLine(allPts)
+      ctx.strokeStyle = paint.borderStroke; ctx.lineWidth = paint.outerWidth; drawLine(allPts)
+      ctx.strokeStyle = paint.stroke; ctx.lineWidth = paint.bodyWidth; drawLine(allPts)
+      ctx.strokeStyle = paint.highlight; ctx.lineWidth = paint.innerWidth; drawLine(allPts)
     } else if (draft.kind === 'wall' && draft.properties?.semanticType === 'localWall' && allPts.length >= 2) {
       const stroke = draft.properties?.stroke || '#62686b'
       const highlight = draft.properties?.highlight || '#aeb4b2'
@@ -2972,7 +2990,15 @@ export function drawHoverHighlight(ctx, object, zoom) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getBoundsFromPoints(pts) {
-  const xs = pts.map(p => p.x), ys = pts.map(p => p.y)
-  const x = Math.min(...xs), y = Math.min(...ys)
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const point of pts) {
+    minX = Math.min(minX, point.x)
+    minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x)
+    maxY = Math.max(maxY, point.y)
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
 }
