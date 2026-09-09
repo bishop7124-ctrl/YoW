@@ -254,12 +254,14 @@ function MapDashboard({ project, addMap, selectMap, deleteMap, renameMap }) {
               key={map.id}
               style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--surface)', display: 'flex', flexDirection: 'column' }}
             >
-              <div
-                style={{ height: 120, background: map.metadata?.stylePreset === 'blueprint' ? '#1a2b4a' : map.metadata?.stylePreset === 'atlas' ? '#c0d8e4' : '#e8d6a4', cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 32 }}
+              <button
+                type="button"
+                aria-label={`Open ${map.name || 'untitled map'}`}
+                style={{ width: '100%', height: 120, padding: 0, border: 'none', background: map.metadata?.stylePreset === 'blueprint' ? '#1a2b4a' : map.metadata?.stylePreset === 'atlas' ? '#c0d8e4' : '#e8d6a4', cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 32 }}
                 onClick={() => selectMap(map.id)}
               >
                 🗺️
-              </div>
+              </button>
               <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
                 {renamingId === map.id ? (
                   <input

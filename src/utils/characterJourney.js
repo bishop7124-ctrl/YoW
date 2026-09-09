@@ -51,13 +51,24 @@ export const createJourneyId = () => Math.random().toString(36).slice(2) + Date.
 export function normalizeJourney(journey) {
   const value = journey && typeof journey === 'object' ? journey : {}
   const beats = Array.isArray(value.beats) ? value.beats : []
+  const originalIds = new Set(beats.map(beat => beat?.id).filter(Boolean))
+  const usedIds = new Set()
+  const text = field => field == null ? '' : String(field)
   return {
     ...EMPTY_JOURNEY,
     ...value,
+    ...Object.fromEntries(Object.keys(EMPTY_JOURNEY).filter(key => key !== 'beats').map(key => [key, text(value[key] ?? EMPTY_JOURNEY[key])])),
     beats: beats
       .filter(beat => beat && typeof beat === 'object')
-      .map((beat, index) => ({
-        id: beat.id || createJourneyId(),
+      .map((beat, index) => {
+        // Reading old data must not invent new identities on every render.
+        let id = typeof beat.id === 'string' && beat.id ? beat.id : `legacy-beat-${index}`
+        if (!beat.id || usedIds.has(id)) {
+          id = `legacy-beat-${index}`
+          while (usedIds.has(id) || originalIds.has(id)) id += '-legacy'
+        }
+        usedIds.add(id)
+        const normalized = {
         title: '',
         description: '',
         storyPhase: 'Beginning',
@@ -74,8 +85,12 @@ export function normalizeJourney(journey) {
         linkedCharacterId: '',
         isMajorTurningPoint: false,
         ...beat,
+        id,
         sortOrder: Number.isFinite(beat.sortOrder) ? beat.sortOrder : index,
-      }))
+        }
+        ;['title', 'description', 'storyPhase', 'customPhase', 'emotionalState', 'belief', 'goal', 'conflict', 'choiceMade', 'consequence', 'timelineEventId', 'chapterId', 'sceneId', 'linkedCharacterId'].forEach(key => { normalized[key] = text(normalized[key]) })
+        return normalized
+      })
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((beat, index) => ({ ...beat, sortOrder: index })),
   }

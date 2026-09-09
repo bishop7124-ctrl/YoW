@@ -1,7 +1,7 @@
 {
   "name": "yow",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -13,7 +13,7 @@
     "check:e2e-matrix": "node ./scripts/check-e2e-matrix.mjs",
     "check:api-esm": "node ./scripts/check-api-esm-resolution.mjs",
     "sync:interest-emails": "node ./scripts/sync-interest-emails.mjs",
-    "lint": "eslint src --ext .js,.jsx",
+    "lint": "eslint src api scripts tests --ext .js,.jsx,.mjs",
     "test": "vitest run",
     "qa": "npm run lint && npm run test && npm run build && npm run check:load && npm run check:e2e-matrix && npm run check:api-esm",
     "qa:all": "npm run qa && npm run qa:smoke",
@@ -46,6 +46,7 @@
     "caniuse-lite": "1.0.30001797"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^2.11.4",

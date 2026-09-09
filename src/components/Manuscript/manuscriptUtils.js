@@ -1,6 +1,19 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react'
 import { readItem, writeItem } from '../../storage/projectStorage'
 
+// ─── Very large scene handling ─────────────────────────────────────────────────
+// A single scene's raw content past this length hits real, unfixable native
+// `<textarea>` cost in the browser engine itself — confirmed by the 2026-08-08
+// investigation (docs/ROADMAP.md Bugs table): a bare, zero-React textarea with no
+// app code showed the same scaling curve (negligible below ~120k characters, ~82ms
+// at 180k, 52-421ms at 245k), and scene virtualization / storage-layer fixes don't
+// reach it because it lives below the app entirely. The accepted Phase 4(a) decision
+// was not to build custom chunking, but to ship this limitation openly plus a
+// Select-All/copy-whole-scene action that bypasses relying on the browser's own
+// (also slow, at this size) native select-all-then-copy path. Picked at the low end
+// of the confirmed-cost range so the warning/action appear before typing lag does.
+export const LARGE_SCENE_CHAR_THRESHOLD = 120000
+
 // ─── Script types ─────────────────────────────────────────────────────────────
 
 export const SCRIPT_TYPES = new Set(['play', 'screenplay', 'tv_show'])

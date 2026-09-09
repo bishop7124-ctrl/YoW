@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
-import { parseTimelineYear } from '../../utils/timelineYear'
+import { useId, useMemo, useState } from 'react'
+import { findEraForYear, formatTimelineDate, getTimelineYear, parseTimelineYear, parseYearInput, sortTimelineEras } from '../../utils/timelineYear'
+import { createEraLookup, resolveTimelineEra, uniqueTimelineValues } from '../../utils/timelineEntries'
 
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
-
-const unique = values => Array.from(new Set((values || []).filter(Boolean)))
 
 export default function ChronicleEntryForm({
   kind = 'timeline',
@@ -16,59 +15,40 @@ export default function ChronicleEntryForm({
   onCancel,
 }) {
   const isWorldHistory = kind === 'worldhistory'
+  const fieldId = useId()
+  const initialDate = formatTimelineDate(initial || {}, '')
+  const sortedEras = useMemo(() => sortTimelineEras(eras), [eras])
 
-  const [form, setForm] = useState({
-    title: initial?.title ?? '',
-    date: initial?.date ?? initial?.dateRange ?? '',
-    startYear: initial?.startYear != null ? String(initial.startYear) : '',
+  const [form, setForm] = useState(() => ({
+    title: String(initial?.title ?? ''),
+    date: initialDate,
+    startYear: String(getTimelineYear(initial || {}) ?? ''),
     endYear: initial?.endYear != null ? String(initial.endYear) : '',
     era: initial?.era ?? '',
-    eraId: initial?.eraId ?? '',
+    eraId: initial ? resolveTimelineEra(initial, createEraLookup(eras))?.id || '' : '',
     description: initial?.description ?? initial?.content ?? '',
     type: initial?.type ?? initial?.category ?? '',
-    tags: initial?.tags ?? [],
-    linkedCharacters: initial?.linkedCharacters ?? [],
-    linkedLocations: initial?.linkedLocations ?? [],
-  })
+    tags: uniqueTimelineValues(initial?.tags),
+    linkedCharacters: uniqueTimelineValues(initial?.linkedCharacters),
+    linkedLocations: uniqueTimelineValues(initial?.linkedLocations),
+  }))
   const [tagInput, setTagInput] = useState('')
-  const [eraManuallySet, setEraManuallySet] = useState(!!initial?.eraId)
+  const [eraManuallySet, setEraManuallySet] = useState(Boolean(initial && (Object.hasOwn(initial, 'eraId') || initial.era)))
+  const [error, setError] = useState('')
+  const year = isWorldHistory ? parseYearInput(form.startYear) : parseTimelineYear(form.date)
+  const autoEraId = findEraForYear(year, sortedEras)?.id || ''
+  const selectedEraId = eraManuallySet ? form.eraId : autoEraId
 
-  const sortedEras = [...eras].sort((a, b) => (a.startYear ?? Infinity) - (b.startYear ?? Infinity))
-
-  const field = (key) => (e) => setForm(prev => ({ ...prev, [key]: e.target.value }))
-
-  const findEraForYear = (year) => {
-    if (year == null || !Number.isFinite(year)) return ''
-    const match = sortedEras.find(er => {
-      const start = er.startYear ?? -Infinity
-      const end = er.endYear ?? Infinity
-      return year >= start && year <= end
-    })
-    return match?.id ?? ''
+  const field = (key) => (e) => {
+    setError('')
+    setForm(prev => ({ ...prev, [key]: e.target.value }))
   }
-
-  // Auto-assign era when startYear changes (unless user has manually picked one)
-  useEffect(() => {
-    if (eraManuallySet) return
-    const year = form.startYear !== '' ? parseInt(form.startYear, 10) : null
-    const autoId = year != null && Number.isFinite(year) ? findEraForYear(year) : ''
-    setForm(prev => ({ ...prev, eraId: autoId }))
-  }, [form.startYear]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // For timeline: also auto-assign from date free text
-  useEffect(() => {
-    if (isWorldHistory || eraManuallySet) return
-    const match = form.date.match(/-?\d+/)
-    const year = match ? parseInt(match[0], 10) : null
-    const autoId = year != null && Number.isFinite(year) ? findEraForYear(year) : ''
-    setForm(prev => ({ ...prev, eraId: autoId }))
-  }, [form.date]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addTag = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
       e.preventDefault()
       const tag = tagInput.trim().replace(/,$/, '')
-      if (tag) setForm(prev => ({ ...prev, tags: unique([...prev.tags, tag]) }))
+      if (tag) setForm(prev => ({ ...prev, tags: uniqueTimelineValues([...prev.tags, tag]) }))
       setTagInput('')
     }
   }
@@ -81,69 +61,86 @@ export default function ChronicleEntryForm({
   const submit = (e) => {
     e.preventDefault()
     if (!form.title.trim()) return
-    if (isWorldHistory && form.startYear.trim() === '') return
-    const selectedEra = eras.find(er => er.id === form.eraId)
-    const startYear = form.startYear !== '' ? parseInt(form.startYear, 10) : null
-    const endYear = form.endYear !== '' ? parseInt(form.endYear, 10) : null
-    onSave({
+    const selectedEra = eras.find(er => er.id === selectedEraId)
+    const startYear = parseYearInput(form.startYear)
+    const endYear = parseYearInput(form.endYear)
+    if (isWorldHistory && ((form.startYear.trim() !== '' && startYear === null) || (form.endYear.trim() !== '' && endYear === null))) {
+      setError('Enter valid whole-number years.')
+      return
+    }
+    if (isWorldHistory && endYear !== null && startYear === null) {
+      setError('Enter a start year before adding an end year.')
+      return
+    }
+    if (isWorldHistory && endYear !== null && endYear < startYear) {
+      setError('End year must be the same as or later than the start year.')
+      return
+    }
+    const historyDate = startYear === getTimelineYear(initial || {}) && endYear === parseYearInput(initial?.endYear)
+      ? initialDate || String(startYear ?? '')
+      : String(startYear ?? '')
+    const saved = onSave({
       title: form.title.trim(),
       // worldhistory uses startYear/endYear; timeline uses free-text date, but we
       // still derive a numeric startYear from it so sort/display order (which
       // prioritizes startYear when present) stays in sync with what was typed.
       ...(isWorldHistory
-        ? { startYear, endYear, date: startYear != null ? String(startYear) : form.date }
-        : { date: form.date, dateRange: form.date, startYear: parseTimelineYear(form.date), endYear: null }
+        ? { startYear, endYear, date: historyDate, dateRange: historyDate }
+        : { date: form.date, dateRange: form.date, startYear: parseTimelineYear(form.date), endYear: form.date === initialDate ? initial?.endYear ?? null : null }
       ),
-      era: selectedEra?.name ?? form.era,
-      eraId: form.eraId || null,
+      era: selectedEra?.name ?? (eras.length ? '' : form.era),
+      eraId: selectedEra?.id || null,
       description: form.description,
       content: form.description,
       type: form.type,
       category: form.type,
-      tags: form.tags,
+      tags: uniqueTimelineValues([...form.tags, tagInput.trim()]),
       linkedCharacters: form.linkedCharacters,
       linkedLocations: form.linkedLocations,
     })
+    if (saved === false || saved === null) setError('This entry could not be saved. Your draft is still here.')
+    else e.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} data-confirms-save className="space-y-4">
       <div>
-        <label className={LABEL}>Title *</label>
-        <input value={form.title} onChange={field('title')} className={INPUT} required />
+        <label htmlFor={`${fieldId}-title`} className={LABEL}>Title *</label>
+        <input id={`${fieldId}-title`} value={form.title} onChange={field('title')} className={INPUT} required />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className={LABEL}>Era</label>
+          <label htmlFor={`${fieldId}-era`} className={LABEL}>Era</label>
           {sortedEras.length > 0 ? (
-            <select value={form.eraId} onChange={e => { setEraManuallySet(true); field('eraId')(e) }} className={INPUT}>
+            <select id={`${fieldId}-era`} value={selectedEraId} onChange={e => { setEraManuallySet(true); field('eraId')(e) }} className={INPUT}>
               <option value="">— None —</option>
               {sortedEras.map(er => (
                 <option key={er.id} value={er.id}>{er.name}</option>
               ))}
             </select>
           ) : (
-            <input value={form.era} onChange={field('era')} placeholder="e.g. The Second Age" className={INPUT} />
+            <input id={`${fieldId}-era`} value={form.era} onChange={field('era')} placeholder="e.g. The Second Age" className={INPUT} />
           )}
         </div>
 
         {isWorldHistory ? (
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className={LABEL}>Start year *</label>
+              <label htmlFor={`${fieldId}-start`} className={LABEL}>Start year</label>
               <input
+                id={`${fieldId}-start`}
                 type="number"
                 value={form.startYear}
                 onChange={field('startYear')}
                 placeholder="e.g. −500"
                 className={INPUT}
-                required
               />
             </div>
             <div>
-              <label className={LABEL}>End year</label>
+              <label htmlFor={`${fieldId}-end`} className={LABEL}>End year</label>
               <input
+                id={`${fieldId}-end`}
                 type="number"
                 value={form.endYear}
                 onChange={field('endYear')}
@@ -154,20 +151,21 @@ export default function ChronicleEntryForm({
           </div>
         ) : (
           <div>
-            <label className={LABEL}>Date / Time</label>
-            <input value={form.date} onChange={field('date')} placeholder="e.g. Year 312, First Month" className={INPUT} />
+            <label htmlFor={`${fieldId}-date`} className={LABEL}>Date / Time</label>
+            <input id={`${fieldId}-date`} value={form.date} onChange={field('date')} placeholder="e.g. Year 312, First Month" className={INPUT} />
           </div>
         )}
       </div>
 
       <div>
-        <label className={LABEL}>Category / Type</label>
-        <input value={form.type} onChange={field('type')} placeholder="War, founding, journey…" className={INPUT} />
+        <label htmlFor={`${fieldId}-type`} className={LABEL}>Category / Type</label>
+        <input id={`${fieldId}-type`} value={form.type} onChange={field('type')} placeholder="War, founding, journey…" className={INPUT} />
       </div>
 
       <div>
-        <label className={LABEL}>{isWorldHistory ? 'Content' : 'Description'}</label>
+        <label htmlFor={`${fieldId}-description`} className={LABEL}>{isWorldHistory ? 'Content' : 'Description'}</label>
         <textarea
+          id={`${fieldId}-description`}
           value={form.description}
           onChange={field('description')}
           rows={isWorldHistory ? 8 : 5}
@@ -176,7 +174,7 @@ export default function ChronicleEntryForm({
       </div>
 
       <div>
-        <label className={LABEL}>Tags</label>
+        <label htmlFor={`${fieldId}-tags`} className={LABEL}>Tags</label>
         {form.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-1.5">
             {form.tags.map(tag => (
@@ -192,6 +190,7 @@ export default function ChronicleEntryForm({
           </div>
         )}
         <input
+          id={`${fieldId}-tags`}
           value={tagInput}
           onChange={e => setTagInput(e.target.value)}
           onKeyDown={addTag}
@@ -234,6 +233,7 @@ export default function ChronicleEntryForm({
         </div>
       )}
 
+      {error && <p role="alert" className="text-sm text-[var(--text-main)]">{error}</p>}
       <div className="flex gap-2 pt-1 border-t border-[var(--border)]">
         <button type="submit" className="btn btn-primary">Save</button>
         <button type="button" onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm transition-colors">Cancel</button>
