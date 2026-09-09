@@ -1,12 +1,20 @@
 import {
-  cleanText, formatDate, sortByOrder, sortByTitle, valueList,
-  isCampaignProject, isComicProject, sessionExportRows,
+  cleanText, formatDate, sortByOrder, sortByTitle,
+  isCampaignProject, isComicProject, sessionExportRows, outlineStoryEventLabel,
   getEnabled, buildOutline, wordCount, buildSummaryStats,
   getProjectExportLabel, getProjectDocxZipFilename, downloadBlob, sanitizeFilename,
 } from './projectExportHelpers.js'
+import { outlineSynopsis, outlineText } from './outlineDisplay.js'
 import { normalizeAiChatSessions } from './aiChatHistory.js'
 import { buildZipBlob } from './zipUtils.js'
-import { getScheduleCalendar, monthName } from './scheduleCalendar.js'
+import { getScheduleCalendar, normalizeScheduleEvent, scheduleExportFields, sortScheduleEvents } from './scheduleCalendar.js'
+import { getDirectFamilyRelationshipRows } from './familyRelationships.js'
+import { formatTimelineDate, sortTimelineEntries } from './timelineYear.js'
+import { normalizeHistoryEntry } from './historyEntries.js'
+import { createLoreReferenceIndex, loreReferenceRows } from './loreEntries.js'
+import { buildCharacterIndex, characterDetailFields, characterJourneyFields } from './characterEntries.js'
+import { buildRelationshipIndex, getSocialRelationshipRows } from './relationshipMap.js'
+import { buildIdeaIndex, buildIdeaEntityIndex, ideaExportFields } from './ideaEntries.js'
 
 // A single `\n` within a block is a soft line break the writer typed on purpose
 // (dialogue formatted one line per beat, poetry, etc.) — replacing it with a space
@@ -65,21 +73,6 @@ const addAiChatMessages = (children, docx, session) => {
     }))
     addDocParagraphs(children, docx, message.content, { indent: { left: 240 } })
   })
-}
-
-const scheduleDateLabel = (project, event) => {
-  if (event?.date) return event.date
-  const parts = []
-  if (event?.year !== null && event?.year !== undefined && String(event.year).trim() !== '') {
-    parts.push(`Year ${event.year}`)
-  }
-  if (event?.month !== null && event?.month !== undefined && String(event.month).trim() !== '') {
-    parts.push(monthName(getScheduleCalendar(project), Number(event.month)))
-  }
-  if (event?.day !== null && event?.day !== undefined && String(event.day).trim() !== '') {
-    parts.push(`Day ${event.day}`)
-  }
-  return parts.join(', ')
 }
 
 export const createProjectDocxBlob = async (projectData) => {
@@ -179,16 +172,18 @@ export const createProjectDocxBlob = async (projectData) => {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, isCampaignProject(project) ? 'Campaign Sessions' : 'Story Outline')
     buildOutline(projectData).forEach(({ act, chapters }) => {
-      addDocHeading(children, docx, act.title || 'Untitled Act', HeadingLevel.HEADING_2)
-      addDocParagraphs(children, docx, act.synopsis)
+      addDocHeading(children, docx, outlineText(act.title) || 'Untitled Act', HeadingLevel.HEADING_2)
+      addDocFields(children, docx, [['Story event', outlineStoryEventLabel(act, project)]])
+      addDocParagraphs(children, docx, outlineSynopsis(act))
       chapters.forEach(({ chapter, scenes }, chapterIndex) => {
-        addDocHeading(children, docx, chapter.title || `Chapter ${chapterIndex + 1}`, HeadingLevel.HEADING_3)
-        addDocParagraphs(children, docx, chapter.synopsis)
+        addDocHeading(children, docx, outlineText(chapter.title) || `Chapter ${chapterIndex + 1}`, HeadingLevel.HEADING_3)
+        addDocFields(children, docx, [['Story event', outlineStoryEventLabel(chapter, project)]])
+        addDocParagraphs(children, docx, outlineSynopsis(chapter))
         if (isCampaignProject(project)) {
           addDocFields(children, docx, sessionExportRows(chapter))
         }
         scenes.forEach(scene => {
-          const title = scene.title && scene.title !== 'Scene' ? scene.title : 'Scene'
+          const title = outlineText(scene.title) && outlineText(scene.title) !== 'Scene' ? outlineText(scene.title) : 'Scene'
           children.push(new Paragraph({
             children: [
               new TextRun({ text: title, bold: true, size: 20 }),
@@ -196,7 +191,8 @@ export const createProjectDocxBlob = async (projectData) => {
             ],
             spacing: { before: 80, after: 80 },
           }))
-          addDocParagraphs(children, docx, scene.synopsis || scene.summary || scene.content, { indent: { left: 360 } })
+          addDocFields(children, docx, [['Story event', outlineStoryEventLabel(scene, project)]])
+          addDocParagraphs(children, docx, outlineSynopsis(scene), { indent: { left: 360 } })
         })
       })
     })
@@ -206,11 +202,11 @@ export const createProjectDocxBlob = async (projectData) => {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, isCampaignProject(project) ? 'Session Drafts' : 'Manuscript')
     buildOutline(projectData).forEach(({ act, chapters }) => {
-      addDocHeading(children, docx, act.title || 'Untitled Act', HeadingLevel.HEADING_2)
+      addDocHeading(children, docx, outlineText(act.title) || 'Untitled Act', HeadingLevel.HEADING_2)
       chapters.forEach(({ chapter, scenes }, chapterIndex) => {
-        addDocHeading(children, docx, chapter.title || `Chapter ${chapterIndex + 1}`, HeadingLevel.HEADING_3)
+        addDocHeading(children, docx, outlineText(chapter.title) || `Chapter ${chapterIndex + 1}`, HeadingLevel.HEADING_3)
         scenes.forEach(scene => {
-          const title = scene.title && scene.title !== 'Scene' ? scene.title : 'Scene'
+          const title = outlineText(scene.title) && outlineText(scene.title) !== 'Scene' ? outlineText(scene.title) : 'Scene'
           children.push(new Paragraph({
             children: [
               new TextRun({ text: title, bold: true, size: 20 }),
@@ -225,66 +221,56 @@ export const createProjectDocxBlob = async (projectData) => {
   }
 
   if (enabled.has('characters')) {
+    const characterIndex = buildCharacterIndex(projectData.characters)
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'Characters')
-    sortByTitle(projectData.characters, 'name').forEach(character => {
+    sortByTitle(characterIndex.entries, 'name').forEach(character => {
       addDocHeading(children, docx, character.name || 'Unnamed Character', HeadingLevel.HEADING_2)
-      addDocFields(children, docx, [
-        ['Role', character.role],
-        ['Pronouns', character.pronouns],
-        ['Alias', character.keywords?.join(', ')],
-        ['Age', character.age],
-        ['Birth', character.birthDate],
-        ['Death', character.deathDate],
-        ['Family', character.familyGroup],
-        ['External goal', character.externalGoal],
-        ['Internal goal', character.internalGoal],
-      ])
-      addDocParagraphs(children, docx, character.bio || character.description || character.notes)
-      if (character.journey) {
-        const journey = character.journey
+      addDocFields(children, docx, characterDetailFields(character, project.currentYear))
+      addDocParagraphs(children, docx, character.bio)
+      const links = character.relationships.map(rel => {
+        const target = characterIndex.byId.get(rel.targetId)
+        return target ? `${rel.type}: ${target.name}` : ''
+      }).filter(Boolean)
+      if (links.length) {
+        addDocHeading(children, docx, 'Known Links', HeadingLevel.HEADING_3)
+        addDocParagraphs(children, docx, links.join('\n'))
+      }
+      const journeyFields = characterJourneyFields(character.journey)
+      if (journeyFields.length) {
         addDocHeading(children, docx, 'Character Journey', HeadingLevel.HEADING_3)
-        addDocFields(children, docx, [
-          ['Arc type', journey.arcType],
-          ['Scope', journey.scope === 'series' ? 'Across the series' : 'This project'],
-          ['Starting state', journey.startingState],
-          ['Ending state', journey.endingState],
-          ['Core wound', journey.coreWound],
-          ['Core fear', journey.fear],
-          ['Lie believed', journey.lieBelieved],
-          ['Truth to learn', journey.truthLearned],
-          ['Want', journey.want],
-          ['Need', journey.need],
-          ['Fatal flaw', journey.fatalFlaw],
-          ['Strength', journey.strength],
-          ['Internal conflict', journey.internalConflict],
-          ['External conflict', journey.externalConflict],
-          ['Beginning belief', journey.beginningBelief],
-          ['Ending belief', journey.endingBelief],
-          ['Beginning goal', journey.beginningGoal],
-          ['Ending goal', journey.endingGoal],
-          ['Beginning fear', journey.beginningFear],
-          ['Ending fear', journey.endingFear],
-          ['Beginning relationships', journey.beginningRelationships],
-          ['Ending relationships', journey.endingRelationships],
-        ])
-        addDocParagraphs(children, docx, journey.notes)
-        ;[...(journey.beats || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).forEach((beat, index) => {
-          addDocHeading(children, docx, `${index + 1}. ${beat.title || 'Untitled beat'}`, HeadingLevel.HEADING_3)
-          addDocFields(children, docx, [
-            ['Story phase', beat.storyPhase === 'Custom' ? beat.customPhase : beat.storyPhase],
-            ['Major turning point', beat.isMajorTurningPoint ? 'Yes' : ''],
-            ['Emotional state', beat.emotionalState],
-            ['Belief', beat.belief],
-            ['Goal', beat.goal],
-            ['Conflict', beat.conflict],
-            ['Choice made', beat.choiceMade],
-            ['Consequence', beat.consequence],
-          ])
-          addDocParagraphs(children, docx, beat.description)
-        })
+        addDocFields(children, docx, journeyFields)
       }
     })
+  }
+
+  if (enabled.has('familytree')) {
+    children.push(new Paragraph({ children: [new PageBreak()] }))
+    addDocHeading(children, docx, 'Family Tree')
+    const groups = new Map()
+    const familyCharacters = buildRelationshipIndex(projectData.characters).entries
+    sortByTitle(familyCharacters, 'name').forEach(character => {
+      const group = character.familyGroup?.trim() || 'Unassigned'
+      if (!groups.has(group)) groups.set(group, [])
+      groups.get(group).push(character.name || 'Unnamed character')
+    })
+    groups.forEach((names, group) => {
+      addDocHeading(children, docx, group, HeadingLevel.HEADING_2)
+      addDocParagraphs(children, docx, names.join(', '))
+    })
+    addDocHeading(children, docx, 'Direct Family Relationships', HeadingLevel.HEADING_2)
+    const rows = getDirectFamilyRelationshipRows(familyCharacters)
+    rows.forEach(row => addDocParagraphs(children, docx, `${row.sourceName} (${row.sourceLabel}) — ${row.targetName} (${row.targetLabel})`))
+    if (!rows.length) addDocParagraphs(children, docx, 'No publicly known direct family relationships recorded.')
+  }
+
+  if (enabled.has('relationships')) {
+    children.push(new Paragraph({ children: [new PageBreak()] }))
+    addDocHeading(children, docx, 'Relationships')
+    addDocParagraphs(children, docx, 'Social links are listed from source to target. Family facts are managed separately in the Family Tree.')
+    const rows = getSocialRelationshipRows(projectData.characters)
+    rows.forEach(row => addDocParagraphs(children, docx, `${row.source} → ${row.target}: ${row.relationship}`))
+    if (!rows.length) addDocParagraphs(children, docx, 'No social relationships recorded.')
   }
 
   if (enabled.has('locations')) {
@@ -316,50 +302,54 @@ export const createProjectDocxBlob = async (projectData) => {
   }
 
   if (enabled.has('lore')) {
+    const loreIndex = createLoreReferenceIndex(projectData)
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'Lore')
-    sortByTitle(projectData.loreEntries).forEach(entry => {
+    sortByTitle(loreIndex.entries).forEach(entry => {
       addDocHeading(children, docx, entry.title || 'Untitled Lore Entry', HeadingLevel.HEADING_2)
       addDocFields(children, docx, [
         ['Category', entry.category || 'Uncategorized'],
         ['Tags', entry.tags?.join(', ')],
       ])
       addDocParagraphs(children, docx, entry.content)
+      const references = loreReferenceRows(entry, loreIndex)
+      if (references.length) {
+        addDocHeading(children, docx, 'Linked entries', HeadingLevel.HEADING_3)
+        addDocParagraphs(children, docx, references.map(reference => `${reference.type}: ${reference.title}`).join('\n'))
+      }
     })
   }
 
   if (enabled.has('ideas')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'Notes')
-    sortByTitle(projectData.ideaEntries).forEach(entry => {
+    const entities = buildIdeaEntityIndex(projectData)
+    sortByTitle(buildIdeaIndex(projectData.ideaEntries).ideas).forEach(entry => {
       addDocHeading(children, docx, entry.title || 'Untitled Note', HeadingLevel.HEADING_2)
-      addDocFields(children, docx, [['Tags', entry.tags?.join(', ')]])
-      addDocParagraphs(children, docx, entry.content || entry.text || entry.body)
+      addDocFields(children, docx, ideaExportFields(entry, entities))
+      addDocParagraphs(children, docx, entry.description)
     })
   }
 
   if (enabled.has('schedule')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'Schedule')
-    sortByOrder(projectData.storySchedule).forEach(event => {
+    sortScheduleEvents(projectData.storySchedule, getScheduleCalendar(project)).forEach(rawEvent => {
+      const event = normalizeScheduleEvent(rawEvent)
       addDocHeading(children, docx, event.title || 'Untitled Schedule Event', HeadingLevel.HEADING_2)
-      addDocFields(children, docx, [
-        ['Date', scheduleDateLabel(project, event)],
-        ['Category', event.category],
-        ['Duration', event.duration],
-        ['Tags', event.tags?.join(', ')],
-      ])
-      addDocParagraphs(children, docx, event.description || event.notes || event.content)
+      addDocFields(children, docx, scheduleExportFields(projectData, rawEvent))
+      addDocParagraphs(children, docx, event.description)
     })
   }
 
   if (enabled.has('timeline')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'Timeline')
-    sortByOrder(projectData.timeline).forEach(event => {
+    sortTimelineEntries(projectData.timeline).forEach(event => {
       addDocHeading(children, docx, event.title || 'Untitled Event', HeadingLevel.HEADING_2)
       addDocFields(children, docx, [
-        ['Date', valueList(event.date, event.year).join(' ')],
+        ['Date', formatTimelineDate(event)],
+        ['Era', event.era],
         ['Tags', event.tags?.join(', ')],
       ])
       addDocParagraphs(children, docx, event.description || event.content || event.notes)
@@ -369,14 +359,15 @@ export const createProjectDocxBlob = async (projectData) => {
   if (enabled.has('worldhistory')) {
     children.push(new Paragraph({ children: [new PageBreak()] }))
     addDocHeading(children, docx, 'World History')
-    sortByOrder(projectData.worldHistory).forEach(entry => {
+    sortTimelineEntries(projectData.worldHistory).map(normalizeHistoryEntry).forEach(entry => {
       addDocHeading(children, docx, entry.title || 'Untitled History Entry', HeadingLevel.HEADING_2)
       addDocFields(children, docx, [
         ['Era', entry.era],
-        ['Date', valueList(entry.date, entry.year).join(' ')],
+        ['Date', formatTimelineDate(entry)],
+        ['Category', entry.category || entry.type],
         ['Tags', entry.tags?.join(', ')],
       ])
-      addDocParagraphs(children, docx, entry.content || entry.description || entry.notes)
+      addDocParagraphs(children, docx, entry.description)
     })
   }
 
@@ -474,6 +465,16 @@ const getProjectDocxCategoryData = (projectData) => {
       include: enabled.has('characters') && Boolean(projectData.characters?.length),
     },
     {
+      label: 'Family Tree',
+      data: withProjectSections(projectData, ['familytree'], { characters: projectData.characters ?? [] }),
+      include: enabled.has('familytree') && Boolean(projectData.characters?.length),
+    },
+    {
+      label: 'Relationships',
+      data: withProjectSections(projectData, ['relationships'], { characters: projectData.characters ?? [] }),
+      include: enabled.has('relationships') && Boolean(projectData.characters?.length),
+    },
+    {
       label: 'Locations',
       data: withProjectSections(projectData, ['locations'], { locations: projectData.locations ?? [] }),
       include: enabled.has('locations') && Boolean(projectData.locations?.length),
@@ -485,12 +486,19 @@ const getProjectDocxCategoryData = (projectData) => {
     },
     {
       label: 'Lore',
-      data: withProjectSections(projectData, ['lore'], { loreEntries: projectData.loreEntries ?? [] }),
+      data: withProjectSections(projectData, ['lore'], {
+        loreEntries: projectData.loreEntries ?? [],
+        characters: projectData.characters ?? [],
+        locations: projectData.locations ?? [],
+      }),
       include: enabled.has('lore') && Boolean(projectData.loreEntries?.length),
     },
     {
       label: 'Notes',
-      data: withProjectSections(projectData, ['ideas'], { ideaEntries: projectData.ideaEntries ?? [] }),
+      data: withProjectSections(projectData, ['ideas'], {
+        ideaEntries: projectData.ideaEntries ?? [], characters: projectData.characters ?? [], locations: projectData.locations ?? [],
+        factions: projectData.factions ?? [], loreEntries: projectData.loreEntries ?? [], timeline: projectData.timeline ?? [], chapters: projectData.chapters ?? [],
+      }),
       include: enabled.has('ideas') && Boolean(projectData.ideaEntries?.length),
     },
     {

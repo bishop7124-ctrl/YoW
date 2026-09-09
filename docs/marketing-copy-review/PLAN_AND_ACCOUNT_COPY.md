@@ -143,9 +143,9 @@ Confirm wording matches the final decision:
 - AI is the paid-only room;
 - no cloud overwrite occurs when the selected project or mode changes.
 
-### `DesktopUpgradeWall.jsx` and `DownloadPage.jsx`
+### `DownloadPage.jsx`
 
-These say Lifetime/Founder unlock the paid desktop product. As of 2026-09-01, `DownloadPage` and both desktop APIs consistently include trusted server-granted Beta accounts too; the Beta-specific unavailable-build message is: “Your beta access includes the desktop app. The installers aren't available for download just yet — check back here soon.” Platform download text still includes unsigned-install workarounds, and the signed-in desktop runtime remains Account Settings-only. Do not ship these instructions as paid-product onboarding.
+Lifetime/Founder and trusted server-granted Beta accounts can reach the desktop download entitlement path. The Beta-specific unavailable-build message is: “Your beta access includes the desktop app. The installers aren't available for download just yet — check back here soon.” Platform download text still includes unsigned-install workarounds, and the signed-in desktop runtime remains Account Settings-only. The obsolete, unreferenced `DesktopUpgradeWall` was removed on 2026-09-07 so it cannot become a second source of entitlement copy. Do not ship these instructions as paid-product onboarding.
 
 ### Beta/interest surfaces
 
