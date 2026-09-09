@@ -49,9 +49,19 @@ describe('loadValue', () => {
     expect(loadValue('nf_missing')).toBeNull()
   })
 
-  it('returns the default when stored JSON is corrupt', () => {
+  it('returns the default when stored JSON is corrupt, and records it as corrupted (audit P0-07) — not just missing', async () => {
+    const { hasCorruptLocalData, readCorruptKeys } = await import('./writeDurability.js')
     localStorage.setItem('nf_corrupt', '{not json')
+
     expect(loadValue('nf_corrupt', [])).toEqual([])
+    expect(hasCorruptLocalData()).toBe(true)
+    expect(readCorruptKeys().has('nf_corrupt')).toBe(true)
+  })
+
+  it('does NOT record a missing key as corrupted — only a value that failed to parse', async () => {
+    const { hasCorruptLocalData } = await import('./writeDurability.js')
+    loadValue('nf_missing', 'fallback')
+    expect(hasCorruptLocalData()).toBe(false)
   })
 
   it('returns the default when the stored value is JSON null', () => {

@@ -22,13 +22,49 @@ describe('friendlyErrorMessage', () => {
     expect(msg).toContain('Rate limit exceeded')
   })
 
+  it('adds OpenRouter free-model guidance for OpenRouter 429s', () => {
+    const msg = friendlyErrorMessage(429, 'Rate limit exceeded', { provider: 'openrouter' })
+    expect(msg).toContain('OpenRouter free models')
+    expect(msg).toContain(':free')
+    expect(msg).toContain('paid model variant')
+  })
+
+  it('distinguishes OpenRouter upstream provider limits from plain platform limits', () => {
+    const msg = friendlyErrorMessage(429, 'Provider returned error', {
+      provider: 'openrouter',
+      metadata: { error_type: 'rate_limit_exceeded', provider_code: 'rate_limited' },
+    })
+    expect(msg).toContain('upstream provider')
+    expect(msg).toContain('at capacity')
+    expect(msg).toContain('Provider returned error')
+  })
+
+  it('includes Retry-After guidance when a provider supplies it', () => {
+    const msg = friendlyErrorMessage(429, 'Rate limit exceeded', { provider: 'openrouter', retryAfter: 60 })
+    expect(msg).toContain('Wait 60 seconds')
+  })
+
+  it('flags a 402 as exhausted provider credits', () => {
+    const msg = friendlyErrorMessage(402, 'Insufficient credits')
+    expect(msg).toContain('out of credits')
+    expect(msg).toContain('Insufficient credits')
+  })
+
   it('flags a 5xx as a provider-side outage the user cannot fix', () => {
     const msg = friendlyErrorMessage(503, 'Service unavailable')
     expect(msg).toContain('having issues')
     expect(msg).toContain('Service unavailable')
   })
 
-  it('passes through the raw message for other status codes unchanged', () => {
-    expect(friendlyErrorMessage(400, 'Bad request: missing field')).toBe('Bad request: missing field')
+  it('flags malformed or oversized requests without blaming the API key', () => {
+    const msg = friendlyErrorMessage(400, 'Bad request: missing field')
+    expect(msg).toContain('too large or malformed')
+    expect(msg).not.toContain('API key looks invalid')
+  })
+
+  it('redacts API-looking secrets from provider messages', () => {
+    const msg = friendlyErrorMessage(401, 'Incorrect API key AIza123456789012345678901234567890 in request URL')
+    expect(msg).toContain('[redacted API key]')
+    expect(msg).not.toContain('AIza123456789012345678901234567890')
   })
 })

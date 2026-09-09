@@ -1,23 +1,23 @@
-import { Component, useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { lazy, Suspense, Component, useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import UserMenu from './auth/UserMenu'
 import AIPanel from './ai/AIPanel'
 import AIAssistant from './ai/AIAssistant'
 import AIStar from './ai/AIStar'
 import Characters from './characters/Characters'
-import FamilyTree from './familytree/FamilyTree'
-import RelationshipMap from './relationships/RelationshipMap'
+const FamilyTree = lazy(() => import('./familytree/FamilyTree'))
+const RelationshipMap = lazy(() => import('./relationships/RelationshipMap'))
 import Factions from './Factions/Factions'
 import Lore from './lore/Lore'
 import IdeasKanban from './ideas/IdeasKanban'
 import Timeline from './timeline/Timeline'
-import WorldHistory from './worldhistory/WorldHistory'
-import MapBuilder from './Map/MapBuilder'
+const WorldHistory = lazy(() => import('./worldhistory/WorldHistory'))
+const MapBuilder = lazy(() => import('./Map/MapBuilder'))
 import Locations from './Locations/Locations'
-import CharacterBuilder from './characterbuilder/CharacterBuilder'
+const CharacterBuilder = lazy(() => import('./characterbuilder/CharacterBuilder'))
 import Manuscript from './Manuscript/Manuscript'
 import StoryOutline from './outline/StoryOutline'
 import ProjectDashboard from './dashboard/ProjectDashboard'
-import ScheduleCalendar from './schedule/ScheduleCalendar'
+const ScheduleCalendar = lazy(() => import('./schedule/ScheduleCalendar'))
 import AITools from './aitools/AITools'
 import OnboardingTour from './onboarding/OnboardingTour'
 import { MANUSCRIPT_TOUR, CHARACTERS_TOUR, LOCATIONS_TOUR, LORE_TOUR, IDEAS_TOUR, MAP_TOUR, AI_TOOLS_TOUR, TIMELINE_TOUR, WORLDHISTORY_TOUR, FAMILYTREE_TOUR, COMIC_TOUR, OUTLINE_TOUR, DASHBOARD_TOUR, FACTIONS_TOUR } from './onboarding/tourDefinitions'
@@ -36,6 +36,7 @@ import RecordConflictReview from './shared/RecordConflictReview'
 import { useIsMobile } from '../utils/useMediaQuery'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
 import { UserMediaImage } from './shared/UserMedia'
+import MergeProjectModal from './MergeProjectModal'
 
 // ─── Project status ──────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ class SectionErrorBoundary extends Component {
         <button onClick={() => this.setState({ error: null })} className="mt-1 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-[var(--bg-main)] font-bold text-xs">Retry</button>
       </div>
     )
-    return this.props.children
+    return <Suspense fallback={<div role="status" className="p-8 text-[var(--text-muted)]">Loading workspace…</div>}>{this.props.children}</Suspense>
   }
 }
 
@@ -208,12 +209,17 @@ function ProjectSettings({ store, onClose }) {
   const initial = getEnabledSections(novel).filter(id => ALL_SECTION_IDS.includes(id))
   const [enabled, setEnabled] = useState(() => new Set(initial))
   const dialogRef = useRef(null)
+  const [showMerge, setShowMerge] = useState(false)
   useEffect(() => { dialogRef.current?.focus() }, [])
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    // Skip while MergeProjectModal is open on top of this dialog — its own
+    // Escape-to-close isn't wired (matching AIImportModal, which also has
+    // no Escape handling), so without this guard Escape would close this
+    // whole Project Settings dialog out from under it instead.
+    const handler = (e) => { if (e.key === 'Escape' && !showMerge) onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, showMerge])
   const [details, setDetails] = useState(() => ({
     title: novel?.title || '',
     description: novel?.description || '',
@@ -480,7 +486,7 @@ function ProjectSettings({ store, onClose }) {
               onClick={onClose}
               style={{
                 height: 28, padding: '0 14px', border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', borderRadius: 8,
-                background: 'var(--accent)', color: 'var(--bg-main)',
+                background: 'var(--accent)', color: 'var(--accent-contrast)',
                 fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer',
               }}
             >Done</button>
@@ -512,7 +518,7 @@ function ProjectSettings({ store, onClose }) {
                   value={details.title}
                   onChange={e => updateDetail('title', e.target.value)}
                   className="field"
-                  style={{ padding: '8px 10px', fontSize: 13 }}
+                  style={{ padding: '8px 10px', fontSize: 16 }}
                 />
               </label>
 
@@ -523,7 +529,7 @@ function ProjectSettings({ store, onClose }) {
                   onChange={e => updateDetail('description', e.target.value)}
                   rows={5}
                   className="field"
-                  style={{ padding: '8px 10px', fontSize: 13, resize: 'vertical', minHeight: 96 }}
+                  style={{ padding: '8px 10px', fontSize: 16, resize: 'vertical', minHeight: 96 }}
                 />
               </label>
 
@@ -534,7 +540,7 @@ function ProjectSettings({ store, onClose }) {
                     value={details.seriesId}
                     onChange={e => updateDetail('seriesId', e.target.value)}
                     className="field"
-                    style={{ padding: '8px 10px', fontSize: 13 }}
+                    style={{ padding: '8px 10px', fontSize: 16 }}
                   >
                     <option value="">No series</option>
                     {store.series.map(series => (
@@ -595,7 +601,7 @@ function ProjectSettings({ store, onClose }) {
                     onChange={e => updateDetail('progress', e.target.value)}
                     placeholder="—"
                     className="field"
-                    style={{ padding: '8px 10px', fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
+                    style={{ padding: '8px 10px', fontSize: 16, fontVariantNumeric: 'tabular-nums' }}
                   />
                 </label>
               )}
@@ -782,6 +788,16 @@ function ProjectSettings({ store, onClose }) {
             </section>
 
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
+              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Import</p>
+              <div className="project-settings-action-grid">
+                <button type="button" onClick={() => setShowMerge(true)} className="project-settings-action-card" title="Add another one of your projects' content into this project">
+                  <strong>Merge another project in</strong>
+                  <span>Adds characters, locations, worldbuilding, and more from another project you own — nothing here is replaced or removed</span>
+                </button>
+              </div>
+            </section>
+
+            <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
                 <div>
                   <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Backups</p>
@@ -870,6 +886,14 @@ function ProjectSettings({ store, onClose }) {
           </span>
         </div>
       </div>
+      {showMerge && novel && (
+        <MergeProjectModal
+          store={store}
+          project={novel}
+          onClose={() => setShowMerge(false)}
+          onDone={() => {}}
+        />
+      )}
     </div>
   )
 }
@@ -996,11 +1020,10 @@ export default function Layout({
   }, [section, viewMode])
 
   const initialContext = useMemo(() => {
-    if (viewMode === 'writing') return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: store.chapters.map(c => c.id), ideaEntryIds: [], customInstruction: '' }
-    if (section === 'characters' && store.selectedCharacterId) return { characterIds: [store.selectedCharacterId], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
-    if (section === 'locations' && store.selectedLocationId) return { characterIds: [], locationIds: [store.selectedLocationId], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
-    return { characterIds: [], locationIds: [], loreEntryIds: [], chapterIds: [], ideaEntryIds: [], customInstruction: '' }
-  }, [viewMode, section, store.selectedCharacterId, store.selectedLocationId, store.chapters])
+    if (viewMode === 'writing') return { mode: 'current_chapter', customInstruction: '' }
+    if (section === 'characters' && store.selectedCharacterId) return { mode: 'current_character', customInstruction: '' }
+    return { mode: 'smart', customInstruction: '' }
+  }, [viewMode, section, store.selectedCharacterId])
 
   const databaseContent = {
     dashboard:    <ProjectDashboard store={store} />,

@@ -13,7 +13,8 @@ import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
-import { PROVIDERS, fetchOpenRouterModels } from '../../utils/aiApi'
+import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
+import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, fetchLiveModels } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
   deleteSyncedAiSettings,
@@ -39,16 +40,19 @@ import {
 import { deactivateDesktopDevice, listDesktopDevices } from '../../utils/desktopEntitlement'
 import {
   BUILT_IN_THEMES,
-  DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
   DEFAULT_THEME_TUNING,
   QUICK_PALETTES,
+  SYSTEM_DARK_THEME,
+  SYSTEM_LIGHT_THEME,
+  SYSTEM_THEME_OPTION,
   applyThemeToDocument,
   applyThemeTuning,
   deriveCustomThemeTokens,
   getAccentContrast,
   getThemeColors,
   getThemeTuning,
+  normalizeThemeChoice,
   rgbaFromHex,
   saveThemeChoice,
   saveThemeTuning,
@@ -62,12 +66,12 @@ const FONT_OPTIONS = [
 ]
 
 const CUSTOM_COLOR_FIELDS = [
-  { key: 'bgMain', label: 'Workspace', hint: 'Page background, editor depth, large empty areas' },
-  { key: 'bgNav', label: 'Panels', hint: 'Sidebars, cards, modals, toolbar surfaces' },
-  { key: 'textMain', label: 'Main text', hint: 'Headings, body copy, active controls' },
-  { key: 'textMuted', label: 'Muted text', hint: 'Labels, helper copy, secondary navigation' },
-  { key: 'accent', label: 'Accent', hint: 'Primary buttons, selected states, focus rings' },
-  { key: 'border', label: 'Borders', hint: 'Dividers, input outlines, card edges' },
+  { key: 'bgMain', label: 'Canvas', hint: 'Main workspace background and editor depth' },
+  { key: 'bgNav', label: 'Surface', hint: 'Sidebars, panels, cards, modals, and toolbars' },
+  { key: 'textMain', label: 'Ink', hint: 'Headings, body copy, active controls' },
+  { key: 'textMuted', label: 'Muted ink', hint: 'Labels, helper copy, secondary navigation' },
+  { key: 'accent', label: 'Action', hint: 'Primary buttons, selected states, focus rings' },
+  { key: 'border', label: 'Line', hint: 'Dividers, input outlines, card edges' },
 ]
 
 export function MaintenancePayButton({ style }) {
@@ -103,7 +107,7 @@ const loadSavedPresets = () => {
 
 const isFiniteNumber = (value) => Number.isFinite(Number(value))
 
-const getAccountTheme = (user) => user?.user_metadata?.theme || DEFAULT_THEME
+const getAccountTheme = (user) => normalizeThemeChoice(user?.user_metadata?.theme || DEFAULT_THEME)
 
 const getAccountCustomColors = (user) => user?.user_metadata?.theme === 'custom'
   ? (user?.user_metadata?.custom_theme_colors || {})
@@ -119,15 +123,6 @@ function applyFontChoice(fontChoice) {
   const font = FONT_OPTIONS.find(option => option.id === fontChoice) || FONT_OPTIONS[0]
   localStorage.setItem('nf-font', font.id)
   document.documentElement.style.setProperty('--font', font.value)
-}
-
-const getLuminance = (hex) => {
-  if (!hex) return 0
-  const clean = hex.replace('#', '')
-  if (clean.length !== 6) return 0
-  const v = parseInt(clean, 16)
-  if (isNaN(v)) return 0
-  return (0.2126 * ((v >> 16) & 255) + 0.7152 * ((v >> 8) & 255) + 0.0722 * (v & 255)) / 255
 }
 
 function ThemeChoiceButton({ theme: p, active, onClick }) {
@@ -616,7 +611,7 @@ function DesktopVaultPanel() {
             onChange={event => setSelectedSnapshot(event.target.value)}
             disabled={!!busy || snapshots.length === 0}
             className="field"
-            style={{ minWidth: 0, fontSize: 12 }}
+            style={{ minWidth: 0, fontSize: 16 }}
             aria-label="Vault snapshot to restore"
           >
             {snapshots.length === 0 ? (
@@ -1517,20 +1512,19 @@ function AppearancePanel({ user, updateProfile }) {
   const [savePresetName, setSavePresetName] = useState('')
   const [profileSaved, setProfileSaved] = useState(false)
 
-  const themeOptions = [...BUILT_IN_THEMES, ...QUICK_PALETTES]
+  const themeOptions = [SYSTEM_THEME_OPTION, ...BUILT_IN_THEMES, ...QUICK_PALETTES]
   const selectedThemeOption = themeOptions.find(t => t.id === theme)
   const effectiveColors = useMemo(() => getThemeColors(theme, customColors), [theme, customColors])
   const effectiveRadius = themeTuning.radiusUnit || selectedThemeOption?.radiusUnit || 7
   const effectiveStrength = themeTuning.visualStrength || 1
   const groupedThemes = useMemo(() => {
-    const builtIns = BUILT_IN_THEMES.reduce((groups, option) => {
-      const key = getLuminance(option.swatches.bgMain) > 0.55 ? 'Light' : 'Dark'
-      groups[key].push(option)
-      return groups
-    }, { Dark: [], Light: [] })
+    const byId = id => BUILT_IN_THEMES.find(option => option.id === id)
+    const primaryPair = [byId(SYSTEM_LIGHT_THEME), byId(SYSTEM_DARK_THEME)].filter(Boolean)
+    const alternatives = BUILT_IN_THEMES.filter(option => !primaryPair.some(primary => primary.id === option.id))
     return [
-      { label: 'Dark themes', options: builtIns.Dark },
-      { label: 'Light themes', options: builtIns.Light },
+      { label: 'Automatic', options: [SYSTEM_THEME_OPTION] },
+      { label: 'Light & dark', options: primaryPair },
+      { label: 'Alternatives', options: alternatives },
     ]
   }, [])
 
@@ -1615,7 +1609,6 @@ function AppearancePanel({ user, updateProfile }) {
 
     try {
       await updateProfile({
-        ...(user.user_metadata || {}),
         theme: appliedTheme,
         custom_theme_colors: appliedTheme === 'custom' ? { ...customColors } : undefined,
         theme_radius_unit: themeTuning.radiusUnit,
@@ -1726,7 +1719,7 @@ function AppearancePanel({ user, updateProfile }) {
                           const v = e.target.value
                           setCustomColors(() => {
                             const base = theme !== 'custom'
-                              ? { ...(themeOptions.find(t => t.id === theme)?.swatches || DEFAULT_CUSTOM_COLORS) }
+                              ? { ...effectiveColors }
                               : { ...effectiveColors }
                             return { ...base, [key]: v }
                           })
@@ -1739,7 +1732,7 @@ function AppearancePanel({ user, updateProfile }) {
                           const v = e.target.value
                           setCustomColors(() => {
                             const base = theme !== 'custom'
-                              ? { ...(themeOptions.find(t => t.id === theme)?.swatches || DEFAULT_CUSTOM_COLORS) }
+                              ? { ...effectiveColors }
                               : { ...effectiveColors }
                             return { ...base, [key]: v }
                           })
@@ -1821,8 +1814,9 @@ function AISettingsPanel({ userId, membership }) {
   const [syncAcrossDevices, setSyncAcrossDevices] = useState(() => loadAiSettingsSyncEnabled())
   const [syncError, setSyncError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [openRouterModels, setOpenRouterModels] = useState(null) // null until loaded
-  const [openRouterModelsFailed, setOpenRouterModelsFailed] = useState(false)
+  // provider -> { forKey: string, models: [] | null, failed: boolean } — the live
+  // catalog fetched for whichever API key/base URL combo was last tried.
+  const [liveCatalogs, setLiveCatalogs] = useState({})
 
   useEffect(() => {
     setSettings(loadAiSettings(userId, DEFAULT_AI_SETTINGS))
@@ -1841,18 +1835,35 @@ function AISettingsPanel({ userId, membership }) {
   const active = settings.activeProvider
   const prov = PROVIDERS[active]
   const cfg = settings[active] || {}
+  const activeHasKeyAfterDraft = !!((keyDrafts[active] ?? cfg.apiKey ?? '').trim())
+  const googleBillingConfirmationRequired = active === 'google' && activeHasKeyAfterDraft && cfg.billingConfirmed !== true
 
-  // OpenRouter's hardcoded starter list above doesn't reflect the 300+
-  // models actually on the platform (or which ones a given account can use)
-  // — fetch the live, current catalog instead once the provider is selected.
+  // The hardcoded PROVIDERS[...].models lists are just curated starter sets —
+  // every provider here retires/ships model IDs faster than this app gets
+  // updated. Fetch each provider's real, current catalog once its key (and,
+  // for OpenAI-compatible, base URL) is known. OpenRouter's catalog is public
+  // and key-less; the others are scoped to the account, so wait for a key
+  // and debounce so we don't fire a request on every keystroke while typing one.
+  const draftKey = keyDrafts[active]
+  const activeApiKey = (draftKey ?? cfg.apiKey ?? '').trim()
+  const activeBaseUrl = cfg.baseUrl || ''
   useEffect(() => {
-    if (active !== 'openrouter' || openRouterModels || openRouterModelsFailed) return
+    if (active !== 'openrouter' && !activeApiKey) return
+    const forKey = `${activeApiKey}::${activeBaseUrl}`
+    if (liveCatalogs[active]?.forKey === forKey) return // already have/attempted this exact combo
+
     let cancelled = false
-    fetchOpenRouterModels()
-      .then(list => { if (!cancelled) setOpenRouterModels(list) })
-      .catch(() => { if (!cancelled) setOpenRouterModelsFailed(true) })
-    return () => { cancelled = true }
-  }, [active, openRouterModels, openRouterModelsFailed])
+    const timer = setTimeout(() => {
+      fetchLiveModels(active, { apiKey: activeApiKey, baseUrl: activeBaseUrl })
+        .then(models => { if (!cancelled) setLiveCatalogs(prev => ({ ...prev, [active]: { forKey, models, failed: false } })) })
+        .catch(() => { if (!cancelled) setLiveCatalogs(prev => ({ ...prev, [active]: { forKey, models: null, failed: true } })) })
+    }, active === 'openrouter' ? 0 : 500)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [active, activeApiKey, activeBaseUrl, liveCatalogs])
+
+  const activeCatalog = liveCatalogs[active]
+  const liveModels = activeCatalog?.forKey === `${activeApiKey}::${activeBaseUrl}` ? activeCatalog.models : null
+  const liveModelsFailed = activeCatalog?.forKey === `${activeApiKey}::${activeBaseUrl}` && activeCatalog?.failed
 
   const update = (field, val) =>
     setSettings(prev => ({ ...prev, [active]: { ...prev[active], [field]: val } }))
@@ -1861,6 +1872,10 @@ function AISettingsPanel({ userId, membership }) {
 
   const handleSave = async () => {
     if (saving) return
+    if (googleBillingConfirmationRequired) {
+      setSyncError('Please confirm the Gemini billing requirement before saving this Google Gemini key.')
+      return
+    }
     const settingsToSave = { ...settings }
     Object.entries(keyDrafts).forEach(([provider, value]) => {
       if (!value?.trim()) return
@@ -1893,7 +1908,7 @@ function AISettingsPanel({ userId, membership }) {
 
   const activeModelLabel = (() => {
     const model = cfg.model || prov?.defaultModel || ''
-    const catalog = active === 'openrouter' && openRouterModels ? openRouterModels : prov?.models
+    const catalog = liveModels || prov?.models
     const found = catalog?.find(m => m.id === model)
     return found ? found.label : model || 'Not set'
   })()
@@ -1927,6 +1942,24 @@ function AISettingsPanel({ userId, membership }) {
           </button>
           {saved && <span className="account-inline-success">Saved</span>}
         </div>
+      </div>
+
+      <div style={{
+        padding: '12px 14px',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        background: 'var(--bg-main)',
+        marginBottom: 18,
+      }}>
+        <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.55, margin: '0 0 8px', fontWeight: 700 }}>
+          AI features send request context to your selected provider
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
+          When you use AI features, YOW may send the information needed to fulfil your request, including relevant project content, to your selected AI provider. Your use of that provider is also subject to its own terms, privacy policy, pricing, and usage limits.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, margin: '8px 0 0' }}>
+          YOW does not operate or control third-party AI providers. Model availability, pricing, limits, and data practices are determined by your selected provider and may change.
+        </p>
       </div>
 
       {/* Active model callout */}
@@ -2000,71 +2033,100 @@ function AISettingsPanel({ userId, membership }) {
         </div>
       </div>
 
+      <div style={{
+        marginBottom: 18,
+        padding: '12px 14px',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        background: 'var(--bg-nav)',
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '0 0 8px' }}>Provider setup</p>
+        <p style={{ fontSize: 12, color: 'var(--text-main)', lineHeight: 1.55, margin: '0 0 6px' }}>
+          <strong>{prov?.name}</strong>: {prov?.bestFor}
+        </p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.freeUsage}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.billing}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 8px' }}>{prov?.limitations}</p>
+        <a href={prov?.setupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent)' }}>Get an API key</a>
+        <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.45, margin: '8px 0 0' }}>
+          Provider availability, pricing, model access, and limits can change. YOW is not partnered with or endorsed by these providers unless explicitly stated elsewhere.
+        </p>
+      </div>
+
       {/* Model selector for active provider */}
       <div style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
           Model — {prov?.name}
         </p>
-        {active === 'openrouter' ? (
-          <>
-            <input
-              list="openrouter-model-options"
-              value={cfg.model || prov?.defaultModel || ''}
-              onChange={e => update('model', e.target.value)}
-              placeholder="Search OpenRouter models, or paste any model id…"
-              className="account-appearance-input"
-              style={{ width: '100%' }}
-            />
-            <datalist id="openrouter-model-options">
-              {(openRouterModels || prov.models).map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </datalist>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              {openRouterModels
-                ? `Live catalog — ${openRouterModels.length} models currently on OpenRouter. Type to search, or paste any model id directly.`
-                : openRouterModelsFailed
-                  ? "Couldn't load OpenRouter's live model list — type or paste any model id from your account directly."
-                  : 'Loading the current model list from OpenRouter…'}
-            </p>
-          </>
-        ) : (
-          <>
-            <select
-              value={cfg.model || prov?.defaultModel || ''}
-              onChange={e => update('model', e.target.value)}
-              className="account-appearance-input"
-              style={{ width: '100%' }}
-            >
-              {prov?.models?.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-            {prov?.models?.length === 0 && (
-              <input
-                value={cfg.model || ''}
-                onChange={e => update('model', e.target.value)}
-                placeholder={`e.g. ${prov?.defaultModel}`}
-                className="account-appearance-input"
-                style={{ width: '100%', marginTop: 4 }}
-              />
-            )}
-          </>
-        )}
+        <input
+          list={`${active}-model-options`}
+          value={cfg.model || prov?.defaultModel || ''}
+          onChange={e => update('model', e.target.value)}
+          placeholder={active === 'openrouter' ? 'Search OpenRouter models, or paste any model id…' : `Search ${prov?.name} models, or paste any model id…`}
+          className="account-appearance-input"
+          style={{ width: '100%' }}
+        />
+        <datalist id={`${active}-model-options`}>
+          {(liveModels || prov?.models || []).map(m => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </datalist>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+          {liveModels
+            ? `Live catalog — ${liveModels.length} models currently available${active === 'openrouter' ? ' on OpenRouter' : ' for this key'}. Type to search, or paste any model id directly.`
+            : liveModelsFailed
+              ? `Couldn't load ${prov?.name}'s live model list — showing the built-in list. Type or paste any model id directly.`
+              : active !== 'openrouter' && !activeApiKey
+                ? `Enter your API key below to load ${prov?.name}'s live, current model list.`
+                : `Loading the current model list from ${prov?.name}…`}
+        </p>
       </div>
 
-      {/* Base URL for OpenAI-compatible */}
+      {active === 'google' && (
+        <label style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          padding: '12px 14px',
+          border: `1px solid ${googleBillingConfirmationRequired ? '#f59e0b' : 'var(--border)'}`,
+          borderRadius: 8,
+          background: 'var(--bg-main)',
+          cursor: 'pointer',
+          marginBottom: 16,
+        }}>
+          <input
+            type="checkbox"
+            checked={cfg.billingConfirmed === true}
+            onChange={e => update('billingConfirmed', e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--text-main)' }}>
+              Gemini billing confirmation
+            </span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.5 }}>
+              I confirm that the Google Cloud project associated with this Gemini API key has billing enabled where required by Google's terms. Users in the UK, EEA, and Switzerland must use Gemini Paid Services for API clients made available to them.
+            </span>
+          </span>
+        </label>
+      )}
+
       {prov?.hasBaseUrl && (
         <div style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Base URL</p>
-          <input
-            value={cfg.baseUrl || ''}
-            onChange={e => update('baseUrl', e.target.value)}
-            placeholder={PROVIDERS.openai.defaultBaseUrl}
-            className="account-appearance-input"
-            style={{ width: '100%' }}
-          />
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Works with Groq, Together, Mistral, Ollama, and any OpenAI-compatible endpoint.</p>
+          <label htmlFor="named-ai-provider">AI provider</label>
+          <select id="named-ai-provider"
+            value={cfg.baseUrl || PROVIDERS.openai.defaultBaseUrl}
+            onChange={e => {
+              const baseUrl = e.target.value
+              setSettings(prev => ({ ...prev, [active]: { ...prev[active], baseUrl, apiKey: '', model: '' } }))
+              setKeyDrafts(prev => ({ ...prev, [active]: '' }))
+            }}
+            className="account-appearance-input" style={{ width: '100%' }}>
+            {cfg.baseUrl && !NAMED_OPENAI_ENDPOINTS.some(endpoint => endpoint.url === cfg.baseUrl) &&
+              <option value={cfg.baseUrl} disabled>Unsupported saved endpoint — choose a provider</option>}
+            {NAMED_OPENAI_ENDPOINTS.map(endpoint => <option key={endpoint.url} value={endpoint.url}>{endpoint.label}</option>)}
+          </select>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Choose a named provider and use an API key issued by that provider. Custom endpoints are not supported.</p>
         </div>
       )}
 
@@ -2089,7 +2151,14 @@ function AISettingsPanel({ userId, membership }) {
           {cfg.apiKey?.trim() && (
             <button
               type="button"
-              onClick={() => setSettings(prev => ({ ...prev, [active]: { ...prev[active], apiKey: '' } }))}
+              onClick={() => setSettings(prev => ({
+                ...prev,
+                [active]: {
+                  ...prev[active],
+                  apiKey: '',
+                  ...(active === 'google' ? { billingConfirmed: false } : {}),
+                },
+              }))}
               style={{ flexShrink: 0, border: 'none', background: 'none', color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >
               Remove key
@@ -2135,7 +2204,7 @@ const billingEndpoints = {
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL,
 }
 
-async function requestBillingUrl(endpoint, accessToken, body) {
+async function requestBillingResult(endpoint, accessToken, body) {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -2144,11 +2213,17 @@ async function requestBillingUrl(endpoint, accessToken, body) {
     },
     body: JSON.stringify(body),
   })
-
-  if (!response.ok) throw new Error('Billing could not be opened right now.')
-  const data = await response.json()
-  if (!data?.url) throw new Error('Billing did not return a destination URL.')
-  return data.url
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    const error = new Error(data?.error || 'Billing could not be opened right now.')
+    error.code = data?.code
+    throw error
+  }
+  // Either a Stripe portal redirect (`url`), or — when the account has no
+  // real Stripe subscription to act on (e.g. plan set directly via SQL) —
+  // a direct local downgrade to Free (`downgraded`). See api/create-customer-portal.js.
+  if (!data?.url && !data?.downgraded) throw new Error('Billing did not return a destination URL.')
+  return data
 }
 
 function PlanBadge({ membership }) {
@@ -2370,7 +2445,6 @@ function ProfileDetails({ user, updateProfile, localProfileOnly = false, storage
       setProfileMessage('')
       setProfileError('')
       const nextProfile = {
-        ...(user.user_metadata || {}),
         full_name: profileDraft.fullName.trim(),
         name: profileDraft.fullName.trim(),
         alias: profileDraft.alias.trim(),
@@ -2671,7 +2745,7 @@ function DeleteAccountModal({ novels, store, onClose }) {
                 style={{
                   width: '100%', padding: '10px 14px', borderRadius: 8,
                   background: 'var(--bg-main)', border: '1.5px solid var(--border)',
-                  fontSize: 14, color: 'var(--text-main)',
+                  fontSize: 16, color: 'var(--text-main)',
                   marginBottom: error ? 8 : 0, boxSizing: 'border-box',
                   outline: 'none',
                 }}
@@ -2769,7 +2843,9 @@ export default function AccountSettings({
   if (!open || !user) return null
 
   const openBilling = async (planKey) => {
-    // planKey = null → open customer portal; otherwise open checkout for that plan
+    // planKey = null opens the customer portal for Stripe-backed accounts or,
+    // after confirmation, downgrades a manually granted plan with no Stripe
+    // customer. Paid-plan selections still use the beta-interest flow below.
     if (planKey) {
       setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
       return
@@ -2781,18 +2857,33 @@ export default function AccountSettings({
       return
     }
 
+    // No real Stripe customer on file (e.g. plan set directly via SQL) —
+    // there's no subscription for Stripe to manage, so this action downgrades
+    // the account to Free immediately instead of opening the billing portal.
+    if (!planKey && !membership.hasStripeCustomer) {
+      const confirmed = window.confirm(
+        'This account has no billing record on file, so there is no subscription to manage. Continuing will downgrade it to the Free plan immediately. Continue?'
+      )
+      if (!confirmed) return
+    }
+
     try {
       setBillingBusy(planKey || 'portal')
       setBillingError('')
       setBillingMessage('')
       const accessToken = await getAccessToken()
-      const url = await requestBillingUrl(endpoint, accessToken, {
+      const result = await requestBillingResult(endpoint, accessToken, {
         userId: user.id,
         email: user.email,
         plan: planKey,
         currency: 'gbp',
       })
-      window.location.assign(url)
+      if (result.downgraded) {
+        setBillingMessage('This account had no billing record on file, so it has been downgraded to the Free plan.')
+        await refreshUser()
+      } else {
+        window.location.assign(result.url)
+      }
     } catch (error) {
       setBillingError(error.message || 'Billing could not be opened right now.')
     } finally {
@@ -2947,7 +3038,7 @@ export default function AccountSettings({
                   {membership.isBetaTester && (
                     <div>
                       <span>Beta notice</span>
-                      <strong>Revoked when beta ends</strong>
+                      <strong>{membership.isBetaNoticeActive ? `${membership.betaDaysRemaining} days remaining` : '30 days of full web access after launch'}</strong>
                     </div>
                   )}
                 </>
@@ -3123,7 +3214,7 @@ export default function AccountSettings({
             )}
 
             {/* Stripe customer portal: cancellation for subscribers, billing history/receipts for one-time purchasers */}
-            {membership.isPaid && !membership.isBetaTester && (
+            {membership.isPaid && (
               <div className="account-actions">
                 <button
                   type="button"
@@ -3133,6 +3224,7 @@ export default function AccountSettings({
                 >
                   {billingBusy === 'portal'
                     ? 'Opening...'
+                    : !membership.hasStripeCustomer ? 'Downgrade to Free'
                     : membership.isLifetime ? 'Billing history & receipts' : 'Manage subscription & billing'}
                 </button>
               </div>
@@ -3147,6 +3239,10 @@ export default function AccountSettings({
                 View full pricing page →
               </a>
             </div>}
+
+            <div style={{ marginTop: 18 }}>
+              <SupportDevelopmentLink variant="banner" />
+            </div>
 
             {billingMessage && <p className="account-success">{billingMessage}</p>}
             {billingError && <p className="account-error">{billingError}</p>}
@@ -3168,8 +3264,8 @@ export default function AccountSettings({
         planKey={betaInterestPlan?.key}
         planLabel={betaInterestPlan?.label}
         onClose={() => setBetaInterestPlan(null)}
-        onGranted={async () => {
-          setBillingMessage('Beta tester access is active. Full product access is unlocked during beta.')
+        onGranted={async (result) => {
+          setBillingMessage(result?.betaTester ? 'Beta tester access is active. Full product access is unlocked during beta.' : 'Your interest is registered. Your membership has not changed.')
           await refreshUser()
         }}
       />
