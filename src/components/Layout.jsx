@@ -1,23 +1,23 @@
-import { Component, useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { lazy, Suspense, Component, useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import UserMenu from './auth/UserMenu'
 import AIPanel from './ai/AIPanel'
 import AIAssistant from './ai/AIAssistant'
 import AIStar from './ai/AIStar'
 import Characters from './characters/Characters'
-import FamilyTree from './familytree/FamilyTree'
-import RelationshipMap from './relationships/RelationshipMap'
+const FamilyTree = lazy(() => import('./familytree/FamilyTree'))
+const RelationshipMap = lazy(() => import('./relationships/RelationshipMap'))
 import Factions from './Factions/Factions'
 import Lore from './lore/Lore'
 import IdeasKanban from './ideas/IdeasKanban'
 import Timeline from './timeline/Timeline'
-import WorldHistory from './worldhistory/WorldHistory'
-import MapBuilder from './Map/MapBuilder'
+const WorldHistory = lazy(() => import('./worldhistory/WorldHistory'))
+const MapBuilder = lazy(() => import('./Map/MapBuilder'))
 import Locations from './Locations/Locations'
-import CharacterBuilder from './characterbuilder/CharacterBuilder'
+const CharacterBuilder = lazy(() => import('./characterbuilder/CharacterBuilder'))
 import Manuscript from './Manuscript/Manuscript'
 import StoryOutline from './outline/StoryOutline'
 import ProjectDashboard from './dashboard/ProjectDashboard'
-import ScheduleCalendar from './schedule/ScheduleCalendar'
+const ScheduleCalendar = lazy(() => import('./schedule/ScheduleCalendar'))
 import AITools from './aitools/AITools'
 import OnboardingTour from './onboarding/OnboardingTour'
 import { MANUSCRIPT_TOUR, CHARACTERS_TOUR, LOCATIONS_TOUR, LORE_TOUR, IDEAS_TOUR, MAP_TOUR, AI_TOOLS_TOUR, TIMELINE_TOUR, WORLDHISTORY_TOUR, FAMILYTREE_TOUR, COMIC_TOUR, OUTLINE_TOUR, DASHBOARD_TOUR, FACTIONS_TOUR } from './onboarding/tourDefinitions'
@@ -103,7 +103,7 @@ class SectionErrorBoundary extends Component {
         <button onClick={() => this.setState({ error: null })} className="mt-1 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-[var(--bg-main)] font-bold text-xs">Retry</button>
       </div>
     )
-    return this.props.children
+    return <Suspense fallback={<div role="status" className="p-8 text-[var(--text-muted)]">Loading workspace…</div>}>{this.props.children}</Suspense>
   }
 }
 

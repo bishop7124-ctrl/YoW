@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useId } from 'react'
 import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
-import { loreRefsFor } from '../../utils/worldLinks'
+import { buildLoreTagIndex, createLoreReferenceIndex, groupLoreEntries, loreCategory, loreTagKey, loreTagLabel, normalizeLoreEntry, normalizeLoreTags, relatedLoreFor } from '../../utils/loreEntries'
 import { UserMediaImage } from '../shared/UserMedia'
 
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
@@ -10,19 +10,16 @@ const LABEL = 'block form-label mb-1.5'
 const SUGGESTED_CATEGORIES = ['Magic System', 'Religion', 'History', 'Politics', 'Geography', 'Culture', 'Technology', 'Prophecy', 'Mythology', 'Other']
 
 function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries, existingCategories, existingTags, configuredCategories }) {
-  const [form, setForm] = useState({
-    title: entry?.title || '',
-    category: entry?.category || '',
-    content: entry?.content || '',
-    characterIds: entry?.characterIds || [],
-    locationIds: entry?.locationIds || [],
-    loreIds: entry?.loreIds || [],
-    tags: entry?.tags || [],
+  const fieldId = useId()
+  const [form, setForm] = useState(() => {
+    const { title, category, content, characterIds, locationIds, loreIds, tags } = normalizeLoreEntry(entry || {})
+    return { title, category, content, characterIds, locationIds, loreIds, tags }
   })
   const [tagInput, setTagInput] = useState('')
+  const [error, setError] = useState('')
 
   const allCategories = useMemo(
-    () => [...new Set([...(configuredCategories?.length ? configuredCategories : SUGGESTED_CATEGORIES), ...existingCategories])],
+    () => [...new Set([...(Array.isArray(configuredCategories) && configuredCategories.length ? configuredCategories : SUGGESTED_CATEGORIES), ...existingCategories].map(String).map(value => value.trim()).filter(Boolean))],
     [configuredCategories, existingCategories],
   )
   const toggleArray = (field, id) => {
@@ -34,29 +31,35 @@ function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries
   const addTag = (e) => {
     if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
       e.preventDefault()
-      const tag = tagInput.trim().replace(/^#/, '').replace(/,$/, '')
-      if (tag && !form.tags.includes(tag)) setForm(prev => ({ ...prev, tags: [...prev.tags, tag] }))
+      const tag = loreTagLabel(tagInput.replace(/,$/, ''))
+      if (tag) setForm(prev => ({ ...prev, tags: normalizeLoreTags([...prev.tags, tag]) }))
       setTagInput('')
     }
   }
 
   return (
-    <form onSubmit={e => { e.preventDefault(); onSave({ ...form, category: form.category.trim() }) }} className="space-y-4 text-left">
+    <form data-confirms-save onChange={() => setError('')} onSubmit={e => {
+      e.preventDefault()
+      if (!form.title.trim()) { setError('Enter a title for this lore entry.'); return }
+      const saved = onSave({ ...form, title: form.title.trim(), category: form.category.trim(), tags: normalizeLoreTags([...form.tags, tagInput.replace(/,$/, '')]) })
+      if (!saved) setError('This entry could not be saved. Your draft is still here.')
+      else e.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
+    }} className="space-y-4 text-left">
       <div>
-        <label className={LABEL}>Title</label>
-        <input className={INPUT} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. The Binding Laws" required />
+        <label htmlFor={`${fieldId}-title`} className={LABEL}>Title</label>
+        <input id={`${fieldId}-title`} className={INPUT} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. The Binding Laws" required />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className={LABEL}>Category</label>
-          <input className={INPUT} list="lore-categories" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} placeholder="e.g. Magic System" />
-          <datalist id="lore-categories">{allCategories.map(c => <option key={c} value={c} />)}</datalist>
+          <label htmlFor={`${fieldId}-category`} className={LABEL}>Category</label>
+          <input id={`${fieldId}-category`} className={INPUT} list={`${fieldId}-categories`} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} placeholder="e.g. Magic System" />
+          <datalist id={`${fieldId}-categories`}>{allCategories.map(c => <option key={c} value={c} />)}</datalist>
         </div>
         <div>
-          <label className={LABEL}>Tags</label>
-          <input className={INPUT} list="lore-tags" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag} placeholder="Type a tag and press Enter" />
-          <datalist id="lore-tags">{existingTags.map(t => <option key={t} value={t} />)}</datalist>
+          <label htmlFor={`${fieldId}-tag`} className={LABEL}>Tags</label>
+          <input id={`${fieldId}-tag`} className={INPUT} list={`${fieldId}-tags`} value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag} placeholder="Type a tag and press Enter" />
+          <datalist id={`${fieldId}-tags`}>{existingTags.map(t => <option key={t} value={t} />)}</datalist>
         </div>
       </div>
 
@@ -65,24 +68,25 @@ function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries
           {form.tags.map(tag => (
             <span key={tag} className="chip chip-accent">
               #{tag}
-              <button type="button" onClick={() => setForm(p => ({ ...p, tags: p.tags.filter(t => t !== tag) }))}>×</button>
+              <button type="button" data-dirties-form aria-label={`Remove tag ${tag}`} onClick={() => setForm(p => ({ ...p, tags: p.tags.filter(t => t !== tag) }))}>×</button>
             </span>
           ))}
         </div>
       )}
 
       <div>
-        <label className={LABEL}>Content</label>
-        <textarea className={INPUT + ' resize-none h-48'} value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} placeholder="Describe this aspect of your world..." />
+        <label htmlFor={`${fieldId}-content`} className={LABEL}>Content</label>
+        <textarea id={`${fieldId}-content`} className={INPUT + ' resize-none h-48'} value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} placeholder="Describe this aspect of your world..." />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <LinkPicker title="Linked Characters" items={characters} selected={form.characterIds} getLabel={c => c.name} onToggle={id => toggleArray('characterIds', id)} />
         <LinkPicker title="Linked Locations" items={locations} selected={form.locationIds} getLabel={l => l.name} onToggle={id => toggleArray('locationIds', id)} />
       </div>
 
       <LinkPicker title="Related Lore" items={(loreEntries || []).filter(e => e.id !== entry?.id)} selected={form.loreIds} getLabel={e => e.title} onToggle={id => toggleArray('loreIds', id)} />
 
+      {error && <p role="alert" className="text-sm">{error}</p>}
       <div className="flex gap-2 pt-4 border-t border-[var(--border)]">
         <button type="submit" className="btn btn-primary flex-1 justify-center">Save Entry</button>
         <button type="button" onClick={onCancel} className="px-4 py-2 text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
@@ -92,17 +96,18 @@ function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries
 }
 
 function LinkPicker({ title, items, selected, getLabel, onToggle }) {
+  const selectedIds = useMemo(() => new Set(selected), [selected])
   return (
-    <div>
-      <label className={LABEL}>{title}</label>
+    <fieldset className="min-w-0">
+      <legend className={LABEL}>{title}</legend>
       {items.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)]">None yet.</p>
       ) : (
         <div className="panel-soft max-h-32 overflow-y-auto flex flex-wrap gap-2 p-2">
           {items.map(item => {
-            const active = selected.includes(item.id)
+            const active = selectedIds.has(item.id)
             return (
-              <button key={item.id} type="button" onClick={() => onToggle(item.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+              <button key={item.id} type="button" data-dirties-form aria-pressed={active} onClick={() => onToggle(item.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                 {item.image && <UserMediaImage src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
                 {active && <span>✓</span>}{getLabel(item)}
               </button>
@@ -110,105 +115,66 @@ function LinkPicker({ title, items, selected, getLabel, onToggle }) {
           })}
         </div>
       )}
-    </div>
+    </fieldset>
   )
 }
 
-function collectTags(store) {
-  return [
-    ...(store.loreEntries || []).flatMap(e => e.tags || []),
-    ...(store.ideaEntries || []).flatMap(e => e.tags || []),
-    ...(store.locations || []).flatMap(e => e.tags || []),
-    ...(store.worldHistory || []).flatMap(e => e.tags || []),
-    ...(store.timeline || []).flatMap(e => e.tags || []),
-    ...(store.characters || []).flatMap(e => e.keywords || []),
-  ]
-}
-
-function tagMatches(tag, store) {
-  const same = (value) => value?.toLowerCase() === tag.toLowerCase()
-  return [
-    ...(store.loreEntries || []).filter(e => e.tags?.some(same)).map(e => ({ type: 'Lore', title: e.title, section: 'lore', id: e.id })),
-    ...(store.ideaEntries || []).filter(e => e.tags?.some(same)).map(e => ({ type: 'Idea', title: e.title, section: 'ideas', id: e.id })),
-    ...(store.locations || []).filter(e => e.tags?.some(same)).map(e => ({ type: 'Location', title: e.name, section: 'locations', id: e.id })),
-    ...(store.characters || []).filter(e => e.keywords?.some(same)).map(e => ({ type: 'Character', title: e.name, section: 'characters', id: e.id })),
-    ...(store.worldHistory || []).filter(e => e.tags?.some(same)).map(e => ({ type: 'History', title: e.title, section: 'worldhistory', id: e.id })),
-    ...(store.timeline || []).filter(e => e.tags?.some(same)).map(e => ({ type: 'Timeline', title: e.title, section: 'timeline', id: e.id })),
-  ]
-}
-
 export default function Lore({ store }) {
+  return <LoreWorkspace key={store.activeNovelId || 'lore'} store={store} />
+}
+
+function LoreWorkspace({ store }) {
   const {
-    loreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
-    characters, locations, selectedLoreEntryId, setSelectedLoreEntryId,
+    loreEntries = [], addLoreEntry, updateLoreEntry, deleteLoreEntry,
+    characters = [], locations = [], selectedLoreEntryId, setSelectedLoreEntryId,
+    ideaEntries, worldHistory, timeline,
   } = store
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('All')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [tagFilter, setTagFilter] = useState('')
   const [sortBy, setSortBy] = useState('title-asc')
-  const [collapsed, setCollapsed] = useState({})
-  const [editing, setEditing] = useState(false)
-  const [editTarget, setEditTarget] = useState(null)
+  const [collapsed, setCollapsed] = useState(() => new Set())
+  const [formState, setFormState] = useState(null)
+  const [notice, setNotice] = useState('')
+  const editTarget = formState?.entry
   const configuredCategories = store.activeNovel?.categoryOptions?.lore || SUGGESTED_CATEGORIES
+  const index = useMemo(() => createLoreReferenceIndex({ loreEntries, characters, locations }), [loreEntries, characters, locations])
+  const existingCategories = useMemo(() => [...new Set(index.entries.map(loreCategory))].sort(), [index])
+  const tagIndex = useMemo(() => buildLoreTagIndex({ loreEntries, ideaEntries, characters, locations, worldHistory, timeline }), [loreEntries, ideaEntries, characters, locations, worldHistory, timeline])
+  const existingTags = useMemo(() => [...tagIndex.values()].map(item => item.label), [tagIndex])
+  const loreTags = useMemo(() => normalizeLoreTags(index.entries.flatMap(entry => entry.tags)).sort((a, b) => a.localeCompare(b)), [index])
+  const effectiveCategory = existingCategories.includes(categoryFilter) ? categoryFilter : ''
+  const effectiveTag = loreTags.find(tag => loreTagKey(tag) === loreTagKey(tagFilter)) || ''
+  const grouped = useMemo(() => groupLoreEntries(index.entries, { search, category: effectiveCategory, tag: effectiveTag, sortBy }), [index, search, effectiveCategory, effectiveTag, sortBy])
+  const visibleIds = useMemo(() => new Set(grouped.flatMap(([, entries]) => entries.map(entry => entry.id))), [grouped])
+  const selected = visibleIds.has(selectedLoreEntryId) ? index.byId.get(selectedLoreEntryId) : null
+  const relatedLore = useMemo(() => selected ? relatedLoreFor(selected, index) : null, [selected, index])
 
-  const selected = loreEntries.find(e => e.id === selectedLoreEntryId) ?? null
-
-  useEffect(() => {
-    if (selectedLoreEntryId && !loreEntries.find(e => e.id === selectedLoreEntryId)) {
-      setSelectedLoreEntryId(null)
-    }
-  }, [loreEntries, selectedLoreEntryId, setSelectedLoreEntryId])
-
-  const existingCategories = useMemo(() => [...new Set(loreEntries.map(e => e.category).filter(Boolean))].sort(), [loreEntries])
-  const existingTags = useMemo(() => [...new Set(collectTags(store).filter(Boolean))].sort(), [store])
-
-  const grouped = useMemo(() => {
-    const q = search.toLowerCase()
-    const filtered = loreEntries.filter(e => {
-      const matchesText = !q || e.title.toLowerCase().includes(q) || (e.category || '').toLowerCase().includes(q) || (e.content || '').toLowerCase().includes(q) || e.tags?.some(t => t.toLowerCase().includes(q))
-      const matchesCategory = categoryFilter === 'All' || (e.category || 'Uncategorized') === categoryFilter
-      const matchesTag = !tagFilter || e.tags?.some(t => t.toLowerCase() === tagFilter.toLowerCase())
-      return matchesText && matchesCategory && matchesTag
-    })
-    const sorter = (a, b) => {
-      if (sortBy === 'title-asc') return a.title.localeCompare(b.title)
-      if (sortBy === 'title-desc') return b.title.localeCompare(a.title)
-      return 0
-    }
-    const groups = filtered.reduce((acc, entry) => {
-      const cat = entry.category || 'Uncategorized'
-      if (!acc[cat]) acc[cat] = []
-      acc[cat].push(entry)
-      return acc
-    }, {})
-    Object.keys(groups).forEach(cat => groups[cat].sort(sorter))
-    if (sortBy === 'category-asc') return Object.fromEntries(Object.entries(groups).sort(([a], [b]) => a.localeCompare(b)))
-    if (sortBy === 'category-desc') return Object.fromEntries(Object.entries(groups).sort(([a], [b]) => b.localeCompare(a)))
-    return groups
-  }, [loreEntries, search, categoryFilter, tagFilter, sortBy])
+  const clearFilters = () => { setSearch(''); setCategoryFilter(''); setTagFilter('') }
+  const closeForm = () => setFormState(null)
 
   const handleNew = () => {
-    setEditTarget(null)
-    setEditing(true)
-    setSelectedLoreEntryId(null)
+    setNotice('')
+    setFormState({ type: 'new' })
   }
   const handleSave = (data) => {
-    if (editTarget) {
-      const entry = updateLoreEntry(editTarget.id, data)
-      setSelectedLoreEntryId(entry?.id || editTarget.id)
-    } else {
-      const entry = addLoreEntry(data)
-      if (!entry) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
-      setSelectedLoreEntryId(entry.id)
-    }
-    setEditing(false)
-    setEditTarget(null)
+    const entry = editTarget ? updateLoreEntry(editTarget.id, data) : addLoreEntry(data)
+    if (!entry) return false
+    setSelectedLoreEntryId(entry.id)
+    clearFilters()
+    setCollapsed(new Set())
+    setNotice('')
+    closeForm()
+    return true
   }
   const jumpTo = (match) => {
+    if (formState) return
     if (match.section === 'characters') store.setSelectedCharacterId(match.id)
     if (match.section === 'locations') store.setSelectedLocationId(match.id)
-    if (match.section === 'lore') store.setSelectedLoreEntryId(match.id)
+    if (match.section === 'lore') { clearFilters(); setCollapsed(new Set()); store.setSelectedLoreEntryId(match.id) }
     if (match.section === 'ideas') store.setSelectedIdeaEntryId(match.id)
+    if (match.section === 'timeline') store.setSelectedTimelineEventId(match.id)
+    if (match.section === 'worldhistory') store.setSelectedHistoryEntryId(match.id)
     window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: match.section } }))
   }
 
@@ -217,36 +183,37 @@ export default function Lore({ store }) {
       <StudioIndex
         eyebrow="Lore wall"
         title="Notebook"
-        tools={<StudioButton tone="primary" size="sm" onClick={handleNew}>New</StudioButton>}
+        tools={<StudioButton tone="primary" size="sm" disabled={store.readOnly || Boolean(formState)} onClick={handleNew}>New</StudioButton>}
       >
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search lore..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]" />
+          <input aria-label="Search lore" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search lore..." className="field w-full px-2 py-1.5 text-base placeholder:text-[var(--text-muted)]" />
           <div data-tour="lore-categories" className="grid grid-cols-2 gap-2">
-            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="field px-2 py-1.5 text-base">
-              <option>All</option>
-              <option>Uncategorized</option>
-              {existingCategories.map(c => <option key={c}>{c}</option>)}
+            <select aria-label="Filter by category" value={effectiveCategory} onChange={e => setCategoryFilter(e.target.value)} className="field px-2 py-1.5 text-base">
+              <option value="">All categories</option>
+              {existingCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="field px-2 py-1.5 text-base">
+            <select aria-label="Filter by tag" value={effectiveTag} onChange={e => setTagFilter(e.target.value)} className="field px-2 py-1.5 text-base">
               <option value="">All Tags</option>
-              {existingTags.map(t => <option key={t} value={t}>#{t}</option>)}
+              {loreTags.map(t => <option key={t} value={t}>#{t}</option>)}
             </select>
           </div>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
+          <select aria-label="Sort lore" value={sortBy} onChange={e => setSortBy(e.target.value)} className="field w-full px-2 py-1.5 text-base">
             <option value="title-asc">Title A→Z</option>
             <option value="title-desc">Title Z→A</option>
             <option value="category-asc">Category A→Z</option>
             <option value="category-desc">Category Z→A</option>
           </select>
 
-          {Object.keys(grouped).length === 0 && <p className="text-xs text-[var(--text-muted)] italic px-4 py-3">{search || tagFilter || categoryFilter !== 'All' ? 'No results.' : 'No lore entries yet.'}</p>}
-          {Object.entries(grouped).map(([cat, entries]) => (
+          {notice && <p role="status" className="text-xs px-4 py-3">{notice}</p>}
+          {grouped.length === 0 && <p className="text-xs text-[var(--text-muted)] italic px-4 py-3">{index.entries.length ? 'No results.' : 'No lore entries yet.'}</p>}
+          {(search || effectiveTag || effectiveCategory) && <StudioButton size="sm" onClick={clearFilters}>Clear filters</StudioButton>}
+          {grouped.map(([cat, entries]) => (
             <div key={cat} className="mb-2">
-              <button onClick={() => setCollapsed(p => ({ ...p, [cat]: !p[cat] }))} className="w-full px-3 py-1.5 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-[var(--accent)] opacity-80">
+              <button aria-expanded={!collapsed.has(cat)} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(cat)) next.delete(cat); else next.add(cat); return next })} className="w-full px-3 py-1.5 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-[var(--accent)] opacity-80">
                 <span>{cat} ({entries.length})</span>
-                <span>{collapsed[cat] ? '+' : '-'}</span>
+                <span>{collapsed.has(cat) ? '+' : '-'}</span>
               </button>
-              {!collapsed[cat] && entries.map(entry => (
-                <StudioRecord key={entry.id} onClick={() => { setSelectedLoreEntryId(entry.id); setEditing(false) }} active={selectedLoreEntryId === entry.id}>
+              {!collapsed.has(cat) && entries.map(entry => (
+                <StudioRecord key={entry.id} disabled={Boolean(formState)} onClick={() => setSelectedLoreEntryId(entry.id)} active={selectedLoreEntryId === entry.id}>
                   <div className="text-sm font-medium text-[var(--text-main)] truncate">{entry.title}</div>
                   <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] mt-0.5">
                     {entry.tags?.length > 0 && <span>{entry.tags.length} tag{entry.tags.length === 1 ? '' : 's'}</span>}
@@ -266,11 +233,13 @@ export default function Lore({ store }) {
               title={selected.title}
               actions={(
                 <>
-                  <StudioButton tone="secondary" size="sm" onClick={() => { setEditTarget(selected); setEditing(true) }}>Edit</StudioButton>
-                  <StudioButton tone="secondary" size="sm" onClick={() => {
+                  <StudioButton tone="secondary" size="sm" disabled={store.readOnly || selected.readOnly || Boolean(formState)} onClick={() => setFormState({ type: 'edit', entry: selected })}>Edit</StudioButton>
+                  <StudioButton tone="secondary" size="sm" disabled={store.readOnly || selected.readOnly || Boolean(formState)} onClick={() => {
                     if (!confirm(`Delete "${selected.title}"?`)) return
                     const scope = confirm('Delete this lore entry from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
-                    deleteLoreEntry(selected.id, { scope })
+                    if (!deleteLoreEntry(selected.id, { scope })) { setNotice('This entry could not be deleted.'); return }
+                    setSelectedLoreEntryId(null)
+                    setNotice('Lore entry deleted.')
                   }}>Delete</StudioButton>
                 </>
               )}
@@ -284,44 +253,39 @@ export default function Lore({ store }) {
             </StudioPageHeader>
 
             <div className="border-t border-[var(--border)] pt-8 space-y-8">
-              <StudioNote className="text-[var(--text-main)] whitespace-pre-wrap leading-relaxed text-lg">{selected.content || <span className="italic text-[var(--text-muted)]">No content yet.</span>}</StudioNote>
+              <StudioNote className="text-[var(--text-main)] whitespace-pre-wrap break-words leading-relaxed text-lg">{selected.content || <span className="italic text-[var(--text-muted)]">No content yet.</span>}</StudioNote>
 
               {(selected.characterIds?.length > 0 || selected.locationIds?.length > 0) && (
-                <div className="grid grid-cols-2 gap-4">
-                  <LinkedItems title="Linked Characters" ids={selected.characterIds || []} items={characters} getLabel={c => c.name} onOpen={id => jumpTo({ section: 'characters', id })} />
-                  <LinkedItems title="Linked Locations" ids={selected.locationIds || []} items={locations} getLabel={l => l.name} onOpen={id => jumpTo({ section: 'locations', id })} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <LinkedItems title="Linked Characters" ids={selected.characterIds} byId={index.characters} getLabel={c => c.name} onOpen={id => jumpTo({ section: 'characters', id })} />
+                  <LinkedItems title="Linked Locations" ids={selected.locationIds} byId={index.locations} getLabel={l => l.name} onOpen={id => jumpTo({ section: 'locations', id })} />
                 </div>
               )}
 
-              {(() => {
-                const relatedLore = (selected.loreIds || []).map(id => loreEntries.find(e => e.id === id)).filter(Boolean)
-                const incomingLore = loreRefsFor(selected.id, loreEntries).filter(e => e.id !== selected.id && !selected.loreIds?.includes(e.id))
-                if (relatedLore.length === 0 && incomingLore.length === 0) return null
-                return (
+              {(relatedLore.outgoing.length > 0 || relatedLore.incoming.length > 0) && (
                   <div>
                     <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Related Lore</h3>
                     <div className="flex flex-wrap gap-2">
-                      {relatedLore.map(e => (
+                      {relatedLore.outgoing.map(e => (
                         <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo({ section: 'lore', id: e.id })}>
                           {e.title}
                         </button>
                       ))}
-                      {incomingLore.map(e => (
+                      {relatedLore.incoming.map(e => (
                         <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo({ section: 'lore', id: e.id })} title="References this entry">
                           ← {e.title}
                         </button>
                       ))}
                     </div>
                   </div>
-                )
-              })()}
+              )}
 
               {selected.tags?.length > 0 && (
                 <div>
                   <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Related By Tag</h3>
                   <div className="space-y-3">
                     {selected.tags.map(tag => {
-                      const matches = tagMatches(tag, store).filter(m => !(m.section === 'lore' && m.id === selected.id))
+                      const matches = [...(tagIndex.get(loreTagKey(tag))?.matches.values() || [])].filter(m => !(m.section === 'lore' && m.id === selected.id))
                       return (
                         <div key={tag} className="space-y-2">
                           <button onClick={() => setTagFilter(tag)} className="text-xs text-[var(--accent)] font-bold">#{tag}</button>
@@ -342,24 +306,25 @@ export default function Lore({ store }) {
             </div>
           </div>
         ) : (
-          <StudioEmpty title="Select a notebook page" body="Choose an entry or pin a new piece of lore." action={<StudioButton tone="primary" className="mt-4" onClick={handleNew}>New Lore Entry</StudioButton>} />
+          <StudioEmpty title="Select a notebook page" body="Choose an entry or pin a new piece of lore." action={<StudioButton tone="primary" className="mt-4" disabled={store.readOnly || Boolean(formState)} onClick={handleNew}>New Lore Entry</StudioButton>} />
         )}
       </StudioDetail>
 
-      {editing && (
+      {formState && (
         <Modal
           title={editTarget ? `Edit: ${editTarget.title}` : 'New Lore Entry'}
-          onClose={() => { setEditing(false); setEditTarget(null) }}
+          onClose={closeForm}
           wide
           centered
         >
           <EntryForm
+            key={editTarget?.id || 'new'}
             entry={editTarget}
             onSave={handleSave}
-            onCancel={() => { setEditing(false); setEditTarget(null) }}
+            onCancel={closeForm}
             characters={characters}
             locations={locations}
-            loreEntries={loreEntries}
+            loreEntries={index.entries}
             existingCategories={existingCategories}
             existingTags={existingTags}
             configuredCategories={configuredCategories}
@@ -370,8 +335,8 @@ export default function Lore({ store }) {
   )
 }
 
-function LinkedItems({ title, ids, items, getLabel, onOpen }) {
-  const linked = ids.map(id => items.find(item => item.id === id)).filter(Boolean)
+function LinkedItems({ title, ids, byId, getLabel, onOpen }) {
+  const linked = ids.map(id => byId.get(id)).filter(Boolean)
   if (linked.length === 0) return null
   return (
     <div>
