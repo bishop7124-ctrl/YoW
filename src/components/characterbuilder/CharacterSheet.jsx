@@ -48,6 +48,16 @@ function AbilityBlock({ abilityKey, score, profBonus, savingThrows, character, o
   const mod = getModifier(score)
   const hasSave = savingThrows?.[abilityKey]
   const saveBonus = mod + (hasSave ? profBonus : 0)
+  const [editingScore, setEditingScore] = useState(false)
+  const [scoreDraft, setScoreDraft] = useState(String(score))
+  const commitScore = () => {
+    const next = Number(scoreDraft)
+    if (Number.isFinite(next)) {
+      const normalized = Math.max(1, Math.min(30, next))
+      onChange({ abilityScores: { ...character.abilityScores, [abilityKey]: normalized } })
+    }
+    setEditingScore(false)
+  }
 
   return (
     <div style={{
@@ -57,21 +67,42 @@ function AbilityBlock({ abilityKey, score, profBonus, savingThrows, character, o
       background: 'color-mix(in srgb, var(--bg-nav) 80%, transparent)',
     }}>
       <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--text-muted)' }}>{ABILITY_SHORT[abilityKey]}</span>
-      <div style={{
-        width: 48, height: 48, borderRadius: 10,
-        border: '2px solid color-mix(in srgb, var(--accent) 50%, transparent)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-main))',
-        cursor: 'pointer', position: 'relative',
-      }} onClick={() => {
-        const val = prompt(`Set ${ABILITY_LABELS[abilityKey]}`, score)
-        if (val !== null) {
-          const n = Math.max(1, Math.min(30, Number(val) || score))
-          onChange({ abilityScores: { ...character.abilityScores, [abilityKey]: n } })
-        }
-      }}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-main)', lineHeight: 1 }}>{score}</span>
-      </div>
+      {editingScore ? (
+        <input
+          type="number"
+          min="1"
+          max="30"
+          value={scoreDraft}
+          aria-label={`Set ${ABILITY_LABELS[abilityKey]} score`}
+          autoFocus
+          onChange={event => setScoreDraft(event.target.value)}
+          onBlur={commitScore}
+          onKeyDown={event => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+            if (event.key === 'Escape') { setScoreDraft(String(score)); setEditingScore(false) }
+          }}
+          style={{
+            width: 48, height: 48, borderRadius: 10, padding: 0, textAlign: 'center',
+            border: '2px solid var(--accent)', background: 'var(--bg-main)',
+            color: 'var(--text-main)', fontSize: 18, fontWeight: 800,
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          aria-label={`Edit ${ABILITY_LABELS[abilityKey]} score, currently ${score}`}
+          onClick={() => { setScoreDraft(String(score)); setEditingScore(true) }}
+          style={{
+            width: 48, height: 48, borderRadius: 10,
+            border: '2px solid color-mix(in srgb, var(--accent) 50%, transparent)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            background: 'color-mix(in srgb, var(--accent) 8%, var(--bg-main))',
+            cursor: 'pointer', position: 'relative', padding: 0,
+          }}
+        >
+          <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-main)', lineHeight: 1 }}>{score}</span>
+        </button>
+      )}
       <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>{formatMod(mod)}</span>
       <button
         onClick={() => onChange({ savingThrows: { ...savingThrows, [abilityKey]: !hasSave } })}
@@ -334,14 +365,14 @@ function TabCombat({ character, onChange }) {
             <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Armor Class</p>
             {editAC
               ? <input type="number" value={character.ac} onChange={e => onChange({ ac: Number(e.target.value) })} onBlur={() => setEditAC(false)} autoFocus className="field" style={{ width: '100%', textAlign: 'center', fontSize: 18, fontWeight: 800, padding: '2px 4px' }} />
-              : <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => setEditAC(true)}>{character.ac}</div>
+              : <button type="button" aria-label={`Edit armor class, currently ${character.ac}`} style={{ width: '100%', padding: 0, border: 'none', background: 'none', fontSize: 22, fontWeight: 800, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => setEditAC(true)}>{character.ac}</button>
             }
           </div>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)', background: 'color-mix(in srgb, var(--bg-nav) 80%, transparent)' }}>
             <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4 }}>Speed</p>
             {editSpeed
               ? <input type="number" value={character.speed} onChange={e => onChange({ speed: Number(e.target.value) })} onBlur={() => setEditSpeed(false)} autoFocus className="field" style={{ width: '100%', textAlign: 'center', fontSize: 18, fontWeight: 800, padding: '2px 4px' }} />
-              : <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => setEditSpeed(true)}>{character.speed}ft</div>
+              : <button type="button" aria-label={`Edit speed, currently ${character.speed} feet`} style={{ width: '100%', padding: 0, border: 'none', background: 'none', fontSize: 22, fontWeight: 800, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => setEditSpeed(true)}>{character.speed}ft</button>
             }
           </div>
         </div>

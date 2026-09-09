@@ -3,1106 +3,228 @@ import KanbanColumn from './KanbanColumn'
 import QuickCapture from './QuickCapture'
 import FiltersBar from './FiltersBar'
 import ConvertModal from './ConvertModal'
+import IdeaEditor from './IdeaEditor'
+import useIdeaDrag from './useIdeaDrag'
+import { StudioSheet } from '../presentation/Studio'
+import { IDEA_STATUSES, buildIdeaIndex, buildIdeaEntityIndex, filterIdeaEntries, normalizeIdea, normalizeIdeaLinks } from '../../utils/ideaEntries.js'
 import { streamMessage } from '../../utils/aiApi'
 import { loadAiSettings } from '../../utils/aiSettings'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
-import AIStar from '../ai/AIStar'
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const KANBAN_STATUSES = [
-  { id: 'raw',        label: 'Raw Capture',  desc: 'Fast, messy idea dumping' },
-  { id: 'developing', label: 'Developing',   desc: 'Refining & expanding' },
-  { id: 'inStory',    label: 'In Story',     desc: 'Active in your story' },
-  { id: 'archived',   label: 'Archived',     desc: 'Saved but inactive' },
-]
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function normalise(entry) {
-  return {
-    status: 'raw',
-    order: 0,
-    isFavourite: false,
-    isPinned: false,
-    aiExpanded: false,
-    description: entry.body || '',
-    linkedEntities: [],
-    linkedIdeas: [],
-    convertedTo: null,
-    updatedAt: entry.createdAt || Date.now(),
-    ...entry,
-  }
-}
-
-// ─── Create modal ─────────────────────────────────────────────────────────────
-
-function IdeaCreateModal({ status, onClose, onAdd }) {
-  const [title, setTitle] = useState('')
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    onAdd(title.trim(), status)
-    onClose()
-  }
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,.55)',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--bg-nav)',
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          padding: '28px 28px 24px',
-          width: 420,
-          maxWidth: '90vw',
-          boxShadow: '0 24px 64px rgba(0,0,0,.45)',
-        }}
-      >
-        <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>
-          New idea
-        </h3>
-        <form onSubmit={handleSubmit}>
-          <input
-            autoFocus
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="What's your idea?"
-            onKeyDown={e => { if (e.key === 'Escape') onClose() }}
-            style={{
-              width: '100%',
-              background: 'color-mix(in srgb, var(--bg-nav) 60%, var(--bg-main))',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              color: 'var(--text-main)',
-              fontSize: 16,
-              fontFamily: 'inherit',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-            onFocus={e => { e.target.style.borderColor = 'var(--accent)' }}
-            onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={!title.trim()}>Create</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// ─── AI expand preview modal ───────────────────────────────────────────────────
-
-function AiExpandPreviewModal({ idea, generated, onReplace, onMerge, onReject }) {
-  const original = (idea.description || idea.body || '').trim()
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1100,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,.6)',
-      }}
-      onClick={onReject}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '90vw',
-          maxWidth: 640,
-          maxHeight: '82vh',
-          background: 'var(--bg-nav)',
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          boxShadow: '0 32px 96px rgba(0,0,0,.55)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '14px 20px',
-          borderBottom: '1px solid var(--border)',
-          flexShrink: 0,
-        }}>
-          <AIStar size={13} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>AI expand preview</span>
-          <div style={{ flex: 1 }} />
-          <button
-            type="button"
-            onClick={onReject}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', alignItems: 'center' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {original && (
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                Current description
-              </label>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-                {original}
-              </p>
-            </div>
-          )}
-          <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-              AI suggestion
-            </label>
-            <p style={{
-              margin: 0, fontSize: 14, color: 'var(--text-main)', lineHeight: 1.7, whiteSpace: 'pre-wrap',
-              background: 'var(--accent-fade)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
-              borderRadius: 10, padding: '12px 14px',
-            }}>
-              {generated}
-            </p>
-          </div>
-        </div>
-
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '14px 20px',
-          borderTop: '1px solid var(--border)',
-          flexShrink: 0,
-        }}>
-          <button
-            type="button"
-            onClick={onReject}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit' }}
-          >
-            Reject
-          </button>
-          <div style={{ flex: 1 }} />
-          {original && (
-            <button
-              type="button"
-              onClick={onMerge}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: 'var(--text-main)', fontSize: 12, fontFamily: 'inherit' }}
-            >
-              Merge with current
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onReplace}
-            style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', color: 'var(--accent-contrast)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
-          >
-            {original ? 'Replace' : 'Use suggestion'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Edit modal ───────────────────────────────────────────────────────────────
-
-function IdeaEditModal({ idea, store, onUpdate, onClose, onConvert, onArchive, onDelete, onAiExpand, aiExpandId, readOnly }) {
-  const [titleDraft, setTitleDraft] = useState(idea.title || '')
-  const [bodyDraft, setBodyDraft] = useState(idea.description || idea.body || '')
-  const [tagDraft, setTagDraft] = useState('')
-  const [linkSearch, setLinkSearch] = useState('')
-  const [showLinkSearch, setShowLinkSearch] = useState(false)
-  const isExpanding = aiExpandId === idea.id
-
-  useEffect(() => {
-    setTitleDraft(idea.title || '')
-    setBodyDraft(idea.description || idea.body || '')
-  }, [idea.id, idea.title, idea.description, idea.body])
-
-  const commitTitle = () => {
-    const t = titleDraft.trim()
-    if (t && t !== idea.title) onUpdate(idea.id, { title: t })
-  }
-
-  const commitBody = () => {
-    const b = bodyDraft
-    if (b !== (idea.description || idea.body || '')) onUpdate(idea.id, { description: b, body: b })
-  }
-
-  const allEntities = useMemo(() => {
-    const arr = []
-    ;(store.characters || []).forEach(c => arr.push({ type: 'character', id: c.id, name: c.name || 'Unnamed' }))
-    ;(store.locations || []).forEach(l => arr.push({ type: 'location', id: l.id, name: l.name || 'Unnamed' }))
-    ;(store.factions || []).forEach(f => arr.push({ type: 'faction', id: f.id, name: f.name || 'Unnamed' }))
-    ;(store.loreEntries || []).forEach(e => arr.push({ type: 'lore', id: e.id, name: e.title || 'Untitled' }))
-    return arr
-  }, [store.characters, store.locations, store.factions, store.loreEntries])
-
-  const linkResults = useMemo(() => {
-    if (!linkSearch.trim()) return []
-    const q = linkSearch.toLowerCase()
-    const linked = idea.linkedEntities || []
-    return allEntities.filter(e => e.name.toLowerCase().includes(q) && !linked.some(l => l.id === e.id)).slice(0, 6)
-  }, [linkSearch, allEntities, idea.linkedEntities])
-
-  const addLink = (entity) => {
-    onUpdate(idea.id, { linkedEntities: [...(idea.linkedEntities || []), entity] })
-    setLinkSearch('')
-    setShowLinkSearch(false)
-  }
-
-  const addTag = (tag) => {
-    const clean = tag.trim().toLowerCase().replace(/\s+/g, '-')
-    if (clean && !(idea.tags || []).includes(clean)) onUpdate(idea.id, { tags: [...(idea.tags || []), clean] })
-    setTagDraft('')
-  }
-
-  const statusInfo = KANBAN_STATUSES.find(s => s.id === (idea.status || 'raw'))
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.6)' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '78vw',
-          maxWidth: 960,
-          height: '82vh',
-          background: 'var(--bg-nav)',
-          border: '1px solid var(--border)',
-          borderRadius: 18,
-          boxShadow: '0 32px 96px rgba(0,0,0,.55)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Modal toolbar */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 20px',
-          borderBottom: '1px solid var(--border)',
-          flexShrink: 0,
-        }}>
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-            background: 'var(--accent-fade)', color: 'var(--accent)',
-            letterSpacing: '.04em', textTransform: 'uppercase',
-          }}>
-            {statusInfo?.label || idea.status}
-          </span>
-          {idea.isFavourite && <span style={{ fontSize: 12, color: '#f59e0b' }}>★</span>}
-          <div style={{ flex: 1 }} />
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => onAiExpand?.(idea.id)}
-              disabled={isExpanding}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                background: 'none', border: '1px solid var(--border)',
-                borderRadius: 8, padding: '5px 12px',
-                cursor: 'pointer', color: 'var(--accent)',
-                fontSize: 11, fontFamily: 'inherit',
-                opacity: isExpanding ? 0.6 : 1,
-              }}
-            >
-              <AIStar size={10} />
-              {isExpanding ? 'Expanding…' : 'AI expand'}
-            </button>
-          )}
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => onConvert?.()}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11, fontFamily: 'inherit' }}
-            >
-              Convert
-            </button>
-          )}
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => { onDelete?.(); onClose() }}
-              style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--danger) 30%, var(--border))', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', color: 'var(--danger)', fontSize: 11, fontFamily: 'inherit' }}
-            >
-              Delete
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Main body — two columns: document + sidebar */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-          {/* Document area */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '32px 48px' }}>
-            {/* Title */}
-            <input
-              value={titleDraft}
-              onChange={e => setTitleDraft(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
-              readOnly={readOnly}
-              placeholder="Untitled idea"
-              style={{
-                width: '100%',
-                flexShrink: 0,
-                background: 'none',
-                border: 'none',
-                outline: 'none',
-                fontFamily: 'var(--font-serif)',
-                fontSize: 32,
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                lineHeight: 1.2,
-                marginBottom: 24,
-                padding: 0,
-                cursor: readOnly ? 'default' : 'text',
-              }}
-            />
-
-            {/* Body / content — fills remaining space and scrolls internally */}
-            <textarea
-              value={bodyDraft}
-              onChange={e => setBodyDraft(e.target.value)}
-              onBlur={commitBody}
-              readOnly={readOnly}
-              placeholder={readOnly ? '' : 'Start writing your idea here…'}
-              style={{
-                width: '100%',
-                flex: 1,
-                background: 'none',
-                border: 'none',
-                outline: 'none',
-                resize: 'none',
-                overflowY: 'auto',
-                fontFamily: 'var(--font-sans, inherit)',
-                fontSize: 16,
-                color: 'var(--text-main)',
-                lineHeight: 1.75,
-                padding: 0,
-                minHeight: 200,
-                cursor: readOnly ? 'default' : 'text',
-              }}
-            />
-          </div>
-
-          {/* Sidebar */}
-          <div style={{
-            width: 220,
-            borderLeft: '1px solid var(--border)',
-            overflowY: 'auto',
-            padding: '20px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 20,
-            flexShrink: 0,
-          }}>
-            {/* Status change */}
-            {!readOnly && (
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Status</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {KANBAN_STATUSES.map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => onUpdate(idea.id, { status: s.id })}
-                      style={{
-                        background: (idea.status || 'raw') === s.id ? 'var(--accent-fade)' : 'none',
-                        border: `1px solid ${(idea.status || 'raw') === s.id ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border)'}`,
-                        borderRadius: 8,
-                        padding: '6px 10px',
-                        cursor: 'pointer',
-                        color: (idea.status || 'raw') === s.id ? 'var(--accent)' : 'var(--text-muted)',
-                        fontSize: 11,
-                        fontFamily: 'inherit',
-                        textAlign: 'left',
-                        fontWeight: (idea.status || 'raw') === s.id ? 700 : 400,
-                      }}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Tags */}
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Tags</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                {(idea.tags || []).map(tag => (
-                  <span key={tag} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'var(--accent-fade)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    #{tag}
-                    {!readOnly && (
-                      <button type="button" onClick={() => onUpdate(idea.id, { tags: (idea.tags || []).filter(t => t !== tag) })} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', opacity: 0.6, lineHeight: 1, fontSize: 12 }}>×</button>
-                    )}
-                  </span>
-                ))}
-                {!readOnly && (
-                  <input
-                    value={tagDraft}
-                    onChange={e => setTagDraft(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft) }
-                      if (e.key === 'Backspace' && !tagDraft) onUpdate(idea.id, { tags: (idea.tags || []).slice(0, -1) })
-                    }}
-                    placeholder="+ add tag"
-                    style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-muted)', fontSize: 16, fontFamily: 'inherit', padding: '2px 0', minWidth: 50 }}
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Linked entities */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Linked to</label>
-                {!readOnly && (
-                  <button type="button" onClick={() => setShowLinkSearch(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 10, fontFamily: 'inherit', padding: 0 }}>+ link</button>
-                )}
-              </div>
-              {showLinkSearch && (
-                <div style={{ marginBottom: 8 }}>
-                  <input
-                    autoFocus
-                    value={linkSearch}
-                    onChange={e => setLinkSearch(e.target.value)}
-                    placeholder="Search…"
-                    style={{ width: '100%', background: 'color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main))', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-main)', fontSize: 16, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
-                  />
-                  {linkResults.length > 0 && (
-                    <div style={{ marginTop: 4, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                      {linkResults.map(e => (
-                        <button key={e.id} type="button" onClick={() => addLink(e)} style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-main)', fontSize: 11, fontFamily: 'inherit', textAlign: 'left' }}>
-                          <span style={{ fontSize: 9, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em', width: 48, flexShrink: 0 }}>{e.type}</span>
-                          {e.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {(idea.linkedEntities || []).length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {idea.linkedEntities.map(entity => (
-                    <div key={entity.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: 'color-mix(in srgb, var(--bg-nav) 78%, var(--bg-main))', borderRadius: 7, border: '1px solid var(--border)', fontSize: 11 }}>
-                      <span style={{ fontSize: 9, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.04em', width: 48, flexShrink: 0 }}>{entity.type}</span>
-                      <span style={{ flex: 1, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entity.name}</span>
-                      {!readOnly && (
-                        <button type="button" onClick={() => onUpdate(idea.id, { linkedEntities: (idea.linkedEntities || []).filter(e => e.id !== entity.id) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ margin: 0, fontSize: 11, color: 'var(--faint)' }}>No linked entities.</p>
-              )}
-            </div>
-
-            {/* Converted indicator */}
-            {idea.convertedTo && (
-              <div style={{ padding: '8px 12px', background: 'color-mix(in srgb, #7ac4a0 10%, var(--bg-nav))', border: '1px solid color-mix(in srgb, #7ac4a0 30%, var(--border))', borderRadius: 8, fontSize: 11 }}>
-                <p style={{ margin: 0, color: '#7ac4a0', fontWeight: 600 }}>✓ Converted to {idea.convertedTo.type}</p>
-                <p style={{ margin: '2px 0 0', color: 'var(--text-muted)' }}>{idea.convertedTo.name}</p>
-              </div>
-            )}
-
-            {/* Archive / restore */}
-            {!readOnly && (
-              <div style={{ marginTop: 'auto' }}>
-                {idea.status !== 'archived' ? (
-                  <button type="button" onClick={() => { onArchive?.(); onClose() }} className="btn btn-secondary" style={{ width: '100%' }}>Archive</button>
-                ) : (
-                  <button type="button" onClick={() => { onUpdate(idea.id, { status: 'raw' }); onClose() }} className="btn btn-secondary" style={{ width: '100%' }}>Restore</button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Ghost card ───────────────────────────────────────────────────────────────
-
-function GhostCard({ idea, style }) {
-  return (
-    <div style={{
-      position: 'fixed',
-      left: style.x,
-      top: style.y,
-      width: style.width,
-      zIndex: 9999,
-      pointerEvents: 'none',
-      opacity: 0.92,
-      transform: 'rotate(2.5deg) scale(1.04)',
-      boxShadow: '0 24px 64px rgba(0,0,0,.45)',
-      background: 'var(--bg-nav)',
-      border: '1px solid var(--accent)',
-      borderRadius: 12,
-      padding: '12px 14px',
-      userSelect: 'none',
-    }}>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.4 }}>
-        {idea.title || 'Untitled'}
-      </p>
-      {(idea.tags || []).length > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          {idea.tags.slice(0, 3).map(t => (
-            <span key={t} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 20, background: 'var(--accent-fade)', color: 'var(--accent)' }}>
-              #{t}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Main component ───────────────────────────────────────────────────────────
-
+const EMPTY = []
 export default function IdeasKanban({ store, userId = null, membership = null }) {
-  const {
-    ideaEntries,
-    addIdeaEntry,
-    updateIdeaEntry,
-    deleteIdeaEntry,
-    readOnly,
-  } = store
+  return <IdeasWorkspace key={JSON.stringify([userId, store.activeNovelId || store.activeNovel?.id])} store={store} userId={userId} membership={membership} />
+}
 
-  // Filter & sort state
+function IdeasWorkspace({ store, userId, membership }) {
+  const { ideaEntries = EMPTY, readOnly, addIdeaEntry, updateIdeaEntry, moveIdeaEntry, deleteIdeaEntry, selectedIdeaEntryId, setSelectedIdeaEntryId } = store
   const [filterTag, setFilterTag] = useState('')
   const [sortBy, setSortBy] = useState('manual')
   const [showArchived, setShowArchived] = useState(false)
   const [filterFavourite, setFilterFavourite] = useState(false)
   const [filterLinked, setFilterLinked] = useState(false)
   const [filterAiExpanded, setFilterAiExpanded] = useState(false)
-
-  // UI state
-  const [selectedId, setSelectedId] = useState(null)
-  const [convertId, setConvertId] = useState(null)
+  const [dialog, setDialog] = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
+  const [error, setError] = useState('')
   const [aiExpandId, setAiExpandId] = useState(null)
-  const [aiExpandError, setAiExpandError] = useState('')
-  const [aiExpandPreview, setAiExpandPreview] = useState(null)
-  const [editingId, setEditingId] = useState(null)
-  const [createStatus, setCreateStatus] = useState(null)
-
-  // Drag state
-  const [draggingId, setDraggingId] = useState(null)
-  const [dropTarget, setDropTarget] = useState(null)
-  const [ghostStyle, setGhostStyle] = useState(null)
-
+  const [preview, setPreview] = useState(null)
   const boardRef = useRef(null)
-  const dragData = useRef(null)
-  const autoScrollFrame = useRef(null)
-  const lastPointerPos = useRef({ x: 0, y: 0 })
-
-  // Normalise existing entries
-  const ideas = useMemo(() => ideaEntries.map(normalise), [ideaEntries])
-
-  // All tags across ideas
-  const allTags = useMemo(() => {
-    const tags = new Set()
-    ideas.forEach(i => (i.tags || []).forEach(t => tags.add(t)))
-    return [...tags]
-  }, [ideas])
-
-  // Filter & sort
-  const filteredIdeas = useMemo(() => {
-    let list = ideas
-    if (filterTag) list = list.filter(i => (i.tags || []).includes(filterTag))
-    if (filterFavourite) list = list.filter(i => i.isFavourite)
-    if (filterLinked) list = list.filter(i => (i.linkedEntities || []).length > 0)
-    if (filterAiExpanded) list = list.filter(i => i.aiExpanded)
-    if (!showArchived) list = list.filter(i => i.status !== 'archived' || i.id === draggingId)
-
-    if (sortBy === 'newest') list = [...list].sort((a, b) => b.createdAt - a.createdAt)
-    else if (sortBy === 'oldest') list = [...list].sort((a, b) => a.createdAt - b.createdAt)
-    else if (sortBy === 'active') list = [...list].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
-    else list = [...list].sort((a, b) => (a.order || 0) - (b.order || 0))
-
-    return list
-  }, [ideas, filterTag, filterFavourite, filterLinked, filterAiExpanded, showArchived, sortBy, draggingId])
-
-  // Group by status
+  const runRef = useRef(null)
+  const latest = useRef(null)
+  const entities = useMemo(() => buildIdeaEntityIndex({
+    characters: store.characters, locations: store.locations, factions: store.factions,
+    loreEntries: store.loreEntries, timeline: store.timeline, chapters: store.chapters,
+  }), [store.characters, store.locations, store.factions, store.loreEntries, store.timeline, store.chapters])
+  const index = useMemo(() => buildIdeaIndex(ideaEntries, entities), [ideaEntries, entities])
+  const tag = index.tags.includes(filterTag) ? filterTag : ''
+  const filtered = useMemo(() => filterIdeaEntries(index, {
+    tag, favourite: filterFavourite, linked: filterLinked, aiExpanded: filterAiExpanded, archived: showArchived, sort: sortBy,
+  }), [index, tag, filterFavourite, filterLinked, filterAiExpanded, showArchived, sortBy])
   const columns = useMemo(() => {
-    const cols = {}
-    KANBAN_STATUSES.forEach(s => { cols[s.id] = [] })
-    filteredIdeas.forEach(idea => {
-      const s = idea.status || 'raw'
-      if (cols[s]) cols[s].push(idea)
-    })
-    return cols
-  }, [filteredIdeas])
+    const result = Object.fromEntries(IDEA_STATUSES.map(status => [status.id, []]))
+    filtered.forEach(idea => result[idea.status].push(idea))
+    return result
+  }, [filtered])
 
-  // ── CRUD handlers ────────────────────────────────────────────────────────────
-
-  const handleAdd = useCallback((title, tags = []) => {
-    if (!title.trim() || readOnly) return
-    const rawIdeas = ideas.filter(i => (i.status || 'raw') === 'raw')
-    const maxOrder = rawIdeas.length ? Math.max(...rawIdeas.map(i => i.order || 0)) : -1
-    addIdeaEntry({
-      title: title.trim(),
-      description: '',
-      body: '',
-      tags,
-      status: 'raw',
-      order: maxOrder + 1,
-      updatedAt: Date.now(),
-    })
-  }, [ideas, addIdeaEntry, readOnly])
-
-  const handleAddForStatus = useCallback((title, status) => {
-    if (!title.trim() || readOnly) return
-    const colIdeas = ideas.filter(i => (i.status || 'raw') === status)
-    const maxOrder = colIdeas.length ? Math.max(...colIdeas.map(i => i.order || 0)) : -1
-    addIdeaEntry({
-      title: title.trim(),
-      description: '',
-      body: '',
-      tags: [],
-      status,
-      order: maxOrder + 1,
-      updatedAt: Date.now(),
-    })
-  }, [ideas, addIdeaEntry, readOnly])
-
-  const handleUpdate = useCallback((id, data) => {
-    if (readOnly) return
-    updateIdeaEntry(id, { ...data, updatedAt: Date.now() })
-  }, [updateIdeaEntry, readOnly])
-
-  const handleDelete = useCallback((id) => {
-    if (readOnly) return
-    const scope = window.confirm('Delete this idea from every synced project too?\n\nOK = every synced project\nCancel = current project only') ? 'all' : 'current'
-    deleteIdeaEntry(id, { scope })
-    if (selectedId === id) setSelectedId(null)
-    if (convertId === id) setConvertId(null)
-    if (editingId === id) setEditingId(null)
-  }, [deleteIdeaEntry, readOnly, selectedId, convertId, editingId])
-
-  const handleArchive = useCallback((id) => {
-    handleUpdate(id, { status: 'archived' })
-  }, [handleUpdate])
-
-  const handleRestore = useCallback((id) => {
-    handleUpdate(id, { status: 'raw' })
-  }, [handleUpdate])
-
-  const handleFavourite = useCallback((id) => {
-    const idea = ideas.find(i => i.id === id)
-    if (idea) handleUpdate(id, { isFavourite: !idea.isFavourite })
-  }, [ideas, handleUpdate])
-
-  const handleMove = useCallback((id, newStatus, beforeId = null) => {
-    if (readOnly) return
-    const colIdeas = ideas
-      .filter(i => (i.status || 'raw') === newStatus && i.id !== id)
-      .sort((a, b) => (a.order || 0) - (b.order || 0))
-
-    let order
-    if (beforeId === null) {
-      order = colIdeas.length ? Math.max(...colIdeas.map(i => i.order || 0)) + 1 : 0
-    } else {
-      const idx = colIdeas.findIndex(i => i.id === beforeId)
-      if (idx === 0) {
-        order = (colIdeas[0].order || 0) - 1
-      } else if (idx > 0) {
-        order = ((colIdeas[idx - 1].order || 0) + (colIdeas[idx].order || 0)) / 2
-      } else {
-        order = colIdeas.length ? Math.max(...colIdeas.map(i => i.order || 0)) + 1 : 0
-      }
+  useEffect(() => { latest.current = { index, readOnly } }, [index, readOnly])
+  useEffect(() => () => { runRef.current?.controller.abort(); runRef.current = null }, [])
+  useEffect(() => {
+    if (runRef.current && (readOnly || !index.byId.has(runRef.current.id))) {
+      runRef.current.controller.abort()
+      runRef.current = null
+      // A deleted/read-only source invalidates this in-flight operation.
+      setAiExpandId(null)
     }
+  }, [readOnly, index])
+  useEffect(() => {
+    const requested = index.byId.get(selectedIdeaEntryId)
+    if (!requested || dialog) return
+    // External reference navigation must not replace an already-open draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDialog({ kind: 'edit', idea: requested })
+    setSelectedIdeaEntryId?.(null)
+  }, [selectedIdeaEntryId, setSelectedIdeaEntryId, index, dialog])
 
-    handleUpdate(id, { status: newStatus, order })
-  }, [ideas, handleUpdate, readOnly])
+  const closeDialog = () => { setDialog(null); store.setSelectedIdeaEntryId?.(null) }
+  const reveal = useCallback(status => {
+    setFilterTag(''); setFilterFavourite(false); setFilterLinked(false); setFilterAiExpanded(false)
+    if (status === 'archived') setShowArchived(true)
+  }, [])
+  const save = useCallback((id, data, options) => {
+    if (readOnly) return null
+    setError('')
+    const saved = id ? updateIdeaEntry(id, data, options) : addIdeaEntry(data)
+    return saved
+  }, [readOnly, updateIdeaEntry, addIdeaEntry])
+  const add = useCallback((title, tags = []) => {
+    if (!title.trim()) return null
+    const saved = save(null, { title: title.trim(), description: '', tags, status: 'raw' })
+    if (saved) reveal('raw')
+    return saved
+  }, [save, reveal])
+  const update = useCallback((id, data) => {
+    try {
+      const saved = save(id, data)
+      if (!saved) setError('This change could not be saved or the idea is no longer editable.')
+      return saved
+    } catch { setError('This change could not be saved. Please try again.'); return null }
+  }, [save])
+  const archive = useCallback(id => update(id, { status: 'archived' }), [update])
+  const restore = useCallback(id => update(id, { status: 'raw' }), [update])
+  const favourite = useCallback(id => {
+    const idea = index.byId.get(id)
+    if (idea) update(id, { isFavourite: !idea.isFavourite })
+  }, [index, update])
+  const requestDelete = useCallback(id => { if (!readOnly) { setError(''); setDeleteId(id) } }, [readOnly])
+  const remove = scope => {
+    if (readOnly) return
+    try {
+      if (!deleteIdeaEntry(deleteId, { scope })) { setError('This idea could not be deleted.'); return }
+      if (dialog?.idea?.id === deleteId) closeDialog()
+      if (preview?.id === deleteId) setPreview(null)
+      setDeleteId(null)
+      setError('')
+    } catch { setError('This idea could not be deleted. Please try again.') }
+  }
+  const move = useCallback((id, status, beforeId) => {
+    if (readOnly) return
+    try {
+      const result = moveIdeaEntry(id, status, beforeId)
+      if (!result) setError('The move was not applied. The idea may have changed; try again.')
+    } catch { setError('The move could not be saved. Please try again.') }
+  }, [readOnly, moveIdeaEntry])
+  const drag = useIdeaDrag(boardRef, !readOnly && sortBy === 'manual' && !dialog && !deleteId, move)
+  const edit = useCallback(id => {
+    if (drag.suppressClick.current || dialog) return
+    const idea = index.byId.get(id)
+    if (idea) setDialog({ kind: 'edit', idea })
+  }, [drag.suppressClick, dialog, index])
+  const convert = useCallback(id => {
+    if (readOnly || dialog) return
+    const idea = index.byId.get(id)
+    if (idea && !idea.convertedTo) setDialog({ kind: 'convert', idea })
+  }, [readOnly, dialog, index])
+  const create = useCallback(status => { if (!readOnly && !dialog) setDialog({ kind: 'create', status }) }, [readOnly, dialog])
 
-  // ── AI expand ────────────────────────────────────────────────────────────────
-
-  const handleAiExpand = useCallback(async (id) => {
-    if (aiExpandId) return
-    const idea = ideas.find(i => i.id === id)
+  const expand = useCallback(async (id, savedIdea) => {
+    if (readOnly || runRef.current || preview) return
+    const idea = savedIdea || index.byId.get(id)
     if (!idea) return
-    if (membership?.isFree) {
-      setAiExpandError(AI_UPGRADE_REQUIRED_TEXT)
-      return
-    }
-
-    const aiSettings = loadAiSettings(userId)
-    const provider = aiSettings?.activeProvider || 'google'
-    const cfg = aiSettings?.[provider] || {}
-    if (!cfg.apiKey?.trim()) {
-      setAiExpandError(AI_CONFIG_REQUIRED_TEXT)
-      return
-    }
-
-    setAiExpandError('')
+    if (membership?.isFree) { setError(AI_UPGRADE_REQUIRED_TEXT); return }
+    const settings = loadAiSettings(userId)
+    const provider = settings?.activeProvider || 'google'
+    const config = settings?.[provider] || {}
+    if (!config.apiKey?.trim()) { setError(AI_CONFIG_REQUIRED_TEXT); return }
+    const request = { id, controller: new AbortController() }
+    runRef.current = request
+    setError('')
     setAiExpandId(id)
-    let result = ''
-
-    await streamMessage({
-      provider,
-      apiKey: cfg.apiKey,
-      model: cfg.model,
-      systemPrompt: 'You are a creative writing assistant. Expand a story idea into a rich, evocative description of 2–4 sentences. Be specific. Return only the expanded description — no JSON, no preamble, no quotes.',
-      messages: [{
-        role: 'user',
-        content: `Expand this story idea:\n\nTitle: "${idea.title}"${idea.description ? `\nCurrent description: ${idea.description}` : ''}`,
-      }],
-      onChunk: (chunk) => { result += chunk },
-      onDone: () => {
-        setAiExpandId(null)
-        setAiExpandPreview({ id, generated: result.trim() })
-      },
-      onError: (err) => {
-        console.error('AI expand failed:', err)
-        setAiExpandError(err || 'AI expand failed.')
-        setAiExpandId(null)
-      },
-    })
-  }, [ideas, aiExpandId, userId, membership?.isFree])
-
-  const handleAiExpandReplace = useCallback(() => {
-    if (!aiExpandPreview) return
-    const text = aiExpandPreview.generated
-    handleUpdate(aiExpandPreview.id, { description: text, body: text, aiExpanded: true })
-    setAiExpandPreview(null)
-  }, [aiExpandPreview, handleUpdate])
-
-  const handleAiExpandMerge = useCallback(() => {
-    if (!aiExpandPreview) return
-    const idea = ideas.find(i => i.id === aiExpandPreview.id)
-    const original = (idea?.description || idea?.body || '').trim()
-    const merged = original ? `${original}\n\n${aiExpandPreview.generated}` : aiExpandPreview.generated
-    handleUpdate(aiExpandPreview.id, { description: merged, body: merged, aiExpanded: true })
-    setAiExpandPreview(null)
-  }, [aiExpandPreview, ideas, handleUpdate])
-
-  const handleAiExpandReject = useCallback(() => {
-    setAiExpandPreview(null)
-  }, [])
-
-  // ── Drag & drop ──────────────────────────────────────────────────────────────
-
-  const resolveDropTarget = useCallback((x, y, excludeId) => {
-    const elements = document.elementsFromPoint(x, y)
-    const colEl = elements.find(el => el.dataset?.column)
-    if (!colEl) return null
-    const status = colEl.dataset.column
-    const cardEls = colEl.querySelectorAll('[data-card-id]')
-    let beforeId = null
-    for (const cardEl of cardEls) {
-      if (cardEl.dataset.cardId === excludeId) continue
-      const r = cardEl.getBoundingClientRect()
-      if (y < r.top + r.height / 2) {
-        beforeId = cardEl.dataset.cardId
-        break
-      }
+    let generated = ''
+    const current = () => runRef.current === request && !request.controller.signal.aborted
+    const fail = message => {
+      if (!current()) return
+      setError(typeof message === 'string' ? message : 'AI expansion failed. Please try again.')
+      setAiExpandId(null)
+      runRef.current = null
     }
-    return { status, beforeId }
-  }, [])
-
-  const startAutoScroll = useCallback(() => {
-    if (autoScrollFrame.current) return
-    const scroll = () => {
-      if (!dragData.current?.moved) { autoScrollFrame.current = null; return }
-      const { x, y } = lastPointerPos.current
-      const ZONE = 80, SPEED = 8
-
-      if (boardRef.current) {
-        const br = boardRef.current.getBoundingClientRect()
-        if (x < br.left + ZONE) boardRef.current.scrollLeft -= SPEED
-        else if (x > br.right - ZONE) boardRef.current.scrollLeft += SPEED
-      }
-
-      const colBody = document.elementFromPoint(x, y)?.closest('[data-column-body]')
-      if (colBody) {
-        const cr = colBody.getBoundingClientRect()
-        if (y < cr.top + ZONE) colBody.scrollTop -= SPEED
-        else if (y > cr.bottom - ZONE) colBody.scrollTop += SPEED
-      }
-
-      autoScrollFrame.current = requestAnimationFrame(scroll)
-    }
-    autoScrollFrame.current = requestAnimationFrame(scroll)
-  }, [])
-
-  const stopAutoScroll = useCallback(() => {
-    if (autoScrollFrame.current) {
-      cancelAnimationFrame(autoScrollFrame.current)
-      autoScrollFrame.current = null
-    }
-  }, [])
-
-  const handleCardPointerDown = useCallback((idea, e) => {
-    if (e.button !== 0 || readOnly || idea.status === 'archived') return
-    // Stop the browser's native text-selection drag from starting at all —
-    // relying solely on `user-select: none` via React state is too slow
-    // (it only takes effect after a re-render), so the mouse can "paint" a
-    // selection across cards/columns during the brief window before that.
-    if (e.pointerType === 'mouse') e.preventDefault()
-    const rect = e.currentTarget.getBoundingClientRect()
-    dragData.current = {
-      id: idea.id,
-      status: idea.status || 'raw',
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-      width: rect.width,
-      startX: e.clientX,
-      startY: e.clientY,
-      moved: false,
-    }
-
-    const onPointerMove = (ev) => {
-      const d = dragData.current
-      if (!d) return
-      lastPointerPos.current = { x: ev.clientX, y: ev.clientY }
-
-      const dx = ev.clientX - d.startX
-      const dy = ev.clientY - d.startY
-
-      if (!d.moved && Math.sqrt(dx * dx + dy * dy) > 8) {
-        d.moved = true
-        setDraggingId(d.id)
-        setGhostStyle({ x: ev.clientX - d.offsetX, y: ev.clientY - d.offsetY, width: d.width })
-        startAutoScroll()
-        // Belt-and-braces: apply user-select:none directly to the DOM right
-        // now, rather than waiting for the draggingId state update to reach
-        // the board via re-render, and clear any selection that already
-        // started in the gap between pointerdown and this threshold.
-        document.body.style.userSelect = 'none'
-        document.body.style.webkitUserSelect = 'none'
-        window.getSelection?.()?.removeAllRanges?.()
-      }
-
-      if (d.moved) {
-        setGhostStyle({ x: ev.clientX - d.offsetX, y: ev.clientY - d.offsetY, width: d.width })
-        setDropTarget(resolveDropTarget(ev.clientX, ev.clientY, d.id))
-      }
-    }
-
-    const onPointerUp = (ev) => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      stopAutoScroll()
-      document.body.style.userSelect = ''
-      document.body.style.webkitUserSelect = ''
-
-      const d = dragData.current
-      if (d?.moved) {
-        const target = resolveDropTarget(ev.clientX, ev.clientY, d.id)
-        if (target && (target.status !== d.status || target.beforeId !== null)) {
-          handleMove(d.id, target.status, target.beforeId)
-        }
-      }
-
-      dragData.current = null
-      setDraggingId(null)
-      setDropTarget(null)
-      setGhostStyle(null)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }, [readOnly, resolveDropTarget, handleMove, startAutoScroll, stopAutoScroll])
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-    stopAutoScroll()
-    document.body.style.userSelect = ''
-    document.body.style.webkitUserSelect = ''
-  }, [stopAutoScroll])
-
-  // ── Derived ──────────────────────────────────────────────────────────────────
-
-  const editingIdea = editingId ? ideas.find(i => i.id === editingId) ?? null : null
-  const convertIdea = convertId ? ideas.find(i => i.id === convertId) ?? null : null
-  const visibleStatuses = showArchived ? KANBAN_STATUSES : KANBAN_STATUSES.filter(s => s.id !== 'archived')
-
-  const handleCardSelect = useCallback((id) => {
-    setSelectedId(prev => prev === id ? null : id)
-  }, [])
-
-  const handleCardEdit = useCallback((id) => {
-    setEditingId(id)
-  }, [])
-
+    try {
+      await streamMessage({
+        provider, apiKey: config.apiKey, model: config.model, baseUrl: config.baseUrl, signal: request.controller.signal,
+        systemPrompt: 'You are a creative writing assistant. Expand a story idea into a rich, evocative description of 2–4 sentences. Be specific. Return only the expanded description — no JSON, no preamble, no quotes.',
+        messages: [{ role: 'user', content: `Expand this story idea:\n\nTitle: "${idea.title}"\nCurrent description: ${idea.description}` }],
+        onChunk: chunk => { if (current()) generated += chunk },
+        onDone: () => {
+          if (!current()) return
+          if (!generated.trim()) { fail('The AI returned no suggestion. Please try again.'); return }
+          if (latest.current?.readOnly || !latest.current?.index.byId.has(id)) { fail('The source idea is no longer editable.'); return }
+          setPreview({ id, generated: generated.trim(), title: idea.title, description: idea.description })
+          setAiExpandId(null)
+          runRef.current = null
+        },
+        onError: fail,
+      })
+    } catch { fail('AI expansion failed. Please try again.') }
+  }, [readOnly, index, membership?.isFree, userId, preview])
+  const acceptPreview = merge => {
+    const current = index.byId.get(preview?.id)
+    if (!current || readOnly) { setError('The source idea is no longer editable.'); return }
+    const description = merge && current.description.trim() ? `${current.description}\n\n${preview.generated}` : preview.generated
+    const expected = merge ? { description: current.description } : { title: preview.title, description: preview.description }
+    try {
+      const saved = save(current.id, { description, aiExpanded: true }, { expected })
+      if (!saved) { setError('The idea changed since this suggestion was requested. Merge with the current text or reject the suggestion.'); return }
+      setPreview(null); closeDialog(); reveal(saved.status)
+    } catch { setError('The suggestion could not be saved. It is still available here.') }
+  }
+  const savedEditor = (saved, action) => {
+    closeDialog()
+    reveal(saved.status)
+    const idea = normalizeIdea(saved)
+    if (action === 'convert') setDialog({ kind: 'convert', idea })
+    if (action === 'ai') expand(idea.id, idea)
+  }
+  const converted = entity => {
+    const current = index.byId.get(dialog.idea.id)
+    if (!current || readOnly) return null
+    const saved = save(current.id, { convertedTo: entity, status: 'inStory', linkedEntities: normalizeIdeaLinks([...current.linkedEntities, entity]) }, { expected: { convertedTo: current.convertedTo, linkedEntities: current.linkedEntities } })
+    if (saved) reveal('inStory')
+    return saved
+  }
+  const series = store.series?.find(item => item.id === store.activeNovel?.seriesId)
+  const previewIdea = index.byId.get(preview?.id)
+  const visibleStatuses = showArchived ? IDEA_STATUSES : IDEA_STATUSES.filter(status => status.id !== 'archived')
   return (
-    <div data-tour="ideas-header" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
-        .quick-capture-wrap:focus-within {
-          border-color: var(--accent) !important;
-          box-shadow: 0 0 0 2px var(--accent-fade) !important;
-        }
-      `}</style>
-
-      <QuickCapture onAdd={handleAdd} readOnly={readOnly} allTags={allTags} />
-
-      <FiltersBar
-        allTags={allTags}
-        filterTag={filterTag}
-        setFilterTag={setFilterTag}
-        sortBy={sortBy}
-        setSortBy={setSortBy}
-        showArchived={showArchived}
-        setShowArchived={setShowArchived}
-        filterFavourite={filterFavourite}
-        setFilterFavourite={setFilterFavourite}
-        filterLinked={filterLinked}
-        setFilterLinked={setFilterLinked}
-        filterAiExpanded={filterAiExpanded}
-        setFilterAiExpanded={setFilterAiExpanded}
-        totalCount={filteredIdeas.filter(i => showArchived || i.status !== 'archived').length}
-      />
-
-      {aiExpandError === AI_CONFIG_REQUIRED_TEXT && (
-        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
-          <AiConfigRequiredNotice />
-        </div>
-      )}
-      {aiExpandError === AI_UPGRADE_REQUIRED_TEXT && (
-        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
-          <AiUpgradeRequiredNotice>
-            Upgrade to use AI expand on idea cards.
-          </AiUpgradeRequiredNotice>
-        </div>
-      )}
-      {aiExpandError && aiExpandError !== AI_CONFIG_REQUIRED_TEXT && aiExpandError !== AI_UPGRADE_REQUIRED_TEXT && (
-        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
-          <div style={{ background: 'color-mix(in srgb, #ef4444 10%, transparent)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', color: '#ef4444', fontSize: 12 }}>
-            {aiExpandError}
-          </div>
-        </div>
-      )}
-
-      {/* Board */}
-      <div
-        ref={boardRef}
-        style={{
-          flex: 1,
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          display: 'flex',
-          gap: 14,
-          padding: '16px 18px 18px',
-          userSelect: draggingId ? 'none' : undefined,
-        }}
-        onClick={() => setSelectedId(null)}
-      >
-        {visibleStatuses.map(status => (
-          <KanbanColumn
-            key={status.id}
-            status={status}
-            ideas={columns[status.id] || []}
-            draggingId={draggingId}
-            isDropTarget={dropTarget?.status === status.id}
-            dropBeforeId={dropTarget?.status === status.id ? dropTarget.beforeId : null}
-            selectedId={selectedId}
-            aiExpandId={aiExpandId}
-            onCardClick={handleCardSelect}
-            onCardEdit={handleCardEdit}
-            onCardPointerDown={handleCardPointerDown}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
-            onArchive={handleArchive}
-            onRestore={handleRestore}
-            onFavourite={handleFavourite}
-            onConvert={(id) => setConvertId(id)}
-            onAiExpand={handleAiExpand}
-            onEmptyClick={() => setCreateStatus(status.id)}
-            readOnly={readOnly}
-          />
-        ))}
+    <div data-tour="ideas-header" className="flex flex-col h-full min-h-0 overflow-hidden relative">
+      <QuickCapture onAdd={add} readOnly={readOnly} allTags={index.tags} />
+      <FiltersBar allTags={index.tags} filterTag={tag} setFilterTag={setFilterTag} sortBy={sortBy} setSortBy={setSortBy}
+        showArchived={showArchived} setShowArchived={setShowArchived} filterFavourite={filterFavourite} setFilterFavourite={setFilterFavourite}
+        filterLinked={filterLinked} setFilterLinked={setFilterLinked} filterAiExpanded={filterAiExpanded} setFilterAiExpanded={setFilterAiExpanded} totalCount={filtered.length} />
+      {error === AI_CONFIG_REQUIRED_TEXT ? <AiConfigRequiredNotice /> : error === AI_UPGRADE_REQUIRED_TEXT ? <AiUpgradeRequiredNotice /> : error && !dialog && !deleteId ? <p role="alert" className="text-sm text-red-400 px-5 py-2">{error}</p> : null}
+      {preview && <div className="flex flex-wrap gap-3 px-5 py-2 text-sm"><span>AI suggestion ready.</span><button type="button" disabled={Boolean(dialog) || !previewIdea} className="text-[var(--accent)]" onClick={() => { setError(''); setDialog({ kind: 'preview' }) }}>Review suggestion</button><button type="button" onClick={() => { setPreview(null); if (dialog?.kind === 'preview') closeDialog() }}>Dismiss suggestion</button></div>}
+      {sortBy !== 'manual' && <p className="text-xs text-[var(--text-muted)] px-5 py-2">Choose Manual order to drag cards. You can also move an idea using Status in its editor.</p>}
+      <div ref={boardRef} className="flex flex-1 min-h-0 overflow-x-auto overflow-y-hidden gap-4 p-4" data-tour="ideas-board">
+        {visibleStatuses.map(status => <KanbanColumn key={status.id} status={status} ideas={columns[status.id]} draggingId={drag.visual?.id}
+          isDropTarget={drag.visual?.target?.status === status.id} dropBeforeId={drag.visual?.target?.status === status.id ? drag.visual.target.beforeId : null}
+          onEdit={edit} onPointerDown={drag.start} onDelete={requestDelete} onArchive={archive} onRestore={restore} onFavourite={favourite}
+          onConvert={convert} onAiExpand={expand} aiExpandId={aiExpandId || (preview ? 'preview-pending' : null)} onEmptyClick={create} readOnly={readOnly} dragEnabled={sortBy === 'manual'} />)}
       </div>
-
-      {/* Drag ghost */}
-      {draggingId && ghostStyle && (() => {
-        const idea = ideas.find(i => i.id === draggingId)
-        return idea ? <GhostCard idea={idea} style={ghostStyle} /> : null
-      })()}
-
-      {/* Edit modal */}
-      {editingIdea && (
-        <IdeaEditModal
-          idea={editingIdea}
-          store={store}
-          onUpdate={handleUpdate}
-          onClose={() => setEditingId(null)}
-          onConvert={() => { setConvertId(editingIdea.id); setEditingId(null) }}
-          onArchive={() => handleArchive(editingIdea.id)}
-          onDelete={() => { handleDelete(editingIdea.id); setEditingId(null) }}
-          onAiExpand={handleAiExpand}
-          aiExpandId={aiExpandId}
-          readOnly={readOnly}
-        />
-      )}
-
-      {/* AI expand preview modal */}
-      {aiExpandPreview && (() => {
-        const previewIdea = ideas.find(i => i.id === aiExpandPreview.id)
-        return previewIdea ? (
-          <AiExpandPreviewModal
-            idea={previewIdea}
-            generated={aiExpandPreview.generated}
-            onReplace={handleAiExpandReplace}
-            onMerge={handleAiExpandMerge}
-            onReject={handleAiExpandReject}
-          />
-        ) : null
-      })()}
-
-      {/* Create modal */}
-      {createStatus && (
-        <IdeaCreateModal
-          status={createStatus}
-          onClose={() => setCreateStatus(null)}
-          onAdd={handleAddForStatus}
-        />
-      )}
-
-      {/* Convert modal */}
-      {convertIdea && (
-        <ConvertModal
-          idea={convertIdea}
-          store={store}
-          onClose={() => setConvertId(null)}
-          onConverted={(type, entityId, entityName) => {
-            handleUpdate(convertIdea.id, {
-              convertedTo: { type, id: entityId, name: entityName },
-              status: 'inStory',
-              linkedEntities: [
-                ...(convertIdea.linkedEntities || []),
-                { type, id: entityId, name: entityName },
-              ],
-            })
-            setConvertId(null)
-          }}
-        />
-      )}
+      {drag.visual && <div aria-hidden="true" className="fixed z-[9999] pointer-events-none rounded-xl border border-[var(--accent)] bg-[var(--bg-nav)] p-4 shadow-2xl text-sm" style={{ left: drag.visual.x, top: drag.visual.y, width: drag.visual.width }}>{index.byId.get(drag.visual.id)?.title || 'Untitled idea'}</div>}
+      {(dialog?.kind === 'edit' || dialog?.kind === 'create') && <IdeaEditor key={dialog.idea?.id || 'new'} idea={dialog.idea} status={dialog.status} entities={entities} readOnly={readOnly} onSave={save} onClose={closeDialog} onSaved={savedEditor} onDelete={requestDelete} />}
+      {dialog?.kind === 'convert' && <ConvertModal idea={dialog.idea} store={store} onClose={closeDialog} onConverted={converted} />}
+      {dialog?.kind === 'preview' && preview && <StudioSheet title="AI expand preview" eyebrow="Ideas Board" onClose={closeDialog} narrow>
+        <div className="space-y-4">
+          <div><h3 className="text-sm font-semibold">Current description</h3><p className="whitespace-pre-wrap text-sm">{previewIdea?.description || 'No description'}</p></div>
+          <div><h3 className="text-sm font-semibold">AI suggestion</h3><p className="whitespace-pre-wrap text-sm">{preview.generated}</p></div>
+          {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+          <div className="flex flex-wrap gap-2"><button className="btn btn-secondary" onClick={() => { setPreview(null); closeDialog() }}>Reject</button><button disabled={readOnly || !previewIdea} className="btn btn-secondary" onClick={() => acceptPreview(true)}>Merge with current</button><button disabled={readOnly || !previewIdea} className="btn btn-primary" onClick={() => acceptPreview(false)}>Replace</button></div>
+        </div>
+      </StudioSheet>}
+      {deleteId && <StudioSheet title="Delete idea?" eyebrow="Ideas Board" onClose={() => setDeleteId(null)} narrow>
+        <p className="text-sm mb-4">Delete “{index.byId.get(deleteId)?.title || 'this idea'}”? Linked story entities are kept.</p>
+        {error && <p role="alert" className="text-sm text-red-400 mb-3">{error}</p>}
+        <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-secondary" onClick={() => setDeleteId(null)}>Cancel</button><button type="button" disabled={readOnly} className="btn btn-primary" onClick={() => remove('current')}>Delete from this project</button>{series?.syncCategories?.includes('ideas') && <button type="button" disabled={readOnly} className="btn btn-secondary" onClick={() => remove('all')}>Delete from all synced projects</button>}</div>
+      </StudioSheet>}
     </div>
   )
 }
