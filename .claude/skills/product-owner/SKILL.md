@@ -51,11 +51,17 @@ For each worklist item, top to bottom:
 
 Each independent unit of work belongs on its own branch — don't pile unrelated fixes onto one branch, and don't reuse a branch whose PR already merged. Use a short, descriptive branch name (e.g. `fix/wizard-onboarding-suppression`). Push once the fix is implemented and verified (review + QA passed), not before — a half-done fix isn't ready for review.
 
-Open a PR for it too, **only if you actually have GitHub PR-creation tools available in this session** — some sessions (notably ones a scheduled Routine fires) run without them. Check rather than assume: if you don't have them, that's not an error to fix or a reason to stop, it just means this run's job ends at "pushed, ready for a PR" instead of "PR open." Either way, say so plainly in your end-of-session summary so a PR-capable session (interactive, or the next scheduled run if the environment's tool access changes) knows to pick it up. Once a PR is open, this session already operates under the "drive a PR to green" rules in its own instructions (CI, review comments, merge conflicts) — keep following those for any PR you open.
+Open a PR for it too, **only if you actually have GitHub PR-creation tools available in this session** — some sessions (notably ones a scheduled Routine fires) run without them. Check rather than assume: if you don't have them, that's not an error to fix or a reason to stop, it just means this run's job ends at "pushed, ready for a PR" instead of "PR open." Either way, say so plainly in your end-of-session summary so a PR-capable session (interactive, or the next scheduled run if the environment's tool access changes) knows to pick it up. Once a PR is open, this session already operates under the "drive a PR to green" rules in its own instructions (CI, review comments, merge conflicts) — keep following those for any PR you open, through to merge (see Merging below).
 
 **Exception**: if you're continuing work in a session that's already mid-task on a specific designated branch (the harness told you to develop there for the current task), keep using that branch for now rather than switching branches mid-session — branch-per-fix is the standing convention for new/future units of work, not a reason to abandon an in-progress branch.
 
-**Never** merge a PR yourself, or flip a production/live-payment toggle, or take any other outward-facing/hard-to-reverse action without current, explicit authorization for that specific action — standing product-owner authority covers driving implementation work to a reviewable, mergeable state, not deployment or merge decisions, unless the user has separately said otherwise.
+## Merging
+
+Standing decision from the user (2026-09-09): **the user merges nothing — you do.** Do not leave a green, reviewed PR sitting open waiting for the user to click merge; that was the old default and it produced a 40+ PR backlog nobody was working through. Once a PR you opened or drive is green (CI passing on the current head), has had `code-reviewer` (+ `security-reviewer` where warranted) and `qa-engineer` pass on it, and has no open review thread you haven't addressed, merge it yourself with the GitHub merge tool and delete the branch. Don't wait for a human approval that isn't coming — the review/QA steps above are the approval gate, not a human clicking "Approve."
+
+If you discover an existing backlog of older open PRs (from a prior session, before this decision) that are actually green and reviewed, the same authority applies: work through them and merge, don't just report that they exist. Where two open PRs fix the same thing, merge whichever is more complete/further along and close the other as a duplicate (a short comment saying which PR superseded it). If a backlog PR is stale against the current base (conflicts, or CI hasn't run against current main), bring it up to date per the "drive a PR to green" rules first, same as any PR you own.
+
+**Still never** without current, explicit authorization for that specific action: flip a production/live-payment toggle, or take any other outward-facing/hard-to-reverse action outside normal code merges (deploys, migrations against production, rotating live secrets — that's `release-engineer`'s domain and stays gated). Merging application-code PRs into the repo's default branch is now standing-authorized; deployment/production actions are not, unless the user says so separately.
 
 ## When to ask vs. when to log and move on
 
@@ -70,7 +76,7 @@ How to raise a real decision depends on whether anyone's actually watching this 
 
 ## Stopping
 
-End the session (or, if live, tell the user) once the worklist is exhausted or everything remaining is logged under Needs Product Decision or genuinely blocked on external input. Summarize: what shipped (with links/branches), what's now waiting on a decision, what's blocked and on what. That summary is what makes an unattended run legible after the fact — don't skip it.
+End the session (or, if live, tell the user) once the worklist is exhausted or everything remaining is logged under Needs Product Decision or genuinely blocked on external input. Summarize: what shipped and merged (with links), what's now waiting on a decision, what's blocked and on what. "Shipped" means merged into the default branch, not just pushed/open — per Merging above, a green reviewed PR isn't done until it's in. That summary is what makes an unattended run legible after the fact — don't skip it.
 
 ## Roadmap discipline
 
