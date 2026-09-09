@@ -128,7 +128,7 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
   await page.reload()
   await waitForStorageHydration(page)
   const panels = await readStorage(page, 'nf_comicPanels')
-  expect(panels.some(p =>
+  expect(panels?.some(p =>
     JSON.stringify(p).includes(dialogueText.slice(0, 15)),
   )).toBe(true)
 })
