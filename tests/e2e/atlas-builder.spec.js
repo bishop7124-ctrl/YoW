@@ -1,6 +1,15 @@
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test, expect } from '@playwright/test'
 import { createProject, seedCleanStorage, dismissLaunchPrompts, readStorage, waitForStorageHydration } from './helpers.js'
+
+// Debug screenshots below use the OS temp dir rather than a hardcoded path —
+// '/private/tmp' is a macOS-only location (Linux has no /private, and CI
+// runners run as a non-root user that can't create it), so a hardcoded
+// '/private/tmp/...' path made these screenshots fail with ENOENT on every
+// Linux CI run while working by coincidence on a developer's Mac.
+const debugScreenshotPath = name => join(tmpdir(), name)
 
 test('new atlas creates all scales, edits and links places, undoes drawing, exports and reloads', async ({ page }) => {
   await seedCleanStorage(page)
@@ -75,7 +84,7 @@ test('new atlas creates all scales, edits and links places, undoes drawing, expo
   await expect(page.getByRole('button', { name: 'Fit', exact: true })).toBeVisible()
   const fit = await page.getByRole('button', { name: 'Fit', exact: true }).boundingBox()
   expect(fit.y+fit.height).toBeLessThan(715)
-  await page.screenshot({ path: '/private/tmp/yow-atlas-editor.png', fullPage: true })
+  await page.screenshot({ path: debugScreenshotPath('yow-atlas-editor.png'), fullPage: true })
   await page.locator('.atlas-export summary').click()
   const jsonDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Editable map JSON' }).click()
@@ -92,7 +101,7 @@ test('new atlas creates all scales, edits and links places, undoes drawing, expo
   await page.getByRole('button', { name: '← Atlas', exact: true }).click()
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.getByRole('button', { name: /World QA/ }).click()
-  await page.screenshot({ path: '/private/tmp/yow-atlas-world.png', fullPage: true })
+  await page.screenshot({ path: debugScreenshotPath('yow-atlas-world.png'), fullPage: true })
 })
 
 test('existing maps retain their original editor and data when a new blank map is created', async ({ page }) => {
@@ -184,7 +193,7 @@ test('cursor placement stays aligned through zoom, pan and expanded view; border
   }
   await page.locator('.atlas-editor').evaluate(el => { el.style.zoom=1 })
   await page.getByRole('button', { name: 'Fit', exact: true }).click()
-  await page.screenshot({ path: '/private/tmp/yow-atlas-expanded.png', fullPage: true })
+  await page.screenshot({ path: debugScreenshotPath('yow-atlas-expanded.png'), fullPage: true })
   await page.getByRole('button', { name: 'Exit expanded view', exact: true }).click()
   await page.evaluate(() => window.__yowStorageBridge.flush())
   await page.reload()
