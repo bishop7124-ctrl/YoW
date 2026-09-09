@@ -4,6 +4,18 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { SceneEditor } from './SceneEditor.jsx'
 import { DEFAULT_FORMAT } from './manuscriptUtils.js'
 
+// This file wasn't cleaning up the DOM between tests (each `render()` call left its
+// output mounted), which every existing test tolerated only because it scopes its
+// queries to its own returned `container`. Text-based getByText/queryByText queries
+// below don't have that protection, so clean up for real between tests.
+afterEach(cleanup)
+
+// This file wasn't cleaning up the DOM between tests (each `render()` call left its
+// output mounted), which every existing test tolerated only because it scopes its
+// queries to its own returned `container`. Text-based getByText/queryByText queries
+// below don't have that protection, so clean up for real between tests.
+afterEach(cleanup)
+
 function noop() {}
 
 function makeScene(content) {
