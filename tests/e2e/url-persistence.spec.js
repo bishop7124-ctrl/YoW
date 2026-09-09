@@ -93,6 +93,7 @@ test('writing view can be reached via direct URL without losing content', async 
   }, text, { timeout: 8000 })
 
   const writingUrl = page.url()
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.goto('/')
   await page.goto(writingUrl)
 
