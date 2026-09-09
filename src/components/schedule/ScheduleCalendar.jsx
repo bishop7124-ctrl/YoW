@@ -1,654 +1,135 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { StudioSheet } from '../presentation/Studio'
 import {
-  getScheduleCalendar, getScheduleViewSettings, monthName, daysInMonth, absoluteDay,
-  SCHEDULE_OPEN_MODES,
-} from '../../utils/scheduleCalendar'
-import ScheduleSettingsModal from './ScheduleSettingsModal'
+  getScheduleCalendar, getScheduleViewSettings, getScheduleCategories,
+  normalizeScheduleCategoryId, normalizeScheduleEvent, scheduleDateLabel,
+  scheduleRangeLabel, scheduleEventSegments, sortScheduleEvents, SCHEDULE_OPEN_MODES,
+} from '../../utils/scheduleCalendar.js'
+import ScheduleEventEditor from './ScheduleEventEditor.jsx'
+import ScheduleSettingsModal from './ScheduleSettingsModal.jsx'
 
-const CATEGORIES = [
-  { id: 'scene',    label: 'Scene',    color: '#8b8fff' },
-  { id: 'battle',   label: 'Battle',   color: '#ef4444' },
-  { id: 'travel',   label: 'Travel',   color: '#f59e0b' },
-  { id: 'meeting',  label: 'Meeting',  color: '#22c55e' },
-  { id: 'festival', label: 'Festival', color: '#f97316' },
-  { id: 'other',    label: 'Other',    color: '#94a3b8' },
-]
-
-const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.id, c]))
-const CATEGORY_COLORS = ['#8b8fff', '#ef4444', '#f59e0b', '#22c55e', '#f97316', '#94a3b8', '#14b8a6', '#ec4899']
-const slugCategory = value => String(value || 'other').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'other'
-const getScheduleCategories = project => {
-  const configured = project?.categoryOptions?.schedule
-  const labels = Array.isArray(configured) && configured.length ? configured : CATEGORIES.map(cat => cat.label)
-  return labels.map((label, index) => {
-    const builtIn = CATEGORIES.find(cat => cat.label.toLowerCase() === String(label).toLowerCase())
-    return builtIn || { id: slugCategory(label), label, color: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }
-  })
-}
-
-const INPUT_STYLE = {
-  width: '100%', background: 'var(--bg-main)', border: '1px solid var(--border)',
-  borderRadius: 8, padding: '8px 10px', color: 'var(--text-main)', fontSize: 16,
-  boxSizing: 'border-box', fontFamily: 'inherit',
-}
-
-const LABEL_STYLE = { display: 'block', color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }
-
-// ─── Event modal ─────────────────────────────────────────────────────────────
-
-function EventModal({ event, prefillDay, prefillMonth, prefillYear, store, categories, calendar, onClose }) {
-  const isEdit = Boolean(event)
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  const [form, setForm] = useState({
-    title: event?.title ?? '',
-    description: event?.description ?? '',
-    year: event?.year ?? prefillYear,
-    month: event?.month ?? prefillMonth,
-    day: event?.day ?? prefillDay,
-    duration: event?.duration ?? 1,
-    category: event?.category ?? 'scene',
-    tags: event?.tags?.join(', ') ?? '',
-    linkedCharacters: event?.linkedCharacters ?? [],
-    linkedLocations: event?.linkedLocations ?? [],
-  })
-  const [error, setError] = useState('')
-
-  const set = field => e => setForm(prev => ({ ...prev, [field]: e.target.value }))
-
-  const save = () => {
-    if (!form.title.trim()) { setError('Title is required'); return }
-    const month = Math.max(1, Math.min(calendar.months.length, parseInt(form.month) || 1))
-    const data = {
-      ...form,
-      year: parseInt(form.year) || 1,
-      month,
-      day: Math.max(1, Math.min(daysInMonth(calendar, month), parseInt(form.day) || 1)),
-      duration: Math.max(1, parseInt(form.duration) || 1),
-      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-    }
-    if (isEdit) store.updateScheduleEvent(event.id, data)
-    else store.addScheduleEvent(data)
-    onClose()
-  }
-
-  const remove = () => { store.deleteScheduleEvent(event.id); onClose() }
-
-  const toggleChar = id => setForm(prev => ({
-    ...prev,
-    linkedCharacters: prev.linkedCharacters.includes(id)
-      ? prev.linkedCharacters.filter(c => c !== id)
-      : [...prev.linkedCharacters, id],
-  }))
-
-  const toggleLoc = id => setForm(prev => ({
-    ...prev,
-    linkedLocations: prev.linkedLocations.includes(id)
-      ? prev.linkedLocations.filter(l => l !== id)
-      : [...prev.linkedLocations, id],
-  }))
-
-  const novelChars = store.characters ?? []
-  const novelLocs = store.locations ?? []
-
-  return (
-    <div
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-    >
-      <div style={{ background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 12, width: 500, maxHeight: '90vh', overflow: 'auto', padding: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: 16, margin: 0 }}>
-            {isEdit ? 'Edit Event' : 'New Event'}
-          </h3>
-          <button onClick={onClose} style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
-        </div>
-
-        {error && <p style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{error}</p>}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={LABEL_STYLE}>Title *</label>
-            <input value={form.title} onChange={set('title')} placeholder="Event name…" autoFocus style={INPUT_STYLE} />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
-            <div>
-              <label style={LABEL_STYLE}>Year</label>
-              <input type="number" value={form.year} onChange={set('year')} style={INPUT_STYLE} />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>Month</label>
-              <input type="number" min="1" max={calendar.months.length} value={form.month} onChange={set('month')} style={INPUT_STYLE} />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>Day</label>
-              <input type="number" min="1" max={daysInMonth(calendar, parseInt(form.month) || 1)} value={form.day} onChange={set('day')} style={INPUT_STYLE} />
-            </div>
-            <div>
-              <label style={LABEL_STYLE}>Duration</label>
-              <input type="number" min="1" value={form.duration} onChange={set('duration')} style={INPUT_STYLE} />
-            </div>
-          </div>
-
-          <div>
-            <label style={{ ...LABEL_STYLE, marginBottom: 6 }}>Category</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setForm(prev => ({ ...prev, category: cat.id }))}
-                  style={{
-                    padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    border: `2px solid ${form.category === cat.id ? cat.color : 'transparent'}`,
-                    background: form.category === cat.id ? cat.color + '33' : 'var(--bg-main)',
-                    color: cat.color,
-                  }}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label style={LABEL_STYLE}>Description</label>
-            <textarea
-              value={form.description} onChange={set('description')} rows={3}
-              placeholder="What happens…"
-              style={{ ...INPUT_STYLE, resize: 'vertical' }}
-            />
-          </div>
-
-          <div>
-            <label style={LABEL_STYLE}>Tags (comma-separated)</label>
-            <input value={form.tags} onChange={set('tags')} placeholder="war, magic, intrigue…" style={INPUT_STYLE} />
-          </div>
-
-          {novelChars.length > 0 && (
-            <div>
-              <label style={LABEL_STYLE}>Characters</label>
-              <div className="panel-soft max-h-32 overflow-y-auto flex flex-wrap gap-2 p-2">
-                {novelChars.map(char => {
-                  const active = form.linkedCharacters.includes(char.id)
-                  return (
-                    <button key={char.id} type="button" onClick={() => toggleChar(char.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
-                      {active && <span>✓</span>}{char.name}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {novelLocs.length > 0 && (
-            <div>
-              <label style={LABEL_STYLE}>Locations</label>
-              <div className="panel-soft max-h-32 overflow-y-auto flex flex-wrap gap-2 p-2">
-                {novelLocs.map(loc => {
-                  const active = form.linkedLocations.includes(loc.id)
-                  return (
-                    <button key={loc.id} type="button" onClick={() => toggleLoc(loc.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
-                      {active && <span>✓</span>}{loc.name}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-          {isEdit && (
-            <button onClick={remove} style={{ padding: '8px 16px', borderRadius: 8, background: 'none', border: '1px solid #ef4444', color: '#ef4444', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-              Delete
-            </button>
-          )}
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button onClick={save} style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
-            {isEdit ? 'Save Changes' : 'Add Event'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Event detail popover ─────────────────────────────────────────────────────
-
-function EventPopover({ event, store, categoriesById, calendar, onEdit, onClose }) {
-  const cat = categoriesById[event.category] || CAT_MAP[event.category] || CAT_MAP.other
-  const chars = (event.linkedCharacters ?? [])
-    .map(id => store.characters?.find(c => c.id === id)?.name).filter(Boolean)
-  const locs = (event.linkedLocations ?? [])
-    .map(id => store.locations?.find(l => l.id === id)?.name).filter(Boolean)
-
-  return (
-    <div
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 900 }}
-    >
-      <div style={{ background: 'var(--bg-nav)', border: `2px solid ${cat.color}44`, borderRadius: 12, width: 380, padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: 15 }}>{event.title}</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>
-              {monthName(calendar, event.month)}, Day {event.day} · Year {event.year}
-              {event.duration > 1 && ` · ${event.duration} days`}
-            </div>
-          </div>
-          <button onClick={onClose} style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, marginLeft: 8 }}>×</button>
-        </div>
-
-        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, background: cat.color + '22', color: cat.color, fontSize: 11, fontWeight: 600, marginBottom: 10 }}>{cat.label}</span>
-
-        {event.description && (
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>{event.description}</p>
-        )}
-
-        {event.tags?.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {event.tags.map(t => (
-              <span key={t} style={{ color: 'var(--text-muted)', fontSize: 11 }}>#{t}</span>
-            ))}
-          </div>
-        )}
-
-        {chars.length > 0 && (
-          <div style={{ marginBottom: 6 }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Characters: </span>
-            <span style={{ color: 'var(--text-main)', fontSize: 12 }}>{chars.join(', ')}</span>
-          </div>
-        )}
-        {locs.length > 0 && (
-          <div style={{ marginBottom: 6 }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Locations: </span>
-            <span style={{ color: 'var(--text-main)', fontSize: 12 }}>{locs.join(', ')}</span>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={onEdit} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>
-            Edit
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Main calendar ────────────────────────────────────────────────────────────
+const titleCase = value => String(value || 'other').replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+const UNKNOWN_COLORS = ['#14b8a6', '#ec4899', '#a78bfa', '#84cc16']
 
 export default function ScheduleCalendar({ store }) {
-  const [viewYear, setViewYear] = useState(1)
-  const [viewMonth, setViewMonth] = useState(1)
-  const [viewMode, setViewMode] = useState('month')
-  const [modal, setModal] = useState(null)
-  const loadedProjectIdRef = useRef(null)
+  return <ScheduleWorkspace key={store.activeNovelId || store.activeNovel?.id || 'none'} store={store} />
+}
 
-  const events = useMemo(() => store.storySchedule ?? [], [store.storySchedule])
-  const categories = useMemo(() => getScheduleCategories(store.activeNovel), [store.activeNovel])
-  const categoriesById = useMemo(() => Object.fromEntries(categories.map(cat => [cat.id, cat])), [categories])
+function ScheduleWorkspace({ store }) {
+  const { activeNovelId, readOnly, updateNovel } = store
   const calendar = useMemo(() => getScheduleCalendar(store.activeNovel), [store.activeNovel])
   const viewSettings = useMemo(() => getScheduleViewSettings(store.activeNovel, calendar), [store.activeNovel, calendar])
+  const [viewYear, setViewYear] = useState(() => viewSettings.openYear)
+  const [viewMonth, setViewMonth] = useState(() => viewSettings.openMonth)
+  const [viewMode, setViewMode] = useState('month')
+  const [modal, setModal] = useState(null)
+  const events = useMemo(() => (store.storySchedule || []).map(normalizeScheduleEvent), [store.storySchedule])
+  const eventIndex = useMemo(() => new Map(events.map(event => [event.id, event])), [events])
+  const configuredCategories = useMemo(() => getScheduleCategories(store.activeNovel), [store.activeNovel])
+  const categories = useMemo(() => {
+    const result = new Map(configuredCategories.map(category => [category.id, category]))
+    events.forEach(event => {
+      if (!result.has(event.category)) result.set(event.category, { id: event.category, label: titleCase(event.category), color: UNKNOWN_COLORS[result.size % UNKNOWN_COLORS.length] })
+    })
+    return [...result.values()]
+  }, [configuredCategories, events])
+  const categoryIndex = useMemo(() => new Map(categories.map(category => [category.id, category])), [categories])
+  const month = Math.max(1, Math.min(viewMonth, calendar.months.length))
+  const layout = useMemo(() => scheduleEventSegments(events, calendar, viewYear, month), [events, calendar, viewYear, month])
+  const monthEventCount = useMemo(() => new Set(layout.segments.map(segment => segment.event.id)).size, [layout.segments])
+  const sortedEvents = useMemo(() => sortScheduleEvents(events, calendar), [events, calendar])
+  const cells = useMemo(() => {
+    const days = calendar.months[month - 1].days
+    return Array.from({ length: layout.weeks * calendar.weekLength }, (_, index) => {
+      const day = index - layout.leadingDays + 1
+      return day >= 1 && day <= days ? day : null
+    })
+  }, [calendar, month, layout.leadingDays, layout.weeks])
+  const maxLane = layout.segments.reduce((max, segment) => Math.max(max, segment.lane), 0)
+  const activeEvent = modal?.eventId ? eventIndex.get(modal.eventId) : null
 
-  const monthCount = calendar.months.length
-  const weekLength = calendar.weekLength
-  // Keep the view valid if the calendar shrinks under it (settings change, project switch)
-  const month = Math.min(viewMonth, monthCount)
-  const monthDays = daysInMonth(calendar, month)
-  const weeksInMonth = Math.ceil(monthDays / weekLength)
+  useEffect(() => {
+    if (!modal?.eventId || activeEvent) return
+    // A remote deletion must not leave a stale detail/editor over the board.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setModal(null)
+  }, [modal?.eventId, activeEvent])
 
-  const prevMonth = () => {
-    if (month === 1) { setViewMonth(monthCount); setViewYear(y => y - 1) }
-    else setViewMonth(month - 1)
+  useEffect(() => {
+    if (!activeNovelId || readOnly || viewSettings.openMode !== SCHEDULE_OPEN_MODES.LAST_VIEWED) return
+    if (viewSettings.lastViewedYear === viewYear && viewSettings.lastViewedMonth === month) return
+    updateNovel(activeNovelId, { scheduleViewSettings: {
+      openMode: viewSettings.openMode, defaultYear: viewSettings.defaultYear, defaultMonth: viewSettings.defaultMonth,
+      lastViewedYear: viewYear, lastViewedMonth: month,
+    } })
+  }, [activeNovelId, readOnly, updateNovel, viewSettings, viewYear, month])
+
+  const previousMonth = () => {
+    if (month === 1) { setViewMonth(calendar.months.length); setViewYear(year => year - 1) } else setViewMonth(month - 1)
   }
   const nextMonth = () => {
-    if (month === monthCount) { setViewMonth(1); setViewYear(y => y + 1) }
-    else setViewMonth(month + 1)
+    if (month === calendar.months.length) { setViewMonth(1); setViewYear(year => year + 1) } else setViewMonth(month + 1)
+  }
+  const create = day => { if (!store.readOnly) setModal({ type: 'create', day }) }
+  const categoryFor = event => categoryIndex.get(normalizeScheduleCategoryId(event.category)) || { label: titleCase(event.category), color: '#94a3b8' }
+  const saved = event => {
+    setModal(null)
+    setViewYear(event.year)
+    setViewMonth(Math.max(1, Math.min(event.month, calendar.months.length)))
   }
 
-  useEffect(() => {
-    if (!store.activeNovelId) return
-    const projectChanged = loadedProjectIdRef.current !== store.activeNovelId
-    loadedProjectIdRef.current = store.activeNovelId
-    if (projectChanged) {
-      setViewYear(viewSettings.openYear)
-      setViewMonth(viewSettings.openMonth)
-      return
-    }
-    setViewMonth(current => Math.min(current, monthCount))
-  }, [store.activeNovelId, viewSettings.openYear, viewSettings.openMonth, monthCount])
-
-  useEffect(() => {
-    if (!store.activeNovelId || viewSettings.openMode !== SCHEDULE_OPEN_MODES.LAST_VIEWED) return
-    if (viewSettings.lastViewedYear === viewYear && viewSettings.lastViewedMonth === month) return
-    store.updateNovel(store.activeNovelId, {
-      scheduleViewSettings: {
-        openMode: viewSettings.openMode,
-        defaultYear: viewSettings.defaultYear,
-        defaultMonth: viewSettings.defaultMonth,
-        lastViewedYear: viewYear,
-        lastViewedMonth: month,
-      },
-    })
-  }, [store, store.activeNovelId, viewSettings, viewYear, month])
-
-  const monthEvents = useMemo(() => {
-    const mAbsStart = calendar.monthStarts[month - 1]
-    const mAbsEnd = mAbsStart + (monthDays - 1)
-    return events.filter(ev => {
-      if (ev.year !== viewYear) return false
-      const evAbsStart = absoluteDay(calendar, ev.month, ev.day)
-      const evAbsEnd = evAbsStart + ((ev.duration || 1) - 1)
-      return evAbsStart <= mAbsEnd && evAbsEnd >= mAbsStart
-    })
-  }, [events, viewYear, month, monthDays, calendar])
-
-  const sortedEvents = useMemo(() => {
-    return [...events].sort((a, b) => (a.year - b.year) || (a.month - b.month) || (a.day - b.day) || a.title.localeCompare(b.title))
-  }, [events])
-
-  const eventSegments = useMemo(() => {
-    const segments = []
-    const lanesByWeek = Array.from({ length: weeksInMonth }, () => [])
-    const sortedMonthEvents = [...monthEvents].sort((a, b) => (a.day - b.day) || ((b.duration || 1) - (a.duration || 1)) || a.title.localeCompare(b.title))
-
-    sortedMonthEvents.forEach(ev => {
-      const evAbsStart = absoluteDay(calendar, ev.month, ev.day)
-      const evAbsEnd = evAbsStart + ((ev.duration || 1) - 1)
-      const mAbsStart = calendar.monthStarts[month - 1]
-      const mAbsEnd = mAbsStart + (monthDays - 1)
-      const overlapStart = Math.max(evAbsStart, mAbsStart)
-      const overlapEnd = Math.min(evAbsEnd, mAbsEnd)
-      let cursor = overlapStart
-      while (cursor <= overlapEnd) {
-        const dayIndex = cursor - mAbsStart
-        const week = Math.floor(dayIndex / weekLength)
-        const col = dayIndex % weekLength
-        const weekEnd = Math.min(overlapEnd, mAbsStart + (week * weekLength) + (weekLength - 1))
-        const span = weekEnd - cursor + 1
-        const endCol = col + span - 1
-        const weekLanes = lanesByWeek[week]
-        let lane = weekLanes.findIndex(items => items.every(item => endCol < item.col || col > item.endCol))
-        if (lane === -1) {
-          lane = weekLanes.length
-          weekLanes.push([])
-        }
-        weekLanes[lane].push({ col, endCol })
-        segments.push({ event: ev, week, col, span, lane, startsBefore: cursor > evAbsStart, endsAfter: weekEnd < evAbsEnd })
-        cursor = weekEnd + 1
-      }
-    })
-    return segments
-  }, [monthEvents, month, monthDays, weekLength, weeksInMonth, calendar])
-
-  const cells = Array.from({ length: weeksInMonth * weekLength }, (_, i) => (i < monthDays ? i + 1 : null))
-
-  const openCreate = day => setModal({ type: 'create', day })
-  const openDetail = event => setModal({ type: 'detail', event })
-
-  const closeModal = () => setModal(null)
-
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-      {/* ── Header ── */}
-      <div className="schedule-header">
-        <button onClick={prevMonth} title="Previous month" className="schedule-icon-button">←</button>
-
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
+      <header className="schedule-header">
+        <button type="button" onClick={previousMonth} aria-label="Previous schedule month" className="schedule-icon-button">←</button>
         <div className="schedule-date-controls">
-          <label className="schedule-date-field schedule-date-field--month">
-            <span>Month</span>
-            <select value={month} onChange={e => setViewMonth(Number(e.target.value))} className="field" aria-label="Schedule month">
-              {calendar.months.map((m, index) => <option key={index} value={index + 1}>{m.name}</option>)}
-            </select>
-          </label>
-          <label className="schedule-date-field schedule-date-field--year">
-            <span>Year</span>
-            <input type="number" value={viewYear} onChange={e => setViewYear(parseInt(e.target.value) || 1)} className="field" aria-label="Schedule year" />
-          </label>
+          <label className="schedule-date-field schedule-date-field--month"><span>Month</span><select value={month} onChange={event => setViewMonth(Number(event.target.value))} className="field" aria-label="Schedule month">{calendar.months.map((item, index) => <option key={index} value={index + 1}>{item.name}</option>)}</select></label>
+          <label className="schedule-date-field schedule-date-field--year"><span>Year</span><input type="number" value={viewYear} onChange={event => { const value = Number(event.target.value); setViewYear(Number.isFinite(value) ? Math.trunc(value) : 1) }} className="field" aria-label="Schedule year" /></label>
         </div>
-
-        <button onClick={nextMonth} title="Next month" className="schedule-icon-button">→</button>
-
+        <button type="button" onClick={nextMonth} aria-label="Next schedule month" className="schedule-icon-button">→</button>
         <div className="schedule-toolbar-actions">
-          <div className="schedule-view-toggle">
-            {['month', 'list'].map(mode => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={viewMode === mode ? 'is-active' : ''}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setModal({ type: 'settings' })}
-            title="Calendar settings — months, week length, day labels"
-            className="schedule-secondary-button"
-          >
-            ⚙ Calendar
-          </button>
-
-          <button
-            onClick={() => openCreate(1)}
-            className="schedule-primary-button"
-          >
-            + Add Event
-          </button>
+          <div className="schedule-view-toggle" role="group" aria-label="Schedule view">{['month', 'list'].map(mode => <button key={mode} type="button" aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{mode}</button>)}</div>
+          <button type="button" disabled={store.readOnly} onClick={() => setModal({ type: 'settings' })} className="schedule-secondary-button">Calendar settings</button>
+          <button type="button" disabled={store.readOnly} onClick={() => create(1)} className="schedule-primary-button">Add event</button>
         </div>
-      </div>
+      </header>
 
-      {/* ── Body ── */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '0 20px 20px' }}>
-
-        {viewMode === 'month' ? (
-          <>
-            <div className="schedule-month-title">{monthName(calendar, month)} · Year {viewYear}</div>
-            {/* Day-of-week header */}
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weekLength}, 1fr)`, gap: 2, paddingTop: 14, marginBottom: 2 }}>
-              {calendar.dayNames.map((name, i) => (
-                <div key={i} style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {name}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar grid */}
-            <div className="schedule-grid" style={{ '--schedule-week': weekLength }}>
-              {cells.map((day, idx) => {
-                const isReal = day !== null
-                return (
-                  <div
-                    key={idx}
-                    className="schedule-day-cell"
-                    onClick={() => isReal && openCreate(day)}
-                    style={{
-                      gridColumn: (idx % weekLength) + 1,
-                      gridRow: Math.floor(idx / weekLength) + 1,
-                      background: isReal ? 'var(--bg-nav)' : 'transparent',
-                      border: isReal ? '1px solid var(--border)' : 'none',
-                      borderRadius: 8,
-                      minHeight: 88,
-                      padding: isReal ? '6px 7px' : 0,
-                      cursor: isReal ? 'pointer' : 'default',
-                      transition: 'background 0.12s',
-                    }}
-                    onMouseEnter={e => { if (isReal) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                    onMouseLeave={e => { if (isReal) e.currentTarget.style.background = 'var(--bg-nav)' }}
-                  >
-                    {day && (
-                      <>
-                        <div className="schedule-day-number" style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-                          {day}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-              {eventSegments.map((segment, index) => {
-                const cat = categoriesById[segment.event.category] || CAT_MAP[segment.event.category] || CAT_MAP.other
-                return (
-                  <button
-                    key={`${segment.event.id}-${index}`}
-                    type="button"
-                    className="schedule-ribbon"
-                    onClick={e => { e.stopPropagation(); openDetail(segment.event) }}
-                    title={segment.event.title}
-                    style={{
-                      '--event-color': cat.color,
-                      gridColumn: `${segment.col + 1} / span ${segment.span}`,
-                      gridRow: segment.week + 1,
-                      marginTop: `${28 + Math.min(segment.lane, 3) * 22}px`,
-                      borderTopLeftRadius: segment.startsBefore ? 0 : 6,
-                      borderBottomLeftRadius: segment.startsBefore ? 0 : 6,
-                      borderTopRightRadius: segment.endsAfter ? 0 : 6,
-                      borderBottomRightRadius: segment.endsAfter ? 0 : 6,
-                    }}
-                  >
-                    {segment.startsBefore ? '← ' : ''}{segment.event.title}{segment.endsAfter ? ' →' : ''}
-                  </button>
-                )
-              })}
-            </div>
-            {monthEvents.length === 0 && (
-              <div className="schedule-empty-month">
-                <p>No events in {monthName(calendar, month)}, Year {viewYear}</p>
-                <button onClick={() => openCreate(1)} className="schedule-primary-button">Add event</button>
-              </div>
-            )}
-
-            {/* Legend */}
-            <div style={{ display: 'flex', gap: 14, marginTop: 16, flexWrap: 'wrap', paddingLeft: 2 }}>
-              {categories.map(cat => (
-                <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 9, height: 9, borderRadius: 3, background: cat.color }} />
-                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{cat.label}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          /* ── List view ── */
-          <div style={{ paddingTop: 16 }}>
-            {sortedEvents.length === 0 ? (
-              <div style={{ textAlign: 'center', paddingTop: 80 }}>
-                <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 12 }}>
-                  No scheduled events yet.
-                </p>
-                <button
-                  onClick={() => openCreate(1)}
-                  style={{ padding: '8px 20px', borderRadius: 8, background: 'var(--accent)', border: 'none', color: 'var(--accent-contrast)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Add the first event
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 680 }}>
-                {sortedEvents
-                  .map(ev => {
-                    const cat = categoriesById[ev.category] || CAT_MAP[ev.category] || CAT_MAP.other
-                    const chars = (ev.linkedCharacters ?? [])
-                      .map(id => store.characters?.find(c => c.id === id)?.name).filter(Boolean)
-                    return (
-                      <div
-                        key={ev.id}
-                        onClick={() => openDetail(ev)}
-                        style={{
-                          display: 'flex', gap: 16, alignItems: 'flex-start',
-                          background: 'var(--bg-nav)', border: '1px solid var(--border)',
-                          borderLeft: `4px solid ${cat.color}`,
-                          borderRadius: 8, padding: '12px 16px', cursor: 'pointer',
-                          transition: 'background 0.12s',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-nav)'}
-                      >
-                        <div style={{ minWidth: 44, textAlign: 'right', paddingTop: 2 }}>
-                          <div style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: 20, lineHeight: 1 }}>{ev.day}</div>
-                          <div style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 1 }}>Y{ev.year} M{ev.month}</div>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: 14 }}>{ev.title}</div>
-                          {ev.description && (
-                            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {ev.description}
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ padding: '2px 8px', borderRadius: 999, background: cat.color + '22', color: cat.color, fontSize: 11, fontWeight: 600 }}>
-                              {cat.label}
-                            </span>
-                            {ev.duration > 1 && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                                Day {ev.day} to Day {Math.min(daysInMonth(calendar, ev.month), ev.day + ev.duration - 1)} · {ev.duration} days
-                              </span>
-                            )}
-                            {chars.length > 0 && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{chars.join(', ')}</span>
-                            )}
-                            {(ev.tags ?? []).map(t => (
-                              <span key={t} style={{ color: 'var(--text-muted)', fontSize: 11 }}>#{t}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
-                }
-              </div>
-            )}
+      <main className="flex-1 min-h-0 overflow-auto px-3 sm:px-5 pb-5">
+        {viewMode === 'month' ? <>
+          <h2 className="schedule-month-title">{calendar.months[month - 1].name} · Year {viewYear}</h2>
+          <div className="grid gap-0.5 pt-3 mb-0.5" style={{ gridTemplateColumns: `repeat(${calendar.weekLength}, minmax(5.75rem, 1fr))`, minWidth: `${calendar.weekLength * 103}px` }}>{calendar.dayNames.map((name, index) => <div key={index} className="truncate py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{name}</div>)}</div>
+          <div className="schedule-grid" style={{ '--schedule-week': calendar.weekLength, gridAutoRows: `${Math.max(88, 52 + (maxLane + 1) * 22)}px` }}>
+            {cells.map((day, index) => day ? <button key={index} type="button" disabled={store.readOnly} aria-label={`Add event on ${calendar.months[month - 1].name}, day ${day}, year ${viewYear}`} className="schedule-day-cell text-left" onClick={() => create(day)} style={{ gridColumn: index % calendar.weekLength + 1, gridRow: Math.floor(index / calendar.weekLength) + 1 }}><span className="schedule-day-number">{day}</span></button> : <span key={index} aria-hidden="true" style={{ gridColumn: index % calendar.weekLength + 1, gridRow: Math.floor(index / calendar.weekLength) + 1 }} />)}
+            {layout.segments.map((segment, index) => { const category = categoryFor(segment.event); return <button key={`${segment.event.id}-${index}`} type="button" className="schedule-ribbon" onClick={() => setModal({ type: 'detail', eventId: segment.event.id })} title={segment.event.title} style={{ '--event-color': category.color, gridColumn: `${segment.col + 1} / span ${segment.span}`, gridRow: segment.week + 1, marginTop: `${28 + segment.lane * 22}px`, borderTopLeftRadius: segment.startsBefore ? 0 : 6, borderBottomLeftRadius: segment.startsBefore ? 0 : 6, borderTopRightRadius: segment.endsAfter ? 0 : 6, borderBottomRightRadius: segment.endsAfter ? 0 : 6 }}>{segment.startsBefore ? '← ' : ''}{segment.event.title}{segment.endsAfter ? ' →' : ''}</button> })}
           </div>
-        )}
-      </div>
+          {!monthEventCount && <div className="schedule-empty-month"><p>No events in {calendar.months[month - 1].name}, Year {viewYear}</p>{!store.readOnly && <button type="button" onClick={() => create(1)} className="schedule-primary-button">Add event</button>}</div>}
+          <div className="flex flex-wrap gap-4 mt-4">{categories.map(category => <span key={category.id} className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)]"><i aria-hidden="true" className="w-2.5 h-2.5 rounded-sm" style={{ background: category.color }} />{category.label}</span>)}</div>
+        </> : <section className="py-4 max-w-3xl" aria-label="Scheduled events">
+          {!sortedEvents.length ? <div className="schedule-empty-month"><p>No scheduled events yet.</p>{!store.readOnly && <button type="button" onClick={() => create(1)} className="schedule-primary-button">Add the first event</button>}</div> : <div className="space-y-2">{sortedEvents.map(event => { const category = categoryFor(event); return <button type="button" key={event.id} onClick={() => setModal({ type: 'detail', eventId: event.id })} className="w-full text-left panel-soft rounded-lg border-l-4 p-3 flex gap-4" style={{ borderLeftColor: category.color }}><time className="shrink-0 w-36 text-xs text-[var(--text-muted)]">{scheduleDateLabel(calendar, event)}</time><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{event.title || 'Untitled event'}</strong>{event.description && <span className="block truncate text-sm text-[var(--text-muted)] mt-1">{event.description}</span>}<span className="flex flex-wrap gap-2 mt-2 text-xs text-[var(--text-muted)]"><i style={{ color: category.color }}>{category.label}</i>{event.duration > 1 && <i>{event.duration} days</i>}{event.tags.map(tag => <i key={tag}>#{tag}</i>)}</span></span></button> })}</div>}
+        </section>}
+      </main>
 
-      {/* ── Modals ── */}
-      {modal?.type === 'create' && (
-        <EventModal
-          event={null}
-          prefillDay={modal.day}
-          prefillMonth={month}
-          prefillYear={viewYear}
-          store={store}
-          categories={categories}
-          calendar={calendar}
-          onClose={closeModal}
-        />
-      )}
-      {modal?.type === 'edit' && (
-        <EventModal
-          event={modal.event}
-          prefillDay={modal.event.day}
-          prefillMonth={modal.event.month}
-          prefillYear={modal.event.year}
-          store={store}
-          categories={categories}
-          calendar={calendar}
-          onClose={closeModal}
-        />
-      )}
-      {modal?.type === 'detail' && (
-        <EventPopover
-          event={modal.event}
-          store={store}
-          categoriesById={categoriesById}
-          calendar={calendar}
-          onEdit={() => setModal({ type: 'edit', event: modal.event })}
-          onClose={closeModal}
-        />
-      )}
-      {modal?.type === 'settings' && (
-        <ScheduleSettingsModal store={store} onClose={closeModal} />
-      )}
+      {modal?.type === 'create' && <ScheduleEventEditor date={{ day: modal.day, month, year: viewYear }} store={store} categories={categories} calendar={calendar} onClose={() => setModal(null)} onSaved={saved} />}
+      {modal?.type === 'edit' && activeEvent && <ScheduleEventEditor key={activeEvent.id} event={activeEvent} date={activeEvent} store={store} categories={categories} calendar={calendar} onClose={() => setModal(null)} onSaved={saved} />}
+      {modal?.type === 'detail' && activeEvent && <EventDetail event={activeEvent} store={store} calendar={calendar} category={categoryFor(activeEvent)} onClose={() => setModal(null)} onEdit={() => setModal({ type: 'edit', eventId: activeEvent.id })} />}
+      {modal?.type === 'settings' && <ScheduleSettingsModal store={store} onClose={() => setModal(null)} />}
     </div>
   )
+}
+
+function EventDetail({ event, store, calendar, category, onClose, onEdit }) {
+  const linked = (ids, items, label) => ids.map(id => `${items?.find(item => item.id === id)?.name || `Unavailable ${label} (${id})`}`)
+  const characters = linked(event.linkedCharacters, store.characters, 'character')
+  const locations = linked(event.linkedLocations, store.locations, 'location')
+  return <StudioSheet title={event.title || 'Untitled event'} eyebrow="Schedule event" onClose={onClose} narrow centered>
+    <div className="space-y-4">
+      <p className="text-sm text-[var(--text-muted)]">{scheduleRangeLabel(calendar, event)}</p>
+      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold" style={{ color: category.color, background: `${category.color}22` }}>{category.label}</span>
+      {event.description && <p className="whitespace-pre-wrap text-sm">{event.description}</p>}
+      {!!event.tags.length && <p className="flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">{event.tags.map(tag => <span key={tag}>#{tag}</span>)}</p>}
+      {!!characters.length && <p className="text-sm"><strong>Characters:</strong> {characters.join(', ')}</p>}
+      {!!locations.length && <p className="text-sm"><strong>Locations:</strong> {locations.join(', ')}</p>}
+      <div className="flex justify-end gap-2"><button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>{!store.readOnly && <button type="button" className="btn btn-primary" onClick={onEdit}>Edit</button>}</div>
+    </div>
+  </StudioSheet>
 }

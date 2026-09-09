@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 
 const PROVIDER_IDS = new Set(['google', 'anthropic', 'openrouter', 'openai'])
 const MAX_BODY_BYTES = 20_000
@@ -87,10 +88,7 @@ function getSupabase() {
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'GET, POST, DELETE, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
