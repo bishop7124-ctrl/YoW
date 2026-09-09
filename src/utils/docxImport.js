@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk } from './archiveImportLimits'
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
@@ -259,7 +260,9 @@ function buildStructure(paragraphs) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function parseDocxToStructure(file) {
-  const uint8 = new Uint8Array(await file.arrayBuffer())
+  const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, file.name ? `"${file.name}"` : 'This file')
+  const uint8 = new Uint8Array(buffer)
 
   let files
   try {
@@ -267,6 +270,7 @@ export async function parseDocxToStructure(file) {
   } catch {
     throw new Error('Could not open the file — make sure it is a valid .docx file.')
   }
+  assertUnzippedResultOk(files, file.name ? `"${file.name}"` : 'This file')
 
   const docEntry = files['word/document.xml']
   if (!docEntry) throw new Error('No document content found in this file.')

@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { getAgeInputValue, getBirthDateFromAge, getCharacterAge } from './characterAge'
 
 describe('character age helpers', () => {
+  it('handles year zero, BCE and full dates consistently with Timeline', () => {
+    expect(getCharacterAge({ birthDate: 'Spring 3, Year 20 BCE', deathDate: 0 }, 100)).toBe('20 at death')
+    expect(getBirthDateFromAge('', 100)).toBe('')
+    expect(getBirthDateFromAge('1.5', 100)).toBe('')
+    expect(getBirthDateFromAge('-1', 100)).toBe('')
+  })
   it('calculates living age from the project current year', () => {
     const character = { birthDate: 'Year 968' }
 

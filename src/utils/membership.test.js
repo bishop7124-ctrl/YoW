@@ -236,3 +236,38 @@ describe('sanitizeProfileMetadata (P0-01 profile-update allowlist)', () => {
     }
   })
 })
+
+describe('launch beta notice', () => {
+  const beta = (metadata = {}) => makeUser({ app_metadata: { subscription_plan: 'beta_tester', subscription_status: 'active', beta_tester: true, ...metadata } })
+  it('keeps full web access for 30 days but removes downloads during notice', () => {
+    const membership = getMembership(beta({ beta_notice_started_at: '2026-07-01T12:00:00Z' }))
+    expect(membership.isBetaNoticeActive).toBe(true)
+    expect(membership.betaDaysRemaining).toBe(11)
+    expect(membership.isPaid).toBe(true)
+    expect(membership.canDownloadDesktop).toBe(false)
+    expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.beta_tester)
+  })
+  it('expires at the exact deadline despite a stale active status', () => {
+    const membership = getMembership(beta({ beta_notice_started_at: '2026-06-20T12:00:00Z' }))
+    expect(membership.isBetaExpired).toBe(true)
+    expect(membership.isFree).toBe(true)
+    expect(membership.isDesktopEntitled).toBe(false)
+    expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.free)
+  })
+  it('does not grant a new trial after beta expires', () => {
+    const user = beta({ beta_notice_started_at: '2026-06-20T12:00:00Z' })
+    user.created_at = '2026-07-19T12:00:00Z'
+    expect(getMembership(user).isFree).toBe(true)
+  })
+  it.each(['premium_monthly', 'premium_plus_lifetime', 'founder'])('preserves a subsequent %s purchase', subscription_plan => {
+    const membership = getMembership(beta({ subscription_plan, beta_notice_started_at: '2026-06-20T12:00:00Z' }))
+    expect(membership.isPaid).toBe(true)
+    expect(membership.isBetaTester).toBe(false)
+  })
+  it('ignores editable notice dates and rejects malformed server dates', () => {
+    const user = beta()
+    user.user_metadata.beta_notice_started_at = '2026-06-20T12:00:00Z'
+    expect(getMembership(user).isBetaTester).toBe(true)
+    expect(getMembership(beta({ beta_notice_started_at: 'invalid' })).isFree).toBe(true)
+  })
+})
