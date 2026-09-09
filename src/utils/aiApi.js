@@ -1,8 +1,8 @@
+import { supabase } from '../supabase'
 import { buildProjectTypePromptContext } from './aiToolPrompts'
 import { isDesktopAppRuntime } from './runtime.js'
 import { OFFLINE_MODE, mockStreamMessage } from './offlineMock'
 import { normalizeAiUsage } from './aiUsage'
-import { buildOpenAiTokenLimit } from './aiTokenParams'
 
 export const DEFAULT_CREATIVE_CHAT_DIRECTIVE = `Help with writing, plot, character development, world-building, and creative problem-solving.
 
@@ -85,14 +85,14 @@ export const PROVIDERS = {
     defaultModel: 'claude-sonnet-4-6',
   },
   openai: {
-    name: 'OpenAI-compatible',
+    name: 'OpenAI, Groq, Mistral or Together',
     keyPlaceholder: 'sk-...',
     hasBaseUrl: true,
     setupUrl: 'https://platform.openai.com/api-keys',
-    bestFor: 'OpenAI API models, Groq, Mistral, Together, and other OpenAI-compatible endpoints.',
+    bestFor: 'OpenAI API models and the named Groq, Mistral and Together integrations.',
     freeUsage: 'Depends entirely on the selected endpoint; some providers offer trial credits or free tiers.',
     billing: 'Billing may be required by the selected endpoint before API requests or specific models work.',
-    limitations: 'Custom endpoints may have different CORS support, model IDs, limits, pricing, and data practices.',
+    limitations: 'Model IDs, limits, pricing and data practices vary by provider. Custom endpoints are not supported.',
     models: [
       { id: 'gpt-4o',                    label: 'GPT-4o' },
       { id: 'gpt-4o-mini',               label: 'GPT-4o mini' },
@@ -115,12 +115,14 @@ export const PROVIDERS = {
 // catalog depends on the account) so re-rendering the settings panel doesn't
 // re-fetch on every keystroke.
 const modelCatalogCache = new Map() // cacheKey -> models[] | Promise<models[]>
-const PROXIED_OPENAI_BASE_URLS = new Set([
-  'https://api.openai.com/v1',
-  'https://api.groq.com/openai/v1',
-  'https://api.mistral.ai/v1',
-  'https://api.together.xyz/v1',
-])
+export const NAMED_OPENAI_ENDPOINTS = [
+  { label: 'OpenAI', url: 'https://api.openai.com/v1' },
+  { label: 'Groq', url: 'https://api.groq.com/openai/v1' },
+  { label: 'Mistral', url: 'https://api.mistral.ai/v1' },
+  { label: 'Together', url: 'https://api.together.xyz/v1' },
+]
+const PROXIED_OPENAI_BASE_URLS = new Set(NAMED_OPENAI_ENDPOINTS.map(endpoint => endpoint.url))
+const UNSUPPORTED_ENDPOINT = 'Custom AI endpoints are not supported. Choose OpenAI, Groq, Mistral or Together in AI Settings.'
 
 const aiProxyEndpoint = () => {
   const base = import.meta.env.VITE_DESKTOP_API_BASE_URL
@@ -131,8 +133,7 @@ const aiProxyEndpoint = () => {
 function normalizeBaseUrl(baseUrl) {
   try {
     const url = new URL(baseUrl || PROVIDERS.openai.defaultBaseUrl)
-    url.hash = ''
-    url.search = ''
+    if (url.hash || url.search || url.username || url.password) return ''
     return url.toString().replace(/\/$/, '')
   } catch {
     return ''
@@ -140,14 +141,20 @@ function normalizeBaseUrl(baseUrl) {
 }
 
 function canProxyProvider(provider, baseUrl) {
-  if (provider !== 'openai') return true
+  if (provider !== 'openai') return ['google', 'anthropic', 'openrouter'].includes(provider)
   return PROXIED_OPENAI_BASE_URLS.has(normalizeBaseUrl(baseUrl))
+}
+
+async function proxyHeaders() {
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !data?.session?.access_token) throw new Error('Please sign in to YOW again to use AI tools.')
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }
 }
 
 async function proxyJson(action, payload) {
   const res = await fetch(aiProxyEndpoint(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await proxyHeaders(),
     body: JSON.stringify({ action, ...payload }),
   })
   const data = await res.json().catch(() => ({}))
@@ -214,18 +221,9 @@ export function fetchAnthropicModels(apiKey) {
 // but not all do — callers should fall back to the curated list on failure.
 export function fetchOpenAIModels(apiKey, baseUrl) {
   if (!apiKey) return Promise.reject(new Error('An API key is required to load the live model list.'))
-  const url = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/models`
-  return cachedModelFetch(`openai:${url}:${apiKey}`, async () => {
-    if (canProxyProvider('openai', baseUrl)) {
-      const data = await proxyJson('models', { provider: 'openai', apiKey, baseUrl })
-      return (data?.data || [])
-        .map(m => ({ id: m.id, label: m.id }))
-        .filter(m => m.id)
-        .sort((a, b) => a.label.localeCompare(b.label))
-    }
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
+  if (!canProxyProvider('openai', baseUrl)) return Promise.reject(new Error(UNSUPPORTED_ENDPOINT))
+  return cachedModelFetch(`openai:${normalizeBaseUrl(baseUrl)}:${apiKey}`, async () => {
+    const data = await proxyJson('models', { provider: 'openai', apiKey, baseUrl })
     return (data?.data || [])
       .map(m => ({ id: m.id, label: m.id }))
       .filter(m => m.id)
@@ -341,48 +339,11 @@ async function readSSE(body, onEvent) {
 
 // ── Provider implementations ──────────────────────────────────────────────────
 
-async function streamOpenAI({ apiKey, model, baseUrl, provider, extraHeaders, systemPrompt, messages, onChunk, onDone, onError, onUsage, maxTokens = 4096, signal, promptMetadata }) {
-  try {
-    const url        = `${(baseUrl || PROVIDERS.openai.defaultBaseUrl).replace(/\/$/, '')}/chat/completions`
-    const apiMessages = [{ role: 'system', content: systemPrompt }, ...messages]
-    const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
-    const includeUsage = normalizedBaseUrl === 'https://api.openai.com/v1' || normalizedBaseUrl === 'https://api.groq.com/openai/v1'
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
-      body: JSON.stringify({ model, ...buildOpenAiTokenLimit(provider, model, maxTokens), stream: true, ...(includeUsage ? { stream_options: { include_usage: true } } : {}), messages: apiMessages }),
-      signal,
-    })
-    if (!res.ok) {
-      let err = { status: res.status, message: `HTTP ${res.status}`, metadata: {} }
-      try { err = parseProviderError(res.status, await res.json()) } catch { /* ignore */ }
-      return onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata, retryAfter: readRetryAfter(res) }))
-    }
-    let done = false
-    const onceDone = () => { if (!done) { done = true; onDone() } }
-    await readSSE(res.body, (parsed) => {
-      if (parsed.error) {
-        const err = parseProviderError(parsed.error.code || 500, parsed)
-        onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata }))
-        done = true
-        return true
-      }
-      if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
-      const text = parsed.choices?.[0]?.delta?.content
-      if (text) onChunk(text)
-      if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
-    })
-    if (!done) onceDone()
-  } catch (e) { if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`) }
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
 async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens = 4096, signal, promptMetadata, cacheControl }) {
   try {
-    const makeRequest = (nextCacheControl) => fetch(aiProxyEndpoint(), {
+    const makeRequest = async (nextCacheControl) => fetch(aiProxyEndpoint(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await proxyHeaders(),
       body: JSON.stringify({ action: 'stream', provider, apiKey, model, baseUrl, systemPrompt, messages, jsonMode, maxTokens, promptMetadata, cacheControl: nextCacheControl }),
       signal,
     })
@@ -440,7 +401,7 @@ export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, 
   if (OFFLINE_MODE)         return mockStreamMessage({ onChunk, onDone, onError })
   if (!apiKey)              return onError('No API key configured.')
   if (canProxyProvider(provider, baseUrl)) return streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl })
-  if (provider === 'openai')      return streamOpenAI({ apiKey, model, baseUrl, provider: 'openai', systemPrompt, messages, onChunk, onDone, onError, onUsage, maxTokens, signal, promptMetadata })
+  if (provider === 'openai') return onError(UNSUPPORTED_ENDPOINT)
   onError(`Unknown provider: ${provider}`)
 }
 
