@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import Modal from '../shared/Modal'
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
-import { parseTimelineYear } from '../../utils/timelineYear'
+import { formatTimelineDate, sortTimelineEras } from '../../utils/timelineYear'
+import { buildTimelineEntries, groupTimelineEntries, matchesTimelineSearch } from '../../utils/timelineEntries'
 
 export default function Timeline({ store }) {
   const {
@@ -17,84 +18,41 @@ export default function Timeline({ store }) {
   const selectedId = selectedTimelineEventId
   const setSelectedId = setSelectedTimelineEventId
   const [formState, setFormState] = useState(null)
-  const eraRefs = useRef({})
   const scrollRef = useRef(null)
 
-  const allEvents = useMemo(() => {
-    const manual = timeline.map(e => ({
-      ...e,
-      year: e.startYear != null ? parseTimelineYear(e.startYear) : parseTimelineYear(e.date),
-      sourceType: 'timeline',
-    }))
-    const birthdays = characters
-      .filter(c => c.birthDate?.toString().trim())
-      .map(c => ({
-        id: `birth-${c.id}`,
-        title: c.name,
-        date: c.birthDate,
-        year: parseTimelineYear(c.birthDate),
-        tags: [],
-        linkedCharacters: [c.id],
-        linkedLocations: [],
-        sourceType: 'birthday',
-        readOnly: true,
-      }))
-    return [...manual, ...birthdays].sort((a, b) => {
-      const ya = Number.isFinite(a.year) ? a.year : Infinity
-      const yb = Number.isFinite(b.year) ? b.year : Infinity
-      return ya - yb || (a.title || '').localeCompare(b.title || '')
-    })
-  }, [timeline, characters])
-
-  const sortedEras = useMemo(() =>
-    [...eras].sort((a, b) => (a.startYear ?? Infinity) - (b.startYear ?? Infinity)),
-    [eras]
-  )
+  const sortedEras = useMemo(() => sortTimelineEras(eras), [eras])
+  const eraById = useMemo(() => new Map(eras.map(era => [era.id, era])), [eras])
+  const characterById = useMemo(() => new Map(characters.map(character => [character.id, character])), [characters])
+  const locationById = useMemo(() => new Map(locations.map(location => [location.id, location])), [locations])
+  const allEvents = useMemo(() => buildTimelineEntries(timeline, characters, sortedEras), [timeline, characters, sortedEras])
+  // A deleted era must not leave the timeline permanently filtered to nothing.
+  const effectiveEraId = eraById.has(activeEraId) ? activeEraId : 'all'
+  const query = search.trim().toLowerCase()
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase()
     return allEvents.filter(e => {
-      if (activeEraId !== 'all' && e.eraId !== activeEraId) return false
-      if (!q) return true
-      return (
-        (e.title || '').toLowerCase().includes(q) ||
-        (e.description || '').toLowerCase().includes(q) ||
-        (e.date || '').toLowerCase().includes(q) ||
-        (e.tags || []).some(t => t.toLowerCase().includes(q))
-      )
+      if (effectiveEraId !== 'all' && e.eraId !== effectiveEraId) return false
+      return matchesTimelineSearch(e, query)
     })
-  }, [allEvents, activeEraId, search])
+  }, [allEvents, effectiveEraId, query])
 
-  // Group into sections: one per era (always shown when eras exist), then unassigned
-  const sections = useMemo(() => {
-    if (sortedEras.length === 0) {
-      return [{ era: null, unassigned: false, events: filtered }]
-    }
-    const eraMap = new Map(sortedEras.map(e => [e.id, []]))
-    const unassigned = []
-    for (const ev of filtered) {
-      if (ev.eraId && eraMap.has(ev.eraId)) eraMap.get(ev.eraId).push(ev)
-      else unassigned.push(ev)
-    }
-    const result = sortedEras.map(era => ({ era, unassigned: false, events: eraMap.get(era.id) ?? [] }))
-    if (unassigned.length > 0) {
-      result.push({ era: null, unassigned: true, events: unassigned })
-    }
-    return result
-  }, [filtered, sortedEras])
+  const sections = useMemo(() => groupTimelineEntries(filtered,
+    effectiveEraId === 'all' ? sortedEras : sortedEras.filter(era => era.id === effectiveEraId),
+    { includeEmpty: !query && effectiveEraId === 'all' }), [filtered, sortedEras, effectiveEraId, query])
 
-  const selectedEvent = selectedId ? allEvents.find(e => e.id === selectedId) : null
-  const selectedEra = selectedEvent?.eraId ? eras.find(e => e.id === selectedEvent.eraId) : null
+  const selectedEvent = selectedId ? filtered.find(e => e.sourceType === 'timeline' && e.id === selectedId) : null
+  const selectedEra = eraById.get(selectedEvent?.eraId)
 
   const handleSave = (data) => {
-    if (formState?.type === 'edit') {
-      const event = updateEvent(formState.item.id, data)
-      if (event?.id) setSelectedId(event.id)
-    } else {
-      const event = addEvent(data, { createHistory: false })
-      if (!event) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
-    }
+    const event = formState?.type === 'edit'
+      ? updateEvent(formState.item.id, data)
+      : addEvent(data, { createHistory: false })
+    if (!event) return false // Refused edits need the same draft protection as creates.
+    setSelectedId(event.id)
+    setSearch('')
+    setActiveEraId('all')
     setFormState(null)
+    return true
   }
 
   const handleDelete = (id) => {
@@ -106,21 +64,10 @@ export default function Timeline({ store }) {
 
   const jumpToEra = (eraId) => {
     setActiveEraId(eraId)
-    if (eraId !== 'all') {
-      setTimeout(() => eraRefs.current[eraId]?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
-    } else {
-      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-    }
+    scrollRef.current?.scrollTo({ top: 0, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 
   const hasContent = filtered.length > 0
-
-  const formatYear = (ev) => {
-    if (ev.startYear != null) {
-      return ev.endYear != null ? `${ev.startYear} – ${ev.endYear}` : String(ev.startYear)
-    }
-    return ev.date || 'Undated'
-  }
 
   return (
     <div className="tl2-root" data-tour="timeline-header">
@@ -130,11 +77,12 @@ export default function Timeline({ store }) {
           <h2 className="font-serif text-xl font-bold text-[var(--text-main)]">Timeline</h2>
         </div>
         <div className="tl2-toolbar">
-          {currentYear ? <span className="tl2-year-badge">Year {currentYear}</span> : null}
+          {currentYear != null && String(currentYear).trim() !== '' ? <span className="tl2-year-badge">Year {currentYear}</span> : null}
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search events…"
+            aria-label="Search events"
             className="field px-3 py-1.5 text-base w-44 placeholder:text-[var(--text-muted)]"
           />
           <button onClick={() => setFormState({ type: 'new' })} className="btn btn-primary btn-sm">New Event</button>
@@ -143,11 +91,12 @@ export default function Timeline({ store }) {
 
       {sortedEras.length > 0 && (
         <div className="tl2-era-strip">
-          <button className={`tl2-era-chip${activeEraId === 'all' ? ' is-active' : ''}`} onClick={() => jumpToEra('all')}>All</button>
+          <button aria-pressed={effectiveEraId === 'all'} className={`tl2-era-chip${effectiveEraId === 'all' ? ' is-active' : ''}`} onClick={() => jumpToEra('all')}>All</button>
           {sortedEras.map(era => (
             <button
               key={era.id}
-              className={`tl2-era-chip${activeEraId === era.id ? ' is-active' : ''}`}
+              aria-pressed={effectiveEraId === era.id}
+              className={`tl2-era-chip${effectiveEraId === era.id ? ' is-active' : ''}`}
               onClick={() => jumpToEra(era.id)}
             >
               {era.name}
@@ -172,20 +121,20 @@ export default function Timeline({ store }) {
               {allEvents.length === 0 && (
                 <button onClick={() => setFormState({ type: 'new' })} className="btn btn-primary btn-sm mt-4">Add First Event</button>
               )}
+              {allEvents.length > 0 && <button className="btn btn-secondary btn-sm mt-4" onClick={() => { setSearch(''); jumpToEra('all') }}>Clear filters</button>}
             </div>
           ) : (
             <div className="tl2-entries">
               {sections.map(section => (
                 <div
                   key={section.era?.id ?? '__unassigned'}
-                  ref={el => { if (section.era) eraRefs.current[section.era.id] = el }}
                 >
                   {/* Era section header — always shown when eras exist */}
-                  {(section.era || section.unassigned) && (
-                    <div className={`tl2-era-band${section.unassigned ? ' tl2-era-band--unassigned' : ''}`}>
+                  {sortedEras.length > 0 && (
+                    <div className={`tl2-era-band${!section.era ? ' tl2-era-band--unassigned' : ''}`}>
                       <div className="tl2-era-band-inner">
                         <span className="tl2-era-band-name">
-                          {section.unassigned ? 'No era assigned' : section.era.name}
+                          {!section.era ? 'No era assigned' : section.era.name}
                         </span>
                         {section.era && (section.era.startYear != null || section.era.endYear != null) && (
                           <span className="tl2-era-band-range">
@@ -203,10 +152,10 @@ export default function Timeline({ store }) {
                   {section.events.map(event => {
                     if (event.sourceType === 'birthday') {
                       return (
-                        <div key={event.id} className="tl2-birthday">
+                        <div key={event.renderKey} className="tl2-birthday">
                           <span className="tl2-birthday-pip" />
                           <span className="tl2-birthday-text">
-                            {event.title} born{event.date ? ` · ${event.date}` : ''}
+                            {event.title} born · {formatTimelineDate(event)}
                           </span>
                         </div>
                       )
@@ -214,15 +163,16 @@ export default function Timeline({ store }) {
 
                     const isSelected = selectedId === event.id
                     return (
-                      <div key={event.id} className={`tl2-event${isSelected ? ' is-selected' : ''}`}>
+                      <div key={event.renderKey} className={`tl2-event${isSelected ? ' is-selected' : ''}`}>
                         <span className="tl2-spine-dot" />
                         <span className="tl2-connector" />
                         <button
                           type="button"
                           className="tl2-card"
+                          aria-pressed={isSelected}
                           onClick={() => setSelectedId(isSelected ? null : event.id)}
                         >
-                          <div className="tl2-card-date">{formatYear(event)}</div>
+                          <div className="tl2-card-date">{formatTimelineDate(event)}</div>
                           <div className="tl2-card-title">{event.title}</div>
                           {event.description && (
                             <div className="tl2-card-desc">{event.description}</div>
@@ -231,11 +181,11 @@ export default function Timeline({ store }) {
                             <div className="tl2-card-meta">
                               {event.tags?.map(t => <span key={t} className="tl2-tag">{t}</span>)}
                               {event.linkedCharacters?.map(id => {
-                                const c = characters.find(x => x.id === id)
+                                const c = characterById.get(id)
                                 return c ? <span key={id} className="tl2-link tl2-link--char">⊙ {c.name}</span> : null
                               })}
                               {event.linkedLocations?.map(id => {
-                                const l = locations.find(x => x.id === id)
+                                const l = locationById.get(id)
                                 return l ? <span key={id} className="tl2-link tl2-link--loc">◈ {l.name}</span> : null
                               })}
                             </div>
@@ -255,7 +205,7 @@ export default function Timeline({ store }) {
             <div className="tl2-panel-head">
               <div className="min-w-0">
                 <div className="tl2-panel-date">
-                  {formatYear(selectedEvent)}
+                  {formatTimelineDate(selectedEvent)}
                   {selectedEra ? ` · ${selectedEra.name}` : ''}
                 </div>
                 <h3 className="tl2-panel-title">{selectedEvent.title}</h3>
@@ -280,7 +230,7 @@ export default function Timeline({ store }) {
                   <div className="tl2-panel-label">Characters</div>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedEvent.linkedCharacters.map(id => {
-                      const c = characters.find(x => x.id === id)
+                      const c = characterById.get(id)
                       return c ? (
                         <button key={id} className="tl2-panel-link"
                           onClick={() => { setSelectedId(null); setSelectedCharacterId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } })) }}>
@@ -296,7 +246,7 @@ export default function Timeline({ store }) {
                   <div className="tl2-panel-label">Locations</div>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedEvent.linkedLocations.map(id => {
-                      const l = locations.find(x => x.id === id)
+                      const l = locationById.get(id)
                       return l ? (
                         <button key={id} className="tl2-panel-link"
                           onClick={() => { setSelectedId(null); setSelectedLocationId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>
