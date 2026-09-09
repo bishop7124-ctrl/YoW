@@ -54,6 +54,16 @@ afterEach(() => {
 })
 
 describe('ProjectDashboard writing goal streak', () => {
+  it('renders project-area tiles above the dashboard stats', () => {
+    const { container } = render(<ProjectDashboard store={makeStore()} />)
+    const projectAreas = container.querySelector('[aria-label="Project areas"]')
+    const statRow = container.querySelector('[data-tour="dashboard-stat-row"]')
+
+    expect(projectAreas).not.toBeNull()
+    expect(statRow).not.toBeNull()
+    expect(projectAreas.compareDocumentPosition(statRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('shows the current and best consecutive goal streak on Overview', () => {
     const store = makeStore()
     const { container } = render(<ProjectDashboard store={store} />)
