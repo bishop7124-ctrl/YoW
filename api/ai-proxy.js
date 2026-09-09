@@ -2,6 +2,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildOpenAiTokenLimit } from '../src/utils/aiTokenParams.js'
 import { getMembership } from '../src/utils/membership.js'
+import { allowedOrigins, applyCors } from './_lib/cors.js'
+
+// Re-exported for tests/api/ai-proxy.test.js, which imports this symbol
+// directly from this file. The real definition now lives in
+// api/_lib/cors.js so every other route can share the same allowlist.
+export { allowedOrigins }
 
 const PROVIDER_IDS = new Set(['google', 'anthropic', 'openrouter', 'openai'])
 const MAX_BODY_BYTES = 2_000_000
@@ -26,35 +32,8 @@ const MAX_OUTPUT_TOKENS = 8192
 const RATE_LIMIT_MAX = Number(process.env.AI_PROXY_RATE_LIMIT_MAX) || 30
 const RATE_LIMIT_WINDOW_MINUTES = Number(process.env.AI_PROXY_RATE_LIMIT_WINDOW_MINUTES) || 10
 
-export function allowedOrigins() {
-  const origins = new Set([
-    'http://localhost:3000', // vercel dev
-    'http://localhost:5173', // npm run dev (Vite)
-    'tauri://localhost', // desktop app (macOS/Linux Tauri webview)
-    'http://tauri.localhost', // desktop app (Windows Tauri webview)
-    'https://tauri.localhost',
-  ])
-  if (process.env.SITE_URL) origins.add(process.env.SITE_URL)
-  // VERCEL_URL is auto-populated by Vercel on every deployment (production
-  // and preview alike) with that deployment's own hostname, no config
-  // needed. Without this, a Vercel preview deployment's frontend calling
-  // its own preview API would be blocked, since preview URLs are dynamic
-  // per-branch/per-PR and can't be listed as static entries above.
-  if (process.env.VERCEL_URL) origins.add(`https://${process.env.VERCEL_URL}`)
-  return origins
-}
-
 function sendCors(req, res) {
-  const origin = req.headers.origin
-  // Only echo back an explicitly allowed origin. A request with no Origin
-  // header (server-to-server, some non-browser desktop contexts) isn't
-  // subject to browser CORS enforcement anyway, so there's nothing to set.
-  if (origin && allowedOrigins().has(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin)
-    res.setHeader('Vary', 'Origin')
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
 }
 
 function byteLength(value) {
