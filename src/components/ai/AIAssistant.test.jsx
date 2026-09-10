@@ -79,4 +79,42 @@ describe('AIAssistant', () => {
     expect(addScene).toHaveBeenCalledWith('chapter-1', 'Arrival')
     expect(updateScene).toHaveBeenCalledWith('scene-new', { synopsis: 'They reach the gate.', content: 'Rain hit the road.' })
   })
+
+  // Regression: recordAiBarExchange(store, args) has two call sites in
+  // send()'s onDone — the JSON.parse-succeeded branch above, and this
+  // non-JSON-response catch branch (exactly what a real provider/model that
+  // doesn't return strict JSON produces, and what src/utils/offlineMock.js's
+  // canned response always produces). The catch branch previously called
+  // recordAiBarExchange({ novelId, ... }) with only one argument — `store`
+  // silently received the args object and the real `args` was `undefined`,
+  // so the exchange was silently dropped (a caught, logged exception) instead
+  // of being saved via store.updateNovel, contradicting the "AI chats were
+  // not saving as durable project entries" Bugs-table row's "Fixed" claim
+  // for any non-JSON response. Found live via a real browser QA pass
+  // (docs/ROADMAP.md, 2026-09-10) using the OFFLINE_MODE mock, which returns
+  // exactly this kind of plain-text response.
+  it('saves a non-JSON response to the project aiChatSessions via store.updateNovel', async () => {
+    streamMessage.mockImplementation(({ onChunk, onDone }) => {
+      onChunk('This is a plain-text answer, not JSON.')
+      onDone()
+    })
+    const updateNovel = vi.fn()
+    renderAssistant({
+      store: {
+        activeNovelId: 'project-1',
+        activeNovel: { id: 'project-1', title: 'Project One', aiChatSessions: [] },
+        updateNovel,
+      },
+    })
+    const input = screen.getByPlaceholderText(/Ask about your project/)
+    fireEvent.change(input, { target: { value: 'What should happen next?' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(updateNovel).toHaveBeenCalled())
+    const [novelId, patch] = updateNovel.mock.calls[0]
+    expect(novelId).toBe('project-1')
+    const messages = patch.aiChatSessions[0].messages
+    expect(messages.some(m => m.role === 'user' && m.content === 'What should happen next?')).toBe(true)
+    expect(messages.some(m => m.role === 'assistant' && m.content === 'This is a plain-text answer, not JSON.')).toBe(true)
+  })
 })
