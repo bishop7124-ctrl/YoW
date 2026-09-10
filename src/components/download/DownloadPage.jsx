@@ -99,8 +99,8 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
     if (!entitled) {
       return (
         <StatusPanel
-          title="Available on Lifetime and Founder plans"
-          body={membership?.isBetaNoticeActive ? "Your 30-day beta notice retains full web access. Desktop downloads require Lifetime or Founder membership during this period." : "The desktop app — with its local project vault and permanent Local Mode — is part of the Lifetime and Founder tiers. Upgrade to download it."}
+          title="Planned for Lifetime and Founder"
+          body={membership?.isBetaNoticeActive ? "Your 30-day beta notice retains full web access. Desktop downloads require Lifetime or Founder membership during this period." : "The desktop workspace and its local project vault are still being completed for paid launch. Register interest in Lifetime or Founder for availability updates."}
         >
           <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>
             View plans

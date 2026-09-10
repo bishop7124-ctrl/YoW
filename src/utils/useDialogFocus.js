@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const controls = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]'
 const visible = element => {
@@ -23,11 +23,15 @@ function topDialog() {
 // ownership of focus; opening a child never lets the parent's trap reclaim it.
 export function useDialogFocus(ref, onClose, enabled = true) {
   const closeRef = useRef(onClose)
+  const [initialReturnFocus] = useState(() => enabled && typeof document !== 'undefined' ? document.activeElement : null)
   useEffect(() => { closeRef.current = onClose }, [onClose])
   useEffect(() => {
     if (!enabled || !ref.current) return undefined
     const dialog = ref.current
-    const previousFocus = document.activeElement
+    // Descendant autoFocus can run before this effect, so dialogs enabled at
+    // mount use the control captured by the state initializer during render.
+    const activeFocus = document.activeElement
+    const previousFocus = initialReturnFocus?.isConnected ? initialReturnFocus : activeFocus
     const focus = () => dialog.focus({ preventScroll: true })
     const frame = requestAnimationFrame(() => {
       if (topDialog() === dialog && !dialog.contains(document.activeElement)) focus()
@@ -60,7 +64,7 @@ export function useDialogFocus(ref, onClose, enabled = true) {
       cancelAnimationFrame(frame)
       window.removeEventListener('keydown', onKey)
       document.removeEventListener('focusin', onFocus)
-      if (previousFocus?.isConnected && (dialog.contains(document.activeElement) || document.activeElement === document.body)) previousFocus.focus({ preventScroll: true })
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
     }
-  }, [enabled, ref])
+  }, [enabled, ref, initialReturnFocus])
 }
