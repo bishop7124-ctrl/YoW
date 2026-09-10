@@ -3,7 +3,7 @@ import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
-import { assertArchiveInputSizeOk, assertUnzippedResultOk } from '../utils/archiveImportLimits'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter } from '../utils/archiveImportLimits'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -24,8 +24,10 @@ export async function readZipFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { reject(err); return }
       try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const results = []
@@ -48,8 +50,13 @@ export async function tryReadYowZip(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      // A ratio violation must abort with a real error, not be silently
+      // treated like "not a YOW zip, fall through to another parser" the
+      // way an ordinary fflate parse error (err) is below.
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { resolve(null); return }
       try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       if (!files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
@@ -104,8 +111,10 @@ export async function readDocxFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { reject(new Error(`Could not read ${file.name}`)); return }
       try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const xmlBytes = files['word/document.xml']
@@ -797,8 +806,13 @@ export async function tryReadStructuredZip(file) {
   const { unzip, unzipSync } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      // A ratio violation must abort with a real error, not be silently
+      // treated like "not a compatible structured ZIP" the way an ordinary
+      // fflate parse error (err) is below.
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { resolve(null); return }
       try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const paths = Object.keys(files)
@@ -858,7 +872,9 @@ export async function tryReadStructuredZip(file) {
       if (docxBytes) {
         try {
           assertArchiveInputSizeOk(docxBytes.byteLength, `"${file.name}" (novel.docx)`)
-          const docxFiles = unzipSync(docxBytes)
+          const docxRatioFilter = makeZipEntryRatioFilter(`"${file.name}" (novel.docx)`)
+          const docxFiles = unzipSync(docxBytes, { filter: docxRatioFilter })
+          docxRatioFilter.check()
           assertUnzippedResultOk(docxFiles, `"${file.name}" (novel.docx)`)
           const xmlBytes = docxFiles['word/document.xml']
           if (xmlBytes) {
