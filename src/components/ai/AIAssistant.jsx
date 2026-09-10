@@ -353,7 +353,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
         } catch {
           const trimmed = accumulated.trim()
           if (trimmed) {
-            recordAiBarExchange({
+            recordAiBarExchange(store, {
               novelId: store.activeNovelId,
               section,
               userText: text,
