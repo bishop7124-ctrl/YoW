@@ -155,6 +155,8 @@ jobs:
             spec: tests/e2e/qa-sweep-2026-09-10-ai-chat-persistence.spec.js
           - name: qa-sweep-2026-09-10-large-scene-copy
             spec: tests/e2e/qa-sweep-2026-09-10-large-scene-copy.spec.js
+          - name: schedule-corrective-audit
+            spec: tests/e2e/schedule-corrective-audit.spec.js
           # Added 2026-08-28. This spec existed in tests/e2e/ from the start but
           # was never listed here, so CI ran 13 of the directory's 14 files and
           # nothing flagged the gap — it had rotted to 4/4 failing against the
