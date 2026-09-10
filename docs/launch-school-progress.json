@@ -76,9 +76,9 @@
     },
     "responsive": {
       "status": "in-progress",
-      "answer": "Product-coherence implementation is complete locally: phone map viewing, tablet/desktop map editing, long-title navigation, complete Catalogue access, dialog focus and chronology/onboarding clarity are covered. Physical-device and screen-reader acceptance remains.",
-      "evidence": "9 September: 956 tests, production build, zero-error lint and 26 relevant Chromium checks passed with two existing manuscript skips. Corrected theme foregrounds measure at least 4.84:1.",
-      "updatedAt": "2026-09-09T18:05:00Z"
+      "answer": "Automated product-coherence and serious accessibility fixes are complete: phone map viewing, tablet/desktop editing, long-title navigation, Catalogue reachability, dialog focus, chronology/onboarding clarity, and manuscript contrast across all four themes are covered. Physical-device, screen-reader, zoom/reflow, reduced-motion, and broader-screen acceptance remains.",
+      "evidence": "10 September: the unfiltered axe gate passes eight covered screen/theme combinations with no known contrast exceptions. Faint manuscript labels now meet the normal-text contrast floor; chapter accents and selected mode pills use readable semantic pairs. The portable Launch School regression also renders all 39 tasks with zero page errors. Changes are on codex/accessibility-contrast pending review.",
+      "updatedAt": "2026-09-10T15:10:00Z"
     },
     "integrity": {
       "status": "in-progress",

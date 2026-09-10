@@ -1285,7 +1285,7 @@ export default function Manuscript({ store, userId, membership = null }) {
                       and --text-muted is already tuned to the AA floor on its
                       own (see .gs-snippet-label's 2026-09-02 fix) — stacking
                       opacity-70 on it here would fail the same way. */}
-                  <h2 className="text-[var(--accent)] text-xs font-black uppercase tracking-[0.5em] mb-1">
+                  <h2 className="text-[var(--accent-text)] text-xs font-black uppercase tracking-[0.5em] mb-1">
                     {getChapterTitle(item.chap)}
                   </h2>
                   {item.chap.title && !item.chap.title.toLowerCase().startsWith(labels.level2.toLowerCase()) && (
