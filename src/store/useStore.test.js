@@ -362,6 +362,65 @@ describe('novel CRUD', () => {
     expect(stored.map(n => n.id)).toContain('other-2')
   })
 
+  // Regression coverage for audit finding #16 ("Project deletion can leave
+  // per-scene keys"): deleteNovel now reads the deleted project's scene ids
+  // straight from persisted `nf_scenes` (via deleteAllSceneContentForNovel)
+  // instead of only relying on whatever `scenesRef` already tracked, and
+  // cleans up `nf_scene_versions` too — a step deleteNovel had no code path
+  // for at all before this fix. Mirrors the analogous cloud-side test
+  // ("scene cloud cleanup on project delete" in firestoreSync.test.js):
+  // seed storage directly rather than building state up through the store's
+  // own add* methods, then assert only the deleted project's data is gone.
+  it('deleteNovel removes every per-scene content key and version-history entry for the project, leaving other projects untouched', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([
+      { id: 'novel-1', title: 'To Delete', type: 'novel' },
+      { id: 'novel-2', title: 'Keep Me', type: 'novel' },
+    ]))
+    localStorage.setItem('nf_scenes', JSON.stringify([
+      { id: 'scene-1', novelId: 'novel-1', title: 'Scene One' },
+      { id: 'scene-2', novelId: 'novel-1', title: 'Scene Two' },
+      { id: 'scene-3', novelId: 'novel-2', title: 'Other Project Scene' },
+    ]))
+    localStorage.setItem('nf_scene_content:scene-1', 'Novel 1 scene 1 prose.')
+    localStorage.setItem('nf_scene_content:scene-2', 'Novel 1 scene 2 prose.')
+    localStorage.setItem('nf_scene_content:scene-3', 'Novel 2 scene prose.')
+    localStorage.setItem('nf_scene_versions', JSON.stringify([
+      { id: 'v1', sceneId: 'scene-1', novelId: 'novel-1', title: 'Scene One', content: 'v1', wordCount: 1, timestamp: 1 },
+      { id: 'v2', sceneId: 'scene-2', novelId: 'novel-1', title: 'Scene Two', content: 'v1', wordCount: 1, timestamp: 2 },
+      { id: 'v3', sceneId: 'scene-3', novelId: 'novel-2', title: 'Other Project Scene', content: 'v1', wordCount: 1, timestamp: 3 },
+    ]))
+
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.deleteNovel('novel-1') })
+
+    expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
+    expect(localStorage.getItem('nf_scene_content:scene-2')).toBeNull()
+    // Untouched project's scene content survives.
+    expect(localStorage.getItem('nf_scene_content:scene-3')).toBe('Novel 2 scene prose.')
+
+    const remainingVersions = JSON.parse(localStorage.getItem('nf_scene_versions'))
+    expect(remainingVersions.map(v => v.id)).toEqual(['v3'])
+  })
+
+  // The "stale/orphan" half of finding #16: a content key whose scene record
+  // is already missing from `nf_scenes` entirely (left behind by some
+  // earlier gap, under no project) has no owner to attribute it to, so
+  // deleteNovel's cleanup sweeps it opportunistically regardless of which
+  // project is actually being deleted.
+  it('deleteNovel also sweeps orphaned scene content keys that belong to no project in nf_scenes', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'novel-1', title: 'To Delete', type: 'novel' }]))
+    localStorage.setItem('nf_scenes', JSON.stringify([{ id: 'scene-1', novelId: 'novel-1', title: 'Scene One' }]))
+    localStorage.setItem('nf_scene_content:scene-1', 'Novel 1 scene prose.')
+    // No nf_scenes entry anywhere references this id.
+    localStorage.setItem('nf_scene_content:orphan-1', 'Nobody references this scene any more.')
+
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.deleteNovel('novel-1') })
+
+    expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
+    expect(localStorage.getItem('nf_scene_content:orphan-1')).toBeNull()
+  })
+
   it('uses the locked free project as the dashboard active project during import', () => {
     const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false, freeProjectId: 'free-1' }))
 
@@ -1675,6 +1734,64 @@ describe('character CRUD', () => {
     act(() => { result.current.deleteCharacter(frodoId) })
 
     expect(deleteUserMedia).toHaveBeenCalledWith('https://x/storage/v1/object/public/user-media/u1/characters/frodo.webp')
+  })
+})
+
+// Manuscript.jsx derives entityMap/characterNames/locationNames from `characters`/
+// `locations` via useMemo, and SceneEditor.jsx's React.memo comparator relies on those
+// staying referentially stable across renders that don't actually touch character/location
+// data — otherwise every scene's memo is invalidated on every such render (see the "Typing
+// lag" ROADMAP row). `characters`/`locations` used to be rebuilt via an unmemoized
+// seriesScope() call inline in the `api` object on every render of whatever component
+// calls useStore(), so any unrelated state update (e.g. selecting a different scene, or the
+// periodic local-storage-warning poll) handed out a brand-new array reference for both.
+describe('characters/locations reference stability', () => {
+  it('keeps the same characters/locations array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+    act(() => { result.current.saveLocation({ name: 'The Shire' }) })
+
+    const charactersBefore = result.current.characters
+    const locationsBefore = result.current.locations
+
+    // Trigger a re-render via state completely unrelated to characters/locations.
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.characters).toBe(charactersBefore)
+    expect(result.current.locations).toBe(locationsBefore)
+  })
+
+  it('produces a new characters/locations reference only when the underlying data actually changes', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+
+    const charactersBefore = result.current.characters
+
+    act(() => { result.current.saveCharacter({ name: 'Sam' }) })
+
+    expect(result.current.characters).not.toBe(charactersBefore)
+    expect(result.current.characters).toHaveLength(2)
+  })
+
+  // Manuscript.jsx's entityMap useMemo also depends on `loreEntries`/`worldHistory`/
+  // `timeline` (not just characters/locations) — these went through the exact same
+  // unmemoized seriesScope()-in-`api` pattern, so entityMap could still churn on every
+  // render via this path even after characters/locations were fixed on their own.
+  it('keeps the same loreEntries array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.addLoreEntry({ title: 'The Old Wars' }) })
+
+    const loreEntriesBefore = result.current.loreEntries
+
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.loreEntries).toBe(loreEntriesBefore)
   })
 })
 

@@ -12,7 +12,8 @@ import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/r
 import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
-import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, deleteAllSceneContentForNovel } from '../storage/sceneContentStore'
+import { clearSceneVersionsForNovel } from '../utils/sceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -1609,6 +1610,28 @@ export function useStore(userId = null, options = {}) {
 
   const seriesScope = (arr, category) => resolveSeriesScope(arr, category, activeNovelId)
 
+  // `characters`/`locations` below feed straight into Manuscript.jsx's `entityMap`/
+  // `characterNames`/`locationNames` useMemo (the @mention/highlight lookups every
+  // SceneEditor's memo comparator was built around — see the "Typing lag" ROADMAP row).
+  // seriesScope()/resolveSeriesScope() always builds a brand-new filtered-or-merged array,
+  // and the `api` object further down used to call it inline on every render of whatever
+  // component calls useStore() — not only when `characters`/`locations` themselves
+  // changed. Any unrelated state update elsewhere in this hook (e.g. the
+  // localStorageWarning/localDataCorrupted poll a few lines up, which fires every 4s
+  // regardless of typing) re-runs the whole hook and was handing Manuscript.jsx a
+  // brand-new reference for both, every time, defeating entityMap/characterNames/
+  // locationNames' own memoization for every scene in the document simultaneously.
+  // Memoizing here keeps the reference stable across renders unless characters/locations/
+  // novels/series/activeNovelId actually changed.
+  const scopedCharacters = useMemo(
+    () => seriesScope(characters, 'characters'),
+    [characters, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const scopedLocations = useMemo(
+    () => seriesScope(locations, 'locations'),
+    [locations, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+
   const getSyncChain = (arr, category, item) => {
     if (!item) return []
     const project = novels.find(n => n.id === item.novelId) ?? activeNovel
@@ -1795,10 +1818,28 @@ export function useStore(userId = null, options = {}) {
   // so the app can warn about them and offer a restore/discard path instead.
   const novelScenes = scenes.filter(s => s.novelId === activeNovelId && !s.conflictOf).sort((a, b) => a.order - b.order)
   const novelSceneConflicts = scenes.filter(s => s.novelId === activeNovelId && s.conflictOf).sort((a, b) => (b.conflictCreatedAt || 0) - (a.conflictCreatedAt || 0))
-  const novelTimeline = seriesScope(timeline, 'timeline')
-  const novelWorldHistory = seriesScope(worldHistory, 'worldhistory')
+  // Memoized for the same reason scopedCharacters/scopedLocations are above:
+  // Manuscript.jsx's `entityMap` useMemo (the one this file's "Typing lag" ROADMAP
+  // row is about) depends on `loreEntries`/`worldHistory`/`timeline` in addition to
+  // `characters`/`locations` — an unmemoized seriesScope() call here would still
+  // leave entityMap churning on every render even after characters/locations were
+  // fixed, just via a different set of props feeding the exact same memo.
+  const novelTimeline = useMemo(
+    () => seriesScope(timeline, 'timeline'),
+    [timeline, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const novelWorldHistory = useMemo(
+    () => seriesScope(worldHistory, 'worldhistory'),
+    [worldHistory, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const novelLoreEntries = useMemo(
+    () => seriesScope(loreEntries, 'lore'),
+    [loreEntries, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  // factions/ideaEntries don't currently feed any memo comparator the way the three
+  // above (and characters/locations) do, so they're deliberately left unmemoized here
+  // — same scope decision as novelFactions/novelIdeaEntries noted in ROADMAP.md.
   const novelFactions = seriesScope(factions, 'factions')
-  const novelLoreEntries = seriesScope(loreEntries, 'lore')
   const novelIdeaEntries = seriesScope(ideaEntries, 'ideas')
   const novelStorySchedule = storySchedule.filter(e => e.novelId === activeNovelId)
   const novelMaps = maps.filter(m => m.novelId === activeNovelId)
@@ -3348,6 +3389,22 @@ export function useStore(userId = null, options = {}) {
       ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
       ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
     ])
+    // Per-scene storage cleanup (audit finding #16: "Project deletion can
+    // leave per-scene keys"). Deliberately reads `nf_scenes` straight from
+    // the storage backend rather than trusting `scenesRef.current` — the
+    // in-memory copy is normally in sync, but the whole point of the bug
+    // being fixed here is a case where it silently isn't (a scene whose
+    // content key was never "known" to this tab this session). Falls back to
+    // `scenesRef.current` too (union, not replace) purely as a belt-and-braces
+    // net for the reverse gap — a scene added this tick whose own persistence
+    // effect hasn't flushed yet — not because the storage read is expected to
+    // be incomplete in normal operation.
+    const removedContentIds = deleteAllSceneContentForNovel(id, {
+      knownContentKeyIds: knownSceneContentIdsRef.current,
+      lastWrittenContentById: lastWrittenSceneContentByIdRef.current,
+    })
+    const inMemorySceneIds = scenesRef.current.filter(s => s.novelId === id).map(s => s.id).filter(sid => sid != null)
+    clearSceneVersionsForNovel(id, [...new Set([...removedContentIds, ...inMemorySceneIds])])
     const updatedNovels = novelsRef.current.filter(n => n.id !== id)
     commitLocal(novelsRef, setNovels, 'nf_novels', updatedNovels)
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.filter(c => c.novelId !== id))
@@ -3768,7 +3825,7 @@ export function useStore(userId = null, options = {}) {
       maps,
     },
     allProjectStats, activeProjectStats,
-    characters: seriesScope(characters, 'characters'),
+    characters: scopedCharacters,
     saveCharacter, saveRelationship, saveCharacterJourney, updateCharacterJourneyForSeries, deleteCharacter,
     factions: novelFactions,
     saveFaction, deleteFaction,
@@ -3780,7 +3837,7 @@ export function useStore(userId = null, options = {}) {
         return [...untouched, ...nextScoped.map(f => ({ ...f, novelId: f.novelId ?? activeNovelId }))]
       })
     },
-    locations: seriesScope(locations, 'locations'),
+    locations: scopedLocations,
     saveLocation, deleteLocation,
     timeline: novelTimeline,
     addEvent, updateEvent, deleteEvent, linkTimelineHistory, unlinkTimelineHistory,
