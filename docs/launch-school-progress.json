@@ -83,8 +83,8 @@
     "integrity": {
       "status": "in-progress",
       "answer": "Automated save, isolation, import, restore and export flows passed. Failed existing-project imports now roll back, and atomic cloud replacement is implemented. Production migration, live Supabase fault injection, local-device replacement and destructive-delete acceptance remain.",
-      "evidence": "10 September: 1,059-test QA pass plus live import/merge browser flows; rollback coverage spans every importable collection. Atomic cloud replacement uses migration 20260910120000 and focused RPC/store tests pass. Migration not deployed.",
-      "updatedAt": "2026-09-10T21:15:00+01:00"
+      "evidence": "10 September: 1,064-test QA pass plus live import/merge browser flows; rollback coverage spans every importable collection. Atomic cloud replacement uses migration 20260910120000 and focused RPC/store tests pass. CLI link succeeded; migration dry-run is blocked by pre-existing history drift for 20260627, 20260728 and 20260801. Migration not deployed.",
+      "updatedAt": "2026-09-10T21:22:00+01:00"
     },
     "export": {
       "status": "done",
