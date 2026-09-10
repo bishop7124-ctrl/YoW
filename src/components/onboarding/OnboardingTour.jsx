@@ -1,15 +1,46 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 
-function getRect(selector) {
+// Some panels (the mobile manuscript structure rail, off-canvas sheets
+// elsewhere) stay mounted and correctly sized while closed, moved off the
+// visible page with a CSS transform (e.g. `translateX(-101%)`) rather than
+// `display: none`. That's invisible to the display/visibility/size checks
+// below, and `Element.scrollIntoView()` cannot bring a transformed-away
+// element into a viewport it was never laid out in — the browser has
+// nothing to scroll. Left unfiltered, `getRect` would confidently return a
+// real-looking box that sits almost entirely off-screen (observed live: the
+// mobile manuscript rail's own rect at `translateX(-101%)`, width 268, sat
+// at x=-270 — only a sliver away from a positive `right`), which is the same
+// "spotlight targets blank space" failure mode this file's other visibility
+// checks exist to prevent. A plain zero-intersection test isn't enough on
+// its own: an element that's 95% off-screen still has a technically-nonzero
+// sliver of overlap and would pass it. Require at least half of the
+// element's own width *and* height to actually be within the viewport, so a
+// bare edge no longer counts as "on screen" — anything short of that falls
+// back to the tour's existing no-target behavior (a centered tip, no
+// spotlight) instead of a spotlight pointing mostly off-screen.
+function isOnScreen(rect) {
+  const visibleWidth = Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0)
+  const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0)
+  return visibleWidth >= rect.width / 2 && visibleHeight >= rect.height / 2
+}
+
+function findTourEl(selector, { requireOnScreen = false } = {}) {
   if (!selector) return null
   const selectors = Array.isArray(selector) ? selector : [selector]
-  const el = selectors
+  return selectors
     .flatMap(item => [...document.querySelectorAll(`[data-tour="${item}"]`)])
     .find(node => {
       const style = window.getComputedStyle(node)
       const r = node.getBoundingClientRect()
-      return style.display !== 'none' && style.visibility !== 'hidden' && r.width > 4 && r.height > 4
+      if (style.display === 'none' || style.visibility === 'hidden') return false
+      if (r.width <= 4 || r.height <= 4) return false
+      if (requireOnScreen && !isOnScreen(r)) return false
+      return true
     })
+}
+
+function getRect(selector) {
+  const el = findTourEl(selector, { requireOnScreen: true })
   if (!el) return null
   const r = el.getBoundingClientRect()
   return { top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom, right: r.right }
@@ -69,13 +100,10 @@ export default function OnboardingTour({ steps, onFinish, onSkip, onDisableTours
 
   useEffect(() => {
     if (!step.target) return
-    const selectors = Array.isArray(step.target) ? step.target : [step.target]
-    const el = selectors
-      .flatMap(item => [...document.querySelectorAll(`[data-tour="${item}"]`)])
-      .find(node => {
-        const r = node.getBoundingClientRect()
-        return r.width > 4 && r.height > 4
-      })
+    // No `requireOnScreen` here: this effect's whole job is finding a
+    // legitimately-off-screen-but-scrollable target and bringing it into
+    // view, unlike getRect's spotlight placement above.
+    const el = findTourEl(step.target)
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [step.target])
 
