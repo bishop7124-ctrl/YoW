@@ -6,7 +6,7 @@
  */
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, seedCleanStorage,
+  createProject, dismissLaunchPrompts, seedCleanStorage, writeInDefaultScene,
 } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
@@ -71,14 +71,21 @@ test('direct navigation to a project URL loads the correct project', async ({ pa
 
 test('writing view can be reached via direct URL without losing content', async ({ page }) => {
   await createProject(page, { title: 'Direct Write Nav' })
-  await page.getByRole('button', { name: 'Write' }).click()
-  await expect(page).toHaveURL(/\/project\/.+\/writing/)
 
   const text = `Direct nav write ${Date.now()}`
-  await page.getByText('Begin writing here…').click()
-  await page.getByPlaceholder('Begin writing here…').fill(text)
+  // writeInDefaultScene clicks Write, fills the scene, and waits for the
+  // debounced store commit to actually land in project storage — a plain
+  // `.fill()` returns as soon as the DOM value changes, well before that
+  // commit fires, so navigating away right after `.fill()` raced the write
+  // (~1 in 5 runs). See autosave.spec.js for the same pattern.
+  await writeInDefaultScene(page, text)
+  await expect(page).toHaveURL(/\/project\/.+\/writing/)
 
   const writingUrl = page.url()
+  // Flush before navigating — the IndexedDB backend persists asynchronously,
+  // so a hard navigation immediately after a write can race it and lose the
+  // write (see src/storage/projectStorage.js's window.__yowStorageBridge).
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.goto('/')
   await page.goto(writingUrl)
 
