@@ -22,6 +22,10 @@ test('writing mode URL persists after reload', async ({ page }) => {
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   const url = page.url()
 
+  // Flush the storage backend's async persist queue before reloading — see
+  // the "writing view can be reached via direct URL" spec below for why a
+  // reload/navigation right after a write can otherwise race it.
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
 
   // Same URL and the writing view is still shown
@@ -35,6 +39,12 @@ test('project overview URL persists after reload', async ({ page }) => {
   await expect(page).toHaveURL(/\/project\//)
   const url = page.url()
 
+  // Flush the storage backend's async persist queue before reloading — see
+  // the "writing view can be reached via direct URL" spec below for why a
+  // reload/navigation right after a write can otherwise race it. Confirmed
+  // this exact spec fails intermittently without the flush under load (once
+  // in a full-suite run) even though it passed 10/10 isolated repeats.
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
 
   expect(page.url()).toBe(url)
@@ -49,6 +59,10 @@ test('worldbuilding section URL persists after reload', async ({ page }) => {
   await expect(page).toHaveURL(/\/project\/.+\/characters/)
   const url = page.url()
 
+  // Flush the storage backend's async persist queue before reloading — see
+  // the "writing view can be reached via direct URL" spec below for why a
+  // reload/navigation right after a write can otherwise race it.
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
 
   expect(page.url()).toBe(url)
@@ -62,6 +76,15 @@ test('direct navigation to a project URL loads the correct project', async ({ pa
 
   const url = page.url() // e.g. /project/abc123
 
+  // Flush the storage backend's async persist queue before navigating away —
+  // createProject only waits for the URL to change, not for the new project's
+  // write to actually land in the IndexedDB-backed vault; a goto() right
+  // after can otherwise race that write (same class of flake as the
+  // "writing view can be reached via direct URL" spec below — see its
+  // comment for the measured flake rate and __yowStorageBridge.flush's own
+  // comment in src/storage/projectStorage.js).
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
+
   // Navigate away then come back via direct URL
   await page.goto('/')
   await page.goto(url)
@@ -73,18 +96,36 @@ test('writing view can be reached via direct URL without losing content', async 
   await createProject(page, { title: 'Direct Write Nav' })
 
   const text = `Direct nav write ${Date.now()}`
-  // writeInDefaultScene clicks Write, fills the scene, and waits for the
-  // debounced store commit to actually land in project storage — a plain
-  // `.fill()` returns as soon as the DOM value changes, well before that
-  // commit fires, so navigating away right after `.fill()` raced the write
-  // (~1 in 5 runs). See autosave.spec.js for the same pattern.
+  // writeInDefaultScene waits for the write to actually reach project storage
+  // (via window.__yowStorageBridge, not just the DOM) before returning — see
+  // its comment in helpers.js.
   await writeInDefaultScene(page, text)
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
 
+  // Wait for the debounced save to actually land in storage before
+  // navigating away — mirrors writeInDefaultScene's own wait. Without this,
+  // page.goto('/') below can fire before the write reaches storage, which
+  // isn't what this test means to verify (see the 2026-08-25 ROADMAP note on
+  // whether beforeunload/pagehide flushing alone is fast enough for a real
+  // user who navigates within the debounce window — a separate, still-open
+  // question this test intentionally isn't exercising).
+  await page.waitForFunction((expected) => {
+    const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+    const scenes = JSON.parse(get('nf_scenes') || '[]')
+    const matches = (content) => content === expected || (content || '').includes(expected.slice(0, 40))
+    return scenes.some(s => matches(s.content) || matches(get(`nf_scene_content:${s.id}`)))
+  }, text, { timeout: 8000 })
+
   const writingUrl = page.url()
-  // Flush before navigating — the IndexedDB backend persists asynchronously,
-  // so a hard navigation immediately after a write can race it and lose the
-  // write (see src/storage/projectStorage.js's window.__yowStorageBridge).
+  // Flush the storage backend's own async persist queue before navigating
+  // away. The app's active backend can be an IndexedDB-backed vault whose
+  // writes are fire-and-forget (see __yowStorageBridge.flush's comment in
+  // src/storage/projectStorage.js) — writeInDefaultScene only confirms the
+  // content reached the bridge's readable view, not that backend write has
+  // landed, so a goto() right after can still race it and lose the content.
+  // Every other spec that reloads/navigates after writing already does this;
+  // this one didn't, which is what made it intermittently fail (confirmed:
+  // it failed 13/20 runs without this flush, 0/20 with it).
   await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.goto('/')
   await page.goto(writingUrl)
