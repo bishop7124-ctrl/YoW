@@ -114,6 +114,15 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
+  // ManuscriptInspector.jsx's Scene tab (SceneTab) only renders the Status
+  // row (`.ms-insp-row`) once a scene is *focused* — Manuscript.jsx keys the
+  // inspector's `activeSceneId` off each SceneEditor's `onFocus` handler, and
+  // nothing focuses a scene by default on entering the writing view (the
+  // inspector otherwise shows "Select a scene to see its details."). Click
+  // into the scene's preview to focus it first, matching the pattern used by
+  // the "rename a scene" test above.
+  await page.locator('.ms-preview').first().click()
+
   // The status chip (SceneEditor.jsx's `.ms-meta-status`) is hidden by CSS
   // while the editor is in Write mode (`.ms-scene-header--write .ms-meta-status
   // { display: none }`) — it only renders in Edit mode.
