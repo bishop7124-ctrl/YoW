@@ -149,6 +149,8 @@ jobs:
             spec: tests/e2e/marketing-promises.spec.js
           - name: desktop-workspace
             spec: tests/e2e/desktop-workspace.spec.js
+          - name: launch-school-static
+            spec: tests/e2e/launch-school-static.spec.js
           - name: accessibility
             spec: tests/e2e/accessibility.spec.js
           - name: marketing-static-pages
