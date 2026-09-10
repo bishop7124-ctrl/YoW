@@ -49,6 +49,21 @@ describe('membership plan limits', () => {
     expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.free)
   })
 
+  it('flags accounts with a real Stripe customer id', () => {
+    const withCustomer = getMembership(makeUser({
+      app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active', stripe_customer_id: 'cus_123' },
+    }))
+    expect(withCustomer.hasStripeCustomer).toBe(true)
+
+    // A plan set directly via SQL (not a real Stripe checkout) is paid
+    // locally but has no Stripe customer to manage billing for.
+    const withoutCustomer = getMembership(makeUser({
+      app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active' },
+    }))
+    expect(withoutCustomer.isPaid).toBe(true)
+    expect(withoutCustomer.hasStripeCustomer).toBe(false)
+  })
+
   it('treats beta tester accounts as temporary full-access members', () => {
     const membership = getMembership(makeUser({
       app_metadata: {
