@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { applyCors } from './_lib/cors.js'
 
 // Maps plan keys to Stripe price IDs and checkout mode.
 // Each price ID must be set as an env var on Vercel.
@@ -23,10 +24,7 @@ async function getRemainingFounderSlots(supabase) {
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin || process.env.SITE_URL || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
+  applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -42,7 +40,7 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const { plan = 'premium_monthly', currency = 'gbp' } = req.body || {}
+    const { plan = 'premium_monthly' } = req.body || {}
     const planConfig = PLAN_CONFIG[plan]
     if (!planConfig) return res.status(400).json({ error: `Unknown plan: ${plan}` })
 

@@ -201,7 +201,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Track which chapters are set where, link key plot events to their locations, and maintain consistent atmospheric descriptions.' },
       { type: 'Short Story', text: 'Track the few places that matter and keep atmosphere notes consistent.' },
-      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, with secrets only the DM can see.' },
+      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, keeping every secret in your own private prep.' },
     ],
     capabilities: [
       'Nested location hierarchy (continent → city → building → room)',

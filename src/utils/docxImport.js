@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter } from './archiveImportLimits'
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
@@ -259,14 +260,28 @@ function buildStructure(paragraphs) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function parseDocxToStructure(file) {
-  const uint8 = new Uint8Array(await file.arrayBuffer())
+  const buffer = await file.arrayBuffer()
+  const label = file.name ? `"${file.name}"` : 'This file'
+  assertArchiveInputSizeOk(buffer.byteLength, label)
+  const uint8 = new Uint8Array(buffer)
 
   let files
   try {
-    files = unzipSync(uint8)
-  } catch {
-    throw new Error('Could not open the file — make sure it is a valid .docx file.')
+    const ratioFilter = makeZipEntryRatioFilter(label)
+    files = unzipSync(uint8, { filter: ratioFilter })
+    ratioFilter.check()
+  } catch (err) {
+    // A limit-exceeded guard (e.g. the ratio check above, thrown from
+    // inside the filter callback during unzipSync itself) must surface its
+    // own specific, user-facing message rather than being flattened into
+    // this catch's generic "invalid file" message meant for genuinely
+    // corrupt/unreadable ZIPs — mirrors the same isArchiveLimitError check
+    // AIImportModal.jsx's tryReadStructuredZip uses around its nested
+    // novel.docx extraction.
+    if (err?.isArchiveLimitError) throw err
+    throw new Error('Could not open the file — make sure it is a valid .docx file.', { cause: err })
   }
+  assertUnzippedResultOk(files, label)
 
   const docEntry = files['word/document.xml']
   if (!docEntry) throw new Error('No document content found in this file.')
