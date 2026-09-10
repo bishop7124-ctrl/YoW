@@ -155,6 +155,8 @@ jobs:
             spec: tests/e2e/qa-sweep-2026-09-10-ai-chat-persistence.spec.js
           - name: qa-sweep-2026-09-10-large-scene-copy
             spec: tests/e2e/qa-sweep-2026-09-10-large-scene-copy.spec.js
+          - name: qa-sweep-2026-09-10-scene-wipe-cross-project
+            spec: tests/e2e/qa-sweep-2026-09-10-scene-wipe-cross-project.spec.js
           - name: schedule-corrective-audit
             spec: tests/e2e/schedule-corrective-audit.spec.js
           # Added 2026-08-28. This spec existed in tests/e2e/ from the start but

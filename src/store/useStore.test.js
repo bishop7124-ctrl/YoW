@@ -7,6 +7,7 @@ import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc } from '../utils/
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
+import { markLocalWriteFailed } from '../storage/writeDurability.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -2289,6 +2290,64 @@ describe('immediate data-safety persistence', () => {
     })
 
     expect(result.current.activeNovelId).toBe(dndId)
+  })
+
+  // 2026-09-10 QA regression (docs/ROADMAP.md "Editing a scene could wipe
+  // scene text across every other project after a stale localStorage
+  // write"): a single known-failed local write (e.g. one scene hitting a
+  // real QuotaExceededError) must never cost more than that one write.
+  // importData's "don't trust local's apparent freshness once any write has
+  // failed" refusal used to fall through to unconditionally preferring
+  // `data` (the "cloud" snapshot) instead — live-reproduced against the
+  // VITE_OFFLINE_MODE dev server, whose loadUserData() always resolves
+  // `{ _savedAt: 0 }` with no novels at all (see firestoreSync.js): forcing
+  // one scene's write to fail, then reloading with no logout, wiped every
+  // project in the account, not just the poisoned scene, because an empty
+  // "cloud" snapshot was treated as more authoritative than a local copy
+  // that actually had real, otherwise-untouched projects in it. Also
+  // real for any account whose cloud fetch is empty/unreachable/not yet
+  // synced, not just offline mode specifically.
+  it('does not discard local projects on a reconciliation when local has a known-failed write but the cloud snapshot is empty', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Untouched Project', type: 'novel' }) })
+    const sceneId = result.current.scenes[0].id
+    act(() => { result.current.updateSceneContent(sceneId, 'Real content that must survive.') })
+
+    // Simulate a real QuotaExceededError having poisoned some unrelated key —
+    // exactly what save()/the IndexedDB backend's onWriteError records.
+    act(() => { markLocalWriteFailed('nf_scene_content:some-other-scene') })
+
+    // Mirrors OFFLINE_MODE's loadUserData() / a not-yet-synced or
+    // unreachable cloud account: no novels at all.
+    act(() => { result.current.importData({ _savedAt: 0 }) })
+
+    expect(result.current.novels.some(n => n.title === 'Untouched Project')).toBe(true)
+    expect(result.current.scenes.find(s => s.id === sceneId)?.content).toBe('Real content that must survive.')
+  })
+
+  it('still prefers a cloud snapshot that actually has data over local when local has a known-failed write', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Locally Poisoned Project', type: 'novel' }) })
+    act(() => { markLocalWriteFailed('nf_scene_content:some-other-scene') })
+
+    // _savedAt deliberately kept at 0 (not Date.now()) so localWriteAt >
+    // remoteSavedAt stays true on its own — exactly like a real stale-but-
+    // recent nf_localWriteAt outrunning an older cloud row (the scenario the
+    // comment above importData's shouldPreferLocal describes). That isolates
+    // this assertion to the fix's actual OR-clause (hasLocalWriteFailed() +
+    // cloud genuinely having data): using a fresher _savedAt here would make
+    // `localWriteAt > remoteSavedAt` false on its own and prove nothing about
+    // that clause.
+    const cloudNovel = { id: 'cloud-novel-1', title: 'Cloud Project', type: 'novel', createdAt: Date.now() }
+    act(() => {
+      result.current.importData({
+        _savedAt: 0,
+        novels: [cloudNovel],
+      })
+    })
+
+    expect(result.current.novels.some(n => n.title === 'Cloud Project')).toBe(true)
+    expect(result.current.novels.some(n => n.title === 'Locally Poisoned Project')).toBe(false)
   })
 
   it('preserves a newer scene edit as a conflict copy when a stale tab writes over it', () => {
