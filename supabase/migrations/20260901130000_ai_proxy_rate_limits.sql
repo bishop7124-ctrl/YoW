@@ -27,4 +27,4 @@ ALTER TABLE public.ai_proxy_requests ENABLE ROW LEVEL SECURITY;
 -- No direct anon/authenticated policies by design: only the Vercel API
 -- route reads/writes this table, using the service-role key after verifying
 -- the caller's Supabase auth token — the same pattern as
--- 20260728_synced_ai_settings.sql.
+-- 20260728130000_synced_ai_settings.sql.
