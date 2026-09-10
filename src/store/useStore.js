@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, deleteItem, deleteItemsByNovel, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
+import { upsertItems, deleteItem, deleteItemsByNovel, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -1294,7 +1294,7 @@ export function useStore(userId = null, options = {}) {
   /* eslint-enable react-hooks/exhaustive-deps */
 
   // Bulk import from Firestore after login
-  const importData = useCallback((data) => {
+  const importData = useCallback((data, options = {}) => {
     importing.current = true
     remoteReady.current = false
     const localWriteAt = loadLocalWriteAt()
@@ -1318,7 +1318,7 @@ export function useStore(userId = null, options = {}) {
     // dormant data, so cap how old "local" is allowed to be to still win.
     const LOCAL_TRUST_WINDOW_MS = 30 * 60 * 1000
     const localWriteIsRecent = localWriteAt > 0 && (Date.now() - localWriteAt) < LOCAL_TRUST_WINDOW_MS
-    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && !hasLocalWriteFailed()
+    const shouldPreferLocal = options.preferLocal !== false && ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && !hasLocalWriteFailed()
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
     const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
@@ -1477,34 +1477,18 @@ export function useStore(userId = null, options = {}) {
     remoteReady.current = allowSaves
   }, [])
 
-  const replaceData = useCallback((data) => {
-    importData(data)
-
-    if (!canSyncCloud) return
-
-    setTimeout(() => {
-      upsertItems('novels', userId, data.novels ?? []).catch(console.error)
-      upsertItems('series_items', userId, data.series ?? []).catch(console.error)
-      upsertItems('characters', userId, data.characters ?? []).catch(console.error)
-      upsertItems('factions', userId, data.factions ?? []).catch(console.error)
-      upsertItems('locations', userId, data.locations ?? []).catch(console.error)
-      upsertItems('timeline_events', userId, data.timeline ?? []).catch(console.error)
-      upsertItems('world_history', userId, data.worldHistory ?? []).catch(console.error)
-      upsertItems('acts', userId, data.acts ?? []).catch(console.error)
-      upsertItems('chapters', userId, data.chapters ?? []).catch(console.error)
-      upsertItems('lore_entries', userId, data.loreEntries ?? []).catch(console.error)
-      upsertItems('idea_entries', userId, data.ideaEntries ?? []).catch(console.error)
-      upsertItems('maps_data', userId, data.maps ?? []).catch(console.error)
-      upsertItems('whiteboards_data', userId, data.whiteboards ?? []).catch(console.error)
-      upsertItems('story_schedule', userId, data.storySchedule ?? []).catch(console.error)
-      upsertItems('rpg_characters', userId, data.rpgCharacters ?? []).catch(console.error)
-      upsertItems('comic_pages', userId, data.comicPages ?? []).catch(console.error)
-      upsertItems('comic_panels', userId, data.comicPanels ?? []).catch(console.error)
-      upsertItems('eras', userId, data.eras ?? []).catch(console.error)
-      saveUserSettings(userId, { activeNovelId: data.activeNovelId ?? null, currentYear: data.currentYear ?? 0, activeMapByNovel: data.activeMapByNovel ?? {} }).catch(console.error)
-      upsertItems('scenes', userId, data.scenes ?? []).catch(console.error)
-    }, 700)
-  }, [importData, userId, canSyncCloud])
+  const replaceData = useCallback(async (data) => {
+    // Commit the selected replacement to cloud storage before changing the
+    // rendered/local copy. The RPC is one database transaction, so failure
+    // leaves both sides on their previous version and can be reported to the
+    // caller without presenting a half-restored account.
+    if (canSyncCloud) await trackSync(replaceUserData(userId, data))
+    // An explicit restore choice is authoritative. The login reconciliation
+    // path may prefer a very recent local edit, but applying that heuristic
+    // here could silently ignore the backup the user just selected.
+    importData(data, { preferLocal: false })
+    return data
+  }, [importData, userId, canSyncCloud, trackSync])
 
   // Clear all local state on sign-out
   const clearData = useCallback(() => {

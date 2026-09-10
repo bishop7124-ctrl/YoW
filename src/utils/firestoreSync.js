@@ -329,12 +329,21 @@ export async function saveUserData(userId, data = {}) {
 export async function replaceUserData(userId, data = {}) {
   if (OFFLINE_MODE || !userId) return
 
-  await Promise.all([...APP_DATA_TABLES, 'user_settings'].map(async table => {
-    const { error } = await supabase.from(table).delete().eq('user_id', userId)
-    throwIfSupabaseError(error, `${table} delete error`)
+  // Prepare image-bearing records before entering the database transaction.
+  // Uploading Storage objects cannot participate in a Postgres transaction;
+  // doing it first means a failed upload never leaves the relational copy
+  // half-deleted. The RPC then replaces every normalized table atomically.
+  const preparedEntries = await Promise.all(APP_DATA_TABLES.map(async table => {
+    const key = TABLE_TO_KEY[table]
+    return [key, await stripEmbeddedImages(table, userId, data[key] ?? [])]
   }))
-
-  await saveUserData(userId, data)
+  const prepared = {
+    ...data,
+    ...Object.fromEntries(preparedEntries),
+    ...getUserSettingsPayload(data),
+  }
+  const { error } = await supabase.rpc('replace_user_data_atomic', { p_data: prepared })
+  throwIfSupabaseError(error, 'atomic account-data replace error')
 }
 
 // Per-scene saves (called directly from updateScene / updateSceneContent)

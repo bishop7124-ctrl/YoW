@@ -82,9 +82,9 @@
     },
     "integrity": {
       "status": "in-progress",
-      "answer": "Automated save, isolation, import, restore and export flows passed. Live Supabase failure/recovery and full destructive-path acceptance remain development responsibilities.",
-      "evidence": "8 September: 167 focused tests and 2 browser checks pass. Live test2 contains original and restored disposable projects. Fix not deployed.",
-      "updatedAt": "2026-09-08T17:51:49.894041+00:00"
+      "answer": "Automated save, isolation, import, restore and export flows passed. Failed existing-project imports now roll back, and atomic cloud replacement is implemented. Production migration, live Supabase fault injection, local-device replacement and destructive-delete acceptance remain.",
+      "evidence": "10 September: 1,059-test QA pass plus live import/merge browser flows; rollback coverage spans every importable collection. Atomic cloud replacement uses migration 20260910120000 and focused RPC/store tests pass. Migration not deployed.",
+      "updatedAt": "2026-09-10T21:15:00+01:00"
     },
     "export": {
       "status": "done",
