@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { zipSync } from 'fflate'
 import { MAX_ARCHIVE_INPUT_BYTES, MAX_ARCHIVE_FILE_COUNT, MAX_ARCHIVE_UNCOMPRESSED_BYTES } from '../utils/archiveImportLimits.js'
 import { readZipFile, tryReadYowZip, readDocxFile, tryReadStructuredZip, processFiles } from './AIImportModal.jsx'
 
@@ -6,12 +7,15 @@ import { readZipFile, tryReadYowZip, readDocxFile, tryReadStructuredZip, process
 // (0xFF / 0xFE) are intercepted to hand back a synthetic decompressed file
 // map — a huge file count or a huge reported total size — without actually
 // allocating that much memory in the test, mirroring the guidance to avoid
-// allocating a real multi-hundred-MB buffer.
+// allocating a real multi-hundred-MB buffer. `opts` (carrying the
+// ratio-check `filter`) is forwarded to the real unzip for every other
+// buffer, including the real zip-bomb-shaped fixtures used below.
 vi.mock('fflate', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
-    unzip: (buf, cb) => {
+    unzip: (buf, opts, cb) => {
+      if (!cb) { cb = opts; opts = undefined }
       if (buf.length === 1 && buf[0] === 0xff) {
         const files = {}
         for (let i = 0; i < MAX_ARCHIVE_FILE_COUNT + 1; i++) files[`f${i}.txt`] = new Uint8Array(0)
@@ -34,7 +38,7 @@ vi.mock('fflate', async (importOriginal) => {
         })
         return
       }
-      actual.unzip(buf, cb)
+      actual.unzip(buf, opts, cb)
     },
   }
 })
@@ -106,5 +110,60 @@ describe('an oversized nested novel.docx inside a compatible structured ZIP abor
     // meant only to tolerate a corrupt/invalid nested .docx, so the error
     // was swallowed and the import silently resolved without a manuscript.
     await expect(tryReadStructuredZip(fakeControlZipFile('withNovel.zip', 0xfd))).rejects.toThrow(/too large to import/)
+  })
+})
+
+// A real, fflate-built ZIP whose one entry is a large run of a repeated
+// byte — DEFLATE compresses it to a tiny fraction of its real size, the
+// exact shape a zip bomb exploits. 20MB of zeros compresses to roughly
+// 20KB (~1000:1), comfortably over the 100:1 cap and the 10MB floor the
+// ratio check requires before it applies at all.
+function realZipBombBytes(entryName = 'bomb.bin') {
+  const zipped = zipSync({ [entryName]: new Uint8Array(20 * 1024 * 1024) })
+  return zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength)
+}
+
+function fakeRealZipFile(name, arrayBuffer) {
+  return { name, arrayBuffer: async () => arrayBuffer }
+}
+
+describe('a single entry with an unsafe compression ratio is rejected (zip-bomb heuristic)', () => {
+  it('readZipFile rejects a real zip-bomb-shaped fixture before it is fully decompressed', async () => {
+    await expect(readZipFile(fakeRealZipFile('bomb.zip', realZipBombBytes())))
+      .rejects.toThrow(/compressed at an unsafe ratio/)
+  })
+
+  it('tryReadYowZip rejects the same fixture rather than falling through to another parser', async () => {
+    await expect(tryReadYowZip(fakeRealZipFile('bomb.zip', realZipBombBytes())))
+      .rejects.toThrow(/compressed at an unsafe ratio/)
+  })
+
+  it('tryReadStructuredZip rejects a compatible structured ZIP whose nested novel.docx is itself a real zip bomb', async () => {
+    // The outer archive looks like a normal, small "compatible structured
+    // ZIP" (one NC-format entry) — the only thing wrong with it is that its
+    // embedded novel.docx is a real zip bomb, proving the ratio check
+    // applies to the nested unzipSync(docxBytes) call too, not just the
+    // outer unzip.
+    const novelDocxBomb = zipSync({ 'bomb.bin': new Uint8Array(20 * 1024 * 1024) })
+    const outer = zipSync({
+      'characters/alice-abc1234567/metadata.json': new TextEncoder().encode(JSON.stringify({ attributes: { name: 'Alice' } })),
+      'novel.docx': novelDocxBomb,
+    })
+    const buffer = outer.buffer.slice(outer.byteOffset, outer.byteOffset + outer.byteLength)
+    await expect(tryReadStructuredZip(fakeRealZipFile('withNovelBomb.zip', buffer)))
+      .rejects.toThrow(/compressed at an unsafe ratio/)
+  })
+
+  it('does not reject an ordinary, non-bomb small text-heavy ZIP', async () => {
+    // A small manuscript-shaped ZIP (a couple of ordinary .txt entries) —
+    // proves the new ratio check doesn't false-positive on legitimate
+    // content that already imports successfully today.
+    const zipped = zipSync({
+      'chapter-1.txt': new TextEncoder().encode('It was a dark and stormy night. '.repeat(200)),
+      'chapter-2.txt': new TextEncoder().encode('The next morning brought clear skies. '.repeat(200)),
+    })
+    const buffer = zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength)
+    const results = await readZipFile(fakeRealZipFile('ok.zip', buffer))
+    expect(results.map(r => r.name).sort()).toEqual(['chapter-1.txt', 'chapter-2.txt'])
   })
 })
