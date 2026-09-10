@@ -54,7 +54,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What does Lifetime actually cover?',
-        a: "Lifetime gives you permanent access to the Your Own World app, Local Mode, unlimited local projects, premium exports, and all current features. It includes 3 years of Cloud Mode for hosted sync, storage, and backups. After that, the desktop app keeps working in Local Mode forever, and web cloud access falls back to Free limits unless you renew Cloud Mode for £6/year.",
+        a: "The planned Lifetime terms include a permanent licence for the purchased desktop version, unlimited local projects, exports, and the features included with that version. They also include 3 years of Cloud Mode for hosted sync, storage, and cloud backups. After that, the desktop app can continue in Local Mode, while web access falls back to Free limits unless you renew Cloud Mode for £6/year. The desktop workspace is still being completed and paid plans are not yet on sale.",
       },
       {
         q: 'What is the cloud hosting renewal?',
@@ -70,11 +70,11 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'How many Founder slots are there?',
-        a: "Founder membership is limited to a small number of slots globally. Once they're gone, they're gone. Founders have lifetime Cloud Mode included within the published storage and fair-use cap.",
+        a: "Founder membership is planned to be capped at 100 completed purchases, with availability confirmed at checkout. Founders receive Cloud Mode for the life of the YOW service without a renewal fee, within the published storage and fair-use limits.",
       },
       {
         q: 'What happens to my data if I downgrade to Free?',
-        a: "Your projects, characters, lore, and maps are always yours. If you downgrade to Free, all your data remains intact and readable/exportable. You'll designate one active project to edit with the full core toolkit, including Map Builder, inside the Free storage allowance. Everything else becomes view-only, and AI tools lock until you upgrade again.",
+        a: "You retain ownership of your work. If you downgrade to Free, you'll designate one retained project to edit with the core toolkit, including Map Builder, inside the 250 MB allowance. Other retained projects become view-only and can be exported, and AI tools lock until you upgrade again. We recommend exporting a ZIP backup before changing plans.",
       },
       {
         q: 'Can I cancel my Monthly subscription?',
@@ -94,11 +94,11 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What does "connect your own AI provider" mean?',
-        a: 'On any paid plan, you connect your own account from a provider like ChatGPT, Claude, or OpenRouter. You pay that provider directly for what you use — YOW never marks up AI usage or resells it to you. The Free plan doesn\'t include AI features.',
+        a: 'On a paid plan, you add an API key from a supported provider such as OpenRouter, Anthropic, Google AI, or another compatible service. A consumer ChatGPT Plus or Claude Pro subscription does not automatically include API access. You pay the provider directly for usage, and YOW does not add a markup. The Free plan does not include AI features.',
       },
       {
         q: 'Do the AI tools know about my specific world?',
-        a: 'Yes. Every AI tool in YOW reads your project context — characters, lore, manuscript structure — before generating any output. You get story-aware analysis, not generic writing prompts.',
+        a: 'YOW provides relevant context from the project and records selected for an AI action, such as characters, lore, or manuscript structure. Review the context notice and generated result before using it in your work.',
       },
       {
         q: 'What project types does YOW support?',
@@ -122,11 +122,11 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Where is my data stored?',
-        a: "In Cloud Mode, your data is stored securely in the cloud and syncs across your devices. In Local Mode, projects are stored on your device. You own your work either way and can export your manuscript and project data at any time.",
+        a: "In Cloud Mode, project data is stored with YOW's cloud provider and syncs across your signed-in devices. In desktop Local Mode, projects are stored in a local database on that device and cloud writes pause. You retain ownership of your work either way. Use project ZIP export for a restorable backup and DOCX or PDF when you need a readable copy.",
       },
       {
         q: 'Can I export my manuscript?',
-        a: 'Yes. All plans support exporting your manuscript as DOCX, PDF, or ZIP. Premium plans unlock advanced export formats and options.',
+        a: 'Yes. All plans support readable DOCX and PDF exports and a project ZIP backup. The ZIP is the format to use when you want to restore a project in YOW later.',
       },
     ],
   },
@@ -142,11 +142,15 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What is the difference between Cloud Mode and Local Mode?',
-        a: "In Cloud Mode, your data is stored securely in the cloud and syncs across your devices. In Local Mode, projects are stored on your device only. Both modes give you full access to the editor, all studio rooms, and exports — the only difference is where your data lives. You own your work either way.",
+        a: "Cloud Mode stores project data with YOW's cloud provider and syncs it across signed-in devices. Desktop Local Mode uses the local vault as the working copy and pauses cloud writes. A lapsed Lifetime account keeps local editing in the desktop app, while web access follows Free limits. You retain ownership of your work in either mode.",
       },
       {
         q: 'Can I switch between Local Mode and Cloud Mode?',
         a: "You can turn Local-first writing on from Account Settings → Membership. While it is on, YOW keeps using the current browser copy and will not pull older cloud data over your local work. When you turn Cloud Sync back on, the current browser copy is uploaded. Export a ZIP backup before changing modes if you want an extra safety copy.",
+      },
+      {
+        q: 'Is my data encrypted in the desktop app?',
+        a: "In desktop Local Mode, your projects live in a local database file on your device. YOW does not separately encrypt that file — its protection comes from your operating system's own disk encryption (FileVault on Mac, BitLocker on Windows), which we recommend keeping enabled. If your device is lost, stolen, or accessed while unlocked, someone with direct file access to it could read your local projects.",
       },
     ],
   },
@@ -162,7 +166,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Does YOW work on mobile?',
-        a: 'Yes — YOW is a web app that works on any modern browser, including mobile. The interface adapts to smaller screens so you can write and plan on the go.',
+        a: 'YOW runs in modern mobile browsers for writing, planning, and reviewing your project. Existing maps can be viewed on phones; map editing is supported on tablets and desktops.',
       },
       {
         q: 'Can I import an existing manuscript?',

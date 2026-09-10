@@ -8,7 +8,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_PATH="${ROOT_DIR}/src-tauri/target/release/bundle/macos/YOW.app"
 OUT_DIR="${ROOT_DIR}/src-tauri/target/release/bundle/zip"
-OUT_PATH="${OUT_DIR}/YOW_0.1.0_aarch64_macos.zip"
+APP_VERSION="$(node -p "require('${ROOT_DIR}/src-tauri/tauri.conf.json').version")"
+OUT_PATH="${OUT_DIR}/YOW_${APP_VERSION}_aarch64_macos.zip"
 
 if [[ ! -d "${APP_PATH}" ]]; then
   echo "Missing app bundle: ${APP_PATH}" >&2
