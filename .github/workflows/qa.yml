@@ -149,6 +149,8 @@ jobs:
             spec: tests/e2e/marketing-static-pages.spec.js
           - name: qa-sweep-2026-09-04
             spec: tests/e2e/qa-sweep-2026-09-04.spec.js
+          - name: qa-sweep-2026-09-10
+            spec: tests/e2e/qa-sweep-2026-09-10.spec.js
           # Added 2026-08-28. This spec existed in tests/e2e/ from the start but
           # was never listed here, so CI ran 13 of the directory's 14 files and
           # nothing flagged the gap — it had rotted to 4/4 failing against the
