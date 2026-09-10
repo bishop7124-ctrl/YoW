@@ -61,10 +61,24 @@ export function useTextareaCaretRect(textareaRef, scale = 1) {
     const borderTop = Number.parseFloat(computed.borderTopWidth) || 0
     const borderLeft = Number.parseFloat(computed.borderLeftWidth) || 0
 
+    // `top` lands on the caret's *line box* top (the marker's own small height
+    // only exists so its baseline-aligned box measures cleanly — it doesn't
+    // change where that top sits). `height` is reported as the full computed
+    // `lineHeight`, not the marker's own small height, because the one caller
+    // that reads it (useCaretComfortScroll's getCaretScrollDelta) uses
+    // `top + height` as the caret's line-box *bottom* for its comfort-zone
+    // boundary check. Reporting the marker's ~0.75×fontSize height there
+    // undercounted the real line-box bottom by `lineHeight - markerHeight`
+    // (confirmed against tests/e2e/focused-writing.spec.js's "long wrapped
+    // prose" case: the bottom-boundary correction was consistently landing
+    // the caret's line ~24px past its 65%-height target), so every downward
+    // correction quietly overshot by that same fixed amount. The other
+    // consumer (SceneEditor.jsx's syncFloatingNoteButton) only reads
+    // `top`/`left`, never `height`, so this doesn't affect it.
     const result = {
       top: textareaRect.top + markerRect.top - mirrorRect.top - textarea.scrollTop + borderTop,
       left: textareaRect.left + markerRect.left - mirrorRect.left - textarea.scrollLeft + borderLeft,
-      height: Math.min(markerRect.height || markerHeight, markerHeight, lineHeight),
+      height: lineHeight,
     }
     mirror.remove()
     return result
