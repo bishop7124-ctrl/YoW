@@ -7,6 +7,7 @@ import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, replaceUserData 
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
+import { createMemoryBackend, resetStorageBackend, setStorageBackend } from '../storage/projectStorage.js'
 import { markLocalWriteFailed } from '../storage/writeDurability.js'
 
 // Mock Supabase-backed modules so tests run without network
@@ -32,6 +33,7 @@ vi.mock('../utils/uploadUserMedia', async importOriginal => ({
 }))
 
 beforeEach(() => {
+  resetStorageBackend()
   localStorage.clear()
 })
 
@@ -251,6 +253,31 @@ describe('explicit data replacement', () => {
     })
 
     expect(result.current.novels).toEqual([expect.objectContaining({ id: original.id, title: 'Keep this project' })])
+  })
+
+  it('leaves rendered and mirrored local state unchanged when the local replacement transaction fails', async () => {
+    const originalNovel = { id: 'original', title: 'Keep this project', type: 'novel' }
+    const backend = createMemoryBackend({
+      nf_localOwner: 'replace-local-user',
+      nf_novels: JSON.stringify([originalNovel]),
+      nf_activeNovel: JSON.stringify(originalNovel.id),
+    })
+    backend.replaceItems = vi.fn(async () => { throw new Error('local transaction aborted') })
+    setStorageBackend(backend)
+    const { result, unmount } = renderHook(() => useStore('replace-local-user', { cloudSyncEnabled: false }))
+
+    await act(async () => {
+      await expect(result.current.replaceData({
+        novels: [{ id: 'replacement', title: 'Do not show', type: 'novel' }],
+        activeNovelId: 'replacement',
+      })).rejects.toThrow('local transaction aborted')
+    })
+
+    expect(result.current.novels).toEqual([originalNovel])
+    expect(JSON.parse(backend.getItem('nf_novels'))).toEqual([originalNovel])
+    expect(JSON.parse(backend.getItem('nf_localWriteFailed'))).toContain('nf_projectReplacement')
+    unmount()
+    resetStorageBackend()
   })
 })
 
