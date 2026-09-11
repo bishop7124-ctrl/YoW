@@ -1,5 +1,18 @@
 # Copy Conflicts and Approval Checklist
 
+## Status update — 10 September 2026
+
+The active customer copy has been corrected while preserving unresolved implementation gates:
+
+- Desktop and paid-plan copy is explicitly framed as planned for paid launch; schema uses `PreOrder` for paid offers. The full desktop workspace remains an implementation blocker.
+- AI copy now names API keys, distinguishes them from consumer subscriptions, and states that YOW relays requests and keys to the selected provider.
+- Founder copy states the approved cap of 100 completed purchases, says availability is confirmed at checkout, limits cloud wording to the life of the YOW service, and describes consent-managed profiles. The UI no longer displays a live remaining-slot counter before atomic allocation exists.
+- Unsupported player-view, cross-section activity, quantified 5–8 app, growing-community, “launch-ready,” and absolute loss-prevention claims found in active source were replaced.
+- Free/paid storage and prices now read £10/£99/£299, 250 MB/8 GB/15 GB in the client sources. Live Stripe reconciliation remains open.
+- Local Mode copy now discloses that YOW does not separately encrypt the desktop vault and recommends FileVault or BitLocker, per the owner's 10 September decision.
+
+The tables below preserve the original 1 September audit findings. Treat the items above as copy-resolved but keep their implementation and live-QA prerequisites open.
+
 Resolve in order. “Implementation first” means the intended statement may remain the product goal, but it must not be published as current fact until the named behavior passes.
 
 ## Blockers

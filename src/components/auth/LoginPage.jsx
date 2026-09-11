@@ -654,7 +654,7 @@ export default function LoginPage({
                 </p>
 
                 <p className="mt-8 text-center text-xs text-[var(--text-muted)]">
-                  Your data is stored securely and synced across all your devices.
+                  In Cloud Mode, your saved project data syncs across your signed-in devices.
                 </p>
 
                 {!isDesktop && <p className="mt-4 text-center text-xs">

@@ -1,5 +1,7 @@
 # Plan, Upgrade, Storage, and Account Copy
 
+> **10 September update:** this file began as a 1 September snapshot. Active source now uses £10 Monthly, £99 Lifetime and £299 Founder; labels paid plans and desktop as coming soon; requires provider API credentials; and qualifies Founder/cloud/update promises. The historical sections below remain useful for tracing the audit but do not override the runtime source or [COPY_CONFLICTS.md](COPY_CONFLICTS.md).
+
 This compares the current plan source with the other promise-bearing surfaces. Values below describe the repository, not an approved launch decision.
 
 ## Current client plan source (`src/utils/membership.js`)
@@ -20,7 +22,7 @@ This compares the current plan source with the other promise-bearing surfaces. V
 
 ### Lifetime
 
-- Display price: £150 once
+- Display price: £99 once
 - Description: Everything in Monthly, plus the desktop app — pay once and own it outright.
 - Long description: permanent desktop app for Mac/Windows and every future update; 3 years cloud sync; then £6/year to sync or Local Mode forever.
 - Features: full toolkit, unlimited projects, 8 GB, desktop Mac/Windows, every future update, 3 years cloud, then £6/year or free Local Mode, no subscription.
@@ -30,7 +32,7 @@ This compares the current plan source with the other promise-bearing surfaces. V
 
 ### Founder
 
-- Display price: £300 once
+- Display price: £299 once
 - Description: Everything in Lifetime, plus permanent recognition as an early believer.
 - Long description: more storage, lifetime cloud sync with no renewal, permanent status limited to 100 writers ever.
 - Features: 15 GB; lifetime cloud; permanent badge; feature debut work on YOW; priority influence.
@@ -51,8 +53,8 @@ This compares the current plan source with the other promise-bearing surfaces. V
 | Item | Current client value |
 | --- | ---: |
 | Monthly | £10/month |
-| Lifetime | £150 once |
-| Founder | £300 once |
+| Lifetime | £99 once |
+| Founder | £299 once |
 | Cloud renewal | £6/year |
 | Lifetime cloud included | 3 years |
 | Founder slots | 100 |

@@ -120,7 +120,7 @@ export default function Timeline({ store }) {
                 {allEvents.length === 0 ? 'Create events to build the story spine.' : 'Try a different search or era filter.'}
               </p>
               {allEvents.length === 0 && (
-                <button onClick={() => setFormState({ type: 'new' })} className="btn btn-primary btn-sm mt-4">Add First Event</button>
+                <button onClick={() => setFormState({ type: 'new' })} disabled={store.readOnly} className="btn btn-primary btn-sm mt-4">Add First Event</button>
               )}
               {allEvents.length > 0 && <button className="btn btn-secondary btn-sm mt-4" onClick={() => { setSearch(''); jumpToEra('all') }}>Clear filters</button>}
             </div>

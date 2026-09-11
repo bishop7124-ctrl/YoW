@@ -1,5 +1,7 @@
 # Lifecycle, Email, Onboarding, and Submission Copy
 
+> **10 September update:** the welcome email no longer claims a “growing community” or promises that nothing gets lost. Remaining email delivery, authorization, deduplication and live-render QA stay open.
+
 ## Welcome email (`supabase/functions/send-welcome-email/index.ts`)
 
 Subject: Welcome to Your Own World ✍️
