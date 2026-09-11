@@ -14,7 +14,7 @@ const LABEL_TYPES = [
   'novella',        // Part / Chapter / Scene
   'short_story',    // Part / Section / Scene
   'dnd_campaign',   // Story Arc / Session / Encounter
-  'ttrpg_campaign', // Campaign Arc / Session / Encounter
+  'tabletop_rpg',    // Campaign Arc / Session / Encounter
 ]
 
 test.beforeEach(async ({ page }) => {
