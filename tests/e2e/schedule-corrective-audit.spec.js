@@ -121,6 +121,99 @@ test.describe('Custom calendar shape', () => {
     await expect(page.locator('.schedule-grid')).toHaveCSS('--schedule-week', '7')
     await expect(page.getByRole('heading', { name: 'First Month · Year 1' })).toBeVisible()
   })
+
+  test('supports the 1-day and 14-day week-length extremes without breaking the grid', async ({ page }) => {
+    const errors = []
+    page.on('pageerror', error => errors.push(error.message))
+
+    await openCalendarSettings(page)
+    await page.getByLabel('Days per schedule week').fill('1')
+    await page.getByRole('button', { name: 'Save calendar' }).click()
+    await expect(page.getByRole('dialog', { name: 'Calendar settings' })).toHaveCount(0)
+    await expect(page.locator('.schedule-grid')).toHaveCSS('--schedule-week', '1')
+    // A 1-day week means every day is its own row: First Month (30 days by
+    // default) renders exactly 30 day cells, none dropped or duplicated.
+    await expect(page.locator('.schedule-day-cell')).toHaveCount(30)
+    await expect(page.getByText('Day 1', { exact: true })).toBeVisible()
+
+    await openCalendarSettings(page)
+    await page.getByLabel('Days per schedule week').fill('14')
+    await page.getByRole('button', { name: 'Save calendar' }).click()
+    await expect(page.getByRole('dialog', { name: 'Calendar settings' })).toHaveCount(0)
+    await expect(page.locator('.schedule-grid')).toHaveCSS('--schedule-week', '14')
+    await expect(page.getByText('Day 14', { exact: true })).toBeVisible()
+    // Still 30 real day cells for a 30-day month regardless of week length
+    // (the remaining 12 slots in the last row are empty padding, not buttons).
+    await expect(page.locator('.schedule-day-cell')).toHaveCount(30)
+
+    expect(errors).toEqual([])
+  })
+
+  test('supports a full 24-month calendar configuration', async ({ page }) => {
+    await openCalendarSettings(page)
+    // Grow from the default 12 months to the configured maximum of 24.
+    while (await page.getByLabel(/^Remove month \d+$/).count() < 24) {
+      await page.getByRole('button', { name: 'Add month' }).click()
+    }
+    await expect(page.getByRole('button', { name: 'Add month' })).toBeDisabled()
+    await expect(page.getByLabel(/^Remove month \d+$/)).toHaveCount(24)
+    await page.getByLabel('Month 24 name').fill('Endmonth')
+    await page.getByLabel('Month 24 days').fill('12')
+    await page.getByRole('button', { name: 'Save calendar' }).click()
+    await expect(page.getByRole('dialog', { name: 'Calendar settings' })).toHaveCount(0)
+
+    // All 24 months are selectable from the month dropdown.
+    await expect(page.getByLabel('Schedule month', { exact: true }).locator('option')).toHaveCount(24)
+    await page.getByLabel('Schedule month', { exact: true }).selectOption('24')
+    await expect(page.getByRole('heading', { name: 'Endmonth · Year 1' })).toBeVisible()
+
+    // Navigating past the 24th month wraps cleanly into year 2, month 1.
+    await page.getByLabel('Next schedule month').click()
+    await expect(page.getByRole('heading', { name: /Year 2$/ })).toBeVisible()
+  })
+
+  test('an event created under the historical 12x30x7 calendar keeps its exact stored date after the calendar shape changes', async ({ page }) => {
+    // Create the event BEFORE touching calendar settings, so it genuinely
+    // predates the shape change rather than starting life under the new
+    // shape — a fresh project already defaults to 12 months x 30 days x
+    // 7-day week, so this reproduces the real migration scenario (an
+    // existing project whose events were laid down under the historical
+    // default) rather than just re-confirming that default in isolation.
+    const title = `Pre-migration Event ${Date.now()}`
+    await page.getByRole('button', { name: 'Add event on First Month, day 15, year 1' }).click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByTitle(title)).toBeVisible()
+
+    // Shrink First Month so it no longer has 15 days — this event's stored
+    // date now falls outside the revised calendar shape.
+    await openCalendarSettings(page)
+    await page.getByLabel('Month 1 days').fill('10')
+    await page.getByRole('button', { name: 'Save calendar' }).click()
+    await expect(page.getByRole('dialog', { name: 'Calendar settings' })).toHaveCount(0)
+
+    // The raw stored record retains its original date exactly — the
+    // calendar-settings modal's own copy ("Existing events retain their
+    // stored dates") — rather than being silently rewritten or clamped.
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
+    const stored = await readStorage(page, 'nf_storySchedule')
+    const migrated = stored.find(event => event.title === title)
+    expect(migrated.year).toBe(1)
+    expect(migrated.month).toBe(1)
+    expect(migrated.day).toBe(15)
+
+    // Now out of range for the revised calendar, so Month view excludes it
+    // (isScheduleDateInCalendar) instead of crashing or showing a wrong day.
+    await expect(page.getByRole('heading', { name: 'First Month · Year 1' })).toBeVisible()
+    await expect(page.getByTitle(title)).toHaveCount(0)
+
+    // ...but it's still fully reachable in List view with its original,
+    // un-clamped date label.
+    await page.getByRole('group', { name: 'Schedule view' }).getByRole('button', { name: 'list' }).click()
+    await expect(page.getByRole('button', { name: new RegExp(title) })).toBeVisible()
+    await expect(page.getByText('First Month, Day 15 · Year 1')).toBeVisible()
+  })
 })
 
 test.describe('Opening view controls', () => {
@@ -247,6 +340,190 @@ test.describe('Event CRUD and validation across the real UI', () => {
     // The draft (title) survives the refused save.
     await expect(page.getByLabel('Title *')).toHaveValue('Impossible Date')
     await page.getByRole('button', { name: 'Cancel' }).click()
+  })
+
+  test('rejects a duration beyond the maximum, retaining the open draft', async ({ page }) => {
+    await page.getByRole('button', { name: 'Add event on First Month, day 1, year 1' }).click()
+    await page.getByLabel('Title *').fill('Too Long')
+    await page.getByLabel('Event duration').fill('36601')
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+    await expect(page.getByRole('alert')).toHaveText('Duration must be between 1 and 36,600 days.')
+    await expect(page.getByLabel('Title *')).toHaveValue('Too Long')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+  })
+
+  test('a same-month event crossing a week boundary renders as two week-row segments', async ({ page }) => {
+    const title = `Week Crosser ${Date.now()}`
+    // First Month, default 7-day week: day 1 starts week row 0 at column 1
+    // (leadingDays is 0 for month 1). Day 5 + duration 5 (days 5-9) crosses
+    // from week row 0 (days 1-7) into week row 1 (days 8-14) — a *within
+    // the same month* boundary, distinct from the cross-month case above.
+    await page.getByRole('button', { name: 'Add event on First Month, day 5, year 1' }).click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByLabel('Event duration').fill('5')
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // Two separate ribbon segments in the SAME month view, one per week row.
+    await expect(page.getByRole('button', { name: new RegExp(`^${title} →$`) })).toBeVisible()
+    await expect(page.getByRole('button', { name: new RegExp(`^← ${title}$`) })).toBeVisible()
+  })
+
+  test('a cross-year event spans correctly in month view and the list date-range label', async ({ page }) => {
+    const title = `Turn of the Year ${Date.now()}`
+    await page.getByLabel('Schedule month', { exact: true }).selectOption('12')
+    await page.getByRole('button', { name: 'Add event on Twelfth Month, day 28, year 1' }).click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByLabel('Event duration').fill('6')
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: new RegExp(`^${title} →$`) })).toBeVisible()
+
+    await page.getByLabel('Next schedule month').click() // Twelfth Month Year 1 -> First Month Year 2
+    await expect(page.getByRole('heading', { name: 'First Month · Year 2' })).toBeVisible()
+    await expect(page.getByRole('button', { name: new RegExp(`^← ${title}$`) })).toBeVisible()
+
+    // List view's own row only shows the start date (scheduleDateLabel) plus
+    // a bare "N days" tag — the full start–end range (scheduleRangeLabel)
+    // renders in the event's detail sheet, so open that to check the actual
+    // cross-year span is computed correctly end-to-end.
+    await page.getByRole('group', { name: 'Schedule view' }).getByRole('button', { name: 'list' }).click()
+    await expect(page.getByText('Twelfth Month, Day 28 · Year 1')).toBeVisible()
+    await page.getByRole('button', { name: new RegExp(title) }).click()
+    await expect(page.getByText('Twelfth Month, Day 28 · Year 1 — First Month, Day 3 · Year 2 · 6 days')).toBeVisible()
+  })
+
+  test('more than three same-day events all stack into distinct lanes', async ({ page }) => {
+    const stamp = Date.now()
+    const titles = [1, 2, 3, 4].map(n => `Overlap ${n} ${stamp}`)
+    for (const title of titles) {
+      // Use the header's "Add event" trigger (defaults to day 1) rather than
+      // the day-10 cell itself: once a couple of ribbons are already stacked
+      // on that cell they visually cover its own "Add event on ..." button,
+      // so re-clicking the cell for every additional overlapping event is
+      // not a realistic user path here — set the day explicitly instead.
+      // Scoped to the toolbar: the empty-month prompt renders its own
+      // same-labelled "Add event" button too while day 10 has zero events.
+      await page.locator('.schedule-toolbar-actions').getByRole('button', { name: 'Add event', exact: true }).click()
+      await page.getByLabel('Title *').fill(title)
+      await page.getByLabel('Event day').fill('10')
+      await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+    }
+
+    const margins = []
+    for (const title of titles) {
+      const ribbon = page.getByRole('button', { name: title, exact: true })
+      await expect(ribbon).toBeVisible()
+      margins.push(await ribbon.evaluate(el => el.style.marginTop))
+    }
+    // Each of the 4 same-day events gets its own lane (distinct vertical
+    // offset) instead of overlapping or hiding one another.
+    expect(new Set(margins).size).toBe(4)
+  })
+})
+
+test.describe('Cross-tab event edits', () => {
+  // Simulates a second real browser tab on the same account/project via a
+  // second Page in the same (shared-storage) browser context — the actual
+  // mechanism this app uses for cross-tab sync in offline/local mode is a
+  // same-origin BroadcastChannel bridging the IndexedDB-backed vault
+  // (src/storage/browserVaultAdapter.js's wireCrossTabSync), which two Pages
+  // in one Playwright BrowserContext exercise for real, not a mock.
+  async function openSecondTab(context, url) {
+    const pageB = await context.newPage()
+    await pageB.goto(url)
+    await dismissLaunchPrompts(pageB)
+    await waitForStorageHydration(pageB)
+    await openSchedule(pageB)
+    return pageB
+  }
+
+  test('two tabs editing different fields on the same event both survive without clobbering each other', async ({ page, context }) => {
+    const title = `Cross-tab Merge ${Date.now()}`
+    await page.getByRole('button', { name: 'Add event on First Month, day 5, year 1' }).click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByLabel('Tags (comma-separated)').fill('original')
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    const pageB = await openSecondTab(context, page.url())
+
+    // Both tabs open the SAME event's editor before either one saves.
+    await page.getByRole('button', { name: new RegExp(title) }).click()
+    await page.getByRole('button', { name: 'Edit' }).click()
+    await pageB.getByRole('button', { name: new RegExp(title) }).click()
+    await pageB.getByRole('button', { name: 'Edit' }).click()
+
+    // Tab B changes only the category, and saves first.
+    await pageB.getByRole('button', { name: 'Festival', exact: true }).click()
+    await pageB.getByRole('button', { name: 'Save changes' }).click()
+    await expect(pageB.getByRole('dialog')).toHaveCount(0)
+
+    // Give the cross-tab BroadcastChannel write time to land.
+    await page.waitForTimeout(1000)
+
+    // Tab A, unaware of Tab B's edit, changes only the tags and saves.
+    await page.getByLabel('Tags (comma-separated)').fill('original, tab-a')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // Both edits survive: Tab B's category change AND Tab A's tags change —
+    // neither tab's field-level edit clobbers the other's.
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
+    const stored = await readStorage(page, 'nf_storySchedule')
+    const merged = stored.find(event => event.title === title)
+    expect(merged.category).toBe('festival')
+    expect(merged.tags).toEqual(['original', 'tab-a'])
+
+    // Different fields merge cleanly — nothing to flag for review.
+    await expect(page.locator('.ms-toolbar-conflict-btn')).toHaveCount(0)
+
+    await pageB.close()
+  })
+
+  test('two tabs editing the SAME field on the same event: this tab\'s save is kept and the other tab\'s version is preserved for review, not silently lost', async ({ page, context }) => {
+    const title = `Cross-tab Field Race ${Date.now()}`
+    await page.getByRole('button', { name: 'Add event on First Month, day 5, year 1' }).click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    const pageB = await openSecondTab(context, page.url())
+
+    await page.getByRole('button', { name: new RegExp(title) }).click()
+    await page.getByRole('button', { name: 'Edit' }).click()
+    await pageB.getByRole('button', { name: new RegExp(title) }).click()
+    await pageB.getByRole('button', { name: 'Edit' }).click()
+
+    // Tab B renames the event first and saves.
+    await pageB.getByLabel('Title *').fill('Renamed in Tab B')
+    await pageB.getByRole('button', { name: 'Save changes' }).click()
+    await expect(pageB.getByRole('dialog')).toHaveCount(0)
+
+    await page.waitForTimeout(1000)
+
+    // Tab A, unaware, renames it differently and saves. This app's cross-tab
+    // policy elsewhere (scenes) is "your edit here is saved as-is — nothing
+    // is lost", not a hard block — confirm Schedule events follow the same
+    // rule rather than silently discarding Tab A's own save.
+    await page.getByLabel('Title *').fill('Renamed in Tab A')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
+    const stored = await readStorage(page, 'nf_storySchedule')
+    expect(stored).toHaveLength(1)
+    expect(stored[0].title).toBe('Renamed in Tab A')
+
+    // Tab B's overwritten title is not silently discarded either — it
+    // surfaces as a reviewable sync conflict instead of disappearing outright.
+    await expect(page.locator('.ms-toolbar-conflict-btn')).toContainText('1 sync conflict')
+    await page.locator('.ms-toolbar-conflict-btn').click()
+    await expect(page.getByRole('dialog', { name: 'Records changed in another tab' })).toBeVisible()
+    await expect(page.getByText('Renamed in Tab B')).toBeVisible()
+
+    await pageB.close()
   })
 })
 
