@@ -1094,6 +1094,98 @@ describe('getProjectExportData', () => {
   })
 })
 
+describe('existing-project import rollback', () => {
+  it('restores every importable project collection after a failed population pass', () => {
+    const { result } = renderHook(() => useStore(null))
+    let novel
+    act(() => {
+      novel = result.current.addNovel({ title: 'Protected project', type: 'comic' })
+    })
+    act(() => {
+      result.current.saveCharacter({ name: 'Existing character' })
+      result.current.setFactions([{ id: 'existing-faction', name: 'Existing faction' }])
+      result.current.addEra({ name: 'Existing era' })
+      result.current.updateWhiteboard({ notes: [{ id: 'existing-note', text: 'Keep me' }], groups: [] })
+      result.current.addMap('Existing map', 'regional')
+    })
+
+    const baseline = result.current.getProjectExportData(novel.id)
+
+    act(() => {
+      result.current.beginProjectImport()
+      result.current.saveCharacter({ name: 'Partial character' })
+      result.current.setFactions(prev => [...prev, { id: 'partial-faction', name: 'Partial faction' }])
+      result.current.addLocation({ name: 'Partial location' })
+      result.current.addEvent({ title: 'Partial event' }, { createHistory: false })
+      result.current.addHistoryEntry({ title: 'Partial history' })
+      result.current.addEra({ name: 'Partial era' })
+      result.current.addLoreEntry({ title: 'Partial lore' })
+      result.current.addIdeaEntry({ title: 'Partial idea' })
+      const importedAct = result.current.addAct('Partial act')
+      const importedChapter = result.current.addChapter(importedAct.id, 'Partial issue')
+      const importedScene = result.current.addScene(importedChapter.id, 'Partial scene')
+      result.current.updateScene(importedScene.id, { content: 'Partial manuscript' })
+      const importedPage = result.current.addComicPage(importedChapter.id, { title: 'Partial page' })
+      result.current.addComicPanel(importedPage.id, { description: 'Partial panel' })
+      result.current.saveRpgCharacter({ name: 'Partial party member' })
+      result.current.addScheduleEvent({ title: 'Partial schedule event', year: 1, month: 1, day: 1 })
+      result.current.addMap('Partial map', 'regional')
+      result.current.updateWhiteboard({ notes: [{ id: 'partial-note', text: 'Remove me' }], groups: [] })
+      expect(result.current.restoreProjectSnapshot(novel.id, baseline)).toBe(true)
+      result.current.endProjectImport()
+    })
+
+    const restored = result.current.getProjectExportData(novel.id)
+    const withoutTimestamp = ({ exportedAt: _exportedAt, ...data }) => data
+    expect(withoutTimestamp(restored)).toEqual(withoutTimestamp(baseline))
+  })
+
+  it('keeps imported scene writes off the cloud until the batch has settled', () => {
+    const { result } = renderHook(() => useStore('cloud-import-user'))
+    let novel
+    act(() => {
+      novel = result.current.addNovel({ title: 'Cloud project', type: 'novel' })
+    })
+    const baseline = result.current.getProjectExportData(novel.id)
+    vi.mocked(saveSceneDoc).mockClear()
+
+    act(() => {
+      result.current.beginProjectImport()
+      const actRecord = result.current.addAct('Imported act')
+      const chapter = result.current.addChapter(actRecord.id, 'Imported chapter')
+      const scene = result.current.addScene(chapter.id, 'Imported scene')
+      result.current.updateScene(scene.id, { content: 'Imported text' })
+      result.current.restoreProjectSnapshot(novel.id, baseline)
+      result.current.endProjectImport(false)
+    })
+
+    expect(saveSceneDoc).not.toHaveBeenCalled()
+  })
+
+  it('writes completed imported scenes to the cloud after the batch commits', () => {
+    const { result } = renderHook(() => useStore('cloud-import-success-user'))
+    act(() => {
+      result.current.addNovel({ title: 'Cloud project', type: 'novel' })
+    })
+    vi.mocked(saveSceneDoc).mockClear()
+
+    let importedScene
+    act(() => {
+      result.current.beginProjectImport()
+      const actRecord = result.current.addAct('Imported act')
+      const chapter = result.current.addChapter(actRecord.id, 'Imported chapter')
+      importedScene = result.current.addScene(chapter.id, 'Imported scene')
+      result.current.updateScene(importedScene.id, { content: 'Imported text' })
+      result.current.endProjectImport(true)
+    })
+
+    expect(saveSceneDoc).toHaveBeenCalledExactlyOnceWith(
+      'cloud-import-success-user',
+      expect.objectContaining({ id: importedScene.id, content: 'Imported text' }),
+    )
+  })
+})
+
 describe('remaining workspace integrity boundaries', () => {
   it('keeps RPG character updates and deletes inside the active project', () => {
     localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n1', title: 'One', type: 'dnd_campaign' }, { id: 'n2', title: 'Two', type: 'dnd_campaign' }]))

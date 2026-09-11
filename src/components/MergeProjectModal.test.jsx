@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, render, screen, fireEvent } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import MergeProjectModal from './MergeProjectModal.jsx'
 
 afterEach(cleanup)
@@ -104,5 +104,34 @@ describe('MergeProjectModal', () => {
 
     fireEvent.click(screen.getByRole('checkbox'))
     expect(mergeButton.disabled).toBe(true)
+  })
+
+  it('restores the destination snapshot when population fails', async () => {
+    const novels = [
+      { id: 'dest-1', type: 'novel', title: 'Destination', characters: [{ id: 'kept', name: 'Keep me' }] },
+      { id: 'src-1', type: 'novel', title: 'Source Novel', characters: [{ id: 'source', name: 'Source character' }] },
+    ]
+    const restoreProjectSnapshot = vi.fn(() => true)
+    const beginProjectImport = vi.fn()
+    const endProjectImport = vi.fn()
+    const store = mockStore(novels, {
+      saveCharacter: () => { throw new Error('Injected population failure') },
+      restoreProjectSnapshot,
+      beginProjectImport,
+      endProjectImport,
+    })
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<MergeProjectModal store={store} project={novels[0]} onClose={() => {}} />)
+
+    fireEvent.change(screen.getByLabelText(/merge from/i), { target: { value: 'src-1' } })
+    fireEvent.click(screen.getByRole('button', { name: /merge in/i }))
+
+    await waitFor(() => expect(restoreProjectSnapshot).toHaveBeenCalledTimes(1))
+    expect(restoreProjectSnapshot.mock.calls[0][0]).toBe('dest-1')
+    expect(restoreProjectSnapshot.mock.calls[0][1].characters).toEqual([{ id: 'kept', name: 'Keep me' }])
+    expect(beginProjectImport).toHaveBeenCalledTimes(1)
+    expect(endProjectImport).toHaveBeenCalledExactlyOnceWith(false)
+    expect(screen.getByText(/destination project was restored/i)).toBeTruthy()
+    consoleError.mockRestore()
   })
 })
