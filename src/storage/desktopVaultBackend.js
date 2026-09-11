@@ -23,11 +23,13 @@ function normalizeEntries(entries = {}) {
 }
 
 function noop() {}
+const REPLACEMENT_WRITE_KEY = 'nf_projectReplacement'
 
 export function createDesktopVaultBackend({
   entries = {},
   persistItem,
   removePersistedItem,
+  replacePersistedItems,
   onWriteError = noop,
   onWriteSuccess = noop,
   retry,
@@ -35,6 +37,9 @@ export function createDesktopVaultBackend({
   const mirror = normalizeEntries(entries)
   const persist = typeof persistItem === 'function' ? persistItem : async () => {}
   const removePersisted = typeof removePersistedItem === 'function' ? removePersistedItem : async () => {}
+  const replacePersisted = typeof replacePersistedItems === 'function'
+    ? replacePersistedItems
+    : async () => { throw new Error('Desktop vault replacement transaction is unavailable.') }
   let queue = Promise.resolve()
   let pendingCount = 0
   let lastError = null
@@ -67,6 +72,28 @@ export function createDesktopVaultBackend({
     removeItem: key => {
       mirror.delete(key)
       return enqueue(key, () => removePersisted(key))
+    },
+    replaceItems: (entriesToSet = {}, keysToRemove = []) => {
+      const nextEntries = normalizeEntries(entriesToSet)
+      const removeKeys = Array.from(new Set(keysToRemove)).filter(key => !nextEntries.has(key))
+      pendingCount += 1
+      const operation = queue
+        .then(() => withRetry(() => replacePersisted(nextEntries, removeKeys), retry))
+        .then(() => {
+          removeKeys.forEach(key => mirror.delete(key))
+          nextEntries.forEach((value, key) => mirror.set(key, String(value)))
+          pendingCount = Math.max(0, pendingCount - 1)
+          lastError = null
+          onWriteSuccess(REPLACEMENT_WRITE_KEY)
+        })
+        .catch(error => {
+          pendingCount = Math.max(0, pendingCount - 1)
+          lastError = error
+          onWriteError(error, REPLACEMENT_WRITE_KEY)
+          throw error
+        })
+      queue = operation.catch(() => {})
+      return operation
     },
     flush: () => queue,
     snapshot: () => Object.fromEntries(mirror),

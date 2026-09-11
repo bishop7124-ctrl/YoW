@@ -57,6 +57,32 @@ describe('tauri vault adapter', () => {
     resetStorageBackend()
   })
 
+  it('routes a multi-key replacement through one SQLite transaction command', async () => {
+    vi.stubEnv('MODE', 'desktop')
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async command => command === 'vault_read_all'
+          ? [{ key: 'old', value: 'original' }, { key: 'stale', value: 'remove' }]
+          : null),
+      },
+    }
+
+    const { initializeDesktopVaultStorage } = await import('./tauriVaultAdapter.js')
+    const { resetStorageBackend } = await import('./projectStorage.js')
+    const backend = await initializeDesktopVaultStorage()
+    await backend.replaceItems({ old: 'replacement', added: 'new' }, ['stale'])
+
+    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('vault_replace_items', {
+      entries: [
+        { key: 'old', value: 'replacement' },
+        { key: 'added', value: 'new' },
+      ],
+      removeKeys: ['stale'],
+    })
+    expect(backend.snapshot()).toEqual({ old: 'replacement', added: 'new' })
+    resetStorageBackend()
+  })
+
   it('exposes desktop vault info, snapshots, restore, and Finder reveal commands', async () => {
     vi.stubEnv('MODE', 'desktop')
     window.__TAURI__ = {

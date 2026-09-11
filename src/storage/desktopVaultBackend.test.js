@@ -104,4 +104,31 @@ describe('desktop vault backend shell', () => {
       nf_activeMapByNovel: '{}',
     })
   })
+
+  it('commits a replacement to the mirror only after the SQLite transaction succeeds', async () => {
+    const replacePersistedItems = vi.fn(async () => {})
+    const backend = createDesktopVaultBackend({
+      entries: { old: 'original', stale: 'remove me' },
+      replacePersistedItems,
+    })
+
+    await backend.replaceItems({ old: 'replacement', added: 'new' }, ['stale'])
+
+    expect(replacePersistedItems).toHaveBeenCalledWith(
+      new Map([['old', 'replacement'], ['added', 'new']]),
+      ['stale'],
+    )
+    expect(backend.snapshot()).toEqual({ old: 'replacement', added: 'new' })
+  })
+
+  it('keeps the mirror unchanged when the SQLite replacement transaction fails', async () => {
+    const backend = createDesktopVaultBackend({
+      entries: { old: 'original' },
+      replacePersistedItems: async () => { throw new Error('sqlite rollback') },
+      retry: { attempts: 1 },
+    })
+
+    await expect(backend.replaceItems({ old: 'replacement' })).rejects.toThrow('sqlite rollback')
+    expect(backend.snapshot()).toEqual({ old: 'original' })
+  })
 })

@@ -58,7 +58,7 @@ extern "C" {
   fn sqlite3_changes(db: *mut sqlite3) -> c_int;
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct VaultEntry {
   key: String,
   value: String,
@@ -352,13 +352,17 @@ fn column_string(stmt: *mut sqlite3_stmt, column: c_int) -> String {
 #[tauri::command]
 fn vault_set_item(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
   let db = open_vault(&app)?;
+  set_vault_item(&db, &key, &value)
+}
+
+fn set_vault_item(db: &Db, key: &str, value: &str) -> Result<(), String> {
   let stmt = prepare(
     db.raw,
     "INSERT INTO kv (key, value, updated_at) VALUES (?1, ?2, unixepoch()) \
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch();",
   )?;
-  bind_text(stmt, 1, &key)?;
-  bind_text(stmt, 2, &value)?;
+  bind_text(stmt, 1, key)?;
+  bind_text(stmt, 2, value)?;
   let result = unsafe { sqlite3_step(stmt) };
   unsafe {
     sqlite3_finalize(stmt);
@@ -373,8 +377,12 @@ fn vault_set_item(app: tauri::AppHandle, key: String, value: String) -> Result<(
 #[tauri::command]
 fn vault_remove_item(app: tauri::AppHandle, key: String) -> Result<(), String> {
   let db = open_vault(&app)?;
+  remove_vault_item(&db, &key)
+}
+
+fn remove_vault_item(db: &Db, key: &str) -> Result<(), String> {
   let stmt = prepare(db.raw, "DELETE FROM kv WHERE key = ?1;")?;
-  bind_text(stmt, 1, &key)?;
+  bind_text(stmt, 1, key)?;
   let result = unsafe { sqlite3_step(stmt) };
   unsafe {
     sqlite3_finalize(stmt);
@@ -384,6 +392,41 @@ fn vault_remove_item(app: tauri::AppHandle, key: String) -> Result<(), String> {
   } else {
     Err(db_error(db.raw))
   }
+}
+
+fn replace_vault_items(
+  db: &Db,
+  entries: &[VaultEntry],
+  remove_keys: &[String],
+) -> Result<(), String> {
+  exec(db.raw, "BEGIN IMMEDIATE;")?;
+  let result = (|| {
+    for key in remove_keys {
+      remove_vault_item(db, key)?;
+    }
+    for entry in entries {
+      set_vault_item(db, &entry.key, &entry.value)?;
+    }
+    Ok(())
+  })();
+
+  match result {
+    Ok(()) => exec(db.raw, "COMMIT;"),
+    Err(error) => {
+      let _ = exec(db.raw, "ROLLBACK;");
+      Err(error)
+    }
+  }
+}
+
+#[tauri::command]
+fn vault_replace_items(
+  app: tauri::AppHandle,
+  entries: Vec<VaultEntry>,
+  remove_keys: Vec<String>,
+) -> Result<(), String> {
+  let db = open_vault(&app)?;
+  replace_vault_items(&db, &entries, &remove_keys)
 }
 
 #[tauri::command]
@@ -1037,6 +1080,7 @@ pub fn run() {
       vault_read_all,
       vault_set_item,
       vault_remove_item,
+      vault_replace_items,
       vault_info,
       vault_integrity_status,
       vault_create_snapshot,
@@ -1300,6 +1344,41 @@ mod tests {
       Some("Chapter One, Revised".to_string())
     );
     assert_eq!(get_item(&db, "missing-key").unwrap(), None);
+  }
+
+  #[test]
+  fn replace_vault_items_rolls_back_every_change_when_one_write_fails() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let db = open_db(&root.path().join("vault.db")).unwrap();
+    set_vault_item(&db, "existing", "original").unwrap();
+    set_vault_item(&db, "stale", "keep on failure").unwrap();
+    exec(
+      db.raw,
+      "CREATE TRIGGER reject_bad_key BEFORE INSERT ON kv WHEN NEW.key = 'bad' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;",
+    ).unwrap();
+
+    let entries = vec![
+      VaultEntry {
+        key: "existing".to_string(),
+        value: "replacement".to_string(),
+      },
+      VaultEntry {
+        key: "bad".to_string(),
+        value: "never commits".to_string(),
+      },
+    ];
+    let result = replace_vault_items(&db, &entries, &["stale".to_string()]);
+
+    assert!(result.is_err());
+    assert_eq!(
+      get_item(&db, "existing").unwrap(),
+      Some("original".to_string())
+    );
+    assert_eq!(
+      get_item(&db, "stale").unwrap(),
+      Some("keep on failure".to_string())
+    );
+    assert_eq!(get_item(&db, "bad").unwrap(), None);
   }
 
   #[test]
