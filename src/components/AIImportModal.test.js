@@ -201,6 +201,28 @@ describe('populateYowProject', () => {
     expect(store.calls.maps[1].mapPins).toEqual([{ id: 'p2' }])
   })
 
+  it('remaps a map object/region/pin Location link to the imported Location, and nulls it if the Location was not imported', () => {
+    const store = mockStore()
+    const data = {
+      locations: [{ id: 'old-loc', novelId: 'old-novel', name: 'Capital City' }],
+      maps: [{
+        id: 'old-map', novelId: 'old-novel', name: 'Continent', mapType: 'region',
+        mapObjects: [{ id: 'o1', linkedEntity: { entityType: 'location', entityId: 'old-loc' } }],
+        mapRegions: [{ id: 'r1', linkedEntity: { entityType: 'location', entityId: 'old-loc' } }],
+        mapPins: [{ id: 'p1', linkedEntity: { entityType: 'location', entityId: 'missing-loc' } }],
+      }],
+    }
+    populateYowProject(store, data, { locations: true, maps: true })
+    const newLocationId = store.calls.locations[0].id
+    expect(newLocationId).not.toBe('old-loc')
+    const map = store.calls.maps[0]
+    // Linked to a Location that was imported: remapped to its new id.
+    expect(map.mapObjects[0].linkedEntity).toEqual({ entityType: 'location', entityId: newLocationId })
+    expect(map.mapRegions[0].linkedEntity).toEqual({ entityType: 'location', entityId: newLocationId })
+    // Linked to a Location that was not imported: dropped, not left stale.
+    expect(map.mapPins[0].linkedEntity).toBeNull()
+  })
+
   it('does not recreate eras when neither world history nor timeline is selected', () => {
     const store = mockStore()
     const data = {
