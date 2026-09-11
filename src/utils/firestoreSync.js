@@ -272,12 +272,13 @@ export async function deleteItem(table, userId, itemId) {
   if (error) console.error(`[sync] delete error for ${table}:`, error)
 }
 
-// Delete all entity rows for a novel (used when deleting a project)
-export async function deleteItemsByNovel(userId, novelId) {
-  if (OFFLINE_MODE || !novelId) return
-  await Promise.all(NOVEL_TABLES.map(table =>
-    supabase.from(table).delete().eq('user_id', userId).eq('novel_id', novelId)
-  ))
+// Deletes a project and every normalized child row in one database
+// transaction. The RPC also removes the project from series ordering and
+// clears project-scoped user settings before it commits.
+export async function deleteProjectData(userId, novelId) {
+  if (OFFLINE_MODE || !userId || !novelId) return
+  const { error } = await supabase.rpc('delete_project_data_atomic', { p_novel_id: novelId })
+  throwIfSupabaseError(error, 'atomic project delete error')
 }
 
 // Reads the authoritative storage-usage counter for a user, maintained by a DB
@@ -365,21 +366,7 @@ export async function deleteSceneDoc(userId, sceneId) {
 
 // Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
-  if (OFFLINE_MODE) return
-  const allTables = [
-    ...USER_TABLES,
-    ...NOVEL_TABLES,
-    'user_settings',
-    'user_profiles',
-    'synced_ai_settings',
-    'ai_findings',
-    'character_interviews',
-    'feedback',
-    // legacy pre-migration tables
-    'project_data',
-    'user_data',
-  ]
-  await Promise.all(allTables.map(table =>
-    supabase.from(table).delete().eq('user_id', userId)
-  ))
+  if (OFFLINE_MODE || !userId) return
+  const { error } = await supabase.rpc('delete_user')
+  throwIfSupabaseError(error, 'atomic account delete error')
 }
