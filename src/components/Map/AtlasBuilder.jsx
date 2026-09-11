@@ -22,13 +22,13 @@ const titleCase = value => value[0].toUpperCase() + value.slice(1)
 const TOOL_INFO = {
   select: ['Select', 'Click an item to edit it. Drag it to move.'],
   pan: ['Move view', 'Drag the map to look around. Use Fit to see everything.'],
-  shape: ['Land', 'Drag around a coastline. Release to close the shape.'],
-  water: ['Water', 'Drag around a lake or riverbank. Release to fill with water.'],
+  shape: ['Land', 'Click around the coastline, then finish the land shape.'],
+  water: ['Water', 'Click around the shoreline, then finish the water shape.'],
   river: ['River', 'Drag to draw a river. Release to finish.'],
   road: ['Route', 'Drag to draw a route. Release to finish.'],
   territory: ['Territory', 'Drag around an area. Release to close its boundary.'],
   wall: ['Wall', 'Click each corner. Press Enter or Finish wall to complete; Escape cancels.'],
-  stamp: ['Symbols', 'Choose a symbol, then click the map to place it.'],
+  stamp: ['Symbols', 'Click the map to place the chosen symbol, or drag one here.'],
   location: ['Place', 'Click the map to add a place, then name or link it.'],
   label: ['Label', 'Click the map to place a separate label.'],
 }
@@ -38,7 +38,7 @@ const TOOL_KEYS = { v: 'select', h: 'pan', l: 'shape', w: 'water', r: 'river', p
 const SHORTCUTS = [
   ['V / H', 'Select / move view'], ['L / W', 'Land or room / water'], ['R / P', 'River / route'], ['B / X', 'Territory / wall'], ['S / M / T', 'Symbols / place / text'],
   ['⌘ or Ctrl Z', 'Undo'], ['⌘ or Ctrl Shift Z / Ctrl Y', 'Redo'], ['⌘ or Ctrl D', 'Duplicate selection'], ['Delete / Backspace', 'Delete selection'],
-  ['Arrow keys', 'Move selection (Shift for larger steps)'], ['+ / − / 0', 'Zoom in / out / fit'], ['F', 'Expand or restore canvas'], ['Enter', 'Finish a point-to-point wall'], ['Escape', 'Cancel drawing / clear selection'], ['?', 'Show keyboard shortcuts'],
+  ['Arrow keys', 'Move selection (Shift for larger steps)'], ['+ / − / 0', 'Zoom in / out / fit'], ['F', 'Expand or restore canvas'], ['Enter', 'Finish point-by-point land, water or wall'], ['Escape', 'Cancel drawing / clear selection'], ['?', 'Show keyboard shortcuts'],
 ]
 
 export default function AtlasBuilder({ store }) {
@@ -121,15 +121,21 @@ function Editor({ map, store, onLibrary }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [lineWidth, setLineWidth] = useState(5)
+  const [landMode, setLandMode] = useState('points')
+  const [waterMode, setWaterMode] = useState('points')
   const [symbolSearch, setSymbolSearch] = useState('')
   const [symbolSize, setSymbolSize] = useState(42)
   const [cursor, setCursor] = useState(null)
   const [wallPointCount, setWallPointCount] = useState(0)
+  const [landPointCount, setLandPointCount] = useState(0)
+  const [waterPointCount, setWaterPointCount] = useState(0)
   const shortcutsRef = useRef(null)
   const deleteRef = useRef(null)
   useDialogFocus(shortcutsRef, () => setShowShortcuts(false), showShortcuts)
   useDialogFocus(deleteRef, () => setShowDelete(false), showDelete)
   const wallRef = useRef(null)
+  const landRef = useRef(null)
+  const waterRef = useRef(null)
   const svgRef = useRef(null)
   const gesture = useRef(null)
   const objects = map.mapObjects || []
@@ -154,11 +160,25 @@ function Editor({ map, store, onLibrary }) {
   }
   function patch(props) { commit({ ...current, mapObjects: objects.map(o => o.id === selectedId ? { ...o, ...props } : o) }) }
   function remove() { if (selected && commit({ ...current, mapObjects: objects.filter(o => o.id !== selectedId) })) setSelectedId(null) }
-  function cancel() { gesture.current = null; wallRef.current = null; setWallPointCount(0); setDraft(null); setCursor(null) }
+  function cancel() { gesture.current = null; wallRef.current = null; landRef.current = null; waterRef.current = null; setWallPointCount(0); setLandPointCount(0); setWaterPointCount(0); setDraft(null); setCursor(null) }
   function finishWall() {
     const wall = wallRef.current
     if (!wall || wall.geometry.points.length < 2) return
     if (commit({ ...current, mapObjects: [...objects, wall] })) { setSelectedId(wall.id); wallRef.current = null; setWallPointCount(0); setDraft(null) }
+  }
+  function finishWater() {
+    const water = waterRef.current
+    if (!water || water.geometry.points.length < 3) return
+    if (commit({ ...current, mapObjects: [...objects, water] })) { setSelectedId(water.id); setTool('select'); waterRef.current = null; setWaterPointCount(0); setDraft(null) }
+  }
+  function finishLand() {
+    const land = landRef.current
+    if (!land || land.geometry.points.length < 3) return
+    if (commit({ ...current, mapObjects: [...objects, land] })) { setSelectedId(land.id); setTool('select'); landRef.current = null; setLandPointCount(0); setDraft(null) }
+  }
+  function placeStamp(point, nextSymbol = symbol, nextSize = symbolSize) {
+    const stamp = makeObject('stamp', point, { symbol: nextSymbol, name: '', size: nextSize })
+    if (commit({ ...current, mapObjects: [...objects, stamp] })) { setSelectedId(stamp.id); setSymbol(nextSymbol) }
   }
   function duplicate() {
     if (!selected) return
@@ -176,6 +196,8 @@ function Editor({ map, store, onLibrary }) {
     else if (command && key === 'd') duplicate()
     else if (command || e.altKey) handled = false
     else if (key === 'enter' && wallRef.current) finishWall()
+    else if (key === 'enter' && landRef.current) finishLand()
+    else if (key === 'enter' && waterRef.current) finishWater()
     else if (key === 'escape') { cancel(); setTool('select'); setSelectedId(null); setExpanded(false) }
     else if (key === 'delete' || key === 'backspace') remove()
     else if (key.startsWith('arrow') && selected) {
@@ -218,6 +240,24 @@ function Editor({ map, store, onLibrary }) {
       setDraft({ ...wall, geometry: { ...wall.geometry, points: [...wall.geometry.points] } })
       return
     }
+    if (tool === 'water' && waterMode === 'points') {
+      const previous = waterRef.current || makeObject('water', { x:0, y:0 }, { size: lineWidth, drawMode: 'points' }, [])
+      const last = previous.geometry.points.at(-1)
+      const water = !last || Math.hypot(last.x-p.x,last.y-p.y) > 1 ? { ...previous, geometry: { ...previous.geometry, points: [...previous.geometry.points,p] } } : previous
+      waterRef.current = water
+      setWaterPointCount(water.geometry.points.length)
+      setDraft(water)
+      return
+    }
+    if (tool === 'shape' && !interior && landMode === 'points') {
+      const previous = landRef.current || makeObject('shape', { x:0, y:0 }, { size: lineWidth, drawMode: 'points' }, [])
+      const last = previous.geometry.points.at(-1)
+      const land = !last || Math.hypot(last.x-p.x,last.y-p.y) > 1 ? { ...previous, geometry: { ...previous.geometry, points: [...previous.geometry.points,p] } } : previous
+      landRef.current = land
+      setLandPointCount(land.geometry.points.length)
+      setDraft(land)
+      return
+    }
     svgRef.current.setPointerCapture(e.pointerId)
     if (tool === 'pan') { gesture.current = { kind: 'pan', x: e.clientX, y: e.clientY, view }; return }
     if (tool === 'select') {
@@ -226,7 +266,8 @@ function Editor({ map, store, onLibrary }) {
       return
     }
     if (['stamp','label','location'].includes(tool)) {
-      const o = makeObject(tool, p, { symbol, ...(tool === 'location' ? { showLabel: false } : {}), name: tool === 'label' ? 'New label' : tool === 'location' ? 'New place' : '', size: tool === 'stamp' ? symbolSize : 42 })
+      if (tool === 'stamp') { placeStamp(p); return }
+      const o = makeObject(tool, p, { symbol, ...(tool === 'location' ? { showLabel: false } : {}), name: tool === 'label' ? 'New label' : tool === 'location' ? 'New place' : '', size: 42 })
       if (commit({ ...current, mapObjects: [...objects, o] })) { setSelectedId(o.id); if (tool !== 'stamp') setTool('select') }
       return
     }
@@ -241,12 +282,22 @@ function Editor({ map, store, onLibrary }) {
       if (tool === 'stamp') setCursor(p)
       const wall = wallRef.current
       if (wall && p) setDraft({ ...wall, geometry: { ...wall.geometry, points: [...wall.geometry.points,p] } })
+      const land = landRef.current
+      if (land && p) setDraft({ ...land, geometry: { ...land.geometry, points: [...land.geometry.points,p] } })
+      const water = waterRef.current
+      if (water && p) setDraft({ ...water, geometry: { ...water.geometry, points: [...water.geometry.points,p] } })
       return
     }
     if (g.kind === 'pan') { setView({ ...g.view, x: g.view.x + e.clientX-g.x, y: g.view.y + e.clientY-g.y }); return }
     const p = point(e)
     if (!p) return
     if (g.kind === 'move') { g.draft = moveObject(g.object, p.x-g.start.x, p.y-g.start.y); setDraft(g.draft); return }
+    if (g.kind === 'point-move') {
+      const key = g.object.geometry.straightPoints ? 'straightPoints' : 'points'
+      g.draft = { ...g.object, geometry: { ...g.object.geometry, [key]: g.object.geometry[key].map((item,index) => index === g.index ? p : item) } }
+      setDraft(g.draft)
+      return
+    }
     if (interior && tool === 'shape') g.points = [g.start, { x: p.x, y: g.start.y }, p, { x: g.start.x, y: p.y }]
     else if (Math.hypot(p.x-g.points.at(-1).x, p.y-g.points.at(-1).y) > 3 && g.points.length < 4000) g.points.push(p)
     g.draft = { ...g.draft, geometry: { ...g.draft.geometry, points: [...g.points] } }
@@ -260,8 +311,25 @@ function Editor({ map, store, onLibrary }) {
     gesture.current = null
     if (svgRef.current.hasPointerCapture(e.pointerId)) svgRef.current.releasePointerCapture(e.pointerId)
     if (g?.kind === 'move' && finished && (finished.x !== g.object.x || finished.y !== g.object.y)) commit({ ...current, mapObjects: objects.map(o => o.id === g.object.id ? finished : o) })
-    if (g?.kind === 'draw' && finished && g.points.length >= (finished.geometry.type === 'polygon' ? 3 : 2)) { commit({ ...current, mapObjects: [...objects, finished] }); setSelectedId(finished.id) }
+    if (g?.kind === 'point-move' && finished) commit({ ...current, mapObjects: objects.map(o => o.id === g.object.id ? finished : o) })
+    if (g?.kind === 'draw' && finished && g.points.length >= (finished.geometry.type === 'polygon' ? 3 : 2) && commit({ ...current, mapObjects: [...objects, finished] })) { setSelectedId(finished.id); if (finished.type === 'water' || (finished.type === 'shape' && !finished.properties?.room)) setTool('select') }
     setDraft(null)
+  }
+  function startPointMove(e, object, index) {
+    if (e.button !== 0 || gesture.current) return
+    e.preventDefault(); e.stopPropagation()
+    svgRef.current.focus({ preventScroll:true })
+    svgRef.current.setPointerCapture(e.pointerId)
+    gesture.current = { kind:'point-move', object, index, draft:object }
+  }
+  function dropStamp(e) {
+    if (tool !== 'stamp') return
+    e.preventDefault()
+    const nextSymbol = e.dataTransfer.getData('application/x-yow-atlas-symbol') || e.dataTransfer.getData('text/plain')
+    if (!SYMBOL_GROUPS.some(group => group.symbols.includes(nextSymbol))) return
+    const p = point(e)
+    if (p) placeStamp(p, nextSymbol, symbolSize)
+    setCursor(null)
   }
   async function exportMap(kind) {
     if (kind === 'json') { downloadBlob(new Blob([JSON.stringify({ format: ATLAS_VERSION, name: map.name, mapType: map.mapType, ...current }, null, 2)], { type: 'application/json' }), `${map.name}.json`); return }
@@ -270,7 +338,7 @@ function Editor({ map, store, onLibrary }) {
     try {
       const clone = svgRef.current.cloneNode(true)
       clone.removeAttribute('style'); clone.setAttribute('width','2400'); clone.setAttribute('height','1600')
-      clone.querySelectorAll('[data-selection], [data-preview], [data-draft]').forEach(el => el.remove())
+      clone.querySelectorAll('[data-selection], [data-edit-handles], [data-preview], [data-draft]').forEach(el => el.remove())
       const xml = new XMLSerializer().serializeToString(clone)
       const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' })
       if (kind === 'svg') { downloadBlob(blob, `${map.name}.svg`); return }
@@ -289,7 +357,7 @@ function Editor({ map, store, onLibrary }) {
   return <div className={`atlas-editor${expanded ? ' atlas-expanded' : ''}${sidebarOpen ? '' : ' atlas-sidebar-hidden'}`}>
     <header className="atlas-topbar"><button onClick={onLibrary}>← Atlas</button><div className="atlas-title"><input aria-label="Map name" key={map.name} defaultValue={map.name} onBlur={e => { if (e.target.value.trim() && e.target.value !== map.name) store.renameMap(map.id, e.target.value.trim()) }} onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}/><span>{titleCase(map.mapType)} map</span></div><div className="atlas-history"><button disabled={!history.past.length} onClick={() => undo()} aria-label="Undo">↶</button><button disabled={!history.future.length} onClick={() => undo(true)} aria-label="Redo">↷</button></div><button aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShowShortcuts(true)}>?</button><button className="atlas-space-toggle" aria-pressed={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? 'Exit expanded view' : 'Expand canvas'}</button><button aria-label={sidebarOpen ? 'Hide panel' : 'Show panel'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(v => !v)}>☷</button><details className="atlas-export"><summary>Export ↓</summary><div>{['png','svg','json'].map(k => <button key={k} disabled={exporting} onClick={() => exportMap(k)}>{k === 'json' ? 'Editable map JSON' : `${k.toUpperCase()} image`}</button>)}</div></details></header>
     <div className="atlas-workspace"><nav className="atlas-tools" aria-label="Map tools">{tools.map(t => <button key={t} aria-pressed={tool === t} title={`${TOOL_INFO[t][0]} (${Object.keys(TOOL_KEYS).find(k => TOOL_KEYS[k] === t)?.toUpperCase()})`} aria-keyshortcuts={Object.keys(TOOL_KEYS).find(k => TOOL_KEYS[k] === t)} onClick={() => changeTool(t)}><b aria-hidden="true">{TOOL_ICONS[t]}</b><span>{interior && t === 'shape' ? 'Room' : TOOL_INFO[t][0]}</span></button>)}</nav>
-      <div className="atlas-stage"><div className="atlas-hint">{interior && tool === 'shape' ? 'Drag from one corner to the other to draw a room.' : TOOL_INFO[tool][1]}</div><div className="atlas-viewport"><div className="atlas-paper" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}><AtlasCanvas svgRef={svgRef} objects={visibleObjects} metadata={metadata} name={map.name} selectedId={selectedId} onPick={start} onPointerDown={e => start(e)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onPointerLeave={() => setCursor(null)} onDoubleClick={() => { if (tool === 'wall') finishWall() }} draftId={draft?.id} placementPreview={tool === 'stamp' && cursor ? { id: 'placement-preview', type: 'stamp', ...cursor, properties: { symbol, size: symbolSize } } : null} tabIndex={0}/></div></div><div className="atlas-view-controls"><button aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(.5,v.zoom-.25) }))}>−</button><span>{Math.round(view.zoom*100)}%</span><button aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3,v.zoom+.25) }))}>+</button><button onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Fit</button></div><div className="atlas-caption">{objects.length} elements · Changes save with your project</div></div>
+      <div className="atlas-stage"><div className="atlas-hint" aria-live="polite">{interior && tool === 'shape' ? 'Drag from one corner to the other to draw a room.' : tool === 'shape' && landMode === 'freehand' ? 'Drag around a coastline. Release to fill with land.' : tool === 'water' && waterMode === 'freehand' ? 'Drag around a lake or riverbank. Release to fill with water.' : TOOL_INFO[tool][1]}</div><div className="atlas-viewport"><div className="atlas-paper" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}><AtlasCanvas svgRef={svgRef} objects={visibleObjects} metadata={metadata} name={map.name} selectedId={selectedId} onPick={start} onPointPick={startPointMove} onPointerDown={e => start(e)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onPointerLeave={() => setCursor(null)} onDoubleClick={() => { if (tool === 'wall') finishWall(); if (tool === 'shape' && !interior && landMode === 'points') finishLand(); if (tool === 'water' && waterMode === 'points') finishWater() }} onDragOver={e => { if (tool === 'stamp') e.preventDefault() }} onDrop={dropStamp} draftId={draft?.id} placementPreview={tool === 'stamp' && cursor ? { id: 'placement-preview', type: 'stamp', ...cursor, properties: { symbol, size: symbolSize } } : null} tabIndex={0}/></div></div><div className="atlas-view-controls"><button aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(.5,v.zoom-.25) }))}>−</button><span>{Math.round(view.zoom*100)}%</span><button aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3,v.zoom+.25) }))}>+</button><button onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Fit</button></div><div className="atlas-caption">{objects.length} elements · Changes save with your project</div></div>
       <aside className="atlas-sidebar" hidden={!sidebarOpen}>
         <label>Select map element<select aria-label="Select map element" value={selectedId || ''} onChange={event => { cancel(); setSelectedId(event.target.value || null); setTool('select') }}><option value="">Choose an element…</option>{objects.map((object, index) => <option key={object.id} value={object.id}>{object.properties?.name || `${titleCase(object.type)} ${index + 1}`}{object.visible === false ? ' (hidden)' : ''}</option>)}</select></label>
         {selected && <div className="atlas-options">{['x', 'y'].map(axis => {
@@ -300,15 +368,17 @@ function Editor({ map, store, onLibrary }) {
 
         <div className="atlas-drawing-settings">
           {tool === 'wall' && <div><p>Click each corner, then finish the wall.</p><div className="atlas-options"><button disabled={wallPointCount < 2} onClick={finishWall}>Finish wall</button><button disabled={!wallPointCount} onClick={cancel}>Cancel wall</button></div></div>}
+          {tool === 'shape' && !interior && <div><fieldset><legend>Draw land with</legend><div className="atlas-options" role="group" aria-label="Land drawing mode"><button type="button" aria-pressed={landMode === 'points'} onClick={() => { cancel(); setLandMode('points') }}>Coastline points</button><button type="button" aria-pressed={landMode === 'freehand'} onClick={() => { cancel(); setLandMode('freehand') }}>Freehand</button></div></fieldset>{landMode === 'points' && <><p>Click around the coastline. The final edge closes automatically.</p><div className="atlas-options"><button disabled={landPointCount < 3} onClick={finishLand}>Finish land</button><button disabled={!landPointCount} onClick={cancel}>Cancel</button></div></>}</div>}
+          {tool === 'water' && <div><fieldset><legend>Draw water with</legend><div className="atlas-options" role="group" aria-label="Water drawing mode"><button type="button" aria-pressed={waterMode === 'points'} onClick={() => { cancel(); setWaterMode('points') }}>Shoreline points</button><button type="button" aria-pressed={waterMode === 'freehand'} onClick={() => { cancel(); setWaterMode('freehand') }}>Freehand</button></div></fieldset>{waterMode === 'points' && <><p>Click around the shoreline. The final edge closes automatically.</p><div className="atlas-options"><button disabled={waterPointCount < 3} onClick={finishWater}>Finish water</button><button disabled={!waterPointCount} onClick={cancel}>Cancel</button></div></>}</div>}
           {['river','road','wall'].includes(tool) && <label>New {tool === 'river' ? 'river' : tool === 'wall' ? 'wall' : 'route'} thickness: {lineWidth}<input aria-label="New line thickness" type="range" min="1" max="40" value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))}/></label>}
           {!interior && <label className="atlas-checkbox"><input type="checkbox" checked={metadata.organicBorders !== false} onChange={e => commit({ ...current, metadata: { ...metadata, organicBorders: e.target.checked } })}/> Organic borders</label>}
           {!interior && metadata.organicBorders !== false && <label>Border variation<input aria-label="Border variation" type="range" min="2" max="30" value={metadata.organicStrength || 12} onChange={e => commit({ ...current, metadata: { ...metadata, organicStrength: Number(e.target.value) } })}/></label>}
           {metadata.gridSettings?.enabled && <label className="atlas-checkbox"><input type="checkbox" checked={Boolean(metadata.gridSettings.snapToGrid)} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, snapToGrid: e.target.checked } } })}/> Snap to grid</label>}
         </div>
-        {tool === 'stamp' ? <><span className="atlas-eyebrow">MAKE YOUR MARK</span><h2>A few familiar shapes.</h2><p>Click a symbol, then place it on the map. You can keep placing as many as you like.</p><label>Symbol size: {symbolSize}<input aria-label="Symbol size" type="range" min="20" max="140" value={symbolSize} onChange={e => setSymbolSize(Number(e.target.value))}/></label><label>Find a symbol<input type="search" value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)} placeholder="Bridge, cave, bed…"/></label>{SYMBOL_GROUPS.filter(group => group.interior === interior).map(group => {
+        {tool === 'stamp' ? <><span className="atlas-eyebrow">MAKE YOUR MARK</span><h2>A few familiar shapes.</h2><p>Click a symbol, then click the map — or drag a symbol straight onto the map.</p><div className="atlas-placement-callout" role="status"><span>Placing</span><svg viewBox="-40 -40 80 80" aria-hidden="true"><InkSymbol kind={symbol}/></svg><strong>{titleCase(symbol)}</strong><small>Esc returns to Select</small></div><label>Symbol size: {symbolSize}<input aria-label="Symbol size" type="range" min="20" max="140" value={symbolSize} onChange={e => setSymbolSize(Number(e.target.value))}/></label><label>Find a symbol<input type="search" value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)} placeholder="Bridge, cave, bed…"/></label>{SYMBOL_GROUPS.filter(group => group.interior === interior).map(group => {
           const matches = group.symbols.filter(s => s.includes(symbolSearch.toLowerCase().trim()))
-          return matches.length ? <div key={group.name}><h3>{group.name}</h3><div className="atlas-symbols">{matches.map(s => <button key={s} aria-pressed={symbol === s} onClick={() => setSymbol(s)}><svg viewBox="-40 -40 80 80"><InkSymbol kind={s}/></svg><span>{titleCase(s)}</span></button>)}</div></div> : null
-        })}{!SYMBOL_GROUPS.some(g => g.interior === interior && g.symbols.some(s => s.includes(symbolSearch.toLowerCase().trim()))) && <p>No matching symbols.</p>}</> : selected ? <><span className="atlas-eyebrow">SELECTED {selected.type === 'stamp' ? 'SYMBOL' : selected.type.toUpperCase()}</span><h2>Make it yours.</h2><label>Name<input aria-label="Element name" value={selected.properties?.name || ''} onChange={e => patch({ properties: { ...selected.properties, name: e.target.value } })} placeholder="Give this place a name"/></label>
+          return matches.length ? <div key={group.name}><h3>{group.name}</h3><div className="atlas-symbols">{matches.map(s => <button key={s} draggable="true" aria-pressed={symbol === s} title={`Select ${titleCase(s)}, or drag it onto the map`} onClick={() => setSymbol(s)} onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('application/x-yow-atlas-symbol', s); e.dataTransfer.setData('text/plain', s) }}><svg viewBox="-40 -40 80 80"><InkSymbol kind={s}/></svg><span>{titleCase(s)}</span></button>)}</div></div> : null
+        })}{!SYMBOL_GROUPS.some(g => g.interior === interior && g.symbols.some(s => s.includes(symbolSearch.toLowerCase().trim()))) && <p>No matching symbols.</p>}</> : selected ? <><span className="atlas-eyebrow">SELECTED {selected.type === 'stamp' ? 'SYMBOL' : selected.type.toUpperCase()}</span><h2>Make it yours.</h2>{selected.properties?.drawMode === 'points' && <p>Drag any round point to reshape this area, or drag inside it to move the whole shape.</p>}<label>Name<input aria-label="Element name" value={selected.properties?.name || ''} onChange={e => patch({ properties: { ...selected.properties, name: e.target.value } })} placeholder="Give this place a name"/></label>
           {['river','road','wall'].includes(selected.type) && <label>{selected.type === 'river' ? 'River' : selected.type === 'wall' ? 'Wall' : 'Route'} thickness: {selected.properties?.size || 5}<input aria-label="Line thickness" type="range" min="1" max="40" value={selected.properties?.size || 5} onChange={e => patch({ properties: { ...selected.properties, size: Number(e.target.value) } })}/></label>}
           {!selected.geometry && <label>Size<input type="range" min="20" max="100" value={selected.properties?.size || 42} onChange={e => patch({ properties: { ...selected.properties, size: Number(e.target.value) } })}/></label>}
           {selected.type === 'location' && <label className="atlas-checkbox"><input type="checkbox" checked={selected.properties?.showLabel === true} onChange={e => patch({ properties: { ...selected.properties, showLabel: e.target.checked } })}/> Show location label</label>}

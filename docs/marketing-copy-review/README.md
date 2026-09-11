@@ -2,7 +2,15 @@
 
 Prepared: 1 September 2026
 
+Implementation pass: 10 September 2026
+
 This folder is the review index for customer-facing marketing, upgrade, onboarding, lifecycle-email, legal-promise, SEO, and static landing-page text used by YOW.
+
+## 10 September implementation status
+
+The source copy now treats Free as the currently available plan and labels Monthly, Lifetime, Founder, and the desktop workspace as planned paid-launch terms. It no longer presents paid offers as in-stock structured data. AI setup refers to provider API keys, explains that consumer ChatGPT/Claude subscriptions do not automatically include API access, and says YOW relays requests to the selected provider. Unsupported player-view, community-growth, quantified market, broad future-update, and absolute data-safety claims were removed from the active sources found in this pass. Founder copy now uses the approved 100 completed-purchase cap, checkout confirmation, consent-managed profiles, and the approved refund/chargeback rule. The Local Mode privacy disclosure records the owner's device-encryption decision.
+
+Remaining blockers are implementation or live-QA work: the full desktop workspace, atomic Founder allocation, Stripe test-mode reconciliation, cloud durability/restore acceptance, and the final owner copy approval. The dated inventories below retain the 1 September findings as audit history; this status note and [COPY_CONFLICTS.md](COPY_CONFLICTS.md) describe their current disposition.
 
 ## How to use this folder
 

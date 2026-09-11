@@ -1961,8 +1961,11 @@ textarea:focus {
   53%, 100% { opacity: 0; }
 }
 .ms-textarea--rich::placeholder {
-  color: var(--studio-muted);
-  -webkit-text-fill-color: var(--studio-muted);
+  /* The rich preview beneath this textarea already renders the empty-state
+     prompt. Keep the native placeholder in the DOM for selectors and browser
+     semantics, but do not paint a second copy over the preview. */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Paragraph indentation is presentation, never literal whitespace in scene.content.
@@ -4019,8 +4022,8 @@ textarea:focus {
 }
 
 .manuscript-processor .ms-textarea.ms-textarea--rich::placeholder {
-  color: var(--studio-muted) !important;
-  -webkit-text-fill-color: var(--studio-muted) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
 }
 
 .modal-overlay,

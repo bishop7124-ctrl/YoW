@@ -103,7 +103,7 @@ const FEATURE_TABS = [
     capabilities: [
       'Word count tracking and daily goals',
       'Chapter and scene progress indicators',
-      'Recent activity feed across all project sections',
+      'Recently updated manuscript scenes',
       'Quick-jump to any section of your project',
       'Writing streak calendar',
       'Project health overview',
@@ -145,11 +145,11 @@ const FEATURE_TABS = [
     ),
     overview: 'Character dossiers with personality profiles, physical descriptions, backstory, motivations, and story links in one place.',
     shot: { src: '/screenshots/character-dossier.jpg', alt: 'A character dossier in Your Own World showing profile details, faction, and biography', width: 1600, height: 613 },
-    why: 'Characters are the heart of any story, but their details scatter across notebooks and documents. YOW centralizes every character so you never contradict yourself two hundred pages later.',
+    why: 'Characters are the heart of any story, but their details scatter across notebooks and documents. YOW keeps character records together so details are easier to check while you write.',
     useCases: [
       { type: 'Novel', text: 'Build full protagonist profiles, track character arc milestones, and see exactly which scenes each character appears in.' },
       { type: 'Short Story', text: 'Keep only the essential character details close at hand for a tighter cast.' },
-      { type: 'D&D Campaign', text: 'Create NPC profiles with goals, secrets, faction loyalties, and DM-only notes hidden from players.' },
+      { type: 'D&D Campaign', text: 'Create private NPC profiles with goals, secrets, faction loyalties, and GM notes for campaign preparation.' },
     ],
     capabilities: [
       'Rich character profiles with custom fields',
@@ -175,7 +175,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Document your magic system rules, historical events, and cultural traditions so every scene stays internally consistent.' },
       { type: 'Novella', text: 'Keep the world rules and backstory that matter without carrying a full epic-scale bible.' },
-      { type: 'D&D Campaign', text: 'Build a world codex — gods, histories, languages, and laws — that your players can explore progressively as they discover it.' },
+      { type: 'D&D Campaign', text: 'Build a private world codex for gods, histories, languages, laws, and campaign discoveries.' },
     ],
     capabilities: [
       'Tagged and categorized lore entries',
@@ -225,9 +225,9 @@ const FEATURE_TABS = [
     shot: { src: '/screenshots/map-terrain-editor.jpg', alt: 'Your Own World map builder showing terrain editing tools and a linked location pin on an interactive map', width: 1600, height: 971 },
     why: 'A map is worth a thousand words of description. YOW connects your visual geography to your written world so pins link directly to location pages, lore, and associated characters.',
     useCases: [
-      { type: 'Novel', text: 'Pin every city, keep, and landmark your characters visit, with plot-relevant notes visible only as your story reaches those places.' },
+      { type: 'Novel', text: 'Pin every city, keep, and landmark your characters visit, with plot relevance and visit notes attached to each place.' },
       { type: 'TTRPG Campaign', text: 'Upload campaign maps and connect important places to your location database.' },
-      { type: 'D&D Campaign', text: 'Layer world maps, regional maps, and dungeon floor plans — each with pins your players discover progressively.' },
+      { type: 'D&D Campaign', text: 'Prepare world maps, regional maps, and dungeon floor plans with linked locations and GM notes.' },
     ],
     capabilities: [
       'Upload any image as a map canvas',
@@ -833,7 +833,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
         <section className="yow-section" aria-label="Feature comparison by project type">
           <div className="yow-section-header">
             <p className="eyebrow">Not one size fits all</p>
-            <h2>YOW adapts to launch-ready project types.</h2>
+            <h2>YOW adapts its workspace to each project type.</h2>
             <p className="yow-section-sub">
               Every project type gets its own structure, defaults, and workspace language — built for the way that format actually works.
             </p>
@@ -870,7 +870,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
             <p className="eyebrow">The tool sprawl problem</p>
             <h2>Stop managing tools. Start building worlds.</h2>
             <p className="yow-section-sub">
-              Most writers use 5–8 separate apps for what YOW handles in one place. Every context switch costs time, momentum, and the thread of your story.
+              Manuscripts, character notes, lore, maps, and timelines often end up in separate tools. YOW keeps those parts connected in one project workspace.
             </p>
           </div>
           <div className="yow-problems-grid">
