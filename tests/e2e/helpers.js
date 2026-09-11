@@ -126,7 +126,9 @@ export async function createProject(page, { title, type = 'novel' } = {}) {
 }
 
 export function writingNavButton(page) {
-  return page.getByLabel('Studio navigation').getByRole('button', { name: /^(Write|Sessions|Pages)$/ })
+  return page.getByLabel('Studio navigation').getByRole('button', {
+    name: /^(Write|Sessions|Pages)$/,
+  })
 }
 
 export async function enterWritingMode(page) {

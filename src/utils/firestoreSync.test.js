@@ -287,21 +287,32 @@ describe('scene cloud cleanup on project delete', () => {
     })
   })
 
-  it('deleteItemsByNovel leaves no scene rows behind for the deleted project, without touching other projects', async () => {
-    const { deleteItemsByNovel } = await import('./firestoreSync.js')
+})
 
-    mockState.tables.scenes = [
-      { user_id: 'user-1', scene_id: 'scene-1', novel_id: 'novel-1', data: { id: 'scene-1', novelId: 'novel-1' } },
-      { user_id: 'user-1', scene_id: 'scene-2', novel_id: 'novel-1', data: { id: 'scene-2', novelId: 'novel-1' } },
-      { user_id: 'user-1', scene_id: 'scene-3', novel_id: 'novel-2', data: { id: 'scene-3', novelId: 'novel-2' } },
-      // Another user's row with the same novel_id must survive too.
-      { user_id: 'user-2', scene_id: 'scene-4', novel_id: 'novel-1', data: { id: 'scene-4', novelId: 'novel-1' } },
-    ]
+describe('atomic destructive deletes', () => {
+  beforeEach(() => {
+    mockState.rpcCalls = []
+    mockState.rpcError = null
+  })
 
-    await deleteItemsByNovel('user-1', 'novel-1')
+  it('deletes a project through one authenticated transaction RPC', async () => {
+    const { deleteProjectData } = await import('./firestoreSync.js')
+    await deleteProjectData('user-1', 'novel-1')
+    expect(mockState.rpcCalls).toEqual([
+      { name: 'delete_project_data_atomic', args: { p_novel_id: 'novel-1' } },
+    ])
+  })
 
-    const remaining = mockState.tables.scenes
-    expect(remaining.find(r => r.novel_id === 'novel-1' && r.user_id === 'user-1')).toBeUndefined()
-    expect(remaining.map(r => r.scene_id).sort()).toEqual(['scene-3', 'scene-4'])
+  it('surfaces project deletion rollback errors', async () => {
+    const { deleteProjectData } = await import('./firestoreSync.js')
+    mockState.rpcError = { message: 'injected project failure' }
+    await expect(deleteProjectData('user-1', 'novel-1'))
+      .rejects.toThrow(/atomic project delete error: injected project failure/)
+  })
+
+  it('deletes an account through the single transactional delete_user RPC', async () => {
+    const { deleteAllUserData } = await import('./firestoreSync.js')
+    await deleteAllUserData('user-1')
+    expect(mockState.rpcCalls).toEqual([{ name: 'delete_user', args: undefined }])
   })
 })
