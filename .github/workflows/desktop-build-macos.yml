@@ -59,6 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           codesign --verify --deep --strict src-tauri/target/release/bundle/macos/YOW.app
+          unzip -t src-tauri/target/release/bundle/zip/YOW_*.zip
           find src-tauri/target/release/bundle -type f \
             \( -name '*.zip' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \) \
             -print0 | sort -z | xargs -0 shasum -a 256 > src-tauri/target/release/bundle/SHA256SUMS.txt
