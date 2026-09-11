@@ -10,12 +10,12 @@ const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest 
 const emptyForm = () => ({ name: '', logo: [], description: '' })
 const getMemberRoles = (faction) => faction?.memberRoles && typeof faction.memberRoles === 'object' ? faction.memberRoles : {}
 
-export default function Factions({ store }) {
+export default function Factions({ store, initialEntryId = null }) {
   const { factions, saveFaction, deleteFaction, characters, setSelectedCharacterId } = store
   const [showForm, setShowForm] = useState(false)
   const [showLogoEditor, setShowLogoEditor] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [selectedFactionId, setSelectedFactionId] = useState(null)
+  const [selectedFactionId, setSelectedFactionId] = useState(initialEntryId)
   const [form, setForm] = useState(emptyForm())
   const [sortBy, setSortBy] = useState('name-asc')
 

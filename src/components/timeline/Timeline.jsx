@@ -75,6 +75,7 @@ export default function Timeline({ store }) {
         <div>
           <p className="eyebrow">Chronicle</p>
           <h2 className="font-serif text-xl font-bold text-[var(--text-main)]">Timeline</h2>
+          <p className="text-xs text-[var(--text-muted)]">Dated events in your story and world. Manage eras and historical records in History.</p>
         </div>
         <div className="tl2-toolbar">
           {currentYear != null && String(currentYear).trim() !== '' ? <span className="tl2-year-badge">Year {currentYear}</span> : null}
@@ -85,7 +86,7 @@ export default function Timeline({ store }) {
             aria-label="Search events"
             className="field px-3 py-1.5 text-base w-44 placeholder:text-[var(--text-muted)]"
           />
-          <button onClick={() => setFormState({ type: 'new' })} className="btn btn-primary btn-sm">New Event</button>
+          <button onClick={() => setFormState({ type: 'new' })} disabled={store.readOnly} className="btn btn-primary btn-sm">New Event</button>
         </div>
       </div>
 
@@ -119,7 +120,7 @@ export default function Timeline({ store }) {
                 {allEvents.length === 0 ? 'Create events to build the story spine.' : 'Try a different search or era filter.'}
               </p>
               {allEvents.length === 0 && (
-                <button onClick={() => setFormState({ type: 'new' })} className="btn btn-primary btn-sm mt-4">Add First Event</button>
+                <button onClick={() => setFormState({ type: 'new' })} disabled={store.readOnly} className="btn btn-primary btn-sm mt-4">Add First Event</button>
               )}
               {allEvents.length > 0 && <button className="btn btn-secondary btn-sm mt-4" onClick={() => { setSearch(''); jumpToEra('all') }}>Clear filters</button>}
             </div>
@@ -259,7 +260,7 @@ export default function Timeline({ store }) {
               )}
             </div>
 
-            {!selectedEvent.readOnly && (
+            {!store.readOnly && !selectedEvent.readOnly && (
               <div className="tl2-panel-actions">
                 <button className="btn btn-secondary btn-sm flex-1"
                   onClick={() => setFormState({ type: 'edit', item: selectedEvent })}>Edit</button>

@@ -6,6 +6,8 @@ import { uid } from './mapUtils.js'
 import { downloadBlob } from '../../utils/projectExportHelpers.js'
 import { SYMBOL_GROUPS } from './atlasSymbols.js'
 import './atlas.css'
+import { useIsPhone } from '../../utils/useMediaQuery'
+import { useDialogFocus } from '../../utils/useDialogFocus'
 
 function modalKeys(event, close) {
   if (event.key === 'Escape') { event.stopPropagation(); close() }
@@ -25,10 +27,10 @@ const TOOL_INFO = {
   river: ['River', 'Drag to draw a river. Release to finish.'],
   road: ['Route', 'Drag to draw a route. Release to finish.'],
   territory: ['Territory', 'Drag around an area. Release to close its boundary.'],
-  wall: ['Wall', 'Drag to draw a wall. Release to finish.'],
+  wall: ['Wall', 'Click each corner. Press Enter or Finish wall to complete; Escape cancels.'],
   stamp: ['Symbols', 'Choose a symbol, then click the map to place it.'],
   location: ['Place', 'Click the map to add a place, then name or link it.'],
-  label: ['Text', 'Click the map to place a label.'],
+  label: ['Label', 'Click the map to place a separate label.'],
 }
 const TOOL_ICONS = { select: '↖', pan: '✥', shape: '◒', water: '≈', river: '〰', road: '┄', territory: '⬡', wall: '⊞', stamp: '♧', location: '⌖', label: 'T' }
 
@@ -36,10 +38,11 @@ const TOOL_KEYS = { v: 'select', h: 'pan', l: 'shape', w: 'water', r: 'river', p
 const SHORTCUTS = [
   ['V / H', 'Select / move view'], ['L / W', 'Land or room / water'], ['R / P', 'River / route'], ['B / X', 'Territory / wall'], ['S / M / T', 'Symbols / place / text'],
   ['⌘ or Ctrl Z', 'Undo'], ['⌘ or Ctrl Shift Z / Ctrl Y', 'Redo'], ['⌘ or Ctrl D', 'Duplicate selection'], ['Delete / Backspace', 'Delete selection'],
-  ['Arrow keys', 'Move selection (Shift for larger steps)'], ['+ / − / 0', 'Zoom in / out / fit'], ['F', 'Expand or restore canvas'], ['Escape', 'Cancel drawing / clear selection'], ['?', 'Show keyboard shortcuts'],
+  ['Arrow keys', 'Move selection (Shift for larger steps)'], ['+ / − / 0', 'Zoom in / out / fit'], ['F', 'Expand or restore canvas'], ['Enter', 'Finish a point-to-point wall'], ['Escape', 'Cancel drawing / clear selection'], ['?', 'Show keyboard shortcuts'],
 ]
 
 export default function AtlasBuilder({ store }) {
+  const isPhone = useIsPhone()
   const [library, setLibrary] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
@@ -47,6 +50,7 @@ export default function AtlasBuilder({ store }) {
   const project = store.mapProject
   if (!project) return <div className="atlas-empty">Open a project to make a map.</div>
   const activeMap = project.maps.find(m => m.id === project.activeMapId)
+  if (isPhone || store.readOnly) return <MapViewer store={store} phone={isPhone} />
   function create(name, type, blank, palette) {
     const data = newMapData(type, blank, palette)
     const id = store.addMap(name, type, { metadata: data.metadata })
@@ -89,8 +93,10 @@ function CreateMap({ initialType, onClose, onCreate }) {
   const [name, setName] = useState('')
   const [blank, setBlank] = useState(false)
   const [palette, setPalette] = useState('paper')
+  const dialogRef = useRef(null)
+  useDialogFocus(dialogRef, onClose)
   const start = newMapData(type, blank, palette)
-  return <div className="atlas-modal-backdrop" onKeyDown={e => modalKeys(e, onClose)}><form className="atlas-create" role="dialog" aria-modal="true" aria-labelledby="atlas-create-title" onSubmit={e => { e.preventDefault(); if (name.trim()) onCreate(name.trim(), type, blank, palette) }}>
+  return <div className="atlas-modal-backdrop" onKeyDown={e => modalKeys(e, onClose)}><form ref={dialogRef} tabIndex={-1} className="atlas-create" role="dialog" aria-modal="true" aria-labelledby="atlas-create-title" onSubmit={e => { e.preventDefault(); if (name.trim()) onCreate(name.trim(), type, blank, palette) }}>
     <div className="atlas-create-fields"><div className="atlas-row"><span className="atlas-eyebrow">A NEW CORNER OF YOUR WORLD</span><button type="button" onClick={onClose} aria-label="Close new map">×</button></div><h2 id="atlas-create-title">Start somewhere.</h2><p>A few good shapes. The rest is your story.</p>
       <label>Map name<input autoFocus required maxLength={100} placeholder="The Sunken Kingdoms" value={name} onChange={e => setName(e.target.value)}/></label>
       <fieldset><legend>How far are we looking?</legend><div className="atlas-scales">{SCALES.map(s => <button type="button" key={s.id} aria-pressed={type === s.id} onClick={() => setType(s.id)}>{s.name}</button>)}</div><small>{SCALES.find(s => s.id === type).detail}</small></fieldset>
@@ -116,6 +122,14 @@ function Editor({ map, store, onLibrary }) {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [lineWidth, setLineWidth] = useState(5)
   const [symbolSearch, setSymbolSearch] = useState('')
+  const [symbolSize, setSymbolSize] = useState(42)
+  const [cursor, setCursor] = useState(null)
+  const [wallPointCount, setWallPointCount] = useState(0)
+  const shortcutsRef = useRef(null)
+  const deleteRef = useRef(null)
+  useDialogFocus(shortcutsRef, () => setShowShortcuts(false), showShortcuts)
+  useDialogFocus(deleteRef, () => setShowDelete(false), showDelete)
+  const wallRef = useRef(null)
   const svgRef = useRef(null)
   const gesture = useRef(null)
   const objects = map.mapObjects || []
@@ -140,7 +154,12 @@ function Editor({ map, store, onLibrary }) {
   }
   function patch(props) { commit({ ...current, mapObjects: objects.map(o => o.id === selectedId ? { ...o, ...props } : o) }) }
   function remove() { if (selected && commit({ ...current, mapObjects: objects.filter(o => o.id !== selectedId) })) setSelectedId(null) }
-  function cancel() { gesture.current = null; setDraft(null) }
+  function cancel() { gesture.current = null; wallRef.current = null; setWallPointCount(0); setDraft(null); setCursor(null) }
+  function finishWall() {
+    const wall = wallRef.current
+    if (!wall || wall.geometry.points.length < 2) return
+    if (commit({ ...current, mapObjects: [...objects, wall] })) { setSelectedId(wall.id); wallRef.current = null; setWallPointCount(0); setDraft(null) }
+  }
   function duplicate() {
     if (!selected) return
     const copy = { ...moveObject(selected, 25, 25), id: uid('atlas') }
@@ -148,14 +167,15 @@ function Editor({ map, store, onLibrary }) {
   }
   function changeTool(next) { cancel(); setTool(next); if (next !== 'select') setSelectedId(null) }
   function keyDown(e) {
-    if (e.isComposing || e.target?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return
-    if (showDelete || showShortcuts || e.target?.closest?.('[role="dialog"]')) return
+    if (e.isComposing || e.target?.isContentEditable || e.target?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return
+    if (showDelete || showShortcuts || e.target?.closest?.('[role="dialog"], [data-keyboard-placement]')) return
     const key = e.key.toLowerCase(), command = e.ctrlKey || e.metaKey
     let handled = true
     if (command && key === 'z') { cancel(); undo(e.shiftKey) }
     else if (command && key === 'y') { cancel(); undo(true) }
     else if (command && key === 'd') duplicate()
     else if (command || e.altKey) handled = false
+    else if (key === 'enter' && wallRef.current) finishWall()
     else if (key === 'escape') { cancel(); setTool('select'); setSelectedId(null); setExpanded(false) }
     else if (key === 'delete' || key === 'backspace') remove()
     else if (key.startsWith('arrow') && selected) {
@@ -189,6 +209,15 @@ function Editor({ map, store, onLibrary }) {
     const p = point(e)
     if (!p) return
     svgRef.current.focus({ preventScroll: true })
+    if (tool === 'wall') {
+      const previous = wallRef.current || makeObject('wall', { x:0, y:0 }, { size: lineWidth }, [])
+      const last = previous.geometry.points.at(-1)
+      const wall = !last || Math.hypot(last.x-p.x,last.y-p.y) > 1 ? { ...previous, geometry: { ...previous.geometry, points: [...previous.geometry.points,p] } } : previous
+      wallRef.current = wall
+      setWallPointCount(wall.geometry.points.length)
+      setDraft({ ...wall, geometry: { ...wall.geometry, points: [...wall.geometry.points] } })
+      return
+    }
     svgRef.current.setPointerCapture(e.pointerId)
     if (tool === 'pan') { gesture.current = { kind: 'pan', x: e.clientX, y: e.clientY, view }; return }
     if (tool === 'select') {
@@ -197,7 +226,7 @@ function Editor({ map, store, onLibrary }) {
       return
     }
     if (['stamp','label','location'].includes(tool)) {
-      const o = makeObject(tool, p, { symbol, ...(tool === 'location' ? { anchor: 'tip' } : {}), name: tool === 'label' ? 'New label' : tool === 'location' ? 'New place' : '', size: 42 })
+      const o = makeObject(tool, p, { symbol, ...(tool === 'location' ? { showLabel: false } : {}), name: tool === 'label' ? 'New label' : tool === 'location' ? 'New place' : '', size: tool === 'stamp' ? symbolSize : 42 })
       if (commit({ ...current, mapObjects: [...objects, o] })) { setSelectedId(o.id); if (tool !== 'stamp') setTool('select') }
       return
     }
@@ -207,7 +236,13 @@ function Editor({ map, store, onLibrary }) {
   }
   function move(e) {
     const g = gesture.current
-    if (!g) return
+    if (!g) {
+      const p = point(e)
+      if (tool === 'stamp') setCursor(p)
+      const wall = wallRef.current
+      if (wall && p) setDraft({ ...wall, geometry: { ...wall.geometry, points: [...wall.geometry.points,p] } })
+      return
+    }
     if (g.kind === 'pan') { setView({ ...g.view, x: g.view.x + e.clientX-g.x, y: g.view.y + e.clientY-g.y }); return }
     const p = point(e)
     if (!p) return
@@ -219,6 +254,7 @@ function Editor({ map, store, onLibrary }) {
   }
   function finish(e) {
     const g = gesture.current
+    if (!g) return
     if (g) move(e) // Commit the release position, even when the last move has not rendered.
     const finished = g?.draft
     gesture.current = null
@@ -234,7 +270,7 @@ function Editor({ map, store, onLibrary }) {
     try {
       const clone = svgRef.current.cloneNode(true)
       clone.removeAttribute('style'); clone.setAttribute('width','2400'); clone.setAttribute('height','1600')
-      clone.querySelectorAll('[data-selection]').forEach(el => el.remove())
+      clone.querySelectorAll('[data-selection], [data-preview], [data-draft]').forEach(el => el.remove())
       const xml = new XMLSerializer().serializeToString(clone)
       const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' })
       if (kind === 'svg') { downloadBlob(blob, `${map.name}.svg`); return }
@@ -253,21 +289,33 @@ function Editor({ map, store, onLibrary }) {
   return <div className={`atlas-editor${expanded ? ' atlas-expanded' : ''}${sidebarOpen ? '' : ' atlas-sidebar-hidden'}`}>
     <header className="atlas-topbar"><button onClick={onLibrary}>← Atlas</button><div className="atlas-title"><input aria-label="Map name" key={map.name} defaultValue={map.name} onBlur={e => { if (e.target.value.trim() && e.target.value !== map.name) store.renameMap(map.id, e.target.value.trim()) }} onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}/><span>{titleCase(map.mapType)} map</span></div><div className="atlas-history"><button disabled={!history.past.length} onClick={() => undo()} aria-label="Undo">↶</button><button disabled={!history.future.length} onClick={() => undo(true)} aria-label="Redo">↷</button></div><button aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShowShortcuts(true)}>?</button><button className="atlas-space-toggle" aria-pressed={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? 'Exit expanded view' : 'Expand canvas'}</button><button aria-label={sidebarOpen ? 'Hide panel' : 'Show panel'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(v => !v)}>☷</button><details className="atlas-export"><summary>Export ↓</summary><div>{['png','svg','json'].map(k => <button key={k} disabled={exporting} onClick={() => exportMap(k)}>{k === 'json' ? 'Editable map JSON' : `${k.toUpperCase()} image`}</button>)}</div></details></header>
     <div className="atlas-workspace"><nav className="atlas-tools" aria-label="Map tools">{tools.map(t => <button key={t} aria-pressed={tool === t} title={`${TOOL_INFO[t][0]} (${Object.keys(TOOL_KEYS).find(k => TOOL_KEYS[k] === t)?.toUpperCase()})`} aria-keyshortcuts={Object.keys(TOOL_KEYS).find(k => TOOL_KEYS[k] === t)} onClick={() => changeTool(t)}><b aria-hidden="true">{TOOL_ICONS[t]}</b><span>{interior && t === 'shape' ? 'Room' : TOOL_INFO[t][0]}</span></button>)}</nav>
-      <div className="atlas-stage"><div className="atlas-hint">{interior && tool === 'shape' ? 'Drag from one corner to the other to draw a room.' : TOOL_INFO[tool][1]}</div><div className="atlas-viewport"><div className="atlas-paper" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}><AtlasCanvas svgRef={svgRef} objects={visibleObjects} metadata={metadata} name={map.name} selectedId={selectedId} onPick={start} onPointerDown={e => start(e)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} tabIndex={0}/></div></div><div className="atlas-view-controls"><button aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(.5,v.zoom-.25) }))}>−</button><span>{Math.round(view.zoom*100)}%</span><button aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3,v.zoom+.25) }))}>+</button><button onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Fit</button></div><div className="atlas-caption">{objects.length} elements · Changes save with your project</div></div>
+      <div className="atlas-stage"><div className="atlas-hint">{interior && tool === 'shape' ? 'Drag from one corner to the other to draw a room.' : TOOL_INFO[tool][1]}</div><div className="atlas-viewport"><div className="atlas-paper" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}><AtlasCanvas svgRef={svgRef} objects={visibleObjects} metadata={metadata} name={map.name} selectedId={selectedId} onPick={start} onPointerDown={e => start(e)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onPointerLeave={() => setCursor(null)} onDoubleClick={() => { if (tool === 'wall') finishWall() }} draftId={draft?.id} placementPreview={tool === 'stamp' && cursor ? { id: 'placement-preview', type: 'stamp', ...cursor, properties: { symbol, size: symbolSize } } : null} tabIndex={0}/></div></div><div className="atlas-view-controls"><button aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(.5,v.zoom-.25) }))}>−</button><span>{Math.round(view.zoom*100)}%</span><button aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3,v.zoom+.25) }))}>+</button><button onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Fit</button></div><div className="atlas-caption">{objects.length} elements · Changes save with your project</div></div>
       <aside className="atlas-sidebar" hidden={!sidebarOpen}>
+        <label>Select map element<select aria-label="Select map element" value={selectedId || ''} onChange={event => { cancel(); setSelectedId(event.target.value || null); setTool('select') }}><option value="">Choose an element…</option>{objects.map((object, index) => <option key={object.id} value={object.id}>{object.properties?.name || `${titleCase(object.type)} ${index + 1}`}{object.visible === false ? ' (hidden)' : ''}</option>)}</select></label>
+        {selected && <div className="atlas-options">{['x', 'y'].map(axis => {
+          const position = selected.geometry?.points?.[0]?.[axis] ?? selected[axis] ?? 0
+          return <label key={axis}>{axis.toUpperCase()} position<input key={`${selected.id}:${position}`} aria-label={`${axis.toUpperCase()} position`} type="number" defaultValue={Math.round(position)} onBlur={event => { const value = Number(event.target.value); if (event.target.value !== '' && Number.isFinite(value) && value !== position) patch(moveObject(selected, axis === 'x' ? value - position : 0, axis === 'y' ? value - position : 0)) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        })}</div>}
+        {!['select', 'pan'].includes(tool) && <KeyboardPlacement key={`${tool}:${symbol}`} tool={tool} symbol={symbol} size={tool === 'stamp' ? symbolSize : lineWidth} interior={interior} onCreate={object => { if (!commit({ ...current, mapObjects: [...objects, object] })) return false; setSelectedId(object.id); setTool('select'); return true }} />}
+
         <div className="atlas-drawing-settings">
-          {['river','road'].includes(tool) && <label>New {tool === 'river' ? 'river' : 'route'} thickness: {lineWidth}<input aria-label="New line thickness" type="range" min="1" max="40" value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))}/></label>}
+          {tool === 'wall' && <div><p>Click each corner, then finish the wall.</p><div className="atlas-options"><button disabled={wallPointCount < 2} onClick={finishWall}>Finish wall</button><button disabled={!wallPointCount} onClick={cancel}>Cancel wall</button></div></div>}
+          {['river','road','wall'].includes(tool) && <label>New {tool === 'river' ? 'river' : tool === 'wall' ? 'wall' : 'route'} thickness: {lineWidth}<input aria-label="New line thickness" type="range" min="1" max="40" value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))}/></label>}
           {!interior && <label className="atlas-checkbox"><input type="checkbox" checked={metadata.organicBorders !== false} onChange={e => commit({ ...current, metadata: { ...metadata, organicBorders: e.target.checked } })}/> Organic borders</label>}
           {!interior && metadata.organicBorders !== false && <label>Border variation<input aria-label="Border variation" type="range" min="2" max="30" value={metadata.organicStrength || 12} onChange={e => commit({ ...current, metadata: { ...metadata, organicStrength: Number(e.target.value) } })}/></label>}
           {metadata.gridSettings?.enabled && <label className="atlas-checkbox"><input type="checkbox" checked={Boolean(metadata.gridSettings.snapToGrid)} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, snapToGrid: e.target.checked } } })}/> Snap to grid</label>}
         </div>
-        {tool === 'stamp' ? <><span className="atlas-eyebrow">MAKE YOUR MARK</span><h2>A few familiar shapes.</h2><p>Click a symbol, then place it on the map. You can keep placing as many as you like.</p><label>Find a symbol<input type="search" value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)} placeholder="Bridge, cave, bed…"/></label>{SYMBOL_GROUPS.filter(group => group.interior === interior).map(group => {
+        {tool === 'stamp' ? <><span className="atlas-eyebrow">MAKE YOUR MARK</span><h2>A few familiar shapes.</h2><p>Click a symbol, then place it on the map. You can keep placing as many as you like.</p><label>Symbol size: {symbolSize}<input aria-label="Symbol size" type="range" min="20" max="140" value={symbolSize} onChange={e => setSymbolSize(Number(e.target.value))}/></label><label>Find a symbol<input type="search" value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)} placeholder="Bridge, cave, bed…"/></label>{SYMBOL_GROUPS.filter(group => group.interior === interior).map(group => {
           const matches = group.symbols.filter(s => s.includes(symbolSearch.toLowerCase().trim()))
           return matches.length ? <div key={group.name}><h3>{group.name}</h3><div className="atlas-symbols">{matches.map(s => <button key={s} aria-pressed={symbol === s} onClick={() => setSymbol(s)}><svg viewBox="-40 -40 80 80"><InkSymbol kind={s}/></svg><span>{titleCase(s)}</span></button>)}</div></div> : null
         })}{!SYMBOL_GROUPS.some(g => g.interior === interior && g.symbols.some(s => s.includes(symbolSearch.toLowerCase().trim()))) && <p>No matching symbols.</p>}</> : selected ? <><span className="atlas-eyebrow">SELECTED {selected.type === 'stamp' ? 'SYMBOL' : selected.type.toUpperCase()}</span><h2>Make it yours.</h2><label>Name<input aria-label="Element name" value={selected.properties?.name || ''} onChange={e => patch({ properties: { ...selected.properties, name: e.target.value } })} placeholder="Give this place a name"/></label>
-          {['river','road'].includes(selected.type) && <label>{selected.type === 'river' ? 'River' : 'Route'} thickness: {selected.properties?.size || 5}<input aria-label="Line thickness" type="range" min="1" max="40" value={selected.properties?.size || 5} onChange={e => patch({ properties: { ...selected.properties, size: Number(e.target.value) } })}/></label>}
+          {['river','road','wall'].includes(selected.type) && <label>{selected.type === 'river' ? 'River' : selected.type === 'wall' ? 'Wall' : 'Route'} thickness: {selected.properties?.size || 5}<input aria-label="Line thickness" type="range" min="1" max="40" value={selected.properties?.size || 5} onChange={e => patch({ properties: { ...selected.properties, size: Number(e.target.value) } })}/></label>}
           {!selected.geometry && <label>Size<input type="range" min="20" max="100" value={selected.properties?.size || 42} onChange={e => patch({ properties: { ...selected.properties, size: Number(e.target.value) } })}/></label>}
-          <label>Linked location<select value={selected.linkedEntity?.entityId || ''} onChange={e => patch({ linkedEntity: e.target.value ? { entityType: 'location', entityId: e.target.value } : null })}><option value="">No location linked</option>{store.mapProject.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          {selected.type === 'location' && <label className="atlas-checkbox"><input type="checkbox" checked={selected.properties?.showLabel === true} onChange={e => patch({ properties: { ...selected.properties, showLabel: e.target.checked } })}/> Show location label</label>}
+          <label>Linked location<select value={selected.linkedEntity?.entityId || ''} onChange={e => {
+            const location = store.mapProject.locations.find(l => l.id === e.target.value)
+            patch({ linkedEntity: location ? { entityType: 'location', entityId: location.id } : null, ...(location ? { properties: { ...selected.properties, name: location.name } } : {}) })
+          }}><option value="">No location linked</option>{store.mapProject.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
           {selected.linkedEntity ? <button onClick={() => { store.setSelectedLocationId?.(selected.linkedEntity.entityId); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>Open location ↗</button> : <button disabled={!selected.properties?.name?.trim()} onClick={() => { const location = store.saveLocation({ name: selected.properties.name.trim(), category: 'Other', description: '' }); if (location?.id) patch({ linkedEntity: { entityType: 'location', entityId: location.id } }) }}>Create Location from this</button>}
           <div className="atlas-options"><button onClick={duplicate}>Duplicate</button><button onClick={remove}>Delete item</button></div>
           <div className="atlas-options"><button onClick={() => commit({ ...current, mapObjects: [selected,...objects.filter(o => o.id !== selectedId)] })}>Send back</button><button onClick={() => commit({ ...current, mapObjects: [...objects.filter(o => o.id !== selectedId),selected] })}>Bring forward</button></div>
@@ -278,7 +326,39 @@ function Editor({ map, store, onLibrary }) {
         </>}
       </aside></div>
     {message && <div className="atlas-error" role="alert">{message}</div>}
-    {showShortcuts && <div className="atlas-modal-backdrop" onKeyDown={e => modalKeys(e, () => setShowShortcuts(false))}><div className="atlas-confirm atlas-shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><div className="atlas-row"><h2>Keyboard shortcuts</h2><button autoFocus aria-label="Close shortcuts" onClick={() => setShowShortcuts(false)}>×</button></div><p>Available while editing a map. Typing in a field keeps its usual keyboard controls.</p><dl>{SHORTCUTS.map(([keys,action]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{action}</dd></div>)}</dl></div></div>}
-    {showDelete && <div className="atlas-modal-backdrop" onKeyDown={e => modalKeys(e, () => setShowDelete(false))}><div className="atlas-confirm" role="dialog" aria-modal="true" aria-label="Delete map"><h2>Delete {map.name}?</h2><p>This removes this map from your project. Linked Locations will stay. Export a JSON copy first if you may want it back.</p><div className="atlas-options"><button autoFocus onClick={() => setShowDelete(false)}>Keep map</button><button onClick={() => { if (store.deleteMap(map.id)) onLibrary() }}>Delete map</button></div></div></div>}
+    {showShortcuts && <div className="atlas-modal-backdrop" onKeyDown={e => modalKeys(e, () => setShowShortcuts(false))}><div ref={shortcutsRef} tabIndex={-1} className="atlas-confirm atlas-shortcuts" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><div className="atlas-row"><h2>Keyboard shortcuts</h2><button autoFocus aria-label="Close shortcuts" onClick={() => setShowShortcuts(false)}>×</button></div><p>Available while editing a map. Typing in a field keeps its usual keyboard controls.</p><dl>{SHORTCUTS.map(([keys,action]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{action}</dd></div>)}</dl></div></div>}
+    {showDelete && <div className="atlas-modal-backdrop" onKeyDown={e => modalKeys(e, () => setShowDelete(false))}><div ref={deleteRef} tabIndex={-1} className="atlas-confirm" role="dialog" aria-modal="true" aria-label="Delete map"><h2>Delete {map.name}?</h2><p>This removes this map from your project. Linked Locations will stay. Export a JSON copy first if you may want it back.</p><div className="atlas-options"><button autoFocus onClick={() => setShowDelete(false)}>Keep map</button><button onClick={() => { if (store.deleteMap(map.id)) onLibrary() }}>Delete map</button></div></div></div>}
   </div>
+}
+
+
+function KeyboardPlacement({ tool, symbol, size, interior, onCreate }) {
+  const [x, setX] = useState('600')
+  const [y, setY] = useState('400')
+  const [points, setPoints] = useState([])
+  const geometric = !['stamp', 'location', 'label'].includes(tool)
+  const closed = ['shape', 'water', 'territory'].includes(tool)
+  const valid = x !== '' && y !== '' && Number(x) >= 0 && Number(x) <= 1200 && Number(y) >= 0 && Number(y) <= 800
+  const point = { x: Number(x), y: Number(y) }
+  const finish = () => onCreate(makeObject(tool, geometric ? { x: 0, y: 0 } : point, { symbol, size: geometric ? size : tool === 'stamp' ? size : 42, room: interior && tool === 'shape', name: tool === 'label' ? 'New label' : tool === 'location' ? 'New place' : '' }, geometric ? points : undefined))
+  return <details data-keyboard-placement className="atlas-keyboard-placement"><summary>Place without dragging</summary>
+    <p>{geometric ? 'Add points in order, then finish the shape or path.' : 'Choose canvas coordinates, then place the element.'}</p>
+    <div className="atlas-options"><label>X (0–1200)<input aria-label="Placement X" type="number" min="0" max="1200" value={x} onChange={e => setX(e.target.value)} /></label><label>Y (0–800)<input aria-label="Placement Y" type="number" min="0" max="800" value={y} onChange={e => setY(e.target.value)} /></label></div>
+    {geometric && <><button type="button" disabled={!valid} onClick={() => setPoints(previous => [...previous, point])}>Add point</button><p role="status">{points.length} points added</p><button type="button" disabled={!points.length} onClick={() => setPoints(previous => previous.slice(0, -1))}>Remove last point</button></>}
+    <button type="button" disabled={geometric ? points.length < (closed ? 3 : 2) : !valid} onClick={finish}>{geometric ? 'Finish element' : 'Place element'}</button>
+  </details>
+}
+
+function MapViewer({ store, phone }) {
+  const [zoom, setZoom] = useState(1)
+  const project = store.mapProject
+  const maps = project?.maps || []
+  const map = maps.find(item => item.id === project.activeMapId) || maps[0]
+  const openLocation = id => { store.setSelectedLocationId?.(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }
+  if (!map) return <div className="atlas atlas-viewer"><h2>No maps yet</h2><p>{phone ? 'Create a map on a tablet or desktop, then view it here.' : 'This project has no maps.'}</p></div>
+  return <section className="atlas atlas-viewer" aria-label="Map viewer">
+    <header className="atlas-viewer-header"><label>Map<select aria-label="View map" value={map.id} onChange={event => { store.selectMap(event.target.value); setZoom(1) }}>{maps.map(item => <option key={item.id} value={item.id}>{item.name || 'Untitled map'}</option>)}</select></label><p>{phone ? 'Viewing mode · Edit on a tablet or desktop.' : 'This project is read-only.'}</p></header>
+    {map.metadata?.builder === ATLAS_VERSION ? <><div className="atlas-options"><button aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - .5))}>−</button><button onClick={() => setZoom(1)}>Fit</button><button aria-label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom + .5))}>+</button></div><div className="atlas-viewer-canvas" tabIndex={0} role="region" aria-label="Map canvas; scroll to pan"><div style={{ width: `${zoom * 100}%` }}><AtlasCanvas objects={map.mapObjects || []} metadata={map.metadata} name={map.name} /></div></div></> : <div className="atlas-viewer-legacy"><Suspense fallback={<p>Opening map…</p>}><LegacyMapBuilder store={store} readOnly /></Suspense></div>}
+    <div className="atlas-viewer-links"><h3>Linked locations</h3>{(map.mapObjects || []).filter(object => object.linkedEntity?.entityType === 'location').map(object => <button key={object.id} onClick={() => openLocation(object.linkedEntity.entityId)}>{project.locations.find(location => location.id === object.linkedEntity.entityId)?.name || object.properties?.name || 'Open location'}</button>)}</div>
+  </section>
 }

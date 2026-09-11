@@ -8,6 +8,7 @@ import { NotesPanel } from './ManuscriptToolbar.jsx'
 import Modal from '../shared/Modal.jsx'
 import { getCharacterAge } from '../../utils/characterAge.js'
 import { buildWritingGoalStreak } from '../../utils/writingStreak.js'
+import { CharacterPortrait } from '../shared/CharacterPortrait.jsx'
 
 const TABS = [
   { id: 'scene', label: 'Scene' },
@@ -460,7 +461,12 @@ function CharacterProfileModal({ character, characters = [], factions = [], curr
       <div className="ms-character-profile">
         <header className="ms-character-profile-head">
           {character.image ? (
-            <img src={character.image} alt="" className="ms-character-profile-image" style={{ objectPosition: character.imagePosition || '50% 50%' }} />
+            <CharacterPortrait
+              src={character.image}
+              position={character.imagePosition}
+              zoom={character.imageZoom}
+              className="ms-character-profile-image"
+            />
           ) : (
             <div className="ms-character-profile-initial">{character.name?.[0]?.toUpperCase() || '?'}</div>
           )}
@@ -550,18 +556,28 @@ function CharacterProfileModal({ character, characters = [], factions = [], curr
   )
 }
 
-function CatalogueTab({ characters = [], locations = [], factions = [], currentYear, loreEntries = [], worldHistory = [], onEntityClick, selectedEntity, onOpenEntitySection }) {
+export function CatalogueTab({ characters = [], locations = [], factions = [], currentYear, loreEntries = [], worldHistory = [], timeline = [], ideaEntries = [], storySchedule = [], rpgCharacters = [], onEntityClick, selectedEntity, onOpenEntitySection }) {
   const [profileCharacter, setProfileCharacter] = useState(null)
   const sections = [
-    { id: 'characters', label: 'Characters', items: characters, getTitle: item => item.name, getPreview: item => item.summary || item.description || item.notes || item.role },
+    { id: 'characters', label: 'Characters', items: characters, getTitle: item => item.name, getPreview: item => item.summary || item.bio || item.description || item.role || item.notes },
     { id: 'locations', label: 'Locations', items: locations, getTitle: item => item.name, getPreview: item => item.description || item.notes || item.summary },
     { id: 'lore', label: 'Lore', items: loreEntries, getTitle: item => item.title, getPreview: item => item.content || item.summary || item.category },
+    { id: 'factions', label: 'Factions', items: factions, getTitle: item => item.name, getPreview: item => item.description },
+    { id: 'timeline', label: 'Timeline', items: timeline, getTitle: item => item.title, getPreview: item => item.description || item.date },
+    { id: 'ideas', label: 'Ideas', items: ideaEntries, getTitle: item => item.title, getPreview: item => item.content || item.description },
+    { id: 'schedule', label: 'Schedule', items: storySchedule, getTitle: item => item.title, getPreview: item => item.description },
+    { id: 'characterbuilder', label: 'Party', items: rpgCharacters, getTitle: item => item.name, getPreview: item => item.backstory || item.notes || item.class },
     { id: 'worldhistory', label: 'History', items: worldHistory, getTitle: item => item.title, getPreview: item => item.content || item.summary || item.dateRange || item.era },
   ]
   const [activeSectionId, setActiveSectionId] = useState(selectedEntity?.section || sections.find(section => section.items?.length)?.id || sections[0].id)
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
   const total = sections.reduce((sum, section) => sum + (section.items?.length || 0), 0)
   if (!total) return <div className="ms-insp-empty">No catalogue entries yet.</div>
   const activeSection = sections.find(section => section.id === activeSectionId) || sections[0]
+  const matches = (activeSection.items || []).filter(item => !item.syncDeleted && `${activeSection.getTitle(item) || ''} ${activeSection.getPreview(item) || ''}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(matches.length / 40) - 1))
+  const visibleItems = matches.slice(currentPage * 40, (currentPage + 1) * 40)
   const selectedSection = sections.find(section => section.id === selectedEntity?.section)
   const selectedItem = selectedSection?.items?.find(item => item.id === selectedEntity?.id)
   const selectedTitle = selectedItem ? selectedSection.getTitle(selectedItem) : selectedEntity?.name
@@ -573,21 +589,25 @@ function CatalogueTab({ characters = [], locations = [], factions = [], currentY
 
   return (
     <div className="ms-insp-scroll ms-catalogue-tab">
-      <div className="ms-ref-tabs" role="tablist" aria-label="Catalogue sections">
+      <div className="ms-ref-tabs" role="group" aria-label="Catalogue sections">
         {sections.map(section => (
           <button
             key={section.id}
             type="button"
-            role="tab"
-            aria-selected={activeSection.id === section.id}
+            aria-pressed={activeSection.id === section.id}
             className={activeSection.id === section.id ? 'is-on' : ''}
-            onClick={() => setActiveSectionId(section.id)}
+            onClick={() => { setActiveSectionId(section.id); setPage(0) }}
           >
             {section.label}
             <span>{section.items?.length || 0}</span>
           </button>
         ))}
       </div>
+      <label className="ms-insp-field">
+        <span>Search {activeSection.label.toLowerCase()}</span>
+        <input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} />
+      </label>
+      <p className="ms-catalogue-count" role="status">{matches.length ? `${currentPage * 40 + 1}–${Math.min((currentPage + 1) * 40, matches.length)} of ${matches.length}` : 'No matching entries'}</p>
       {selectedEntity && (
         <section className="ms-ref-detail" aria-label="Selected catalogue entry">
           <small>{selectedSection?.label || selectedEntity.section}</small>
@@ -598,10 +618,10 @@ function CatalogueTab({ characters = [], locations = [], factions = [], currentY
           </button>
         </section>
       )}
-      <div className="ms-ref-list" role="tabpanel" aria-label={activeSection.label}>
-        {(activeSection.items || []).length === 0 ? (
-          <div className="ms-insp-empty">No {activeSection.label.toLowerCase()} yet.</div>
-        ) : (activeSection.items || []).slice(0, 120).map(item => {
+      <div className="ms-ref-list" role="region" aria-label={activeSection.label}>
+        {matches.length === 0 ? (
+          <div className="ms-insp-empty">{query ? "Try a different search." : `No ${activeSection.label.toLowerCase()} yet.`}</div>
+        ) : visibleItems.map(item => {
           const title = activeSection.getTitle(item) || 'Untitled'
           const preview = activeSection.getPreview(item) || ''
           return (
@@ -617,6 +637,11 @@ function CatalogueTab({ characters = [], locations = [], factions = [], currentY
           )
         })}
       </div>
+      {matches.length > 40 && <div className="ms-catalogue-pagination" aria-label="Catalogue pages">
+        <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button>
+        <span>Page {currentPage + 1} of {Math.ceil(matches.length / 40)}</span>
+        <button type="button" disabled={(currentPage + 1) * 40 >= matches.length} onClick={() => setPage(currentPage + 1)}>Next</button>
+      </div>}
       {profileCharacter && (
         <CharacterProfileModal
           character={profileCharacter}
@@ -636,7 +661,7 @@ function CatalogueTab({ characters = [], locations = [], factions = [], currentY
 export default function ManuscriptInspector({
   activeTab, onSetTab, onClose,
   scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick,
-  characters, locations, factions, currentYear, loreEntries, worldHistory, selectedCatalogueEntity, onOpenEntitySection,
+  characters, locations, factions, currentYear, loreEntries, worldHistory, timeline, ideaEntries, storySchedule, rpgCharacters, selectedCatalogueEntity, onOpenEntitySection,
   highlightedNoteSeq,
   formatSettings, onFormatChange,
   scenes, chapters, writingGoals, onUpdateGoals,
@@ -650,6 +675,7 @@ export default function ManuscriptInspector({
           <button
             key={tab.id}
             type="button"
+            aria-pressed={activeTab === tab.id}
             className={activeTab === tab.id ? 'is-on' : ''}
             onClick={() => onSetTab(tab.id)}
           >
@@ -679,13 +705,16 @@ export default function ManuscriptInspector({
         )}
         {activeTab === 'catalogue' && (
           <CatalogueTab
-            key={`${selectedCatalogueEntity?.section || 'all'}:${selectedCatalogueEntity?.id || 'none'}`}
             characters={characters}
             locations={locations}
             factions={factions}
             currentYear={currentYear}
             loreEntries={loreEntries}
             worldHistory={worldHistory}
+            timeline={timeline}
+            ideaEntries={ideaEntries}
+            storySchedule={storySchedule}
+            rpgCharacters={rpgCharacters}
             onEntityClick={onEntityClick}
             selectedEntity={selectedCatalogueEntity}
             onOpenEntitySection={onOpenEntitySection}

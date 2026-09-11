@@ -3,23 +3,17 @@ import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType }
 import { FACTION_ICONS } from '../../constants/factionIcons'
 import { buildRelationshipIndex, relationshipMapPage, RELATIONSHIP_MAP_SIZE } from '../../utils/relationshipMap.js'
 import FactionLogo from '../Factions/FactionLogo'
-import { UserMediaImage } from '../shared/UserMedia'
+import { CharacterAvatar as PortraitAvatar } from '../shared/CharacterPortrait'
 
 const EMPTY = []
 const factionIcons = new Map(FACTION_ICONS.map(icon => [icon.id, icon]))
 const displayName = character => character?.name || 'Unnamed character'
-const initials = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0].toUpperCase()).join('') || '?'
 
 function CharacterAvatar({ character, faction, size = 52 }) {
   const legacyIcon = factionIcons.get(faction?.iconId)
   return (
     <span className="relative inline-flex flex-shrink-0">
-      <span style={{ width: size, height: size }} className="rounded-full overflow-hidden grid place-items-center border-2 border-[var(--border)] bg-[var(--surface2)] text-[var(--accent)] font-bold">
-        {character.image ? (
-          <UserMediaImage src={character.image} alt="" className="w-full h-full object-cover"
-            style={{ objectPosition: character.imagePosition, transform: `scale(${character.imageZoom})` }} />
-        ) : initials(character.name)}
-      </span>
+      <PortraitAvatar character={character} size={size} shape="circle" />
       {faction && (
         <span className="absolute -right-1 -bottom-1 w-6 h-6 grid place-items-center rounded-md border border-[var(--border)] bg-[var(--bg-main)] shadow-sm overflow-hidden"
           title={`${faction.name || 'Faction'} logo`} aria-label={`${faction.name || 'Faction'} logo`}>

@@ -289,9 +289,6 @@ export function AuthProvider({ children }) {
         const currentUser = user
         if (!currentUser) throw new Error('No user is signed in.')
         await deleteAllUserData(currentUser.id)
-        // Attempt server-side auth deletion via RPC
-        const { error: rpcError } = await supabase.rpc('delete_user')
-        if (rpcError) throw new Error(`Account deletion failed: ${rpcError.message}`)
         await supabase.auth.signOut()
         setUser(null)
       }

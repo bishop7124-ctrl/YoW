@@ -1,0 +1,77 @@
+name: Desktop Build (macOS)
+
+# Manual arm64 release-candidate build. The app bundle remains ad-hoc signed
+# until Developer ID signing is enabled, while the updater archive is always
+# signed with YOW's existing project-owned Tauri updater key.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: Build arm64 app and updater
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app and signed updater archive
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: npm run desktop:build:app
+
+      - name: Verify updater signature was produced
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app.tar.gz.sig' -print -quit)"
+
+      - name: Package local-install ZIP and DMG
+        run: |
+          npm run desktop:package:zip:local
+          npm run desktop:package:dmg:local
+
+      - name: Verify package and write checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          codesign --verify --deep --strict src-tauri/target/release/bundle/macos/YOW.app
+          find src-tauri/target/release/bundle -type f \
+            \( -name '*.zip' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \) \
+            -print0 | sort -z | xargs -0 shasum -a 256 > src-tauri/target/release/bundle/SHA256SUMS.txt
+
+      - name: Upload macOS release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: yow-macos-arm64-release-candidate
+          path: |
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
+            src-tauri/target/release/bundle/zip/*.zip
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30

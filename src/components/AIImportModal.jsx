@@ -1196,7 +1196,14 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (store.activeNovelId !== pendingImport.novelId) return
     const id = pendingImport.novelId
     const isNewProject = isNewProjectImport(pendingImport)
+    let projectSnapshot = null
+    let populationSucceeded = false
+    store.beginProjectImport?.()
     try {
+      if (!isNewProject) {
+        projectSnapshot = store.getProjectExportData?.(id)
+        if (!projectSnapshot) throw new Error('Destination project snapshot is unavailable')
+      }
       // Every project type (including comic, whose Act/Chapter records are
       // just relabelled Volume/Issue) seeds this same starter scaffold via
       // buildStarterStructure, so the clear applies universally here.
@@ -1205,22 +1212,25 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
       }
       if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
       else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
+      populationSucceeded = true
       setPendingImport(null)
       setPhase('done')
       setTimeout(() => { onImportDone?.(id); onClose() }, 1100)
     } catch (err) {
       console.error('Import population failed:', err)
       setPendingImport(null)
-      // Only ever delete a project this import itself just created — an
-      // existing destination project the user picked is never touched by
-      // the rollback, even if some of its sections partially populated
-      // before the error (see the "Import into an existing project" row in
-      // docs/ROADMAP.md's Bugs table for why this distinction matters).
       if (isNewProject) {
-        store.deleteNovel(id)
-        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+        Promise.resolve(store.deleteNovel(id)).then(() => {
+          setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+        }).catch(deleteError => {
+          console.error('Could not remove failed import project:', deleteError)
+          setAiError('This archive could not be fully imported, and its incomplete project could not be removed automatically. Check the project library before trying again.')
+        })
       } else {
-        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. Some content may already have been added to the destination project; check it before importing again.')
+        const restored = store.restoreProjectSnapshot?.(id, projectSnapshot)
+        setAiError(restored
+          ? 'This archive could not be fully imported — it may be corrupted or in an unexpected format. The destination project was restored and no imported content was kept.'
+          : 'This archive could not be fully imported — it may be corrupted or in an unexpected format. Some content may already have been added to the destination project; check it before importing again.')
       }
       // Don't leave a stale existing-project selection sitting in state — a
       // retry with a different (e.g. differently-typed) file re-validates in
@@ -1229,6 +1239,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
       // attempt.
       setDestination('new')
       setPhase('upload')
+    } finally {
+      store.endProjectImport?.(populationSucceeded)
     }
   }, [store.activeNovelId, pendingImport]) // eslint-disable-line react-hooks/exhaustive-deps
 

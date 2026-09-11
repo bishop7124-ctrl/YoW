@@ -12,7 +12,7 @@
   --color-surface-hover:  rgba(22, 38, 31, 0.05);
   --color-text:           #16261f;
   --color-text-muted:     #51675c;
-  --color-text-faint:     #7d9086;
+  --color-text-faint:     #586b61;
   --color-prose:          #14221c;
   --color-accent:         #8f3f2d;
   --color-accent-soft:    rgba(143, 63, 45, 0.13);
@@ -205,7 +205,7 @@
   --color-surface-hover: rgba(236, 230, 218, 0.06);
   --color-text: #ece6da;
   --color-text-muted: #8ea19b;
-  --color-text-faint: #5c706b;
+  --color-text-faint: #82958f;
   --color-prose: #f2ece0;
   --color-accent: #9c4935;
   --color-accent-soft: rgba(156, 73, 53, 0.14);
@@ -226,7 +226,7 @@
   --logo-filter: none;
   --accent2:    #9db07a;
   --bg-raise:      #1a2b28;
-  --text-faint:    #5c706b;
+  --text-faint:    #82958f;
   --border-strong: rgba(255, 255, 255, 0.16);
   --accent-text:   #d99a7d;
   --accent-2:      #9db07a;
@@ -262,7 +262,7 @@
   --color-surface-hover: rgba(22, 38, 31, 0.05);
   --color-text: #16261f;
   --color-text-muted: #51675c;
-  --color-text-faint: #7d9086;
+  --color-text-faint: #586b61;
   --color-prose: #14221c;
   --color-accent: #8f3f2d;
   --color-accent-soft: rgba(143, 63, 45, 0.13);
@@ -283,7 +283,7 @@
   --logo-filter: brightness(0);
   --accent2:    #58704f;
   --bg-raise:      #f6fbf7;
-  --text-faint:    #7d9086;
+  --text-faint:    #586b61;
   --border-strong: rgba(22, 38, 31, 0.28);
   --accent-text:   #743221;
   --accent-2:      #58704f;
@@ -320,13 +320,13 @@
   --color-surface-hover: rgba(226, 240, 238, 0.06);
   --color-text: #e2f0ee;
   --color-text-muted: #7ab8b4;
-  --color-text-faint: #4d8480;
+  --color-text-faint: #7ab8b4;
   --color-prose: #e8f4f2;
   --color-accent: #e8724e;
   --color-accent-soft: rgba(232, 114, 78, 0.16);
   --color-accent-text: #f39a7c;
   --color-accent-secondary: #6fc0a8;
-  --color-accent-contrast: #151713;
+  --color-accent-contrast: #050706;
   --color-line: #1e4a50;
   --color-line-strong: #2a636b;
   --bg-main:    #0d282e;
@@ -336,12 +336,12 @@
   --text-muted: #7ab8b4;
   --accent:     #e8724e;
   --accent-fade: rgba(232, 114, 78, 0.16);
-  --accent-contrast: #151713;
+  --accent-contrast: #050706;
   --border:     #1e4a50;
   --logo-filter: none;
   --accent2:    #2a9a8c;
   --bg-raise:      #1a4550;
-  --text-faint:    #4d8480;
+  --text-faint:    #7ab8b4;
   --border-strong: #2a636b;
   --accent-text:   #f39a7c;
   --accent-2:      #6fc0a8;
@@ -378,13 +378,13 @@
   --color-surface-hover: rgba(20, 24, 28, 0.04);
   --color-text: #1c1f23;
   --color-text-muted: #656e77;
-  --color-text-faint: #8b939b;
+  --color-text-faint: #656e77;
   --color-prose: #16191d;
   --color-accent: #7a8a9c;
   --color-accent-soft: rgba(122, 138, 156, 0.12);
   --color-accent-text: #4f5f73;
   --color-accent-secondary: #8c9c86;
-  --color-accent-contrast: #151713;
+  --color-accent-contrast: #050706;
   --color-line: #e2e6ea;
   --color-line-strong: #cbd1d6;
   --bg-main:    #fafaf9;
@@ -394,13 +394,13 @@
   --text-muted: #656e77;
   --accent:     #7a8a9c;
   --accent-fade: rgba(122, 138, 156, 0.12);
-  --accent-contrast: #151713;
+  --accent-contrast: #050706;
   --border:     #e2e6ea;
   --logo-filter: brightness(0);
   --accent2:    #a0aab8;
   /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
   --bg-raise:      #ffffff;
-  --text-faint:    #8b939b;
+  --text-faint:    #656e77;
   --border-strong: #cbd1d6;
   --accent-text:   #4f5f73;
   --accent-2:      #8c9c86;
@@ -1822,7 +1822,7 @@ textarea:focus {
 }
 
 .ms-entity {
-  color: var(--accent);
+  color: var(--accent-text);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 54%, transparent);
   cursor: pointer;
 }
@@ -1961,8 +1961,11 @@ textarea:focus {
   53%, 100% { opacity: 0; }
 }
 .ms-textarea--rich::placeholder {
-  color: var(--studio-muted);
-  -webkit-text-fill-color: var(--studio-muted);
+  /* The rich preview beneath this textarea already renders the empty-state
+     prompt. Keep the native placeholder in the DOM for selectors and browser
+     semantics, but do not paint a second copy over the preview. */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Paragraph indentation is presentation, never literal whitespace in scene.content.
@@ -3397,7 +3400,7 @@ textarea:focus {
   --color-surface-hover: rgba(22, 38, 31, 0.05);
   --color-text: #16261f;
   --color-text-muted: #51675c;
-  --color-text-faint: #7d9086;
+  --color-text-faint: #586b61;
   --color-prose: #14221c;
   --color-accent: #8f3f2d;
   --color-accent-soft: rgba(143, 63, 45, 0.13);
@@ -3412,7 +3415,7 @@ textarea:focus {
   --bg-hover: rgba(22, 38, 31, 0.05);
   --text-main: #16261f;
   --text-muted: #51675c;
-  --text-faint: #7d9086;
+  --text-faint: #586b61;
   --accent: #8f3f2d;
   --accent-fade: rgba(143, 63, 45, 0.13);
   --accent-text: #743221;
@@ -4019,8 +4022,8 @@ textarea:focus {
 }
 
 .manuscript-processor .ms-textarea.ms-textarea--rich::placeholder {
-  color: var(--studio-muted) !important;
-  -webkit-text-fill-color: var(--studio-muted) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
 }
 
 .modal-overlay,
@@ -11618,15 +11621,18 @@ body {
   }
 
   .studio-brand {
-    width: max-content;
-    max-width: none;
+    width: auto;
+    max-width: min(28vw, 360px);
+    overflow: hidden;
   }
 
   .studio-brand-text,
   .studio-brand h1 {
-    overflow: visible;
-    text-overflow: clip;
-    max-width: none;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
   }
 
   .studio-primary-action {
@@ -15185,7 +15191,7 @@ body {
   cursor: pointer;
 }
 .ms-modes button:hover { color: var(--text-main); }
-.ms-modes button.is-on { background: var(--accent-fade); color: var(--accent-text); font-weight: 700; }
+.ms-modes button.is-on { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
 
 .ms-topbar-status {
   display: flex;
@@ -18241,7 +18247,7 @@ body {
 .overview-hero h1 {
   order: 2;
   max-width: 560px;
-  font-size: clamp(42px, 5vw, 72px);
+  font-size: clamp(30px, 3.2vw, 48px);
   text-shadow: 0 18px 44px color-mix(in srgb, #000 42%, transparent);
 }
 
@@ -22988,3 +22994,18 @@ body {
   text-transform: none;
   color: var(--text-main);
 }
+
+/* Product coherence: identity cannot consume navigation, even with long titles. */
+@media (min-width: 861px) {
+  .studio-room { flex: 0 0 auto; }
+  .studio-room-list { overflow-x: auto; scrollbar-width: thin; }
+}
+@media (min-width: 861px) and (max-width: 1100px) {
+  .studio-room-list { display: none; }
+  .studio-room-hamburger { display: flex; align-items: center; gap: 8px; justify-self: start; }
+}
+.ms-catalogue-count { color: var(--text-muted); font-size: 12px; margin: 8px 0; }
+.ms-catalogue-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 12px; }
+.ms-catalogue-pagination button { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; }
+.ms-catalogue-pagination button:disabled { opacity: .5; }
+.ms-catalogue-tab .ms-ref-detail p { white-space: pre-wrap; overflow-wrap: anywhere; }

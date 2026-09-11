@@ -449,7 +449,7 @@ const NAV_ROOMS = [
   },
   {
     id: 'history',
-    label: 'History',
+    label: 'Timeline & History',
     cta: 'View timeline',
     description: 'Track important events that shape your world.',
     accent: 'amber',
@@ -462,8 +462,8 @@ const NAV_ROOMS = [
     ),
     getSummary: (stats) => {
       const parts = []
-      if (stats.timeline.length) parts.push(`${stats.timeline.length} events`)
-      if (stats.worldHistory.length) parts.push(`${stats.worldHistory.length} events`)
+      if (stats.timeline.length) parts.push(`${stats.timeline.length} timeline events`)
+      if (stats.worldHistory.length) parts.push(`${stats.worldHistory.length} history records`)
       return parts.join(' · ') || '0 events'
     },
   },
