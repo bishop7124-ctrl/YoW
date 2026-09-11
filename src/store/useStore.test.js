@@ -3,19 +3,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
+import { createMemoryBackend, resetStorageBackend, setStorageBackend } from '../storage/projectStorage.js'
+import { markLocalWriteFailed } from '../storage/writeDurability.js'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
   upsertItems:        vi.fn().mockResolvedValue({}),
   deleteItem:         vi.fn().mockResolvedValue({}),
-  deleteItemsByNovel: vi.fn().mockResolvedValue({}),
   saveUserSettings:   vi.fn().mockResolvedValue({}),
   saveSceneDoc:       vi.fn().mockResolvedValue({}),
   deleteSceneDoc:     vi.fn().mockResolvedValue({}),
+  deleteProjectData:  vi.fn().mockResolvedValue({}),
+  replaceUserData:    vi.fn().mockResolvedValue({}),
   getUserStorageUsage: vi.fn().mockResolvedValue(0),
 }))
 vi.mock('../utils/projectStats', () => ({
@@ -30,6 +33,7 @@ vi.mock('../utils/uploadUserMedia', async importOriginal => ({
 }))
 
 beforeEach(() => {
+  resetStorageBackend()
   localStorage.clear()
 })
 
@@ -194,6 +198,89 @@ describe('localStorage persistence', () => {
   })
 })
 
+describe('explicit data replacement', () => {
+  it('honors the selected replacement even when the local snapshot has a newer timestamp', () => {
+    const localNovel = { id: 'local-novel', title: 'Newer local copy', type: 'novel' }
+    localStorage.setItem('nf_localOwner', 'replace-user')
+    localStorage.setItem('nf_localWriteAt', String(Date.now()))
+    localStorage.setItem('nf_novels', JSON.stringify([localNovel]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify(localNovel.id))
+    const { result } = renderHook(() => useStore('replace-user', { cloudSyncEnabled: false }))
+    const restoredNovel = { id: 'backup-novel', title: 'Chosen backup', type: 'novel' }
+
+    act(() => {
+      result.current.importData({
+        _savedAt: 1,
+        novels: [restoredNovel],
+        activeNovelId: restoredNovel.id,
+      }, { preferLocal: false })
+    })
+
+    expect(result.current.novels).toEqual([restoredNovel])
+    expect(result.current.activeNovelId).toBe(restoredNovel.id)
+  })
+
+  it('commits the cloud transaction before replacing local state', async () => {
+    vi.mocked(replaceUserData).mockClear()
+    vi.mocked(replaceUserData).mockResolvedValue({})
+    const { result } = renderHook(() => useStore('replace-cloud-user'))
+    const restoredNovel = { id: 'backup-novel', title: 'Chosen backup', type: 'novel' }
+
+    await act(async () => {
+      await result.current.replaceData({ novels: [restoredNovel], activeNovelId: restoredNovel.id })
+    })
+
+    expect(replaceUserData).toHaveBeenCalledExactlyOnceWith(
+      'replace-cloud-user',
+      { novels: [restoredNovel], activeNovelId: restoredNovel.id },
+    )
+    expect(result.current.novels).toEqual([restoredNovel])
+  })
+
+  it('leaves local state unchanged when the cloud transaction fails', async () => {
+    vi.mocked(replaceUserData).mockRejectedValueOnce(new Error('transaction failed'))
+    const { result } = renderHook(() => useStore('replace-failure-user'))
+    let original
+    act(() => {
+      original = result.current.addNovel({ title: 'Keep this project', type: 'novel' })
+    })
+
+    await act(async () => {
+      await expect(result.current.replaceData({
+        novels: [{ id: 'replacement', title: 'Do not show', type: 'novel' }],
+        activeNovelId: 'replacement',
+      })).rejects.toThrow('transaction failed')
+    })
+
+    expect(result.current.novels).toEqual([expect.objectContaining({ id: original.id, title: 'Keep this project' })])
+  })
+
+  it('leaves rendered and mirrored local state unchanged when the local replacement transaction fails', async () => {
+    const originalNovel = { id: 'original', title: 'Keep this project', type: 'novel' }
+    const backend = createMemoryBackend({
+      nf_localOwner: 'replace-local-user',
+      nf_novels: JSON.stringify([originalNovel]),
+      nf_activeNovel: JSON.stringify(originalNovel.id),
+    })
+    backend.replaceItems = vi.fn(async () => { throw new Error('local transaction aborted') })
+    setStorageBackend(backend)
+    const { result, unmount } = renderHook(() => useStore('replace-local-user', { cloudSyncEnabled: false }))
+
+    await act(async () => {
+      await expect(result.current.replaceData({
+        novels: [{ id: 'replacement', title: 'Do not show', type: 'novel' }],
+        activeNovelId: 'replacement',
+      })).rejects.toThrow('local transaction aborted')
+    })
+
+    expect(result.current.novels).toEqual([originalNovel])
+    expect(JSON.parse(backend.getItem('nf_novels'))).toEqual([originalNovel])
+    expect(JSON.parse(backend.getItem('nf_localWriteFailed'))).toContain('nf_projectReplacement')
+    unmount()
+    resetStorageBackend()
+  })
+})
+
 // ─── ownership guard ─────────────────────────────────────────────────────────
 // If localStorage is owned by a different user, the store must NOT load it.
 
@@ -295,20 +382,20 @@ describe('novel CRUD', () => {
     expect(novel.id).toBe(id)
   })
 
-  it('deleteNovel removes the novel and persists the deletion', () => {
+  it('deleteNovel removes the novel and persists the deletion', async () => {
     const { result } = renderHook(() => useStore(null))
 
     act(() => { result.current.addNovel({ title: 'To Delete', type: 'novel' }) })
     const id = result.current.novels[0].id
 
     let deleted
-    act(() => { deleted = result.current.deleteNovel(id) })
+    await act(async () => { deleted = await result.current.deleteNovel(id) })
 
     expect(deleted).toBe(true)
     expect(result.current.novels).toHaveLength(0)
     const stored = JSON.parse(localStorage.getItem('nf_novels'))
     expect(stored).toHaveLength(0)
-    expect(result.current.deleteNovel('missing')).toBe(false)
+    await expect(result.current.deleteNovel('missing')).resolves.toBe(false)
   })
 
   it('updateNovel blocks edits to a non-active project on the free tier even while a different project is active', () => {
@@ -328,7 +415,7 @@ describe('novel CRUD', () => {
     expect(stored.find(n => n.id === 'other-2').title).toBe('Other Project')
   })
 
-  it('deleteNovel cleans up uploaded Storage images for the novel and its characters/factions', () => {
+  it('deleteNovel cleans up uploaded Storage images for the novel and its characters/factions', async () => {
     vi.mocked(deleteUserMedia).mockClear()
     const { result } = renderHook(() => useStore(null))
 
@@ -337,7 +424,7 @@ describe('novel CRUD', () => {
     act(() => { result.current.saveCharacter({ name: 'Frodo', novelId: id, image: 'https://x/storage/v1/object/public/user-media/u1/characters/c.webp' }) })
     act(() => { result.current.saveFaction({ name: 'Fellowship', novelId: id, logo: { source: 'image', image: 'https://x/storage/v1/object/public/user-media/u1/factions/f.webp' } }) })
 
-    act(() => { result.current.deleteNovel(id) })
+    await act(async () => { await result.current.deleteNovel(id) })
 
     const deletedUrls = vi.mocked(deleteUserMedia).mock.calls.map(call => call[0])
     expect(deletedUrls).toEqual(expect.arrayContaining([
@@ -348,7 +435,7 @@ describe('novel CRUD', () => {
     ]))
   })
 
-  it('deleteNovel blocks deleting a non-active project on the free tier', () => {
+  it('deleteNovel blocks deleting a non-active project on the free tier', async () => {
     localStorage.setItem('nf_novels', JSON.stringify([
       { id: 'free-1', title: 'Locked Free Project', type: 'novel' },
       { id: 'other-2', title: 'Other Project', type: 'novel' },
@@ -356,10 +443,104 @@ describe('novel CRUD', () => {
     const { result } = renderHook(() => useStore(null, { freeProjectId: 'free-1' }))
     act(() => { result.current.setActiveNovelId('free-1') })
 
-    act(() => { result.current.deleteNovel('other-2') })
+    await act(async () => { await result.current.deleteNovel('other-2') })
 
     const stored = JSON.parse(localStorage.getItem('nf_novels'))
     expect(stored.map(n => n.id)).toContain('other-2')
+  })
+
+  it('keeps local project data intact when the atomic cloud deletion fails', async () => {
+    vi.mocked(deleteProjectData).mockRejectedValueOnce(new Error('database rollback'))
+    const { result } = renderHook(() => useStore('delete-cloud-user'))
+    let project
+    act(() => { project = result.current.addNovel({ title: 'Keep after failure', type: 'novel' }) })
+
+    await act(async () => {
+      await expect(result.current.deleteNovel(project.id)).rejects.toThrow('database rollback')
+    })
+
+    expect(result.current.novels).toEqual([expect.objectContaining({ id: project.id })])
+    expect(JSON.parse(localStorage.getItem('nf_novels'))).toEqual([expect.objectContaining({ id: project.id })])
+  })
+
+  it('keeps rendered and mirrored project data intact when the local deletion transaction fails', async () => {
+    const project = { id: 'local-project', title: 'Keep locally', type: 'novel' }
+    const backend = createMemoryBackend({
+      nf_novels: JSON.stringify([project]),
+      'nf_scene_content:local-scene': 'Keep this prose',
+    })
+    backend.replaceItems = vi.fn(async () => { throw new Error('local delete rollback') })
+    setStorageBackend(backend)
+    const { result } = renderHook(() => useStore(null, { cloudSyncEnabled: false }))
+    expect(result.current.novels).toEqual([project])
+
+    await act(async () => {
+      await expect(result.current.deleteNovel(project.id)).rejects.toThrow('local delete rollback')
+    })
+
+    expect(result.current.novels).toEqual([project])
+    expect(backend.getItem('nf_scene_content:local-scene')).toBe('Keep this prose')
+  })
+
+  // Regression coverage for audit finding #16 ("Project deletion can leave
+  // per-scene keys"): deleteNovel now reads the deleted project's scene ids
+  // straight from persisted `nf_scenes` (via deleteAllSceneContentForNovel)
+  // instead of only relying on whatever `scenesRef` already tracked, and
+  // cleans up `nf_scene_versions` too — a step deleteNovel had no code path
+  // for at all before this fix. Mirrors the analogous cloud-side test
+  // ("scene cloud cleanup on project delete" in firestoreSync.test.js):
+  // seed storage directly rather than building state up through the store's
+  // own add* methods, then assert only the deleted project's data is gone.
+  it('deleteNovel removes every per-scene content key and version-history entry for the project, leaving other projects untouched', async () => {
+    localStorage.setItem('nf_novels', JSON.stringify([
+      { id: 'novel-1', title: 'To Delete', type: 'novel' },
+      { id: 'novel-2', title: 'Keep Me', type: 'novel' },
+    ]))
+    localStorage.setItem('nf_scenes', JSON.stringify([
+      { id: 'scene-1', novelId: 'novel-1', title: 'Scene One' },
+      { id: 'scene-2', novelId: 'novel-1', title: 'Scene Two' },
+      { id: 'scene-3', novelId: 'novel-2', title: 'Other Project Scene' },
+    ]))
+    localStorage.setItem('nf_scene_content:scene-1', 'Novel 1 scene 1 prose.')
+    localStorage.setItem('nf_scene_content:scene-2', 'Novel 1 scene 2 prose.')
+    localStorage.setItem('nf_scene_content:scene-3', 'Novel 2 scene prose.')
+    localStorage.setItem('nf_scene_versions', JSON.stringify([
+      { id: 'v1', sceneId: 'scene-1', novelId: 'novel-1', title: 'Scene One', content: 'v1', wordCount: 1, timestamp: 1 },
+      { id: 'v2', sceneId: 'scene-2', novelId: 'novel-1', title: 'Scene Two', content: 'v1', wordCount: 1, timestamp: 2 },
+      { id: 'v3', sceneId: 'scene-3', novelId: 'novel-2', title: 'Other Project Scene', content: 'v1', wordCount: 1, timestamp: 3 },
+    ]))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 'series-1', projectOrder: ['novel-1', 'novel-2'] }]))
+
+    const { result } = renderHook(() => useStore(null))
+    await act(async () => { await result.current.deleteNovel('novel-1') })
+
+    expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
+    expect(localStorage.getItem('nf_scene_content:scene-2')).toBeNull()
+    // Untouched project's scene content survives.
+    expect(localStorage.getItem('nf_scene_content:scene-3')).toBe('Novel 2 scene prose.')
+
+    const remainingVersions = JSON.parse(localStorage.getItem('nf_scene_versions'))
+    expect(remainingVersions.map(v => v.id)).toEqual(['v3'])
+    expect(JSON.parse(localStorage.getItem('nf_series'))[0].projectOrder).toEqual(['novel-2'])
+  })
+
+  // The "stale/orphan" half of finding #16: a content key whose scene record
+  // is already missing from `nf_scenes` entirely (left behind by some
+  // earlier gap, under no project) has no owner to attribute it to, so
+  // deleteNovel's cleanup sweeps it opportunistically regardless of which
+  // project is actually being deleted.
+  it('deleteNovel also sweeps orphaned scene content keys that belong to no project in nf_scenes', async () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'novel-1', title: 'To Delete', type: 'novel' }]))
+    localStorage.setItem('nf_scenes', JSON.stringify([{ id: 'scene-1', novelId: 'novel-1', title: 'Scene One' }]))
+    localStorage.setItem('nf_scene_content:scene-1', 'Novel 1 scene prose.')
+    // No nf_scenes entry anywhere references this id.
+    localStorage.setItem('nf_scene_content:orphan-1', 'Nobody references this scene any more.')
+
+    const { result } = renderHook(() => useStore(null))
+    await act(async () => { await result.current.deleteNovel('novel-1') })
+
+    expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
+    expect(localStorage.getItem('nf_scene_content:orphan-1')).toBeNull()
   })
 
   it('uses the locked free project as the dashboard active project during import', () => {
@@ -1034,6 +1215,98 @@ describe('getProjectExportData', () => {
   })
 })
 
+describe('existing-project import rollback', () => {
+  it('restores every importable project collection after a failed population pass', () => {
+    const { result } = renderHook(() => useStore(null))
+    let novel
+    act(() => {
+      novel = result.current.addNovel({ title: 'Protected project', type: 'comic' })
+    })
+    act(() => {
+      result.current.saveCharacter({ name: 'Existing character' })
+      result.current.setFactions([{ id: 'existing-faction', name: 'Existing faction' }])
+      result.current.addEra({ name: 'Existing era' })
+      result.current.updateWhiteboard({ notes: [{ id: 'existing-note', text: 'Keep me' }], groups: [] })
+      result.current.addMap('Existing map', 'regional')
+    })
+
+    const baseline = result.current.getProjectExportData(novel.id)
+
+    act(() => {
+      result.current.beginProjectImport()
+      result.current.saveCharacter({ name: 'Partial character' })
+      result.current.setFactions(prev => [...prev, { id: 'partial-faction', name: 'Partial faction' }])
+      result.current.addLocation({ name: 'Partial location' })
+      result.current.addEvent({ title: 'Partial event' }, { createHistory: false })
+      result.current.addHistoryEntry({ title: 'Partial history' })
+      result.current.addEra({ name: 'Partial era' })
+      result.current.addLoreEntry({ title: 'Partial lore' })
+      result.current.addIdeaEntry({ title: 'Partial idea' })
+      const importedAct = result.current.addAct('Partial act')
+      const importedChapter = result.current.addChapter(importedAct.id, 'Partial issue')
+      const importedScene = result.current.addScene(importedChapter.id, 'Partial scene')
+      result.current.updateScene(importedScene.id, { content: 'Partial manuscript' })
+      const importedPage = result.current.addComicPage(importedChapter.id, { title: 'Partial page' })
+      result.current.addComicPanel(importedPage.id, { description: 'Partial panel' })
+      result.current.saveRpgCharacter({ name: 'Partial party member' })
+      result.current.addScheduleEvent({ title: 'Partial schedule event', year: 1, month: 1, day: 1 })
+      result.current.addMap('Partial map', 'regional')
+      result.current.updateWhiteboard({ notes: [{ id: 'partial-note', text: 'Remove me' }], groups: [] })
+      expect(result.current.restoreProjectSnapshot(novel.id, baseline)).toBe(true)
+      result.current.endProjectImport()
+    })
+
+    const restored = result.current.getProjectExportData(novel.id)
+    const withoutTimestamp = ({ exportedAt: _exportedAt, ...data }) => data
+    expect(withoutTimestamp(restored)).toEqual(withoutTimestamp(baseline))
+  })
+
+  it('keeps imported scene writes off the cloud until the batch has settled', () => {
+    const { result } = renderHook(() => useStore('cloud-import-user'))
+    let novel
+    act(() => {
+      novel = result.current.addNovel({ title: 'Cloud project', type: 'novel' })
+    })
+    const baseline = result.current.getProjectExportData(novel.id)
+    vi.mocked(saveSceneDoc).mockClear()
+
+    act(() => {
+      result.current.beginProjectImport()
+      const actRecord = result.current.addAct('Imported act')
+      const chapter = result.current.addChapter(actRecord.id, 'Imported chapter')
+      const scene = result.current.addScene(chapter.id, 'Imported scene')
+      result.current.updateScene(scene.id, { content: 'Imported text' })
+      result.current.restoreProjectSnapshot(novel.id, baseline)
+      result.current.endProjectImport(false)
+    })
+
+    expect(saveSceneDoc).not.toHaveBeenCalled()
+  })
+
+  it('writes completed imported scenes to the cloud after the batch commits', () => {
+    const { result } = renderHook(() => useStore('cloud-import-success-user'))
+    act(() => {
+      result.current.addNovel({ title: 'Cloud project', type: 'novel' })
+    })
+    vi.mocked(saveSceneDoc).mockClear()
+
+    let importedScene
+    act(() => {
+      result.current.beginProjectImport()
+      const actRecord = result.current.addAct('Imported act')
+      const chapter = result.current.addChapter(actRecord.id, 'Imported chapter')
+      importedScene = result.current.addScene(chapter.id, 'Imported scene')
+      result.current.updateScene(importedScene.id, { content: 'Imported text' })
+      result.current.endProjectImport(true)
+    })
+
+    expect(saveSceneDoc).toHaveBeenCalledExactlyOnceWith(
+      'cloud-import-success-user',
+      expect.objectContaining({ id: importedScene.id, content: 'Imported text' }),
+    )
+  })
+})
+
 describe('remaining workspace integrity boundaries', () => {
   it('keeps RPG character updates and deletes inside the active project', () => {
     localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n1', title: 'One', type: 'dnd_campaign' }, { id: 'n2', title: 'Two', type: 'dnd_campaign' }]))
@@ -1678,6 +1951,64 @@ describe('character CRUD', () => {
   })
 })
 
+// Manuscript.jsx derives entityMap/characterNames/locationNames from `characters`/
+// `locations` via useMemo, and SceneEditor.jsx's React.memo comparator relies on those
+// staying referentially stable across renders that don't actually touch character/location
+// data — otherwise every scene's memo is invalidated on every such render (see the "Typing
+// lag" ROADMAP row). `characters`/`locations` used to be rebuilt via an unmemoized
+// seriesScope() call inline in the `api` object on every render of whatever component
+// calls useStore(), so any unrelated state update (e.g. selecting a different scene, or the
+// periodic local-storage-warning poll) handed out a brand-new array reference for both.
+describe('characters/locations reference stability', () => {
+  it('keeps the same characters/locations array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+    act(() => { result.current.saveLocation({ name: 'The Shire' }) })
+
+    const charactersBefore = result.current.characters
+    const locationsBefore = result.current.locations
+
+    // Trigger a re-render via state completely unrelated to characters/locations.
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.characters).toBe(charactersBefore)
+    expect(result.current.locations).toBe(locationsBefore)
+  })
+
+  it('produces a new characters/locations reference only when the underlying data actually changes', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo' }) })
+
+    const charactersBefore = result.current.characters
+
+    act(() => { result.current.saveCharacter({ name: 'Sam' }) })
+
+    expect(result.current.characters).not.toBe(charactersBefore)
+    expect(result.current.characters).toHaveLength(2)
+  })
+
+  // Manuscript.jsx's entityMap useMemo also depends on `loreEntries`/`worldHistory`/
+  // `timeline` (not just characters/locations) — these went through the exact same
+  // unmemoized seriesScope()-in-`api` pattern, so entityMap could still churn on every
+  // render via this path even after characters/locations were fixed on their own.
+  it('keeps the same loreEntries array reference across a re-render triggered by unrelated state', () => {
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.addLoreEntry({ title: 'The Old Wars' }) })
+
+    const loreEntriesBefore = result.current.loreEntries
+
+    act(() => { result.current.setSelectedSceneId('some-scene-id') })
+
+    expect(result.current.loreEntries).toBe(loreEntriesBefore)
+  })
+})
+
 describe('lore CRUD', () => {
   it('preserves omitted references during partial edits and honors explicit clearing', () => {
     const { result } = renderHook(() => useStore(null))
@@ -2173,6 +2504,64 @@ describe('immediate data-safety persistence', () => {
     })
 
     expect(result.current.activeNovelId).toBe(dndId)
+  })
+
+  // 2026-09-10 QA regression (docs/ROADMAP.md "Editing a scene could wipe
+  // scene text across every other project after a stale localStorage
+  // write"): a single known-failed local write (e.g. one scene hitting a
+  // real QuotaExceededError) must never cost more than that one write.
+  // importData's "don't trust local's apparent freshness once any write has
+  // failed" refusal used to fall through to unconditionally preferring
+  // `data` (the "cloud" snapshot) instead — live-reproduced against the
+  // VITE_OFFLINE_MODE dev server, whose loadUserData() always resolves
+  // `{ _savedAt: 0 }` with no novels at all (see firestoreSync.js): forcing
+  // one scene's write to fail, then reloading with no logout, wiped every
+  // project in the account, not just the poisoned scene, because an empty
+  // "cloud" snapshot was treated as more authoritative than a local copy
+  // that actually had real, otherwise-untouched projects in it. Also
+  // real for any account whose cloud fetch is empty/unreachable/not yet
+  // synced, not just offline mode specifically.
+  it('does not discard local projects on a reconciliation when local has a known-failed write but the cloud snapshot is empty', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Untouched Project', type: 'novel' }) })
+    const sceneId = result.current.scenes[0].id
+    act(() => { result.current.updateSceneContent(sceneId, 'Real content that must survive.') })
+
+    // Simulate a real QuotaExceededError having poisoned some unrelated key —
+    // exactly what save()/the IndexedDB backend's onWriteError records.
+    act(() => { markLocalWriteFailed('nf_scene_content:some-other-scene') })
+
+    // Mirrors OFFLINE_MODE's loadUserData() / a not-yet-synced or
+    // unreachable cloud account: no novels at all.
+    act(() => { result.current.importData({ _savedAt: 0 }) })
+
+    expect(result.current.novels.some(n => n.title === 'Untouched Project')).toBe(true)
+    expect(result.current.scenes.find(s => s.id === sceneId)?.content).toBe('Real content that must survive.')
+  })
+
+  it('still prefers a cloud snapshot that actually has data over local when local has a known-failed write', () => {
+    const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
+    act(() => { result.current.addNovel({ title: 'Locally Poisoned Project', type: 'novel' }) })
+    act(() => { markLocalWriteFailed('nf_scene_content:some-other-scene') })
+
+    // _savedAt deliberately kept at 0 (not Date.now()) so localWriteAt >
+    // remoteSavedAt stays true on its own — exactly like a real stale-but-
+    // recent nf_localWriteAt outrunning an older cloud row (the scenario the
+    // comment above importData's shouldPreferLocal describes). That isolates
+    // this assertion to the fix's actual OR-clause (hasLocalWriteFailed() +
+    // cloud genuinely having data): using a fresher _savedAt here would make
+    // `localWriteAt > remoteSavedAt` false on its own and prove nothing about
+    // that clause.
+    const cloudNovel = { id: 'cloud-novel-1', title: 'Cloud Project', type: 'novel', createdAt: Date.now() }
+    act(() => {
+      result.current.importData({
+        _savedAt: 0,
+        novels: [cloudNovel],
+      })
+    })
+
+    expect(result.current.novels.some(n => n.title === 'Cloud Project')).toBe(true)
+    expect(result.current.novels.some(n => n.title === 'Locally Poisoned Project')).toBe(false)
   })
 
   it('preserves a newer scene edit as a conflict copy when a stale tab writes over it', () => {

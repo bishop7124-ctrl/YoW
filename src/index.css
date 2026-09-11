@@ -12,7 +12,7 @@
   --color-surface-hover:  rgba(22, 38, 31, 0.05);
   --color-text:           #16261f;
   --color-text-muted:     #51675c;
-  --color-text-faint:     #7d9086;
+  --color-text-faint:     #586b61;
   --color-prose:          #14221c;
   --color-accent:         #8f3f2d;
   --color-accent-soft:    rgba(143, 63, 45, 0.13);
@@ -205,7 +205,7 @@
   --color-surface-hover: rgba(236, 230, 218, 0.06);
   --color-text: #ece6da;
   --color-text-muted: #8ea19b;
-  --color-text-faint: #5c706b;
+  --color-text-faint: #82958f;
   --color-prose: #f2ece0;
   --color-accent: #9c4935;
   --color-accent-soft: rgba(156, 73, 53, 0.14);
@@ -226,7 +226,7 @@
   --logo-filter: none;
   --accent2:    #9db07a;
   --bg-raise:      #1a2b28;
-  --text-faint:    #5c706b;
+  --text-faint:    #82958f;
   --border-strong: rgba(255, 255, 255, 0.16);
   --accent-text:   #d99a7d;
   --accent-2:      #9db07a;
@@ -262,7 +262,7 @@
   --color-surface-hover: rgba(22, 38, 31, 0.05);
   --color-text: #16261f;
   --color-text-muted: #51675c;
-  --color-text-faint: #7d9086;
+  --color-text-faint: #586b61;
   --color-prose: #14221c;
   --color-accent: #8f3f2d;
   --color-accent-soft: rgba(143, 63, 45, 0.13);
@@ -283,7 +283,7 @@
   --logo-filter: brightness(0);
   --accent2:    #58704f;
   --bg-raise:      #f6fbf7;
-  --text-faint:    #7d9086;
+  --text-faint:    #586b61;
   --border-strong: rgba(22, 38, 31, 0.28);
   --accent-text:   #743221;
   --accent-2:      #58704f;
@@ -320,13 +320,13 @@
   --color-surface-hover: rgba(226, 240, 238, 0.06);
   --color-text: #e2f0ee;
   --color-text-muted: #7ab8b4;
-  --color-text-faint: #4d8480;
+  --color-text-faint: #7ab8b4;
   --color-prose: #e8f4f2;
   --color-accent: #e8724e;
   --color-accent-soft: rgba(232, 114, 78, 0.16);
   --color-accent-text: #f39a7c;
   --color-accent-secondary: #6fc0a8;
-  --color-accent-contrast: #151713;
+  --color-accent-contrast: #050706;
   --color-line: #1e4a50;
   --color-line-strong: #2a636b;
   --bg-main:    #0d282e;
@@ -336,12 +336,12 @@
   --text-muted: #7ab8b4;
   --accent:     #e8724e;
   --accent-fade: rgba(232, 114, 78, 0.16);
-  --accent-contrast: #151713;
+  --accent-contrast: #050706;
   --border:     #1e4a50;
   --logo-filter: none;
   --accent2:    #2a9a8c;
   --bg-raise:      #1a4550;
-  --text-faint:    #4d8480;
+  --text-faint:    #7ab8b4;
   --border-strong: #2a636b;
   --accent-text:   #f39a7c;
   --accent-2:      #6fc0a8;
@@ -378,13 +378,13 @@
   --color-surface-hover: rgba(20, 24, 28, 0.04);
   --color-text: #1c1f23;
   --color-text-muted: #656e77;
-  --color-text-faint: #8b939b;
+  --color-text-faint: #656e77;
   --color-prose: #16191d;
   --color-accent: #7a8a9c;
   --color-accent-soft: rgba(122, 138, 156, 0.12);
   --color-accent-text: #4f5f73;
   --color-accent-secondary: #8c9c86;
-  --color-accent-contrast: #151713;
+  --color-accent-contrast: #050706;
   --color-line: #e2e6ea;
   --color-line-strong: #cbd1d6;
   --bg-main:    #fafaf9;
@@ -394,13 +394,13 @@
   --text-muted: #656e77;
   --accent:     #7a8a9c;
   --accent-fade: rgba(122, 138, 156, 0.12);
-  --accent-contrast: #151713;
+  --accent-contrast: #050706;
   --border:     #e2e6ea;
   --logo-filter: brightness(0);
   --accent2:    #a0aab8;
   /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
   --bg-raise:      #ffffff;
-  --text-faint:    #8b939b;
+  --text-faint:    #656e77;
   --border-strong: #cbd1d6;
   --accent-text:   #4f5f73;
   --accent-2:      #8c9c86;
@@ -3400,7 +3400,7 @@ textarea:focus {
   --color-surface-hover: rgba(22, 38, 31, 0.05);
   --color-text: #16261f;
   --color-text-muted: #51675c;
-  --color-text-faint: #7d9086;
+  --color-text-faint: #586b61;
   --color-prose: #14221c;
   --color-accent: #8f3f2d;
   --color-accent-soft: rgba(143, 63, 45, 0.13);
@@ -3415,7 +3415,7 @@ textarea:focus {
   --bg-hover: rgba(22, 38, 31, 0.05);
   --text-main: #16261f;
   --text-muted: #51675c;
-  --text-faint: #7d9086;
+  --text-faint: #586b61;
   --accent: #8f3f2d;
   --accent-fade: rgba(143, 63, 45, 0.13);
   --accent-text: #743221;
@@ -14226,12 +14226,17 @@ body {
   background: var(--text-muted);
   animation: ms-pulse 1s ease-in-out infinite;
 }
+/* Was a hardcoded, non-theme-aware #4ade80 at opacity 0.75 — axe measured
+   the rendered result at 1.24:1 against this pill's background (needs
+   4.5:1), i.e. functionally invisible, 2026-09-02. Mixing a fixed green
+   into each theme's own --text-main (already contrast-safe against every
+   theme's surfaces) keeps this recognizably "success green" while staying
+   readable in all four themes — verified 5.3-10.3:1 across all of them. */
 .ms-save-indicator.is-saved {
-  color: var(--text-main);
-  opacity: 1;
+  color: color-mix(in srgb, #16a34a 40%, var(--text-main));
 }
 .ms-save-indicator.is-saved .ms-save-dot {
-  background: #4ade80;
+  background: color-mix(in srgb, #16a34a 40%, var(--text-main));
 }
 /* Local write failed to persist durably (audit P0-07) — distinct from
    "saving", since automatic retries have already been exhausted and this
@@ -15177,13 +15182,16 @@ body {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-muted);
+  /* Same --bg-hover-pill contrast shortfall as .ms-topbar-status above —
+     the inactive Write/Edit/Finalised labels measured 4.38:1 (axe,
+     2026-09-02) against this pill's background. */
+  color: color-mix(in srgb, var(--text-main) 10%, var(--text-muted));
   background: none;
   border: 0;
   cursor: pointer;
 }
 .ms-modes button:hover { color: var(--text-main); }
-.ms-modes button.is-on { background: var(--accent-fade); color: var(--accent-text); font-weight: 700; }
+.ms-modes button.is-on { background: var(--accent); color: var(--accent-contrast); font-weight: 700; }
 
 .ms-topbar-status {
   display: flex;
@@ -15193,7 +15201,11 @@ body {
   white-space: nowrap;
   overflow: hidden;
   font-size: 12px;
-  color: var(--text-muted);
+  /* --text-muted alone clears AA against --bg-main, but this pill sits on
+     --bg-nav *and* the --bg-hover overlay stacked on top of it, landing at
+     4.38:1 (axe, 2026-09-02) — just under the 4.5:1 floor. A 10% nudge
+     toward --text-main clears it without touching the shared token. */
+  color: color-mix(in srgb, var(--text-main) 10%, var(--text-muted));
   padding: 5px 12px;
   border-radius: var(--r-pill);
   background: var(--bg-hover);
@@ -21755,19 +21767,20 @@ body {
 }
 
 .gs-snippet-label {
+  /* No opacity multiplier: --text-muted is already tuned to the AA contrast
+     floor against --bg-main in every theme (axe color-contrast, 2026-09-02)
+     — stacking opacity on top of it was dropping as low as 2.33:1. */
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .09em;
   text-transform: uppercase;
   color: var(--text-muted);
-  opacity: .7;
 }
 
 .gs-snippet-count {
   font-size: 9px;
   font-weight: 700;
   color: var(--text-muted);
-  opacity: .6;
 }
 
 .gs-snippet-bottom {

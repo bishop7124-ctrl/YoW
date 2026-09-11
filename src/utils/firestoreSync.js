@@ -272,12 +272,13 @@ export async function deleteItem(table, userId, itemId) {
   if (error) console.error(`[sync] delete error for ${table}:`, error)
 }
 
-// Delete all entity rows for a novel (used when deleting a project)
-export async function deleteItemsByNovel(userId, novelId) {
-  if (OFFLINE_MODE || !novelId) return
-  await Promise.all(NOVEL_TABLES.map(table =>
-    supabase.from(table).delete().eq('user_id', userId).eq('novel_id', novelId)
-  ))
+// Deletes a project and every normalized child row in one database
+// transaction. The RPC also removes the project from series ordering and
+// clears project-scoped user settings before it commits.
+export async function deleteProjectData(userId, novelId) {
+  if (OFFLINE_MODE || !userId || !novelId) return
+  const { error } = await supabase.rpc('delete_project_data_atomic', { p_novel_id: novelId })
+  throwIfSupabaseError(error, 'atomic project delete error')
 }
 
 // Reads the authoritative storage-usage counter for a user, maintained by a DB
@@ -329,12 +330,21 @@ export async function saveUserData(userId, data = {}) {
 export async function replaceUserData(userId, data = {}) {
   if (OFFLINE_MODE || !userId) return
 
-  await Promise.all([...APP_DATA_TABLES, 'user_settings'].map(async table => {
-    const { error } = await supabase.from(table).delete().eq('user_id', userId)
-    throwIfSupabaseError(error, `${table} delete error`)
+  // Prepare image-bearing records before entering the database transaction.
+  // Uploading Storage objects cannot participate in a Postgres transaction;
+  // doing it first means a failed upload never leaves the relational copy
+  // half-deleted. The RPC then replaces every normalized table atomically.
+  const preparedEntries = await Promise.all(APP_DATA_TABLES.map(async table => {
+    const key = TABLE_TO_KEY[table]
+    return [key, await stripEmbeddedImages(table, userId, data[key] ?? [])]
   }))
-
-  await saveUserData(userId, data)
+  const prepared = {
+    ...data,
+    ...Object.fromEntries(preparedEntries),
+    ...getUserSettingsPayload(data),
+  }
+  const { error } = await supabase.rpc('replace_user_data_atomic', { p_data: prepared })
+  throwIfSupabaseError(error, 'atomic account-data replace error')
 }
 
 // Per-scene saves (called directly from updateScene / updateSceneContent)
@@ -356,21 +366,7 @@ export async function deleteSceneDoc(userId, sceneId) {
 
 // Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
-  if (OFFLINE_MODE) return
-  const allTables = [
-    ...USER_TABLES,
-    ...NOVEL_TABLES,
-    'user_settings',
-    'user_profiles',
-    'synced_ai_settings',
-    'ai_findings',
-    'character_interviews',
-    'feedback',
-    // legacy pre-migration tables
-    'project_data',
-    'user_data',
-  ]
-  await Promise.all(allTables.map(table =>
-    supabase.from(table).delete().eq('user_id', userId)
-  ))
+  if (OFFLINE_MODE || !userId) return
+  const { error } = await supabase.rpc('delete_user')
+  throwIfSupabaseError(error, 'atomic account delete error')
 }

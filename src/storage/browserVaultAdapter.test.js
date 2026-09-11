@@ -102,6 +102,29 @@ describe('browser vault adapter', () => {
     await tabTwoBackend.flush()
   })
 
+  it('commits and broadcasts a multi-key replacement as one mirror update', async () => {
+    const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
+    const { resetStorageBackend } = await import('./projectStorage.js')
+    const tabOneBackend = await initializeIndexedDbStorage()
+    tabOneBackend.setItem('replace-old', 'original')
+    tabOneBackend.setItem('replace-stale', 'remove')
+    await tabOneBackend.flush()
+    resetStorageBackend()
+    const tabTwoBackend = await initializeIndexedDbStorage()
+
+    await tabOneBackend.replaceItems({ 'replace-old': 'replacement', 'replace-new': 'added' }, ['replace-stale'])
+
+    const start = Date.now()
+    while (tabTwoBackend.getItem('replace-new') !== 'added') {
+      if (Date.now() - start > 500) throw new Error('replacement broadcast timed out')
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    expect(tabTwoBackend.getItem('replace-old')).toBe('replacement')
+    expect(tabTwoBackend.getItem('replace-stale')).toBeNull()
+
+    resetStorageBackend()
+  })
+
   it('records write failures via onWriteError, and feeds writeDurability.js so the app-wide warning banner reflects it (audit P0-07)', async () => {
     const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
     const { resetStorageBackend, writeItem, readItem } = await import('./projectStorage.js')

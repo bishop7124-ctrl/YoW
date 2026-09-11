@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
 import { jsonResponse } from '../_shared/cors.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -129,7 +130,7 @@ function welcomeEmailHtml(email: string, confirmUrl: string) {
                 Your Own World &middot; <a href="https://www.yourownworld.co.uk" style="color:#7ab8b4;text-decoration:none;">yourownworld.co.uk</a>
               </p>
               <p style="margin:0;font-size:11px;color:#4a8a86;">
-                You're receiving this because you created an account with ${email}
+                You're receiving this because you created an account with ${escapeHtml(email)}
               </p>
             </td>
           </tr>
@@ -167,7 +168,7 @@ Deno.serve(async (req) => {
   // request body — always derived server-side from a verified source:
   //
   // 1. The `on_user_profile_created` DB trigger (trigger_welcome_email(),
-  //    supabase/migrations/20260801_fix_welcome_email_http_post.sql) calls
+  //    supabase/migrations/20260801130000_fix_welcome_email_http_post.sql) calls
   //    this with the service-role key and only ever sends { user_id } — no
   //    email at all — so look it up via the admin API in that case.
   // 2. The browser client (AuthContext.jsx's sendWelcomeEmail) calls this

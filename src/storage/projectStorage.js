@@ -24,6 +24,11 @@ export function createMemoryBackend(initial = {}) {
     getItem: key => (entries.has(key) ? entries.get(key) : null),
     setItem: (key, value) => { entries.set(key, String(value)) },
     removeItem: key => { entries.delete(key) },
+    replaceItems: (entriesToSet = {}, keysToRemove = []) => {
+      keysToRemove.forEach(key => entries.delete(key))
+      Object.entries(entriesToSet).forEach(([key, value]) => entries.set(key, String(value)))
+    },
+    keys: () => Array.from(entries.keys()),
   }
 }
 
@@ -33,6 +38,22 @@ function createBrowserBackend() {
     getItem: key => window.localStorage.getItem(key),
     setItem: (key, value) => { window.localStorage.setItem(key, value) },
     removeItem: key => { window.localStorage.removeItem(key) },
+    replaceItems: (entriesToSet = {}, keysToRemove = []) => {
+      const setEntries = Object.entries(entriesToSet)
+      const affectedKeys = new Set([...keysToRemove, ...setEntries.map(([key]) => key)])
+      const before = new Map([...affectedKeys].map(key => [key, window.localStorage.getItem(key)]))
+      try {
+        keysToRemove.forEach(key => window.localStorage.removeItem(key))
+        setEntries.forEach(([key, value]) => window.localStorage.setItem(key, String(value)))
+      } catch (error) {
+        before.forEach((value, key) => {
+          if (value == null) window.localStorage.removeItem(key)
+          else window.localStorage.setItem(key, value)
+        })
+        throw error
+      }
+    },
+    keys: () => Object.keys(window.localStorage),
   }
 }
 
@@ -74,6 +95,39 @@ export function writeItem(key, value) {
 
 export function removeItem(key) {
   activeBackend.removeItem(key)
+}
+
+export async function replaceItemsAtomically(entriesToSet, keysToRemove = []) {
+  if (typeof activeBackend.replaceItems !== 'function') {
+    throw new Error('Atomic local replacement is unavailable for the active storage backend.')
+  }
+  await activeBackend.replaceItems(entriesToSet, keysToRemove)
+}
+
+// Every backend that actually holds project data (browser localStorage, the
+// IndexedDB-backed vault, the desktop Tauri vault — see indexedDbBackend.js
+// and desktopVaultBackend.js) keeps a full, synchronous, in-memory mirror of
+// every key it holds (localStorage always has, and the other two hydrate a
+// complete mirror from disk at startup specifically so reads stay
+// synchronous). `keys()` is the read-only enumeration half of that same
+// mirror, exposed through the shared abstraction — it lets a caller query the
+// storage backend itself for "every key matching this prefix" instead of only
+// ever knowing about whatever subset happens to be tracked in some in-memory
+// React ref right now (see sceneContentStore.js's deleteAllSceneContentForNovel,
+// written for audit finding #16 — project deletion previously only cleaned up
+// per-scene content keys the current tab's session already knew about).
+// Optional on the backend contract (unlike getItem/setItem/removeItem, which
+// setStorageBackend requires): a caller-injected test backend that doesn't
+// implement it degrades to "nothing found" rather than throwing.
+export function listKeys(prefix) {
+  let all
+  try {
+    all = typeof activeBackend.keys === 'function' ? activeBackend.keys() : []
+  } catch {
+    return []
+  }
+  if (!Array.isArray(all)) return []
+  return prefix ? all.filter(key => typeof key === 'string' && key.startsWith(prefix)) : all
 }
 
 // ── JSON value helper (never throws) ─────────────────────────────────────────

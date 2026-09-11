@@ -3,6 +3,7 @@ import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter } from '../utils/archiveImportLimits'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -19,12 +20,16 @@ function readTextFile(file) {
   })
 }
 
-async function readZipFile(file) {
+export async function readZipFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { reject(err); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const results = []
       for (const [path, data] of Object.entries(files)) {
         const basename = path.split('/').pop()
@@ -41,12 +46,20 @@ async function readZipFile(file) {
 
 // Attempt to read a ZIP as a native YOW project export.
 // Returns parsed projectData object, or null if not a YOW export.
-async function tryReadYowZip(file) {
+export async function tryReadYowZip(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
-  return new Promise((resolve) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
-      if (err || !files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
+  return new Promise((resolve, reject) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      // A ratio violation must abort with a real error, not be silently
+      // treated like "not a YOW zip, fall through to another parser" the
+      // way an ordinary fflate parse error (err) is below.
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
+      if (err) { resolve(null); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
+      if (!files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
       try {
         const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
         if (manifest?.app !== 'YOW' || manifest?.format !== 'yow-project-export') { resolve(null); return }
@@ -94,12 +107,16 @@ async function readPdfFile(file) {
 }
 
 // Extract plain text from a .docx file (OOXML — ZIP of XML files).
-async function readDocxFile(file) {
+export async function readDocxFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { reject(new Error(`Could not read ${file.name}`)); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const xmlBytes = files['word/document.xml']
       if (!xmlBytes) { reject(new Error(`${file.name} doesn't appear to be a valid .docx file`)); return }
       const xml = new TextDecoder('utf-8').decode(xmlBytes)
@@ -115,7 +132,7 @@ async function readDocxFile(file) {
   })
 }
 
-async function processFiles(fileList) {
+export async function processFiles(fileList) {
   const results = []
   for (const file of fileList) {
     const lower = file.name.toLowerCase()
@@ -763,6 +780,24 @@ export function populateYowProject(store, data, sel) {
       // dropped (or written onto the wrong map) when importing more than one map.
       const newMapId = store.addMap(map.name || 'Map', map.mapType || 'regional')
       const { id: _id, novelId: _nid, name: _n, mapType: _mt, created: _c, ...rest } = map
+      // mapObjects/mapRegions/mapPins entries can each link to a Location
+      // record by id (e.g. a placed pin's "Create Location from this" link);
+      // that id gets a fresh value above (sel.locations runs before this
+      // loop) or, if Locations weren't imported at all, never existed in
+      // this project to begin with. Either way the map's own stale reference
+      // must be remapped or dropped — otherwise it silently points at
+      // another project's Location id (or, worse, an unrelated Location that
+      // happens to land on the same id when importing into an existing
+      // project) after import. Mirrors useStore.js's own remapMap (used for
+      // project duplication), which remaps all three fields the same way for
+      // exactly this reason, and AtlasBuilder.jsx's importMap, which prunes
+      // the same broken-link case for a same-project single-map JSON import.
+      const remapMapLinkedEntity = (item) => item.linkedEntity?.entityType === 'location'
+        ? { ...item, linkedEntity: idMap[item.linkedEntity.entityId] ? { entityType: 'location', entityId: idMap[item.linkedEntity.entityId] } : null }
+        : item
+      if (rest.mapObjects) rest.mapObjects = rest.mapObjects.map(remapMapLinkedEntity)
+      if (rest.mapRegions) rest.mapRegions = rest.mapRegions.map(remapMapLinkedEntity)
+      if (rest.mapPins) rest.mapPins = rest.mapPins.map(remapMapLinkedEntity)
       if (newMapId && Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
     }
   }
@@ -785,12 +820,19 @@ export function populateYowProject(store, data, sel) {
 
 // Compatible structured ZIP import
 
-async function tryReadStructuredZip(file) {
+export async function tryReadStructuredZip(file) {
   const { unzip, unzipSync } = await import('fflate')
   const buffer = await file.arrayBuffer()
-  return new Promise((resolve) => {
-    unzip(new Uint8Array(buffer), (err, files) => {
+  assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
+  return new Promise((resolve, reject) => {
+    unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
+      // A ratio violation must abort with a real error, not be silently
+      // treated like "not a compatible structured ZIP" the way an ordinary
+      // fflate parse error (err) is below.
+      try { ratioFilter.check() } catch (guardErr) { reject(guardErr); return }
       if (err) { resolve(null); return }
+      try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       const paths = Object.keys(files)
       const isNC = paths.some(p =>
         /^(characters|locations|lore|items|other|snippets|notes)\/[^/]+\/metadata\.json$/.test(p)
@@ -847,7 +889,11 @@ async function tryReadStructuredZip(file) {
       const docxBytes = files['novel.docx']
       if (docxBytes) {
         try {
-          const docxFiles = unzipSync(docxBytes)
+          assertArchiveInputSizeOk(docxBytes.byteLength, `"${file.name}" (novel.docx)`)
+          const docxRatioFilter = makeZipEntryRatioFilter(`"${file.name}" (novel.docx)`)
+          const docxFiles = unzipSync(docxBytes, { filter: docxRatioFilter })
+          docxRatioFilter.check()
+          assertUnzippedResultOk(docxFiles, `"${file.name}" (novel.docx)`)
           const xmlBytes = docxFiles['word/document.xml']
           if (xmlBytes) {
             const xml = new TextDecoder('utf-8').decode(xmlBytes)
@@ -872,7 +918,13 @@ async function tryReadStructuredZip(file) {
               }
             }
           }
-        } catch { /* manuscript extraction failed — skip */ }
+        } catch (manuscriptErr) {
+          // A limit-exceeded guard must abort the whole import with a clear
+          // error rather than being treated like an ordinary corrupt/invalid
+          // novel.docx (which we tolerate by just skipping the manuscript).
+          if (manuscriptErr?.isArchiveLimitError) { reject(manuscriptErr); return }
+          /* manuscript extraction failed — skip */
+        }
       }
 
       // Extract project name from ZIP filename
@@ -1018,6 +1070,21 @@ export function isNewProjectImport(pendingImport) {
   return pendingImport?.isNewProject !== false
 }
 
+// A brand-new project always seeds one starter Act/Chapter/Scene
+// ("Act 1" > "Chapter 1" > "Opening Scene" or the project type's equivalent
+// labels) via store.addNovel/buildStarterStructure, so the workspace never
+// opens completely empty. When that new project is the destination of an
+// import that itself brings manuscript structure (sel.acts), the imported
+// acts land *alongside* that starter scaffold instead of replacing it,
+// leaving a duplicate empty Act 1 in the outline. Only ever called for a
+// project this import itself just created (isNewProjectImport), so this
+// never touches an existing destination project's real content.
+export function clearStarterManuscriptScaffold(store, novelId) {
+  store.acts
+    .filter(act => act.novelId === novelId)
+    .forEach(act => store.deleteAct(act.id))
+}
+
 // populateYowProject() (native YOW-export import) is not destination-type-
 // aware the way populateProject() is (see its typeKey === 'comic' branch) —
 // it always writes acts/chapters/scenes and comicPages/comicPanels based on
@@ -1129,25 +1196,41 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (store.activeNovelId !== pendingImport.novelId) return
     const id = pendingImport.novelId
     const isNewProject = isNewProjectImport(pendingImport)
+    let projectSnapshot = null
+    let populationSucceeded = false
+    store.beginProjectImport?.()
     try {
+      if (!isNewProject) {
+        projectSnapshot = store.getProjectExportData?.(id)
+        if (!projectSnapshot) throw new Error('Destination project snapshot is unavailable')
+      }
+      // Every project type (including comic, whose Act/Chapter records are
+      // just relabelled Volume/Issue) seeds this same starter scaffold via
+      // buildStarterStructure, so the clear applies universally here.
+      if (isNewProject && pendingImport.sel.acts) {
+        clearStarterManuscriptScaffold(store, id)
+      }
       if (pendingImport.isYow) populateYowProject(store, pendingImport.data, pendingImport.sel)
       else                     populateProject(store, pendingImport.data, pendingImport.sel, pendingImport.type)
+      populationSucceeded = true
       setPendingImport(null)
       setPhase('done')
       setTimeout(() => { onImportDone?.(id); onClose() }, 1100)
     } catch (err) {
       console.error('Import population failed:', err)
       setPendingImport(null)
-      // Only ever delete a project this import itself just created — an
-      // existing destination project the user picked is never touched by
-      // the rollback, even if some of its sections partially populated
-      // before the error (see the "Import into an existing project" row in
-      // docs/ROADMAP.md's Bugs table for why this distinction matters).
       if (isNewProject) {
-        store.deleteNovel(id)
-        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+        Promise.resolve(store.deleteNovel(id)).then(() => {
+          setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+        }).catch(deleteError => {
+          console.error('Could not remove failed import project:', deleteError)
+          setAiError('This archive could not be fully imported, and its incomplete project could not be removed automatically. Check the project library before trying again.')
+        })
       } else {
-        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. Some content may already have been added to the destination project; check it before importing again.')
+        const restored = store.restoreProjectSnapshot?.(id, projectSnapshot)
+        setAiError(restored
+          ? 'This archive could not be fully imported — it may be corrupted or in an unexpected format. The destination project was restored and no imported content was kept.'
+          : 'This archive could not be fully imported — it may be corrupted or in an unexpected format. Some content may already have been added to the destination project; check it before importing again.')
       }
       // Don't leave a stale existing-project selection sitting in state — a
       // retry with a different (e.g. differently-typed) file re-validates in
@@ -1156,6 +1239,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
       // attempt.
       setDestination('new')
       setPhase('upload')
+    } finally {
+      store.endProjectImport?.(populationSucceeded)
     }
   }, [store.activeNovelId, pendingImport]) // eslint-disable-line react-hooks/exhaustive-deps
 
