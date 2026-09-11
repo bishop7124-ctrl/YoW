@@ -88,6 +88,8 @@ jobs:
             spec: tests/e2e/manuscript-reference-panel.spec.js
           - name: new-account-onboarding
             spec: tests/e2e/new-account-onboarding.spec.js
+          - name: pricing-page
+            spec: tests/e2e/pricing-page.spec.js
 
     steps:
       - name: Check out repository
