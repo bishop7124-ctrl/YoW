@@ -90,6 +90,8 @@ jobs:
             spec: tests/e2e/new-account-onboarding.spec.js
           - name: pricing-page
             spec: tests/e2e/pricing-page.spec.js
+          - name: unconfigured-ai-account
+            spec: tests/e2e/unconfigured-ai-account.spec.js
 
     steps:
       - name: Check out repository
