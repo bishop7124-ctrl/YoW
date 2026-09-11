@@ -77,6 +77,8 @@ jobs:
             spec: tests/e2e/account-isolation.spec.js
           - name: project-type-labels
             spec: tests/e2e/project-type-labels.spec.js
+          - name: manuscript-reference-panel
+            spec: tests/e2e/manuscript-reference-panel.spec.js
 
     steps:
       - name: Check out repository
