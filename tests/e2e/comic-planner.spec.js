@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, readStorage,
+  createProject, dismissLaunchPrompts, enterWritingMode, readStorage,
   seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
@@ -17,8 +17,8 @@ test('comic project has correct project type', async ({ page }) => {
   expect(project?.type).toBe('comic')
 })
 
-test('comic workspace is reachable from the Write button', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+test('comic workspace is reachable from the Pages button', async ({ page }) => {
+  await enterWritingMode(page)
 
   // The Comic Planner should be rendered instead of the prose editor
   await expect(
@@ -27,7 +27,7 @@ test('comic workspace is reachable from the Write button', async ({ page }) => {
 })
 
 test('add a page to an issue and verify localStorage persistence', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   // Select (or auto-select) the first issue
   const issueBtn = page.getByRole('button', { name: /Issue|Chapter/i }).first()
@@ -49,7 +49,7 @@ test('add a page to an issue and verify localStorage persistence', async ({ page
 })
 
 test('add a panel to a page and verify localStorage persistence', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   const issueBtn = page.getByRole('button', { name: /Issue|Chapter/i }).first()
   if (await issueBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
@@ -82,7 +82,7 @@ test('add a panel to a page and verify localStorage persistence', async ({ page 
 })
 
 test('panel dialogue field saves and persists after reload', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   const issueBtn = page.getByRole('button', { name: /Issue|Chapter/i }).first()
   if (await issueBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
@@ -131,7 +131,7 @@ test('panel dialogue field saves and persists after reload', async ({ page }) =>
 })
 
 test('page and panel counts appear in the planner UI', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   const issueBtn = page.getByRole('button', { name: /Issue|Chapter/i }).first()
   if (await issueBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
@@ -152,7 +152,7 @@ test('page and panel counts appear in the planner UI', async ({ page }) => {
 })
 
 test('deleting a page removes it and its panels from storage', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   const issueBtn = page.getByRole('button', { name: /Issue|Chapter/i }).first()
   if (await issueBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
@@ -198,7 +198,7 @@ test('deleting a page removes it and its panels from storage', async ({ page }) 
 })
 
 test('comic pages and panels are included in ZIP export', async ({ page }) => {
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   const issueBtn = page.getByRole('button', { name: /Issue|Chapter/i }).first()
   if (await issueBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
@@ -226,7 +226,7 @@ test('prose project does not show Comic Planner UI', async ({ page }) => {
   await page.getByRole('button', { name: 'Back to projects' }).click()
   await createProject(page, { title: 'Prose Novel', type: 'novel' })
 
-  await page.getByRole('button', { name: 'Write' }).click()
+  await enterWritingMode(page)
 
   // Wait for the manuscript editor to mount
   await page.locator('[data-tour="manuscript-editor"]').waitFor({ timeout: 8000 })
