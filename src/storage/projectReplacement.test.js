@@ -18,6 +18,7 @@ describe('atomic project storage replacement', () => {
     expect(entries['nf_scene_content:scene-1']).toBe('Prose')
     expect(entries.nf_characters).toBe('[]')
     expect(entries.nf_activeMapByNovel).toBe('{}')
+    expect(entries.nf_scene_versions).toBe('[]')
     expect(entries.nf_localOwner).toBe('user-1')
     expect(entries.nf_localWriteAt).toBe('123')
   })

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, replaceUserData } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
@@ -13,10 +13,10 @@ import { createMemoryBackend, resetStorageBackend, setStorageBackend } from '../
 vi.mock('../utils/firestoreSync', () => ({
   upsertItems:        vi.fn().mockResolvedValue({}),
   deleteItem:         vi.fn().mockResolvedValue({}),
-  deleteItemsByNovel: vi.fn().mockResolvedValue({}),
   saveUserSettings:   vi.fn().mockResolvedValue({}),
   saveSceneDoc:       vi.fn().mockResolvedValue({}),
   deleteSceneDoc:     vi.fn().mockResolvedValue({}),
+  deleteProjectData:  vi.fn().mockResolvedValue({}),
   replaceUserData:    vi.fn().mockResolvedValue({}),
   getUserStorageUsage: vi.fn().mockResolvedValue(0),
 }))
@@ -381,20 +381,20 @@ describe('novel CRUD', () => {
     expect(novel.id).toBe(id)
   })
 
-  it('deleteNovel removes the novel and persists the deletion', () => {
+  it('deleteNovel removes the novel and persists the deletion', async () => {
     const { result } = renderHook(() => useStore(null))
 
     act(() => { result.current.addNovel({ title: 'To Delete', type: 'novel' }) })
     const id = result.current.novels[0].id
 
     let deleted
-    act(() => { deleted = result.current.deleteNovel(id) })
+    await act(async () => { deleted = await result.current.deleteNovel(id) })
 
     expect(deleted).toBe(true)
     expect(result.current.novels).toHaveLength(0)
     const stored = JSON.parse(localStorage.getItem('nf_novels'))
     expect(stored).toHaveLength(0)
-    expect(result.current.deleteNovel('missing')).toBe(false)
+    await expect(result.current.deleteNovel('missing')).resolves.toBe(false)
   })
 
   it('updateNovel blocks edits to a non-active project on the free tier even while a different project is active', () => {
@@ -414,7 +414,7 @@ describe('novel CRUD', () => {
     expect(stored.find(n => n.id === 'other-2').title).toBe('Other Project')
   })
 
-  it('deleteNovel cleans up uploaded Storage images for the novel and its characters/factions', () => {
+  it('deleteNovel cleans up uploaded Storage images for the novel and its characters/factions', async () => {
     vi.mocked(deleteUserMedia).mockClear()
     const { result } = renderHook(() => useStore(null))
 
@@ -423,7 +423,7 @@ describe('novel CRUD', () => {
     act(() => { result.current.saveCharacter({ name: 'Frodo', novelId: id, image: 'https://x/storage/v1/object/public/user-media/u1/characters/c.webp' }) })
     act(() => { result.current.saveFaction({ name: 'Fellowship', novelId: id, logo: { source: 'image', image: 'https://x/storage/v1/object/public/user-media/u1/factions/f.webp' } }) })
 
-    act(() => { result.current.deleteNovel(id) })
+    await act(async () => { await result.current.deleteNovel(id) })
 
     const deletedUrls = vi.mocked(deleteUserMedia).mock.calls.map(call => call[0])
     expect(deletedUrls).toEqual(expect.arrayContaining([
@@ -434,7 +434,7 @@ describe('novel CRUD', () => {
     ]))
   })
 
-  it('deleteNovel blocks deleting a non-active project on the free tier', () => {
+  it('deleteNovel blocks deleting a non-active project on the free tier', async () => {
     localStorage.setItem('nf_novels', JSON.stringify([
       { id: 'free-1', title: 'Locked Free Project', type: 'novel' },
       { id: 'other-2', title: 'Other Project', type: 'novel' },
@@ -442,10 +442,43 @@ describe('novel CRUD', () => {
     const { result } = renderHook(() => useStore(null, { freeProjectId: 'free-1' }))
     act(() => { result.current.setActiveNovelId('free-1') })
 
-    act(() => { result.current.deleteNovel('other-2') })
+    await act(async () => { await result.current.deleteNovel('other-2') })
 
     const stored = JSON.parse(localStorage.getItem('nf_novels'))
     expect(stored.map(n => n.id)).toContain('other-2')
+  })
+
+  it('keeps local project data intact when the atomic cloud deletion fails', async () => {
+    vi.mocked(deleteProjectData).mockRejectedValueOnce(new Error('database rollback'))
+    const { result } = renderHook(() => useStore('delete-cloud-user'))
+    let project
+    act(() => { project = result.current.addNovel({ title: 'Keep after failure', type: 'novel' }) })
+
+    await act(async () => {
+      await expect(result.current.deleteNovel(project.id)).rejects.toThrow('database rollback')
+    })
+
+    expect(result.current.novels).toEqual([expect.objectContaining({ id: project.id })])
+    expect(JSON.parse(localStorage.getItem('nf_novels'))).toEqual([expect.objectContaining({ id: project.id })])
+  })
+
+  it('keeps rendered and mirrored project data intact when the local deletion transaction fails', async () => {
+    const project = { id: 'local-project', title: 'Keep locally', type: 'novel' }
+    const backend = createMemoryBackend({
+      nf_novels: JSON.stringify([project]),
+      'nf_scene_content:local-scene': 'Keep this prose',
+    })
+    backend.replaceItems = vi.fn(async () => { throw new Error('local delete rollback') })
+    setStorageBackend(backend)
+    const { result } = renderHook(() => useStore(null, { cloudSyncEnabled: false }))
+    expect(result.current.novels).toEqual([project])
+
+    await act(async () => {
+      await expect(result.current.deleteNovel(project.id)).rejects.toThrow('local delete rollback')
+    })
+
+    expect(result.current.novels).toEqual([project])
+    expect(backend.getItem('nf_scene_content:local-scene')).toBe('Keep this prose')
   })
 
   // Regression coverage for audit finding #16 ("Project deletion can leave
@@ -457,7 +490,7 @@ describe('novel CRUD', () => {
   // ("scene cloud cleanup on project delete" in firestoreSync.test.js):
   // seed storage directly rather than building state up through the store's
   // own add* methods, then assert only the deleted project's data is gone.
-  it('deleteNovel removes every per-scene content key and version-history entry for the project, leaving other projects untouched', () => {
+  it('deleteNovel removes every per-scene content key and version-history entry for the project, leaving other projects untouched', async () => {
     localStorage.setItem('nf_novels', JSON.stringify([
       { id: 'novel-1', title: 'To Delete', type: 'novel' },
       { id: 'novel-2', title: 'Keep Me', type: 'novel' },
@@ -475,9 +508,10 @@ describe('novel CRUD', () => {
       { id: 'v2', sceneId: 'scene-2', novelId: 'novel-1', title: 'Scene Two', content: 'v1', wordCount: 1, timestamp: 2 },
       { id: 'v3', sceneId: 'scene-3', novelId: 'novel-2', title: 'Other Project Scene', content: 'v1', wordCount: 1, timestamp: 3 },
     ]))
+    localStorage.setItem('nf_series', JSON.stringify([{ id: 'series-1', projectOrder: ['novel-1', 'novel-2'] }]))
 
     const { result } = renderHook(() => useStore(null))
-    act(() => { result.current.deleteNovel('novel-1') })
+    await act(async () => { await result.current.deleteNovel('novel-1') })
 
     expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
     expect(localStorage.getItem('nf_scene_content:scene-2')).toBeNull()
@@ -486,6 +520,7 @@ describe('novel CRUD', () => {
 
     const remainingVersions = JSON.parse(localStorage.getItem('nf_scene_versions'))
     expect(remainingVersions.map(v => v.id)).toEqual(['v3'])
+    expect(JSON.parse(localStorage.getItem('nf_series'))[0].projectOrder).toEqual(['novel-2'])
   })
 
   // The "stale/orphan" half of finding #16: a content key whose scene record
@@ -493,7 +528,7 @@ describe('novel CRUD', () => {
   // earlier gap, under no project) has no owner to attribute it to, so
   // deleteNovel's cleanup sweeps it opportunistically regardless of which
   // project is actually being deleted.
-  it('deleteNovel also sweeps orphaned scene content keys that belong to no project in nf_scenes', () => {
+  it('deleteNovel also sweeps orphaned scene content keys that belong to no project in nf_scenes', async () => {
     localStorage.setItem('nf_novels', JSON.stringify([{ id: 'novel-1', title: 'To Delete', type: 'novel' }]))
     localStorage.setItem('nf_scenes', JSON.stringify([{ id: 'scene-1', novelId: 'novel-1', title: 'Scene One' }]))
     localStorage.setItem('nf_scene_content:scene-1', 'Novel 1 scene prose.')
@@ -501,7 +536,7 @@ describe('novel CRUD', () => {
     localStorage.setItem('nf_scene_content:orphan-1', 'Nobody references this scene any more.')
 
     const { result } = renderHook(() => useStore(null))
-    act(() => { result.current.deleteNovel('novel-1') })
+    await act(async () => { await result.current.deleteNovel('novel-1') })
 
     expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
     expect(localStorage.getItem('nf_scene_content:orphan-1')).toBeNull()

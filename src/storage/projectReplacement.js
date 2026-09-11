@@ -32,6 +32,10 @@ export function buildProjectReplacementEntries(data, { ownerId = null, writtenAt
   entries.nf_activeMapByNovel = JSON.stringify(source.activeMapByNovel ?? {})
   entries.nf_currentYear = JSON.stringify(source.currentYear ?? 0)
   entries.nf_activeNovel = JSON.stringify(source.activeNovelId ?? null)
+  // Version history is local recovery data rather than part of cloud exports.
+  // A full replacement clears it unless a local destructive operation supplies
+  // the subset that still belongs to retained projects.
+  entries.nf_scene_versions = JSON.stringify(source.sceneVersions ?? [])
   entries.nf_localWriteAt = String(writtenAt)
   if (ownerId) entries.nf_localOwner = String(ownerId)
 

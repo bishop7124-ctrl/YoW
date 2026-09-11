@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, deleteItem, deleteItemsByNovel, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
+import { upsertItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -12,9 +12,8 @@ import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/r
 import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
-import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, deleteAllSceneContentForNovel } from '../storage/sceneContentStore'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
-import { clearSceneVersionsForNovel } from '../utils/sceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -3484,62 +3483,88 @@ export function useStore(userId = null, options = {}) {
     const ordered = (orderedIds || []).filter(id => map.has(id) && !seen.has(id) && seen.add(id)).map(id => map.get(id))
     return [...ordered, ...prev.filter(item => !seen.has(item.id))]
   })
-  const deleteNovel = (id) => {
+  const deleteNovel = async (id) => {
     if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return false }
     const deletedNovel = novelsRef.current.find(n => n.id === id)
     if (!deletedNovel) return false
-    deleteMediaUrls([
+    const mediaUrls = [
       deletedNovel?.coverPhoto,
       deletedNovel?.bannerImage,
       ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
       ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
-    ])
-    // Per-scene storage cleanup (audit finding #16: "Project deletion can
-    // leave per-scene keys"). Deliberately reads `nf_scenes` straight from
-    // the storage backend rather than trusting `scenesRef.current` — the
-    // in-memory copy is normally in sync, but the whole point of the bug
-    // being fixed here is a case where it silently isn't (a scene whose
-    // content key was never "known" to this tab this session). Falls back to
-    // `scenesRef.current` too (union, not replace) purely as a belt-and-braces
-    // net for the reverse gap — a scene added this tick whose own persistence
-    // effect hasn't flushed yet — not because the storage read is expected to
-    // be incomplete in normal operation.
-    const removedContentIds = deleteAllSceneContentForNovel(id, {
-      knownContentKeyIds: knownSceneContentIdsRef.current,
-      lastWrittenContentById: lastWrittenSceneContentByIdRef.current,
-    })
-    const inMemorySceneIds = scenesRef.current.filter(s => s.novelId === id).map(s => s.id).filter(sid => sid != null)
-    clearSceneVersionsForNovel(id, [...new Set([...removedContentIds, ...inMemorySceneIds])])
-    const updatedNovels = novelsRef.current.filter(n => n.id !== id)
-    commitLocal(novelsRef, setNovels, 'nf_novels', updatedNovels)
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(factionsRef, setFactions, 'nf_factions', prev => prev.filter(f => f.novelId !== id))
-    commitLocal(locationsRef, setLocations, 'nf_locations', prev => prev.filter(l => l.novelId !== id))
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.filter(h => h.novelId !== id))
-    setEras(prev => prev.filter(e => e.novelId !== id))
-    commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => a.novelId !== id))
-    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.novelId !== id))
-    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.filter(m => m.novelId !== id))
-    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => prev.filter(w => w.novelId !== id))
-    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.novelId !== id))
-    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.novelId !== id))
+    ]
+    const removedSceneIds = new Set(scenesRef.current.filter(s => s.novelId === id).map(s => s.id))
     const nextActiveMapByNovel = { ...activeMapByNovelRef.current }
-    if (Object.prototype.hasOwnProperty.call(nextActiveMapByNovel, id)) {
-      delete nextActiveMapByNovel[id]
-      setActiveMapByNovel(nextActiveMapByNovel)
-      saveSettingsNow({ activeMapByNovel: nextActiveMapByNovel })
+    delete nextActiveMapByNovel[id]
+    const nextData = {
+      novels: novelsRef.current.filter(n => n.id !== id),
+      characters: charactersRef.current.filter(item => item.novelId !== id),
+      factions: factionsRef.current.filter(item => item.novelId !== id),
+      locations: locationsRef.current.filter(item => item.novelId !== id),
+      timeline: timelineRef.current.filter(item => item.novelId !== id),
+      worldHistory: worldHistoryRef.current.filter(item => item.novelId !== id),
+      eras: erasRef.current.filter(item => item.novelId !== id),
+      acts: actsRef.current.filter(item => item.novelId !== id),
+      chapters: chaptersRef.current.filter(item => item.novelId !== id),
+      scenes: scenesRef.current.filter(item => item.novelId !== id),
+      loreEntries: loreEntriesRef.current.filter(item => item.novelId !== id),
+      ideaEntries: ideaEntriesRef.current.filter(item => item.novelId !== id),
+      maps: mapsRef.current.filter(item => item.novelId !== id),
+      whiteboards: whiteboardsRef.current.filter(item => item.novelId !== id),
+      series: series.map(item => ({
+        ...item,
+        projectOrder: (item.projectOrder ?? []).filter(projectId => projectId !== id),
+      })),
+      storySchedule: storyScheduleRef.current.filter(item => item.novelId !== id),
+      rpgCharacters: rpgCharactersRef.current.filter(item => item.novelId !== id),
+      comicPages: comicPagesRef.current.filter(item => item.novelId !== id),
+      comicPanels: comicPanelsRef.current.filter(item => item.novelId !== id),
+      activeMapByNovel: nextActiveMapByNovel,
+      currentYear: currentYearRef.current,
+      activeNovelId: activeNovelIdRef.current === id ? null : activeNovelIdRef.current,
+      recordConflicts,
+      sceneVersions: load('nf_scene_versions', []).filter(version =>
+        version.novelId !== id && !(version.novelId == null && removedSceneIds.has(version.sceneId))
+      ),
     }
-    if (canSyncCloud) {
-      deleteItemsByNovel(userId, id).catch(console.error)
-      deleteItem('novels', userId, id).catch(console.error)
+
+    if (canSyncCloud) await trackSync(deleteProjectData(userId, id))
+    try {
+      await replaceProjectStorageAtomically(nextData, { ownerId: userId })
+      clearLocalWriteFailed('nf_projectReplacement')
+    } catch (error) {
+      markLocalWriteFailed('nf_projectReplacement')
+      throw error
     }
-    if (activeNovelIdRef.current === id) selectActiveNovel(null)
+
+    novelsRef.current = nextData.novels; setNovels(nextData.novels)
+    charactersRef.current = nextData.characters; setCharacters(nextData.characters)
+    factionsRef.current = nextData.factions; setFactions(nextData.factions)
+    locationsRef.current = nextData.locations; setLocations(nextData.locations)
+    timelineRef.current = nextData.timeline; setTimeline(nextData.timeline)
+    worldHistoryRef.current = nextData.worldHistory; setWorldHistory(nextData.worldHistory)
+    erasRef.current = nextData.eras; setEras(nextData.eras)
+    actsRef.current = nextData.acts; setActs(nextData.acts)
+    chaptersRef.current = nextData.chapters; setChapters(nextData.chapters)
+    scenesRef.current = nextData.scenes; setScenes(nextData.scenes)
+    loreEntriesRef.current = nextData.loreEntries; setLoreEntries(nextData.loreEntries)
+    ideaEntriesRef.current = nextData.ideaEntries; setIdeaEntries(nextData.ideaEntries)
+    mapsRef.current = nextData.maps; setMaps(nextData.maps)
+    whiteboardsRef.current = nextData.whiteboards; setWhiteboards(nextData.whiteboards)
+    setSeries(nextData.series)
+    storyScheduleRef.current = nextData.storySchedule; setStorySchedule(nextData.storySchedule)
+    rpgCharactersRef.current = nextData.rpgCharacters; setRpgCharacters(nextData.rpgCharacters)
+    comicPagesRef.current = nextData.comicPages; setComicPages(nextData.comicPages)
+    comicPanelsRef.current = nextData.comicPanels; setComicPanels(nextData.comicPanels)
+    activeMapByNovelRef.current = nextData.activeMapByNovel; setActiveMapByNovel(nextData.activeMapByNovel)
+    activeNovelIdRef.current = nextData.activeNovelId; setActiveNovelId(nextData.activeNovelId)
+    removedSceneIds.forEach(sceneId => {
+      debouncedSaveScene.cancel(sceneId)
+      knownSceneContentIdsRef.current.delete(sceneId)
+      lastWrittenSceneContentByIdRef.current.delete(sceneId)
+    })
+    deleteMediaUrls(mediaUrls)
+    if (nextData.activeNovelId == null) setWritingSceneId(null)
     setSelectedCharacterId(null)
     setSelectedLocationId(null)
     setSelectedLoreEntryId(null)
