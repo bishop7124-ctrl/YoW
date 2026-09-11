@@ -1822,7 +1822,7 @@ textarea:focus {
 }
 
 .ms-entity {
-  color: var(--accent);
+  color: var(--accent-text);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 54%, transparent);
   cursor: pointer;
 }
@@ -1961,8 +1961,11 @@ textarea:focus {
   53%, 100% { opacity: 0; }
 }
 .ms-textarea--rich::placeholder {
-  color: var(--studio-muted);
-  -webkit-text-fill-color: var(--studio-muted);
+  /* The rich preview beneath this textarea already renders the empty-state
+     prompt. Keep the native placeholder in the DOM for selectors and browser
+     semantics, but do not paint a second copy over the preview. */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Paragraph indentation is presentation, never literal whitespace in scene.content.
@@ -4019,8 +4022,8 @@ textarea:focus {
 }
 
 .manuscript-processor .ms-textarea.ms-textarea--rich::placeholder {
-  color: var(--studio-muted) !important;
-  -webkit-text-fill-color: var(--studio-muted) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
 }
 
 .modal-overlay,
@@ -11618,15 +11621,18 @@ body {
   }
 
   .studio-brand {
-    width: max-content;
-    max-width: none;
+    width: auto;
+    max-width: min(28vw, 360px);
+    overflow: hidden;
   }
 
   .studio-brand-text,
   .studio-brand h1 {
-    overflow: visible;
-    text-overflow: clip;
-    max-width: none;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
   }
 
   .studio-primary-action {
@@ -18241,7 +18247,7 @@ body {
 .overview-hero h1 {
   order: 2;
   max-width: 560px;
-  font-size: clamp(42px, 5vw, 72px);
+  font-size: clamp(30px, 3.2vw, 48px);
   text-shadow: 0 18px 44px color-mix(in srgb, #000 42%, transparent);
 }
 
@@ -22988,3 +22994,18 @@ body {
   text-transform: none;
   color: var(--text-main);
 }
+
+/* Product coherence: identity cannot consume navigation, even with long titles. */
+@media (min-width: 861px) {
+  .studio-room { flex: 0 0 auto; }
+  .studio-room-list { overflow-x: auto; scrollbar-width: thin; }
+}
+@media (min-width: 861px) and (max-width: 1100px) {
+  .studio-room-list { display: none; }
+  .studio-room-hamburger { display: flex; align-items: center; gap: 8px; justify-self: start; }
+}
+.ms-catalogue-count { color: var(--text-muted); font-size: 12px; margin: 8px 0; }
+.ms-catalogue-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 12px; }
+.ms-catalogue-pagination button { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; }
+.ms-catalogue-pagination button:disabled { opacity: .5; }
+.ms-catalogue-tab .ms-ref-detail p { white-space: pre-wrap; overflow-wrap: anywhere; }

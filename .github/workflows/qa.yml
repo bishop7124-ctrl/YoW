@@ -141,10 +141,16 @@ jobs:
             spec: tests/e2e/import-into-existing-project.spec.js
           - name: merge-project
             spec: tests/e2e/merge-project.spec.js
-          - name: accessibility
-            spec: tests/e2e/accessibility.spec.js
+          - name: product-coherence
+            spec: tests/e2e/product-coherence.spec.js
           - name: workspace-loading
             spec: tests/e2e/workspace-loading.spec.js
+          - name: marketing-promises
+            spec: tests/e2e/marketing-promises.spec.js
+          - name: desktop-workspace
+            spec: tests/e2e/desktop-workspace.spec.js
+          - name: accessibility
+            spec: tests/e2e/accessibility.spec.js
           - name: marketing-static-pages
             spec: tests/e2e/marketing-static-pages.spec.js
           - name: qa-sweep-2026-09-04

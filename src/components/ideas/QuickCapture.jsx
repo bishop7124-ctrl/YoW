@@ -60,7 +60,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
   ).slice(0, 4)
 
   return (
-    <div data-tour="ideas-capture" style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
+    <div data-tour="ideas-capture" style={{ padding: '10px 20px 8px', borderBottom: '1px solid var(--border)' }}>
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -68,8 +68,8 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
         gap: 8,
         background: 'var(--bg-nav)',
         border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: '10px 14px',
+        borderRadius: 10,
+        padding: '6px 12px',
         transition: 'border-color .15s, box-shadow .15s',
       }}
         className="quick-capture-wrap focus-within:ring-2 focus-within:ring-[var(--accent)]"
@@ -94,7 +94,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
             border: 'none',
             outline: 'none',
             color: 'var(--text-main)',
-            fontSize: 16,
+            fontSize: 14,
             fontFamily: 'inherit',
           }}
         />
@@ -183,7 +183,7 @@ export default function QuickCapture({ onAdd, readOnly, allTags }) {
               border: 'none',
               outline: 'none',
               color: 'var(--text-muted)',
-              fontSize: 16,
+              fontSize: 14,
               fontFamily: 'inherit',
             }}
           />

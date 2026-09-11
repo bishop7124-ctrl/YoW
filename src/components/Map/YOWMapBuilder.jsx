@@ -175,7 +175,7 @@ function StampPreviewCanvas({ stamp, stylePreset, active }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function MapBuilder({ store }) {
+export default function MapBuilder({ store, readOnly = false }) {
   const { mapProject: project, addMap, selectMap, deleteMap, renameMap, updateActiveMapData, saveLocation, setSelectedLocationId } = store
 
   if (!project) {
@@ -202,6 +202,7 @@ export default function MapBuilder({ store }) {
   return (
     <MapEditor
       key={activeMap.id}
+      readOnly={readOnly}
       activeMap={activeMap}
       project={project}
       addMap={addMap}
@@ -399,7 +400,7 @@ function NewMapModal({ onClose, onCreate }) {
 
 // ─── Map Editor ───────────────────────────────────────────────────────────────
 
-function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap, updateActiveMapData, saveLocation, setSelectedLocationId }) {
+function MapEditor({ readOnly = false, activeMap, project, addMap, selectMap, deleteMap, renameMap, updateActiveMapData, saveLocation, setSelectedLocationId }) {
   const canvasRef = useRef(null)
   const viewportRef = useRef(null)
   const frameRef = useRef(null)
@@ -418,7 +419,9 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   const redoStackRef = useRef([])
   const spacePressedRef = useRef(false)
 
-  const [editorMode, setEditorMode] = useState('create') // 'create' | 'view'
+  const [chosenEditorMode, setEditorMode] = useState('create')
+  const editorMode = readOnly ? 'view' : chosenEditorMode
+  // // 'create' | 'view'
   const [viewTooltip, setViewTooltip] = useState(null) // { x, y, object }
   const [mode, setModeState] = useState('select')
   const [view, setView] = useState(viewRef.current)
@@ -576,6 +579,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
       const typing = e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)
       if (typing) return
       if (e.code === 'Space') { spacePressedRef.current = true; return }
+      if (readOnly) return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return }
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedSegmentRef.current || selectedIdsRef.current.length)) { e.preventDefault(); deleteSelected(); return }
@@ -605,6 +609,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   // ── Persistence ────────────────────────────────────────────────────────────
 
   function persistMap({ mapObjects = objectsRef.current, mapLayers = schemaRef.current.layers, metadata = schemaRef.current.metadata } = {}) {
+    if (readOnly) return
     updateActiveMapData(() => ({
       schemaVersion: SCHEMA_VERSION,
       width: MAP_W, height: MAP_H,
@@ -624,6 +629,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   }
 
   function persistMeta(patch) {
+    if (readOnly) return
     takeSnapshot()
     persistMap({ metadata: { ...(schemaRef.current.metadata || {}), ...patch } })
   }
@@ -641,6 +647,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   }
 
   function applySnapshot(snap) {
+    if (readOnly) return
     updateActiveMapData(() => ({ schemaVersion: SCHEMA_VERSION, width: MAP_W, height: MAP_H, ...snap }))
     setSelectedIds([]); setDraft(null)
   }
@@ -662,6 +669,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
   // ── Object mutations ────────────────────────────────────────────────────────
 
   function updateObjects(updater, { nextLayers } = {}) {
+    if (readOnly) return
     takeSnapshot()
     const next = typeof updater === 'function' ? updater(objectsRef.current) : updater
     persistMap({
@@ -1798,10 +1806,10 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#2a2e33', overflow: 'hidden' }}>
 
       {/* Command bar */}
-      <div style={{ height: CMD_H, background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', flexShrink: 0, zIndex: 10 }}>
+      <div style={{ flexWrap: readOnly ? 'wrap' : undefined, minHeight: CMD_H, height: readOnly ? 'auto' : CMD_H, background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', flexShrink: 0, zIndex: 10 }}>
         {/* Mode toggle */}
         <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: 7, padding: 2, gap: 2, border: '1px solid var(--border)' }}>
-          {[['create', '✏️ Create'], ['view', '👁 View']].map(([m, label]) => (
+          {(readOnly ? [['view', '👁 View']] : [['create', '✏️ Create'], ['view', '👁 View']]).map(([m, label]) => (
             <button
               key={m}
               onClick={() => { setEditorMode(m); setViewTooltip(null) }}
@@ -1825,12 +1833,12 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
           >
             {(project.maps || []).map(m => <option key={m.id} value={m.id}>{m.name || 'Untitled'}</option>)}
           </select>
-          <button className="btn btn-secondary btn-sm" title="New map" onClick={() => setShowNewMapModal(true)} style={{ fontSize: 13, lineHeight: 1 }}>+</button>
+          <button hidden={readOnly} className="btn btn-secondary btn-sm" title="New map" onClick={() => setShowNewMapModal(true)} style={{ fontSize: 13, lineHeight: 1 }}>+</button>
         </div>
         <span style={{ fontSize: 10, color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{activeMapType}</span>
         <div style={{ flex: 1 }} />
-        <button className="btn btn-secondary btn-sm" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">↶</button>
-        <button className="btn btn-secondary btn-sm" onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)">↷</button>
+        <button className="btn btn-secondary btn-sm" onClick={undo} disabled={readOnly || !canUndo} title="Undo (⌘Z)">↶</button>
+        <button className="btn btn-secondary btn-sm" onClick={redo} disabled={readOnly || !canRedo} title="Redo (⌘⇧Z)">↷</button>
         <div style={{ width: 1, background: 'var(--border)', height: 20, margin: '0 4px' }} />
         <button className="btn btn-secondary btn-sm" onClick={() => zoomCenter(0.82)} title="Zoom out">−</button>
         <span style={{ fontSize: 12, color: 'var(--muted)', minWidth: 42, textAlign: 'center' }}>{Math.round(view.zoom * 100)}%</span>
@@ -1838,6 +1846,7 @@ function MapEditor({ activeMap, project, addMap, selectMap, deleteMap, renameMap
         <button className="btn btn-secondary btn-sm" onClick={() => fitCanvas()} title="Fit to screen" style={{ fontSize: 11 }}>Fit</button>
         <div style={{ width: 1, background: 'var(--border)', height: 20, margin: '0 4px' }} />
         <select
+          disabled={readOnly}
           value={stylePreset}
           onChange={e => persistMeta({ stylePreset: e.target.value })}
           style={{ height: 28, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', borderRadius: 6, padding: '0 8px', fontSize: 16, fontFamily: 'inherit' }}

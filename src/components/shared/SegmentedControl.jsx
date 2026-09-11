@@ -28,6 +28,7 @@ export default function SegmentedControl({ options, value, onChange, variant = '
           <button
             key={opt.id}
             type="button"
+            aria-pressed={active}
             onClick={() => onChange(opt.id)}
             className={cx(
               'shrink-0 whitespace-nowrap text-xs font-bold transition-colors relative',

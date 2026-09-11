@@ -1,5 +1,7 @@
 # Core Public Marketing Copy
 
+> **10 September update:** the bracketed findings below are the 1 September audit snapshot. Active source now removes the unsupported player-view, “launch-ready,” 5–8-app, absolute loss-prevention, and broad future-update wording identified here. See [COPY_CONFLICTS.md](COPY_CONFLICTS.md) for current status.
+
 This file consolidates the current headline-level copy and promise-bearing feature text. Bracketed labels are audit notes, not runtime content.
 
 ## Homepage (`src/components/auth/HomePage.jsx`)

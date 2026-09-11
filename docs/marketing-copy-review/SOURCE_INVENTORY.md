@@ -16,19 +16,19 @@ This is the file-level map of marketing and promise-bearing text. “Canonical�
 | `public/robots.txt` | Crawler rules and sitemap reference | Review with launch visibility decision. |
 | `public/sitemap.xml` | Indexed public URLs | Must match actual Vercel routing/canonical URLs. |
 | `public/llms.txt` | Machine-readable product summary and feature claims | A marketing source that is easy to overlook. |
-| `vercel.json` | Which static or React representation is actually served | `/founders/` is static; `/features/` and `/faq/` fall through to React. |
+| `vercel.json` | Which static or React representation is actually served | React owns `/features/`, `/faq/`, `/founders/`, and Founder profiles; distinct SEO topic pages remain static. |
 
 ## React public pages
 
 | Source | URL / surface | Main text groups |
 | --- | --- | --- |
 | `src/components/pricing/PricingPage.jsx` | `/pricing/` | Pricing hero, trust chips, plan table, Founder slots, affordability note, pricing FAQ, final CTA, schema. |
-| `src/utils/billingConfig.js` | Shared pricing values | £10 Monthly, £150 Lifetime, £300 Founder, £6/year renewal, 3-year inclusion, 100 slots. Display-only; Stripe is separate. |
+| `src/utils/billingConfig.js` | Shared pricing values | £10 Monthly, £99 Lifetime, £299 Founder, £6/year renewal, 3-year inclusion, 100 slots. Display-only; Stripe is separate. |
 | `src/utils/membership.js` | Shared plan copy and quotas | Free/Monthly/Lifetime/Founder/Beta descriptions, feature lists, 250 MB/8 GB/15 GB, Local/Cloud labels. |
 | `src/components/features/FeaturesPage.jsx` | `/features/` | Full feature catalogue, project-type fit, AI descriptions, use cases, comparison/CTA. |
 | `src/components/faq/FAQPage.jsx` | `/faq/` | Plans, storage, AI, Local Mode, projects, mobile/import, data ownership. |
-| `src/components/founders/FoundersPage.jsx` | React Founders component | Present in code but Vercel explicitly routes `/founders/` to static HTML. |
-| `src/components/founders/FounderProfilePage.jsx` | React Founder profile | Code path competes with Vercel static profile route. |
+| `src/components/founders/FoundersPage.jsx` | `/founders/` | Founder directory and approved membership/profile terms. |
+| `src/components/founders/FounderProfilePage.jsx` | `/founders/:slug/` | YOW-managed Founder profile. |
 | `src/components/download/DownloadPage.jsx` | `/download/` | Desktop entitlement, platform availability, unsigned-install instructions, Local Mode/updates. |
 | `src/components/auth/LoginPage.jsx` | `/login/`, `/signup/`, recovery | Auth value proposition, welcome/recovery/status text, development-only credential fill. |
 
@@ -56,7 +56,7 @@ The former static duplicates for Features, FAQ, Founders and the Morgan Bishop p
 | --- | --- |
 | `src/components/account/AccountSettings.jsx` | Membership cards, upgrade/renewal, AI key/privacy promise, storage/sync/vault explanations, devices, cancellation, profile. |
 | `src/components/account/BetaInterestModal.jsx` | “Paid plans coming soon,” plan interest, beta access result, account handoff. |
-| `src/components/account/CloudExpiryWarningModal.jsx` | Hosting-expiry, Local Mode, Free fallback, export-all, renewal copy. Contains stale 5 MB claim. |
+| `src/components/account/CloudExpiryWarningModal.jsx` | Hosting-expiry, Local Mode, 250 MB Free fallback, export-all, and renewal copy. |
 | `src/components/account/FreeProjectSelector.jsx` | Downgrade/free editable-project promise and read-only/export behavior. |
 | `src/components/account/StorageCard.jsx` | Quota, fair use, media/storage messaging. |
 | `src/components/auth/UserMenu.jsx` | Plan badge/account CTA labels. |

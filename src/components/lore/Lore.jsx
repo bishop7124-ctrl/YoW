@@ -107,7 +107,7 @@ function LinkPicker({ title, items, selected, getLabel, onToggle }) {
           {items.map(item => {
             const active = selectedIds.has(item.id)
             return (
-              <button key={item.id} type="button" data-dirties-form aria-pressed={active} onClick={() => onToggle(item.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+              <button key={item.id} type="button" data-dirties-form aria-pressed={active} onClick={() => onToggle(item.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-[var(--accent-fade)] border-[var(--accent)]/40 text-[var(--accent-text)]' : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                 {item.image && <UserMediaImage src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
                 {active && <span>✓</span>}{getLabel(item)}
               </button>
@@ -208,7 +208,7 @@ function LoreWorkspace({ store }) {
           {(search || effectiveTag || effectiveCategory) && <StudioButton size="sm" onClick={clearFilters}>Clear filters</StudioButton>}
           {grouped.map(([cat, entries]) => (
             <div key={cat} className="mb-2">
-              <button aria-expanded={!collapsed.has(cat)} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(cat)) next.delete(cat); else next.add(cat); return next })} className="w-full px-3 py-1.5 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-[var(--accent)] opacity-80">
+              <button aria-expanded={!collapsed.has(cat)} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(cat)) next.delete(cat); else next.add(cat); return next })} className="w-full px-3 py-1.5 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-[var(--accent-text)] opacity-80">
                 <span>{cat} ({entries.length})</span>
                 <span>{collapsed.has(cat) ? '+' : '-'}</span>
               </button>
@@ -247,7 +247,7 @@ function LoreWorkspace({ store }) {
                 <div className="flex flex-wrap gap-2 mt-3">
                   {selected.category && <span className="chip chip-accent">{selected.category}</span>}
                   {selected.tags?.map(tag => (
-                    <button key={tag} onClick={() => setTagFilter(tag)} className="chip hover:text-[var(--accent)] hover:border-[var(--accent)]">#{tag}</button>
+                    <button key={tag} onClick={() => setTagFilter(tag)} className="chip hover:text-[var(--accent-text)] hover:border-[var(--accent)]">#{tag}</button>
                   ))}
                 </div>
             </StudioPageHeader>
@@ -267,12 +267,12 @@ function LoreWorkspace({ store }) {
                     <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">Related Lore</h3>
                     <div className="flex flex-wrap gap-2">
                       {relatedLore.outgoing.map(e => (
-                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo({ section: 'lore', id: e.id })}>
+                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent-text)]" onClick={() => jumpTo({ section: 'lore', id: e.id })}>
                           {e.title}
                         </button>
                       ))}
                       {relatedLore.incoming.map(e => (
-                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => jumpTo({ section: 'lore', id: e.id })} title="References this entry">
+                        <button key={e.id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent-text)]" onClick={() => jumpTo({ section: 'lore', id: e.id })} title="References this entry">
                           ← {e.title}
                         </button>
                       ))}
@@ -288,15 +288,8 @@ function LoreWorkspace({ store }) {
                       const matches = [...(tagIndex.get(loreTagKey(tag))?.matches.values() || [])].filter(m => !(m.section === 'lore' && m.id === selected.id))
                       return (
                         <div key={tag} className="space-y-2">
-                          <button onClick={() => setTagFilter(tag)} className="text-xs text-[var(--accent)] font-bold">#{tag}</button>
-                          <div className="flex flex-wrap gap-2">
-                            {matches.length === 0 && <span className="text-xs text-[var(--text-muted)]">No other matches yet.</span>}
-                            {matches.map(match => (
-                              <button key={`${tag}-${match.section}-${match.id}`} onClick={() => jumpTo(match)} className="text-xs border border-[var(--border)] rounded px-2 py-1 text-[var(--text-muted)] hover:text-[var(--accent)] hover:border-[var(--accent)]">
-                                {match.type}: {match.title}
-                              </button>
-                            ))}
-                          </div>
+                          <button onClick={() => setTagFilter(tag)} className="text-xs text-[var(--accent-text)] font-bold">#{tag}</button>
+                          <TagMatches key={`${selected.id}:${tag}`} matches={matches} onOpen={jumpTo} />
                         </div>
                       )
                     })}
@@ -343,7 +336,7 @@ function LinkedItems({ title, ids, byId, getLabel, onOpen }) {
       <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-widest mb-3">{title}</h3>
       <div className="flex flex-wrap gap-2">
         {linked.map(item => (
-          <button key={item.id} onClick={() => onOpen(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[var(--accent-fade)] border border-[var(--accent)]/30 text-[var(--accent)] hover:opacity-80 transition-opacity">
+          <button key={item.id} onClick={() => onOpen(item.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[var(--accent-fade)] border border-[var(--accent)]/30 text-[var(--accent-text)] hover:opacity-80 transition-opacity">
             {item.image && <UserMediaImage src={item.image} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />}
             {getLabel(item)}
           </button>
@@ -351,4 +344,19 @@ function LinkedItems({ title, ids, byId, getLabel, onOpen }) {
       </div>
     </div>
   )
+}
+
+
+function TagMatches({ matches, onOpen }) {
+  const [expanded, setExpanded] = useState(false)
+  const [query, setQuery] = useState('')
+  const visible = expanded ? matches.filter(match => `${match.type} ${match.title}`.toLowerCase().includes(query.toLowerCase())) : matches.slice(0, 6)
+  return <div className="space-y-2">
+    {expanded && <input className="field w-full px-3 py-2" type="search" aria-label="Search related entries" value={query} onChange={event => setQuery(event.target.value)} />}
+    <div className="flex flex-wrap gap-2">
+      {!visible.length && <span className="text-xs text-[var(--text-muted)]">{query ? 'No matching entries.' : 'No other matches yet.'}</span>}
+      {visible.map(match => <button key={`${match.type}:${match.id}`} onClick={() => onOpen(match)} className="text-xs border border-[var(--border)] rounded px-2 py-1 text-[var(--text-muted)] hover:text-[var(--accent-text)]">{match.type}: {match.title}</button>)}
+    </div>
+    {matches.length > 6 && <button type="button" aria-expanded={expanded} className="text-xs underline text-[var(--accent-text)]" onClick={() => setExpanded(!expanded)}>{expanded ? 'Show fewer related entries' : `Show all ${matches.length} related entries`}</button>}
+  </div>
 }

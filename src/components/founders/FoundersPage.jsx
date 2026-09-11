@@ -54,7 +54,7 @@ export default function FoundersPage({ user, onGetStarted, onLogin }) {
   usePageMeta({
     path: '/founders/',
     title: 'Founders — Your Own World | Worldbuilding & Writing Software',
-    description: 'Meet the Founder members of Your Own World and learn about limited Founder slots — lifetime Cloud Mode, a Founder badge, and a YOW-managed profile showcasing their work.',
+    description: 'Meet the Founder members of Your Own World and review the planned Founder terms, including a badge and an optional YOW-managed profile.',
   })
 
   return (
@@ -70,7 +70,7 @@ export default function FoundersPage({ user, onGetStarted, onLogin }) {
             The writers who believed first.
           </h1>
           <p style={{ fontSize: 17, color: 'var(--text-muted)', maxWidth: 580, lineHeight: 1.7, margin: 0 }}>
-            Founder membership is limited to a small number of slots — refunded or charged-back memberships can return a slot to availability. These are the writers who supported Your Own World from the start. Explore their work and follow their worlds.
+            Founder membership is planned to be capped at 100 completed purchases. Full refunds and lost chargebacks return a slot to availability. These profiles showcase submitted work with each member's permission.
           </p>
         </section>
 
@@ -103,7 +103,7 @@ export default function FoundersPage({ user, onGetStarted, onLogin }) {
           }}>
             <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>Become a Founder</h3>
             <p style={{ color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24, fontSize: 15 }}>
-              Founder membership is a limited, one-time purchase. It includes a permanent profile on this page, lifetime app access, lifetime Cloud Mode within the published fair-use cap, and a YOW-managed profile featuring your work. A full refund or lost chargeback removes Founder access and returns the slot to availability.
+              Founder is a planned one-time purchase capped at 100 completed sales. The planned terms include the Lifetime app licence, Cloud Mode for the life of the YOW service within published storage and fair-use limits, a Founder badge, and an optional YOW-managed profile featuring submitted work. Availability will be confirmed at checkout. A full refund or lost chargeback removes Founder access and returns the slot.
             </p>
             <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>See Founder pricing</a>
           </div>
