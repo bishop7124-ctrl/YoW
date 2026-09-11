@@ -5,6 +5,8 @@ const mockState = vi.hoisted(() => ({
   tables: {},
   selects: [],
   upserts: [],
+  rpcCalls: [],
+  rpcError: null,
   // Queue of { error } results to hand out (in order) before falling back to
   // the normal success response — lets tests simulate a table query that
   // fails N times before succeeding, or fails on every attempt.
@@ -23,6 +25,10 @@ vi.mock('./uploadUserMedia', () => ({
 
 vi.mock('../supabase', () => ({
   supabase: {
+    rpc: vi.fn((name, args) => {
+      mockState.rpcCalls.push({ name, args })
+      return Promise.resolve({ data: null, error: mockState.rpcError })
+    }),
     from: vi.fn((table) => ({
       select: vi.fn((columns) => {
         mockState.selects.push({ table, columns })
@@ -211,6 +217,51 @@ describe('upsertItems embedded-image safety net', () => {
     ])
 
     expect(mockState.embeddedUploadCalls).toHaveLength(0)
+  })
+})
+
+describe('replaceUserData', () => {
+  beforeEach(() => {
+    mockState.rpcCalls = []
+    mockState.rpcError = null
+    mockState.embeddedUploadCalls = []
+    mockState.embeddedUploadShouldFail = false
+  })
+
+  it('sends one atomic RPC with normalized settings and relocated images', async () => {
+    const { replaceUserData } = await import('./firestoreSync.js')
+
+    await replaceUserData('user-1', {
+      activeNovelId: 'novel-1',
+      currentYear: 42,
+      activeMapByNovel: { 'novel-1': 'map-1' },
+      novels: [{ id: 'novel-1', title: 'Restored' }],
+      characters: [{ id: 'char-1', novelId: 'novel-1', image: 'data:image/png;base64,ZmFrZQ==' }],
+      scenes: [{ id: 'scene-1', novelId: 'novel-1', content: 'Exact backup prose' }],
+    })
+
+    expect(mockState.rpcCalls).toHaveLength(1)
+    expect(mockState.rpcCalls[0]).toMatchObject({
+      name: 'replace_user_data_atomic',
+      args: {
+        p_data: {
+          activeNovelId: 'novel-1',
+          currentYear: 42,
+          activeMapByNovel: { 'novel-1': 'map-1' },
+          novels: [{ id: 'novel-1', title: 'Restored' }],
+          characters: [{ id: 'char-1', novelId: 'novel-1', image: 'yow-media:user-1/characters/relocated.webp' }],
+          scenes: [{ id: 'scene-1', novelId: 'novel-1', content: 'Exact backup prose' }],
+        },
+      },
+    })
+  })
+
+  it('surfaces an atomic replacement failure to the caller', async () => {
+    const { replaceUserData } = await import('./firestoreSync.js')
+    mockState.rpcError = { message: 'transaction aborted' }
+
+    await expect(replaceUserData('user-1', { novels: [] }))
+      .rejects.toThrow(/atomic account-data replace error: transaction aborted/)
   })
 })
 

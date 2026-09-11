@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, replaceUserData } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
@@ -17,6 +17,7 @@ vi.mock('../utils/firestoreSync', () => ({
   saveUserSettings:   vi.fn().mockResolvedValue({}),
   saveSceneDoc:       vi.fn().mockResolvedValue({}),
   deleteSceneDoc:     vi.fn().mockResolvedValue({}),
+  replaceUserData:    vi.fn().mockResolvedValue({}),
   getUserStorageUsage: vi.fn().mockResolvedValue(0),
 }))
 vi.mock('../utils/projectStats', () => ({
@@ -192,6 +193,64 @@ describe('localStorage persistence', () => {
       'user-heal',
       [expect.objectContaining({ id: 'pc-legacy', hp: { max: 10, current: 10, temp: 0 } })]
     ), { timeout: 2000 })
+  })
+})
+
+describe('explicit data replacement', () => {
+  it('honors the selected replacement even when the local snapshot has a newer timestamp', () => {
+    const localNovel = { id: 'local-novel', title: 'Newer local copy', type: 'novel' }
+    localStorage.setItem('nf_localOwner', 'replace-user')
+    localStorage.setItem('nf_localWriteAt', String(Date.now()))
+    localStorage.setItem('nf_novels', JSON.stringify([localNovel]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify(localNovel.id))
+    const { result } = renderHook(() => useStore('replace-user', { cloudSyncEnabled: false }))
+    const restoredNovel = { id: 'backup-novel', title: 'Chosen backup', type: 'novel' }
+
+    act(() => {
+      result.current.importData({
+        _savedAt: 1,
+        novels: [restoredNovel],
+        activeNovelId: restoredNovel.id,
+      }, { preferLocal: false })
+    })
+
+    expect(result.current.novels).toEqual([restoredNovel])
+    expect(result.current.activeNovelId).toBe(restoredNovel.id)
+  })
+
+  it('commits the cloud transaction before replacing local state', async () => {
+    vi.mocked(replaceUserData).mockClear()
+    vi.mocked(replaceUserData).mockResolvedValue({})
+    const { result } = renderHook(() => useStore('replace-cloud-user'))
+    const restoredNovel = { id: 'backup-novel', title: 'Chosen backup', type: 'novel' }
+
+    await act(async () => {
+      await result.current.replaceData({ novels: [restoredNovel], activeNovelId: restoredNovel.id })
+    })
+
+    expect(replaceUserData).toHaveBeenCalledExactlyOnceWith(
+      'replace-cloud-user',
+      { novels: [restoredNovel], activeNovelId: restoredNovel.id },
+    )
+    expect(result.current.novels).toEqual([restoredNovel])
+  })
+
+  it('leaves local state unchanged when the cloud transaction fails', async () => {
+    vi.mocked(replaceUserData).mockRejectedValueOnce(new Error('transaction failed'))
+    const { result } = renderHook(() => useStore('replace-failure-user'))
+    let original
+    act(() => {
+      original = result.current.addNovel({ title: 'Keep this project', type: 'novel' })
+    })
+
+    await act(async () => {
+      await expect(result.current.replaceData({
+        novels: [{ id: 'replacement', title: 'Do not show', type: 'novel' }],
+        activeNovelId: 'replacement',
+      })).rejects.toThrow('transaction failed')
+    })
+
+    expect(result.current.novels).toEqual([expect.objectContaining({ id: original.id, title: 'Keep this project' })])
   })
 })
 

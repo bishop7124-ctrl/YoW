@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
   // request body — always derived server-side from a verified source:
   //
   // 1. The `on_user_profile_created` DB trigger (trigger_welcome_email(),
-  //    supabase/migrations/20260801_fix_welcome_email_http_post.sql) calls
+  //    supabase/migrations/20260801130000_fix_welcome_email_http_post.sql) calls
   //    this with the service-role key and only ever sends { user_id } — no
   //    email at all — so look it up via the admin API in that case.
   // 2. The browser client (AuthContext.jsx's sendWelcomeEmail) calls this
