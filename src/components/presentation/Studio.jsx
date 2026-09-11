@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useDialogFocus } from '../../utils/useDialogFocus'
 import YOWLogo from '../brand/YOWLogo'
 import { useIsMobile, useIsPhone, isMobileViewport } from '../../utils/useMediaQuery'
 
@@ -67,6 +68,20 @@ export function StudioFrame({
   }, [])
 
   useEffect(() => { setRoomMenuOpen(false) }, [activeRoomId])
+
+  useEffect(() => {
+    if (!roomMenuOpen || !roomMenuCoords) return undefined
+    const frame = requestAnimationFrame(() => roomMenuRef.current?.querySelector('button')?.focus())
+    const onKey = event => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setRoomMenuOpen(false)
+      hamburgerRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { cancelAnimationFrame(frame); document.removeEventListener('keydown', onKey) }
+  }, [roomMenuOpen, roomMenuCoords])
+
 
   return (
     <div className={cx('studio-shell', topBar && 'has-top-bar', !contextRail && 'has-no-context', contextRail && !contextRailOpen && 'is-context-collapsed')}>
@@ -148,7 +163,7 @@ export function StudioFrame({
           ref={hamburgerRef}
           className="studio-room-hamburger"
           aria-label={roomMenuOpen ? 'Close section menu' : 'Open section menu'}
-          aria-haspopup="menu"
+          aria-controls="studio-room-menu"
           aria-expanded={roomMenuOpen}
           onClick={() => setRoomMenuOpen(v => !v)}
         >
@@ -159,6 +174,7 @@ export function StudioFrame({
         {roomMenuOpen && roomMenuCoords && createPortal(
           <nav
             ref={roomMenuRef}
+            id="studio-room-menu"
             className="studio-room-menu-portal"
             aria-label="Workspace"
             style={{ top: roomMenuCoords.top, left: roomMenuCoords.left, right: roomMenuCoords.right }}
@@ -173,8 +189,8 @@ export function StudioFrame({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                 </span>
                 <span className="studio-room-copy">
-                  <strong>Write</strong>
-                  <small>Open the manuscript</small>
+                  <strong>{primaryAction.props.children}</strong>
+                  <small>Open the writing workspace</small>
                 </span>
               </button>
             )}
@@ -386,22 +402,8 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
     dialog?.addEventListener('studio-form-saved', saved)
     return () => dialog?.removeEventListener('studio-form-saved', saved)
   }, [])
-  // On phones this no longer renders as a fixed-position overlay at all (see
-  // the CSS for `.is-mobile-sheet`) — it's a normal in-flow, full-height
-  // block appended where the editor was opened from, and we scroll it into
-  // view like navigating to a new part of the page. This replaces an earlier
-  // attempt that kept `position: fixed` and just skipped the dialog's own
-  // `.focus()` call to dodge a WebKit bug where fixed elements get cut off
-  // by the on-screen keyboard/viewport resize (webkit.org/b/236584) — that
-  // mitigation still left real-device reports of the sheet's header being
-  // clipped/missing, so the fixed-overlay approach itself was dropped rather
-  // than patched further.
   useEffect(() => {
-    if (isPhone) {
-      dialogRef.current?.scrollIntoView({ block: 'start' })
-    } else {
-      dialogRef.current?.focus({ preventScroll: true })
-    }
+    if (isPhone) dialogRef.current?.scrollIntoView({ block: 'start' })
   }, [isPhone])
 
   const requestClose = () => {
@@ -412,14 +414,9 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
     onClose()
   }
 
-  useEffect(() => {
-    const handler = (event) => {
-      const sheets = document.querySelectorAll('[data-studio-sheet]')
-      if (event.key === 'Escape' && !event.defaultPrevented && sheets[sheets.length - 1] === dialogRef.current) requestClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  })
+  const confirmationRef = useRef(null)
+  useDialogFocus(dialogRef, requestClose)
+  useDialogFocus(confirmationRef, () => setConfirmClose(false), confirmClose)
 
   const discardAndClose = () => {
     setDirty(false)
@@ -493,7 +490,7 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
         </header>
         <div className="studio-sheet-body">{children}</div>
         {confirmClose && (
-          <div className="save-changes-prompt" role="alertdialog" aria-modal="true" aria-labelledby={`${headingId}-discard`}>
+          <div ref={confirmationRef} tabIndex={-1} className="save-changes-prompt" role="alertdialog" aria-modal="true" aria-labelledby={`${headingId}-discard`}>
             <div className="save-changes-card">
               <p className="studio-kicker">Unsaved changes</p>
               <h3 id={`${headingId}-discard`}>Save changes?</h3>

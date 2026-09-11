@@ -233,9 +233,9 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
 
 // ─── Main CharacterBuilder ────────────────────────────────────────────────────
 
-export default function CharacterBuilder({ store }) {
-  const [view, setView] = useState('list')
-  const [selectedId, setSelectedId] = useState(null)
+export default function CharacterBuilder({ store, initialEntryId = null }) {
+  const [view, setView] = useState(initialEntryId ? 'detail' : 'list')
+  const [selectedId, setSelectedId] = useState(initialEntryId)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [diceOpen, setDiceOpen] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)

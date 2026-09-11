@@ -95,7 +95,7 @@ const CONTENT = {
             <Li>Free, Monthly, Lifetime, and Founder plans have different app access, cloud hosting, storage, and support limits. Current plan details are shown before checkout.</Li>
             <Li>Lifetime app access means permanent access to the YOW desktop app and Local Mode. It does not mean indefinite hosted cloud storage above the Free allowance unless your Cloud Mode entitlement is active.</Li>
             <Li>If Lifetime cloud hosting lapses, your lifetime licence remains active and you can continue in desktop Local Mode, import backups, and export your work. Web cloud access falls back to the Free one-project, 250 MB allowance unless Cloud Mode is renewed.</Li>
-            <Li>Founder includes lifetime Cloud Mode within the published storage and fair-use cap.</Li>
+            <Li>Founder includes Cloud Mode for the life of the YOW service, without a renewal fee, within the published storage and fair-use cap.</Li>
             <Li>A failed Monthly payment moves the account to Free access. Download all project backups and choose the project to keep editable; if stored data exceeds 250 MB, reduce cloud storage or restore a paid plan. Selecting an editable project does not delete other projects.</Li>
             <Li>If optional Cloud Mode renewal is not paid, download your backups or renew Cloud Mode. Lifetime desktop Local Mode remains available.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>

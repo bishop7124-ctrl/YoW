@@ -1147,7 +1147,7 @@ function StorageConfigurationPanel({
                 Cloud sync unavailable
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                Cloud hosting for this account has lapsed, so cloud sync — automatic and manual, upload and download — is fully removed until you renew. There is no toggle to turn it back on from here: everything simply stays in this device's local vault. Nothing is deleted, and you can still export a backup any time.
+                Cloud hosting for this account has lapsed, so cloud sync — automatic and manual, upload and download — is unavailable until you renew. There is no toggle to turn it back on from here: edits stay in this device's local vault. YOW does not delete projects as part of this plan change, and you can still export a backup.
               </div>
               <SyncStatusLine
                 syncStatus={syncStatus}
@@ -2147,7 +2147,7 @@ function AISettingsPanel({ userId, membership }) {
           style={{ width: '100%' }}
         />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 4 }}>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Keys are stored locally for this account, hidden after saving, and sent only to the chosen provider.</p>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Keys are stored locally for this account and hidden after saving. YOW relays AI requests and the key to the provider you choose.</p>
           {cfg.apiKey?.trim() && (
             <button
               type="button"
@@ -2900,9 +2900,14 @@ export default function AccountSettings({
             <h1 id="account-settings-title">Settings</h1>
           </div>
           {desktopApp ? (
-            <button className="account-secondary-button" type="button" onClick={signOut}>
-              Sign out
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className="account-secondary-button" type="button" onClick={signOut}>
+                Sign out
+              </button>
+              <button className="account-icon-button" type="button" onClick={onClose} aria-label="Close account settings">
+                ×
+              </button>
+            </div>
           ) : (
             <button className="account-icon-button" type="button" onClick={onClose} aria-label="Close account settings">
               ×
@@ -3208,7 +3213,7 @@ export default function AccountSettings({
                   ✦ You are a Founder of Your Own World.
                 </p>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  Your name will appear in the Founder recognition section of the YOW website. Thank you for believing in this from the start.
+                  You can choose whether YOW displays submitted work on a managed Founder profile. Contact founders@yourownworld.co.uk for profile changes or removal.
                 </p>
               </div>
             )}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useDialogFocus } from '../../utils/useDialogFocus'
+import { useEffect, useRef, useState } from 'react'
 import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../../constants/projectTypes'
 import { trackEvent } from '../../utils/analytics'
 
@@ -76,9 +77,12 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
     }
   }
 
+  const wizardRef = useRef(null)
+  useDialogFocus(wizardRef, handleSkip)
+
   return (
     <div className="wizard-backdrop" onClick={handleSkip}>
-      <div className="wizard-modal" onClick={e => e.stopPropagation()}>
+      <div ref={wizardRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Welcome to Your Own World" className="wizard-modal" onClick={e => e.stopPropagation()}>
 
         {step !== 'choice' && (
           <div className="wizard-progress">
@@ -132,6 +136,7 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
                   <button
                     key={t.id}
                     type="button"
+                    aria-pressed={selected}
                     className={`wizard-type-card${selected ? ' wizard-type-card--selected' : ''}`}
                     style={{ '--type-color': icon.color }}
                     onClick={() => setType(t.id)}
@@ -229,7 +234,7 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
                 disabled={busy}
                 onClick={handleCreate}
               >
-                {busy ? 'Opening…' : 'Start writing →'}
+                {busy ? 'Opening…' : 'Open project →'}
               </button>
             </div>
           </div>

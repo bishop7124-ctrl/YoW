@@ -1,0 +1,14 @@
+# YOW Design Principles
+
+- **Protect sustained creative focus.** Keep prose and the current task visually dominant. Stable layouts, restrained feedback, and predictable controls should support hours of writing, worldbuilding, or session preparation without fatigue.
+- **Make hierarchy immediately legible.** Distinguish project context, module navigation, content, and actions. Use type, spacing, and emphasis consistently so writers can identify the next action without scanning competing panels.
+- **Reduce cognitive load.** Use familiar creative terminology and clear labels. Remove redundant presentation and unnecessary steps while preserving capabilities, context, and access to user work.
+- **Make YOW feel like one product.** Reuse established components, semantic theme tokens, spacing, and interaction states across manuscript, characters, lore, maps, and timelines. Allow differences when the underlying task warrants them.
+- **Disclose complexity progressively.** Keep frequent actions readily available and reveal specialist controls in context. Do not hide essential actions or make discovery depend on onboarding tours or hovering.
+- **Build accessibility into ordinary use.** Support keyboard operation, visible focus, meaningful labels, readable contrast, zoom, and non-color status cues. A calm palette must still communicate clearly across supported themes.
+- **Adapt layouts to the task and screen.** Preserve readable writing surfaces and reachable navigation on small screens. Stack or collapse secondary panels deliberately; keep dense maps and timelines usable without shrinking every control.
+- **Use decoration with purpose.** Retain YOW's distinctive visual identity through established typography, palette, and restrained materials. Avoid ornamental chrome, excessive gradients, animation, and oversized empty space that compete with content or weaken professional credibility.
+- **Design for worlds that grow.** Consider hundreds of entries, long names, extensive histories, dense relationships, and substantial manuscripts. Favor scannable collections and existing search, filtering, and contextual links; propose missing capabilities for product review rather than silently adding scope.
+- **Keep important information close.** Help novelists consult character and lore details without losing their place. Help worldbuilders follow relationships and TTRPG creators retrieve session information quickly, using existing contextual navigation and reference surfaces.
+- **Earn production trust.** Make saving, loading, errors, and recovery understandable. Preserve user content and workflow continuity; empty states should explain a useful next step without pretending the product is populated.
+- **Improve with evidence.** Preserve what already works. Prefer specific, verifiable improvements to the implemented product over fashionable wholesale redesigns or subjective aesthetic preferences.

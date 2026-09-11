@@ -203,7 +203,7 @@ function IdeasWorkspace({ store, userId, membership }) {
       {error === AI_CONFIG_REQUIRED_TEXT ? <AiConfigRequiredNotice /> : error === AI_UPGRADE_REQUIRED_TEXT ? <AiUpgradeRequiredNotice /> : error && !dialog && !deleteId ? <p role="alert" className="text-sm text-red-400 px-5 py-2">{error}</p> : null}
       {preview && <div className="flex flex-wrap gap-3 px-5 py-2 text-sm"><span>AI suggestion ready.</span><button type="button" disabled={Boolean(dialog) || !previewIdea} className="text-[var(--accent)]" onClick={() => { setError(''); setDialog({ kind: 'preview' }) }}>Review suggestion</button><button type="button" onClick={() => { setPreview(null); if (dialog?.kind === 'preview') closeDialog() }}>Dismiss suggestion</button></div>}
       {sortBy !== 'manual' && <p className="text-xs text-[var(--text-muted)] px-5 py-2">Choose Manual order to drag cards. You can also move an idea using Status in its editor.</p>}
-      <div ref={boardRef} className="flex flex-1 min-h-0 overflow-x-auto overflow-y-hidden gap-4 p-4" data-tour="ideas-board">
+      <div ref={boardRef} className="flex flex-1 min-h-0 overflow-x-auto overflow-y-hidden gap-3 p-3" data-tour="ideas-board">
         {visibleStatuses.map(status => <KanbanColumn key={status.id} status={status} ideas={columns[status.id]} draggingId={drag.visual?.id}
           isDropTarget={drag.visual?.target?.status === status.id} dropBeforeId={drag.visual?.target?.status === status.id ? drag.visual.target.beforeId : null}
           onEdit={edit} onPointerDown={drag.start} onDelete={requestDelete} onArchive={archive} onRestore={restore} onFavourite={favourite}

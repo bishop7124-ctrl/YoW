@@ -43,6 +43,7 @@ import { isDesktopAppRuntime } from './utils/runtime'
 import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
+import { OFFLINE_MODE } from './utils/offlineMock'
 import { isStandalonePublicRoute, parsePublicRoute } from './utils/appRoutes'
 import {
   DEFAULT_CUSTOM_COLORS,
@@ -426,7 +427,7 @@ function AppInner() {
   const [desktopLicenceStale, setDesktopLicenceStale] = useState(false)
   const [desktopDeviceLimit, setDesktopDeviceLimit] = useState(false)
   useEffect(() => {
-    if (!desktopApp || !userId || !membership.isDesktopEntitled) return
+    if (OFFLINE_MODE || !desktopApp || !userId || !membership.isDesktopEntitled) return
     let cancelled = false
     verifyDesktopEntitlement()
       .then(result => {
@@ -1165,7 +1166,7 @@ function AppInner() {
           </button>
         </div>
       )}
-      {desktopApp && desktopLicenceStale && (
+      {desktopApp && !OFFLINE_MODE && desktopLicenceStale && (
         <div role="status" className="membership-toast">
           <span>YOW hasn't been able to verify your Lifetime licence for a while. Connect to the internet when you can — your writing is not affected.</span>
           <button type="button" className="membership-toast-link" onClick={() => setDesktopLicenceStale(false)}>
@@ -1236,112 +1237,6 @@ function AppInner() {
       )}
     </>
   )
-
-  if (desktopApp) {
-    return (
-      <>
-        <AccountSettings
-          open
-          onClose={() => {}}
-          storageUsedBytes={store.storageUsedBytes}
-          activeTab={accountTab}
-          onTabChange={setAccountTab}
-          store={store}
-          tourStore={tourStore}
-          storageMode={storageMode}
-          onStorageModeChange={handleStorageModeChange}
-          onResumeCloudSyncPreview={getResumeCloudSyncPreview}
-          onManualCloudSyncPreview={getManualCloudSyncPreview}
-          onManualCloudSync={handleManualCloudSync}
-          effectiveLocalMode={effectiveLocalMode}
-          desktopApp
-        />
-        {desktopVaultError && (
-          <div role="alert" className="membership-toast">
-            <span>
-              Your local vault couldn't be reached, so recent edits are being kept in a small temporary space on this device instead.
-              {' '}Reconnect to move them into your vault.
-            </span>
-            <button
-              type="button"
-              className="membership-toast-link"
-              disabled={desktopVaultRetryBusy}
-              onClick={handleRetryDesktopVault}
-            >
-              {desktopVaultRetryBusy ? 'Reconnecting…' : 'Reconnect vault'}
-            </button>
-            <button
-              type="button"
-              className="membership-toast-link"
-              onClick={() => setAccountTab('storage')}
-            >
-              Storage settings
-            </button>
-          </div>
-        )}
-        {desktopLicenceStale && (
-          <div role="status" className="membership-toast">
-            <span>YOW hasn't been able to verify your Lifetime licence for a while. Connect to the internet when you can — your writing is not affected.</span>
-            <button type="button" className="membership-toast-link" onClick={() => setDesktopLicenceStale(false)}>
-              Dismiss
-            </button>
-          </div>
-        )}
-        {desktopUpdate && (
-          <div role="status" className="membership-toast">
-            <span>
-              {desktopUpdateState === 'error'
-                ? "Couldn't install the update. It'll be offered again next launch."
-                : `Update available: version ${desktopUpdate.version}.`}
-            </span>
-            {desktopUpdateState !== 'error' && (
-              <button
-                type="button"
-                className="membership-toast-link"
-                disabled={desktopUpdateState === 'installing'}
-                onClick={handleInstallDesktopUpdate}
-              >
-                {desktopUpdateState === 'installing' ? 'Installing…' : 'Restart to update'}
-              </button>
-            )}
-            <button type="button" className="membership-toast-link" onClick={() => setDesktopUpdate(null)}>
-              Later
-            </button>
-          </div>
-        )}
-        {desktopDeviceLimit && (
-          <div role="status" className="membership-toast">
-            <span>This device isn't activated yet — your plan has reached its device limit.</span>
-            <button
-              type="button"
-              className="membership-toast-link"
-              onClick={() => { setDesktopDeviceLimit(false); setAccountTab('membership') }}
-            >
-              Manage devices
-            </button>
-            <button type="button" className="membership-toast-link" onClick={() => setDesktopDeviceLimit(false)}>
-              Dismiss
-            </button>
-          </div>
-        )}
-        {user && !vaultNoticeAck && (
-          <div role="status" className="membership-toast">
-            <span>Your writing is saved in a local vault on this device. You can move it or create snapshots any time.</span>
-            <button
-              type="button"
-              className="membership-toast-link"
-              onClick={() => { ackVaultNotice(); setAccountTab('storage') }}
-            >
-              Storage settings
-            </button>
-            <button type="button" className="membership-toast-link" onClick={ackVaultNotice}>
-              Got it
-            </button>
-          </div>
-        )}
-      </>
-    )
-  }
 
   const handleOpenProject = (id) => {
     const project = store.novels.find(item => item.id === id)
@@ -1441,7 +1336,7 @@ function AppInner() {
       {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
+      {!desktopApp && <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />}
       {maintenanceModalOpen && user && !dataLoading && !isFirstRun && !showWelcomeTour && (
         <CloudExpiryWarningModal
           membership={membership}

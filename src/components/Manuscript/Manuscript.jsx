@@ -198,8 +198,8 @@ export default function Manuscript({ store, userId, membership = null }) {
     updateSceneContent, updateScene, updateAct, updateChapter,
     deleteAct, deleteChapter, deleteScene,
     moveAct, moveChapter, moveScene,
-    characters, locations, loreEntries = [], worldHistory = [], timeline = [], factions = [], currentYear,
-    setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId, setSelectedHistoryEntryId,
+    characters, locations, loreEntries = [], worldHistory = [], timeline = [], factions = [], ideaEntries = [], storySchedule = [], rpgCharacters = [], currentYear,
+    setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId, setSelectedHistoryEntryId, setSelectedIdeaEntryId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
     retireManuscript, restoreManuscriptCopy,
@@ -549,27 +549,30 @@ export default function Manuscript({ store, userId, membership = null }) {
     localStorage.setItem('nf-format-settings', JSON.stringify(next))
   }, [])
 
-  const selectCatalogueHistory = worldHistory?.length ? setSelectedHistoryEntryId : setSelectedTimelineEventId
   const handleEntityClick = useCallback(entity => {
     if (!entity?.id || !entity?.section) return
     if (entity.section === 'characters') setSelectedCharacterId(entity.id)
     if (entity.section === 'locations') setSelectedLocationId(entity.id)
     if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
-    if (entity.section === 'worldhistory') selectCatalogueHistory?.(entity.id)
+    if (entity.section === 'worldhistory') setSelectedHistoryEntryId?.(entity.id)
+    if (entity.section === 'timeline') setSelectedTimelineEventId?.(entity.id)
+    if (entity.section === 'ideas') setSelectedIdeaEntryId?.(entity.id)
     setSelectedCatalogueEntity(entity)
     setInspectorTab('catalogue')
     setInspectorOpen(true)
     setSurfaceId(null)
-  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, selectCatalogueHistory])
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedHistoryEntryId, setSelectedTimelineEventId, setSelectedIdeaEntryId])
 
   const handleOpenEntitySection = useCallback(entity => {
     if (!entity?.id || !entity?.section) return
     if (entity.section === 'characters') setSelectedCharacterId(entity.id)
     if (entity.section === 'locations') setSelectedLocationId(entity.id)
     if (entity.section === 'lore') setSelectedLoreEntryId?.(entity.id)
-    if (entity.section === 'worldhistory') selectCatalogueHistory?.(entity.id)
-    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: entity.section } }))
-  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, selectCatalogueHistory])
+    if (entity.section === 'worldhistory') setSelectedHistoryEntryId?.(entity.id)
+    if (entity.section === 'timeline') setSelectedTimelineEventId?.(entity.id)
+    if (entity.section === 'ideas') setSelectedIdeaEntryId?.(entity.id)
+    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: entity.section, entryId: entity.id } }))
+  }, [setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedHistoryEntryId, setSelectedTimelineEventId, setSelectedIdeaEntryId])
 
   const chapterGlobalNumbers = useMemo(() => {
     const map = {}
@@ -1416,7 +1419,11 @@ export default function Manuscript({ store, userId, membership = null }) {
             factions={factions}
             currentYear={currentYear}
             loreEntries={loreEntries}
-            worldHistory={worldHistory?.length ? worldHistory : timeline}
+            worldHistory={worldHistory}
+            timeline={timeline}
+            ideaEntries={ideaEntries}
+            storySchedule={storySchedule}
+            rpgCharacters={rpgCharacters}
             selectedCatalogueEntity={selectedCatalogueEntity}
             onOpenEntitySection={handleOpenEntitySection}
             highlightedNoteSeq={highlightedNoteSeq}

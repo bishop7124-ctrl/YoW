@@ -41,9 +41,8 @@ function welcomeEmailHtml(email: string, confirmUrl: string) {
               </h1>
 
               <p style="margin:0 0 14px;font-size:15px;line-height:1.75;color:#7ab8b4;">
-                You've joined a growing community of writers, worldbuilders, and storytellers.
-                <span style="color:#e2f0ee;">Your Own World</span> gives you one place to build everything
-                — so nothing gets lost between notebooks, docs, and scattered files.
+                <span style="color:#e2f0ee;">Your Own World</span> gives you one place to write, build your world,
+                and keep important story details connected across your project.
               </p>
 
               <p style="margin:0 0 24px;font-size:15px;line-height:1.75;color:#7ab8b4;">

@@ -104,6 +104,7 @@ export default function ChronicleEntryForm({
 
   return (
     <form onSubmit={submit} data-confirms-save className="space-y-4">
+      <p className="text-sm text-[var(--text-muted)]">{isWorldHistory ? 'History records also appear as linked Timeline events. Changes to linked content stay in sync.' : 'New events appear in Timeline and as timeline-only entries in History. They do not create a separate historical record.'}</p>
       <div>
         <label htmlFor={`${fieldId}-title`} className={LABEL}>Title *</label>
         <input id={`${fieldId}-title`} value={form.title} onChange={field('title')} className={INPUT} required />

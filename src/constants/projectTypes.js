@@ -267,27 +267,27 @@ export const PROJECT_TYPE_STAGE = {
   novel: {
     stage: 'live',
     label: 'Live',
-    note: 'Launch-ready long-form prose workflow.',
+    note: 'Long-form prose workflow.',
   },
   novella: {
     stage: 'live',
     label: 'Live',
-    note: 'Launch-ready medium-form prose workflow.',
+    note: 'Medium-form prose workflow.',
   },
   short_story: {
     stage: 'live',
     label: 'Live',
-    note: 'Launch-ready short-form prose workflow.',
+    note: 'Short-form prose workflow.',
   },
   dnd_campaign: {
     stage: 'live',
     label: 'Live',
-    note: 'Launch-ready campaign bible workflow.',
+    note: 'D&D-flavoured campaign bible workflow.',
   },
   tabletop_rpg: {
     stage: 'live',
     label: 'Live',
-    note: 'Launch-ready system-neutral campaign bible workflow.',
+    note: 'System-neutral campaign bible workflow.',
   },
   comic: {
     stage: 'beta',
