@@ -1202,8 +1202,12 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
       console.error('Import population failed:', err)
       setPendingImport(null)
       if (isNewProject) {
-        store.deleteNovel(id)
-        setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+        Promise.resolve(store.deleteNovel(id)).then(() => {
+          setAiError('This archive could not be fully imported — it may be corrupted or in an unexpected format. No project was created.')
+        }).catch(deleteError => {
+          console.error('Could not remove failed import project:', deleteError)
+          setAiError('This archive could not be fully imported, and its incomplete project could not be removed automatically. Check the project library before trying again.')
+        })
       } else {
         const restored = store.restoreProjectSnapshot?.(id, projectSnapshot)
         setAiError(restored

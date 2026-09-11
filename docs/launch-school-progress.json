@@ -82,9 +82,9 @@
     },
     "integrity": {
       "status": "in-progress",
-      "answer": "Automated save, isolation, import, restore and export flows passed. Failed existing-project imports roll back, atomic cloud replacement is deployed, and browser IndexedDB/desktop SQLite now replace local backups transactionally. Live Supabase and packaged-device fault injection plus destructive-delete acceptance remain.",
-      "evidence": "11 September: 1,073-test QA pass plus live import/merge browser flows; rollback coverage spans every importable collection. Production migration 20260910120000 is applied, migration history aligns, the remote dry-run is clean, and schema lint reports no errors. New IndexedDB and SQLite transaction tests verify full local replacement, stale scene-key cleanup, cross-tab broadcast, unchanged state on failure, and native SQLite rollback under an injected mid-transaction error.",
-      "updatedAt": "2026-09-11T07:36:00+01:00"
+      "answer": "Automated save, isolation, import, restore and export flows passed. Failed existing-project imports roll back, atomic cloud replacement is deployed, and browser IndexedDB/desktop SQLite now replace local backups transactionally. Transactional project/account deletion is implemented with a clean migration dry-run. Migration deployment, live Supabase failure injection, and packaged-device restore/delete acceptance remain.",
+      "evidence": "11 September: 1,077-test QA pass plus live import/merge browser flows; rollback coverage spans every importable collection. Production migration 20260910120000 is applied, migration history aligns, the remote dry-run is clean, and schema lint reports no errors. New IndexedDB and SQLite transaction tests verify full local replacement, stale scene-key cleanup, cross-tab broadcast, unchanged state on failure, and native SQLite rollback under an injected mid-transaction error. Project deletion now waits for one cloud RPC and one local transaction; account deletion is one database transaction. The pending destructive-delete migration is dry-run clean and has not been deployed.",
+      "updatedAt": "2026-09-11T07:58:00+01:00"
     },
     "export": {
       "status": "done",
