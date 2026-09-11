@@ -1319,7 +1319,15 @@ export function useStore(userId = null, options = {}) {
     // dormant data, so cap how old "local" is allowed to be to still win.
     const LOCAL_TRUST_WINDOW_MS = 30 * 60 * 1000
     const localWriteIsRecent = localWriteAt > 0 && (Date.now() - localWriteAt) < LOCAL_TRUST_WINDOW_MS
-    const shouldPreferLocal = options.preferLocal !== false && ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && !hasLocalWriteFailed()
+// A known-failed local write should only ever cost the one poisoned key —
+    // never the rest of the account. A failed-write marker can override local
+    // freshness only when the cloud copy actually contains project data.
+    const cloudHasAnyData = Array.isArray(data?.novels) && data.novels.length > 0
+    const shouldPreferLocal = options.preferLocal !== false
+      && ownerMatchesCurrentUser
+      && localWriteAt > remoteSavedAt
+      && localWriteIsRecent
+      && (!hasLocalWriteFailed() || !cloudHasAnyData)
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
     const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
