@@ -30,9 +30,15 @@ export const storageKeys = [
   'nf_comicPanels',
 ]
 
-export async function seedCleanStorage(page) {
-  await page.addInitScript((keys) => {
-    if (!sessionStorage.getItem('yow_qa_storage_seeded')) {
+// `suppressWizard: false` leaves the first-run "How would you like to begin?"
+// choice wizard (and the AI setup/product tour prompts that follow it) live —
+// use that for onboarding-flow specs that need to interact with the wizard
+// itself. Every other spec wants it suppressed (the default) so it never
+// blocks an unrelated button click.
+export async function seedCleanStorage(page, { suppressWizard = true } = {}) {
+  await page.addInitScript(({ keys, suppressWizard }) => {
+    const firstLoad = !sessionStorage.getItem('yow_qa_storage_seeded')
+    if (firstLoad) {
       for (const key of keys) localStorage.removeItem(key)
       sessionStorage.setItem('yow_qa_storage_seeded', '1')
     }
@@ -40,14 +46,29 @@ export async function seedCleanStorage(page) {
     // Suppress the first-run wizard and all tours so they never block button clicks.
     // useTourStore reads these per-userId ('wizard_<id>'/'welcome_<id>'), not a flat
     // 'wizardShown' flag — see the OFFLINE_USER_ID comment above.
-    localStorage.setItem('yow_onboarding', JSON.stringify({
-      toursEnabled: false,
-      checklistDismissed: true,
-      'wizard_offline-dev-user': true,
-      'welcome_offline-dev-user': true,
-    }))
+    //
+    // suppressWizard:false specs interact with the wizard directly and rely
+    // on the app's own runtime writes to `yow_onboarding` (e.g. marking it
+    // shown) surviving a `page.reload()` within the test — this init script
+    // reruns on every navigation/reload, so only force the "unsuppressed"
+    // baseline once, on the very first load, or a reload right after
+    // dismissing the wizard would silently wipe that mark back out and the
+    // wizard would wrongly reappear.
+    if (suppressWizard) {
+      localStorage.setItem('yow_onboarding', JSON.stringify({
+        toursEnabled: false,
+        checklistDismissed: true,
+        'wizard_offline-dev-user': true,
+        'welcome_offline-dev-user': true,
+      }))
+    } else if (firstLoad) {
+      localStorage.setItem('yow_onboarding', JSON.stringify({
+        toursEnabled: false,
+        checklistDismissed: true,
+      }))
+    }
     document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
-  }, storageKeys)
+  }, { keys: storageKeys, suppressWizard })
 }
 
 export async function dismissLaunchPrompts(page) {
