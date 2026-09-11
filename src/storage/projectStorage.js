@@ -24,6 +24,10 @@ export function createMemoryBackend(initial = {}) {
     getItem: key => (entries.has(key) ? entries.get(key) : null),
     setItem: (key, value) => { entries.set(key, String(value)) },
     removeItem: key => { entries.delete(key) },
+    replaceItems: (entriesToSet = {}, keysToRemove = []) => {
+      keysToRemove.forEach(key => entries.delete(key))
+      Object.entries(entriesToSet).forEach(([key, value]) => entries.set(key, String(value)))
+    },
     keys: () => Array.from(entries.keys()),
   }
 }
@@ -34,6 +38,21 @@ function createBrowserBackend() {
     getItem: key => window.localStorage.getItem(key),
     setItem: (key, value) => { window.localStorage.setItem(key, value) },
     removeItem: key => { window.localStorage.removeItem(key) },
+    replaceItems: (entriesToSet = {}, keysToRemove = []) => {
+      const setEntries = Object.entries(entriesToSet)
+      const affectedKeys = new Set([...keysToRemove, ...setEntries.map(([key]) => key)])
+      const before = new Map([...affectedKeys].map(key => [key, window.localStorage.getItem(key)]))
+      try {
+        keysToRemove.forEach(key => window.localStorage.removeItem(key))
+        setEntries.forEach(([key, value]) => window.localStorage.setItem(key, String(value)))
+      } catch (error) {
+        before.forEach((value, key) => {
+          if (value == null) window.localStorage.removeItem(key)
+          else window.localStorage.setItem(key, value)
+        })
+        throw error
+      }
+    },
     keys: () => Object.keys(window.localStorage),
   }
 }
@@ -76,6 +95,13 @@ export function writeItem(key, value) {
 
 export function removeItem(key) {
   activeBackend.removeItem(key)
+}
+
+export async function replaceItemsAtomically(entriesToSet, keysToRemove = []) {
+  if (typeof activeBackend.replaceItems !== 'function') {
+    throw new Error('Atomic local replacement is unavailable for the active storage backend.')
+  }
+  await activeBackend.replaceItems(entriesToSet, keysToRemove)
 }
 
 // Every backend that actually holds project data (browser localStorage, the

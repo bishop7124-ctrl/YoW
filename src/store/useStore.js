@@ -13,6 +13,7 @@ import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, deleteAllSceneContentForNovel } from '../storage/sceneContentStore'
+import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersionsForNovel } from '../utils/sceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
@@ -1387,7 +1388,9 @@ export function useStore(userId = null, options = {}) {
       // doesn't know about it — union it back in from whatever's actually on
       // local disk right now (which already correctly reflects any discard/
       // restore the user has done through the app).
-      const localScenes = hydrateScenesFromStorage(load('nf_scenes', []))
+      const localScenes = options.preserveLocalSceneConflicts === false
+        ? []
+        : hydrateScenesFromStorage(load('nf_scenes', []))
       const importedIds = new Set(importedScenes.map(s => s.id))
       const missingLocalConflicts = (Array.isArray(localScenes) ? localScenes : [])
         .filter(s => s.conflictOf && !importedIds.has(s.id))
@@ -1420,6 +1423,7 @@ export function useStore(userId = null, options = {}) {
     setComicPages(sourceData.comicPages ?? [])
     setComicPanels(sourceData.comicPanels ?? [])
     setEras(sourceData.eras ?? [])
+    setRecordConflicts(sourceData.recordConflicts ?? [])
     if (!shouldPreferLocal && canSyncCloud && resolvedActiveNovelId !== (data.activeNovelId ?? null)) {
       trackSync(saveUserSettings(userId, {
         activeNovelId: resolvedActiveNovelId,
@@ -1483,12 +1487,41 @@ export function useStore(userId = null, options = {}) {
     // leaves both sides on their previous version and can be reported to the
     // caller without presenting a half-restored account.
     if (canSyncCloud) await trackSync(replaceUserData(userId, data))
+    const importedNovels = data.novels ?? []
+    const sourceProjectIds = new Set(importedNovels.map(novel => novel.id))
+    const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
+      ? freeProjectId
+      : resolveActiveNovelId(data, userId, Number(data?._savedAt || 0) || 0)
+    const freeProjectExists = freeProjectId && sourceProjectIds.has(freeProjectId)
+    const normalizedData = {
+      ...data,
+      novels: freeProjectExists
+        ? importedNovels.map(novel => ({ ...novel, focus: novel.id === freeProjectId }))
+        : importedNovels,
+      rpgCharacters: (data.rpgCharacters ?? []).map(normalizeRpgCharacter),
+      activeNovelId: resolvedActiveNovelId,
+      recordConflicts: data.recordConflicts ?? [],
+    }
+    // The local browser vault and desktop SQLite vault each commit this full
+    // key set in one native transaction before React renders the replacement.
+    // A failed transaction leaves both their durable copy and in-memory mirror
+    // unchanged, so a restore cannot strand a mixture of old and new records.
+    try {
+      await replaceProjectStorageAtomically(normalizedData, { ownerId: userId })
+      clearLocalWriteFailed('nf_projectReplacement')
+    } catch (error) {
+      // The cloud transaction may already have committed. Keep this marker so
+      // login reconciliation distrusts the older local snapshot and reloads
+      // the authoritative cloud copy instead of pushing stale rows back up.
+      markLocalWriteFailed('nf_projectReplacement')
+      throw error
+    }
     // An explicit restore choice is authoritative. The login reconciliation
     // path may prefer a very recent local edit, but applying that heuristic
     // here could silently ignore the backup the user just selected.
-    importData(data, { preferLocal: false })
-    return data
-  }, [importData, userId, canSyncCloud, trackSync])
+    importData(normalizedData, { preferLocal: false, preserveLocalSceneConflicts: false })
+    return normalizedData
+  }, [importData, userId, canSyncCloud, trackSync, freeProjectId])
 
   // Clear all local state on sign-out
   const clearData = useCallback(() => {
