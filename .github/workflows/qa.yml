@@ -123,6 +123,8 @@ jobs:
             spec: tests/e2e/manuscript-structure.spec.js
           - name: atlas-builder
             spec: tests/e2e/atlas-builder.spec.js
+          - name: atlas-project-zip-restore
+            spec: tests/e2e/atlas-project-zip-restore.spec.js
           - name: worldbuilding
             spec: tests/e2e/worldbuilding.spec.js
           - name: dashboard

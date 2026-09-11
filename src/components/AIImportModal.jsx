@@ -780,6 +780,24 @@ export function populateYowProject(store, data, sel) {
       // dropped (or written onto the wrong map) when importing more than one map.
       const newMapId = store.addMap(map.name || 'Map', map.mapType || 'regional')
       const { id: _id, novelId: _nid, name: _n, mapType: _mt, created: _c, ...rest } = map
+      // mapObjects/mapRegions/mapPins entries can each link to a Location
+      // record by id (e.g. a placed pin's "Create Location from this" link);
+      // that id gets a fresh value above (sel.locations runs before this
+      // loop) or, if Locations weren't imported at all, never existed in
+      // this project to begin with. Either way the map's own stale reference
+      // must be remapped or dropped — otherwise it silently points at
+      // another project's Location id (or, worse, an unrelated Location that
+      // happens to land on the same id when importing into an existing
+      // project) after import. Mirrors useStore.js's own remapMap (used for
+      // project duplication), which remaps all three fields the same way for
+      // exactly this reason, and AtlasBuilder.jsx's importMap, which prunes
+      // the same broken-link case for a same-project single-map JSON import.
+      const remapMapLinkedEntity = (item) => item.linkedEntity?.entityType === 'location'
+        ? { ...item, linkedEntity: idMap[item.linkedEntity.entityId] ? { entityType: 'location', entityId: idMap[item.linkedEntity.entityId] } : null }
+        : item
+      if (rest.mapObjects) rest.mapObjects = rest.mapObjects.map(remapMapLinkedEntity)
+      if (rest.mapRegions) rest.mapRegions = rest.mapRegions.map(remapMapLinkedEntity)
+      if (rest.mapPins) rest.mapPins = rest.mapPins.map(remapMapLinkedEntity)
       if (newMapId && Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
     }
   }
