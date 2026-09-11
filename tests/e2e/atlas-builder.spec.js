@@ -296,7 +296,7 @@ test('freehand organic edges, line widths, expanded symbols and keyboard command
   expect(saved.mapObjects.find(o => o.properties.symbol==='bridge')).toBeTruthy()
 })
 
-test('walls use clicked vertices; dots and separate labels link by name; symbol previews resize and never export', async ({ page }) => {
+test('walls use clicked vertices; dots and separate labels link by name; symbol previews resize and never export', async ({ page }, testInfo) => {
   await seedCleanStorage(page)
   await page.goto('/')
   await dismissLaunchPrompts(page)
@@ -375,5 +375,5 @@ test('walls use clicked vertices; dots and separate labels link by name; symbol 
   expect(saved.mapObjects.filter(o => o.type === 'location')).toHaveLength(2)
   expect(saved.mapObjects.find(o => o.type === 'label').properties.name).toBe('Library')
   expect(saved.mapObjects[0].geometry.points).toHaveLength(3)
-  await page.screenshot({ path:'/private/tmp/yow-atlas-interior-drawing.png', fullPage:true })
+  await page.screenshot({ path:testInfo.outputPath('yow-atlas-interior-drawing.png'), fullPage:true })
 })

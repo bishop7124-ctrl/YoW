@@ -50,6 +50,42 @@ export async function seedCleanStorage(page) {
   }, storageKeys)
 }
 
+// Same seeding as seedCleanStorage, but leaves section/library tours enabled
+// (and not pre-marked complete) so a spec can actually drive one open and
+// step through it — most specs want tours suppressed (seedCleanStorage),
+// this one is for the minority that need to exercise them.
+export async function seedCleanStorageWithToursEnabled(page) {
+  await page.addInitScript((keys) => {
+    if (!sessionStorage.getItem('yow_qa_storage_seeded')) {
+      for (const key of keys) localStorage.removeItem(key)
+      sessionStorage.setItem('yow_qa_storage_seeded', '1')
+    }
+    localStorage.setItem('yow_beta_acknowledged', '1')
+    localStorage.setItem('yow_onboarding', JSON.stringify({
+      toursEnabled: true,
+      checklistDismissed: true,
+      'wizard_offline-dev-user': true,
+      'welcome_offline-dev-user': true,
+    }))
+    document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
+  }, storageKeys)
+}
+
+// Seed a fake, non-functional AI provider key into local AI settings so the
+// UI reaches its "AI configured" state without ever making a real API call.
+// Matches the shape aiSettings.js expects (see getActiveAiConfig): an
+// activeProvider plus that provider's own { apiKey, model } entry, owned by
+// the fixed offline-mode user id so per-owner isolation checks don't strip it.
+export async function seedFakeAiConfig(page) {
+  await page.addInitScript((userId) => {
+    localStorage.setItem('nf_aiSettings', JSON.stringify({
+      activeProvider: 'openrouter',
+      openrouter: { apiKey: 'sk-or-fake-test-key-not-real', model: 'google/gemma-3-27b-it' },
+    }))
+    localStorage.setItem('nf_aiSettingsOwner', userId)
+  }, OFFLINE_USER_ID)
+}
+
 export async function dismissLaunchPrompts(page) {
   const betaDialog = page.getByRole('dialog', { name: 'Beta disclaimer' })
   if (await betaDialog.isVisible().catch(() => false)) {
@@ -90,7 +126,7 @@ export async function createProject(page, { title, type = 'novel' } = {}) {
 }
 
 export function writingNavButton(page) {
-  return page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' })
+  return page.getByLabel('Studio navigation').getByRole('button', { name: /^(Write|Sessions|Pages)$/ })
 }
 
 export async function enterWritingMode(page) {
@@ -121,7 +157,8 @@ export async function openImportZip(page) {
 
 // Wait for the manuscript/writing view to be hydrated and ready after a
 // reload — e.g. before reading persisted storage back out. A bare
-// `getByRole('button', { name: 'Write' })` is ambiguous once already on the
+// The Studio navigation label varies by project type (Write, Sessions, or Pages),
+// and `getByRole('button', { name: 'Write' })` is ambiguous once already on the
 // writing route: the redesigned editor's own Write/Edit mode toggle
 // (ManuscriptTopbar.jsx, `aria-label="Editor mode"`) is also labeled
 // "Write", alongside the persistent Studio nav's own "Write" room button
@@ -130,7 +167,7 @@ export async function openImportZip(page) {
 // Scope to the Studio nav one specifically, matching this call's original
 // intent (confirm navigation/hydration is stable after reload).
 export async function waitForManuscriptReady(page) {
-  await page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' }).waitFor()
+  await writingNavButton(page).waitFor()
 }
 
 // Navigate to writing and fill the default scene, waiting for autosave to localStorage.
