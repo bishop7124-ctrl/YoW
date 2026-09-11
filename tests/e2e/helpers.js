@@ -50,6 +50,42 @@ export async function seedCleanStorage(page) {
   }, storageKeys)
 }
 
+// Same seeding as seedCleanStorage, but leaves section/library tours enabled
+// (and not pre-marked complete) so a spec can actually drive one open and
+// step through it — most specs want tours suppressed (seedCleanStorage),
+// this one is for the minority that need to exercise them.
+export async function seedCleanStorageWithToursEnabled(page) {
+  await page.addInitScript((keys) => {
+    if (!sessionStorage.getItem('yow_qa_storage_seeded')) {
+      for (const key of keys) localStorage.removeItem(key)
+      sessionStorage.setItem('yow_qa_storage_seeded', '1')
+    }
+    localStorage.setItem('yow_beta_acknowledged', '1')
+    localStorage.setItem('yow_onboarding', JSON.stringify({
+      toursEnabled: true,
+      checklistDismissed: true,
+      'wizard_offline-dev-user': true,
+      'welcome_offline-dev-user': true,
+    }))
+    document.cookie = 'yow_consent=essential; max-age=31536000; path=/; SameSite=Lax'
+  }, storageKeys)
+}
+
+// Seed a fake, non-functional AI provider key into local AI settings so the
+// UI reaches its "AI configured" state without ever making a real API call.
+// Matches the shape aiSettings.js expects (see getActiveAiConfig): an
+// activeProvider plus that provider's own { apiKey, model } entry, owned by
+// the fixed offline-mode user id so per-owner isolation checks don't strip it.
+export async function seedFakeAiConfig(page) {
+  await page.addInitScript((userId) => {
+    localStorage.setItem('nf_aiSettings', JSON.stringify({
+      activeProvider: 'openrouter',
+      openrouter: { apiKey: 'sk-or-fake-test-key-not-real', model: 'google/gemma-3-27b-it' },
+    }))
+    localStorage.setItem('nf_aiSettingsOwner', userId)
+  }, OFFLINE_USER_ID)
+}
+
 export async function dismissLaunchPrompts(page) {
   const betaDialog = page.getByRole('dialog', { name: 'Beta disclaimer' })
   if (await betaDialog.isVisible().catch(() => false)) {
