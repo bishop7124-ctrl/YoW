@@ -1310,7 +1310,25 @@ export function useStore(userId = null, options = {}) {
     // dormant data, so cap how old "local" is allowed to be to still win.
     const LOCAL_TRUST_WINDOW_MS = 30 * 60 * 1000
     const localWriteIsRecent = localWriteAt > 0 && (Date.now() - localWriteAt) < LOCAL_TRUST_WINDOW_MS
-    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && !hasLocalWriteFailed()
+    // A known-failed local write should only ever cost the one poisoned key —
+    // never the rest of the account. `!hasLocalWriteFailed()` below refuses
+    // to let a poisoned local snapshot win purely on the nf_localWriteAt
+    // "freshness" signal, but naively applied that also means "prefer the
+    // cloud copy" whenever ANYTHING has ever failed to write, even a cloud
+    // copy that has no data at all (VITE_OFFLINE_MODE's loadUserData always
+    // returns `{ _savedAt: 0 }` with no novels — see firestoreSync.js — and
+    // the same is true for real accounts before their first successful sync,
+    // or while cloud sync is unreachable). Live-reproduced: create several
+    // projects, force one scene's write to fail (simulating real quota
+    // exhaustion), then reload with no logout — every project vanished, not
+    // just the poisoned scene, because importData treated an empty "cloud"
+    // as more authoritative than a local copy holding real, otherwise-
+    // untouched data. An empty cloud snapshot is never more trustworthy than
+    // a local one that actually has projects in it, regardless of any
+    // failed-write flag, so only let hasLocalWriteFailed() override local
+    // when the cloud copy actually has something to offer instead.
+    const cloudHasAnyData = Array.isArray(data?.novels) && data.novels.length > 0
+    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && (!hasLocalWriteFailed() || !cloudHasAnyData)
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
     const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
