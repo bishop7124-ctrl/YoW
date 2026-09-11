@@ -1,12 +1,19 @@
 name: QA
 
+# claude/dev-team-member-skills-ts02xj is a long-lived active-development fork
+# (the dev-team-member-skills work, not yet merged to main) that has been
+# accumulating PRs with no CI signal at all, since this workflow previously
+# only triggered against main. Remove that branch from the lists below once
+# it merges back into main.
 on:
   push:
     branches:
       - main
+      - claude/dev-team-member-skills-ts02xj
   pull_request:
     branches:
       - main
+      - claude/dev-team-member-skills-ts02xj
   workflow_dispatch:
   schedule:
     - cron: '17 3 * * *'
@@ -79,6 +86,8 @@ jobs:
             spec: tests/e2e/project-type-labels.spec.js
           - name: manuscript-reference-panel
             spec: tests/e2e/manuscript-reference-panel.spec.js
+          - name: new-account-onboarding
+            spec: tests/e2e/new-account-onboarding.spec.js
 
     steps:
       - name: Check out repository
