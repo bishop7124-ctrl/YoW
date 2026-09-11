@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels } from './AIImportModal'
+import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels, clearStarterManuscriptScaffold } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 function mockStore() {
@@ -120,6 +120,36 @@ describe('populateProject', () => {
   })
 })
 
+describe('clearStarterManuscriptScaffold', () => {
+  // Every new project seeds one starter Act/Chapter/Scene via
+  // buildStarterStructure (see useStore.js addNovel). When an import into a
+  // brand-new project also brings its own manuscript structure, that starter
+  // scaffold must be removed first or the outline ends up with a duplicate,
+  // empty Act 1 sitting next to the real imported one.
+  function mockActStore(acts) {
+    let currentActs = acts
+    return {
+      get acts() { return currentActs },
+      deleteAct: (id) => { currentActs = currentActs.filter(a => a.id !== id) },
+    }
+  }
+
+  it('removes only the acts belonging to the target novel', () => {
+    const store = mockActStore([
+      { id: 'act-1', novelId: 'novel-new', title: 'Act 1' },
+      { id: 'act-2', novelId: 'novel-other', title: 'Act 1' },
+    ])
+    clearStarterManuscriptScaffold(store, 'novel-new')
+    expect(store.acts.map(a => a.id)).toEqual(['act-2'])
+  })
+
+  it('is a no-op when the novel has no acts yet', () => {
+    const store = mockActStore([])
+    expect(() => clearStarterManuscriptScaffold(store, 'novel-new')).not.toThrow()
+    expect(store.acts).toEqual([])
+  })
+})
+
 describe('populateYowProject', () => {
   it('restores comic pages/panels with remapped issue, page, and character ids', () => {
     const store = mockStore()
@@ -169,6 +199,28 @@ describe('populateYowProject', () => {
     expect(store.calls.maps[0].mapPins).toEqual([{ id: 'p1' }])
     expect(store.calls.maps[1].name).toBe('Capital City')
     expect(store.calls.maps[1].mapPins).toEqual([{ id: 'p2' }])
+  })
+
+  it('remaps a map object/region/pin Location link to the imported Location, and nulls it if the Location was not imported', () => {
+    const store = mockStore()
+    const data = {
+      locations: [{ id: 'old-loc', novelId: 'old-novel', name: 'Capital City' }],
+      maps: [{
+        id: 'old-map', novelId: 'old-novel', name: 'Continent', mapType: 'region',
+        mapObjects: [{ id: 'o1', linkedEntity: { entityType: 'location', entityId: 'old-loc' } }],
+        mapRegions: [{ id: 'r1', linkedEntity: { entityType: 'location', entityId: 'old-loc' } }],
+        mapPins: [{ id: 'p1', linkedEntity: { entityType: 'location', entityId: 'missing-loc' } }],
+      }],
+    }
+    populateYowProject(store, data, { locations: true, maps: true })
+    const newLocationId = store.calls.locations[0].id
+    expect(newLocationId).not.toBe('old-loc')
+    const map = store.calls.maps[0]
+    // Linked to a Location that was imported: remapped to its new id.
+    expect(map.mapObjects[0].linkedEntity).toEqual({ entityType: 'location', entityId: newLocationId })
+    expect(map.mapRegions[0].linkedEntity).toEqual({ entityType: 'location', entityId: newLocationId })
+    // Linked to a Location that was not imported: dropped, not left stale.
+    expect(map.mapPins[0].linkedEntity).toBeNull()
   })
 
   it('does not recreate eras when neither world history nor timeline is selected', () => {

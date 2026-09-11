@@ -121,4 +121,39 @@ describe('indexeddb backend shell', () => {
       nf_activeMapByNovel: '{}',
     })
   })
+
+  it('changes the mirror only after a full replacement transaction succeeds', async () => {
+    let release
+    const replacePersistedItems = vi.fn(() => new Promise(resolve => { release = resolve }))
+    const backend = createIndexedDbBackend({
+      entries: { old: 'keep until commit', stale: 'remove me' },
+      replacePersistedItems,
+    })
+
+    const operation = backend.replaceItems({ old: 'replacement', added: 'new' }, ['stale'])
+    await Promise.resolve()
+    expect(backend.snapshot()).toEqual({ old: 'keep until commit', stale: 'remove me' })
+
+    release()
+    await operation
+    expect(replacePersistedItems).toHaveBeenCalledWith(
+      new Map([['old', 'replacement'], ['added', 'new']]),
+      ['stale'],
+    )
+    expect(backend.snapshot()).toEqual({ old: 'replacement', added: 'new' })
+  })
+
+  it('keeps the mirror unchanged and remains usable after a replacement transaction fails', async () => {
+    const backend = createIndexedDbBackend({
+      entries: { old: 'original' },
+      replacePersistedItems: async () => { throw new Error('transaction aborted') },
+      persistItem: async () => {},
+      retry: { attempts: 1 },
+    })
+
+    await expect(backend.replaceItems({ old: 'replacement' })).rejects.toThrow('transaction aborted')
+    expect(backend.snapshot()).toEqual({ old: 'original' })
+    await backend.setItem('later', 'works')
+    expect(backend.getItem('later')).toBe('works')
+  })
 })

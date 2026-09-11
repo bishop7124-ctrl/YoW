@@ -22,7 +22,8 @@ import { useStore } from './useStore.js'
 vi.mock('../utils/firestoreSync', () => ({
   upsertItems:        vi.fn().mockResolvedValue({}),
   deleteItem:         vi.fn().mockResolvedValue({}),
-  deleteItemsByNovel: vi.fn().mockResolvedValue({}),
+  deleteProjectData:  vi.fn().mockResolvedValue({}),
+  replaceUserData:    vi.fn().mockResolvedValue({}),
   saveUserSettings:   vi.fn().mockResolvedValue({}),
   saveSceneDoc:       vi.fn().mockResolvedValue({}),
   deleteSceneDoc:     vi.fn().mockResolvedValue({}),

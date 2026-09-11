@@ -7,10 +7,15 @@ OUT_DIR="${ROOT_DIR}/src-tauri/target/release/bundle/dmg"
 APP_VERSION="$(node -p "require('${ROOT_DIR}/src-tauri/tauri.conf.json').version")"
 OUT_PATH="${OUT_DIR}/YOW_${APP_VERSION}_aarch64.local.dmg"
 STAGING_DIR="$(mktemp -d /private/tmp/yow-dmg-staging.XXXXXX)"
-IMAGE_BASE="${OUT_PATH%.dmg}"
+MOUNT_DIR="$(mktemp -d /private/tmp/yow-dmg-mount.XXXXXX)"
+MOUNTED=false
 
 cleanup() {
+  if [[ "${MOUNTED}" == true ]]; then
+    hdiutil detach "${MOUNT_DIR}" >/dev/null 2>&1 || true
+  fi
   rm -rf "${STAGING_DIR}"
+  rmdir "${MOUNT_DIR}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -21,32 +26,38 @@ if [[ ! -d "${APP_PATH}" ]]; then
 fi
 
 mkdir -p "${OUT_DIR}"
-rm -f "${OUT_PATH}" "${IMAGE_BASE}.dmg"
+rm -f "${OUT_PATH}"
 
 # Strip Finder/provenance metadata that ad-hoc codesign rejects as detritus.
 xattr -cr "${APP_PATH}"
 codesign --force --deep --sign - "${APP_PATH}" >/dev/null
 codesign --verify --deep --strict "${APP_PATH}"
 
-ditto "${APP_PATH}" "${STAGING_DIR}/YOW.app"
+ditto --norsrc "${APP_PATH}" "${STAGING_DIR}/YOW.app"
+xattr -cr "${STAGING_DIR}/YOW.app"
+codesign --verify --deep --strict "${STAGING_DIR}/YOW.app"
 ln -s /Applications "${STAGING_DIR}/Applications"
 
-hdiutil makehybrid \
-  -default-volume-name YOW \
-  -hfs \
-  -o "${IMAGE_BASE}" \
-  "${STAGING_DIR}"
+hdiutil create \
+  -volname YOW \
+  -srcfolder "${STAGING_DIR}" \
+  -ov \
+  -format UDZO \
+  "${OUT_PATH}"
 
 if [[ ! -s "${OUT_PATH}" ]]; then
   echo "Expected DMG was not created: ${OUT_PATH}" >&2
   exit 1
 fi
 
-if ! file "${OUT_PATH}" | grep -q "Apple"; then
-  echo "Created file does not look like an Apple disk image: ${OUT_PATH}" >&2
-  file "${OUT_PATH}" >&2
-  exit 1
-fi
+# Verify the artifact users will mount, not only the staging source. HFS hybrid
+# images can add FinderInfo metadata to every file and invalidate even an
+# otherwise-correct app signature.
+hdiutil attach -readonly -nobrowse -mountpoint "${MOUNT_DIR}" "${OUT_PATH}" >/dev/null
+MOUNTED=true
+codesign --verify --deep --strict "${MOUNT_DIR}/YOW.app"
+hdiutil detach "${MOUNT_DIR}" >/dev/null
+MOUNTED=false
 
 shasum -a 256 "${OUT_PATH}"
 echo "Created ${OUT_PATH}"

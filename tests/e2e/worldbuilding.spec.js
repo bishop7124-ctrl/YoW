@@ -112,6 +112,72 @@ test.describe('Characters', () => {
     expect(chars.some(c => c.name === charName)).toBe(false)
   })
 
+  // 2026-07-25 user report / docs/ROADMAP.md Bugs table: the character
+  // editor could close mid-edit (backdrop click, Escape, Cancel, or the X
+  // button) with no save and no warning, silently dropping in-progress
+  // profile edits. Mitigated via StudioSheet's dirty-tracking + unsaved-
+  // changes prompt and `closeOnBackdrop={false}` on the character Modal —
+  // this is the "needs browser QA" verification for that row.
+  test('unsaved character edits survive backdrop click, Escape, and Cancel — and Discard actually closes', async ({ page }) => {
+    await page.getByRole('button', { name: 'New' }).first().click()
+    const dialog = page.locator('[role="dialog"]').first()
+    await expect(dialog).toBeVisible()
+
+    const draftName = `Unsaved Draft ${Date.now()}`
+    await dialog.locator('input[required]').first().fill(draftName)
+    const pronounsInput = dialog.getByLabel('Pronouns')
+    await pronounsInput.fill('she/her')
+
+    // Backdrop click: the character modal opts out of close-on-backdrop
+    // entirely, so this must be a complete no-op — no prompt, no close.
+    await page.mouse.click(10, 10)
+    await expect(dialog).toBeVisible()
+    await expect(pronounsInput).toHaveValue('she/her')
+
+    // Escape on a dirty form must show the unsaved-changes prompt, not close.
+    await page.keyboard.press('Escape')
+    const prompt = page.locator('.save-changes-prompt')
+    await expect(prompt).toBeVisible()
+    await expect(dialog).toBeVisible()
+
+    // Cancel on the prompt itself just dismisses the prompt — edits remain.
+    await prompt.getByRole('button', { name: 'Cancel' }).click()
+    await expect(prompt).not.toBeVisible()
+    await expect(dialog).toBeVisible()
+    await expect(pronounsInput).toHaveValue('she/her')
+
+    // The form's own Cancel button is intercepted the same dirty-aware way
+    // as Escape/X, not a silent direct close.
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(prompt).toBeVisible()
+
+    // Discard actually closes, and drops the unsaved draft (never persisted).
+    await prompt.getByRole('button', { name: 'Discard' }).click()
+    await expect(dialog).not.toBeVisible()
+    const chars = await readStorage(page, 'nf_characters')
+    expect(chars?.some(c => c.name === draftName)).toBe(false)
+
+    // Now confirm a real save still works cleanly end-to-end, including the
+    // pronouns field the original report specifically called out.
+    await page.getByRole('button', { name: 'New' }).first().click()
+    await page.locator('[role="dialog"] input[required]').first().fill(draftName)
+    await page.locator('[role="dialog"]').getByLabel('Pronouns').fill('she/her')
+    await page.getByRole('button', { name: 'Save Character' }).click()
+
+    await waitForStorage(page, (n) => {
+      const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
+      const list = JSON.parse(get('nf_characters') || '[]')
+      return list.some(c => c.name === n && c.pronouns === 'she/her')
+    }, draftName)
+
+    await page.evaluate(() => window.__yowStorageBridge?.flush())
+    await page.reload()
+    await waitForStorageHydration(page)
+    const savedChars = await readStorage(page, 'nf_characters')
+    const saved = savedChars?.find(c => c.name === draftName)
+    expect(saved?.pronouns).toBe('she/her')
+  })
+
   test('character search filters the list', async ({ page }) => {
     const nameA = `Alpha ${Date.now()}`
     const nameB = `Beta ${Date.now()}`

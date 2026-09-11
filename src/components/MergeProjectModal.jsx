@@ -56,16 +56,24 @@ export default function MergeProjectModal({ store, project, onClose, onDone }) {
   useEffect(() => {
     if (!pending) return
     if (store.activeNovelId !== pending.novelId) return
+    let populationSucceeded = false
+    store.beginProjectImport?.()
     try {
       populateYowProject(store, pending.data, pending.sel)
+      populationSucceeded = true
       setPending(null)
       setPhase('done')
       setTimeout(() => { onDone?.(); onClose() }, 1100)
     } catch (err) {
       console.error('Project merge failed:', err)
       setPending(null)
-      setError('This project could not be fully merged in — it may be in an unexpected state. Some content may already have been added; check this project before trying again.')
+      const restored = store.restoreProjectSnapshot?.(pending.novelId, pending.destinationSnapshot)
+      setError(restored
+        ? 'This project could not be fully merged in — it may be in an unexpected state. The destination project was restored and no merged content was kept.'
+        : 'This project could not be fully merged in — it may be in an unexpected state. Some content may already have been added; check this project before trying again.')
       setPhase('error')
+    } finally {
+      store.endProjectImport?.(populationSucceeded)
     }
   }, [store.activeNovelId, pending]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,7 +81,12 @@ export default function MergeProjectModal({ store, project, onClose, onDone }) {
     if (!sourceData) return
     setError('')
     setPhase('merging')
-    setPending({ novelId: project.id, data: sourceData, sel: selections })
+    setPending({
+      novelId: project.id,
+      data: sourceData,
+      sel: selections,
+      destinationSnapshot: store.getProjectExportData(project.id),
+    })
     if (store.activeNovelId !== project.id) store.setActiveNovelId(project.id)
   }
 

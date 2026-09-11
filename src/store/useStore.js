@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, deleteItem, deleteItemsByNovel, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
+import { upsertItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -13,6 +13,7 @@ import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
+import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -130,6 +131,7 @@ const clearProjectRefs = (refs) => {
   refs.rpgCharactersRef.current = []
   refs.comicPagesRef.current = []
   refs.comicPanelsRef.current = []
+  refs.erasRef.current = []
   refs.activeNovelIdRef.current = null
   refs.activeMapByNovelRef.current = {}
   refs.currentYearRef.current = 0
@@ -593,6 +595,7 @@ export function useStore(userId = null, options = {}) {
   const rpgCharactersRef = useRef(rpgCharacters)
   const comicPagesRef = useRef(comicPages)
   const comicPanelsRef = useRef(comicPanels)
+  const erasRef = useRef(eras)
   const activeNovelIdRef = useRef(activeNovelId)
   const activeMapByNovelRef = useRef(activeMapByNovel)
   const currentYearRef = useRef(currentYear)
@@ -612,6 +615,11 @@ export function useStore(userId = null, options = {}) {
 
   // Track whether we're mid-import to suppress Firestore saves during bulk load
   const importing = useRef(false)
+  // Existing-project archive imports populate several collections in one
+  // synchronous pass. Keep their intermediate state off the network so a
+  // failed pass can restore its snapshot before cloud effects observe it.
+  const projectImportDepthRef = useRef(0)
+  const projectImportSceneIdsRef = useRef(new Set())
   const remoteReady = useRef(!userId)
   const previousUserId = useRef(userId)
 
@@ -789,6 +797,7 @@ export function useStore(userId = null, options = {}) {
       rpgCharactersRef,
       comicPagesRef,
       comicPanelsRef,
+      erasRef,
       activeNovelIdRef,
       activeMapByNovelRef,
       currentYearRef,
@@ -1049,7 +1058,7 @@ export function useStore(userId = null, options = {}) {
       markLocalWrite(userId)
       save('nf_activeMapByNovel', activeMapByNovelRef.current)
     }
-    if (canSyncCloud) trackSync(saveUserSettings(userId, settings)).catch(() => {})
+    if (canSyncCloud && projectImportDepthRef.current === 0) trackSync(saveUserSettings(userId, settings)).catch(() => {})
     return settings
   }, [userId, canSyncCloud, trackSync])
 
@@ -1084,7 +1093,7 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { locationsRef.current = locations; save('nf_locations', locations) }, [locations])
   useEffect(() => { timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
   useEffect(() => { worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
-  useEffect(() => { save('nf_eras', eras) }, [eras])
+  useEffect(() => { erasRef.current = eras; save('nf_eras', eras) }, [eras])
   useEffect(() => { currentYearRef.current = currentYear; save('nf_currentYear', currentYear) }, [currentYear])
   useEffect(() => { actsRef.current = acts; save('nf_acts', acts) }, [acts])
   useEffect(() => { chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
@@ -1173,7 +1182,7 @@ export function useStore(userId = null, options = {}) {
     comic_pages: { setter: setComicPages, ref: comicPagesRef, storageKey: 'nf_comicPages' },
     comic_panels: { setter: setComicPanels, ref: comicPanelsRef, storageKey: 'nf_comicPanels' },
     scenes: { setter: setScenes, ref: scenesRef, storageKey: 'nf_scenes' },
-    eras: { setter: setEras, ref: null, storageKey: 'nf_eras' },
+    eras: { setter: setEras, ref: erasRef, storageKey: 'nf_eras' },
   }), [])
 
   // Applies the OTHER tab's version of a conflicted record on top of the
@@ -1285,7 +1294,7 @@ export function useStore(userId = null, options = {}) {
   /* eslint-enable react-hooks/exhaustive-deps */
 
   // Bulk import from Firestore after login
-  const importData = useCallback((data) => {
+  const importData = useCallback((data, options = {}) => {
     importing.current = true
     remoteReady.current = false
     const localWriteAt = loadLocalWriteAt()
@@ -1309,7 +1318,15 @@ export function useStore(userId = null, options = {}) {
     // dormant data, so cap how old "local" is allowed to be to still win.
     const LOCAL_TRUST_WINDOW_MS = 30 * 60 * 1000
     const localWriteIsRecent = localWriteAt > 0 && (Date.now() - localWriteAt) < LOCAL_TRUST_WINDOW_MS
-    const shouldPreferLocal = ownerMatchesCurrentUser && localWriteAt > remoteSavedAt && localWriteIsRecent && !hasLocalWriteFailed()
+// A known-failed local write should only ever cost the one poisoned key —
+    // never the rest of the account. A failed-write marker can override local
+    // freshness only when the cloud copy actually contains project data.
+    const cloudHasAnyData = Array.isArray(data?.novels) && data.novels.length > 0
+    const shouldPreferLocal = options.preferLocal !== false
+      && ownerMatchesCurrentUser
+      && localWriteAt > remoteSavedAt
+      && localWriteIsRecent
+      && (!hasLocalWriteFailed() || !cloudHasAnyData)
     const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
     const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
@@ -1378,7 +1395,9 @@ export function useStore(userId = null, options = {}) {
       // doesn't know about it — union it back in from whatever's actually on
       // local disk right now (which already correctly reflects any discard/
       // restore the user has done through the app).
-      const localScenes = hydrateScenesFromStorage(load('nf_scenes', []))
+      const localScenes = options.preserveLocalSceneConflicts === false
+        ? []
+        : hydrateScenesFromStorage(load('nf_scenes', []))
       const importedIds = new Set(importedScenes.map(s => s.id))
       const missingLocalConflicts = (Array.isArray(localScenes) ? localScenes : [])
         .filter(s => s.conflictOf && !importedIds.has(s.id))
@@ -1411,6 +1430,7 @@ export function useStore(userId = null, options = {}) {
     setComicPages(sourceData.comicPages ?? [])
     setComicPanels(sourceData.comicPanels ?? [])
     setEras(sourceData.eras ?? [])
+    setRecordConflicts(sourceData.recordConflicts ?? [])
     if (!shouldPreferLocal && canSyncCloud && resolvedActiveNovelId !== (data.activeNovelId ?? null)) {
       trackSync(saveUserSettings(userId, {
         activeNovelId: resolvedActiveNovelId,
@@ -1468,34 +1488,47 @@ export function useStore(userId = null, options = {}) {
     remoteReady.current = allowSaves
   }, [])
 
-  const replaceData = useCallback((data) => {
-    importData(data)
-
-    if (!canSyncCloud) return
-
-    setTimeout(() => {
-      upsertItems('novels', userId, data.novels ?? []).catch(console.error)
-      upsertItems('series_items', userId, data.series ?? []).catch(console.error)
-      upsertItems('characters', userId, data.characters ?? []).catch(console.error)
-      upsertItems('factions', userId, data.factions ?? []).catch(console.error)
-      upsertItems('locations', userId, data.locations ?? []).catch(console.error)
-      upsertItems('timeline_events', userId, data.timeline ?? []).catch(console.error)
-      upsertItems('world_history', userId, data.worldHistory ?? []).catch(console.error)
-      upsertItems('acts', userId, data.acts ?? []).catch(console.error)
-      upsertItems('chapters', userId, data.chapters ?? []).catch(console.error)
-      upsertItems('lore_entries', userId, data.loreEntries ?? []).catch(console.error)
-      upsertItems('idea_entries', userId, data.ideaEntries ?? []).catch(console.error)
-      upsertItems('maps_data', userId, data.maps ?? []).catch(console.error)
-      upsertItems('whiteboards_data', userId, data.whiteboards ?? []).catch(console.error)
-      upsertItems('story_schedule', userId, data.storySchedule ?? []).catch(console.error)
-      upsertItems('rpg_characters', userId, data.rpgCharacters ?? []).catch(console.error)
-      upsertItems('comic_pages', userId, data.comicPages ?? []).catch(console.error)
-      upsertItems('comic_panels', userId, data.comicPanels ?? []).catch(console.error)
-      upsertItems('eras', userId, data.eras ?? []).catch(console.error)
-      saveUserSettings(userId, { activeNovelId: data.activeNovelId ?? null, currentYear: data.currentYear ?? 0, activeMapByNovel: data.activeMapByNovel ?? {} }).catch(console.error)
-      upsertItems('scenes', userId, data.scenes ?? []).catch(console.error)
-    }, 700)
-  }, [importData, userId, canSyncCloud])
+  const replaceData = useCallback(async (data) => {
+    // Commit the selected replacement to cloud storage before changing the
+    // rendered/local copy. The RPC is one database transaction, so failure
+    // leaves both sides on their previous version and can be reported to the
+    // caller without presenting a half-restored account.
+    if (canSyncCloud) await trackSync(replaceUserData(userId, data))
+    const importedNovels = data.novels ?? []
+    const sourceProjectIds = new Set(importedNovels.map(novel => novel.id))
+    const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
+      ? freeProjectId
+      : resolveActiveNovelId(data, userId, Number(data?._savedAt || 0) || 0)
+    const freeProjectExists = freeProjectId && sourceProjectIds.has(freeProjectId)
+    const normalizedData = {
+      ...data,
+      novels: freeProjectExists
+        ? importedNovels.map(novel => ({ ...novel, focus: novel.id === freeProjectId }))
+        : importedNovels,
+      rpgCharacters: (data.rpgCharacters ?? []).map(normalizeRpgCharacter),
+      activeNovelId: resolvedActiveNovelId,
+      recordConflicts: data.recordConflicts ?? [],
+    }
+    // The local browser vault and desktop SQLite vault each commit this full
+    // key set in one native transaction before React renders the replacement.
+    // A failed transaction leaves both their durable copy and in-memory mirror
+    // unchanged, so a restore cannot strand a mixture of old and new records.
+    try {
+      await replaceProjectStorageAtomically(normalizedData, { ownerId: userId })
+      clearLocalWriteFailed('nf_projectReplacement')
+    } catch (error) {
+      // The cloud transaction may already have committed. Keep this marker so
+      // login reconciliation distrusts the older local snapshot and reloads
+      // the authoritative cloud copy instead of pushing stale rows back up.
+      markLocalWriteFailed('nf_projectReplacement')
+      throw error
+    }
+    // An explicit restore choice is authoritative. The login reconciliation
+    // path may prefer a very recent local edit, but applying that heuristic
+    // here could silently ignore the backup the user just selected.
+    importData(normalizedData, { preferLocal: false, preserveLocalSceneConflicts: false })
+    return normalizedData
+  }, [importData, userId, canSyncCloud, trackSync, freeProjectId])
 
   // Clear all local state on sign-out
   const clearData = useCallback(() => {
@@ -1520,6 +1553,7 @@ export function useStore(userId = null, options = {}) {
       rpgCharactersRef,
       comicPagesRef,
       comicPanelsRef,
+      erasRef,
       activeNovelIdRef,
       activeMapByNovelRef,
       currentYearRef,
@@ -1608,6 +1642,28 @@ export function useStore(userId = null, options = {}) {
   }
 
   const seriesScope = (arr, category) => resolveSeriesScope(arr, category, activeNovelId)
+
+  // `characters`/`locations` below feed straight into Manuscript.jsx's `entityMap`/
+  // `characterNames`/`locationNames` useMemo (the @mention/highlight lookups every
+  // SceneEditor's memo comparator was built around — see the "Typing lag" ROADMAP row).
+  // seriesScope()/resolveSeriesScope() always builds a brand-new filtered-or-merged array,
+  // and the `api` object further down used to call it inline on every render of whatever
+  // component calls useStore() — not only when `characters`/`locations` themselves
+  // changed. Any unrelated state update elsewhere in this hook (e.g. the
+  // localStorageWarning/localDataCorrupted poll a few lines up, which fires every 4s
+  // regardless of typing) re-runs the whole hook and was handing Manuscript.jsx a
+  // brand-new reference for both, every time, defeating entityMap/characterNames/
+  // locationNames' own memoization for every scene in the document simultaneously.
+  // Memoizing here keeps the reference stable across renders unless characters/locations/
+  // novels/series/activeNovelId actually changed.
+  const scopedCharacters = useMemo(
+    () => seriesScope(characters, 'characters'),
+    [characters, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const scopedLocations = useMemo(
+    () => seriesScope(locations, 'locations'),
+    [locations, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
 
   const getSyncChain = (arr, category, item) => {
     if (!item) return []
@@ -1795,10 +1851,28 @@ export function useStore(userId = null, options = {}) {
   // so the app can warn about them and offer a restore/discard path instead.
   const novelScenes = scenes.filter(s => s.novelId === activeNovelId && !s.conflictOf).sort((a, b) => a.order - b.order)
   const novelSceneConflicts = scenes.filter(s => s.novelId === activeNovelId && s.conflictOf).sort((a, b) => (b.conflictCreatedAt || 0) - (a.conflictCreatedAt || 0))
-  const novelTimeline = seriesScope(timeline, 'timeline')
-  const novelWorldHistory = seriesScope(worldHistory, 'worldhistory')
+  // Memoized for the same reason scopedCharacters/scopedLocations are above:
+  // Manuscript.jsx's `entityMap` useMemo (the one this file's "Typing lag" ROADMAP
+  // row is about) depends on `loreEntries`/`worldHistory`/`timeline` in addition to
+  // `characters`/`locations` — an unmemoized seriesScope() call here would still
+  // leave entityMap churning on every render even after characters/locations were
+  // fixed, just via a different set of props feeding the exact same memo.
+  const novelTimeline = useMemo(
+    () => seriesScope(timeline, 'timeline'),
+    [timeline, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const novelWorldHistory = useMemo(
+    () => seriesScope(worldHistory, 'worldhistory'),
+    [worldHistory, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  const novelLoreEntries = useMemo(
+    () => seriesScope(loreEntries, 'lore'),
+    [loreEntries, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
+  )
+  // factions/ideaEntries don't currently feed any memo comparator the way the three
+  // above (and characters/locations) do, so they're deliberately left unmemoized here
+  // — same scope decision as novelFactions/novelIdeaEntries noted in ROADMAP.md.
   const novelFactions = seriesScope(factions, 'factions')
-  const novelLoreEntries = seriesScope(loreEntries, 'lore')
   const novelIdeaEntries = seriesScope(ideaEntries, 'ideas')
   const novelStorySchedule = storySchedule.filter(e => e.novelId === activeNovelId)
   const novelMaps = maps.filter(m => m.novelId === activeNovelId)
@@ -1931,7 +2005,8 @@ export function useStore(userId = null, options = {}) {
       lastModified: Date.now() // eslint-disable-line react-hooks/purity
     }
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, newScene])
-    if (canSyncCloud) saveSceneDoc(userId, newScene).catch(console.error)
+    if (projectImportDepthRef.current > 0) projectImportSceneIdsRef.current.add(newScene.id)
+    else if (canSyncCloud) saveSceneDoc(userId, newScene).catch(console.error)
     return newScene
   }
 
@@ -2222,12 +2297,12 @@ export function useStore(userId = null, options = {}) {
         const updated = hasContent && resolvedData.content !== s.content
           ? withSceneContentHistory({ ...s, ...resolvedData }, resolvedData.content)
           : { ...s, ...resolvedData }
-        if (canSyncCloud) debouncedSaveScene(id, userId, updated)
+        if (canSyncCloud && projectImportDepthRef.current === 0) debouncedSaveScene(id, userId, updated)
         saved = updated
         return updated
       })
     })
-    if (canSyncCloud && Object.prototype.hasOwnProperty.call(data, 'content')) {
+    if (canSyncCloud && projectImportDepthRef.current === 0 && Object.prototype.hasOwnProperty.call(data, 'content')) {
       nextScenes
         .filter(scene => scene.conflictOf === id)
         .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
@@ -2536,6 +2611,23 @@ export function useStore(userId = null, options = {}) {
       cleanupCharacterPortraits([previousLogo], { factions: factionsRef.current })
     }
     return saved
+  }
+
+  const setScopedFactions = (updater) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
+    let nextScoped = null
+    commitLocal(factionsRef, setFactions, 'nf_factions', prev => {
+      const untouched = prev.filter(faction => faction.novelId !== projectId)
+      const scoped = prev.filter(faction => faction.novelId === projectId)
+      const requested = typeof updater === 'function' ? updater(scoped) : updater
+      nextScoped = (Array.isArray(requested) ? requested : []).map(faction => ({
+        ...faction,
+        novelId: faction.novelId ?? projectId,
+      }))
+      return [...untouched, ...nextScoped]
+    })
+    return nextScoped
   }
 
   const deleteFaction = (id, options = {}) => {
@@ -3247,6 +3339,67 @@ export function useStore(userId = null, options = {}) {
     }
   }
 
+  const beginProjectImport = () => {
+    if (projectImportDepthRef.current === 0) projectImportSceneIdsRef.current.clear()
+    projectImportDepthRef.current += 1
+  }
+
+  const endProjectImport = (commit = true) => {
+    projectImportDepthRef.current = Math.max(0, projectImportDepthRef.current - 1)
+    if (projectImportDepthRef.current > 0) return
+    const sceneIds = [...projectImportSceneIdsRef.current]
+    projectImportSceneIdsRef.current.clear()
+    if (!commit || !canSyncCloud) return
+    sceneIds.forEach(sceneId => {
+      const scene = scenesRef.current.find(item => item.id === sceneId)
+      if (scene) trackSync(saveSceneDoc(userId, scene)).catch(() => {})
+    })
+  }
+
+  const restoreProjectSnapshot = (projectId, snapshot) => {
+    if (!projectId || !snapshot || activeNovelIdRef.current !== projectId) return false
+
+    const restoreCollection = (ref, setter, storageKey, items) => {
+      const restored = Array.isArray(items) ? items : []
+      commitLocal(ref, setter, storageKey, prev => [
+        ...prev.filter(item => item.novelId !== projectId),
+        ...restored,
+      ])
+    }
+
+    const restoredSceneIds = new Set((snapshot.scenes || []).map(scene => scene.id))
+    scenesRef.current
+      .filter(scene => scene.novelId === projectId && !restoredSceneIds.has(scene.id))
+      .forEach(scene => debouncedSaveScene.cancel(scene.id))
+
+    restoreCollection(charactersRef, setCharacters, 'nf_characters', snapshot.characters)
+    restoreCollection(factionsRef, setFactions, 'nf_factions', snapshot.factions)
+    restoreCollection(locationsRef, setLocations, 'nf_locations', snapshot.locations)
+    restoreCollection(timelineRef, setTimeline, 'nf_timeline', snapshot.timeline)
+    restoreCollection(worldHistoryRef, setWorldHistory, 'nf_worldHistory', snapshot.worldHistory)
+    restoreCollection(erasRef, setEras, 'nf_eras', snapshot.eras)
+    restoreCollection(actsRef, setActs, 'nf_acts', snapshot.acts)
+    restoreCollection(chaptersRef, setChapters, 'nf_chapters', snapshot.chapters)
+    restoreCollection(scenesRef, setScenes, 'nf_scenes', snapshot.scenes)
+    restoreCollection(loreEntriesRef, setLoreEntries, 'nf_loreEntries', snapshot.loreEntries)
+    restoreCollection(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', snapshot.ideaEntries)
+    restoreCollection(mapsRef, setMaps, 'nf_maps', snapshot.maps)
+    restoreCollection(whiteboardsRef, setWhiteboards, 'nf_whiteboards', snapshot.whiteboards)
+    restoreCollection(storyScheduleRef, setStorySchedule, 'nf_storySchedule', snapshot.storySchedule)
+    restoreCollection(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', snapshot.rpgCharacters)
+    restoreCollection(comicPagesRef, setComicPages, 'nf_comicPages', snapshot.comicPages)
+    restoreCollection(comicPanelsRef, setComicPanels, 'nf_comicPanels', snapshot.comicPanels)
+
+    const nextActiveMaps = {
+      ...activeMapByNovelRef.current,
+      [projectId]: snapshot.activeMapId ?? null,
+    }
+    activeMapByNovelRef.current = nextActiveMaps
+    setActiveMapByNovel(nextActiveMaps)
+    saveSettingsNow({ activeMapByNovel: nextActiveMaps })
+    return true
+  }
+
   const novelEras = eras.filter(e => e.novelId === activeNovelId)
 
   const addEra = (data) => {
@@ -3255,16 +3408,16 @@ export function useStore(userId = null, options = {}) {
     if (storageExceededCheck()) { return null }
     const { id: _id, novelId: _novelId, createdAt: _createdAt, ...safeData } = data || {}
     const era = { ...safeData, id: uid(), novelId: projectId, createdAt: Date.now() } // eslint-disable-line react-hooks/purity
-    setEras(prev => [...prev, era])
+    commitLocal(erasRef, setEras, 'nf_eras', prev => [...prev, era])
     return era
   }
   const updateEra = (id, data) => {
     const projectId = currentActiveProjectId()
-    const existing = eras.find(era => era.id === id && era.novelId === projectId)
+    const existing = erasRef.current.find(era => era.id === id && era.novelId === projectId)
     if (!existing) return null
     const { id: _id, novelId: _novelId, createdAt: _createdAt, ...safeData } = data || {}
     const updated = { ...existing, ...safeData }
-    setEras(prev => prev.map(era => era.id === id ? updated : era))
+    commitLocal(erasRef, setEras, 'nf_eras', prev => prev.map(era => era.id === id ? updated : era))
     if (Object.hasOwn(safeData, 'name')) {
       const rename = prev => prev.map(entry => entry.eraId === id ? { ...entry, era: data.name } : entry)
       commitLocal(timelineRef, setTimeline, 'nf_timeline', rename)
@@ -3274,9 +3427,9 @@ export function useStore(userId = null, options = {}) {
   }
   const deleteEra = (id) => {
     const projectId = currentActiveProjectId()
-    if (!projectId || !eras.some(era => era.id === id && era.novelId === projectId)) return false
+    if (!projectId || !erasRef.current.some(era => era.id === id && era.novelId === projectId)) return false
     if (canSyncCloud) deleteItem('eras', userId, id).catch(console.error)
-    setEras(prev => prev.filter(e => e.id !== id))
+    commitLocal(erasRef, setEras, 'nf_eras', prev => prev.filter(e => e.id !== id))
     // clear era reference from timeline entries
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev =>
       prev.map(e => e.eraId === id ? { ...e, eraId: null, era: '' } : e)
@@ -3338,46 +3491,88 @@ export function useStore(userId = null, options = {}) {
     const ordered = (orderedIds || []).filter(id => map.has(id) && !seen.has(id) && seen.add(id)).map(id => map.get(id))
     return [...ordered, ...prev.filter(item => !seen.has(item.id))]
   })
-  const deleteNovel = (id) => {
+  const deleteNovel = async (id) => {
     if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return false }
     const deletedNovel = novelsRef.current.find(n => n.id === id)
     if (!deletedNovel) return false
-    deleteMediaUrls([
+    const mediaUrls = [
       deletedNovel?.coverPhoto,
       deletedNovel?.bannerImage,
       ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
       ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
-    ])
-    const updatedNovels = novelsRef.current.filter(n => n.id !== id)
-    commitLocal(novelsRef, setNovels, 'nf_novels', updatedNovels)
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(factionsRef, setFactions, 'nf_factions', prev => prev.filter(f => f.novelId !== id))
-    commitLocal(locationsRef, setLocations, 'nf_locations', prev => prev.filter(l => l.novelId !== id))
-    commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.filter(h => h.novelId !== id))
-    setEras(prev => prev.filter(e => e.novelId !== id))
-    commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => a.novelId !== id))
-    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.novelId !== id))
-    commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.filter(m => m.novelId !== id))
-    commitLocal(whiteboardsRef, setWhiteboards, 'nf_whiteboards', prev => prev.filter(w => w.novelId !== id))
-    commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.novelId !== id))
-    commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.novelId !== id))
-    commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.novelId !== id))
-    commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.novelId !== id))
+    ]
+    const removedSceneIds = new Set(scenesRef.current.filter(s => s.novelId === id).map(s => s.id))
     const nextActiveMapByNovel = { ...activeMapByNovelRef.current }
-    if (Object.prototype.hasOwnProperty.call(nextActiveMapByNovel, id)) {
-      delete nextActiveMapByNovel[id]
-      setActiveMapByNovel(nextActiveMapByNovel)
-      saveSettingsNow({ activeMapByNovel: nextActiveMapByNovel })
+    delete nextActiveMapByNovel[id]
+    const nextData = {
+      novels: novelsRef.current.filter(n => n.id !== id),
+      characters: charactersRef.current.filter(item => item.novelId !== id),
+      factions: factionsRef.current.filter(item => item.novelId !== id),
+      locations: locationsRef.current.filter(item => item.novelId !== id),
+      timeline: timelineRef.current.filter(item => item.novelId !== id),
+      worldHistory: worldHistoryRef.current.filter(item => item.novelId !== id),
+      eras: erasRef.current.filter(item => item.novelId !== id),
+      acts: actsRef.current.filter(item => item.novelId !== id),
+      chapters: chaptersRef.current.filter(item => item.novelId !== id),
+      scenes: scenesRef.current.filter(item => item.novelId !== id),
+      loreEntries: loreEntriesRef.current.filter(item => item.novelId !== id),
+      ideaEntries: ideaEntriesRef.current.filter(item => item.novelId !== id),
+      maps: mapsRef.current.filter(item => item.novelId !== id),
+      whiteboards: whiteboardsRef.current.filter(item => item.novelId !== id),
+      series: series.map(item => ({
+        ...item,
+        projectOrder: (item.projectOrder ?? []).filter(projectId => projectId !== id),
+      })),
+      storySchedule: storyScheduleRef.current.filter(item => item.novelId !== id),
+      rpgCharacters: rpgCharactersRef.current.filter(item => item.novelId !== id),
+      comicPages: comicPagesRef.current.filter(item => item.novelId !== id),
+      comicPanels: comicPanelsRef.current.filter(item => item.novelId !== id),
+      activeMapByNovel: nextActiveMapByNovel,
+      currentYear: currentYearRef.current,
+      activeNovelId: activeNovelIdRef.current === id ? null : activeNovelIdRef.current,
+      recordConflicts,
+      sceneVersions: load('nf_scene_versions', []).filter(version =>
+        version.novelId !== id && !(version.novelId == null && removedSceneIds.has(version.sceneId))
+      ),
     }
-    if (canSyncCloud) {
-      deleteItemsByNovel(userId, id).catch(console.error)
-      deleteItem('novels', userId, id).catch(console.error)
+
+    if (canSyncCloud) await trackSync(deleteProjectData(userId, id))
+    try {
+      await replaceProjectStorageAtomically(nextData, { ownerId: userId })
+      clearLocalWriteFailed('nf_projectReplacement')
+    } catch (error) {
+      markLocalWriteFailed('nf_projectReplacement')
+      throw error
     }
-    if (activeNovelIdRef.current === id) selectActiveNovel(null)
+
+    novelsRef.current = nextData.novels; setNovels(nextData.novels)
+    charactersRef.current = nextData.characters; setCharacters(nextData.characters)
+    factionsRef.current = nextData.factions; setFactions(nextData.factions)
+    locationsRef.current = nextData.locations; setLocations(nextData.locations)
+    timelineRef.current = nextData.timeline; setTimeline(nextData.timeline)
+    worldHistoryRef.current = nextData.worldHistory; setWorldHistory(nextData.worldHistory)
+    erasRef.current = nextData.eras; setEras(nextData.eras)
+    actsRef.current = nextData.acts; setActs(nextData.acts)
+    chaptersRef.current = nextData.chapters; setChapters(nextData.chapters)
+    scenesRef.current = nextData.scenes; setScenes(nextData.scenes)
+    loreEntriesRef.current = nextData.loreEntries; setLoreEntries(nextData.loreEntries)
+    ideaEntriesRef.current = nextData.ideaEntries; setIdeaEntries(nextData.ideaEntries)
+    mapsRef.current = nextData.maps; setMaps(nextData.maps)
+    whiteboardsRef.current = nextData.whiteboards; setWhiteboards(nextData.whiteboards)
+    setSeries(nextData.series)
+    storyScheduleRef.current = nextData.storySchedule; setStorySchedule(nextData.storySchedule)
+    rpgCharactersRef.current = nextData.rpgCharacters; setRpgCharacters(nextData.rpgCharacters)
+    comicPagesRef.current = nextData.comicPages; setComicPages(nextData.comicPages)
+    comicPanelsRef.current = nextData.comicPanels; setComicPanels(nextData.comicPanels)
+    activeMapByNovelRef.current = nextData.activeMapByNovel; setActiveMapByNovel(nextData.activeMapByNovel)
+    activeNovelIdRef.current = nextData.activeNovelId; setActiveNovelId(nextData.activeNovelId)
+    removedSceneIds.forEach(sceneId => {
+      debouncedSaveScene.cancel(sceneId)
+      knownSceneContentIdsRef.current.delete(sceneId)
+      lastWrittenSceneContentByIdRef.current.delete(sceneId)
+    })
+    deleteMediaUrls(mediaUrls)
+    if (nextData.activeNovelId == null) setWritingSceneId(null)
     setSelectedCharacterId(null)
     setSelectedLocationId(null)
     setSelectedLoreEntryId(null)
@@ -3768,19 +3963,12 @@ export function useStore(userId = null, options = {}) {
       maps,
     },
     allProjectStats, activeProjectStats,
-    characters: seriesScope(characters, 'characters'),
+    characters: scopedCharacters,
     saveCharacter, saveRelationship, saveCharacterJourney, updateCharacterJourneyForSeries, deleteCharacter,
     factions: novelFactions,
     saveFaction, deleteFaction,
-    setFactions: (updater) => {
-      setFactions(prev => {
-        const untouched = prev.filter(f => f.novelId !== activeNovelId)
-        const scoped = prev.filter(f => f.novelId === activeNovelId)
-        const nextScoped = typeof updater === 'function' ? updater(scoped) : updater
-        return [...untouched, ...nextScoped.map(f => ({ ...f, novelId: f.novelId ?? activeNovelId }))]
-      })
-    },
-    locations: seriesScope(locations, 'locations'),
+    setFactions: setScopedFactions,
+    locations: scopedLocations,
     saveLocation, deleteLocation,
     timeline: novelTimeline,
     addEvent, updateEvent, deleteEvent, linkTimelineHistory, unlinkTimelineHistory,
@@ -3818,6 +4006,7 @@ export function useStore(userId = null, options = {}) {
     addComicPage, updateComicPage, deleteComicPage, reorderComicPage, duplicateComicPage,
     addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
     importData, replaceData, clearData, finishRemoteLoad,
+    beginProjectImport, endProjectImport, restoreProjectSnapshot,
     getLocalSnapshot: getCurrentSnapshot,
     syncStatus, trackSync, flushPendingSync,
     localStorageWarning, localDataCorrupted,

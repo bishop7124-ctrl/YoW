@@ -28,6 +28,10 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await editor.fill(sentence)
   await expect(editor).toHaveValue(sentence)
 
+  // Flush before reload — the IndexedDB backend persists asynchronously, so
+  // reloading immediately after typing can race it and lose the write (see
+  // autosave.spec.js's identical pattern for this same scenario).
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
   await page.reload()
   await expect(page).toHaveURL(/\/project\/.+\/writing/)
   await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()

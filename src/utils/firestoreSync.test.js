@@ -5,6 +5,8 @@ const mockState = vi.hoisted(() => ({
   tables: {},
   selects: [],
   upserts: [],
+  rpcCalls: [],
+  rpcError: null,
   // Queue of { error } results to hand out (in order) before falling back to
   // the normal success response — lets tests simulate a table query that
   // fails N times before succeeding, or fails on every attempt.
@@ -23,6 +25,10 @@ vi.mock('./uploadUserMedia', () => ({
 
 vi.mock('../supabase', () => ({
   supabase: {
+    rpc: vi.fn((name, args) => {
+      mockState.rpcCalls.push({ name, args })
+      return Promise.resolve({ data: null, error: mockState.rpcError })
+    }),
     from: vi.fn((table) => ({
       select: vi.fn((columns) => {
         mockState.selects.push({ table, columns })
@@ -214,6 +220,51 @@ describe('upsertItems embedded-image safety net', () => {
   })
 })
 
+describe('replaceUserData', () => {
+  beforeEach(() => {
+    mockState.rpcCalls = []
+    mockState.rpcError = null
+    mockState.embeddedUploadCalls = []
+    mockState.embeddedUploadShouldFail = false
+  })
+
+  it('sends one atomic RPC with normalized settings and relocated images', async () => {
+    const { replaceUserData } = await import('./firestoreSync.js')
+
+    await replaceUserData('user-1', {
+      activeNovelId: 'novel-1',
+      currentYear: 42,
+      activeMapByNovel: { 'novel-1': 'map-1' },
+      novels: [{ id: 'novel-1', title: 'Restored' }],
+      characters: [{ id: 'char-1', novelId: 'novel-1', image: 'data:image/png;base64,ZmFrZQ==' }],
+      scenes: [{ id: 'scene-1', novelId: 'novel-1', content: 'Exact backup prose' }],
+    })
+
+    expect(mockState.rpcCalls).toHaveLength(1)
+    expect(mockState.rpcCalls[0]).toMatchObject({
+      name: 'replace_user_data_atomic',
+      args: {
+        p_data: {
+          activeNovelId: 'novel-1',
+          currentYear: 42,
+          activeMapByNovel: { 'novel-1': 'map-1' },
+          novels: [{ id: 'novel-1', title: 'Restored' }],
+          characters: [{ id: 'char-1', novelId: 'novel-1', image: 'yow-media:user-1/characters/relocated.webp' }],
+          scenes: [{ id: 'scene-1', novelId: 'novel-1', content: 'Exact backup prose' }],
+        },
+      },
+    })
+  })
+
+  it('surfaces an atomic replacement failure to the caller', async () => {
+    const { replaceUserData } = await import('./firestoreSync.js')
+    mockState.rpcError = { message: 'transaction aborted' }
+
+    await expect(replaceUserData('user-1', { novels: [] }))
+      .rejects.toThrow(/atomic account-data replace error: transaction aborted/)
+  })
+})
+
 describe('scene cloud cleanup on project delete', () => {
   beforeEach(() => {
     mockState.tables = {}
@@ -236,21 +287,32 @@ describe('scene cloud cleanup on project delete', () => {
     })
   })
 
-  it('deleteItemsByNovel leaves no scene rows behind for the deleted project, without touching other projects', async () => {
-    const { deleteItemsByNovel } = await import('./firestoreSync.js')
+})
 
-    mockState.tables.scenes = [
-      { user_id: 'user-1', scene_id: 'scene-1', novel_id: 'novel-1', data: { id: 'scene-1', novelId: 'novel-1' } },
-      { user_id: 'user-1', scene_id: 'scene-2', novel_id: 'novel-1', data: { id: 'scene-2', novelId: 'novel-1' } },
-      { user_id: 'user-1', scene_id: 'scene-3', novel_id: 'novel-2', data: { id: 'scene-3', novelId: 'novel-2' } },
-      // Another user's row with the same novel_id must survive too.
-      { user_id: 'user-2', scene_id: 'scene-4', novel_id: 'novel-1', data: { id: 'scene-4', novelId: 'novel-1' } },
-    ]
+describe('atomic destructive deletes', () => {
+  beforeEach(() => {
+    mockState.rpcCalls = []
+    mockState.rpcError = null
+  })
 
-    await deleteItemsByNovel('user-1', 'novel-1')
+  it('deletes a project through one authenticated transaction RPC', async () => {
+    const { deleteProjectData } = await import('./firestoreSync.js')
+    await deleteProjectData('user-1', 'novel-1')
+    expect(mockState.rpcCalls).toEqual([
+      { name: 'delete_project_data_atomic', args: { p_novel_id: 'novel-1' } },
+    ])
+  })
 
-    const remaining = mockState.tables.scenes
-    expect(remaining.find(r => r.novel_id === 'novel-1' && r.user_id === 'user-1')).toBeUndefined()
-    expect(remaining.map(r => r.scene_id).sort()).toEqual(['scene-3', 'scene-4'])
+  it('surfaces project deletion rollback errors', async () => {
+    const { deleteProjectData } = await import('./firestoreSync.js')
+    mockState.rpcError = { message: 'injected project failure' }
+    await expect(deleteProjectData('user-1', 'novel-1'))
+      .rejects.toThrow(/atomic project delete error: injected project failure/)
+  })
+
+  it('deletes an account through the single transactional delete_user RPC', async () => {
+    const { deleteAllUserData } = await import('./firestoreSync.js')
+    await deleteAllUserData('user-1')
+    expect(mockState.rpcCalls).toEqual([{ name: 'delete_user', args: undefined }])
   })
 })

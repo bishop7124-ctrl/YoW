@@ -114,16 +114,35 @@ test('structure sidebar shows at least one act, chapter, and scene', async ({ pa
 // ─── Scene status ─────────────────────────────────────────────────────────────
 
 test('scene status cycles and persists', async ({ page }) => {
-  // Scene status badge is clickable in the scene meta bar
-  const statusBtn = page.locator('.scene-status, [data-status]').first()
+  // ManuscriptInspector.jsx's Scene tab (SceneTab) only renders the Status
+  // row (`.ms-insp-row`) once a scene is *focused* — Manuscript.jsx keys the
+  // inspector's `activeSceneId` off each SceneEditor's `onFocus` handler, and
+  // nothing focuses a scene by default on entering the writing view (the
+  // inspector otherwise shows "Select a scene to see its details."). Click
+  // into the scene's preview to focus it first, matching the pattern used by
+  // the "rename a scene" test above.
+  await page.locator('.ms-preview').first().click()
+
+  // The status chip (SceneEditor.jsx's `.ms-meta-status`) is hidden by CSS
+  // while the editor is in Write mode (`.ms-scene-header--write .ms-meta-status
+  // { display: none }`) — it only renders in Edit mode.
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Edit' }).click()
+
+  const statusBtn = page.locator('.ms-meta-status').first()
   if (!(await statusBtn.isVisible().catch(() => false))) {
     test.skip() // status control not visible in this layout, skip gracefully
     return
   }
 
-  const before = await statusBtn.textContent()
-  await statusBtn.click()
-  const after = await statusBtn.textContent()
+  const statusRow = page.locator('.ms-insp-row').first()
+  await expect(statusRow).toBeVisible()
+  const before = await statusRow.locator('.ms-opt.is-on').first().textContent()
+  // Click the next status in the cycle (not currently active) rather than
+  // assuming a fixed index, so this doesn't depend on the scene's starting status.
+  const nextOption = statusRow.locator('.ms-opt:not(.is-on)').first()
+  const after = await nextOption.textContent()
+  await nextOption.click()
+  await expect(statusRow.locator('.ms-opt.is-on')).toHaveText(after)
   expect(after).not.toBe(before)
 
   await page.evaluate(() => window.__yowStorageBridge?.flush())
@@ -134,10 +153,15 @@ test('scene status cycles and persists', async ({ page }) => {
   expect(scenes.some(s => s.status && s.status !== 'draft')).toBe(true)
 })
 
-// ─── Finalize draft ───────────────────────────────────────────────────────────
+// ─── Finalised mode ───────────────────────────────────────────────────────────
 
 test('finalized draft can be created and viewed', async ({ page }) => {
-  // Write some content first
+  // The 2026-08-27 manuscript-editor-redesign replaced the old one-off
+  // "Finalize draft" action button with a persistent "Finalised" mode
+  // alongside Write/Edit in the topbar's mode switcher (ManuscriptTopbar.jsx
+  // MODES, `[role=group][aria-label="Editor mode"]`) — a live read view of
+  // the current manuscript, not a saved snapshot. Write some content first
+  // so there's something to see in that read view.
   const placeholder = page.getByText('Begin writing here…')
   if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
   await page.getByPlaceholder('Begin writing here…').fill('Draft content for finalization.')
@@ -152,20 +176,31 @@ test('finalized draft can be created and viewed', async ({ page }) => {
     return scenes.some(s => (s.content || '').includes('Draft content') || (get(`nf_scene_content:${s.id}`) || '').includes('Draft content'))
   })
 
-  // Look for Finalize / Final Draft button
-  const finalizeBtn = page
-    .getByRole('button', { name: /Final(ize|ised)? draft|Create final|Compile/i })
-    .first()
+  // Finalise lives behind the topbar overflow ("More") menu, under the
+  // "Finish" section, as "Finalise draft" (British spelling — the previous
+  // regex only matched "Finalize"/"Finalised", never plain "Finalise").
+  // Opening it there swaps the surface to the FinalisePane, which has its
+  // own "Finalise draft" button that actually calls handleFinaliseDraft().
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menu').getByRole('button', { name: 'Finalise draft' }).click()
 
+  const finalizeBtn = page.getByRole('button', { name: 'Finalise draft' }).first()
   if (!(await finalizeBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
     test.skip()
     return
   }
 
+  // handleFinaliseDraft() names the copy via window.prompt then confirms via
+  // window.confirm — both are native dialogs Playwright auto-dismisses
+  // unless handled, which is why this used to silently no-op. One `on`
+  // handler (not two `once`s — both `once`s would fire on the first dialog
+  // and the second would error "already handled") covers both dialogs.
+  page.on('dialog', dialog => dialog.accept())
   await finalizeBtn.click()
 
-  // The finalized reader or success state should appear
+  // The finalized reader (FinalizedReader.jsx's `.ms-final-reader`, shared by
+  // both its scroll and paged view modes) should appear.
   await expect(
-    page.locator('.finalized-reader, .final-draft, [data-finalized]').first(),
+    page.locator('.ms-final-reader').first(),
   ).toBeVisible({ timeout: 8000 })
 })
