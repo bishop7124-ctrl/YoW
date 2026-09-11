@@ -26,11 +26,13 @@ function normalizeEntries(entries = {}) {
 }
 
 function noop() {}
+const REPLACEMENT_WRITE_KEY = 'nf_projectReplacement'
 
 export function createIndexedDbBackend({
   entries = {},
   persistItem,
   removePersistedItem,
+  replacePersistedItems,
   onWriteError = noop,
   onWriteSuccess = noop,
   retry,
@@ -38,6 +40,9 @@ export function createIndexedDbBackend({
   const mirror = normalizeEntries(entries)
   const persist = typeof persistItem === 'function' ? persistItem : async () => {}
   const removePersisted = typeof removePersistedItem === 'function' ? removePersistedItem : async () => {}
+  const replacePersisted = typeof replacePersistedItems === 'function'
+    ? replacePersistedItems
+    : async () => { throw new Error('IndexedDB replacement transaction is unavailable.') }
   let queue = Promise.resolve()
   let pendingCount = 0
   let lastError = null
@@ -71,6 +76,28 @@ export function createIndexedDbBackend({
       mirror.delete(key)
       return enqueue(key, () => removePersisted(key))
     },
+    replaceItems: (entriesToSet = {}, keysToRemove = []) => {
+      const nextEntries = normalizeEntries(entriesToSet)
+      const removeKeys = Array.from(new Set(keysToRemove)).filter(key => !nextEntries.has(key))
+      pendingCount += 1
+      const operation = queue
+        .then(() => withRetry(() => replacePersisted(nextEntries, removeKeys), retry))
+        .then(() => {
+          removeKeys.forEach(key => mirror.delete(key))
+          nextEntries.forEach((value, key) => mirror.set(key, String(value)))
+          pendingCount = Math.max(0, pendingCount - 1)
+          lastError = null
+          onWriteSuccess(REPLACEMENT_WRITE_KEY)
+        })
+        .catch(error => {
+          pendingCount = Math.max(0, pendingCount - 1)
+          lastError = error
+          onWriteError(error, REPLACEMENT_WRITE_KEY)
+          throw error
+        })
+      queue = operation.catch(() => {})
+      return operation
+    },
     // Applies a write/removal another browser tab already made (and already
     // persisted to the shared IndexedDB database) directly to this tab's own
     // mirror — no re-persist (the other tab already did it; this database is
@@ -82,6 +109,10 @@ export function createIndexedDbBackend({
     // whatever the other tab saved for every record it didn't touch.
     applyExternalWrite: (key, value) => { mirror.set(key, value) },
     applyExternalRemove: key => { mirror.delete(key) },
+    applyExternalReplace: (entriesToSet = {}, keysToRemove = []) => {
+      keysToRemove.forEach(key => mirror.delete(key))
+      normalizeEntries(entriesToSet).forEach((value, key) => mirror.set(key, String(value)))
+    },
     flush: () => queue,
     snapshot: () => Object.fromEntries(mirror),
     // Full key enumeration (see projectStorage.js's listKeys) — the mirror
