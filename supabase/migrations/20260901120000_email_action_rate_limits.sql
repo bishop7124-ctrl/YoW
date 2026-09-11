@@ -7,7 +7,7 @@
 --   across any public email-triggering action that needs a durable per-key
 --   rate limit (currently: password reset requests, keyed by the requested
 --   email address). Same append-only-log shape as
---   20260901_ai_proxy_rate_limits.sql, for the same reason: avoids a
+--   20260901130000_ai_proxy_rate_limits.sql, for the same reason: avoids a
 --   check-then-update race on a single counter row.
 -- ============================================================
 
