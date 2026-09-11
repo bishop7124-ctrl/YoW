@@ -204,11 +204,11 @@ const logoFilterForBackground = (hex) => {
 
 export const getAccentContrast = (accent) => {
   const accentLum = luminanceFromHex(accent, 0.5)
-  const darkLum = luminanceFromHex('#151713')
+  const darkLum = luminanceFromHex('#050706')
   const lightLum = luminanceFromHex('#ffffff')
   const darkRatio = (Math.max(accentLum, darkLum) + 0.05) / (Math.min(accentLum, darkLum) + 0.05)
   const lightRatio = (Math.max(accentLum, lightLum) + 0.05) / (Math.min(accentLum, lightLum) + 0.05)
-  return darkRatio >= lightRatio ? '#151713' : '#ffffff'
+  return darkRatio >= lightRatio ? '#050706' : '#ffffff'
 }
 
 export const deriveCustomThemeTokens = (colors = DEFAULT_CUSTOM_COLORS, tuning = DEFAULT_THEME_TUNING) => {
