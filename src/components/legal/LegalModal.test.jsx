@@ -12,6 +12,8 @@ describe('Legal dialog keyboard access', () => {
     const close = vi.fn()
     const view = render(<LegalModal page="privacy" onClose={close} />)
     const dialog = screen.getByRole('dialog')
+    expect(dialog.textContent).toContain('not separately encrypted by YOW')
+    expect(dialog.textContent).toContain('FileVault on Mac, BitLocker on Windows')
     expect(document.activeElement).toBe(dialog)
     const links = dialog.querySelectorAll('a[href],button:not([disabled])')
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })

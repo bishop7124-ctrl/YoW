@@ -39,11 +39,11 @@ const FEATURE_ROWS = [
   { label: 'Cloud storage',           free: freePlanDef?.storageLabelShort, monthly: monthlyPlanDef?.storageLabelShort, lifetime: lifetimePlanDef?.storageLabelShort, founder: founderPlanDef?.storageLabelShort },
   { label: 'Full writing & worldbuilding toolkit', free: '✓ in your 1 project', monthly: '✓', lifetime: '✓', founder: '✓' },
   { label: 'Connect your own AI provider', free: '—', monthly: '✓', lifetime: '✓', founder: '✓' },
-  { label: 'Desktop app (Mac & Windows)', free: '—', monthly: '—', lifetime: '✓', founder: '✓' },
-  { label: 'Cloud sync',               free: 'Free-tier limits', monthly: 'While subscribed', lifetime: `${HOSTING_INCLUDED_YEARS} yrs included, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Lifetime, no renewal' },
+  { label: 'Desktop app (Mac & Windows)', free: '—', monthly: '—', lifetime: 'Planned for paid launch', founder: 'Planned for paid launch' },
+  { label: 'Cloud sync',               free: 'Free-tier limits', monthly: 'While subscribed', lifetime: `${HOSTING_INCLUDED_YEARS} yrs included, then £${HOSTING_RENEWAL_FEE_GBP}/yr`, founder: 'Life of YOW service, no renewal fee' },
   { label: 'Founder badge & recognition', free: '—', monthly: '—', lifetime: '—', founder: '✓' },
-  { label: 'Support',                 free: 'Community', monthly: 'Priority', lifetime: 'Priority', founder: 'Priority' },
-  { label: 'Payment',                 free: 'Free, forever', monthly: 'Monthly, cancel anytime', lifetime: 'One-time payment', founder: 'One-time payment' },
+  { label: 'Support target',          free: 'Within 1 week', monthly: 'Within 1 week', lifetime: 'Within 1 week', founder: 'Within 1 week' },
+  { label: 'Payment',                 free: 'Free, no time limit', monthly: 'Monthly, cancel anytime', lifetime: 'One-time payment', founder: 'One-time payment' },
 ]
 
 // --------------------------------------------------------------------------
@@ -52,27 +52,27 @@ const FEATURE_ROWS = [
 const FAQ_ITEMS = [
   {
     q: 'What does Lifetime actually cover?',
-    a: `Lifetime gives you everything in Monthly — unlimited projects, the full toolkit, and 8 GB of cloud storage — plus the desktop app for Mac and Windows, and every future update for free. It includes ${HOSTING_INCLUDED_YEARS} years of cloud sync. After that, the desktop app keeps working in Local Mode forever, and you can either renew cloud sync for £${HOSTING_RENEWAL_FEE_GBP}/year or keep writing locally at no cost.`,
+    a: `The planned Lifetime terms include everything in Monthly — unlimited projects, the full toolkit, and 8 GB of cloud storage — plus a permanent licence for the purchased desktop version and updates released for that version. It includes ${HOSTING_INCLUDED_YEARS} years of cloud sync. After that, renew sync for £${HOSTING_RENEWAL_FEE_GBP}/year or keep writing in desktop Local Mode without a hosting fee. The desktop workspace is still being completed and paid plans are not yet on sale.`,
   },
   {
     q: 'Why isn\'t the desktop app included in Monthly?',
-    a: 'The desktop app is a one-time-purchase perk reserved for Lifetime and Founder — it\'s how we can keep Monthly\'s price low. Monthly gives you the complete web app, unlimited projects, and cloud sync; if you later decide you want to own the app outright, you can upgrade to Lifetime at any time.',
+    a: 'At paid launch, the desktop app is planned as a one-time-purchase benefit for Lifetime and Founder. Monthly covers the web app, unlimited projects, and cloud sync while subscribed.',
   },
   {
     q: 'Can I switch from Monthly to Lifetime later?',
-    a: 'Yes. Open Account Settings → Membership and choose Lifetime — checkout walks you through it, and your projects and data carry straight over. Cancel the Monthly subscription from the same screen once you\'re switched.',
+    a: 'This upgrade path is planned for paid launch. It will be managed from Account Settings → Membership, with Monthly cancellation handled through the billing portal.',
   },
   {
     q: 'What is the cloud hosting renewal?',
-    a: `The cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year, and it only applies to Lifetime after the included ${HOSTING_INCLUDED_YEARS}-year period ends. It covers hosted sync, storage, and backups. If you'd rather not renew, your desktop app licence stays active forever and you keep writing in Local Mode at no cost — nothing is taken away, you just sync manually instead of automatically.`,
+    a: `The planned cloud hosting renewal is £${HOSTING_RENEWAL_FEE_GBP}/year. It applies to Lifetime after the included ${HOSTING_INCLUDED_YEARS}-year period and covers hosted sync, storage, and cloud backups. Without renewal, the desktop licence remains active and projects can be edited in Local Mode; web access falls back to Free limits. Cloud sync is unavailable while hosting is inactive.`,
   },
   {
     q: 'What happens if I don\'t renew cloud hosting?',
-    a: `You keep full access to the desktop app in Local Mode — your work stays safely on your device and you can keep editing, importing, and exporting. Web/cloud access falls back to the Free plan's one-project, ${freePlanDef?.storageLabelShort} allowance until you renew.`,
+    a: `You keep access to the purchased desktop version in Local Mode and can continue editing, importing, and exporting projects stored on that device. Web access falls back to the Free plan's one-project, ${freePlanDef?.storageLabelShort} allowance until you renew.`,
   },
   {
     q: 'How many Founder slots are there?',
-    a: `Founder membership is limited to ${FOUNDER_SLOTS_TOTAL} slots, ever. Once they're gone, they're gone. Founders get lifetime cloud sync included, with no renewal, within the published fair-use cap.`,
+    a: `Founder membership is planned to be capped at ${FOUNDER_SLOTS_TOTAL} completed purchases. Availability will be confirmed at checkout. Founders receive cloud sync for the life of the YOW service without a renewal fee, within the published storage and fair-use limits.`,
   },
   {
     q: 'Do Monthly subscribers pay a cloud hosting renewal?',
@@ -80,7 +80,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What happens to my data if I downgrade to Free?',
-    a: `Your projects, characters, lore, and maps are always yours. If you downgrade, you'll pick one project to keep as your active workspace — it keeps the full toolkit, including Map Builder, within the Free plan's ${freePlanDef?.storageLabelShort} allowance. Every other project becomes view-only and stays fully exportable. AI tools lock until you upgrade again.`,
+    a: `You retain ownership of your work. If you downgrade, you'll pick one project to keep as your active workspace within the Free plan's ${freePlanDef?.storageLabelShort} allowance. Other retained projects become view-only and can be exported; AI tools lock until you upgrade again. We recommend exporting a ZIP backup before changing plans.`,
   },
   {
     q: 'Can I cancel my Monthly subscription?',
@@ -88,7 +88,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What does "connect your own AI provider" mean?',
-    a: 'On any paid plan, you link your own account from a provider like ChatGPT, Claude, or OpenRouter, right from Account Settings. You pay that provider directly for what you use — YOW never marks up or resells AI usage. The Free plan doesn\'t include AI features.',
+    a: 'On a paid plan, you add an API key from a supported provider such as OpenRouter, Anthropic, Google AI, or another compatible service in Account Settings. A consumer ChatGPT Plus or Claude Pro subscription does not automatically include API access. You pay the provider directly for usage, and YOW does not add a markup. The Free plan does not include AI features.',
   },
   {
     q: 'Is my storage quota shared across projects?',
@@ -99,23 +99,6 @@ const FAQ_ITEMS = [
     a: 'Payments are processed securely by Stripe. All major credit and debit cards are accepted, including Visa, Mastercard, and American Express.',
   },
 ]
-
-// --------------------------------------------------------------------------
-// Founder slot hook
-// --------------------------------------------------------------------------
-function useFounderSlots() {
-  const [slots, setSlots] = useState(null) // null = loading
-
-  useEffect(() => {
-    const endpoint = import.meta.env.VITE_GET_FOUNDER_SLOTS_URL || '/api/get-founder-slots'
-    fetch(endpoint)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setSlots(data))
-      .catch(() => setSlots(null))
-  }, [])
-
-  return slots
-}
 
 // --------------------------------------------------------------------------
 // Sub-components
@@ -129,46 +112,14 @@ function CheckIcon() {
   )
 }
 
-function FounderSlotsCounter({ slots }) {
-  if (!slots || slots.remaining === null) return null
-  const pct = slots.total ? Math.round((slots.remaining / slots.total) * 100) : 0
-
-  return (
-    <div style={{
-      position: 'absolute', bottom: '100%', left: '50%',
-      transform: 'translateX(-50%)', marginBottom: 12,
-      display: 'inline-flex', alignItems: 'center', gap: 8,
-      background: 'var(--accent-fade)', border: '1px solid var(--accent)',
-      borderRadius: 99, padding: '6px 14px', whiteSpace: 'nowrap',
-      fontSize: 12, fontWeight: 700, color: 'var(--text-main)',
-    }} role="status" aria-live="polite">
-      <span style={{
-        width: 8, height: 8, borderRadius: '50%',
-        background: pct > 30 ? 'var(--accent)' : '#ef4444',
-        flexShrink: 0,
-        boxShadow: `0 0 6px ${pct > 30 ? 'var(--accent)' : '#ef4444'}`,
-      }} />
-      <span>
-        {slots.remaining > 0
-          ? <>{slots.remaining} of {slots.total} slots remaining</>
-          : 'All Founder slots claimed'}
-      </span>
-    </div>
-  )
-}
-
-function PricingCard({ plan, onSelect, onFreeStart, busy, founderSlots }) {
-  const isFounder = plan.isFounder
+function PricingCard({ plan, onSelect, onFreeStart, busy }) {
   const isFree = plan.key === 'free'
-  const soldOut = isFounder && founderSlots !== null && founderSlots?.remaining === 0
 
   return (
     <article
       className={`pricing-card${plan.highlight ? ' pricing-card--highlight' : ''}`}
       aria-label={`${plan.label} plan — ${plan.priceLabel}`}
     >
-      {isFounder && <FounderSlotsCounter slots={founderSlots} />}
-
       {/* Badge / ribbon */}
       {plan.badge && (
         plan.highlight
@@ -245,14 +196,12 @@ function PricingCard({ plan, onSelect, onFreeStart, busy, founderSlots }) {
         <button
           type="button"
           className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`}
-          onClick={() => onSelect && !soldOut && onSelect(plan.key)}
-          disabled={busy || soldOut}
+          onClick={() => onSelect && onSelect(plan.key)}
+          disabled={busy}
         >
           {busy
             ? 'Opening…'
-            : soldOut
-              ? 'Sold out'
-              : 'Register interest'}
+            : 'Register interest'}
         </button>
       )}
 
@@ -327,7 +276,6 @@ function getInterestPlanFromLocation() {
 // Main page
 // --------------------------------------------------------------------------
 export default function PricingPage({ onGetStarted, onSignIn, user }) {
-  const founderSlots = useFounderSlots()
   const [openFaq, setOpenFaq]   = useState(null)
   const [billingError, setBillingError] = useState('')
   const [interestPlan, setInterestPlan] = useState(() => getInterestPlanFromLocation())
@@ -335,7 +283,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   usePageMeta({
     path: '/pricing/',
     title: 'Pricing — Your Own World | Worldbuilding & Writing Software',
-    description: `Affordable, honest pricing for Your Own World — Free, Monthly at ${monthlyPlanDef?.priceLabel}/month, Lifetime at ${lifetimePlanDef?.priceLabel} (includes the desktop app), and Founder.`,
+    description: `Start Your Own World free. Review planned paid-launch terms for Monthly at ${monthlyPlanDef?.priceLabel}/month, Lifetime at ${lifetimePlanDef?.priceLabel}, and Founder.`,
   })
 
   // Inject / remove JSON-LD schemas while this page is mounted.
@@ -344,7 +292,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
       '@context': 'https://schema.org',
       '@type': 'WebPage',
       name: 'Pricing — Your Own World',
-      description: 'Affordable, honest pricing for worldbuilding and writing software. A genuinely useful free plan, a low-cost monthly subscription, and a lifetime option that includes the desktop app.',
+      description: 'Start free now and review the planned paid-launch terms for Monthly, Lifetime, and Founder membership.',
       url: 'https://www.yourownworld.co.uk/pricing',
       mainEntity: {
         '@type': 'ItemList',
@@ -357,7 +305,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             description: p.description,
             price: p.price,
             priceCurrency: 'GBP',
-            availability: 'https://schema.org/InStock',
+            availability: 'https://schema.org/PreOrder',
           },
         })),
       },
@@ -374,7 +322,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         name: p.label,
         price: p.price,
         priceCurrency: 'GBP',
-        availability: 'https://schema.org/InStock',
+        availability: p.key === 'free' ? 'https://schema.org/InStock' : 'https://schema.org/PreOrder',
         priceValidUntil: '2027-12-31',
         url: 'https://www.yourownworld.co.uk/pricing',
       })),
@@ -458,8 +406,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             color: 'var(--text-muted)', lineHeight: 1.7,
             maxWidth: 580, margin: '0 auto 32px',
           }}>
-            Every plan runs on the same powerful toolkit. The only question is how many worlds
-            you're building, and whether you'd rather own the app outright or pay as you go.
+            Start with one fully featured project for free. Paid plans add more projects, storage,
+            AI connections, and the planned desktop option shown below.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
@@ -496,6 +444,9 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           <p style={{ marginTop: 20, fontSize: 12, color: 'var(--text-muted)', opacity: 0.7 }}>
             Prices shown in GBP. VAT may apply depending on your location and is calculated at checkout.
           </p>
+          <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)', fontWeight: 700 }}>
+            Free is available now. Paid plans and the desktop workspace are coming soon; paid buttons register interest and do not start a purchase.
+          </p>
         </section>
 
         {/* ── Plan cards ── */}
@@ -507,7 +458,6 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               onSelect={handleSelect}
               onFreeStart={onGetStarted}
               busy={false}
-              founderSlots={founderSlots}
             />
           ))}
         </section>
@@ -626,8 +576,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
             fontSize: 15, lineHeight: 1.8, color: 'var(--text-muted)',
             margin: '0 auto 28px', maxWidth: 640,
           }}>
-            Most writers land on Lifetime — one payment, and you own the app and the desktop
-            experience outright. Here's the honest breakdown.
+            Paid plans are still coming soon. Compare the planned terms and register interest
+            in the option that best fits how you expect to work.
           </p>
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -646,14 +596,14 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
                 heading: 'Choose Lifetime if…',
                 points: [
                   'You build worlds seriously and consistently',
-                  'You want the desktop app and to own your software, not rent it',
+                  'You want the planned desktop app with a permanent licence for the purchased version',
                   `You want a single ${lifetimePlanDef?.priceLabel} payment instead of a bill every month`,
                 ],
               },
               {
                 heading: 'Choose Founder if…',
                 points: [
-                  'You want lifetime cloud sync locked in with zero renewal, ever',
+                  'You want cloud sync for the life of the YOW service with no renewal fee',
                   'You want your name and debut work featured on YOW',
                   'You want to back this from day one and be recognised for it',
                 ],

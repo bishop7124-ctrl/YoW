@@ -58,7 +58,7 @@ extern "C" {
   fn sqlite3_changes(db: *mut sqlite3) -> c_int;
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct VaultEntry {
   key: String,
   value: String,
@@ -352,13 +352,17 @@ fn column_string(stmt: *mut sqlite3_stmt, column: c_int) -> String {
 #[tauri::command]
 fn vault_set_item(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
   let db = open_vault(&app)?;
+  set_vault_item(&db, &key, &value)
+}
+
+fn set_vault_item(db: &Db, key: &str, value: &str) -> Result<(), String> {
   let stmt = prepare(
     db.raw,
     "INSERT INTO kv (key, value, updated_at) VALUES (?1, ?2, unixepoch()) \
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch();",
   )?;
-  bind_text(stmt, 1, &key)?;
-  bind_text(stmt, 2, &value)?;
+  bind_text(stmt, 1, key)?;
+  bind_text(stmt, 2, value)?;
   let result = unsafe { sqlite3_step(stmt) };
   unsafe {
     sqlite3_finalize(stmt);
@@ -373,8 +377,12 @@ fn vault_set_item(app: tauri::AppHandle, key: String, value: String) -> Result<(
 #[tauri::command]
 fn vault_remove_item(app: tauri::AppHandle, key: String) -> Result<(), String> {
   let db = open_vault(&app)?;
+  remove_vault_item(&db, &key)
+}
+
+fn remove_vault_item(db: &Db, key: &str) -> Result<(), String> {
   let stmt = prepare(db.raw, "DELETE FROM kv WHERE key = ?1;")?;
-  bind_text(stmt, 1, &key)?;
+  bind_text(stmt, 1, key)?;
   let result = unsafe { sqlite3_step(stmt) };
   unsafe {
     sqlite3_finalize(stmt);
@@ -384,6 +392,41 @@ fn vault_remove_item(app: tauri::AppHandle, key: String) -> Result<(), String> {
   } else {
     Err(db_error(db.raw))
   }
+}
+
+fn replace_vault_items(
+  db: &Db,
+  entries: &[VaultEntry],
+  remove_keys: &[String],
+) -> Result<(), String> {
+  exec(db.raw, "BEGIN IMMEDIATE;")?;
+  let result = (|| {
+    for key in remove_keys {
+      remove_vault_item(db, key)?;
+    }
+    for entry in entries {
+      set_vault_item(db, &entry.key, &entry.value)?;
+    }
+    Ok(())
+  })();
+
+  match result {
+    Ok(()) => exec(db.raw, "COMMIT;"),
+    Err(error) => {
+      let _ = exec(db.raw, "ROLLBACK;");
+      Err(error)
+    }
+  }
+}
+
+#[tauri::command]
+fn vault_replace_items(
+  app: tauri::AppHandle,
+  entries: Vec<VaultEntry>,
+  remove_keys: Vec<String>,
+) -> Result<(), String> {
+  let db = open_vault(&app)?;
+  replace_vault_items(&db, &entries, &remove_keys)
 }
 
 #[tauri::command]
@@ -936,44 +979,11 @@ fn vault_snapshot_remove_keys(
   Ok(removed)
 }
 
-#[tauri::command]
-async fn vault_restore_snapshot(
-  app: tauri::AppHandle,
-  name: String,
-) -> Result<VaultRestoreResult, String> {
-  use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-
-  let prompt_app = app.clone();
-  let prompt_name = name.clone();
-  let confirmed = tauri::async_runtime::spawn_blocking(move || {
-    prompt_app
-      .dialog()
-      .message(format!(
-        "Restore {prompt_name}? This replaces the current desktop vault with that snapshot. \
-YOW will create a pre-restore safety copy first, then reopen in Local-first mode so Cloud Sync stays paused."
-      ))
-      .title("Restore vault snapshot?")
-      .kind(MessageDialogKind::Warning)
-      .buttons(MessageDialogButtons::OkCancelCustom(
-        "Restore snapshot".to_string(),
-        "Cancel".to_string(),
-      ))
-      .blocking_show()
-  })
-  .await
-  .map_err(|error| format!("Could not show restore confirmation: {error}"))?;
-
-  if !confirmed {
-    return Err("Snapshot restore cancelled.".to_string());
-  }
-
-  let snapshot = snapshot_path_for_restore(&app, &name)?;
-  let safety = create_vault_snapshot(&app, "vault-before-restore")?;
-  let target = vault_path(&app)?;
+fn restore_vault_file(snapshot: &Path, target: &Path) -> Result<(), String> {
   let wal_path = PathBuf::from(format!("{}-wal", target.to_string_lossy()));
   let shm_path = PathBuf::from(format!("{}-shm", target.to_string_lossy()));
 
-  fs::copy(&snapshot, &target)
+  fs::copy(snapshot, target)
     .map_err(|error| format!("Could not restore vault snapshot: {error}"))?;
   if wal_path.exists() {
     let _ = fs::remove_file(&wal_path);
@@ -981,6 +991,23 @@ YOW will create a pre-restore safety copy first, then reopen in Local-first mode
   if shm_path.exists() {
     let _ = fs::remove_file(&shm_path);
   }
+
+  Ok(())
+}
+
+#[tauri::command]
+fn vault_restore_snapshot(
+  app: tauri::AppHandle,
+  name: String,
+) -> Result<VaultRestoreResult, String> {
+  // AccountSettings already presents an accessible, in-app confirmation with
+  // the selected snapshot and safety-copy consequences. A second blocking
+  // native dialog here can open behind the webview on macOS and leave the UI
+  // permanently waiting on "Restoring...".
+  let snapshot = snapshot_path_for_restore(&app, &name)?;
+  let safety = create_vault_snapshot(&app, "vault-before-restore")?;
+  let target = vault_path(&app)?;
+  restore_vault_file(&snapshot, &target)?;
 
   Ok(VaultRestoreResult {
     restored_path: snapshot.to_string_lossy().into_owned(),
@@ -1037,6 +1064,7 @@ pub fn run() {
       vault_read_all,
       vault_set_item,
       vault_remove_item,
+      vault_replace_items,
       vault_info,
       vault_integrity_status,
       vault_create_snapshot,
@@ -1303,6 +1331,41 @@ mod tests {
   }
 
   #[test]
+  fn replace_vault_items_rolls_back_every_change_when_one_write_fails() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let db = open_db(&root.path().join("vault.db")).unwrap();
+    set_vault_item(&db, "existing", "original").unwrap();
+    set_vault_item(&db, "stale", "keep on failure").unwrap();
+    exec(
+      db.raw,
+      "CREATE TRIGGER reject_bad_key BEFORE INSERT ON kv WHEN NEW.key = 'bad' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;",
+    ).unwrap();
+
+    let entries = vec![
+      VaultEntry {
+        key: "existing".to_string(),
+        value: "replacement".to_string(),
+      },
+      VaultEntry {
+        key: "bad".to_string(),
+        value: "never commits".to_string(),
+      },
+    ];
+    let result = replace_vault_items(&db, &entries, &["stale".to_string()]);
+
+    assert!(result.is_err());
+    assert_eq!(
+      get_item(&db, "existing").unwrap(),
+      Some("original".to_string())
+    );
+    assert_eq!(
+      get_item(&db, "stale").unwrap(),
+      Some("keep on failure".to_string())
+    );
+    assert_eq!(get_item(&db, "bad").unwrap(), None);
+  }
+
+  #[test]
   fn prepare_surfaces_a_sqlite_error_for_invalid_sql() {
     let root = tempfile::tempdir().expect("tempdir");
     let db = open_db(&root.path().join("vault.db")).unwrap();
@@ -1366,5 +1429,45 @@ mod tests {
       Some("It was a dark and stormy night.".to_string())
     );
     assert_eq!(integrity_message(snapshot_db.raw).unwrap(), "ok");
+  }
+
+  #[test]
+  fn restore_vault_file_replaces_contents_and_removes_stale_wal_files() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let target_path = root.path().join("vault.db");
+    let snapshot_path = root.path().join("vault-snapshot-1700000000.db");
+
+    {
+      let target = open_db(&target_path).unwrap();
+      set_item(&target, "project", "deleted-current-copy").unwrap();
+      exec(target.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    }
+    {
+      let snapshot = open_db(&snapshot_path).unwrap();
+      set_item(&snapshot, "project", "restored-snapshot-copy").unwrap();
+      set_item(&snapshot, "scene", "restored prose").unwrap();
+      exec(snapshot.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    }
+
+    let wal_path = PathBuf::from(format!("{}-wal", target_path.to_string_lossy()));
+    let shm_path = PathBuf::from(format!("{}-shm", target_path.to_string_lossy()));
+    fs::write(&wal_path, b"stale wal").unwrap();
+    fs::write(&shm_path, b"stale shm").unwrap();
+
+    restore_vault_file(&snapshot_path, &target_path).unwrap();
+
+    assert!(!wal_path.exists());
+    assert!(!shm_path.exists());
+    let restored = open_db(&target_path).unwrap();
+    assert_eq!(entry_count(restored.raw).unwrap(), 2);
+    assert_eq!(
+      get_item(&restored, "project").unwrap(),
+      Some("restored-snapshot-copy".to_string())
+    );
+    assert_eq!(
+      get_item(&restored, "scene").unwrap(),
+      Some("restored prose".to_string())
+    );
+    assert_eq!(integrity_message(restored.raw).unwrap(), "ok");
   }
 }

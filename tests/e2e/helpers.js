@@ -126,7 +126,9 @@ export async function createProject(page, { title, type = 'novel' } = {}) {
 }
 
 export function writingNavButton(page) {
-  return page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' })
+  return page.getByLabel('Studio navigation').getByRole('button', {
+    name: /^(Write|Sessions|Pages)$/,
+  })
 }
 
 export async function enterWritingMode(page) {
@@ -157,7 +159,8 @@ export async function openImportZip(page) {
 
 // Wait for the manuscript/writing view to be hydrated and ready after a
 // reload — e.g. before reading persisted storage back out. A bare
-// `getByRole('button', { name: 'Write' })` is ambiguous once already on the
+// The Studio navigation label varies by project type (Write, Sessions, or Pages),
+// and `getByRole('button', { name: 'Write' })` is ambiguous once already on the
 // writing route: the redesigned editor's own Write/Edit mode toggle
 // (ManuscriptTopbar.jsx, `aria-label="Editor mode"`) is also labeled
 // "Write", alongside the persistent Studio nav's own "Write" room button
@@ -166,7 +169,7 @@ export async function openImportZip(page) {
 // Scope to the Studio nav one specifically, matching this call's original
 // intent (confirm navigation/hydration is stable after reload).
 export async function waitForManuscriptReady(page) {
-  await page.getByLabel('Studio navigation').getByRole('button', { name: 'Write' }).waitFor()
+  await writingNavButton(page).waitFor()
 }
 
 // Navigate to writing and fill the default scene, waiting for autosave to localStorage.

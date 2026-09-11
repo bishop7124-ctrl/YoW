@@ -41,9 +41,8 @@ function welcomeEmailHtml(email: string, confirmUrl: string) {
               </h1>
 
               <p style="margin:0 0 14px;font-size:15px;line-height:1.75;color:#7ab8b4;">
-                You've joined a growing community of writers, worldbuilders, and storytellers.
-                <span style="color:#e2f0ee;">Your Own World</span> gives you one place to build everything
-                — so nothing gets lost between notebooks, docs, and scattered files.
+                <span style="color:#e2f0ee;">Your Own World</span> gives you one place to write, build your world,
+                and keep important story details connected across your project.
               </p>
 
               <p style="margin:0 0 24px;font-size:15px;line-height:1.75;color:#7ab8b4;">
@@ -169,7 +168,7 @@ Deno.serve(async (req) => {
   // request body — always derived server-side from a verified source:
   //
   // 1. The `on_user_profile_created` DB trigger (trigger_welcome_email(),
-  //    supabase/migrations/20260801_fix_welcome_email_http_post.sql) calls
+  //    supabase/migrations/20260801130000_fix_welcome_email_http_post.sql) calls
   //    this with the service-role key and only ever sends { user_id } — no
   //    email at all — so look it up via the admin API in that case.
   // 2. The browser client (AuthContext.jsx's sendWelcomeEmail) calls this

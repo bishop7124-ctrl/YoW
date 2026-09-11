@@ -24,7 +24,7 @@ const ALLOWED_OPENAI_BASE_URLS = new Set([
 // own logic already picked a smaller number for its use case.
 const MAX_OUTPUT_TOKENS = 8192
 
-// Durable per-user rate limit (see supabase/migrations/20260901_ai_proxy_rate_limits.sql).
+// Durable per-user rate limit (see supabase/migrations/20260901130000_ai_proxy_rate_limits.sql).
 // Deliberately generous for legitimate interactive use (AI chat, per-scene
 // tools) while bounding sustained abuse. Configurable via env so ops can
 // tune without a code change if real usage patterns need it.

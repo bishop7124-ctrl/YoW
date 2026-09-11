@@ -33,6 +33,7 @@ function wireCrossTabSync(backend) {
 
   const rawSetItem = backend.setItem
   const rawRemoveItem = backend.removeItem
+  const rawReplaceItems = backend.replaceItems
   backend.setItem = (key, value) => {
     rawSetItem(key, value)
     try { channel.postMessage({ type: 'set', key, value: String(value) }) }
@@ -43,11 +44,19 @@ function wireCrossTabSync(backend) {
     try { channel.postMessage({ type: 'remove', key }) }
     catch { /* best effort */ }
   }
+  if (typeof rawReplaceItems === 'function') {
+    backend.replaceItems = async (entriesToSet, keysToRemove) => {
+      await rawReplaceItems(entriesToSet, keysToRemove)
+      try { channel.postMessage({ type: 'replace', entriesToSet, keysToRemove }) }
+      catch { /* best effort — this tab and IndexedDB already committed atomically */ }
+    }
+  }
   channel.onmessage = event => {
     const { type, key, value } = event.data || {}
-    if (!key) return
+    if (type !== 'replace' && !key) return
     if (type === 'set') backend.applyExternalWrite?.(key, value)
     else if (type === 'remove') backend.applyExternalRemove?.(key)
+    else if (type === 'replace') backend.applyExternalReplace?.(event.data.entriesToSet, event.data.keysToRemove)
   }
   return backend
 }
@@ -111,6 +120,18 @@ function deleteEntry(db, key) {
   return promisifyRequest(store.delete(key))
 }
 
+function replaceEntries(db, entriesToSet, keysToRemove) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite')
+    const store = transaction.objectStore(STORE_NAME)
+    keysToRemove.forEach(key => store.delete(key))
+    entriesToSet.forEach((value, key) => store.put(String(value), key))
+    transaction.oncomplete = () => resolve()
+    transaction.onabort = () => reject(transaction.error || new Error('IndexedDB replacement transaction aborted.'))
+    transaction.onerror = () => reject(transaction.error || new Error('IndexedDB replacement transaction failed.'))
+  })
+}
+
 function installFlushHandlers(backend) {
   if (flushHandlersInstalled || typeof window === 'undefined') return
   flushHandlersInstalled = true
@@ -152,6 +173,7 @@ export async function initializeIndexedDbStorage({ onWriteError = console.error,
       entries,
       persistItem: (key, value) => putEntry(db, key, value),
       removePersistedItem: key => deleteEntry(db, key),
+      replacePersistedItems: (entriesToSet, keysToRemove) => replaceEntries(db, entriesToSet, keysToRemove),
       // Feeds writeDurability.js's tracking (audit P0-07) — this is what
       // turns a real async persist failure into the same persistent,
       // dismissible warning banner (App.jsx) that already existed for the

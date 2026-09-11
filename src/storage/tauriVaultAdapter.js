@@ -163,6 +163,10 @@ async function connectVaultBackend({ onWriteError, retry }) {
     entries: entriesFromRows(rows),
     persistItem: (key, value) => invoke('vault_set_item', { key, value }),
     removePersistedItem: key => invoke('vault_remove_item', { key }),
+    replacePersistedItems: (entriesToSet, keysToRemove) => invoke('vault_replace_items', {
+      entries: Array.from(entriesToSet, ([key, value]) => ({ key, value: String(value) })),
+      removeKeys: keysToRemove,
+    }),
     // Feeds writeDurability.js's tracking (audit P0-07) — this is what turns
     // a real async vault-write failure into the same persistent, dismissible
     // warning banner (App.jsx) that already existed for the synchronous

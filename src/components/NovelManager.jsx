@@ -280,7 +280,7 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
                 <span>1</span>
                 <div>
                   <strong>Choose a format</strong>
-                  <small>Novel, campaign, screenplay, comic, and more.</small>
+                  <small>Novel, novella, short story, campaign, or comic.</small>
                 </div>
               </div>
               <div className="first-run-tour-step">
@@ -1377,10 +1377,15 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showForm, showSeriesForm])
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm('Delete this project and all its content? This cannot be undone.')) {
-      store.deleteNovel(id)
-      setEditingProject(null)
+      try {
+        const deleted = await store.deleteNovel(id)
+        if (deleted) setEditingProject(null)
+      } catch (error) {
+        console.error('Project deletion failed:', error)
+        alert('This project could not be deleted. Nothing was removed; please try again.')
+      }
     }
   }
 
