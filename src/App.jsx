@@ -988,6 +988,11 @@ function AppInner() {
               importData(reviewedData, { preferLocal: false })
               store.addRecordConflicts?.(conflicts || [])
               clearDesktopLapseSnapshot(userId)
+              // The claimed attempt's own failure path left cloud sync
+              // paused (see its comment) — this retry just fully recovered
+              // it, so undo that pause too, or cloud sync would otherwise
+              // stay silently disabled for the rest of the session.
+              setResumingCloudSyncAfterLapse(false)
             } catch (error) {
               console.error('[YOW] Fallback desktop-lapse resume reconcile also failed:', error)
               importData(data)
