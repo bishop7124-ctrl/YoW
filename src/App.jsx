@@ -293,15 +293,17 @@ function AppInner() {
   const tourStore = useTourStore({ remoteFlags: user?.user_metadata?.tour_progress, onPersist: persistTourProgress })
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
-  // Claimed synchronously (before any async work starts) by whichever of the
-  // two desktop-lapse-resume paths below notices a pending lapse snapshot
-  // first — the automatic same-session resume-on-renewal effect always runs
-  // its synchronous check before the primary data-load effect's async
-  // `.then` callback can ever fire, so it always wins this claim when both
-  // are eligible. The other path then knows to skip its own import entirely
-  // (not fall back to a plain, unmerged one) while that claim is outstanding
-  // or already resolved — see both call sites for why a snapshot-presence
-  // check alone can't tell "never pending" apart from "already resumed."
+  // Holds the in-flight desktop-lapse resume Promise (or `false`) once the
+  // automatic same-session resume-on-renewal effect below claims a pending
+  // lapse snapshot — it always runs its synchronous check before the
+  // primary data-load effect's async `.then` callback can ever fire, so it
+  // always wins this claim when both are eligible for a given login. The
+  // primary effect awaits this same Promise rather than re-checking whether
+  // a snapshot is still pending (that alone can't tell "never pending" apart
+  // from "already resumed") and only imports its own already-fetched data if
+  // the awaited resume did not actually succeed — a last-resort fallback so
+  // a failed resume attempt still leaves the app showing *something* rather
+  // than an empty state indistinguishable from real data loss.
   const lapseResumeClaimed = useRef(false)
   const localModeNoticeKey = useMemo(
     () => getLocalModeNoticeKey(userId, membership, storageMode),
@@ -402,11 +404,12 @@ function AppInner() {
   // either side's edits get silently discarded.
   //
   // Shared with the primary user-data-load effect further below: that effect
-  // does the identical reconcile inline whenever it finds a pending lapse
-  // snapshot on plain login/refresh (see its own comment for why — the app
-  // can be closed for an entire lapse and reopened only after renewal, which
-  // has no in-session true→false transition for the effect just below to
-  // observe at all).
+  // never runs this merge itself. It only awaits whichever outcome the
+  // effect just below produces, whenever that effect claims a pending lapse
+  // snapshot first — see both call sites' own comments for the full
+  // coordination and why (in short: the app can be closed for an entire
+  // lapse and reopened only after renewal, which has no in-session
+  // true→false transition for the effect just below to observe at all).
   const reconcileDesktopLapseResume = async (cloudData, pendingBase) => {
     const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
     const cloud = pruneSaveDataToProjects(cloudData)
@@ -446,15 +449,15 @@ function AppInner() {
     // always runs (in React's mount-order-of-declaration guarantee) before
     // the primary user-data-load effect's `loadUserData(...).then(...)`
     // callback can ever fire, so it always wins this claim whenever both are
-    // eligible (same guard conditions above) — that effect checks the same
-    // ref and, seeing it already claimed, skips its own import rather than
-    // fall back to a plain unmerged one that could otherwise land either
-    // before or after this effect's own merge finishes.
-    lapseResumeClaimed.current = true
-
+    // eligible (same guard conditions above). The claim is the in-flight
+    // Promise itself (resolving to whether it actually succeeded) rather
+    // than a plain boolean: that lets the primary effect await the *outcome*
+    // and fall back to importing its own already-fetched data if this
+    // resume ends up failing, instead of leaving the app showing an empty,
+    // indistinguishable-from-data-loss state until a manual restart.
     let cancelled = false
     setResumingCloudSyncAfterLapse(true)
-    ;(async () => {
+    lapseResumeClaimed.current = (async () => {
       try {
         // Fetch cloud data (the slow, network-bound step) before taking the
         // local snapshot, not after — narrows the window in which a local
@@ -464,14 +467,15 @@ function AppInner() {
         // the write-back are not instant either) — same inherent limitation
         // the manual Resume Cloud Sync flow above already has.
         const cloudData = await loadUserData(userId)
-        if (cancelled) return
+        if (cancelled) return { ok: false }
         const { reviewedData, conflicts } = await reconcileDesktopLapseResume(cloudData, pendingBase)
-        if (cancelled) return
+        if (cancelled) return { ok: false }
         // preferLocal: false — see the matching call in handleStorageModeChange.
         importData(reviewedData, { preferLocal: false })
         store.addRecordConflicts?.(conflicts || [])
         clearDesktopLapseSnapshot(userId)
         if (!cancelled) setResumingCloudSyncAfterLapse(false)
+        return { ok: true }
       } catch (error) {
         // Deliberately do NOT clear resumingCloudSyncAfterLapse here: leaving
         // cloud sync paused for the rest of this session is a safe fail-
@@ -482,6 +486,7 @@ function AppInner() {
         // in place, so restarting the app (which re-runs this effect fresh
         // on mount) gets another chance to reconcile.
         if (!cancelled) console.error('[YOW] Automatic cloud-sync resume-on-renewal reconcile failed:', error)
+        return { ok: false }
       }
     })()
     return () => { cancelled = true }
@@ -927,17 +932,16 @@ function AppInner() {
       return
     }
     loadedUid.current = loadKey
-    // Deliberately not reset here on every load (only on sign-out above): if
-    // a prior attempt for this same user claimed a lapse resume and it
-    // failed, a retry of this plain load must keep deferring to it rather
-    // than risk falling back to a plain, unmerged import — same fail-closed
-    // reasoning as leaving the snapshot itself in place on a failed resume.
+    // Deliberately not reset here on every load (only on sign-out above): a
+    // prior attempt's settled claim Promise is cheap to re-await and its
+    // resolved `{ ok }` still correctly decides whether *this* retry's fresh
+    // fetch below needs to be imported as a fallback.
 
     const localResumeData = store.getLocalSnapshot?.()
     const hasLocalResumeData = Array.isArray(localResumeData?.novels) && localResumeData.novels.length > 0
     setDataLoading(!hasLocalResumeData)
     loadUserData(userId)
-      .then(data => {
+      .then(async data => {
         // `importData`'s own local-trust window only covers a brief same-
         // session reload/network hiccup (see its comment in useStore.js) —
         // it is not sized for a multi-day desktop hosting lapse, so a local
@@ -950,14 +954,21 @@ function AppInner() {
         // is *also* mounting and independently discovering the very same
         // pending snapshot. That effect always wins the `lapseResumeClaimed`
         // claim (its synchronous check runs before this `.then` can ever
-        // fire — see its own comment), so this path defers to it completely
-        // whenever a claim is outstanding, rather than falling back to a
-        // plain `importData(data)`: a plain snapshot-presence check taken
-        // here instead couldn't tell "no resume was ever pending" apart from
-        // "one was pending and that effect already finished it," and in the
-        // latter case a fallback import would silently re-apply this fetch's
-        // unmerged `data` right over the just-completed merge.
-        if (!lapseResumeClaimed.current) importData(data)
+        // fire — see its own comment), so rather than fall back to a plain
+        // `importData(data)` — which couldn't tell "no resume was ever
+        // pending" apart from "one was pending and already resumed," and in
+        // the latter case would silently re-apply this fetch's unmerged
+        // `data` right over the just-completed merge — this path awaits that
+        // same claim's outcome and only imports its own (unmerged) fetch if
+        // the claimed resume did not actually succeed, so a failed resume
+        // still leaves the app showing this fetch's data rather than nothing.
+        const claimedResume = lapseResumeClaimed.current
+        if (claimedResume) {
+          const result = await claimedResume
+          if (!result?.ok) importData(data)
+        } else {
+          importData(data)
+        }
         // URL takes priority over remote last-active project; also restore the view/section
         const urlNovelId = initialRoute.current.novelId
         if (urlNovelId) {
