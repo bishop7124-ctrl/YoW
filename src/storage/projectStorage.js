@@ -113,7 +113,7 @@ export async function replaceItemsAtomically(entriesToSet, keysToRemove = []) {
 // mirror, exposed through the shared abstraction — it lets a caller query the
 // storage backend itself for "every key matching this prefix" instead of only
 // ever knowing about whatever subset happens to be tracked in some in-memory
-// React ref right now (see sceneContentStore.js's deleteAllSceneContentForNovel,
+// React ref right now (see projectReplacement.js's replaceProjectStorageAtomically,
 // written for audit finding #16 — project deletion previously only cleaned up
 // per-scene content keys the current tab's session already knew about).
 // Optional on the backend contract (unlike getItem/setItem/removeItem, which

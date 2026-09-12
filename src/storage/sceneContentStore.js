@@ -28,11 +28,9 @@
 // existing `save('nf_scenes', ...)`/`load('nf_scenes', ...)` pattern keeps
 // working unchanged as long as it goes through these first.
 
-import { readItem, writeItem, removeItem, listKeys } from './projectStorage'
-import { markLocalReadCorrupt } from './writeDurability'
+import { readItem, writeItem, removeItem } from './projectStorage'
 
 const CONTENT_KEY_PREFIX = 'nf_scene_content:'
-const SCENES_KEY = 'nf_scenes'
 
 export const sceneContentKey = (id) => `${CONTENT_KEY_PREFIX}${id}`
 
@@ -157,122 +155,22 @@ export function hydrateScenesFromStorage(metaScenes) {
   })
 }
 
-/**
- * Removes every per-scene content key that belongs to a deleted project —
- * written for audit finding #16 ("Project deletion can leave per-scene
- * keys"). This is deliberately independent of any in-memory scene state
- * (`scenesRef`/React `scenes`): the caller's project-deletion code path
- * (`deleteNovel` in useStore.js) only knows which scenes to filter out of
- * `nf_scenes` via *this tab's own current state*, which can miss a scene
- * whose content key exists on disk but whose id never made it into this
- * tab's tracking this session — a stale/orphan key that then survives the
- * project "forever," even though the user believes the project is gone
- * (storage, privacy, and later-resurrection risk, per the finding).
- *
- * Two independent passes, both reading storage directly rather than trusting
- * memory:
- *  1. **Project-scoped**: reads the persisted `nf_scenes` metadata blob
- *     directly (not `scenesRef.current`) to find every scene id that
- *     actually belongs to `novelId` on disk right now, and removes each
- *     one's content key unconditionally — regardless of whether this tab's
- *     `knownContentKeyIds` ever saw it. This is the authoritative "index"
- *     the fix uses in place of an efficient per-project storage query: since
- *     content keys carry no project id of their own (`nf_scene_content:<id>`
- *     has no `novelId`), `nf_scenes` — which does — is the closest thing to
- *     one already in the schema.
- *  2. **Orphan sweep**: because per-scene content keys carry no project id,
- *     a key left behind by an *earlier* gap in this same cleanup (before
- *     this fix shipped) — i.e. a content key whose scene record is already
- *     gone from `nf_scenes` entirely, under any project — can't be
- *     attributed to `novelId` by the pass above. It has no living owner
- *     anywhere, though, so it's always safe to remove on sight. Project
- *     deletion is a natural, infrequent point to also run this sweep, using
- *     `listKeys` (see projectStorage.js) to enumerate every
- *     `nf_scene_content:*` key actually present in the backend rather than
- *     only ones some in-memory cache already knows about.
- *
- * **Both passes require `nf_scenes` to have actually been read.** If it
- * can't be read/parsed — key absent is fine and legitimately means "no
- * scenes anywhere yet" (handled below without throwing), but a genuine read
- * failure (backend unavailable) or corrupt JSON is not the same thing as
- * "zero scenes exist" — this function aborts entirely rather than guessing.
- * A prior version of this function treated any read/parse failure as an
- * empty `nf_scenes`, which made `liveIds` an empty set and turned the
- * orphan sweep into "delete every `nf_scene_content:*` key on the account,"
- * including every *other* project's scene prose — a real data-loss bug
- * caught in security review (see docs/ROADMAP.md, audit finding #16). See
- * projectStorage.js's `loadValue`/`markLocalReadCorrupt` for the same
- * corrupt-vs-absent distinction used elsewhere, and indexedDbBackend.js /
- * audit finding P0-07 for why an unreadable local value is a real,
- * anticipated scenario here, not just a theoretical one.
- *
- * `caches` (optional) lets the caller's own per-tab `knownContentKeyIds`/
- * `lastWrittenContentById` (see splitScenesForStorage's own doc comment)
- * stay in sync with what this function removes, so a later commit in the
- * same tab doesn't have stale bookkeeping for an id that no longer exists.
- *
- * Returns the full set of scene ids whose content key was removed (project
- * ids first, then any orphan ids), so a caller that also needs to clean up
- * a *different* per-scene store (e.g. scene version history, keyed by
- * `sceneId` — see sceneVersions.js's `clearSceneVersionsForNovel`) doesn't
- * have to re-derive the same id list.
- */
-export function deleteAllSceneContentForNovel(novelId, caches = {}) {
-  const { knownContentKeyIds, lastWrittenContentById } = caches
-  let metadata
-  try {
-    const raw = readItem(SCENES_KEY)
-    const parsed = raw == null ? [] : JSON.parse(raw)
-    metadata = Array.isArray(parsed) ? parsed : []
-  } catch (error) {
-    // Genuinely unreadable/corrupt `nf_scenes` — NOT the same as "no scenes
-    // exist" (see doc comment above). With no trustworthy metadata there is
-    // no safe way to tell which content keys belong to `novelId`, nor which
-    // ones are truly orphaned account-wide, so both the project-scoped
-    // removal and the orphan sweep abort rather than risk deleting live
-    // content that just happens to look unreferenced from here.
-    markLocalReadCorrupt(SCENES_KEY)
-    console.error(`[sceneContentStore] "${SCENES_KEY}" could not be read/parsed — aborting deleteAllSceneContentForNovel's storage sweep instead of risking deletion of live scene content.`, error)
-    return []
-  }
-  const liveIds = new Set(metadata.map(s => s?.id).filter(id => id != null))
-  const projectIds = novelId == null
-    ? []
-    : metadata.filter(s => s && s.novelId === novelId).map(s => s.id).filter(id => id != null)
-
-  const removedIds = []
-  const removeContentKey = (id) => {
-    try { removeItem(sceneContentKey(id)) } catch { /* best effort */ }
-    knownContentKeyIds?.delete(id)
-    lastWrittenContentById?.delete(id)
-    removedIds.push(id)
-  }
-
-  projectIds.forEach(removeContentKey)
-
-  // Orphan sweep — see doc comment above. Runs after the project-scoped pass
-  // so its own now-removed keys no longer appear in `listKeys`'s result.
-  //
-  // KNOWN CROSS-TAB RACE (security review finding, docs/ROADMAP.md audit
-  // finding #16 — deferred to live QA, see docs/QA_PLAN.md): a scene edit
-  // broadcasts its content-key write and its `nf_scenes` metadata write to
-  // other tabs as two separate BroadcastChannel messages in sequence (see
-  // browserVaultAdapter.js's wireCrossTabSync and the shared `mirror` in
-  // indexedDbBackend.js). If this sweep runs *in a different tab* inside the
-  // narrow window after that tab's mirror has applied the new content-key
-  // message but before it applies the corresponding `nf_scenes` message, the
-  // new scene's id is briefly missing from `liveIds` above even though it's
-  // genuinely live under an unrelated, undeleted project — and this sweep
-  // would delete its just-written content. Narrow (same-origin tabs, mid-
-  // edit-and-delete race) and not closed by this fix: closing it fully would
-  // mean making the two broadcasts atomic (a bigger change to the cross-tab
-  // sync mechanism than this fix's scope), so it's left as a documented risk
-  // rather than a rushed redesign.
-  listKeys(CONTENT_KEY_PREFIX).forEach(key => {
-    const id = key.slice(CONTENT_KEY_PREFIX.length)
-    if (liveIds.has(id)) return // still belongs to a live scene in some project
-    removeContentKey(id)
-  })
-
-  return removedIds
-}
+// Project-deletion scene-content-key cleanup (audit finding #16, "Project
+// deletion can leave per-scene keys") used to live here as a standalone
+// `deleteAllSceneContentForNovel` function, called from `deleteNovel`
+// (useStore.js). It was superseded when project deletion moved to the
+// atomic full-state replacement path (`replaceProjectStorageAtomically`,
+// src/storage/projectReplacement.js): that function already computes every
+// retained scene's content key from the complete authoritative dataset
+// being written and removes any other `nf_scene_content:*` key already in
+// storage in the exact same `replaceItemsAtomically()` call — a superset of
+// what the standalone sweep did, and one that also closes a cross-tab race
+// the standalone version couldn't (see 2026-09-12 investigation in
+// docs/ROADMAP.md's Bugs table): a single atomic backend operation
+// broadcasts as one `{ type: 'replace' }` message (browserVaultAdapter.js's
+// wireCrossTabSync), so there is no window where another tab's mirror has
+// applied a new content key but not yet the metadata that proves it
+// belongs to a live, undeleted project. Removed 2026-09-12 after confirming
+// (full-repo grep, plus the live two-tab e2e coverage in
+// tests/e2e/qa-sweep-2026-09-12-project-delete-cross-tab.spec.js) that
+// nothing outside its own test suite still called it.
