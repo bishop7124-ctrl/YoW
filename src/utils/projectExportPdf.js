@@ -1038,7 +1038,17 @@ const createTocPages = (records, theme, tocPageCount) => {
         pdf.rect(50, y - 7, 740, 19, lineIndex % 2 ? theme.palette.panelSoft : theme.palette.panel, theme.palette.border, 0.35)
         pdf.text(lineItem.number, 62, y, 9, { bold: true, color: theme.palette.accent, maxWidth: 24 })
         pdf.text(lineItem.title, 98, y, 11, { bold: true, color: theme.palette.text, maxWidth: 560 })
-        pdf.text(`${lineItem.count} ${lineItem.count === 1 ? 'entry' : 'entries'}`, 710, y, 8, { bold: true, color: theme.palette.muted, maxWidth: 70 })
+        // This counts PDF page-records per section, not underlying content
+        // items — a single long dossier/article/outline act can legitimately
+        // span multiple pages (see createCharacterPages/createArticlePages/
+        // createOutlinePages), and a whole Timeline can render as a single
+        // page holding several events. "N pages" stays literally true in
+        // both cases; "N entries" previously implied a content-item count
+        // that this loop never actually computes and can visibly mismatch
+        // the cover page's real per-type counts (found in manual QA of a
+        // realistic export: a 5-character project whose bios triggered one
+        // continuation page showed "Characters — 6 entries").
+        pdf.text(`${lineItem.count} ${lineItem.count === 1 ? 'page' : 'pages'}`, 710, y, 8, { bold: true, color: theme.palette.muted, maxWidth: 70 })
       } else {
         pdf.text(lineItem.title, x, y, 9, { color: theme.palette.muted, maxWidth: 630 })
         pdf.line(78, y + 4, 78, y - 7, theme.palette.border, 0.6)
@@ -1390,96 +1400,154 @@ const createPdfBytes = (pageContents, title) => {
   return concatBytes(chunks, totalLength)
 }
 
+// A section the user enabled but that has no records yet must still get a
+// page and a Table of Contents entry — otherwise it silently disappears
+// from the PDF with no indication it was ever considered (found in manual
+// QA: an all-sections-enabled, otherwise-empty project's "Visual PDF"
+// rendered nothing but a cover, a one-line TOC, and a Timeline page; every
+// other enabled section — Characters, Locations, Factions, Lore, World
+// History, Schedule, Maps, Manuscript Structure, Ideas — vanished rather
+// than showing the "No … yet." empty state the parallel HTML export
+// (makeProjectPages/emptyState()) already shows for the same case).
+const emptySectionPages = (section, eyebrow, title, subtitle, message, theme) =>
+  createArticlePages({ section, eyebrow, title, subtitle, body: message }, theme)
+
 const createProjectPdfPages = (projectData, theme) => {
   const enabled = getEnabled(projectData)
   const records = []
   if (enabled.has('characters')) {
     const characters = buildCharacterIndex(projectData.characters)
-    sortByTitle(characters.entries, 'name').forEach((character, index) => {
-      records.push(...createCharacterPages(character, projectData, theme, index, characters.byId))
-    })
+    const sorted = sortByTitle(characters.entries, 'name')
+    if (sorted.length) {
+      sorted.forEach((character, index) => {
+        records.push(...createCharacterPages(character, projectData, theme, index, characters.byId))
+      })
+    } else {
+      records.push(...emptySectionPages('Characters', 'People', 'Character Dossiers', 'Intelligence files, arcs, roles, and known links', 'No characters yet.', theme))
+    }
   }
-  if ((enabled.has('familytree') || enabled.has('relationships')) && (projectData.characters ?? []).length) {
-    records.push(...createRelationshipsPages(projectData.characters ?? [], theme, enabled))
+  if (enabled.has('familytree') || enabled.has('relationships')) {
+    records.push(...((projectData.characters ?? []).length
+      ? createRelationshipsPages(projectData.characters ?? [], theme, enabled)
+      : emptySectionPages('Relationships', 'Networks', 'Relationship Atlas', enabled.has('familytree') ? 'Family groups and direct relationship records' : 'Directed social links: source to target', 'No characters yet, so no relationships to chart.', theme)))
   }
   if (enabled.has('locations')) {
-    sortByTitle(projectData.locations, 'name').forEach(location => {
-      records.push(...createArticlePages({
-        section: 'Locations',
-        eyebrow: 'Encyclopedia Article',
-        title: location.name || 'Unnamed Location',
-        subtitle: valueList(location.type, location.region, location.tags?.join(', ')).join(' - '),
-        body: location.description || location.notes || location.content,
-        related: relatedEntries(location, projectData, 'location'),
-      }, theme))
-    })
+    const sorted = sortByTitle(projectData.locations, 'name')
+    if (sorted.length) {
+      sorted.forEach(location => {
+        records.push(...createArticlePages({
+          section: 'Locations',
+          eyebrow: 'Encyclopedia Article',
+          title: location.name || 'Unnamed Location',
+          subtitle: valueList(location.type, location.region, location.tags?.join(', ')).join(' - '),
+          body: location.description || location.notes || location.content,
+          related: relatedEntries(location, projectData, 'location'),
+        }, theme))
+      })
+    } else {
+      records.push(...emptySectionPages('Locations', 'Locations', 'Atlas of Places', 'Encyclopedia entries for cities, ruins, realms, and landmarks', 'No locations yet.', theme))
+    }
   }
   if (enabled.has('factions')) {
-    sortByTitle(projectData.factions, 'name').forEach(faction => {
-      records.push(...createArticlePages({
-        section: 'Factions',
-        eyebrow: 'Faction Dossier',
-        title: faction.name || 'Unnamed Faction',
-        subtitle: valueList(faction.type, faction.leader && `Led by ${faction.leader}`, faction.status).join(' - '),
-        body: faction.description || faction.notes,
-        related: relatedEntries(faction, projectData, 'faction'),
-        artLabel: 'Faction Seal',
-        initial: firstLetter(faction.name).replace(/&.*;/, ''),
-        image: faction._pdfImage,
-        imageFit: 'contain',
-      }, theme))
-    })
+    const sorted = sortByTitle(projectData.factions, 'name')
+    if (sorted.length) {
+      sorted.forEach(faction => {
+        records.push(...createArticlePages({
+          section: 'Factions',
+          eyebrow: 'Faction Dossier',
+          title: faction.name || 'Unnamed Faction',
+          subtitle: valueList(faction.type, faction.leader && `Led by ${faction.leader}`, faction.status).join(' - '),
+          body: faction.description || faction.notes,
+          related: relatedEntries(faction, projectData, 'faction'),
+          artLabel: 'Faction Seal',
+          initial: firstLetter(faction.name).replace(/&.*;/, ''),
+          image: faction._pdfImage,
+          imageFit: 'contain',
+        }, theme))
+      })
+    } else {
+      records.push(...emptySectionPages('Factions', 'Political Index', 'Factions and Powers', 'Orders, houses, alliances, institutions, and rivals', 'No factions yet.', theme))
+    }
   }
   if (enabled.has('lore')) {
     const loreIndex = createLoreReferenceIndex(projectData)
-    sortByTitle(loreIndex.entries).forEach(entry => {
-      records.push(...createArticlePages({
-        section: 'Lore',
-        eyebrow: 'Lore Encyclopedia',
-        title: entry.title || 'Untitled Lore Entry',
-        subtitle: valueList(entry.category || 'Uncategorized', entry.tags?.join(', ')).join(' - '),
-        body: entry.content,
-        related: loreReferenceRows(entry, loreIndex),
-      }, theme))
-    })
+    const sorted = sortByTitle(loreIndex.entries)
+    if (sorted.length) {
+      sorted.forEach(entry => {
+        records.push(...createArticlePages({
+          section: 'Lore',
+          eyebrow: 'Lore Encyclopedia',
+          title: entry.title || 'Untitled Lore Entry',
+          subtitle: valueList(entry.category || 'Uncategorized', entry.tags?.join(', ')).join(' - '),
+          body: entry.content,
+          related: loreReferenceRows(entry, loreIndex),
+        }, theme))
+      })
+    } else {
+      records.push(...emptySectionPages('Lore', 'Codex Articles', 'Lore Encyclopedia', 'Collector edition world guide entries', 'No lore entries yet.', theme))
+    }
   }
   if (enabled.has('timeline')) {
     records.push(...createVisualTimelinePages(projectData.timeline, theme, 'Timeline & History', 'Timeline'))
   }
   if (enabled.has('worldhistory')) {
-    sortTimelineEntries(projectData.worldHistory).map(normalizeHistoryEntry).forEach((event, index) => {
-      records.push(...createTimelinePages(event, projectData, theme, index, 'World History', 'World History'))
-    })
+    const sorted = sortTimelineEntries(projectData.worldHistory).map(normalizeHistoryEntry)
+    if (sorted.length) {
+      sorted.forEach((event, index) => {
+        records.push(...createTimelinePages(event, projectData, theme, index, 'World History', 'World History'))
+      })
+    } else {
+      records.push(...emptySectionPages('World History', 'Archive', 'World History', 'Eras, conflicts, founding myths, and turning points', 'No history entries yet.', theme))
+    }
   }
   if (enabled.has('schedule')) {
-    sortScheduleEvents(projectData.storySchedule, getScheduleCalendar(projectData.project)).forEach(rawEvent => {
-      const event = normalizeScheduleEvent(rawEvent)
-      const fields = scheduleExportFields(projectData, rawEvent)
-      records.push(...createArticlePages({
-        section: 'Schedule', eyebrow: 'Story Calendar', title: event.title || 'Untitled Schedule Event',
-        subtitle: fields.slice(0, 2).map(([label, value]) => `${label}: ${value}`).join(' - '),
-        body: [event.description, ...fields.map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'), related: [],
-      }, theme))
-    })
+    const sorted = sortScheduleEvents(projectData.storySchedule, getScheduleCalendar(projectData.project))
+    if (sorted.length) {
+      sorted.forEach(rawEvent => {
+        const event = normalizeScheduleEvent(rawEvent)
+        const fields = scheduleExportFields(projectData, rawEvent)
+        records.push(...createArticlePages({
+          section: 'Schedule', eyebrow: 'Story Calendar', title: event.title || 'Untitled Schedule Event',
+          subtitle: fields.slice(0, 2).map(([label, value]) => `${label}: ${value}`).join(' - '),
+          body: [event.description, ...fields.map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'), related: [],
+        }, theme))
+      })
+    } else {
+      records.push(...emptySectionPages('Schedule', 'Story Calendar', 'Schedule', 'Planned scenes, journeys, meetings, and campaign events', 'No scheduled events yet.', theme))
+    }
   }
   if (enabled.has('map')) {
-    ;(projectData.maps ?? []).forEach(map => {
-      records.push(...createMapPages(map, projectData, theme))
-    })
+    const maps = projectData.maps ?? []
+    if (maps.length) {
+      maps.forEach(map => {
+        records.push(...createMapPages(map, projectData, theme))
+      })
+    } else {
+      records.push(...emptySectionPages('Maps', 'Cartography', 'Maps and Visual Plates', 'Project maps and available visual references', 'No maps attached to this project.', theme))
+    }
   }
-  if (enabled.has('outline')) records.push(...createOutlinePages(projectData, theme))
+  if (enabled.has('outline')) {
+    const outlinePages = createOutlinePages(projectData, theme)
+    const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
+    records.push(...(outlinePages.length ? outlinePages : emptySectionPages(`${workspaceLabel} Structure`, workspaceLabel, `${workspaceLabel} Structure`, 'Outline structure, draft counts, project notes, and loose ideas', `No ${(getProjectType(projectData.project?.type).structure?.level1 || 'Act').toLowerCase()} sections yet.`, theme)))
+  }
   if (enabled.has('ideas')) {
     const entities = buildIdeaEntityIndex(projectData)
-    sortByTitle(buildIdeaIndex(projectData.ideaEntries).ideas).forEach(entry => {
-      records.push(...createArticlePages({
-        section: 'Ideas',
-        eyebrow: 'Field Notes',
-        title: entry.title || 'Untitled Note',
-        subtitle: valueList(entry.tags.join(', ')).join(' - '),
-        body: [entry.description, ...ideaExportFields(entry, entities).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'),
-        related: [],
-      }, theme))
-    })
+    const sorted = sortByTitle(buildIdeaIndex(projectData.ideaEntries).ideas)
+    if (sorted.length) {
+      sorted.forEach(entry => {
+        records.push(...createArticlePages({
+          section: 'Ideas',
+          eyebrow: 'Field Notes',
+          title: entry.title || 'Untitled Note',
+          subtitle: valueList(entry.tags.join(', ')).join(' - '),
+          body: [entry.description, ...ideaExportFields(entry, entities).map(([label, value]) => `${label}: ${value}`)].filter(Boolean).join('\n\n'),
+          related: [],
+        }, theme))
+      })
+    } else {
+      records.push(...emptySectionPages('Ideas', 'Field Notes', 'Notes and Ideas', 'Loose ideas and story notes', 'No ideas yet.', theme))
+    }
   }
   const tocLineCount = [...new Set(records.map(record => record.section))].length + records.length
   const tocPageCount = Math.max(1, Math.ceil(tocLineCount / 23))
