@@ -80,3 +80,45 @@ describe('createProjectPdfBlob privacy', () => {
     expect(raw).toContain('SECRET CHARACTER BIO')
   })
 })
+
+// World Bible export QA (2026-09-12): a project with every section enabled
+// but no records at all used to render nothing but a cover, a one-line TOC,
+// and a Timeline page — every other enabled section (Characters, Locations,
+// Factions, Lore, World History, Schedule, Maps, Manuscript Structure,
+// Ideas) silently disappeared instead of showing an empty state, unlike the
+// parallel HTML export (createProjectVisualPdfHtml), which already shows
+// "No … yet." text for the same case. Fixed by giving every enabled-but-
+// empty section its own page with that message, mirrored from the HTML
+// export's existing copy.
+describe('createProjectPdfBlob empty-section handling', () => {
+  const emptyProjectData = {
+    project: { id: 'project-empty', title: 'Empty Project', type: 'novel', enabledSections: ALL_SECTIONS },
+    characters: [], factions: [], locations: [], timeline: [], worldHistory: [], eras: [],
+    acts: [], chapters: [], scenes: [], loreEntries: [], ideaEntries: [], maps: [], whiteboards: [], storySchedule: [],
+  }
+
+  it('shows a page and TOC entry for every enabled section even with no records at all', async () => {
+    const raw = await pdfBytesToLatin1(await createProjectPdfBlob(emptyProjectData))
+    for (const message of [
+      'No characters yet.', 'No characters yet, so no relationships to chart.', 'No locations yet.',
+      'No factions yet.', 'No lore entries yet.', 'No chronology entries yet.', 'No history entries yet.',
+      'No scheduled events yet.', 'No maps attached to this project.', 'No act sections yet.', 'No ideas yet.',
+    ]) expect(raw).toContain(message)
+    // Every enabled section keeps a TOC row (and therefore a jump target)
+    // instead of vanishing because it had zero records.
+    for (const section of [
+      'Characters', 'Relationships', 'Locations', 'Factions', 'Lore', 'Timeline', 'World History',
+      'Schedule', 'Maps', 'Manuscript Structure', 'Ideas',
+    ]) expect(raw).toContain(section)
+  })
+
+  it('labels the TOC count as pages, matching what it actually counts', async () => {
+    // A single dossier/article can legitimately span multiple pages
+    // (continuation pages), and a whole Timeline can render as one page
+    // holding several events — "N entries" previously implied a
+    // content-item count this loop never computes.
+    const raw = await pdfBytesToLatin1(await createProjectPdfBlob(emptyProjectData))
+    expect(raw).toContain('1 page')
+    expect(raw).not.toMatch(/\d+ entr(y|ies)/)
+  })
+})
