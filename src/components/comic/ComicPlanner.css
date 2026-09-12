@@ -86,8 +86,20 @@
 }
 
 .cp-sidebar-volume-row:hover .cp-sidebar-row-actions,
-.cp-sidebar-issue-row:hover .cp-sidebar-row-actions {
+.cp-sidebar-issue-row:hover .cp-sidebar-row-actions,
+.cp-sidebar-volume-row:focus-within .cp-sidebar-row-actions,
+.cp-sidebar-issue-row:focus-within .cp-sidebar-row-actions {
   opacity: 1;
+}
+
+/* Hover-to-reveal has no equivalent on touch input, so the "Add issue" /
+   "Delete volume/issue" controls above would otherwise be permanently
+   invisible (not just hidden-until-hover) on phones and tablets. Keep them
+   always visible below the tablet breakpoint. */
+@media (max-width: 768px) {
+  .cp-sidebar-row-actions {
+    opacity: 1;
+  }
 }
 
 .cp-sidebar-issue-row {
@@ -611,6 +623,25 @@
 
 .cp-icon-btn.cp-danger:hover {
   color: var(--danger, #e53e3e);
+}
+
+.cp-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cp-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.cp-page-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
 }
 
 .cp-add-inline {
