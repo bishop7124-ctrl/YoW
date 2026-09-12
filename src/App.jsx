@@ -959,15 +959,40 @@ function AppInner() {
         // pending" apart from "one was pending and already resumed," and in
         // the latter case would silently re-apply this fetch's unmerged
         // `data` right over the just-completed merge — this path awaits that
-        // same claim's outcome and only imports its own (unmerged) fetch if
-        // the claimed resume did not actually succeed, so a failed resume
-        // still leaves the app showing this fetch's data rather than nothing.
+        // same claim's outcome first.
         const claimedResume = lapseResumeClaimed.current
-        if (claimedResume) {
-          const result = await claimedResume
-          if (!result?.ok) importData(data)
-        } else {
+        if (!claimedResume) {
           importData(data)
+        } else if (!(await claimedResume).ok) {
+          // The claimed resume failed (and, per its own comment, deliberately
+          // left the lapse snapshot in place rather than clear it) — a plain
+          // `importData(data)` here would just reintroduce the exact bug
+          // this fetch's merge was supposed to prevent, since `data`'s local
+          // edit is, by definition of even reaching this branch, well
+          // outside importData's 30-minute local-trust window. Retry the
+          // merge here instead, against this fetch's own already-loaded
+          // cloud `data` (no second network round trip needed) and whatever
+          // base is still pending. Only if *that* also fails does this fall
+          // back to the plain unmerged import, as the true last resort so
+          // the app shows something rather than staying on its empty state.
+          const retryBase = loadPendingDesktopLapseResumeBase(userId, {
+            desktopApp,
+            isLocalMode: membership.isLocalMode,
+            userLocalFirstMode,
+          })
+          if (!retryBase) {
+            importData(data)
+          } else {
+            try {
+              const { reviewedData, conflicts } = await reconcileDesktopLapseResume(data, retryBase)
+              importData(reviewedData, { preferLocal: false })
+              store.addRecordConflicts?.(conflicts || [])
+              clearDesktopLapseSnapshot(userId)
+            } catch (error) {
+              console.error('[YOW] Fallback desktop-lapse resume reconcile also failed:', error)
+              importData(data)
+            }
+          }
         }
         // URL takes priority over remote last-active project; also restore the view/section
         const urlNovelId = initialRoute.current.novelId
