@@ -251,6 +251,32 @@ fn open_db(path: &Path) -> Result<Db, String> {
 
   exec(raw, "PRAGMA journal_mode = WAL;")?;
   exec(raw, "PRAGMA synchronous = FULL;")?;
+  // Without this, two commands that each open their own connection against
+  // the same file (e.g. vault_secure_erase_residue's VACUUM racing
+  // create_desktop_vault_auto_snapshot's checkpoint-and-copy, both able to
+  // fire within the same tick of a fresh launch) get an immediate
+  // SQLITE_BUSY the instant one holds the single write lock SQLite allows,
+  // rather than the second one simply waiting the brief moment for the
+  // first to finish — silently failing an operation that would have
+  // succeeded a few hundred milliseconds later. `busy_timeout` makes
+  // SQLite itself retry internally for up to this many milliseconds before
+  // giving up, which is enough headroom for this file's own commands (none
+  // hold the write lock for anywhere near this long) without masking a
+  // *genuinely* stuck lock forever.
+  exec(raw, "PRAGMA busy_timeout = 3000;")?;
+  // Audit finding P0-10's remaining "secure erase" gap: a plain SQL DELETE
+  // only unlinks a row from SQLite's b-tree — the deleted bytes themselves
+  // stay on disk in a freed page (and, in WAL mode, potentially in old WAL
+  // frames) until something else overwrites them, which could be never on a
+  // lightly-used vault. `secure_delete = ON` makes SQLite zero a row's
+  // content as part of the same delete/update that frees it, for every
+  // connection opened through this function (the live vault and every
+  // snapshot/backup file `open_db` is used against) — the standard SQLite
+  // mechanism for exactly this threat model. It only affects deletes made
+  // *after* this pragma takes effect, so it closes the gap going forward but
+  // can't retroactively scrub bytes a pre-fix session already leaked into an
+  // existing file's freed pages — see `secure_erase_residue` below for that.
+  exec(raw, "PRAGMA secure_delete = ON;")?;
   exec(raw, "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL, updated_at INTEGER NOT NULL DEFAULT (unixepoch()));")?;
   Ok(Db { raw })
 }
@@ -979,6 +1005,110 @@ fn vault_snapshot_remove_keys(
   Ok(removed)
 }
 
+// `PRAGMA wal_checkpoint(FULL);` can return SQLITE_OK while its own `busy`
+// result column reports it could NOT fully flush the WAL back into the main
+// file — this happens when another connection holds an open read snapshot
+// at that moment, and a bare `exec()` (used everywhere else in this file)
+// would silently discard that column and treat the call as a full success.
+// Reads it properly via `prepare`/`sqlite3_step` instead, the same way any
+// other single-row query result is read in this file (`entry_count`,
+// `integrity_message`), so `secure_erase_residue` below can tell a genuine
+// full checkpoint from one that only partially completed.
+fn wal_checkpoint_full(db: *mut sqlite3) -> Result<bool, String> {
+  let stmt = prepare(db, "PRAGMA wal_checkpoint(FULL);")?;
+  let result = unsafe { sqlite3_step(stmt) };
+  if result != SQLITE_ROW {
+    let error = db_error(db);
+    unsafe {
+      sqlite3_finalize(stmt);
+    }
+    return Err(error);
+  }
+  // Result row is (busy, log, checkpointed); busy = 0 means fully checkpointed.
+  let busy = column_string(stmt, 0);
+  unsafe {
+    sqlite3_finalize(stmt);
+  }
+  Ok(busy == "0")
+}
+
+// Retroactively scrubs residue `secure_delete = ON` (see `open_db`) can't:
+// bytes a *pre-fix* session already left behind in a freed page (or old WAL
+// frame) before this database was ever opened with that pragma set. `VACUUM`
+// rebuilds the entire file from its live rows only, so no freed-page content
+// — sensitive or not — survives it; the follow-up checkpoint then folds the
+// WAL back into the main file and truncates it, rather than leaving a
+// pre-VACUUM WAL file sitting on disk with its own stale copy of the old
+// page. Deliberately not run on every ordinary delete (`vault_remove_item`
+// et al.) — a VACUUM rewrites the whole file and would be a real, felt
+// typing-latency regression if triggered on every scene/character/etc.
+// deletion; callers invoke this only after actually removing a *sensitive*
+// key from a database that might still be running with a pre-fix
+// (`secure_delete`-off) history, not as part of normal operation.
+//
+// No code path in this file currently holds a read transaction open across
+// another command's call (every read/write here opens, acts, and drops its
+// own connection within one function), so the retry loop below is defense
+// in depth against a scenario this app doesn't currently create rather than
+// a bug this diff introduces — but a caller that only ever gets one silent
+// "success" per sensitive key found has no other chance to retry (see
+// `vault_secure_erase_residue`'s doc comment), so this returns a real error
+// rather than a false Ok if the checkpoint still can't complete after
+// waiting out a brief overlap the same way `busy_timeout` does for the
+// write-lock case above.
+fn secure_erase_residue(db: &Db) -> Result<(), String> {
+  exec(db.raw, "VACUUM;")?;
+  // 10 x 100ms = up to ~1s of total wait. This only ever runs once per
+  // sensitive key actually found (see callers' doc comments), at most a
+  // handful of times across a vault's whole lifetime, so a generous budget
+  // costs nothing in the overwhelmingly common case (the loop exits on its
+  // first, immediately-successful attempt) while giving real headroom for
+  // the concurrent-reader case this exists to handle.
+  const MAX_ATTEMPTS: u8 = 10;
+  for attempt in 0..MAX_ATTEMPTS {
+    if wal_checkpoint_full(db.raw)? {
+      return Ok(());
+    }
+    if attempt + 1 < MAX_ATTEMPTS {
+      std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+  }
+  Err(
+    "Could not fully checkpoint the database after VACUUM — a concurrent \
+     reader may have prevented it from completing. The sensitive key is \
+     still removed from the live data either way; some residual bytes may \
+     remain on disk until a later checkpoint occurs naturally."
+      .to_string(),
+  )
+}
+
+// Companion to `vault_remove_item`: the JS-side scrub (`scrubSensitiveVaultEntries`
+// in tauriVaultAdapter.js) calls this once, after actually removing one or
+// more sensitive keys from the live vault, to retroactively clean up any
+// pre-fix residue those deletes' own `secure_delete` couldn't reach (see
+// `secure_erase_residue` above). Never called on a vault that had nothing to
+// scrub, so an already-clean install pays no extra VACUUM cost.
+#[tauri::command]
+fn vault_secure_erase_residue(app: tauri::AppHandle) -> Result<(), String> {
+  let db = open_vault(&app)?;
+  secure_erase_residue(&db)
+}
+
+// Snapshot-file counterpart to `vault_secure_erase_residue`, mirroring
+// `vault_snapshot_remove_keys`'s "every existing physical copy of this name"
+// handling — a relocated install can have more than one copy of the same
+// snapshot file (see `resolve_existing_snapshot_paths`), and a scrub that
+// only vacuumed one would leave the other still carrying the old residue.
+#[tauri::command]
+fn vault_snapshot_secure_erase_residue(app: tauri::AppHandle, name: String) -> Result<(), String> {
+  let paths = resolve_existing_snapshot_paths(&app, &name)?;
+  for path in &paths {
+    let db = open_db(path)?;
+    secure_erase_residue(&db)?;
+  }
+  Ok(())
+}
+
 fn restore_vault_file(snapshot: &Path, target: &Path) -> Result<(), String> {
   let wal_path = PathBuf::from(format!("{}-wal", target.to_string_lossy()));
   let shm_path = PathBuf::from(format!("{}-shm", target.to_string_lossy()));
@@ -1074,6 +1204,8 @@ pub fn run() {
       vault_restore_snapshot,
       vault_snapshot_read_all,
       vault_snapshot_remove_keys,
+      vault_secure_erase_residue,
+      vault_snapshot_secure_erase_residue,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -1391,6 +1523,12 @@ mod tests {
     set_item(&writer, "held", "by-writer-one").unwrap();
 
     let contender = open_db(&path).unwrap();
+    // open_db's own busy_timeout would make this block for up to 3s waiting
+    // on a lock this test holds indefinitely (see the dedicated
+    // busy_timeout test below for what that's actually for) — opt this one
+    // connection back into failing immediately, since this test's whole
+    // point is proving genuine contention exists, not how long it waits.
+    exec(contender.raw, "PRAGMA busy_timeout = 0;").unwrap();
     let result = set_item(&contender, "held", "by-writer-two");
     assert!(
       result.is_err(),
@@ -1401,6 +1539,50 @@ mod tests {
     // failure above really was the busy-lock path and not something else.
     exec(writer.raw, "COMMIT;").unwrap();
     assert!(set_item(&contender, "held", "by-writer-two").is_ok());
+  }
+
+  // Proves what open_db's default busy_timeout is actually for: two
+  // separate connections briefly overlapping (the exact shape of
+  // vault_secure_erase_residue's VACUUM racing create_desktop_vault_auto_snapshot's
+  // checkpoint-and-copy, both fired within the same launch tick) succeed
+  // instead of one failing outright, as long as the first releases its lock
+  // well within the timeout window.
+  #[test]
+  fn busy_timeout_lets_a_brief_lock_be_waited_out_instead_of_failing_immediately() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    // Ensure the file/schema exist before either thread races to open it.
+    drop(open_db(&path).unwrap());
+
+    let (lock_held_tx, lock_held_rx) = std::sync::mpsc::channel();
+    let writer_path = path.clone();
+    let writer = std::thread::spawn(move || {
+      let writer = open_db(&writer_path).unwrap();
+      exec(writer.raw, "BEGIN IMMEDIATE;").unwrap();
+      set_item(&writer, "held", "by-writer-one").unwrap();
+      lock_held_tx.send(()).unwrap(); // deterministic hand-off, not a timing guess
+      std::thread::sleep(std::time::Duration::from_millis(150));
+      exec(writer.raw, "COMMIT;").unwrap();
+    });
+    // Block until the writer confirms it actually holds the lock, rather
+    // than guessing a head-start sleep long enough to survive CI scheduling
+    // jitter — this is the only synchronization point that matters for the
+    // test to mean anything.
+    lock_held_rx.recv().unwrap();
+
+    let contender = open_db(&path).unwrap(); // default busy_timeout = 3000ms
+    let result = set_item(&contender, "held", "by-writer-two");
+    writer.join().unwrap();
+
+    assert!(
+      result.is_ok(),
+      "a connection with the default busy_timeout should wait out a lock \
+       held for well under the timeout, not fail immediately: {result:?}"
+    );
+    assert_eq!(
+      get_item(&contender, "held").unwrap(),
+      Some("by-writer-two".to_string())
+    );
   }
 
   #[test]
@@ -1469,5 +1651,242 @@ mod tests {
       Some("restored prose".to_string())
     );
     assert_eq!(integrity_message(restored.raw).unwrap(), "ok");
+  }
+
+  // --- secure erase (audit finding P0-10's remaining gap) ---
+
+  fn raw_file_contains(path: &Path, marker: &str) -> bool {
+    let bytes = fs::read(path).expect("read raw db file");
+    bytes
+      .windows(marker.len())
+      .any(|window| window == marker.as_bytes())
+  }
+
+  #[test]
+  fn open_db_enables_secure_delete_for_every_connection() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let db = open_db(&root.path().join("vault.db")).unwrap();
+    let stmt = prepare(db.raw, "PRAGMA secure_delete;").unwrap();
+    let result = unsafe { sqlite3_step(stmt) };
+    assert_eq!(result, SQLITE_ROW);
+    let value = column_string(stmt, 0);
+    unsafe {
+      sqlite3_finalize(stmt);
+    }
+    assert_eq!(
+      value, "1",
+      "secure_delete should be ON for a freshly opened connection"
+    );
+  }
+
+  // Sanity check for the two tests below: a plain SQL DELETE with
+  // secure_delete OFF (the pre-fix behavior every existing vault.db has a
+  // history of) really does leave the deleted value's bytes recoverable
+  // straight out of the raw file — proves the "search the raw file for the
+  // marker" methodology actually detects residue when it's genuinely there,
+  // rather than the later "residue is gone" assertions passing for the wrong
+  // reason (e.g. a marker that was never actually written to disk as
+  // expected).
+  #[test]
+  fn without_secure_delete_a_removed_value_can_still_be_recovered_from_the_raw_file() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    let marker = "UNIQUE_SECRET_MARKER_METHODOLOGY_CHECK_1";
+    {
+      let db = open_db(&path).unwrap();
+      // Simulate a connection with the pre-fix history every already-existing
+      // vault.db has: open_db always re-enables secure_delete on every open,
+      // so a real pre-fix file's *residue* has to be simulated by turning it
+      // back off for this one write+delete, not by avoiding open_db.
+      exec(db.raw, "PRAGMA secure_delete = OFF;").unwrap();
+      set_vault_item(&db, "sb-project-ref-auth-token", marker).unwrap();
+      remove_vault_item(&db, "sb-project-ref-auth-token").unwrap();
+      exec(db.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    }
+    assert!(
+      raw_file_contains(&path, marker),
+      "test methodology check failed: expected the deleted marker to still be \
+       recoverable from the raw file without secure_delete"
+    );
+  }
+
+  // The actual fix, proven end to end rather than by reasoning about SQLite
+  // internals: a sensitive value deleted under pre-fix conditions (see the
+  // methodology check above) is genuinely gone from the on-disk bytes — not
+  // just absent from a SELECT — after `secure_erase_residue` runs.
+  #[test]
+  fn secure_erase_residue_removes_a_pre_fix_sensitive_value_from_the_raw_file() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    let marker = "UNIQUE_SECRET_MARKER_MUST_BE_SCRUBBED_2";
+    {
+      let db = open_db(&path).unwrap();
+      exec(db.raw, "PRAGMA secure_delete = OFF;").unwrap(); // simulate pre-fix history
+      set_vault_item(&db, "nf_aiSettings", marker).unwrap();
+      remove_vault_item(&db, "nf_aiSettings").unwrap();
+      exec(db.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    }
+    assert!(
+      raw_file_contains(&path, marker),
+      "residue must genuinely exist before the fix runs, or this test proves nothing"
+    );
+
+    // Reopen the way a later app launch would (secure_delete back ON per
+    // open_db — but that alone can't reach bytes already freed before this
+    // connection existed) and run the residue scrub.
+    let db = open_db(&path).unwrap();
+    secure_erase_residue(&db).unwrap();
+    let wal_path = PathBuf::from(format!("{}-wal", path.to_string_lossy()));
+    // Check the WAL file (if any) while the connection is still open, before
+    // dropping it — closing the sole connection to a fully-checkpointed
+    // WAL-mode database removes the -wal file entirely, which would make a
+    // post-drop check here trivially pass without proving anything.
+    if wal_path.exists() {
+      assert!(
+        !raw_file_contains(&wal_path, marker),
+        "the WAL file must not carry the sensitive value either, once secure_erase_residue reports success"
+      );
+    }
+    drop(db);
+
+    assert!(
+      !raw_file_contains(&path, marker),
+      "sensitive value bytes must not survive secure_erase_residue's VACUUM + checkpoint"
+    );
+  }
+
+  // Proves the primary fix (the pragma, not the heavier VACUUM-based residue
+  // scrub) is sufficient on its own for the common/future case: an install
+  // that never had a pre-fix history at all shouldn't need VACUUM to avoid
+  // leaking a deleted secret, since every connection now runs with
+  // secure_delete already ON from its very first write.
+  #[test]
+  fn with_secure_delete_on_from_the_start_a_removed_value_is_never_recoverable() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    let marker = "UNIQUE_SECRET_MARKER_NEVER_LEAKS_3";
+    {
+      let db = open_db(&path).unwrap(); // secure_delete ON from the first write, no override
+      set_vault_item(&db, "nf_aiSettings", marker).unwrap();
+      remove_vault_item(&db, "nf_aiSettings").unwrap();
+      exec(db.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    }
+    assert!(!raw_file_contains(&path, marker));
+  }
+
+  #[test]
+  fn vault_snapshot_secure_erase_residue_reaches_every_physical_copy_of_a_name() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let vault_dir = root.path().join("vault");
+    let backups = vault_dir.join("Backups");
+    fs::create_dir_all(&backups).unwrap();
+    File::create(vault_dir.join("vault.db")).unwrap();
+    let name = "vault-snapshot-1700000000.db";
+    let marker = "UNIQUE_SECRET_MARKER_BOTH_COPIES_4";
+
+    let copy_paths = [backups.join(name), root.path().join(name)];
+    for copy_path in &copy_paths {
+      let db = open_db(copy_path).unwrap();
+      exec(db.raw, "PRAGMA secure_delete = OFF;").unwrap();
+      set_vault_item(&db, "nf_aiSettings", marker).unwrap();
+      remove_vault_item(&db, "nf_aiSettings").unwrap();
+      exec(db.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+      assert!(raw_file_contains(copy_path, marker));
+    }
+
+    // `vault_snapshot_secure_erase_residue` itself takes a `tauri::AppHandle`
+    // to resolve `name` through `resolve_existing_snapshot_paths` (reading
+    // the vault's own directory via Tauri's path resolver, which isn't
+    // available outside a running app) — not constructible in a unit test,
+    // same constraint every other `resolve_existing_snapshot_paths`-based
+    // command's tests already work around in this file. Exercise the shared
+    // `secure_erase_residue` helper the command wraps directly against both
+    // physical copies instead, proving the part that's actually new logic.
+    for copy_path in &copy_paths {
+      let db = open_db(copy_path).unwrap();
+      secure_erase_residue(&db).unwrap();
+    }
+
+    for copy_path in &copy_paths {
+      assert!(
+        !raw_file_contains(copy_path, marker),
+        "every physical copy of the snapshot must be scrubbed, not just one"
+      );
+    }
+  }
+
+  // A concurrent reader with an open snapshot (a `BEGIN`ned read transaction
+  // that hasn't committed yet) can make a single `wal_checkpoint(FULL)` call
+  // report incomplete (its `busy` result column set) even though the call
+  // itself succeeds — code review on this diff found that a bare `exec()`
+  // ignoring that column would silently accept a checkpoint that didn't
+  // actually finish. Proves the retry loop bridges a *brief* such overlap,
+  // the same way `busy_timeout` already bridges a brief write-lock conflict.
+  #[test]
+  fn secure_erase_residue_waits_out_a_brief_concurrent_reader_and_still_succeeds() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    {
+      let db = open_db(&path).unwrap();
+      set_vault_item(&db, "nf_aiSettings", "value").unwrap();
+    }
+
+    let (snapshot_open_tx, snapshot_open_rx) = std::sync::mpsc::channel();
+    let reader_path = path.clone();
+    let reader = std::thread::spawn(move || {
+      let reader = open_db(&reader_path).unwrap();
+      exec(reader.raw, "BEGIN;").unwrap();
+      exec(reader.raw, "SELECT * FROM kv;").unwrap(); // establishes the read snapshot
+      snapshot_open_tx.send(()).unwrap(); // deterministic hand-off, not a timing guess
+      std::thread::sleep(std::time::Duration::from_millis(150));
+      exec(reader.raw, "COMMIT;").unwrap();
+    });
+    // Block until the reader confirms its snapshot is actually open, rather
+    // than guessing a head-start sleep — the 150ms hold above is comfortably
+    // inside secure_erase_residue's ~1s retry budget regardless of CI
+    // scheduling jitter, since this synchronization point is exact.
+    snapshot_open_rx.recv().unwrap();
+
+    let db = open_db(&path).unwrap();
+    let result = secure_erase_residue(&db);
+    reader.join().unwrap();
+
+    assert!(
+      result.is_ok(),
+      "a brief concurrent reader (well under the retry window) should not \
+       make secure_erase_residue give up: {result:?}"
+    );
+  }
+
+  // The honest-failure half of the same scenario: if the concurrent reader
+  // never releases its snapshot within the retry window, secure_erase_residue
+  // must report that rather than silently claiming success — a caller that
+  // only gets one chance per sensitive key found (see
+  // vault_secure_erase_residue's doc comment) needs a real signal, not false
+  // confidence that residue was actually removed from disk.
+  #[test]
+  fn secure_erase_residue_reports_failure_rather_than_falsely_claiming_success() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    {
+      let db = open_db(&path).unwrap();
+      set_vault_item(&db, "nf_aiSettings", "value").unwrap();
+    }
+
+    let reader = open_db(&path).unwrap();
+    exec(reader.raw, "BEGIN;").unwrap();
+    exec(reader.raw, "SELECT * FROM kv;").unwrap();
+    // Never committed — holds the read snapshot open indefinitely, well
+    // past secure_erase_residue's own retry budget (5 attempts x 50ms).
+
+    let db = open_db(&path).unwrap();
+    let result = secure_erase_residue(&db);
+
+    assert!(
+      result.is_err(),
+      "a checkpoint that can never fully complete must be a reported error, not a silent Ok"
+    );
+
+    exec(reader.raw, "COMMIT;").unwrap(); // release it so the tempdir cleans up without a lingering lock
   }
 }
