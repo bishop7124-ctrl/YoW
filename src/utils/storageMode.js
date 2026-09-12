@@ -1,7 +1,8 @@
-import { loadValue, readItem, writeItem } from '../storage/projectStorage'
+import { loadValue, readItem, removeItem, writeItem } from '../storage/projectStorage'
 
 const STORAGE_MODE_PREFIX = 'nf_storageMode'
 const LOCAL_FIRST_SNAPSHOT_PREFIX = 'nf_localFirstSnapshot'
+const DESKTOP_LAPSE_SNAPSHOT_PREFIX = 'nf_desktopLapseSnapshot'
 
 export const STORAGE_MODES = {
   CLOUD_SYNC: 'cloud-sync',
@@ -56,4 +57,45 @@ export function loadLocalFirstSnapshot(userId) {
   if (!userId) return null
   const parsed = loadValue(snapshotKey(userId), null)
   return parsed?.data ?? null
+}
+
+function desktopLapseSnapshotKey(userId) {
+  return `${DESKTOP_LAPSE_SNAPSHOT_PREFIX}:${userId || 'anonymous'}`
+}
+
+// Captured once, the moment a desktop account's Cloud Mode hosting lapses
+// (`membership.isLocalMode` first becomes true), so that whenever Cloud Sync
+// automatically resumes on renewal there is a genuine last-known-common
+// snapshot to three-way-merge against — the same machinery the manual
+// "Resume Cloud Sync" flow already uses (see cloudSyncReconcile.js). Without
+// this, the automatic resume path has no base to diff against and can only
+// blindly push whatever is in local memory, silently overwriting any edits
+// the account picked up elsewhere (e.g. via web Free-cloud-fallback) while
+// this device was lapsed. Deliberately does not overwrite an existing,
+// not-yet-consumed snapshot — if `isLocalMode` flickers true more than once
+// before ever resolving back to false, the *first* lapse's snapshot remains
+// the correct base until it's actually consumed by a resume.
+export function saveDesktopLapseSnapshot(userId, data) {
+  if (!userId || !data) return false
+  if (loadDesktopLapseSnapshot(userId)) return false
+  try {
+    writeItem(desktopLapseSnapshotKey(userId), JSON.stringify({
+      savedAt: Date.now(),
+      data,
+    }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function loadDesktopLapseSnapshot(userId) {
+  if (!userId) return null
+  const parsed = loadValue(desktopLapseSnapshotKey(userId), null)
+  return parsed?.data ?? null
+}
+
+export function clearDesktopLapseSnapshot(userId) {
+  if (!userId) return
+  try { removeItem(desktopLapseSnapshotKey(userId)) } catch { /* storage unavailable */ }
 }

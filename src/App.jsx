@@ -30,7 +30,17 @@ import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
 import DownloadPage from './components/download/DownloadPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
-import { STORAGE_MODES, isLocalFirstMode, loadLocalFirstSnapshot, loadStorageMode, saveLocalFirstSnapshot, saveStorageMode } from './utils/storageMode'
+import {
+  STORAGE_MODES,
+  clearDesktopLapseSnapshot,
+  isLocalFirstMode,
+  loadDesktopLapseSnapshot,
+  loadLocalFirstSnapshot,
+  loadStorageMode,
+  saveDesktopLapseSnapshot,
+  saveLocalFirstSnapshot,
+  saveStorageMode,
+} from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
 import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
@@ -211,13 +221,20 @@ function AppInner() {
     : loadStorageMode(userId)
   const userLocalFirstMode = desktopApp && isLocalFirstMode(storageMode)
   const effectiveLocalMode = desktopApp && (membership.isLocalMode || userLocalFirstMode)
+  // Set for the duration of the automatic reconcile-and-merge that runs when
+  // a desktop account's hosting renews out of `membership.isLocalMode` (see
+  // the lapse-resume effect below). Cloud sync stays paused for this brief
+  // window so `useStore`'s normal per-collection debounced-save effects
+  // can't race the reconcile by pushing stale pre-merge local state up before
+  // it has been merged against whatever landed in the cloud during the lapse.
+  const [resumingCloudSyncAfterLapse, setResumingCloudSyncAfterLapse] = useState(false)
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
   const store = useStore(userId, {
     readOnly: membership.isReadOnly || (!desktopApp && membership.isLocalMode && !membership.isCloudFreeFallback),
     freeProjectId: membership.freeProjectId,
     storageQuotaBytes: desktopApp ? null : devStorageExceeded ? 1 : membership.storageQuotaBytes,
-    cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode,
+    cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode && !resumingCloudSyncAfterLapse,
   })
   const { importData, finishRemoteLoad, clearData, ensureSampleProject } = store
   const [dataLoading, setDataLoading] = useState(false)
@@ -320,7 +337,13 @@ function AppInner() {
     if (nextMode === STORAGE_MODES.CLOUD_SYNC && options.mergedData) {
       await store.flushPendingSync?.()
       const reviewedData = await persistReviewedCloudSyncResume(userId, options.mergedData, { trackSync: store.trackSync })
-      importData(reviewedData)
+      // preferLocal: false — reviewedData is already the reviewed three-way
+      // merge; importData's own "trust local if it was written recently"
+      // heuristic (useStore.js's shouldPreferLocal) would otherwise re-read
+      // raw un-merged local storage instead of the merge whenever there was
+      // any local write in the last 30 minutes, which is true in practice
+      // almost every time this flow runs.
+      importData(reviewedData, { preferLocal: false })
       store.addRecordConflicts?.(options.conflicts || [])
       await store.flushPendingSync?.()
     }
@@ -353,7 +376,82 @@ function AppInner() {
   // after renewal. Because `useStore`'s per-collection debounced-save effects
   // are keyed on `canSyncCloud`, the moment entitlement is restored and
   // `effectiveLocalMode` naturally goes back to false, cloud sync resumes on
-  // its own — no manual "resume" step required.
+  // its own — no separate manual "resume" *step* is required from the user.
+  //
+  // That resume is not a no-op, though: unlike the manual Local-first "Resume
+  // Cloud Sync" flow above (which fetches cloud data and three-way-merges it
+  // via `reconcileCloudSyncData` before the user confirms), an *entitlement*
+  // lapse/renewal cycle has no user-facing confirmation step to hang a preview
+  // on, and this same account may have kept syncing on the *web* app via
+  // Free-cloud-fallback the whole time this device was lapsed. So the two
+  // effects below give the automatic path the same real merge, just run
+  // non-interactively: one snapshots local state the moment the lapse begins
+  // (the merge "base"), the other reconciles against fresh cloud data the
+  // moment the lapse ends, applies the merge, and surfaces any genuine
+  // conflicts through the existing record-conflict banner instead of letting
+  // either side's edits get silently discarded.
+  useEffect(() => {
+    if (!desktopApp || !userId || !membership.isLocalMode) return
+    // Capture the merge base while lapsed. This deliberately does not try to
+    // detect the false→true transition specifically — it also needs to fire
+    // when the app is *launched* already lapsed (e.g. it was closed for the
+    // whole lapse), which has no transition to observe, only a value already
+    // true on first render. `saveDesktopLapseSnapshot` itself is the actual
+    // guard: it no-ops once a snapshot for this lapse already exists, so
+    // firing this on every render (or every remount) while lapsed is safe.
+    saveDesktopLapseSnapshot(userId, store.getLocalSnapshot?.())
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopApp, userId, membership.isLocalMode])
+
+  useEffect(() => {
+    if (!desktopApp || !userId) return undefined
+    // Only the entitlement-driven transition needs this: if Local-first is
+    // still separately turned on, `effectiveLocalMode` stays true and cloud
+    // sync does not actually resume yet — that later transition goes through
+    // the manual `getResumeCloudSyncPreview`/`handleStorageModeChange` flow
+    // above instead, which already merges properly.
+    if (membership.isLocalMode || userLocalFirstMode) return undefined
+    const pendingBase = loadDesktopLapseSnapshot(userId)
+    if (!pendingBase) return undefined
+
+    let cancelled = false
+    setResumingCloudSyncAfterLapse(true)
+    ;(async () => {
+      try {
+        // Fetch cloud data (the slow, network-bound step) before taking the
+        // local snapshot, not after — narrows the window in which a local
+        // edit made *during* this reconcile could land after the snapshot is
+        // taken but still get overwritten when the merge result is applied
+        // below. A tiny residual window remains (the merge computation and
+        // the write-back are not instant either) — same inherent limitation
+        // the manual Resume Cloud Sync flow above already has.
+        const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
+        if (cancelled) return
+        const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+        const baseData = pruneSaveDataToProjects(pendingBase)
+        const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloudData, baseData)
+        const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
+        if (cancelled) return
+        // preferLocal: false — see the matching call in handleStorageModeChange.
+        importData(reviewedData, { preferLocal: false })
+        store.addRecordConflicts?.(conflicts || [])
+        clearDesktopLapseSnapshot(userId)
+        if (!cancelled) setResumingCloudSyncAfterLapse(false)
+      } catch (error) {
+        // Deliberately do NOT clear resumingCloudSyncAfterLapse here: leaving
+        // cloud sync paused for the rest of this session is a safe fail-
+        // closed state (this device just stays local-only a little longer),
+        // whereas resetting it would let useStore's ordinary debounced-save
+        // effects resume raw/unmerged pushes right after a failed merge —
+        // exactly the bug this is fixing. The pending snapshot is also left
+        // in place, so restarting the app (which re-runs this effect fresh
+        // on mount) gets another chance to reconcile.
+        if (!cancelled) console.error('[YOW] Automatic cloud-sync resume-on-renewal reconcile failed:', error)
+      }
+    })()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopApp, userId, membership.isLocalMode, userLocalFirstMode])
 
   const getResumeCloudSyncPreview = async () => {
     if (!desktopApp || !userId) throw new Error('Sign in to resume cloud sync.')
