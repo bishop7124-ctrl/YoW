@@ -192,7 +192,7 @@ function SFXLine({ line, onChange, onDelete }) {
   )
 }
 
-function PanelEditor({ panel, characters, onUpdate, onDelete, store }) {
+function PanelEditor({ panel, panelNumber, canMoveUp, canMoveDown, onMoveUp, onMoveDown, characters, onUpdate, onDelete, store }) {
   const [open, setOpen] = useState(true)
   const [sessionPdf, setSessionPdf] = useState(null)
 
@@ -215,11 +215,19 @@ function PanelEditor({ panel, characters, onUpdate, onDelete, store }) {
       <div className="cp-panel-header">
         <button className="cp-panel-toggle" onClick={() => setOpen(o => !o)}>
           <span className="cp-panel-chevron">{open ? '▾' : '▸'}</span>
-          <span className="cp-panel-num">Panel {(panel.order ?? 0) + 1}</span>
+          <span className="cp-panel-num">Panel {panelNumber}</span>
           {panel.shotType && <span className="cp-panel-meta">{panel.shotType}</span>}
           {panel.status && panel.status !== 'outline' && <span className={`cp-status-chip cp-status-${panel.status}`}>{panel.status}</span>}
         </button>
-        <button className="cp-icon-btn cp-danger" onClick={() => onDelete(panel.id)} title="Delete panel">×</button>
+        <div className="cp-panel-header-actions">
+          <button className="cp-icon-btn" onClick={onMoveUp} disabled={!canMoveUp} title="Move panel up">↑</button>
+          <button className="cp-icon-btn" onClick={onMoveDown} disabled={!canMoveDown} title="Move panel down">↓</button>
+          <button
+            className="cp-icon-btn cp-danger"
+            onClick={() => { if (window.confirm('Delete this panel? This cannot be undone.')) onDelete(panel.id) }}
+            title="Delete panel"
+          >×</button>
+        </div>
       </div>
 
       {open && (
@@ -338,7 +346,7 @@ function PanelEditor({ panel, characters, onUpdate, onDelete, store }) {
 
 // ─── Page editor ──────────────────────────────────────────────────────────────
 
-function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDeletePage, onAddPanel, onUpdatePanel, onDeletePanel, onDuplicatePage, store }) {
+function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDeletePage, onAddPanel, onUpdatePanel, onDeletePanel, onDuplicatePage, onMovePanel, store }) {
   const sortedPanels = sortByOrder(panels)
   const [pageSessionPdf, setPageSessionPdf] = useState(null)
 
@@ -355,7 +363,11 @@ function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDele
           />
           <div className="cp-page-actions">
             <button className="cp-btn-ghost" onClick={() => onDuplicatePage(page.id)} title="Duplicate page">Duplicate</button>
-            <button className="cp-btn-ghost cp-danger" onClick={() => onDeletePage(page.id)} title="Delete page">Delete</button>
+            <button
+              className="cp-btn-ghost cp-danger"
+              onClick={() => { if (window.confirm('Delete this page and all its panels? This cannot be undone.')) onDeletePage(page.id) }}
+              title="Delete page"
+            >Delete</button>
           </div>
         </div>
 
@@ -458,10 +470,15 @@ function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDele
           </div>
         )}
 
-        {sortedPanels.map(panel => (
+        {sortedPanels.map((panel, index) => (
           <PanelEditor
             key={panel.id}
             panel={panel}
+            panelNumber={index + 1}
+            canMoveUp={index > 0}
+            canMoveDown={index < sortedPanels.length - 1}
+            onMoveUp={() => onMovePanel(page.id, panel.id, -1)}
+            onMoveDown={() => onMovePanel(page.id, panel.id, 1)}
             characters={characters}
             onUpdate={(updated) => onUpdatePanel(panel.id, updated)}
             onDelete={(id) => onDeletePanel(id)}
@@ -475,12 +492,18 @@ function PageEditor({ page, panels, characters, pageNumber, onUpdatePage, onDele
 
 // ─── Page list (issue view) ────────────────────────────────────────────────────
 
-function PageRow({ page, panels, pageNumber, isActive, onClick }) {
+function PageRow({ page, panels, pageNumber, isActive, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onClick }) {
   const panelCount = panels.length
   const dialogueCount = panels.reduce((n, p) => n + (p.dialogue?.length ?? 0), 0)
 
   return (
-    <button className={`cp-page-row ${isActive ? 'is-active' : ''}`} onClick={onClick}>
+    <div
+      className={`cp-page-row ${isActive ? 'is-active' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+    >
       <span className="cp-page-row-num">{pageNumber}</span>
       <div className="cp-page-row-body">
         <span className="cp-page-row-title">{page.title || <em>Untitled page</em>}</span>
@@ -492,7 +515,21 @@ function PageRow({ page, panels, pageNumber, isActive, onClick }) {
           {page.status && page.status !== 'outline' && <span className={`cp-status-chip cp-status-${page.status}`}>{page.status}</span>}
         </div>
       </div>
-    </button>
+      <div className="cp-page-row-actions">
+        <button
+          className="cp-icon-btn"
+          onClick={e => { e.stopPropagation(); onMoveUp() }}
+          disabled={!canMoveUp}
+          title="Move page up"
+        >↑</button>
+        <button
+          className="cp-icon-btn"
+          onClick={e => { e.stopPropagation(); onMoveDown() }}
+          disabled={!canMoveDown}
+          title="Move page down"
+        >↓</button>
+      </div>
+    </div>
   )
 }
 
@@ -558,7 +595,11 @@ function StructureSidebar({ volumes, issues, selectedIssueId, onSelectIssue, onA
               )}
               <div className="cp-sidebar-row-actions">
                 <button className="cp-icon-btn" onClick={() => onAddIssue(volume.id)} title="Add issue">+</button>
-                <button className="cp-icon-btn cp-danger" onClick={() => onDeleteVolume(volume.id)} title="Delete volume">×</button>
+                <button
+                  className="cp-icon-btn cp-danger"
+                  onClick={() => { if (window.confirm(`Delete "${volume.title || 'Untitled Volume'}" and all its issues and pages? This cannot be undone.`)) onDeleteVolume(volume.id) }}
+                  title="Delete volume"
+                >×</button>
               </div>
             </div>
 
@@ -582,7 +623,11 @@ function StructureSidebar({ volumes, issues, selectedIssueId, onSelectIssue, onA
                   )}
                   <span className="cp-issue-page-count">{issuePageCount(issue.id)}p</span>
                 </button>
-                <button className="cp-icon-btn cp-danger" onClick={() => onDeleteIssue(issue.id)} title="Delete issue">×</button>
+                <button
+                  className="cp-icon-btn cp-danger"
+                  onClick={() => { if (window.confirm(`Delete "${issue.title || 'Untitled Issue'}" and all its pages? This cannot be undone.`)) onDeleteIssue(issue.id) }}
+                  title="Delete issue"
+                >×</button>
               </div>
             ))}
 
@@ -606,8 +651,8 @@ export default function ComicPlanner({ store }) {
     addAct, updateAct, deleteAct,
     addChapter, updateChapter, deleteChapter,
     comicPages, comicPanels,
-    addComicPage, updateComicPage, deleteComicPage, duplicateComicPage,
-    addComicPanel, updateComicPanel, deleteComicPanel,
+    addComicPage, updateComicPage, deleteComicPage, duplicateComicPage, reorderComicPage,
+    addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
     characters,
     activeNovel,
   } = store
@@ -669,6 +714,24 @@ export default function ComicPlanner({ store }) {
   const handleDuplicatePage = (pageId) => {
     const newPage = duplicateComicPage(pageId)
     if (newPage) setSelectedPageId(newPage.id)
+  }
+
+  const handleMovePage = (pageId, direction) => {
+    const ids = issuePages.map(p => p.id)
+    const index = ids.indexOf(pageId)
+    const swapWith = index + direction
+    if (index < 0 || swapWith < 0 || swapWith >= ids.length) return
+    ;[ids[index], ids[swapWith]] = [ids[swapWith], ids[index]]
+    reorderComicPage(selectedIssueId, ids)
+  }
+
+  const handleMovePanel = (pageId, panelId, direction) => {
+    const ids = sortByOrder(comicPanels.filter(p => p.pageId === pageId)).map(p => p.id)
+    const index = ids.indexOf(panelId)
+    const swapWith = index + direction
+    if (index < 0 || swapWith < 0 || swapWith >= ids.length) return
+    ;[ids[index], ids[swapWith]] = [ids[swapWith], ids[index]]
+    reorderComicPanel(pageId, ids)
   }
 
   const handleSelectIssue = (issueId) => {
@@ -733,6 +796,10 @@ export default function ComicPlanner({ store }) {
                   panels={comicPanels.filter(p => p.pageId === page.id)}
                   pageNumber={i + 1}
                   isActive={selectedPageId === page.id}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < issuePages.length - 1}
+                  onMoveUp={() => handleMovePage(page.id, -1)}
+                  onMoveDown={() => handleMovePage(page.id, 1)}
                   onClick={() => setSelectedPageId(page.id)}
                 />
               ))}
@@ -756,6 +823,7 @@ export default function ComicPlanner({ store }) {
                   onUpdatePanel={(panelId, data) => updateComicPanel(panelId, data)}
                   onDeletePanel={deleteComicPanel}
                   onDuplicatePage={handleDuplicatePage}
+                  onMovePanel={handleMovePanel}
                   store={store}
                 />
               )}
