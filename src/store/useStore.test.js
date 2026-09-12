@@ -483,11 +483,14 @@ describe('novel CRUD', () => {
   })
 
   // Regression coverage for audit finding #16 ("Project deletion can leave
-  // per-scene keys"): deleteNovel now reads the deleted project's scene ids
-  // straight from persisted `nf_scenes` (via deleteAllSceneContentForNovel)
-  // instead of only relying on whatever `scenesRef` already tracked, and
-  // cleans up `nf_scene_versions` too — a step deleteNovel had no code path
-  // for at all before this fix. Mirrors the analogous cloud-side test
+  // per-scene keys"): deleteNovel's storage write goes through
+  // replaceProjectStorageAtomically (projectReplacement.js), which computes
+  // every retained scene's content key from the full authoritative dataset
+  // being written and removes any other nf_scene_content:* key already in
+  // storage in the same atomic operation — rather than relying on whatever
+  // `scenesRef` already tracked — and writes `nf_scene_versions` as a full
+  // replacement filtered to the retained projects too, a step deleteNovel
+  // had no code path for at all before this fix. Mirrors the analogous cloud-side test
   // ("scene cloud cleanup on project delete" in firestoreSync.test.js):
   // seed storage directly rather than building state up through the store's
   // own add* methods, then assert only the deleted project's data is gone.

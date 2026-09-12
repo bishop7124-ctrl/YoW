@@ -56,30 +56,15 @@ export function deleteSceneVersion(versionId) {
   save(all.filter(v => v.id !== versionId))
 }
 
-/**
- * Removes every saved version snapshot belonging to a deleted project —
- * the version-history half of audit finding #16 ("Project deletion can
- * leave per-scene keys"): all scene versions live in one flat blob under
- * `nf_scene_versions` rather than per-scene keys, but that blob was never
- * filtered on project delete at all, so every version of every scene in a
- * deleted project stayed on disk indefinitely.
- *
- * Matches primarily on each version's own `novelId` (set at save time —
- * see `saveSceneVersion` above). `sceneIds` is an optional fallback set
- * (the caller — `deleteNovel` in useStore.js — already has it from
- * `deleteAllSceneContentForNovel`'s return value) for the rare version
- * record saved before `novelId` existed on the scene it snapshotted, or
- * where the scene itself never carried one: those records have
- * `novelId: null`, so `novelId` alone can't identify them, but their
- * `sceneId` still can.
- */
-export function clearSceneVersionsForNovel(novelId, sceneIds = []) {
-  if (novelId == null) return
-  const sceneIdSet = new Set(sceneIds)
-  const all = load()
-  save(all.filter(v => {
-    if (v.novelId === novelId) return false
-    if (v.novelId == null && sceneIdSet.has(v.sceneId)) return false
-    return true
-  }))
-}
+// A standalone `clearSceneVersionsForNovel(novelId, sceneIds)` used to live
+// here — the version-history half of audit finding #16 ("Project deletion
+// can leave per-scene keys"), called from `deleteNovel` in useStore.js.
+// Removed 2026-09-12: project deletion moved to the atomic full-state
+// replacement path (`replaceProjectStorageAtomically`,
+// src/storage/projectReplacement.js), which already writes
+// `nf_scene_versions` as a full replacement filtered to only the retained
+// projects' versions (see `buildProjectReplacementEntries`'s
+// `source.sceneVersions` handling and `deleteNovel`'s own `nextData.sceneVersions`
+// computation) — a superset of what this function did, in the same atomic
+// operation as everything else project deletion touches. Confirmed via a
+// full-repo grep that nothing outside this file's own tests still called it.
