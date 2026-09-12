@@ -441,7 +441,6 @@ test('water can be outlined point by point and symbols can be dragged directly o
   expect(objects[2]).toMatchObject({ type:'stamp', properties:{ symbol:'castle' } })
   expect(objects[2].x).toBeCloseTo(1200*.72, -1)
   expect(objects[2].y).toBeCloseTo(800*.42, -1)
-  await page.screenshot({ path:'/private/tmp/yow-atlas-placement-improvements.png', fullPage:true })
 })
 
 test('land supports point-by-point and freehand drawing with immediate selection and movement', async ({ page }) => {
