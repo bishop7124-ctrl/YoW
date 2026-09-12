@@ -43,19 +43,23 @@ function isSensitiveStorageKey(key) {
 // Removes any sensitive keys a pre-fix build may already have copied into
 // this vault's live database, so an existing installation self-heals on its
 // next successful connection rather than needing a separate migration step.
-// Best-effort: a failure here shouldn't block using the vault. Deliberately
-// narrow in scope, not a full remediation — see the P0-10 Bugs table row in
-// docs/ROADMAP.md for what this does *not* cover (existing snapshot/backup
-// .db copies, and whether a SQL DELETE here is a secure erase at the SQLite
-// storage layer) and why: both need native testing this sandboxed session
-// can't do.
+// Best-effort: a failure here shouldn't block using the vault. Returns how
+// many keys were actually removed, so the caller knows whether this vault
+// might have pre-fix `secure_delete`-off residue worth scrubbing (see
+// `vault_secure_erase_residue` in src-tauri/src/lib.rs) — a database that
+// never had a sensitive key to begin with has nothing to scrub.
 function scrubSensitiveVaultEntries(backend) {
+  let removedCount = 0
   try {
     const existingKeys = Object.keys(backend.snapshot?.() || {})
     for (const key of existingKeys) {
-      if (isSensitiveStorageKey(key)) backend.removeItem(key)
+      if (isSensitiveStorageKey(key)) {
+        backend.removeItem(key)
+        removedCount += 1
+      }
     }
   } catch { /* best-effort cleanup only */ }
+  return removedCount
 }
 
 // Removes any sensitive key (isSensitiveStorageKey()) from every existing
@@ -69,7 +73,11 @@ function scrubSensitiveVaultEntries(backend) {
 // sensitive-key predicate itself is not duplicated into Rust — Rust only
 // exposes generic read/remove-by-key commands against an arbitrary backup
 // file (vault_snapshot_read_all/vault_snapshot_remove_keys), matching the
-// same read/write split the live vault already uses.
+// same read/write split the live vault already uses. A SQL DELETE alone
+// isn't a secure erase at the SQLite storage layer (freed-page/WAL residue
+// can survive it) — vault_snapshot_secure_erase_residue (VACUUM + a full WAL
+// checkpoint) is invoked right after removing keys from a given snapshot to
+// close that gap for it too, same as the live vault below.
 export async function scrubDesktopVaultSnapshots() {
   const invoke = getTauriInvoke()
   const summary = { scannedSnapshots: 0, scrubbedSnapshots: 0, scrubbedKeys: 0 }
@@ -96,6 +104,13 @@ export async function scrubDesktopVaultSnapshots() {
       await invoke('vault_snapshot_remove_keys', { name: snapshot.name, keys: sensitiveKeys })
       summary.scrubbedSnapshots += 1
       summary.scrubbedKeys += sensitiveKeys.length
+      try {
+        await invoke('vault_snapshot_secure_erase_residue', { name: snapshot.name })
+      } catch (error) {
+        // The keys are already removed from the kv table either way — a
+        // failed VACUUM leaves residue but not a live, readable secret.
+        console.error(`Could not secure-erase residue in desktop vault snapshot "${snapshot?.name}":`, error)
+      }
     } catch (error) {
       // One inaccessible/locked snapshot shouldn't stop the rest from being
       // scrubbed — same best-effort framing as scrubSensitiveVaultEntries.
@@ -184,7 +199,28 @@ async function connectVaultBackend({ onWriteError, retry }) {
 }
 
 function activateVaultBackend(backend) {
-  scrubSensitiveVaultEntries(backend)
+  const scrubbedLiveKeys = scrubSensitiveVaultEntries(backend)
+  if (scrubbedLiveKeys > 0) {
+    // scrubSensitiveVaultEntries only *enqueues* each removal on the
+    // backend's write-behind queue (see desktopVaultBackend.js) — the
+    // in-memory mirror updates immediately, but the actual SQLite DELETE is
+    // still a pending async IPC call at this point. Running the VACUUM-based
+    // residue scrub before those deletes land would just rebuild the file
+    // with the sensitive value still in its live table, achieving nothing.
+    // `flush()` never rejects (each queued write's own failure is caught
+    // internally and reported via onWriteError, not propagated here), so
+    // this is safe to proceed after unconditionally. Still fire-and-forget
+    // from this function's own caller's perspective — vault activation
+    // below doesn't wait on any of this, only this internal sequencing does.
+    // Only reached when this vault actually had a sensitive key to remove —
+    // an already-clean install (the common case going forward, now that
+    // secure_delete is on for every connection from the start) pays no
+    // VACUUM cost on launch. A failed residue scrub doesn't block anything
+    // either way; it just leaves the on-disk bytes lingering a little longer.
+    backend.flush().then(() => getTauriInvoke()?.('vault_secure_erase_residue')).catch(error => {
+      console.error('Desktop vault secure-erase residue cleanup failed:', error)
+    })
+  }
   // Fire-and-forget: scrubbing every existing backup file is real IPC/disk
   // work that shouldn't delay activating the vault the app is about to use,
   // but a failure still needs to surface somewhere rather than vanish.
