@@ -105,6 +105,41 @@ describe('automatic cloud-sync resume-on-renewal reconcile', () => {
     expect(reviewedData.characters).toEqual(data.characters)
   })
 
+  // Bugs table, 2026-09-12: the automatic same-session resume effect only
+  // fires on an observed true→false transition of `membership.isLocalMode`.
+  // If the app was closed for the *entire* lapse and only reopened after
+  // renewal, there is no transition to observe this session — only a plain
+  // login/refresh, which used to trust `importData`'s 30-minute local-trust
+  // window and, since a local write made during a days-long lapse is easily
+  // older than that, could silently apply cloud data with no merge at all.
+  // The plain login path now runs this exact same pipeline whenever a lapse
+  // snapshot is still pending (see `loadPendingDesktopLapseResumeBase` and
+  // its call site in App.jsx) — this proves the pipeline still closes the
+  // gap even though nothing in this test ever "observes" a transition,
+  // exactly matching that scenario.
+  it('resumes correctly even when nothing in this session ever observed the lapse ending', async () => {
+    const base = {
+      novels: [{ id: 'project-1', title: 'Project' }],
+      characters: [{ id: 'char-1', novelId: 'project-1', name: 'Antagonist', notes: 'original' }],
+    }
+    // A local-only edit made while the app was open during the lapse, days
+    // before this simulated relaunch — well outside importData's 30-minute
+    // local-trust window by the time the app reopens after renewal.
+    const local = {
+      novels: [{ id: 'project-1', title: 'Project' }],
+      characters: [{ id: 'char-1', novelId: 'project-1', name: 'Antagonist', notes: 'edited on this device during the lapse, days ago' }],
+    }
+    // Nothing else touched this account in the cloud while it was lapsed.
+    const cloud = base
+
+    expect(saveDesktopLapseSnapshot('user-1', base)).toBe(true)
+
+    const { reviewedData, conflicts } = await runAutoResume({ base, local, cloud })
+
+    expect(conflicts).toEqual([])
+    expect(reviewedData.characters[0].notes).toBe('edited on this device during the lapse, days ago')
+  })
+
   it('consumes the lapse snapshot once the resume completes', async () => {
     const base = { novels: [{ id: 'project-1', title: 'Project' }] }
     saveDesktopLapseSnapshot('user-1', base)

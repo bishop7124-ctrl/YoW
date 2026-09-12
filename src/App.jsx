@@ -36,6 +36,7 @@ import {
   isLocalFirstMode,
   loadDesktopLapseSnapshot,
   loadLocalFirstSnapshot,
+  loadPendingDesktopLapseResumeBase,
   loadStorageMode,
   saveDesktopLapseSnapshot,
   saveLocalFirstSnapshot,
@@ -390,6 +391,22 @@ function AppInner() {
   // moment the lapse ends, applies the merge, and surfaces any genuine
   // conflicts through the existing record-conflict banner instead of letting
   // either side's edits get silently discarded.
+  //
+  // Shared with the primary user-data-load effect further below: that effect
+  // does the identical reconcile inline whenever it finds a pending lapse
+  // snapshot on plain login/refresh (see its own comment for why — the app
+  // can be closed for an entire lapse and reopened only after renewal, which
+  // has no in-session true→false transition for the effect just below to
+  // observe at all).
+  const reconcileDesktopLapseResume = async (cloudData, pendingBase) => {
+    const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+    const cloud = pruneSaveDataToProjects(cloudData)
+    const baseData = pruneSaveDataToProjects(pendingBase)
+    const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloud, baseData)
+    const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
+    return { reviewedData, conflicts }
+  }
+
   useEffect(() => {
     if (!desktopApp || !userId || !membership.isLocalMode) return
     // Capture the merge base while lapsed. This deliberately does not try to
@@ -425,12 +442,21 @@ function AppInner() {
         // below. A tiny residual window remains (the merge computation and
         // the write-back are not instant either) — same inherent limitation
         // the manual Resume Cloud Sync flow above already has.
-        const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
+        const cloudData = await loadUserData(userId)
         if (cancelled) return
-        const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
-        const baseData = pruneSaveDataToProjects(pendingBase)
-        const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloudData, baseData)
-        const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
+        // The primary user-data-load effect (further below) runs this exact
+        // same reconcile inline whenever it finds a pending lapse snapshot on
+        // a plain login/refresh, reusing data it already had in hand instead
+        // of fetching again here — so it normally finishes first. If it
+        // already consumed and cleared the snapshot by the time this fetch
+        // resolves, bail instead of merging and importing a second time: that
+        // would just redundantly reapply the same merge and double-surface
+        // its conflicts in the record-conflict banner.
+        if (!loadDesktopLapseSnapshot(userId)) {
+          if (!cancelled) setResumingCloudSyncAfterLapse(false)
+          return
+        }
+        const { reviewedData, conflicts } = await reconcileDesktopLapseResume(cloudData, pendingBase)
         if (cancelled) return
         // preferLocal: false — see the matching call in handleStorageModeChange.
         importData(reviewedData, { preferLocal: false })
@@ -896,8 +922,33 @@ function AppInner() {
     const hasLocalResumeData = Array.isArray(localResumeData?.novels) && localResumeData.novels.length > 0
     setDataLoading(!hasLocalResumeData)
     loadUserData(userId)
-      .then(data => {
-        importData(data)
+      .then(async data => {
+        // `importData`'s own local-trust window only covers a brief same-
+        // session reload/network hiccup (see its comment in useStore.js) —
+        // it is not sized for a multi-day desktop hosting lapse, so a local
+        // edit made while lapsed can already be well outside that window by
+        // the time hosting renews. The in-session automatic-resume effect
+        // above only fires on an observed true→false transition, which never
+        // happens if the app was closed for the *entire* lapse and only
+        // reopened after renewal — this plain login path is the only one
+        // that runs in that case. So: if a lapse snapshot is still pending
+        // and the account isn't (as far as this render knows) still lapsed,
+        // treat this load as a lapse resume and merge before importing,
+        // instead of calling `importData(data)` wholesale and risking a
+        // silent, unmerged discard of those local-only edits.
+        const pendingLapseBase = loadPendingDesktopLapseResumeBase(userId, {
+          desktopApp,
+          isLocalMode: membership.isLocalMode,
+          userLocalFirstMode,
+        })
+        if (pendingLapseBase) {
+          const { reviewedData, conflicts } = await reconcileDesktopLapseResume(data, pendingLapseBase)
+          importData(reviewedData, { preferLocal: false })
+          store.addRecordConflicts?.(conflicts || [])
+          clearDesktopLapseSnapshot(userId)
+        } else {
+          importData(data)
+        }
         // URL takes priority over remote last-active project; also restore the view/section
         const urlNovelId = initialRoute.current.novelId
         if (urlNovelId) {
