@@ -99,3 +99,22 @@ export function clearDesktopLapseSnapshot(userId) {
   if (!userId) return
   try { removeItem(desktopLapseSnapshotKey(userId)) } catch { /* storage unavailable */ }
 }
+
+// Decides whether a data load (a plain login/refresh, not just the in-session
+// entitlement-transition effect) should be treated as resuming from a desktop
+// hosting lapse rather than a normal reload. Needed because the app can be
+// closed for an *entire* lapse and only reopened after renewal — there is no
+// true→false transition to observe in that case, only a snapshot already
+// sitting in storage from before the app closed. Any caller that finds a
+// non-null return here must merge (e.g. via `reconcileCloudSyncData` against
+// this base) before trusting freshly loaded cloud data, instead of applying
+// it wholesale — plain timestamp-based freshness checks (like `importData`'s
+// 30-minute local-trust window) are sized for a brief reload/network hiccup
+// and cannot be relied on to protect a local-only edit made days into a lapse.
+export function loadPendingDesktopLapseResumeBase(userId, { desktopApp, isLocalMode, userLocalFirstMode } = {}) {
+  if (!desktopApp || !userId) return null
+  // Still lapsed, or deliberately still in manual Local-first mode: cloud
+  // sync isn't resuming yet, so there is nothing to reconcile against yet.
+  if (isLocalMode || userLocalFirstMode) return null
+  return loadDesktopLapseSnapshot(userId)
+}
