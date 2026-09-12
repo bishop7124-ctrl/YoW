@@ -55,8 +55,17 @@ test('project ZIP export/import round trip preserves Atlas map drawings and link
 
   // Draw one Land shape (a simple drag, same gesture atlas-builder.spec.js
   // uses for Room) so the exported map carries at least one additional
-  // geometric object, not just a pin.
+  // geometric object, not just a pin. Land's default drawing mode is now
+  // point-by-point (click each coastline point, then Finish/double-click/
+  // Enter) rather than a single drag — a plain drag under that default
+  // only adds one point to an in-progress, uncommitted draft, which gets
+  // silently discarded the moment the tool changes (see visibleObjects in
+  // AtlasBuilder.jsx appending an uncommitted draft for display only).
+  // Switch to Freehand mode first so this drag actually commits a real
+  // object, matching the pattern atlas-builder.spec.js's own tests already
+  // use for the same reason.
   await page.getByRole('button', { name: 'Land', exact: true }).click()
+  await page.getByRole('group', { name: 'Land drawing mode' }).getByRole('button', { name: 'Freehand' }).click()
   await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4, { steps: 8 })
