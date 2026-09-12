@@ -419,6 +419,17 @@ function AppInner() {
     return { reviewedData, conflicts }
   }
 
+  // Applies a completed resume's result — used by both the claim effect's own
+  // success path and the primary load effect's fallback retry, so the two
+  // can't silently drift apart on what "finished resuming" actually does.
+  const applyDesktopLapseResumeResult = (reviewedData, conflicts) => {
+    // preferLocal: false — see the matching call in handleStorageModeChange.
+    importData(reviewedData, { preferLocal: false })
+    store.addRecordConflicts?.(conflicts || [])
+    clearDesktopLapseSnapshot(userId)
+    setResumingCloudSyncAfterLapse(false)
+  }
+
   useEffect(() => {
     if (!desktopApp || !userId || !membership.isLocalMode) return
     // Capture the merge base while lapsed. This deliberately does not try to
@@ -470,11 +481,7 @@ function AppInner() {
         if (cancelled) return { ok: false }
         const { reviewedData, conflicts } = await reconcileDesktopLapseResume(cloudData, pendingBase)
         if (cancelled) return { ok: false }
-        // preferLocal: false — see the matching call in handleStorageModeChange.
-        importData(reviewedData, { preferLocal: false })
-        store.addRecordConflicts?.(conflicts || [])
-        clearDesktopLapseSnapshot(userId)
-        if (!cancelled) setResumingCloudSyncAfterLapse(false)
+        applyDesktopLapseResumeResult(reviewedData, conflicts)
         return { ok: true }
       } catch (error) {
         // Deliberately do NOT clear resumingCloudSyncAfterLapse here: leaving
@@ -985,14 +992,10 @@ function AppInner() {
           } else {
             try {
               const { reviewedData, conflicts } = await reconcileDesktopLapseResume(data, retryBase)
-              importData(reviewedData, { preferLocal: false })
-              store.addRecordConflicts?.(conflicts || [])
-              clearDesktopLapseSnapshot(userId)
-              // The claimed attempt's own failure path left cloud sync
-              // paused (see its comment) — this retry just fully recovered
-              // it, so undo that pause too, or cloud sync would otherwise
-              // stay silently disabled for the rest of the session.
-              setResumingCloudSyncAfterLapse(false)
+              // Also undoes the claimed attempt's own failure path leaving
+              // cloud sync paused (see its comment) — this retry just fully
+              // recovered it.
+              applyDesktopLapseResumeResult(reviewedData, conflicts)
             } catch (error) {
               console.error('[YOW] Fallback desktop-lapse resume reconcile also failed:', error)
               importData(data)
