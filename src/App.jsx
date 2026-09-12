@@ -34,8 +34,8 @@ import {
   STORAGE_MODES,
   clearDesktopLapseSnapshot,
   isLocalFirstMode,
-  loadDesktopLapseSnapshot,
   loadLocalFirstSnapshot,
+  loadPendingDesktopLapseResumeBase,
   loadStorageMode,
   saveDesktopLapseSnapshot,
   saveLocalFirstSnapshot,
@@ -293,6 +293,18 @@ function AppInner() {
   const tourStore = useTourStore({ remoteFlags: user?.user_metadata?.tour_progress, onPersist: persistTourProgress })
   const firstUrlSync = useRef(true)
   const loadedUid = useRef(null)
+  // Holds the in-flight desktop-lapse resume Promise (or `false`) once the
+  // automatic same-session resume-on-renewal effect below claims a pending
+  // lapse snapshot — it always runs its synchronous check before the
+  // primary data-load effect's async `.then` callback can ever fire, so it
+  // always wins this claim when both are eligible for a given login. The
+  // primary effect awaits this same Promise rather than re-checking whether
+  // a snapshot is still pending (that alone can't tell "never pending" apart
+  // from "already resumed") and only imports its own already-fetched data if
+  // the awaited resume did not actually succeed — a last-resort fallback so
+  // a failed resume attempt still leaves the app showing *something* rather
+  // than an empty state indistinguishable from real data loss.
+  const lapseResumeClaimed = useRef(false)
   const localModeNoticeKey = useMemo(
     () => getLocalModeNoticeKey(userId, membership, storageMode),
     [userId, membership, storageMode]
@@ -390,6 +402,34 @@ function AppInner() {
   // moment the lapse ends, applies the merge, and surfaces any genuine
   // conflicts through the existing record-conflict banner instead of letting
   // either side's edits get silently discarded.
+  //
+  // Shared with the primary user-data-load effect further below: that effect
+  // never runs this merge itself. It only awaits whichever outcome the
+  // effect just below produces, whenever that effect claims a pending lapse
+  // snapshot first — see both call sites' own comments for the full
+  // coordination and why (in short: the app can be closed for an entire
+  // lapse and reopened only after renewal, which has no in-session
+  // true→false transition for the effect just below to observe at all).
+  const reconcileDesktopLapseResume = async (cloudData, pendingBase) => {
+    const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+    const cloud = pruneSaveDataToProjects(cloudData)
+    const baseData = pruneSaveDataToProjects(pendingBase)
+    const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloud, baseData)
+    const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
+    return { reviewedData, conflicts }
+  }
+
+  // Applies a completed resume's result — used by both the claim effect's own
+  // success path and the primary load effect's fallback retry, so the two
+  // can't silently drift apart on what "finished resuming" actually does.
+  const applyDesktopLapseResumeResult = (reviewedData, conflicts) => {
+    // preferLocal: false — see the matching call in handleStorageModeChange.
+    importData(reviewedData, { preferLocal: false })
+    store.addRecordConflicts?.(conflicts || [])
+    clearDesktopLapseSnapshot(userId)
+    setResumingCloudSyncAfterLapse(false)
+  }
+
   useEffect(() => {
     if (!desktopApp || !userId || !membership.isLocalMode) return
     // Capture the merge base while lapsed. This deliberately does not try to
@@ -410,13 +450,25 @@ function AppInner() {
     // sync does not actually resume yet — that later transition goes through
     // the manual `getResumeCloudSyncPreview`/`handleStorageModeChange` flow
     // above instead, which already merges properly.
-    if (membership.isLocalMode || userLocalFirstMode) return undefined
-    const pendingBase = loadDesktopLapseSnapshot(userId)
+    const pendingBase = loadPendingDesktopLapseResumeBase(userId, {
+      desktopApp,
+      isLocalMode: membership.isLocalMode,
+      userLocalFirstMode,
+    })
     if (!pendingBase) return undefined
-
+    // Claim synchronously, before any async work starts: this effect's body
+    // always runs (in React's mount-order-of-declaration guarantee) before
+    // the primary user-data-load effect's `loadUserData(...).then(...)`
+    // callback can ever fire, so it always wins this claim whenever both are
+    // eligible (same guard conditions above). The claim is the in-flight
+    // Promise itself (resolving to whether it actually succeeded) rather
+    // than a plain boolean: that lets the primary effect await the *outcome*
+    // and fall back to importing its own already-fetched data if this
+    // resume ends up failing, instead of leaving the app showing an empty,
+    // indistinguishable-from-data-loss state until a manual restart.
     let cancelled = false
     setResumingCloudSyncAfterLapse(true)
-    ;(async () => {
+    lapseResumeClaimed.current = (async () => {
       try {
         // Fetch cloud data (the slow, network-bound step) before taking the
         // local snapshot, not after — narrows the window in which a local
@@ -425,18 +477,12 @@ function AppInner() {
         // below. A tiny residual window remains (the merge computation and
         // the write-back are not instant either) — same inherent limitation
         // the manual Resume Cloud Sync flow above already has.
-        const cloudData = pruneSaveDataToProjects(await loadUserData(userId))
-        if (cancelled) return
-        const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
-        const baseData = pruneSaveDataToProjects(pendingBase)
-        const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloudData, baseData)
-        const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
-        if (cancelled) return
-        // preferLocal: false — see the matching call in handleStorageModeChange.
-        importData(reviewedData, { preferLocal: false })
-        store.addRecordConflicts?.(conflicts || [])
-        clearDesktopLapseSnapshot(userId)
-        if (!cancelled) setResumingCloudSyncAfterLapse(false)
+        const cloudData = await loadUserData(userId)
+        if (cancelled) return { ok: false }
+        const { reviewedData, conflicts } = await reconcileDesktopLapseResume(cloudData, pendingBase)
+        if (cancelled) return { ok: false }
+        applyDesktopLapseResumeResult(reviewedData, conflicts)
+        return { ok: true }
       } catch (error) {
         // Deliberately do NOT clear resumingCloudSyncAfterLapse here: leaving
         // cloud sync paused for the rest of this session is a safe fail-
@@ -447,6 +493,7 @@ function AppInner() {
         // in place, so restarting the app (which re-runs this effect fresh
         // on mount) gets another chance to reconcile.
         if (!cancelled) console.error('[YOW] Automatic cloud-sync resume-on-renewal reconcile failed:', error)
+        return { ok: false }
       }
     })()
     return () => { cancelled = true }
@@ -866,6 +913,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) {
       loadedUid.current = null
+      lapseResumeClaimed.current = false
       clearData()
       finishRemoteLoad()
       setDataLoadError(false)
@@ -891,13 +939,69 @@ function AppInner() {
       return
     }
     loadedUid.current = loadKey
+    // Deliberately not reset here on every load (only on sign-out above): a
+    // prior attempt's settled claim Promise is cheap to re-await and its
+    // resolved `{ ok }` still correctly decides whether *this* retry's fresh
+    // fetch below needs to be imported as a fallback.
 
     const localResumeData = store.getLocalSnapshot?.()
     const hasLocalResumeData = Array.isArray(localResumeData?.novels) && localResumeData.novels.length > 0
     setDataLoading(!hasLocalResumeData)
     loadUserData(userId)
-      .then(data => {
-        importData(data)
+      .then(async data => {
+        // `importData`'s own local-trust window only covers a brief same-
+        // session reload/network hiccup (see its comment in useStore.js) —
+        // it is not sized for a multi-day desktop hosting lapse, so a local
+        // edit made while lapsed can already be well outside that window by
+        // the time hosting renews. The in-session automatic-resume effect
+        // above only fires on an observed true→false transition, which never
+        // happens if the app was closed for the *entire* lapse and only
+        // reopened after renewal — this plain login path is the only one
+        // that runs at all in that case, at the same moment the effect above
+        // is *also* mounting and independently discovering the very same
+        // pending snapshot. That effect always wins the `lapseResumeClaimed`
+        // claim (its synchronous check runs before this `.then` can ever
+        // fire — see its own comment), so rather than fall back to a plain
+        // `importData(data)` — which couldn't tell "no resume was ever
+        // pending" apart from "one was pending and already resumed," and in
+        // the latter case would silently re-apply this fetch's unmerged
+        // `data` right over the just-completed merge — this path awaits that
+        // same claim's outcome first.
+        const claimedResume = lapseResumeClaimed.current
+        if (!claimedResume) {
+          importData(data)
+        } else if (!(await claimedResume).ok) {
+          // The claimed resume failed (and, per its own comment, deliberately
+          // left the lapse snapshot in place rather than clear it) — a plain
+          // `importData(data)` here would just reintroduce the exact bug
+          // this fetch's merge was supposed to prevent, since `data`'s local
+          // edit is, by definition of even reaching this branch, well
+          // outside importData's 30-minute local-trust window. Retry the
+          // merge here instead, against this fetch's own already-loaded
+          // cloud `data` (no second network round trip needed) and whatever
+          // base is still pending. Only if *that* also fails does this fall
+          // back to the plain unmerged import, as the true last resort so
+          // the app shows something rather than staying on its empty state.
+          const retryBase = loadPendingDesktopLapseResumeBase(userId, {
+            desktopApp,
+            isLocalMode: membership.isLocalMode,
+            userLocalFirstMode,
+          })
+          if (!retryBase) {
+            importData(data)
+          } else {
+            try {
+              const { reviewedData, conflicts } = await reconcileDesktopLapseResume(data, retryBase)
+              // Also undoes the claimed attempt's own failure path leaving
+              // cloud sync paused (see its comment) — this retry just fully
+              // recovered it.
+              applyDesktopLapseResumeResult(reviewedData, conflicts)
+            } catch (error) {
+              console.error('[YOW] Fallback desktop-lapse resume reconcile also failed:', error)
+              importData(data)
+            }
+          }
+        }
         // URL takes priority over remote last-active project; also restore the view/section
         const urlNovelId = initialRoute.current.novelId
         if (urlNovelId) {
