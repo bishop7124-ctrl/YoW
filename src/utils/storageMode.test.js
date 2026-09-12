@@ -1,22 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createMemoryBackend, resetStorageBackend, setStorageBackend } from '../storage/projectStorage'
 import {
   STORAGE_MODES,
+  clearDesktopLapseSnapshot,
   isLocalFirstMode,
+  loadDesktopLapseSnapshot,
   loadLocalFirstSnapshot,
   loadStorageMode,
+  saveDesktopLapseSnapshot,
   saveLocalFirstSnapshot,
   saveStorageMode,
 } from './storageMode'
 
+// The test environment runs under Node (no `window`), so the storage
+// abstraction's default backend is already the in-memory one — but it's a
+// module-level singleton, not reset between tests on its own. Give every
+// test its own fresh backend explicitly rather than relying on a
+// `window.localStorage` stub that this module never actually reads in Node.
 beforeEach(() => {
-  const store = new Map()
-  vi.stubGlobal('localStorage', {
-    getItem: vi.fn(key => store.get(key) ?? null),
-    setItem: vi.fn((key, value) => { store.set(key, String(value)) }),
-    removeItem: vi.fn(key => { store.delete(key) }),
-    clear: vi.fn(() => { store.clear() }),
-  })
-  localStorage.clear()
+  setStorageBackend(createMemoryBackend())
+})
+
+afterEach(() => {
+  resetStorageBackend()
 })
 
 describe('storage mode preferences', () => {
@@ -45,5 +51,41 @@ describe('local-first snapshots', () => {
 
     expect(loadLocalFirstSnapshot('user-a')).toEqual(snapshot)
     expect(loadLocalFirstSnapshot('user-b')).toBeNull()
+  })
+})
+
+describe('desktop lapse snapshots', () => {
+  it('stores and restores a user-scoped snapshot captured when hosting lapses', () => {
+    const snapshot = {
+      novels: [{ id: 'novel-1', title: 'Written while lapsed' }],
+      scenes: [{ id: 'scene-1', novelId: 'novel-1', content: 'Offline during the lapse' }],
+    }
+
+    expect(saveDesktopLapseSnapshot('user-a', snapshot)).toBe(true)
+
+    expect(loadDesktopLapseSnapshot('user-a')).toEqual(snapshot)
+    expect(loadDesktopLapseSnapshot('user-b')).toBeNull()
+  })
+
+  it('does not overwrite an existing, not-yet-consumed snapshot', () => {
+    const firstLapse = { novels: [{ id: 'novel-1', title: 'First lapse base' }] }
+    const secondLapse = { novels: [{ id: 'novel-1', title: 'Second lapse base' }] }
+
+    expect(saveDesktopLapseSnapshot('user-a', firstLapse)).toBe(true)
+    expect(saveDesktopLapseSnapshot('user-a', secondLapse)).toBe(false)
+
+    expect(loadDesktopLapseSnapshot('user-a')).toEqual(firstLapse)
+  })
+
+  it('allows a fresh snapshot once the previous one is consumed/cleared', () => {
+    const firstLapse = { novels: [{ id: 'novel-1', title: 'First lapse base' }] }
+    const secondLapse = { novels: [{ id: 'novel-1', title: 'Second lapse base' }] }
+
+    saveDesktopLapseSnapshot('user-a', firstLapse)
+    clearDesktopLapseSnapshot('user-a')
+
+    expect(loadDesktopLapseSnapshot('user-a')).toBeNull()
+    expect(saveDesktopLapseSnapshot('user-a', secondLapse)).toBe(true)
+    expect(loadDesktopLapseSnapshot('user-a')).toEqual(secondLapse)
   })
 })
