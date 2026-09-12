@@ -206,9 +206,11 @@ describe('tauri vault adapter', () => {
   it('scrubs sensitive keys a pre-fix build already copied into the vault, on the very next successful connection (audit P0-10)', async () => {
     vi.stubEnv('MODE', 'desktop')
     const removedKeys = []
+    const commandsCalled = []
     window.__TAURI__ = {
       core: {
         invoke: vi.fn(async (command, payload) => {
+          commandsCalled.push(command)
           if (command === 'vault_read_all') {
             return [
               { key: 'nf_novels', value: '[{"id":"novel-1"}]' },
@@ -231,12 +233,88 @@ describe('tauri vault adapter', () => {
     expect(backend.getItem('nf_aiSettings')).toBeNull()
     expect(backend.getItem('sb-abcdefgh-auth-token')).toBeNull()
     expect(removedKeys).toEqual(expect.arrayContaining(['nf_aiSettings', 'sb-abcdefgh-auth-token']))
+    // A SQL DELETE alone isn't a secure erase at the SQLite storage layer
+    // (freed-page/WAL residue can survive it) — a vault that actually had
+    // something to scrub must also trigger the VACUUM-based residue cleanup.
+    expect(commandsCalled).toContain('vault_secure_erase_residue')
+
+    resetStorageBackend()
+  })
+
+  it('waits for the sensitive-key removal to actually reach SQLite before running the residue VACUUM', async () => {
+    vi.stubEnv('MODE', 'desktop')
+    const commandsCalled = []
+    let resolveRemoval
+    const removalPromise = new Promise(resolve => { resolveRemoval = resolve })
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async (command) => {
+          if (command === 'vault_read_all') {
+            return [{ key: 'nf_aiSettings', value: JSON.stringify({ apiKey: 'sk-leaked' }) }]
+          }
+          if (command === 'vault_remove_item') {
+            // Deliberately does not resolve until the test says so — proves
+            // scrubSensitiveVaultEntries's removal isn't just *enqueued* by
+            // the time vault_secure_erase_residue fires, it has actually
+            // completed (or at least been attempted) first. Firing the
+            // VACUUM before this resolves would rebuild the file with the
+            // sensitive value still present in its live table.
+            await removalPromise
+          }
+          commandsCalled.push(command)
+          return null
+        }),
+      },
+    }
+
+    const { initializeDesktopVaultStorage } = await import('./tauriVaultAdapter.js')
+    const { resetStorageBackend } = await import('./projectStorage.js')
+    const backend = await initializeDesktopVaultStorage()
+
+    // Give any wrongly-sequenced fire-and-forget code a chance to run before
+    // the removal resolves — if vault_secure_erase_residue were dispatched
+    // eagerly, it would already be recorded here.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(commandsCalled).not.toContain('vault_secure_erase_residue')
+
+    resolveRemoval()
+    await backend.flush()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(commandsCalled).toContain('vault_secure_erase_residue')
+    resetStorageBackend()
+  })
+
+  it('does not run the residue cleanup when the vault had nothing sensitive to scrub', async () => {
+    vi.stubEnv('MODE', 'desktop')
+    const commandsCalled = []
+    window.__TAURI__ = {
+      core: {
+        invoke: vi.fn(async (command) => {
+          commandsCalled.push(command)
+          if (command === 'vault_read_all') return [{ key: 'nf_novels', value: '[{"id":"novel-1"}]' }]
+          return null
+        }),
+      },
+    }
+
+    const { initializeDesktopVaultStorage } = await import('./tauriVaultAdapter.js')
+    const { resetStorageBackend } = await import('./projectStorage.js')
+    const backend = await initializeDesktopVaultStorage()
+    await backend.flush()
+
+    // An already-clean install shouldn't pay a VACUUM's disk/latency cost on
+    // every single launch — only a vault that actually had a sensitive key
+    // removed needs its residue scrubbed.
+    expect(commandsCalled).not.toContain('vault_secure_erase_residue')
 
     resetStorageBackend()
   })
 
   it('scrubs sensitive keys out of existing snapshot/backup files, leaving clean ones and non-sensitive keys untouched (audit P0-10 follow-up)', async () => {
     const removals = []
+    const residueErased = []
     window.__TAURI__ = {
       core: {
         invoke: vi.fn(async (command, payload) => {
@@ -263,6 +341,10 @@ describe('tauri vault adapter', () => {
             removals.push([payload.name, payload.keys])
             return payload.keys.length
           }
+          if (command === 'vault_snapshot_secure_erase_residue') {
+            residueErased.push(payload.name)
+            return null
+          }
           return null
         }),
       },
@@ -280,6 +362,10 @@ describe('tauri vault adapter', () => {
     )
     // The clean snapshot's name never appears in a removal call at all.
     expect(removals.some(([name]) => name === 'vault-snapshot-2.db')).toBe(false)
+    // A SQL DELETE alone isn't a secure erase — every snapshot that actually
+    // had a key removed must also get its residue VACUUM'd, and the clean
+    // one must not (nothing to scrub, no cost to pay).
+    expect(residueErased.sort()).toEqual(['vault-auto-1.db', 'vault-before-restore-3.db'])
   })
 
   it('keeps scrubbing remaining snapshots after one fails to read or scrub (audit P0-10 follow-up)', async () => {
