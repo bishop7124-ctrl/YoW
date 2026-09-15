@@ -4,7 +4,7 @@ import {
   buildScriptBlocks, getScriptElements, getScriptElementLabel, getNextScriptElementAfterEnter,
   getScriptBlockIndexAtOffset, syncScriptBlocks,
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
-  copyTextToClipboard,
+  copyTextToClipboard, stripNoteMarkers, NOTE_MARKER_RE,
 } from './manuscriptUtils.js'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
@@ -249,16 +249,6 @@ function getPreviewCaretRect(preview, rawOffset) {
 }
 
 // ─── Entity / note parsing ────────────────────────────────────────────────────
-
-const NOTE_MARKER_RE = /\s?\[\[(\d+)\]\]\s?/g
-
-function stripNoteMarkers(content) {
-  return (content || '').replace(NOTE_MARKER_RE, (match, _seq, offset, text) => {
-    const before = text[offset - 1]
-    const after = text[offset + match.length]
-    return before && after && /\S/.test(before) && /\S/.test(after) ? ' ' : ''
-  })
-}
 
 function parseSegments(content, entityNames, entityMap, notes = []) {
   if (!content) return []
@@ -817,6 +807,11 @@ const SceneEditorImpl = ({
   const presenceBlockedRef = useRef(false)
   const editBaselineRef = useRef(localContent)
   const textareaRef = useRef(null)
+  // Bumped by every imperative focus() call with an object placeCursor —
+  // lets that call's own bounded reapply-retry loop (see innerRef below)
+  // recognize a newer focus()/user edit superseded it and stop, instead of
+  // fighting over the selection for its whole retry window.
+  const highlightRequestTokenRef = useRef(0)
   const wrapperRef = useRef(null)
   const visualCaretFrameRef = useRef(null)
   const activeVisualCaretRef = useRef({ marker: null, textarea: null })
@@ -1274,6 +1269,10 @@ const SceneEditorImpl = ({
     if (!innerRef) return
     innerRef({
       focus: ({ placeCursor = 'end' } = {}) => {
+        // Invalidate any still-running reapply loop from an earlier object
+        // placeCursor call — this new focus() call (even a plain 'end' one)
+        // wins from here on, not the older one.
+        const myToken = ++highlightRequestTokenRef.current
         setFocused(true)
         setTimeout(() => {
           const ta = textareaRef.current
@@ -1287,6 +1286,49 @@ const SceneEditorImpl = ({
 	            const end = localContentRef.current.length
 	            ta.setSelectionRange(end, end)
 	            lastSelectionRef.current = { start: end, end }
+	          } else if (placeCursor && typeof placeCursor === 'object') {
+	            // A specific raw {start, end} range (e.g. a search match) —
+	            // select it so it's visibly highlighted via the native text
+	            // selection, and the browser's own "scroll caret into view"
+	            // behavior on setSelectionRange brings it on screen.
+	            const len = localContentRef.current.length
+	            const start = Math.max(0, Math.min(placeCursor.start ?? 0, len))
+	            const end = Math.max(start, Math.min(placeCursor.end ?? start, len))
+	            ta.setSelectionRange(start, end)
+	            lastSelectionRef.current = { start, end }
+	            // Something outside this component (e.g. the caller closing a
+	            // search/AI surface right around the same time) can still
+	            // replace this textarea's own DOM node a few ms later, which
+	            // silently drops a plain one-shot selection. Re-apply for a
+	            // short bounded window so the highlight survives that kind of
+	            // external churn instead of racing it — but stop the moment
+	            // the user does anything (types, clicks anywhere, a newer
+	            // focus() call supersedes this one) rather than fighting them
+	            // for the rest of the window. Listens at the document level,
+	            // not on `ta` itself, since the churn this guards against can
+	            // replace that exact node with a new one the listener
+	            // wouldn't be attached to.
+	            const cancelOnUserInput = () => { highlightRequestTokenRef.current++ }
+	            document.addEventListener('keydown', cancelOnUserInput, { capture: true, once: true })
+	            document.addEventListener('mousedown', cancelOnUserInput, { capture: true, once: true })
+	            const stopListening = () => {
+	              document.removeEventListener('keydown', cancelOnUserInput, { capture: true })
+	              document.removeEventListener('mousedown', cancelOnUserInput, { capture: true })
+	            }
+	            let attempts = 0
+	            const reapply = () => {
+	              attempts++
+	              if (highlightRequestTokenRef.current !== myToken) { stopListening(); return }
+	              const current = textareaRef.current
+	              if (current && document.contains(current) && (current.selectionStart !== start || current.selectionEnd !== end)) {
+	                current.focus({ preventScroll: true })
+	                current.setSelectionRange(start, end)
+	                lastSelectionRef.current = { start, end }
+	              }
+	              if (attempts < 6) window.setTimeout(reapply, 50)
+	              else stopListening()
+	            }
+	            window.setTimeout(reapply, 50)
 	          }
 	          syncFloatingNoteButton()
 	        }, 0)
