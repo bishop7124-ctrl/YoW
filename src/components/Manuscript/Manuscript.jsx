@@ -906,14 +906,17 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
   }, [activeNovel, acts, chapters, scenes, chapterGlobalNumbers])
 
-  // Navigate from sidebar click
-  const handleSelectScene = useCallback((sceneId) => {
+  // Navigate from sidebar click. `matchRange` (optional {start, end}) comes
+  // from ManuscriptSearch's "Go to scene" — selects that raw text range
+  // instead of placing the caret at the end, so the matched text is visibly
+  // highlighted (native selection) once the scene comes into view.
+  const handleSelectScene = useCallback((sceneId, matchRange) => {
     setActiveSceneId(sceneId)
     requestAnimationFrame(() => {
       document.getElementById(`ms-scene-${sceneId}`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
-    setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: 'end' }), 200)
+    setTimeout(() => editorRefs.current[sceneId]?.focus({ placeCursor: matchRange || 'end' }), 200)
   }, [setActiveSceneId])
 
   // Clicking a virtualized-away scene's placeholder (see SceneSlot above) — setting it
