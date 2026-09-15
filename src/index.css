@@ -17527,9 +17527,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .ms-search-input {
   flex: 1;
+  /* A text input's default flex min-width is its intrinsic content size, not
+     0 — without this it refuses to shrink below that and can push the Aa/W/
+     Replace controls in .ms-search-row past the panel's edge instead of
+     yielding space to them. */
+  min-width: 0;
   height: 32px;
   padding: 0 10px;
   border-radius: var(--r-sm);
