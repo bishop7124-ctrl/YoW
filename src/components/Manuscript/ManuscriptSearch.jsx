@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { saveSceneVersion } from '../../utils/sceneVersions'
+import { stripNoteMarkers } from './manuscriptUtils.js'
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -18,6 +19,24 @@ function countMatches(content, regex) {
   if (!content || !regex) return 0
   regex.lastIndex = 0
   return (content.match(regex) || []).length
+}
+
+function getFirstMatchRange(content, regex) {
+  if (!content || !regex) return null
+  regex.lastIndex = 0
+  const match = regex.exec(content)
+  if (!match) return null
+  return { start: match.index, end: match.index + match[0].length }
+}
+
+// SceneEditor's textarea always operates on note-marker-stripped content
+// (see stripNoteMarkers's own comment in manuscriptUtils.js) — a match's raw
+// offset into scene.content (which still has `[[123]]` markers embedded) can
+// land on the wrong text once handed to SceneEditor's setSelectionRange,
+// shifted by however many marker characters preceded it. Compute the
+// highlight-on-open range against the same stripped text the editor uses.
+function getFirstMatchRangeForEditor(content, regex) {
+  return getFirstMatchRange(stripNoteMarkers(content), regex)
 }
 
 function getPreviewSnippet(content, regex, maxLen = 120) {
@@ -113,7 +132,8 @@ export default function ManuscriptSearch({
         if (count === 0) return null
         const chapter = chapterMap[scene.chapterId]
         const snippet = getPreviewSnippet(scene.content || '', regex)
-        return { scene, chapter, count, snippet }
+        const matchRange = getFirstMatchRangeForEditor(scene.content || '', regex)
+        return { scene, chapter, count, snippet, matchRange }
       })
       .filter(Boolean)
   }, [novelScenes, regex, term, chapterMap])
@@ -228,7 +248,7 @@ export default function ManuscriptSearch({
         )}
 
         <div className="ms-search-results">
-          {results.map(({ scene, chapter, count, snippet }) => (
+          {results.map(({ scene, chapter, count, snippet, matchRange }) => (
             <div key={scene.id} className="ms-search-result-group">
               <div className="ms-search-result-heading">
                 <div className="ms-search-result-scene">
@@ -248,7 +268,16 @@ export default function ManuscriptSearch({
                   )}
                   <button
                     className="ms-toolbar-btn"
-                    onClick={() => { onOpenScene(scene.id); onClose() }}
+                    onClick={() => {
+                      // Blur whatever's currently focused (typically this panel's own
+                      // search input) before closing this surface — otherwise the
+                      // surface unmounting a still-focused element hands focus back to
+                      // document.body a beat later, racing with (and undoing) the
+                      // freshly-focused/selected scene editor onOpenScene is about to set up.
+                      document.activeElement?.blur()
+                      onOpenScene(scene.id, matchRange)
+                      onClose()
+                    }}
                     title="Go to scene"
                   >
                     Go to scene

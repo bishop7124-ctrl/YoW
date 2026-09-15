@@ -14,6 +14,23 @@ import { readItem, writeItem } from '../../storage/projectStorage'
 // of the confirmed-cost range so the warning/action appear before typing lag does.
 export const LARGE_SCENE_CHAR_THRESHOLD = 120000
 
+// ─── Note markers ─────────────────────────────────────────────────────────────
+// Inline `[[123]]` markers anchor a note to a spot in the raw content string,
+// but never appear in what SceneEditor actually renders/edits (its `localContent`
+// always has them stripped). Any other code that needs to work with character
+// offsets into a scene's content — not just SceneEditor itself — has to strip
+// them the same way first, or its offsets disagree with the editor's own.
+
+export const NOTE_MARKER_RE = /\s?\[\[(\d+)\]\]\s?/g
+
+export function stripNoteMarkers(content) {
+  return (content || '').replace(NOTE_MARKER_RE, (match, _seq, offset, text) => {
+    const before = text[offset - 1]
+    const after = text[offset + match.length]
+    return before && after && /\S/.test(before) && /\S/.test(after) ? ' ' : ''
+  })
+}
+
 // ─── Script types ─────────────────────────────────────────────────────────────
 
 export const SCRIPT_TYPES = new Set(['play', 'screenplay', 'tv_show'])
