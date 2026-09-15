@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, openImportZip, readStorage,
+  createProject, dismissLaunchPrompts, downloadManualProjectBackup, openImportZip, readStorage,
   seedCleanStorage, seedIndexedDbEntries, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
@@ -200,9 +200,7 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
 
   // Export via the studio project settings panel
   await page.getByRole('button', { name: 'Project settings' }).click()
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/i }).click()
-  const download = await downloadPromise
+  const download = await downloadManualProjectBackup(page)
   const zipPath = await download.path()
   await page.getByRole('button', { name: 'Done' }).click()
 

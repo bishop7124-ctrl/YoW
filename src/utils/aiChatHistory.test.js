@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { appendAiBarExchange, appendAiBarExchangeToSessions, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions } from './aiChatHistory'
+import { appendAiBarExchange, appendAiBarExchangeToSessions, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from './aiChatHistory'
 
 describe('AI chat history helpers', () => {
   beforeEach(() => {
@@ -76,5 +76,16 @@ describe('AI chat history helpers', () => {
     expect(mergeAiChatSessions(project, legacy, 'project-1')).toEqual([
       expect.objectContaining({ id: 'chat-1', title: 'Project copy' }),
     ])
+  })
+
+  it('does not write a default context mode into an existing chat', () => {
+    const sessions = [{
+      id: 'chat-1',
+      novelId: 'project-1',
+      context: { chapterIds: ['chapter-1'] },
+      messages: [],
+    }]
+
+    expect(normalizeAiChatSessions(sessions, 'project-1')).toEqual(sessions)
   })
 })

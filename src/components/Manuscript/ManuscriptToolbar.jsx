@@ -40,7 +40,8 @@ function NoteFields({ note, onUpdateNote, onDelete }) {
         onChange={e => { setText(e.target.value); debouncedSaveText.schedule(e.target.value) }}
         onBlur={debouncedSaveText.flush}
         placeholder="Write your note here…"
-        className="w-full bg-transparent text-[var(--text-main)] text-base outline-none resize-none min-h-[60px]"
+        wrap="soft"
+        className="w-full min-w-0 overflow-x-hidden break-words bg-transparent px-3 py-2 text-[var(--text-main)] text-base leading-relaxed outline-none resize-none min-h-[60px]"
         rows={3}
       />
     </>

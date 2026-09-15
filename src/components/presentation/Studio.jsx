@@ -171,6 +171,22 @@ export function StudioFrame({
           {activeRoom && <span className="studio-room-hamburger-label">{activeRoom.label}</span>}
         </button>
 
+        {onGoHome ? (
+          <button
+            type="button"
+            className="studio-compact-identity"
+            onClick={onGoHome}
+            aria-label={`${projectTitle}. Back to library`}
+            title={`${projectTitle} — back to library`}
+          >
+            <span className="studio-compact-project-title">{projectTitle}</span>
+          </button>
+        ) : (
+          <div className="studio-compact-identity" aria-label={projectTitle}>
+            <span className="studio-compact-project-title">{projectTitle}</span>
+          </div>
+        )}
+
         {roomMenuOpen && roomMenuCoords && createPortal(
           <nav
             ref={roomMenuRef}
@@ -508,9 +524,9 @@ export function StudioSheet({ title, eyebrow = 'Editor', onClose, children, narr
   )
 }
 
-export function StudioPageHeader({ eyebrow, title, meta, actions, children }) {
+export function StudioPageHeader({ eyebrow, title, meta, actions, children, className = '' }) {
   return (
-    <header className="studio-page-header">
+    <header className={cx('studio-page-header', className)}>
       <div className="min-w-0">
         <p className="studio-kicker">{eyebrow}</p>
         <h1>{title}</h1>

@@ -146,6 +146,15 @@ export async function openProjectSettings(page) {
   await page.waitForSelector('[role="dialog"][aria-labelledby="project-settings-title"]', { timeout: 6000 })
 }
 
+// Create a restore-ready project backup from the consolidated Export card,
+// then download that snapshot from the backup list.
+export async function downloadManualProjectBackup(page) {
+  await page.getByRole('button', { name: 'Create backup' }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Manual backup/ }).first().click()
+  return downloadPromise
+}
+
 // Open the Import dropdown and click "Import ZIP", then return the file input locator.
 export async function openImportZip(page) {
   await page.getByRole('button', { name: /Import/i }).first().click()

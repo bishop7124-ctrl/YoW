@@ -268,6 +268,119 @@ test.describe('Opening view controls', () => {
 })
 
 test.describe('Event CRUD and validation across the real UI', () => {
+  test('provides a default inline buffer for every native textual field type', async ({ page }) => {
+    const failures = await page.evaluate(() => {
+      const fixture = document.createElement('div')
+      fixture.style.cssText = 'position:fixed;left:-9999px;top:0;visibility:hidden'
+
+      const createControl = (tagName, fieldKind, type) => {
+        const control = document.createElement(tagName)
+        if (type) control.type = type
+        control.dataset.fieldKind = fieldKind
+        return control
+      }
+
+      const controls = [
+        createControl('input', 'implicit-text'),
+        ...[
+          'text', 'number', 'email', 'password', 'search', 'url', 'tel',
+          'date', 'datetime-local', 'month', 'week', 'time',
+        ].map(type => createControl('input', type, type)),
+        createControl('textarea', 'textarea'),
+        createControl('select', 'select'),
+      ]
+
+      fixture.append(...controls)
+      document.body.append(fixture)
+      const missingBuffer = controls.flatMap(control => {
+        const style = getComputedStyle(control)
+        const paddingLeft = Number.parseFloat(style.paddingLeft)
+        const paddingRight = Number.parseFloat(style.paddingRight)
+        return paddingLeft >= 8 && paddingRight >= 8
+          ? []
+          : [{ kind: control.dataset.fieldKind, paddingLeft, paddingRight }]
+      })
+      fixture.remove()
+      return missingBuffer
+    })
+
+    expect(failures).toEqual([])
+  })
+
+  test('keeps the event editor header inside a short viewport while its form scrolls', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 500 })
+    await page.getByRole('button', { name: 'Add event on First Month, day 1, year 1' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'New event' })
+    const bounds = await dialog.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds.y).toBeGreaterThanOrEqual(0)
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(500)
+    await expect(dialog.getByText('Schedule', { exact: true })).toBeVisible()
+    await expect(dialog.locator('.studio-sheet-body')).toHaveCSS('overflow-y', 'auto')
+  })
+
+  test('keeps event field text inset from the left edge without horizontal spill', async ({ page }) => {
+    await page.setViewportSize({ width: 700, height: 600 })
+    await page.getByRole('button', { name: 'Add event on First Month, day 1, year 1' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'New event' })
+    const form = dialog.locator('.schedule-event-form')
+    const yearInput = page.getByLabel('Event year')
+    await yearInput.fill('832')
+
+    await expect(yearInput).toHaveCSS('padding-left', '12px')
+    expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+  })
+
+  test('keeps an event ribbon below its date and shows the full year value', async ({ page }) => {
+    const yearInput = page.getByLabel('Schedule year')
+    await yearInput.fill('832')
+    await expect(yearInput).toHaveValue('832')
+    await expect.poll(() => yearInput.evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(84)
+
+    const title = `Grounding Day Ceremony ${Date.now()}`
+    const dayCell = page.getByRole('button', { name: 'Add event on First Month, day 30, year 832' })
+    await dayCell.click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+
+    const dayNumberBox = await dayCell.locator('.schedule-day-number').boundingBox()
+    const ribbonBox = await page.getByTitle(title).boundingBox()
+    expect(dayNumberBox).not.toBeNull()
+    expect(ribbonBox).not.toBeNull()
+    expect(ribbonBox.y).toBeGreaterThanOrEqual(dayNumberBox.y + dayNumberBox.height + 1)
+  })
+
+  test('moves and resizes an event directly on the month grid', async ({ page }) => {
+    const title = `Drag rehearsal ${Date.now()}`
+    await page.getByRole('button', { name: 'Add event on First Month, day 5, year 1' }).click()
+    await page.getByLabel('Title *').fill(title)
+    await page.getByRole('dialog').getByRole('button', { name: 'Add event', exact: true }).click()
+
+    const dragBetween = async (source, target) => {
+      const sourceBox = await source.boundingBox()
+      const targetBox = await target.boundingBox()
+      expect(sourceBox).not.toBeNull()
+      expect(targetBox).not.toBeNull()
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 })
+      await page.mouse.up()
+    }
+
+    const dayEight = page.getByRole('button', { name: 'Add event on First Month, day 8, year 1' })
+    await dragBetween(page.getByTitle(title, { exact: true }), dayEight)
+    await expect(page.getByRole('status')).toContainText(`${title} moved.`)
+
+    const dayTen = page.getByRole('button', { name: 'Add event on First Month, day 10, year 1' })
+    await dragBetween(page.getByTitle(title, { exact: true }).locator('.schedule-resize-handle'), dayTen)
+    await expect(page.getByRole('status')).toContainText(`${title} duration updated.`)
+
+    await page.getByTitle(title, { exact: true }).click()
+    await expect(page.getByRole('dialog', { name: title })).toContainText('First Month, Day 8 · Year 1 — First Month, Day 10 · Year 1 · 3 days')
+  })
+
   test('creates, edits, and deletes an event, with the day cell / list / detail views agreeing', async ({ page }) => {
     const title = `Council of Elders ${Date.now()}`
     await page.getByRole('button', { name: 'Add event on First Month, day 5, year 1' }).click()

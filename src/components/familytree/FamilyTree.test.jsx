@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import FamilyTree from './FamilyTree.jsx'
@@ -21,6 +22,37 @@ const makeStore = (overrides = {}) => ({
 const node = name => screen.queryByRole('button', { name: `Focus ${name}` })
 
 describe('FamilyTree', () => {
+  it('keeps every family and its connectors visible when the selected card changes', () => {
+    const characters = [
+      { id: 'linked-a', name: 'Linked A', familyLinks: [{ id: 'siblings', sourceCharacterId: 'linked-a', targetCharacterId: 'linked-b', kind: 'sibling' }] },
+      { id: 'linked-b', name: 'Linked B' },
+      { id: 'standalone', name: 'Standalone' },
+    ]
+    const selectionSpy = vi.fn()
+    function Harness() {
+      const [selectedCharacterId, setSelected] = useState('linked-a')
+      return <FamilyTree store={makeStore({
+        characters,
+        selectedCharacterId,
+        setSelectedCharacterId: id => {
+          selectionSpy(id)
+          setSelected(id)
+        },
+      })} />
+    }
+
+    const { container } = render(<Harness />)
+    expect(screen.getByLabelText('View').value).toBe('all')
+    expect(container.querySelectorAll('.tree-node')).toHaveLength(3)
+    expect(container.querySelectorAll('[data-family-kind]')).toHaveLength(1)
+
+    fireEvent.click(node('Standalone'))
+
+    expect(selectionSpy).toHaveBeenCalledWith('standalone')
+    expect(container.querySelectorAll('.tree-node')).toHaveLength(3)
+    expect(container.querySelectorAll('[data-family-kind]')).toHaveLength(1)
+  })
+
   it('applies scope/deceased filters to nodes and preserves standalone access', () => {
     render(<FamilyTree store={makeStore()} />)
     expect(node('Grand')).toBeTruthy()

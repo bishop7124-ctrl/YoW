@@ -98,6 +98,52 @@ describe('Schedule workspace', () => {
     fireEvent.click(screen.getByTitle('Crossing'))
     expect(screen.getByText('Saved description')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(document.querySelector('.schedule-resize-handle')).toBeNull()
+  })
+
+  it('moves an event to the dropped day while preserving its duration', () => {
+    const store = makeStore()
+    render(<ScheduleCalendar store={store} />)
+    const targetDay = screen.getByRole('button', { name: 'Add event on First Month, day 5, year 1' })
+    const originalElementsFromPoint = document.elementsFromPoint
+    document.elementsFromPoint = vi.fn(() => [targetDay])
+
+    try {
+      const ribbon = screen.getByTitle('Crossing')
+      fireEvent.pointerDown(ribbon, { pointerId: 7, pointerType: 'mouse', button: 0, clientX: 10, clientY: 10 })
+      fireEvent.pointerMove(window, { pointerId: 7, pointerType: 'mouse', clientX: 30, clientY: 10 })
+      fireEvent.pointerUp(window, { pointerId: 7, pointerType: 'mouse', clientX: 30, clientY: 10 })
+
+      expect(store.updateScheduleEvent).toHaveBeenCalledWith('e', { year: 1, month: 1, day: 5 }, {
+        expected: { year: 1, month: 1, day: 2 },
+      })
+      expect(screen.getByRole('status').textContent).toContain('moved')
+    } finally {
+      document.elementsFromPoint = originalElementsFromPoint
+    }
+  })
+
+  it('resizes an event from its end handle and saves once on release', () => {
+    const store = makeStore()
+    render(<ScheduleCalendar store={store} />)
+    const targetDay = screen.getByRole('button', { name: 'Add event on First Month, day 5, year 1' })
+    const originalElementsFromPoint = document.elementsFromPoint
+    document.elementsFromPoint = vi.fn(() => [targetDay])
+
+    try {
+      const handle = screen.getByTitle('Crossing').querySelector('.schedule-resize-handle')
+      fireEvent.pointerDown(handle, { pointerId: 8, pointerType: 'mouse', button: 0, clientX: 10, clientY: 10 })
+      fireEvent.pointerMove(window, { pointerId: 8, pointerType: 'mouse', clientX: 30, clientY: 10 })
+      fireEvent.pointerUp(window, { pointerId: 8, pointerType: 'mouse', clientX: 30, clientY: 10 })
+
+      expect(store.updateScheduleEvent).toHaveBeenCalledTimes(1)
+      expect(store.updateScheduleEvent).toHaveBeenCalledWith('e', { duration: 4 }, {
+        expected: { year: 1, month: 1, day: 2, duration: 2 },
+      })
+      expect(screen.getByRole('status').textContent).toContain('duration updated')
+    } finally {
+      document.elementsFromPoint = originalElementsFromPoint
+    }
   })
 
   it('retains calendar-setting drafts when a conflicting background change arrives', () => {

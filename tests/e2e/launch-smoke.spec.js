@@ -1,6 +1,36 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, enterWritingMode, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
+import { strFromU8, unzipSync } from 'fflate'
+import { dismissLaunchPrompts, downloadManualProjectBackup, enterWritingMode, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
+
+const readProjectBackup = (path) => {
+  const files = unzipSync(new Uint8Array(fs.readFileSync(path)))
+  return JSON.parse(strFromU8(files['project-data.json']))
+}
+
+const canonicalRoundTripData = (source, restored) => {
+  const restoredToSourceId = new Map()
+  const pairIds = (left, right) => {
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return
+    if (Array.isArray(left) || Array.isArray(right)) {
+      if (Array.isArray(left) && Array.isArray(right)) left.forEach((item, index) => pairIds(item, right[index]))
+      return
+    }
+    if (typeof left.id === 'string' && typeof right.id === 'string') restoredToSourceId.set(right.id, left.id)
+    Object.keys(left).forEach(key => pairIds(left[key], right[key]))
+  }
+  pairIds(source, restored)
+
+  const normalize = (value, path = []) => {
+    if (typeof value === 'string') return restoredToSourceId.get(value) || value
+    if (Array.isArray(value)) return value.map((item, index) => normalize(item, [...path, index]))
+    if (!value || typeof value !== 'object') return value
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => key !== 'exportedAt' && !(path.length === 0 && key === 'backup'))
+      .map(([key, item]) => [key, normalize(item, [...path, key])]))
+  }
+  return { source: normalize(source), restored: normalize(restored) }
+}
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -37,9 +67,7 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
   await expect(page.locator('.ms-preview').filter({ hasText: sentence })).toBeVisible()
 
   await openProjectSettings(page)
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/ }).click()
-  const download = await downloadPromise
+  const download = await downloadManualProjectBackup(page)
   expect(download.suggestedFilename()).toMatch(/\.zip$/)
 
   // Playwright temp downloads have no extension; save with .zip so the import modal accepts it
@@ -76,4 +104,15 @@ test('create, write, refresh, export, and restore a project', async ({ page }) =
     }
     return novels.length
   }), { timeout: 20_000 }).toBe(2)
+
+  // Re-export the restored copy and compare the complete JSON payload. Fresh
+  // ids and per-download backup metadata are intentionally normalized; every
+  // project setting, collection field, ordering value and content payload must
+  // otherwise be identical.
+  await openProjectSettings(page)
+  const restoredDownload = await downloadManualProjectBackup(page)
+  const restoredZipPath = `/tmp/yow-smoke-restored-${Date.now()}.zip`
+  await restoredDownload.saveAs(restoredZipPath)
+  const comparison = canonicalRoundTripData(readProjectBackup(tmpZipPath), readProjectBackup(restoredZipPath))
+  expect(comparison.restored).toEqual(comparison.source)
 })

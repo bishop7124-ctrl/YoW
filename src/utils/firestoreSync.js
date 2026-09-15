@@ -161,6 +161,11 @@ function timestampMs(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function isMissingSceneRevisionError(error) {
+  const message = String(error?.message || error?.details || '')
+  return error?.code === '42703' || /revision.*(does not exist|schema cache|not find)/i.test(message)
+}
+
 // The full load below fans out into ~20 fully-parallel per-table requests
 // (see loadUserData). With that many requests in flight, the odds that any
 // single one hits a one-off network blip are much higher than for a lone
@@ -188,8 +193,17 @@ export async function loadUserData(userId) {
     ...APP_DATA_TABLES.map(table => {
       // scenes uses scene_id as the id column (legacy schema)
       const idCol = table === 'scenes' ? 'scene_id' : 'id'
-      const columns = table === 'scenes' ? `${idCol}, data` : `${idCol}, data, updated_at`
-      return withRetry(() => supabase.from(table).select(columns).eq('user_id', userId))
+      const columns = table === 'scenes' ? `${idCol}, data, revision` : `${idCol}, data, updated_at`
+      return withRetry(async () => {
+        const response = await supabase.from(table).select(columns).eq('user_id', userId)
+        if (table !== 'scenes' || !isMissingSceneRevisionError(response.error)) return response
+        // Deployment-safe compatibility: the UI may reach a database before
+        // the optimistic-concurrency migration. Loading must still work, but
+        // mark the capability absent so writes are never silently downgraded
+        // to the unsafe last-write-wins path.
+        const legacy = await supabase.from('scenes').select(`${idCol}, data`).eq('user_id', userId)
+        return { ...legacy, _sceneRevisionSupported: false }
+      })
     }),
   ])
 
@@ -220,6 +234,8 @@ export async function loadUserData(userId) {
     comicPages:      [],
     comicPanels:     [],
     eras:            [],
+    _sceneRevisions: {},
+    _sceneRevisionSupported: true,
   }
 
   // A partial failure here must never be treated as "this project has no
@@ -234,6 +250,10 @@ export async function loadUserData(userId) {
     if (error) { console.warn(`[sync] load error for ${table}:`, error); failedTables.push(table); return }
     const key = TABLE_TO_KEY[table]
     result[key] = (data ?? []).map(row => row.data).filter(Boolean)
+    if (table === 'scenes') {
+      result._sceneRevisionSupported = entityResults[i]._sceneRevisionSupported !== false
+      ;(data ?? []).forEach(row => { result._sceneRevisions[row.scene_id] = Number(row.revision || 0) })
+    }
     ;(data ?? []).forEach(row => {
       remoteSavedAt = Math.max(remoteSavedAt, timestampMs(row.updated_at))
     })
@@ -348,8 +368,23 @@ export async function replaceUserData(userId, data = {}) {
 }
 
 // Per-scene saves (called directly from updateScene / updateSceneContent)
-export async function saveSceneDoc(userId, scene) {
+export async function saveSceneDoc(userId, scene, { expectedRevision } = {}) {
   if (OFFLINE_MODE) return
+  if (expectedRevision !== undefined) {
+    const { data, error } = await supabase.rpc('save_scene_if_current', {
+      p_scene_id: scene.id,
+      p_novel_id: scene.novelId ?? null,
+      p_data: scene,
+      p_expected_revision: expectedRevision,
+    })
+    throwIfSupabaseError(error, 'conflict-safe scene save error')
+    return {
+      saved: data?.saved !== false,
+      revision: Number(data?.revision || 0),
+      remoteScene: data?.data ?? null,
+      reason: data?.reason ?? null,
+    }
+  }
   const { error } = await supabase.from('scenes').upsert({
     user_id: userId,
     scene_id: scene.id,
@@ -357,6 +392,7 @@ export async function saveSceneDoc(userId, scene) {
     data: scene,
   })
   throwIfSupabaseError(error, 'scene upsert error')
+  return { saved: true, revision: null, remoteScene: scene }
 }
 
 export async function deleteSceneDoc(userId, sceneId) {

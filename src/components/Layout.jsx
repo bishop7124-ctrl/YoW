@@ -29,7 +29,6 @@ import {
   downloadBlob,
   downloadProjectDocx,
   downloadProjectPdf,
-  getProjectExportFilename,
 } from '../utils/projectExport'
 import { readItem, writeItem } from '../storage/projectStorage'
 import RecordConflictReview from './shared/RecordConflictReview'
@@ -353,8 +352,7 @@ function ProjectSettings({ store, onClose }) {
     try {
       setExporting(format)
       if (format === 'docx') await downloadProjectDocx(projectData)
-      else if (format === 'pdf') await downloadProjectPdf(projectData, { themeId })
-      else await downloadBlob(createProjectZipBlob(projectData), getProjectExportFilename(projectData.project))
+      else await downloadProjectPdf(projectData, { themeId })
     } catch (error) {
       console.error('Project export failed:', error)
       setBackupMessage('Export failed. Please try again.')
@@ -762,10 +760,6 @@ function ProjectSettings({ store, onClose }) {
                   <strong>Word docs ZIP</strong>
                   <span>Separate Word documents for story, characters, locations, lore, timeline, and more</span>
                 </button>
-                <button type="button" onClick={() => handleExport('zip')} className="project-settings-action-card" disabled={!!exporting} title="Restore file for YOW — JSON data, not for reading">
-                  <strong>Backup zip</strong>
-                  <span>Restore file for YOW — JSON data, not for reading</span>
-                </button>
               </div>
               <div style={{ marginTop: 12 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>Visual PDF theme</p>
@@ -785,6 +779,48 @@ function ProjectSettings({ store, onClose }) {
                 </div>
               </div>
               {exporting && <p style={{ fontSize: 11, color: 'var(--accent)', marginTop: 10 }}>Preparing export...</p>}
+
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid color-mix(in srgb, var(--border) 55%, transparent)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div>
+                    <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Backups</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Automatic restore-ready snapshots of this project, saved as ZIP files. Use Import ZIP to restore one — they aren't meant to be opened and read.</p>
+                  </div>
+                  <button type="button" onClick={() => createLocalBackup('manual')} className="project-settings-small-button">Create backup</button>
+                </div>
+
+                <div className="project-settings-form-grid">
+                  <label>
+                    <span>Frequency</span>
+                    <select value={backupConfig.frequency} onChange={e => saveBackupConfig({ frequency: e.target.value })} className="field">
+                      <option value="manual">Manual</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Retained backups</span>
+                    <input type="number" min={1} max={20} value={backupConfig.retention} onChange={e => saveBackupConfig({ retention: e.target.value })} className="field" />
+                  </label>
+                </div>
+
+                <div className="project-settings-checks">
+                  <label><input type="checkbox" checked={backupConfig.includeMedia} onChange={e => saveBackupConfig({ includeMedia: e.target.checked })} /> Include cover and media fields</label>
+                  <label><input type="checkbox" checked={backupConfig.includeCustomerData} onChange={e => saveBackupConfig({ includeCustomerData: e.target.checked })} /> Include project settings metadata</label>
+                </div>
+
+                <div className="project-settings-backup-list">
+                  {localBackups.length ? localBackups.slice(0, 4).map(entry => (
+                    <button key={entry.id} type="button" onClick={() => exportBackup(entry)}>
+                      <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                      <strong>{entry.kind === 'auto' ? 'Auto backup' : 'Manual backup'}</strong>
+                    </button>
+                  )) : (
+                    <p>No local backups yet.</p>
+                  )}
+                </div>
+                {backupMessage && <p style={{ fontSize: 11, color: backupMessage.includes('failed') ? '#f87171' : 'var(--accent)', marginTop: 10 }}>{backupMessage}</p>}
+              </div>
             </section>
 
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
@@ -795,48 +831,6 @@ function ProjectSettings({ store, onClose }) {
                   <span>Adds characters, locations, worldbuilding, and more from another project you own — nothing here is replaced or removed</span>
                 </button>
               </div>
-            </section>
-
-            <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
-                <div>
-                  <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Backups</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Automatic restore-ready snapshots of this project, saved as zip files. Use Import ZIP to restore one — they aren't meant to be opened and read.</p>
-                </div>
-                <button type="button" onClick={() => createLocalBackup('manual')} className="project-settings-small-button">Create backup</button>
-              </div>
-
-              <div className="project-settings-form-grid">
-                <label>
-                  <span>Frequency</span>
-                  <select value={backupConfig.frequency} onChange={e => saveBackupConfig({ frequency: e.target.value })} className="field">
-                    <option value="manual">Manual</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Retained backups</span>
-                  <input type="number" min={1} max={20} value={backupConfig.retention} onChange={e => saveBackupConfig({ retention: e.target.value })} className="field" />
-                </label>
-              </div>
-
-              <div className="project-settings-checks">
-                <label><input type="checkbox" checked={backupConfig.includeMedia} onChange={e => saveBackupConfig({ includeMedia: e.target.checked })} /> Include cover and media fields</label>
-                <label><input type="checkbox" checked={backupConfig.includeCustomerData} onChange={e => saveBackupConfig({ includeCustomerData: e.target.checked })} /> Include project settings metadata</label>
-              </div>
-
-              <div className="project-settings-backup-list">
-                {localBackups.length ? localBackups.slice(0, 4).map(entry => (
-                  <button key={entry.id} type="button" onClick={() => exportBackup(entry)}>
-                    <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                    <strong>{entry.kind === 'auto' ? 'Auto backup' : 'Manual backup'}</strong>
-                  </button>
-                )) : (
-                  <p>No local backups yet.</p>
-                )}
-              </div>
-              {backupMessage && <p style={{ fontSize: 11, color: backupMessage.includes('failed') ? '#f87171' : 'var(--accent)', marginTop: 10 }}>{backupMessage}</p>}
             </section>
 
             <section style={{ border: '1px solid color-mix(in srgb, var(--border) 55%, transparent)', borderRadius: 14, background: 'color-mix(in srgb, var(--bg-main) 80%, transparent)', padding: 18 }}>

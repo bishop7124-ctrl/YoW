@@ -26,7 +26,7 @@ const TOOL_INFO = {
   water: ['Water', 'Click around the shoreline, then finish the water shape.'],
   river: ['River', 'Drag to draw a river. Release to finish.'],
   road: ['Route', 'Drag to draw a route. Release to finish.'],
-  territory: ['Territory', 'Drag around an area. Release to close its boundary.'],
+  territory: ['Territory', 'Click around the boundary, then finish the territory.'],
   wall: ['Wall', 'Click each corner. Press Enter or Finish wall to complete; Escape cancels.'],
   stamp: ['Symbols', 'Click the map to place the chosen symbol, or drag one here.'],
   location: ['Place', 'Click the map to add a place, then name or link it.'],
@@ -38,7 +38,7 @@ const TOOL_KEYS = { v: 'select', h: 'pan', l: 'shape', w: 'water', r: 'river', p
 const SHORTCUTS = [
   ['V / H', 'Select / move view'], ['L / W', 'Land or room / water'], ['R / P', 'River / route'], ['B / X', 'Territory / wall'], ['S / M / T', 'Symbols / place / text'],
   ['⌘ or Ctrl Z', 'Undo'], ['⌘ or Ctrl Shift Z / Ctrl Y', 'Redo'], ['⌘ or Ctrl D', 'Duplicate selection'], ['Delete / Backspace', 'Delete selection'],
-  ['Arrow keys', 'Move selection (Shift for larger steps)'], ['+ / − / 0', 'Zoom in / out / fit'], ['F', 'Expand or restore canvas'], ['Enter', 'Finish point-by-point land, water or wall'], ['Escape', 'Cancel drawing / clear selection'], ['?', 'Show keyboard shortcuts'],
+  ['Arrow keys', 'Move selection (Shift for larger steps)'], ['+ / − / 0', 'Zoom in / out / fit'], ['F', 'Expand or restore canvas'], ['Enter', 'Finish point-by-point land, water, territory or wall'], ['Escape', 'Cancel drawing / clear selection'], ['?', 'Show keyboard shortcuts'],
 ]
 
 export default function AtlasBuilder({ store }) {
@@ -123,12 +123,14 @@ function Editor({ map, store, onLibrary }) {
   const [lineWidth, setLineWidth] = useState(5)
   const [landMode, setLandMode] = useState('points')
   const [waterMode, setWaterMode] = useState('points')
+  const [territoryMode, setTerritoryMode] = useState('points')
   const [symbolSearch, setSymbolSearch] = useState('')
   const [symbolSize, setSymbolSize] = useState(42)
   const [cursor, setCursor] = useState(null)
   const [wallPointCount, setWallPointCount] = useState(0)
   const [landPointCount, setLandPointCount] = useState(0)
   const [waterPointCount, setWaterPointCount] = useState(0)
+  const [territoryPointCount, setTerritoryPointCount] = useState(0)
   const shortcutsRef = useRef(null)
   const deleteRef = useRef(null)
   useDialogFocus(shortcutsRef, () => setShowShortcuts(false), showShortcuts)
@@ -136,6 +138,7 @@ function Editor({ map, store, onLibrary }) {
   const wallRef = useRef(null)
   const landRef = useRef(null)
   const waterRef = useRef(null)
+  const territoryRef = useRef(null)
   const svgRef = useRef(null)
   const gesture = useRef(null)
   const objects = map.mapObjects || []
@@ -160,7 +163,7 @@ function Editor({ map, store, onLibrary }) {
   }
   function patch(props) { commit({ ...current, mapObjects: objects.map(o => o.id === selectedId ? { ...o, ...props } : o) }) }
   function remove() { if (selected && commit({ ...current, mapObjects: objects.filter(o => o.id !== selectedId) })) setSelectedId(null) }
-  function cancel() { gesture.current = null; wallRef.current = null; landRef.current = null; waterRef.current = null; setWallPointCount(0); setLandPointCount(0); setWaterPointCount(0); setDraft(null); setCursor(null) }
+  function cancel() { gesture.current = null; wallRef.current = null; landRef.current = null; waterRef.current = null; territoryRef.current = null; setWallPointCount(0); setLandPointCount(0); setWaterPointCount(0); setTerritoryPointCount(0); setDraft(null); setCursor(null) }
   function finishWall() {
     const wall = wallRef.current
     if (!wall || wall.geometry.points.length < 2) return
@@ -175,6 +178,11 @@ function Editor({ map, store, onLibrary }) {
     const land = landRef.current
     if (!land || land.geometry.points.length < 3) return
     if (commit({ ...current, mapObjects: [...objects, land] })) { setSelectedId(land.id); setTool('select'); landRef.current = null; setLandPointCount(0); setDraft(null) }
+  }
+  function finishTerritory() {
+    const territory = territoryRef.current
+    if (!territory || territory.geometry.points.length < 3) return
+    if (commit({ ...current, mapObjects: [...objects, territory] })) { setSelectedId(territory.id); setTool('select'); territoryRef.current = null; setTerritoryPointCount(0); setDraft(null) }
   }
   function placeStamp(point, nextSymbol = symbol, nextSize = symbolSize) {
     const stamp = makeObject('stamp', point, { symbol: nextSymbol, name: '', size: nextSize })
@@ -198,6 +206,7 @@ function Editor({ map, store, onLibrary }) {
     else if (key === 'enter' && wallRef.current) finishWall()
     else if (key === 'enter' && landRef.current) finishLand()
     else if (key === 'enter' && waterRef.current) finishWater()
+    else if (key === 'enter' && territoryRef.current) finishTerritory()
     else if (key === 'escape') { cancel(); setTool('select'); setSelectedId(null); setExpanded(false) }
     else if (key === 'delete' || key === 'backspace') remove()
     else if (key.startsWith('arrow') && selected) {
@@ -258,6 +267,15 @@ function Editor({ map, store, onLibrary }) {
       setDraft(land)
       return
     }
+    if (tool === 'territory' && territoryMode === 'points') {
+      const previous = territoryRef.current || makeObject('territory', { x:0, y:0 }, { size: lineWidth, drawMode: 'points' }, [])
+      const last = previous.geometry.points.at(-1)
+      const territory = !last || Math.hypot(last.x-p.x,last.y-p.y) > 1 ? { ...previous, geometry: { ...previous.geometry, points: [...previous.geometry.points,p] } } : previous
+      territoryRef.current = territory
+      setTerritoryPointCount(territory.geometry.points.length)
+      setDraft(territory)
+      return
+    }
     svgRef.current.setPointerCapture(e.pointerId)
     if (tool === 'pan') { gesture.current = { kind: 'pan', x: e.clientX, y: e.clientY, view }; return }
     if (tool === 'select') {
@@ -286,6 +304,8 @@ function Editor({ map, store, onLibrary }) {
       if (land && p) setDraft({ ...land, geometry: { ...land.geometry, points: [...land.geometry.points,p] } })
       const water = waterRef.current
       if (water && p) setDraft({ ...water, geometry: { ...water.geometry, points: [...water.geometry.points,p] } })
+      const territory = territoryRef.current
+      if (territory && p) setDraft({ ...territory, geometry: { ...territory.geometry, points: [...territory.geometry.points,p] } })
       return
     }
     if (g.kind === 'pan') { setView({ ...g.view, x: g.view.x + e.clientX-g.x, y: g.view.y + e.clientY-g.y }); return }
@@ -312,7 +332,7 @@ function Editor({ map, store, onLibrary }) {
     if (svgRef.current.hasPointerCapture(e.pointerId)) svgRef.current.releasePointerCapture(e.pointerId)
     if (g?.kind === 'move' && finished && (finished.x !== g.object.x || finished.y !== g.object.y)) commit({ ...current, mapObjects: objects.map(o => o.id === g.object.id ? finished : o) })
     if (g?.kind === 'point-move' && finished) commit({ ...current, mapObjects: objects.map(o => o.id === g.object.id ? finished : o) })
-    if (g?.kind === 'draw' && finished && g.points.length >= (finished.geometry.type === 'polygon' ? 3 : 2) && commit({ ...current, mapObjects: [...objects, finished] })) { setSelectedId(finished.id); if (finished.type === 'water' || (finished.type === 'shape' && !finished.properties?.room)) setTool('select') }
+    if (g?.kind === 'draw' && finished && g.points.length >= (finished.geometry.type === 'polygon' ? 3 : 2) && commit({ ...current, mapObjects: [...objects, finished] })) { setSelectedId(finished.id); if (finished.type === 'water' || finished.type === 'territory' || (finished.type === 'shape' && !finished.properties?.room)) setTool('select') }
     setDraft(null)
   }
   function startPointMove(e, object, index) {
@@ -357,7 +377,7 @@ function Editor({ map, store, onLibrary }) {
   return <div className={`atlas-editor${expanded ? ' atlas-expanded' : ''}${sidebarOpen ? '' : ' atlas-sidebar-hidden'}`}>
     <header className="atlas-topbar"><button onClick={onLibrary}>← Atlas</button><div className="atlas-title"><input aria-label="Map name" key={map.name} defaultValue={map.name} onBlur={e => { if (e.target.value.trim() && e.target.value !== map.name) store.renameMap(map.id, e.target.value.trim()) }} onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}/><span>{titleCase(map.mapType)} map</span></div><div className="atlas-history"><button disabled={!history.past.length} onClick={() => undo()} aria-label="Undo">↶</button><button disabled={!history.future.length} onClick={() => undo(true)} aria-label="Redo">↷</button></div><button aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShowShortcuts(true)}>?</button><button className="atlas-space-toggle" aria-pressed={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? 'Exit expanded view' : 'Expand canvas'}</button><button aria-label={sidebarOpen ? 'Hide panel' : 'Show panel'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(v => !v)}>☷</button><details className="atlas-export"><summary>Export ↓</summary><div>{['png','svg','json'].map(k => <button key={k} disabled={exporting} onClick={() => exportMap(k)}>{k === 'json' ? 'Editable map JSON' : `${k.toUpperCase()} image`}</button>)}</div></details></header>
     <div className="atlas-workspace"><nav className="atlas-tools" aria-label="Map tools">{tools.map(t => <button key={t} aria-pressed={tool === t} title={`${TOOL_INFO[t][0]} (${Object.keys(TOOL_KEYS).find(k => TOOL_KEYS[k] === t)?.toUpperCase()})`} aria-keyshortcuts={Object.keys(TOOL_KEYS).find(k => TOOL_KEYS[k] === t)} onClick={() => changeTool(t)}><b aria-hidden="true">{TOOL_ICONS[t]}</b><span>{interior && t === 'shape' ? 'Room' : TOOL_INFO[t][0]}</span></button>)}</nav>
-      <div className="atlas-stage"><div className="atlas-hint" aria-live="polite">{interior && tool === 'shape' ? 'Drag from one corner to the other to draw a room.' : tool === 'shape' && landMode === 'freehand' ? 'Drag around a coastline. Release to fill with land.' : tool === 'water' && waterMode === 'freehand' ? 'Drag around a lake or riverbank. Release to fill with water.' : TOOL_INFO[tool][1]}</div><div className="atlas-viewport"><div className="atlas-paper" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}><AtlasCanvas svgRef={svgRef} objects={visibleObjects} metadata={metadata} name={map.name} selectedId={selectedId} onPick={start} onPointPick={startPointMove} onPointerDown={e => start(e)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onPointerLeave={() => setCursor(null)} onDoubleClick={() => { if (tool === 'wall') finishWall(); if (tool === 'shape' && !interior && landMode === 'points') finishLand(); if (tool === 'water' && waterMode === 'points') finishWater() }} onDragOver={e => { if (tool === 'stamp') e.preventDefault() }} onDrop={dropStamp} draftId={draft?.id} placementPreview={tool === 'stamp' && cursor ? { id: 'placement-preview', type: 'stamp', ...cursor, properties: { symbol, size: symbolSize } } : null} tabIndex={0}/></div></div><div className="atlas-view-controls"><button aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(.5,v.zoom-.25) }))}>−</button><span>{Math.round(view.zoom*100)}%</span><button aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3,v.zoom+.25) }))}>+</button><button onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Fit</button></div><div className="atlas-caption">{objects.length} elements · Changes save with your project</div></div>
+      <div className="atlas-stage"><div className="atlas-hint" aria-live="polite">{interior && tool === 'shape' ? 'Drag from one corner to the other to draw a room.' : tool === 'shape' && landMode === 'freehand' ? 'Drag around a coastline. Release to fill with land.' : tool === 'water' && waterMode === 'freehand' ? 'Drag around a lake or riverbank. Release to fill with water.' : tool === 'territory' && territoryMode === 'freehand' ? 'Drag around an area. Release to close its boundary.' : TOOL_INFO[tool][1]}</div><div className="atlas-viewport"><div className="atlas-paper" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}><AtlasCanvas svgRef={svgRef} objects={visibleObjects} metadata={metadata} name={map.name} selectedId={selectedId} onPick={start} onPointPick={startPointMove} onPointerDown={e => start(e)} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onPointerLeave={() => setCursor(null)} onDoubleClick={() => { if (tool === 'wall') finishWall(); if (tool === 'shape' && !interior && landMode === 'points') finishLand(); if (tool === 'water' && waterMode === 'points') finishWater(); if (tool === 'territory' && territoryMode === 'points') finishTerritory() }} onDragOver={e => { if (tool === 'stamp') e.preventDefault() }} onDrop={dropStamp} draftId={draft?.id} placementPreview={tool === 'stamp' && cursor ? { id: 'placement-preview', type: 'stamp', ...cursor, properties: { symbol, size: symbolSize } } : null} tabIndex={0}/></div></div><div className="atlas-view-controls"><button aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(.5,v.zoom-.25) }))}>−</button><span>{Math.round(view.zoom*100)}%</span><button aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3,v.zoom+.25) }))}>+</button><button onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Fit</button></div><div className="atlas-caption">{objects.length} elements · Changes save with your project</div></div>
       <aside className="atlas-sidebar" hidden={!sidebarOpen}>
         <label>Select map element<select aria-label="Select map element" value={selectedId || ''} onChange={event => { cancel(); setSelectedId(event.target.value || null); setTool('select') }}><option value="">Choose an element…</option>{objects.map((object, index) => <option key={object.id} value={object.id}>{object.properties?.name || `${titleCase(object.type)} ${index + 1}`}{object.visible === false ? ' (hidden)' : ''}</option>)}</select></label>
         {selected && <div className="atlas-options">{['x', 'y'].map(axis => {
@@ -370,6 +390,7 @@ function Editor({ map, store, onLibrary }) {
           {tool === 'wall' && <div><p>Click each corner, then finish the wall.</p><div className="atlas-options"><button disabled={wallPointCount < 2} onClick={finishWall}>Finish wall</button><button disabled={!wallPointCount} onClick={cancel}>Cancel wall</button></div></div>}
           {tool === 'shape' && !interior && <div><fieldset><legend>Draw land with</legend><div className="atlas-options" role="group" aria-label="Land drawing mode"><button type="button" aria-pressed={landMode === 'points'} onClick={() => { cancel(); setLandMode('points') }}>Coastline points</button><button type="button" aria-pressed={landMode === 'freehand'} onClick={() => { cancel(); setLandMode('freehand') }}>Freehand</button></div></fieldset>{landMode === 'points' && <><p>Click around the coastline. The final edge closes automatically.</p><div className="atlas-options"><button disabled={landPointCount < 3} onClick={finishLand}>Finish land</button><button disabled={!landPointCount} onClick={cancel}>Cancel</button></div></>}</div>}
           {tool === 'water' && <div><fieldset><legend>Draw water with</legend><div className="atlas-options" role="group" aria-label="Water drawing mode"><button type="button" aria-pressed={waterMode === 'points'} onClick={() => { cancel(); setWaterMode('points') }}>Shoreline points</button><button type="button" aria-pressed={waterMode === 'freehand'} onClick={() => { cancel(); setWaterMode('freehand') }}>Freehand</button></div></fieldset>{waterMode === 'points' && <><p>Click around the shoreline. The final edge closes automatically.</p><div className="atlas-options"><button disabled={waterPointCount < 3} onClick={finishWater}>Finish water</button><button disabled={!waterPointCount} onClick={cancel}>Cancel</button></div></>}</div>}
+          {tool === 'territory' && <div><fieldset><legend>Draw territory with</legend><div className="atlas-options" role="group" aria-label="Territory drawing mode"><button type="button" aria-pressed={territoryMode === 'points'} onClick={() => { cancel(); setTerritoryMode('points') }}>Boundary points</button><button type="button" aria-pressed={territoryMode === 'freehand'} onClick={() => { cancel(); setTerritoryMode('freehand') }}>Freehand</button></div></fieldset>{territoryMode === 'points' && <><p>Click around the boundary. The final edge closes automatically.</p><div className="atlas-options"><button disabled={territoryPointCount < 3} onClick={finishTerritory}>Finish territory</button><button disabled={!territoryPointCount} onClick={cancel}>Cancel</button></div></>}</div>}
           {['river','road','wall'].includes(tool) && <label>New {tool === 'river' ? 'river' : tool === 'wall' ? 'wall' : 'route'} thickness: {lineWidth}<input aria-label="New line thickness" type="range" min="1" max="40" value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))}/></label>}
           {!interior && <label className="atlas-checkbox"><input type="checkbox" checked={metadata.organicBorders !== false} onChange={e => commit({ ...current, metadata: { ...metadata, organicBorders: e.target.checked } })}/> Organic borders</label>}
           {!interior && metadata.organicBorders !== false && <label>Border variation<input aria-label="Border variation" type="range" min="2" max="30" value={metadata.organicStrength || 12} onChange={e => commit({ ...current, metadata: { ...metadata, organicStrength: Number(e.target.value) } })}/></label>}

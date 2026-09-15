@@ -34,6 +34,36 @@ for (const viewport of viewports) {
     await page.getByText('Begin writing here…').click()
     const editor = page.locator('main textarea').first()
     await expect(editor).toBeVisible()
+
+    // Focusing a scene reveals its complete formatting/action cluster. That
+    // cluster used to stay on one intrinsic-width row on phones, pushing
+    // "Copy scene" (and the manuscript canvas) beyond the right edge.
+    const writingCanvas = page.locator('.ms-scroll-container')
+    await expect(page.getByRole('button', { name: 'Copy scene' })).toBeVisible()
+    await expect.poll(() => writingCanvas.evaluate(
+      node => node.scrollWidth - node.clientWidth,
+    )).toBeLessThanOrEqual(1)
+
+    const modeSwitch = page.getByRole('group', { name: 'Editor mode' })
+    const breadcrumb = page.locator('.ms-topbar-crumb')
+    await expect(modeSwitch).toBeVisible()
+    await expect(page.locator('.ms-topbar-crumb-path')).toBeHidden()
+    await expect.poll(async () => (await breadcrumb.boundingBox())?.width || 0).toBeGreaterThan(40)
+    await expect.poll(async () => {
+      const [crumbBox, modeBox] = await Promise.all([breadcrumb.boundingBox(), modeSwitch.boundingBox()])
+      return crumbBox && modeBox ? crumbBox.x + crumbBox.width - modeBox.x : Number.POSITIVE_INFINITY
+    }).toBeLessThanOrEqual(1)
+
+    if (viewport.width <= 640) {
+      const noteButton = page.getByRole('button', { name: 'Add note', exact: true })
+      await expect(noteButton).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Add note at cursor' })).toBeHidden()
+      await expect.poll(() => editor.evaluate(node => {
+        const style = getComputedStyle(node)
+        return Number.parseFloat(style.textIndent) / Number.parseFloat(style.fontSize)
+      })).toBeLessThanOrEqual(1.6)
+    }
+
     await editor.click()
     await editor.fill(sentence)
     await expect(editor).toHaveValue(sentence)
@@ -55,6 +85,26 @@ for (const viewport of viewports) {
     }).toBe(true)
   })
 }
+
+test('mobile AI workspace shows a focused setup state when AI is not connected', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await dismissLaunchPrompts(page)
+
+  await page.getByRole('button', { name: 'New Project' }).first().click()
+  await page.getByPlaceholder('Title *').fill(`AI workspace ${Date.now()}`)
+  await page.getByRole('button', { name: 'Create' }).click()
+  await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).first().click()
+  await page.getByRole('navigation', { name: 'Manuscript navigation' }).getByRole('button', { name: 'AI' }).click()
+
+  const surface = page.locator('.ms-surface')
+  await expect(surface.getByText('Connect AI to begin')).toBeVisible()
+  await expect(surface.getByRole('button', { name: 'Open AI settings' })).toBeVisible()
+  await expect(surface.getByText('Quick actions')).toHaveCount(0)
+  await expect(surface.getByText('Rewrite point of view or tense')).toHaveCount(0)
+  await expect(surface.getByRole('textbox')).toHaveCount(0)
+  await expect.poll(() => surface.evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+})
 
 test('rotating a tablet into portrait does not leave a panel covering the editor', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 })

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { strFromU8, unzipSync } from 'fflate'
 import {
-  createProject, dismissLaunchPrompts, enterWritingMode, openImportZip, readStorage,
+  createProject, dismissLaunchPrompts, downloadManualProjectBackup, enterWritingMode, openImportZip, readStorage,
   seedCleanStorage, waitForStorage, waitForStorageHydration,
 } from './helpers.js'
 
@@ -277,9 +277,7 @@ test('comic pages and panels are included in ZIP export', async ({ page }) => {
   })
 
   await page.getByRole('button', { name: 'Project settings' }).click()
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/i }).click()
-  const download = await downloadPromise
+  const download = await downloadManualProjectBackup(page)
   expect(download.suggestedFilename()).toMatch(/\.zip$/)
 
   const { default: fs } = await import('node:fs')

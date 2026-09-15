@@ -969,6 +969,62 @@ describe('getProjectExportData', () => {
     expect(importedData.timeline.filter(event => event.eraId).every(event => importedData.eras.some(era => era.id === event.eraId))).toBe(true)
   })
 
+  it('round-trips a complete backup without changing any non-identity project data', () => {
+    const { result } = renderHook(() => useStore('round-trip-user'))
+    let sourceProject
+    act(() => { sourceProject = result.current.ensureSampleProject() })
+
+    const initial = result.current.getProjectExportData(sourceProject.id)
+    act(() => {
+      result.current.updateNovel(sourceProject.id, {
+        focus: true,
+        writingGoals: { daily: 45 },
+        aiChatSessions: [{
+          id: 'chat-source',
+          novelId: sourceProject.id,
+          title: 'Restore this chat',
+          context: {
+            chapterIds: [initial.chapters[0].id],
+            characterIds: [initial.characters[0].id],
+          },
+          messages: [{ id: 'message-source', role: 'user', content: 'Keep this exactly.' }],
+        }],
+      })
+    })
+
+    const source = result.current.getProjectExportData(sourceProject.id)
+    let restoredProject
+    act(() => { restoredProject = result.current.importProjectFromData(source) })
+    const restored = result.current.getProjectExportData(restoredProject.id)
+
+    // Fresh ids are required to prevent collisions. Pair each restored id to
+    // its source counterpart, then compare the complete export recursively;
+    // only the top-level export timestamp is expected to differ.
+    const restoredToSourceId = new Map()
+    const pairIds = (left, right) => {
+      if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return
+      if (Array.isArray(left) || Array.isArray(right)) {
+        if (Array.isArray(left) && Array.isArray(right)) left.forEach((item, index) => pairIds(item, right[index]))
+        return
+      }
+      if (typeof left.id === 'string' && typeof right.id === 'string') restoredToSourceId.set(right.id, left.id)
+      Object.keys(left).forEach(key => pairIds(left[key], right[key]))
+    }
+    pairIds(source, restored)
+    const canonicalize = (value) => {
+      if (typeof value === 'string') return restoredToSourceId.get(value) || value
+      if (Array.isArray(value)) return value.map(canonicalize)
+      if (!value || typeof value !== 'object') return value
+      return Object.fromEntries(Object.entries(value)
+        .filter(([key]) => key !== 'exportedAt')
+        .map(([key, item]) => [key, canonicalize(item)]))
+    }
+
+    const asExportedJson = value => JSON.parse(JSON.stringify(canonicalize(value)))
+    expect(restored.project.id).not.toBe(source.project.id)
+    expect(asExportedJson(restored)).toEqual(asExportedJson(source))
+  })
+
   it('never reuses exported ids, even when the same export is imported twice into one account (audit P0-06)', () => {
     const { result } = renderHook(() => useStore('sample-user'))
 
@@ -2415,9 +2471,43 @@ describe('scene reorder/move cloud sync', () => {
     act(() => { result.current.reorderScene(sceneB.id, 'up') })
 
     await waitFor(() => {
-      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure', expect.objectContaining({ id: sceneA.id, order: 1 }))
-      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure', expect.objectContaining({ id: sceneB.id, order: 0 }))
+      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure', expect.objectContaining({ id: sceneA.id, order: 1 }), { expectedRevision: 0 })
+      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure', expect.objectContaining({ id: sceneB.id, order: 0 }), { expectedRevision: 0 })
     }, { timeout: 3000 })
+  })
+
+  it('preserves a stale cloud save as a conflict copy instead of overwriting newer prose', async () => {
+    const { result } = renderHook(() => useStore('user-scene-conflict'))
+    let project
+    act(() => { project = result.current.addNovel('Protected', '', 'novel') })
+    const scene = result.current.scenes[0]
+    const remoteScene = { ...scene, content: 'Newer prose from the other tab', lastModified: 200 }
+    vi.mocked(saveSceneDoc).mockClear()
+    vi.mocked(saveSceneDoc)
+      .mockResolvedValueOnce({ saved: false, reason: 'stale', revision: 2, remoteScene })
+      .mockResolvedValueOnce({ saved: true })
+
+    act(() => { result.current.updateSceneContent(scene.id, 'My concurrent prose') })
+
+    await waitFor(() => {
+      expect(result.current.scenes.find(item => item.id === scene.id)?.content).toBe(remoteScene.content)
+      expect(result.current.sceneConflicts).toEqual([
+        expect.objectContaining({ conflictOf: scene.id, content: 'My concurrent prose' }),
+      ])
+    }, { timeout: 3000 })
+
+    expect(saveSceneDoc).toHaveBeenNthCalledWith(
+      1,
+      'user-scene-conflict',
+      expect.objectContaining({ id: scene.id, content: 'My concurrent prose' }),
+      { expectedRevision: 0 },
+    )
+    expect(saveSceneDoc).toHaveBeenNthCalledWith(
+      2,
+      'user-scene-conflict',
+      expect.objectContaining({ conflictOf: scene.id, content: 'My concurrent prose' }),
+    )
+    expect(project.id).toBe(scene.novelId)
   })
 
   it('moveScene pushes the moved scene to the cloud under its new chapter', async () => {
@@ -2439,7 +2529,7 @@ describe('scene reorder/move cloud sync', () => {
     act(() => { result.current.moveScene(scene.id, chapterTwo.id, 0) })
 
     await waitFor(() => {
-      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure-2', expect.objectContaining({ id: scene.id, chapterId: chapterTwo.id }))
+      expect(saveSceneDoc).toHaveBeenCalledWith('user-structure-2', expect.objectContaining({ id: scene.id, chapterId: chapterTwo.id }), { expectedRevision: 0 })
     }, { timeout: 3000 })
   })
 })

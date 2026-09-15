@@ -3,7 +3,7 @@ import { streamMessage } from '../../utils/aiApi'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import { getProjectType } from '../../constants/projectTypes'
 import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
-import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
+import { AI_CONFIG_REQUIRED_TEXT, AiUpgradeRequiredNotice, openAiSettings } from '../ai/AiConfigRequired'
 
 const QUICK_PROMPTS = [
   { label: 'Continue', text: "Continue writing this scene naturally from where it ends. Match the author's existing style, voice, tone, and POV. Write 2-3 paragraphs." },
@@ -142,86 +142,24 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     )
   }
 
+  if (!configured) {
+    return (
+      <div className="ms-panel-scroll ai-panel ai-panel-setup">
+        <div className="ai-setup-card">
+          <span className="ai-setup-eyebrow">One-time setup</span>
+          <strong>Connect AI to begin</strong>
+          <p>Add your preferred provider and API key, then return here to use suggestions, rewrites, and custom prompts.</p>
+          <button type="button" className="ai-setup-button" onClick={openAiSettings}>Open AI settings</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ms-panel-scroll ai-panel">
-      {!configured && (
-        <AiConfigRequiredNotice style={{ marginBottom: 12 }} />
-      )}
-
-      {/* Quick actions */}
-      <div className="ms-panel-section-header" style={{ marginTop: 12 }}>Quick actions</div>
-      <div className="ai-chips">
-        {quickPrompts.map(q => (
-          <button
-            key={q.label}
-            className="ai-chip"
-            disabled={streaming || !configured}
-            onClick={() => { setPrompt(''); generate(q.text) }}
-          >
-            {q.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="ms-panel-section-header" style={{ marginTop: 14 }}>Rewrite options</div>
-      <div className="ai-rewrite-tools">
-        <label className="ai-rewrite-field">
-          <span>Point of view</span>
-          <div className="ai-rewrite-row">
-            <select
-              value={targetPov}
-              onChange={e => setTargetPov(e.target.value)}
-              disabled={streaming || !configured}
-              className="ai-rewrite-select"
-            >
-              {POV_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <button
-              className="ai-chip ai-rewrite-btn"
-              disabled={streaming || !configured || !activeScene}
-              title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
-              onClick={() => {
-                setPrompt('')
-                generate(buildRewritePrompt('pov', targetPov, itemLabel, hasSelectedText))
-              }}
-            >
-              Change
-            </button>
-          </div>
-        </label>
-
-        <label className="ai-rewrite-field">
-          <span>Tense</span>
-          <div className="ai-rewrite-row">
-            <select
-              value={targetTense}
-              onChange={e => setTargetTense(e.target.value)}
-              disabled={streaming || !configured}
-              className="ai-rewrite-select"
-            >
-              {TENSE_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <button
-              className="ai-chip ai-rewrite-btn"
-              disabled={streaming || !configured || !activeScene}
-              title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
-              onClick={() => {
-                setPrompt('')
-                generate(buildRewritePrompt('tense', targetTense, itemLabel, hasSelectedText))
-              }}
-            >
-              Change
-            </button>
-          </div>
-        </label>
-      </div>
-
-	      {/* Custom prompt */}
-	      <div className="ms-panel-section-header" style={{ marginTop: 14 }}>Custom prompt</div>
+	      {/* The open-ended request is the primary task; presets and mechanical
+	          rewrites are supporting shortcuts below it. */}
+	      <div className="ms-panel-section-header">Ask AI</div>
 	      {activeScene && (
 	        <div className="ai-context-scope">
 	          {selectedText.trim()
@@ -252,6 +190,79 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
           {!streaming && <span className="ai-hint">or Ctrl+Enter</span>}
         </div>
       </div>
+
+      <div className="ms-panel-section-header">Quick actions</div>
+      <div className="ai-chips">
+        {quickPrompts.map(q => (
+          <button
+            key={q.label}
+            className="ai-chip"
+            disabled={streaming}
+            onClick={() => { setPrompt(''); generate(q.text) }}
+          >
+            {q.label}
+          </button>
+        ))}
+      </div>
+
+      <details className="ai-rewrite-disclosure">
+        <summary>Rewrite point of view or tense</summary>
+        <div className="ai-rewrite-tools">
+          <label className="ai-rewrite-field">
+            <span>Point of view</span>
+            <div className="ai-rewrite-row">
+              <select
+                value={targetPov}
+                onChange={e => setTargetPov(e.target.value)}
+                disabled={streaming}
+                className="ai-rewrite-select"
+              >
+                {POV_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <button
+                className="ai-chip ai-rewrite-btn"
+                disabled={streaming || !activeScene}
+                title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
+                onClick={() => {
+                  setPrompt('')
+                  generate(buildRewritePrompt('pov', targetPov, itemLabel, hasSelectedText))
+                }}
+              >
+                Change
+              </button>
+            </div>
+          </label>
+
+          <label className="ai-rewrite-field">
+            <span>Tense</span>
+            <div className="ai-rewrite-row">
+              <select
+                value={targetTense}
+                onChange={e => setTargetTense(e.target.value)}
+                disabled={streaming}
+                className="ai-rewrite-select"
+              >
+                {TENSE_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <button
+                className="ai-chip ai-rewrite-btn"
+                disabled={streaming || !activeScene}
+                title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
+                onClick={() => {
+                  setPrompt('')
+                  generate(buildRewritePrompt('tense', targetTense, itemLabel, hasSelectedText))
+                }}
+              >
+                Change
+              </button>
+            </div>
+          </label>
+        </div>
+      </details>
 
       {/* Error */}
       {error && <div className="ai-error">{error}</div>}

@@ -730,7 +730,7 @@ const WritingProgressCard = ({ words, target, progress, statusLabel }) => {
       </div>
       <div className="writing-progress-footer">
         <p>{context}</p>
-        <small>{remainingText}</small>
+        <small className={hasTarget && remaining === 0 ? 'is-target-reached' : undefined}>{remainingText}</small>
         <span>{statusLabel || 'Drafting'}</span>
       </div>
     </section>

@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SceneEditor } from './SceneEditor.jsx'
 import { DEFAULT_FORMAT } from './manuscriptUtils.js'
+
+const presenceState = vi.hoisted(() => ({ count: 0 }))
+vi.mock('../../utils/useTabPresence.js', () => ({
+  useTabPresence: () => presenceState.count,
+}))
 
 // This file wasn't cleaning up the DOM between tests (each `render()` call left its
 // output mounted), which every existing test tolerated only because it scopes its
 // queries to its own returned `container`. Text-based getByText/queryByText queries
 // below don't have that protection, so clean up for real between tests.
-afterEach(cleanup)
-
 function noop() {}
 
 function makeScene(content) {
@@ -43,7 +46,27 @@ function renderScene(content, overrides = {}) {
 }
 
 afterEach(() => {
+  presenceState.count = 0
   cleanup()
+})
+
+describe('SceneEditor same-scene lease', () => {
+  it('returns a later tab to read-only without flushing its draft', async () => {
+    presenceState.count = 1
+    const onPersistDraft = vi.fn()
+    const onUpdate = vi.fn()
+    const { container } = renderScene('Protected prose.', { onPersistDraft, onUpdate })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/keep this tab read-only/i)).toBeTruthy()
+      expect(container.querySelector('textarea.ms-textarea')).toBeNull()
+    })
+    expect(onPersistDraft).not.toHaveBeenCalled()
+    expect(onUpdate).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Edit anyway' })).toBeNull()
+  })
 })
 
 describe('SceneEditor content preview — mismatched markdown emphasis', () => {
@@ -72,18 +95,19 @@ describe('SceneEditor content preview — mismatched markdown emphasis', () => {
 })
 
 describe('SceneEditor semantic paragraph indentation', () => {
-  it('renders each stored paragraph with a visual first-line indent', () => {
+  it('renders every explicit line without adding paragraph spacing', () => {
     const { container } = renderScene('First paragraph.\n\nSecond paragraph.')
     const paragraphs = [...container.querySelectorAll('.ms-prose-paragraph')]
 
-    expect(paragraphs).toHaveLength(2)
+    expect(paragraphs).toHaveLength(3)
     expect(paragraphs.map(paragraph => paragraph.textContent)).toEqual([
       'First paragraph.',
+      '\u00a0',
       'Second paragraph.',
     ])
   })
 
-  it('starts a new paragraph with a semantic break instead of literal spaces', async () => {
+  it('moves down exactly one line for each Enter press', async () => {
     const onPersistDraft = vi.fn()
     const onLiveContentChange = vi.fn()
     const { container } = renderScene('First paragraph.', { onPersistDraft, onLiveContentChange })
@@ -97,9 +121,27 @@ describe('SceneEditor semantic paragraph indentation', () => {
     textarea.setSelectionRange(textarea.value.length, textarea.value.length)
     fireEvent.keyDown(textarea, { key: 'Enter' })
 
+    expect(onPersistDraft).toHaveBeenLastCalledWith(expect.objectContaining({ id: 's1' }), 'First paragraph.\n')
+    expect(onLiveContentChange).toHaveBeenLastCalledWith('s1', 'First paragraph.\n')
+
+    const updatedTextarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node.value).toBe('First paragraph.\n')
+      expect(node.selectionStart).toBe(node.value.length)
+      expect(node.selectionEnd).toBe(node.value.length)
+      return node
+    })
+    updatedTextarea.setSelectionRange(updatedTextarea.value.length, updatedTextarea.value.length)
+    fireEvent.keyDown(updatedTextarea, { key: 'Enter' })
+
     expect(onPersistDraft).toHaveBeenLastCalledWith(expect.objectContaining({ id: 's1' }), 'First paragraph.\n\n')
     expect(onLiveContentChange).toHaveBeenLastCalledWith('s1', 'First paragraph.\n\n')
     expect(onPersistDraft.mock.lastCall[1]).not.toMatch(/\n +$/)
+    await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node.selectionStart).toBe(node.value.length)
+      expect(node.selectionEnd).toBe(node.value.length)
+    })
     expect(fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })).toBe(true)
   })
 })

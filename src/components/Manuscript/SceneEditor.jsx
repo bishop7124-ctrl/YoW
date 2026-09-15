@@ -485,15 +485,18 @@ const ContentPreview = ({
   }
 
   if (indentParagraphs) {
+    // Keep every explicit newline as exactly one visual line. Enter used to
+    // insert `\n\n`, then the overlay added another line-height of margin to
+    // mirror that separator, so one keypress looked like two. Splitting on
+    // each newline also preserves empty lines: pressing Enter repeatedly now
+    // moves the caret down one line per press without collapsing the blanks.
     const paragraphs = []
-    const separator = /\n{2,}/g
     let start = 0
-    let match
-    while ((match = separator.exec(content)) !== null) {
-      paragraphs.push({ start, end: match.index, text: content.slice(start, match.index) })
-      start = match.index + match[0].length
-    }
-    paragraphs.push({ start, end: content.length, text: content.slice(start) })
+    content.split('\n').forEach((text, index, lines) => {
+      const end = start + text.length
+      paragraphs.push({ start, end, text })
+      if (index < lines.length - 1) start = end + 1
+    })
 
     const notes = [...notesBySeq.values()]
     return (
@@ -809,7 +812,10 @@ const SceneEditorImpl = ({
   // docs/ROADMAP.md for why silent post-hoc merging kept finding new gaps.
   const otherEditorsCount = useTabPresence(`scene:${scene.id}`, focused)
   const [showEditingElsewhereWarning, setShowEditingElsewhereWarning] = useState(false)
+  const [showSaveConflictNotice, setShowSaveConflictNotice] = useState(false)
   const warnedThisFocusRef = useRef(false)
+  const presenceBlockedRef = useRef(false)
+  const editBaselineRef = useRef(localContent)
   const textareaRef = useRef(null)
   const wrapperRef = useRef(null)
   const visualCaretFrameRef = useRef(null)
@@ -947,15 +953,6 @@ const SceneEditorImpl = ({
     return () => window.cancelAnimationFrame(sync)
   }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
 
-  useEffect(() => {
-    if (!focused) { warnedThisFocusRef.current = false; return }
-    if (otherEditorsCount > 0 && !warnedThisFocusRef.current) {
-      warnedThisFocusRef.current = true
-      setShowEditingElsewhereWarning(true)
-    }
-  }, [focused, otherEditorsCount])
-
-
   // `ta.style.height = 'auto'` followed by reading `scrollHeight` forces the browser
   // to lay out the textarea's entire content to find its natural height — cheap for a
   // normal scene, but measured at 40ms+ for a scene in the tens of thousands of words,
@@ -1053,6 +1050,42 @@ const SceneEditorImpl = ({
     onPersistDraft(sceneRef.current, text, { immediate: true })
     onUpdate(scene.id, text)
   }, 400)
+
+  useEffect(() => {
+    if (!focused) {
+      warnedThisFocusRef.current = false
+      editBaselineRef.current = stripNoteMarkers(scene.content || '')
+      return
+    }
+    if (otherEditorsCount === 0) presenceBlockedRef.current = false
+    if (otherEditorsCount > 0 && !warnedThisFocusRef.current) {
+      warnedThisFocusRef.current = true
+      presenceBlockedRef.current = true
+      debouncedUpdate.cancel()
+      const baseline = editBaselineRef.current
+      localContentRef.current = baseline
+      onLiveContentChange(scene.id, baseline)
+      setLocalContent(baseline)
+      setFocused(false)
+      setShowEditingElsewhereWarning(true)
+    }
+  }, [focused, otherEditorsCount, debouncedUpdate, onLiveContentChange, scene.id, scene.content])
+
+  useEffect(() => {
+    const handleCloudConflict = event => {
+      if (event.detail?.sceneId !== scene.id) return
+      const remoteContent = stripNoteMarkers(event.detail?.remoteScene?.content || '')
+      presenceBlockedRef.current = true
+      debouncedUpdate.cancel()
+      localContentRef.current = remoteContent
+      onLiveContentChange(scene.id, remoteContent)
+      setLocalContent(remoteContent)
+      setFocused(false)
+      setShowSaveConflictNotice(true)
+    }
+    window.addEventListener('yow-scene-save-conflict', handleCloudConflict)
+    return () => window.removeEventListener('yow-scene-save-conflict', handleCloudConflict)
+  }, [debouncedUpdate, onLiveContentChange, scene.id])
 
   const measureCaret = useTextareaCaretRect(textareaRef, pageZoom)
 
@@ -1333,6 +1366,7 @@ const SceneEditorImpl = ({
   useEffect(() => {
     if (!focused) return undefined
     const flushDraft = () => {
+      if (presenceBlockedRef.current) return
       onPersistDraft(sceneRef.current, localContentRef.current, { immediate: true })
       debouncedUpdate.flush()
     }
@@ -1535,10 +1569,9 @@ const SceneEditorImpl = ({
       recordBeforeEdit(true)
       const start = base + e.target.selectionStart
       const end = base + e.target.selectionEnd
-      // A paragraph break is semantic data, not a run of presentation spaces.
-      // The editor/final reader/exporters render first-line indentation; keeping
-      // the stored prose as `\n\n` also preserves copy/paste and DOCX paragraphs.
-      const insertion = '\n\n'
+      // One Enter is one newline. Repeated presses intentionally create and
+      // retain additional blank lines, matching an ordinary text editor.
+      const insertion = '\n'
 	      const nextContent = localContent.slice(0, start) + insertion + localContent.slice(end)
       localContentRef.current = nextContent
       onPersistDraft(scene, nextContent)
@@ -1657,7 +1690,6 @@ const SceneEditorImpl = ({
     lineHeight: formatSettings.lineHeight,
     textAlign: formatSettings.textAlign,
     '--ms-paragraph-indent': `${formatSettings.indentSize}ch`,
-    '--ms-paragraph-edit-gap': `${formatSettings.lineHeight}em`,
   }
 
 	  // Replaces the `autoFocus` attribute the real textarea(s) used to have.
@@ -1683,8 +1715,10 @@ const SceneEditorImpl = ({
 	  const handleEditorBlur = () => {
 	    burstActiveRef.current = false
 	    hideVisualCaret()
-	    onPersistDraft(scene, localContentRef.current, { immediate: true })
-	    debouncedUpdate.flush()
+	    if (!presenceBlockedRef.current) {
+	      onPersistDraft(scene, localContentRef.current, { immediate: true })
+	      debouncedUpdate.flush()
+	    }
 	    window.setTimeout(() => {
 	      if (wrapperRef.current?.contains(document.activeElement)) return
 	      if (keepEditingOnExternalBlur) return
@@ -1737,6 +1771,15 @@ const SceneEditorImpl = ({
             <span className="ms-meta-dot" />
             {statusCfg.label}
           </button>
+
+          <button
+            type="button"
+            className="ms-meta-chip ms-mobile-note-btn"
+            onMouseDown={e => e.preventDefault()}
+            onClick={handleAddNote}
+            title="Add note at cursor"
+            aria-label="Add note"
+          >+ Note</button>
 
           <div className="flex-1 h-px bg-[var(--border)]" />
 
@@ -2030,21 +2073,22 @@ const SceneEditorImpl = ({
             textareaRef.current?.blur()
             setFocused(false)
           }}
-          onEditAnyway={() => {
-            setShowEditingElsewhereWarning(false)
-            // The dialog auto-focuses itself on mount (StudioSheet), which blurs the
-            // textarea and drops `focused` to false — the editable textarea then
-            // unmounts entirely (see the focused ? <textarea> : <preview> branch
-            // below), so textareaRef can be stale/detached here. Re-render focused
-            // first, then look the fresh node up by class once it's back in the DOM,
-            // so "Edit anyway" actually leaves the user able to keep typing.
-            setFocused(true)
-            window.setTimeout(() => {
-              const ta = wrapperRef.current?.querySelector('textarea.ms-textarea')
-              if (ta) { textareaRef.current = ta; ta.focus({ preventScroll: true }) }
-            }, 0)
-          }}
         />
+      )}
+      {showSaveConflictNotice && (
+        <Modal title="Both scene versions were saved" onClose={() => setShowSaveConflictNotice(false)} closeOnBackdrop={false}>
+          <p style={{ marginBottom: '1rem' }}>
+            This scene changed elsewhere before your save reached the cloud. YOW kept the newer cloud scene here and saved your attempted edit as a conflict copy.
+          </p>
+          <p style={{ marginBottom: '1.25rem', color: 'var(--text-muted)' }}>
+            Open the conflict-copies review in the manuscript toolbar to compare or restore it. No prose was discarded.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="ms-conflict-btn ms-conflict-btn-primary" onClick={() => setShowSaveConflictNotice(false)}>
+              Review when ready
+            </button>
+          </div>
+        </Modal>
       )}
       {openNote && (
         <NoteModal
