@@ -146,6 +146,70 @@ describe('SceneEditor semantic paragraph indentation', () => {
   })
 })
 
+describe('SceneEditor note-anchor store commits on keystroke', () => {
+  // Regression guard for the 2026-09-12 "typing lags once a note is attached"
+  // Bugs-table row (docs/ROADMAP.md): handleChange used to call onUpdateScene
+  // (an un-debounced store commit, unlike the content path's debounced update)
+  // on every keystroke whenever the scene had any notes, even when nothing
+  // about a note's anchor actually changed. Fixed by only committing when the
+  // recomputed anchor differs from the original.
+  function makeNote(overrides = {}) {
+    return { id: 'n1', seq: 1, title: '', text: 'A note', anchorOffset: 0, anchorEndOffset: 4, selectedText: 'Test', ...overrides }
+  }
+
+  it('does not call onUpdateScene when typing does not require any note to shift (edit mode)', async () => {
+    // Edit mode's single textarea always reports the full document as the
+    // edit span (data-ms-start=0, data-ms-end=content.length) — so a note
+    // anchored anywhere before the document's current end never needs to
+    // shift here. This is the exact scenario the original bug report hit:
+    // typing normally in a large scene with an existing note.
+    const onUpdateScene = vi.fn()
+    const { container } = renderScene('Test scene content.', {
+      onUpdateScene,
+      scene: { id: 's1', title: 'Scene', content: 'Test scene content.', chapterId: 'c1', order: 0, notes: [makeNote()] },
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+
+    fireEvent.change(textarea, { target: { value: 'Test scene content. More.' } })
+
+    expect(onUpdateScene).not.toHaveBeenCalledWith('s1', expect.objectContaining({ notes: expect.anything() }))
+  })
+
+  it('still shifts a note anchor and commits it when an edit genuinely precedes the note (write mode block editor)', async () => {
+    // Write mode splits the textarea per note, with data-ms-start/data-ms-end
+    // set to that block's real offsets — this is the path where an edit
+    // actually located before a note's anchor is detectable, and the shift
+    // must still be committed.
+    const onUpdateScene = vi.fn()
+    const note = makeNote({ anchorOffset: 5, anchorEndOffset: 9 }) // anchors "scene" in "Test scene content."
+    const { container } = renderScene('Test scene content.', {
+      onUpdateScene,
+      mode: 'write',
+      scene: { id: 's1', title: 'Scene', content: 'Test scene content.', chapterId: 'c1', order: 0, notes: [note] },
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea[data-ms-start="0"]')
+      expect(node).toBeTruthy()
+      return node
+    })
+
+    // Insert "XX" at the very start of the block preceding the note — a genuine edit before the anchor.
+    fireEvent.change(textarea, { target: { value: 'XXTest ' } })
+
+    expect(onUpdateScene).toHaveBeenCalledWith('s1', {
+      notes: [expect.objectContaining({ anchorOffset: 7, anchorEndOffset: 11 })],
+    })
+  })
+})
+
 describe('SceneEditor visual caret', () => {
   it('uses a font-height preview caret instead of the textarea line-height caret', async () => {
     const originalDescriptor = Object.getOwnPropertyDescriptor(Range.prototype, 'getClientRects')
