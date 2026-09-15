@@ -4,22 +4,19 @@ import Modal from './Modal'
 // row in docs/ROADMAP.md's Bugs table: reconciling concurrent edits after the
 // fact (field-level merge, conflict copies, cross-tab storage sync) has kept
 // finding new gaps under real live testing, so this warns up front instead.
-export default function EditingElsewhereWarning({ label, onClose, onEditAnyway }) {
+export default function EditingElsewhereWarning({ label, onClose }) {
   return (
-    <Modal title="Also open in another tab" onClose={onClose}>
+    <Modal title="Also open in another tab" onClose={onClose} closeOnBackdrop={false}>
       <p style={{ marginBottom: '1rem' }}>
         {label ? <>This {label} is</> : 'This is'} currently open for editing in another browser
-        tab. Editing it here at the same time can cause one of you to lose changes.
+        tab. To protect both copies, YOW will keep this tab read-only until the other editor closes.
       </p>
       <p style={{ marginBottom: '1.25rem', color: 'var(--text-muted)' }}>
-        Safest option: finish or close out the other tab first.
+        Finish or close the scene in the other tab, then select this scene again to edit here.
       </p>
       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
         <button type="button" className="ms-conflict-btn" onClick={onClose}>
-          Go back
-        </button>
-        <button type="button" className="ms-conflict-btn ms-conflict-btn-primary" onClick={onEditAnyway}>
-          Edit anyway
+          Return to read-only
         </button>
       </div>
     </Modal>

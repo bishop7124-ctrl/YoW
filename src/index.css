@@ -64,6 +64,8 @@
   --button-secondary-text: var(--color-text-muted);
   --button-secondary-hover-bg: var(--color-surface-hover);
   --control-radius: var(--r-md);
+  --text-field-padding-block: 8px;
+  --text-field-padding-inline: 12px;
 
   /* ── Atmosphere tokens (drive gradients, textures & materials) ──────────── */
   /* Each theme overrides these to create a radically distinct environment.    */
@@ -427,6 +429,31 @@
 
 /* Base application styling */
 * { box-sizing: border-box; }
+
+/* Every native text-entry control starts with a readable inner buffer. Keep
+   this at element-level specificity so it beats the reset while component
+   classes can still override sizing and icon offsets without a cascade fight. */
+input:where(
+  :not([type]),
+  [type="text"],
+  [type="number"],
+  [type="email"],
+  [type="password"],
+  [type="search"],
+  [type="url"],
+  [type="tel"],
+  [type="date"],
+  [type="datetime-local"],
+  [type="month"],
+  [type="week"],
+  [type="time"]
+),
+  textarea,
+  select {
+  min-width: 0;
+  padding: var(--text-field-padding-block) var(--text-field-padding-inline);
+}
+
 html, body, #root { height: 100%; margin: 0; }
 html { height: 100dvh; }
 body {
@@ -1299,6 +1326,8 @@ textarea:focus {
 }
 
 .studio-sheet.is-centered {
+  max-height: calc(100dvh - clamp(20px, 6vw, 48px));
+  margin: 0;
   border-radius: var(--r-lg);
   box-shadow: 0 24px 80px rgba(0,0,0,.44);
 }
@@ -1987,12 +2016,9 @@ textarea:focus {
   text-indent: var(--ms-paragraph-indent, 4ch) each-line;
 }
 
-/* While the transparent textarea is active, its semantic `\n\n` separator
-   occupies one blank line. Mirror that line in the overlay so text and caret
-   stay vertically aligned; read-only/final views keep book-style tight paragraphs. */
-.ms-rich-preview .ms-prose-paragraph + .ms-prose-paragraph {
-  margin-top: var(--ms-paragraph-edit-gap, 2em);
-}
+/* Each explicit newline is rendered as its own line-sized paragraph block.
+   Keep adjacent blocks flush so one Enter advances exactly one line; empty
+   blocks preserve intentional blank lines from repeated Enter presses. */
 .ms-note-marker {
   margin-left: 2px;
   color: var(--accent);
@@ -5256,11 +5282,13 @@ textarea:focus {
 }
 
 .schedule-date-field--year {
-  flex: 0 0 104px;
+  flex: 0 0 auto;
 }
 
 .schedule-date-field--year input {
-  width: 52px;
+  width: 9ch;
+  min-width: 84px;
+  font-variant-numeric: tabular-nums;
 }
 
 .schedule-toolbar-actions {
@@ -5314,11 +5342,29 @@ textarea:focus {
   transform: translateY(-1px);
 }
 
+.schedule-event-form,
+.schedule-event-form label {
+  min-width: 0;
+}
+
+.schedule-event-form .field {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .schedule-month-title {
   padding-top: 14px;
   color: var(--text-main);
   font-size: 16px;
   font-weight: 750;
+  text-align: center;
+}
+
+.schedule-drag-hint {
+  margin: 3px 0 -3px;
+  color: var(--text-faint);
+  font-size: 10px;
   text-align: center;
 }
 
@@ -5334,6 +5380,9 @@ textarea:focus {
 .schedule-day-cell {
   position: relative;
   z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -5347,6 +5396,13 @@ textarea:focus {
 .schedule-day-cell:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   background: var(--bg-hover);
+}
+
+.schedule-day-cell.is-drop-target {
+  z-index: 2;
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-nav));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .schedule-day-cell:disabled {
@@ -5367,6 +5423,8 @@ textarea:focus {
 .schedule-ribbon {
   position: relative;
   z-index: 3;
+  display: flex;
+  align-items: center;
   align-self: start;
   margin-inline: 4px;
   height: 18px;
@@ -5379,10 +5437,49 @@ textarea:focus {
   font-weight: 750;
   line-height: 16px;
   text-align: left;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-main) 80%, transparent);
+}
+
+.schedule-ribbon:active,
+.schedule-ribbon.is-interacting {
+  cursor: grabbing;
+  filter: brightness(1.1);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--event-color) 24%, transparent);
+}
+
+.schedule-ribbon.is-read-only {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.schedule-ribbon-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schedule-resize-handle {
+  position: relative;
+  align-self: stretch;
+  flex: 0 0 12px;
+  margin: -1px -8px -1px auto;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.schedule-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  opacity: .8;
 }
 
 .schedule-empty-month {
@@ -11621,9 +11718,17 @@ body {
   }
 
   .studio-brand {
-    width: auto;
-    max-width: min(28vw, 360px);
+    width: clamp(420px, 34vw, 520px);
+    max-width: none;
     overflow: hidden;
+  }
+
+  .studio-brand-text {
+    flex: 1 1 auto;
+  }
+
+  .studio-brand h1 {
+    flex: 1 1 14ch;
   }
 
   .studio-brand-text,
@@ -11651,16 +11756,17 @@ body {
   }
 
   .studio-brand {
-    width: auto;
+    width: min(42vw, 420px);
     min-width: 0;
-    max-width: min(42vw, 420px);
+    max-width: none;
     overflow: hidden;
     flex-direction: row;
     gap: 6px;
     padding-inline: 10px;
   }
 
-  /* At narrow end of range just show the logo — title may be cut to nothing */
+  /* Keep the identity row shrinkable inside its reserved column; the
+     decorative brand labels below collapse before the project title. */
   .studio-brand-text {
     flex: 0 1 auto;
     min-width: 0;
@@ -13454,6 +13560,10 @@ body {
     box-sizing: border-box;
   }
 
+  .status-queue-section {
+    order: -1;
+  }
+
   .library-content-shell {
     width: 100%;
     max-width: 100%;
@@ -14567,7 +14677,7 @@ body {
   outline: none;
   color: var(--text-main);
   font: inherit;
-  padding: 0;
+  padding: 2px 6px;
 }
 
 .ms-rail-dropzone {
@@ -15333,6 +15443,24 @@ body {
 .ms-goto-item-path { font-size: 11px; color: var(--text-faint); }
 
 @media (max-width: 900px) {
+  .ms-topbar {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+  .ms-topbar-zone-left {
+    flex: 1 1 auto;
+  }
+  .ms-topbar-crumb {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+  .ms-topbar-crumb-title {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  /* The full act/chapter/scene path is useful on desktop, but competes with
+     the primary project identity and the mode switch in the compact bar. */
+  .ms-topbar-crumb-path { display: none; }
   .ms-topbar-zone-mid { display: none; }
   /* AI/Inspector/Project/Focus/zoom all duplicate the mobile bottom tab bar
      (Outline/Write/Inspector/AI) or don't fit — only the overflow menu
@@ -15770,6 +15898,8 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.ms-mobile-note-btn { display: none; }
 
 .ms-meta-status {
   --dot-color: var(--text-muted);
@@ -16721,14 +16851,32 @@ body {
 	    gap: 4px;
 	  }
 
+    /* The edit-mode action cluster can be wider than the manuscript column
+       once word count, text mode, undo/redo, formatting, Copy scene, History,
+       and Details are present. Let the controls form additional rows inside
+       the scene header instead of widening the scroll container. */
+    .ms-scene-header-hover {
+      flex: 1 1 100%;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    /* Mobile uses a stable scene-header action instead of a large square that
+       follows the caret and covers whichever line the writer is editing. */
+    .ms-mobile-note-btn { display: inline-flex; }
+    .ms-floating-note-btn { display: none; }
+
+    /* The desktop default is four characters—too dramatic on a phone, where
+       it consumes a large part of the usable line before prose even begins. */
+    .manuscript-processor .ms-preview,
+    .manuscript-processor .ms-textarea {
+      --ms-paragraph-indent: 1.5ch !important;
+    }
+
 	  .ms-inline-notes {
 	    margin-inline: 18px;
 	  }
 
-	  .ms-floating-note-btn {
-	    right: 8px !important;
-	    left: auto !important;
-	  }
 	}
 
 /* ── AI Suggestion Panel ─────────────────────────────────────────────────────── */
@@ -16737,7 +16885,57 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
+  font-family: var(--font);
 }
+
+.ai-panel-setup {
+  padding: 16px;
+}
+
+.ai-setup-card {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent-fade) 42%, var(--bg-main));
+}
+
+.ai-setup-eyebrow {
+  color: var(--accent-text);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.ai-setup-card strong {
+  color: var(--text-main);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.ai-setup-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ai-setup-button {
+  min-height: 34px;
+  margin-top: 3px;
+  padding: 0 13px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  font: 800 12px var(--font);
+}
+
+.ai-setup-button:hover { opacity: .88; }
 
 .ai-no-config {
   margin: 12px 14px 0;
@@ -16781,6 +16979,30 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 0 14px;
+}
+
+.ai-rewrite-disclosure {
+  margin: 14px 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ai-rewrite-disclosure > summary {
+  padding: 11px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+  list-style-position: outside;
+}
+
+.ai-rewrite-disclosure > summary:hover,
+.ai-rewrite-disclosure > summary:focus-visible {
+  color: var(--text-main);
+}
+
+.ai-rewrite-disclosure .ai-rewrite-tools {
+  gap: 10px;
+  padding: 2px 0 4px;
 }
 
 .ai-rewrite-field {
@@ -18421,6 +18643,12 @@ body {
   white-space: nowrap;
 }
 
+.writing-progress-footer small.is-target-reached {
+  border-color: color-mix(in srgb, var(--success) 58%, var(--project-border));
+  background: color-mix(in srgb, var(--success) 18%, var(--bg-main));
+  color: color-mix(in srgb, var(--success) 72%, var(--text-main));
+}
+
 .overview-hero-side {
   margin-top: 10px;
   padding-top: 12px;
@@ -18490,11 +18718,18 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .writing-progress-footer {
+    display: grid;
+    align-items: start;
+  }
+
   .writing-progress-footer p,
   .writing-progress-footer small,
   .writing-progress-footer span {
     grid-column: auto;
     grid-row: auto;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .writing-progress-icon {
@@ -18517,8 +18752,10 @@ body {
 
   .writing-progress-footer small,
   .writing-progress-footer span {
+    width: fit-content;
     justify-self: start;
     white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -21321,6 +21558,70 @@ body {
   color: var(--accent);
 }
 
+/* Keep the portrait as a stable dossier column while the identity chips grow.
+   Previously every item shared one wrapping flex row, so overflow restarted
+   beneath the portrait and made larger character profiles look staggered. */
+.character-dossier-header > :first-child {
+  min-width: 0;
+}
+
+.character-dossier-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.character-dossier-header .studio-page-actions {
+  width: auto;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.character-dossier-summary {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  max-width: 100%;
+  margin-top: 20px;
+}
+
+.character-dossier-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 9px 10px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.character-dossier-tags .chip {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+@media (max-width: 480px) {
+  .character-dossier-summary {
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .character-dossier-summary .character-cover-placeholder,
+  .character-dossier-photo {
+    width: 76px;
+    height: 76px;
+  }
+}
+
+@media (max-width: 860px) {
+  .character-dossier-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Left-nav redesign, Phase 2/Locations (2026-08-19): same treatment as
    .character-cover-placeholder above (reused rather than duplicated —
    only the selector differs), for the location dossier's new photo slot. */
@@ -22441,6 +22742,10 @@ body {
   white-space: nowrap;
 }
 
+.studio-compact-identity {
+  display: none;
+}
+
 .studio-room-menu-portal {
   position: fixed;
   z-index: 1000;
@@ -22577,15 +22882,9 @@ body {
 }
 
 @media (max-width: 860px) {
-  /* Full mobile header redesign, per explicit request (fifth iteration): a
-     plain hamburger glyph triggers the section menu, far left; the YOW
-     brand mark is removed entirely (fourth iteration had it centred — per
-     follow-up request, just drop it, nothing replaces it); Settings/Exit/
-     tour sit next to the account avatar on the far right. Write stays
-     folded into the hamburger dropdown. Appended last so it wins over the
-     file's several earlier (and mutually inconsistent) `.studio-spine`
-     grid definitions at this breakpoint — verified against live computed
-     styles, not guessed from source order. */
+  /* Tablet/mobile header: the section menu owns the far-left slot while
+     project identity uses the flexible middle column. Appended last so it
+     wins over the file's earlier compact-header iterations. */
   .studio-spine {
     grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
     grid-template-rows: auto;
@@ -22605,6 +22904,47 @@ body {
     max-width: 96px;
   }
 
+  .studio-brand {
+    display: flex;
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+    min-width: 0;
+    height: 54px;
+    padding: 0 10px;
+    overflow: hidden;
+    border-right: 0;
+    border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  }
+
+  .studio-spine .studio-brand .studio-brand-text {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .studio-brand-name-stack,
+  .studio-brand-sep,
+  .studio-project-type-badge,
+  .studio-brand-text .beta-watermark {
+    display: none;
+  }
+
+  .studio-brand h1 {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .studio-spine .studio-brand .studio-primary-action {
+    display: flex;
+    flex: 0 0 auto;
+    padding: 0 0 0 8px;
+  }
+
   .studio-utility {
     grid-column: 3;
     grid-row: 1;
@@ -22612,10 +22952,6 @@ body {
     padding-left: 0;
   }
 
-  /* No brand mark on mobile — the hamburger (left) already identifies this
-     as YOW's in-project view, and Write moved into its dropdown instead of
-     living in the bar as its own button. */
-  .studio-brand,
   .studio-mobile-primary-action {
     display: none;
   }
@@ -22645,6 +22981,14 @@ body {
     border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
     margin-bottom: 2px;
     padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Phones retain the intentionally minimal header; the identity swap is
+     for the tablet layout where the middle column has room for the title. */
+  .studio-brand {
+    display: none;
   }
 }
 
@@ -23001,8 +23345,60 @@ body {
   .studio-room-list { overflow-x: auto; scrollbar-width: thin; }
 }
 @media (min-width: 861px) and (max-width: 1100px) {
+  .studio-spine { position: relative; }
   .studio-room-list { display: none; }
-  .studio-room-hamburger { display: flex; align-items: center; gap: 8px; justify-self: start; }
+  .studio-room-hamburger {
+    display: flex;
+    grid-column: 1;
+    grid-row: 1;
+    align-items: center;
+    gap: 8px;
+    justify-self: start;
+  }
+}
+
+/* A dedicated tablet identity avoids the accumulated desktop/mobile brand
+   rules competing over the same element. Safari's iPad desktop-site viewport
+   can resolve anywhere from 820–1100 CSS px, so cover that full range. */
+@media (min-width: 641px) and (max-width: 1100px) {
+  .studio-spine {
+    position: relative;
+  }
+
+  .studio-spine > .studio-brand {
+    display: none;
+  }
+
+  .studio-compact-identity {
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-width: min(46vw, 440px);
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    background: none;
+    color: var(--text-main);
+  }
+
+  .studio-compact-identity,
+  button.studio-compact-identity {
+    display: flex;
+  }
+
+  .studio-compact-project-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 .ms-catalogue-count { color: var(--text-muted); font-size: 12px; margin: 8px 0; }
 .ms-catalogue-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 12px; }

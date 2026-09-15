@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { dismissLaunchPrompts, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
+import { dismissLaunchPrompts, downloadManualProjectBackup, openImportZip, openProjectSettings, seedCleanStorage } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await seedCleanStorage(page)
@@ -34,9 +34,7 @@ test('Import ZIP can import into an existing project without creating a new one 
   await expect(sourceEditor).toHaveValue(sourceSentence)
 
   await openProjectSettings(page)
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/ }).click()
-  const download = await downloadPromise
+  const download = await downloadManualProjectBackup(page)
   const tmpZipPath = `/tmp/yow-import-existing-${Date.now()}.zip`
   await download.saveAs(tmpZipPath)
   expect(fs.statSync(tmpZipPath).size).toBeGreaterThan(100)

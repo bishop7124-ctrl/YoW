@@ -28,7 +28,6 @@ export function normalizeAiChatSessions(sessions, novelId) {
     .map(session => ({
       ...session,
       novelId: session.novelId ?? novelId,
-      context: { mode: 'smart', ...(session.context || {}) },
       messages: Array.isArray(session.messages) ? session.messages : [],
     }))
 }

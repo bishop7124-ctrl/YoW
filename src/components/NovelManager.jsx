@@ -138,7 +138,6 @@ function ProjectExportMenu({ onExport, compact = false }) {
   const options = [
     ['docx', 'Word docs ZIP', 'Readable export — separate Word documents for story, characters, locations, lore, timeline, and more'],
     ['pdf', 'Visual PDF', 'Styled World Bible-style export'],
-    ['zip', 'Backup zip', 'Restore file for YOW — JSON data, not for reading'],
   ]
 
   return (
@@ -424,7 +423,7 @@ function StatusQueue({ stats, series = [], onOpenProject }) {
   })
 
   return (
-    <section>
+    <section className="status-queue-section">
       <div className="dash-section-title">
         <h2>Status Queue</h2>
         <div className="status-queue-controls">

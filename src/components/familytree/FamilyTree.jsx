@@ -46,6 +46,7 @@ const getTreeColumnCount = () => {
 
 const FAMILY_TYPE_OPTIONS = ["biological", "adoptive", "step", "chosen", "legal", "magical", "unknown"];
 const FAMILY_STATUS_OPTIONS = ["active", "former", "secret", "disputed", "hidden"];
+const FAMILY_TREE_FILTER_DEFAULTS = { ...FAMILY_FILTER_DEFAULTS, scope: "all" };
 
 const RELATIVE_ROLE_OPTIONS = [
   ["parent", "Parent"],
@@ -137,7 +138,7 @@ export default function FamilyTree({ store }) {
   const [hoveredCharId, setHoveredCharId] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const [treeColumnCount, setTreeColumnCount] = useState(getTreeColumnCount);
-  const [filters, setFilters] = useState(FAMILY_FILTER_DEFAULTS);
+  const [filters, setFilters] = useState(FAMILY_TREE_FILTER_DEFAULTS);
   const [connectionForm, setConnectionForm] = useState(() => newConnectionForm());
   const [connectionWarnings, setConnectionWarnings] = useState([]);
   const [connectionNotice, setConnectionNotice] = useState("");
@@ -171,9 +172,15 @@ export default function FamilyTree({ store }) {
   const selectedCharacter = byId.get(focusCharacterId) || null;
   const hoveredCharacter = hoveredCharId ? byId.get(hoveredCharId) : null;
   const familyLookups = useMemo(() => buildFamilyLookups(characters, filters), [characters, filters]);
+  // "All families" keeps the canvas stable while cards are selected. The
+  // details panel still uses full-dynasty relationship labels for its focus.
+  const relationshipFilters = useMemo(
+    () => filters.scope === "all" ? { ...filters, scope: "full" } : filters,
+    [filters],
+  );
   const derivedBySelected = useMemo(
-    () => focusCharacterId ? deriveFamilyRelationshipsFromLookups(characters, focusCharacterId, filters, familyLookups) : [],
-    [characters, familyLookups, focusCharacterId, filters],
+    () => focusCharacterId ? deriveFamilyRelationshipsFromLookups(characters, focusCharacterId, relationshipFilters, familyLookups) : [],
+    [characters, familyLookups, focusCharacterId, relationshipFilters],
   );
   const groupedSelectedFamily = useMemo(
     () => focusCharacterId ? groupDerivedFamilyRelationships(derivedBySelected) : null,
@@ -190,8 +197,10 @@ export default function FamilyTree({ store }) {
   }, [derivedBySelected]);
 
   const scopedCharacterIds = useMemo(
-    () => getFamilyScopeCharacterIds(familyLookups, focusCharacterId, filters.scope),
-    [familyLookups, focusCharacterId, filters.scope],
+    () => filters.scope === "all"
+      ? new Set(characters.map(character => character.id))
+      : getFamilyScopeCharacterIds(familyLookups, focusCharacterId, filters.scope),
+    [characters, familyLookups, focusCharacterId, filters.scope],
   );
   const layoutCharacters = useMemo(() => characters.filter(character => {
     if (!filters.includeDeceased && character.deathDate && character.id !== focusCharacterId) return false;
@@ -408,6 +417,7 @@ export default function FamilyTree({ store }) {
                   onChange={(event) => updateFilter("scope", event.target.value)}
                   className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)]"
                 >
+                  <option value="all">All families</option>
                   <option value="direct">Direct lineage</option>
                   <option value="immediate">Immediate family</option>
                   <option value="extended">Extended family</option>
@@ -415,7 +425,7 @@ export default function FamilyTree({ store }) {
                 </select>
               </label>
             </div>
-            <p className="text-xs text-[var(--text-muted)]">Views follow the focus character: direct ancestors and descendants, immediate relatives, extended family within three connections, or the full connected dynasty. Standalone characters remain in their own row.</p>
+            <p className="text-xs text-[var(--text-muted)]">All families keeps the complete tree visible while you select people. The narrower views follow the focus character: direct ancestors and descendants, immediate relatives, extended family within three connections, or their full connected dynasty.</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
               {[
                 ["bloodOnly", "Blood only"],

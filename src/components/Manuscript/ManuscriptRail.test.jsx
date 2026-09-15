@@ -78,6 +78,80 @@ describe('ManuscriptRail outline parity', () => {
     expect(addScene).toHaveBeenCalledWith('chapter-1', 'Scene')
   })
 
+  it('adds chapters to the act containing the active scene', () => {
+    const addChapter = vi.fn()
+    renderRail({ addChapter })
+
+    const addChapterButton = screen.getByRole('button', { name: '+ Chapter' })
+    expect(addChapterButton.title).toBe('Add a chapter to The Departure')
+    fireEvent.click(addChapterButton)
+
+    expect(addChapter).toHaveBeenCalledWith('act-1', 'Chapter')
+  })
+
+  it('updates the chapter target when another act is selected', () => {
+    const addChapter = vi.fn()
+    renderRail({ addChapter })
+
+    fireEvent.click(screen.getByRole('button', { name: 'The Return' }))
+    const addChapterButton = screen.getByRole('button', { name: '+ Chapter' })
+    expect(addChapterButton.title).toBe('Add a chapter to The Return')
+    fireEvent.click(addChapterButton)
+
+    expect(addChapter).toHaveBeenCalledWith('act-2', 'Chapter')
+  })
+
+  it('makes a newly added act the current chapter target', () => {
+    const addAct = vi.fn(() => ({ id: 'act-3', title: 'Act 3', order: 2 }))
+    const addChapter = vi.fn()
+    const { rerender } = renderRail({ addAct, addChapter })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Act' }))
+    expect(addAct).toHaveBeenCalledWith('Act 3')
+
+    rerender(
+      <ManuscriptRail
+        acts={[
+          { id: 'act-1', title: 'The Departure', order: 0 },
+          { id: 'act-2', title: 'The Return', order: 1 },
+          { id: 'act-3', title: 'Act 3', order: 2 },
+        ]}
+        chapters={[
+          { id: 'chapter-1', actId: 'act-1', title: 'First Steps', order: 0 },
+          { id: 'chapter-2', actId: 'act-2', title: 'Homecoming', order: 0 },
+        ]}
+        scenes={[
+          { id: 'scene-1', chapterId: 'chapter-1', title: 'Into the Rain', content: '', order: 0 },
+          { id: 'scene-2', chapterId: 'chapter-2', title: 'At the Gate', content: '', order: 0 },
+        ]}
+        addAct={addAct}
+        addChapter={addChapter}
+        addScene={noop}
+        updateAct={noop}
+        updateChapter={noop}
+        updateScene={noop}
+        deleteAct={noop}
+        deleteChapter={noop}
+        deleteScene={noop}
+        moveAct={noop}
+        moveChapter={noop}
+        moveScene={noop}
+        activeSceneId="scene-1"
+        onSelectScene={noop}
+        onSelectChapter={noop}
+        labels={{ level1: 'Act', level2: 'Chapter', level3: 'Scene' }}
+        totalWordCount={0}
+        collapsed={false}
+        onToggleCollapsed={noop}
+      />
+    )
+
+    const addChapterButton = screen.getByRole('button', { name: '+ Chapter' })
+    expect(addChapterButton.title).toBe('Add a chapter to Act 3')
+    fireEvent.click(addChapterButton)
+    expect(addChapter).toHaveBeenCalledWith('act-3', 'Chapter')
+  })
+
   it('still moves a scene between populated chapters by drag and drop', () => {
     const moveScene = vi.fn()
     renderRail({ moveScene })

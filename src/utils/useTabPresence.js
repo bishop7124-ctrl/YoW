@@ -26,42 +26,51 @@ function getTabId() {
 const tabId = getTabId()
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL_NAME) : null
 
-// key -> Map(otherTabId -> lastSeenAt)
+// key -> Map(otherTabId -> { lastSeenAt, startedAt })
 const presenceByKey = new Map()
 // key -> Set(listener callbacks)
 const listeners = new Map()
 // keys *this* tab currently has open, so it can answer a fresh 'hello' from a
 // tab that doesn't know about it yet (a plain heartbeat only reaches tabs that
 // already know to listen for this key).
-const openKeys = new Set()
+const openKeys = new Map()
 
-function otherCount(key) {
+export function presenceHasPriority(ours, theirs) {
+  if (!theirs) return false
+  if (!ours) return true
+  if (theirs.startedAt !== ours.startedAt) return theirs.startedAt < ours.startedAt
+  return String(theirs.id) < String(ours.id)
+}
+
+function blockingEditorCount(key, ours) {
   const seen = presenceByKey.get(key)
   if (!seen) return 0
   const now = Date.now()
   let n = 0
-  seen.forEach(lastSeenAt => { if (now - lastSeenAt < STALE_MS) n++ })
+  seen.forEach((entry, id) => {
+    if (now - entry.lastSeenAt < STALE_MS && presenceHasPriority(ours, { id, startedAt: entry.startedAt })) n++
+  })
   return n
 }
 
 function notify(key) {
-  listeners.get(key)?.forEach(cb => cb(otherCount(key)))
+  listeners.get(key)?.forEach(cb => cb())
 }
 
-function markSeen(key, id) {
+function markSeen(key, id, startedAt) {
   if (!presenceByKey.has(key)) presenceByKey.set(key, new Map())
-  presenceByKey.get(key).set(id, Date.now())
+  presenceByKey.get(key).set(id, { lastSeenAt: Date.now(), startedAt: Number(startedAt) || 0 })
   notify(key)
 }
 
 if (channel) {
   channel.onmessage = ({ data }) => {
-    const { type, key, id } = data || {}
+    const { type, key, id, startedAt } = data || {}
     if (!type || !key || !id || id === tabId) return
     if (type === 'hello' || type === 'heartbeat') {
-      markSeen(key, id)
+      markSeen(key, id, startedAt)
       if (type === 'hello' && openKeys.has(key)) {
-        channel.postMessage({ type: 'heartbeat', key, id: tabId })
+        channel.postMessage({ type: 'heartbeat', key, id: tabId, startedAt: openKeys.get(key) })
       }
     } else if (type === 'bye') {
       presenceByKey.get(key)?.delete(id)
@@ -76,25 +85,28 @@ if (channel) {
  * key). Pass a stable, globally-unique key per record, e.g. `scene:${id}`.
  */
 export function useTabPresence(key, active) {
-  const [count, setCount] = useState(() => (key ? otherCount(key) : 0))
+  const [count, setCount] = useState(0)
 
   useEffect(() => {
     if (!active || !key || !channel) return undefined
-    openKeys.add(key)
+    const startedAt = Date.now()
+    const ours = { id: tabId, startedAt }
+    const refresh = () => setCount(blockingEditorCount(key, ours))
+    openKeys.set(key, startedAt)
     if (!listeners.has(key)) listeners.set(key, new Set())
-    listeners.get(key).add(setCount)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCount(otherCount(key))
+    listeners.get(key).add(refresh)
+    refresh()
 
-    channel.postMessage({ type: 'hello', key, id: tabId })
+    channel.postMessage({ type: 'hello', key, id: tabId, startedAt })
     const heartbeat = setInterval(() => {
-      channel.postMessage({ type: 'heartbeat', key, id: tabId })
+      refresh()
+      channel.postMessage({ type: 'heartbeat', key, id: tabId, startedAt })
     }, HEARTBEAT_MS)
 
     return () => {
       clearInterval(heartbeat)
       openKeys.delete(key)
-      listeners.get(key)?.delete(setCount)
+      listeners.get(key)?.delete(refresh)
       channel.postMessage({ type: 'bye', key, id: tabId })
     }
   }, [key, active])

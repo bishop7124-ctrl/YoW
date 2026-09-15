@@ -7,6 +7,7 @@ const mockState = vi.hoisted(() => ({
   upserts: [],
   rpcCalls: [],
   rpcError: null,
+  rpcData: null,
   // Queue of { error } results to hand out (in order) before falling back to
   // the normal success response — lets tests simulate a table query that
   // fails N times before succeeding, or fails on every attempt.
@@ -27,7 +28,7 @@ vi.mock('../supabase', () => ({
   supabase: {
     rpc: vi.fn((name, args) => {
       mockState.rpcCalls.push({ name, args })
-      return Promise.resolve({ data: null, error: mockState.rpcError })
+      return Promise.resolve({ data: mockState.rpcData, error: mockState.rpcError })
     }),
     from: vi.fn((table) => ({
       select: vi.fn((columns) => {
@@ -101,13 +102,38 @@ describe('loadUserData', () => {
       data: { id: 'loc-1', novelId: 'novel-1', name: 'Older Cloud Location' },
       updated_at: '2026-07-19T09:00:00.000Z',
     }]
+    mockState.tables.scenes = [{
+      scene_id: 'scene-1',
+      data: { id: 'scene-1', novelId: 'novel-1', content: 'Cloud prose' },
+      revision: 7,
+    }]
 
     const data = await loadUserData('user-1')
 
     expect(data._savedAt).toBe(new Date('2026-07-19T10:05:00.000Z').getTime())
     expect(data.characters).toEqual([{ id: 'char-1', novelId: 'novel-1', name: 'Fresh Cloud Character' }])
+    expect(data._sceneRevisions).toEqual({ 'scene-1': 7 })
     expect(mockState.selects.find(call => call.table === 'characters')?.columns).toContain('updated_at')
-    expect(mockState.selects.find(call => call.table === 'scenes')?.columns).toBe('scene_id, data')
+    expect(mockState.selects.find(call => call.table === 'scenes')?.columns).toBe('scene_id, data, revision')
+  })
+
+  it('loads legacy scenes when the revision migration has not deployed yet', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.tables.scenes = [{
+      scene_id: 'scene-legacy',
+      data: { id: 'scene-legacy', novelId: 'novel-1', content: 'Still loads' },
+    }]
+    mockState.errorQueues.scenes = [{ code: '42703', message: 'column scenes.revision does not exist' }]
+
+    const data = await loadUserData('user-1')
+
+    expect(data.scenes).toEqual([{ id: 'scene-legacy', novelId: 'novel-1', content: 'Still loads' }])
+    expect(data._sceneRevisions).toEqual({ 'scene-legacy': 0 })
+    expect(data._sceneRevisionSupported).toBe(false)
+    expect(mockState.selects.filter(call => call.table === 'scenes').map(call => call.columns)).toEqual([
+      'scene_id, data, revision',
+      'scene_id, data',
+    ])
   })
 
   it('recovers from a one-off transient error on a single table instead of failing the whole load', async () => {
@@ -271,6 +297,9 @@ describe('scene cloud cleanup on project delete', () => {
     mockState.selects = []
     mockState.upserts = []
     mockState.errorQueues = {}
+    mockState.rpcCalls = []
+    mockState.rpcError = null
+    mockState.rpcData = null
   })
 
   it('writes novel_id on scene saves so bulk cleanup can find them later', async () => {
@@ -285,6 +314,29 @@ describe('scene cloud cleanup on project delete', () => {
       novel_id: 'novel-1',
       data: { id: 'scene-1', novelId: 'novel-1', title: 'Opening' },
     })
+  })
+
+  it('uses the transactional revision guard when an expected revision is supplied', async () => {
+    const { saveSceneDoc } = await import('./firestoreSync.js')
+    const scene = { id: 'scene-1', novelId: 'novel-1', content: 'Mine' }
+    mockState.rpcData = { saved: false, reason: 'stale', revision: 4, data: { ...scene, content: 'Theirs' } }
+
+    await expect(saveSceneDoc('user-1', scene, { expectedRevision: 3 })).resolves.toEqual({
+      saved: false,
+      reason: 'stale',
+      revision: 4,
+      remoteScene: { ...scene, content: 'Theirs' },
+    })
+    expect(mockState.rpcCalls).toEqual([{
+      name: 'save_scene_if_current',
+      args: {
+        p_scene_id: 'scene-1',
+        p_novel_id: 'novel-1',
+        p_data: scene,
+        p_expected_revision: 3,
+      },
+    }])
+    expect(mockState.upserts).toEqual([])
   })
 
 })

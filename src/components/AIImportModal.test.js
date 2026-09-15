@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels, clearStarterManuscriptScaffold } from './AIImportModal'
+import { populateProject, populateYowProject, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter, isNewProjectImport, filterYowCompatibleDestinations, filterImportableNovels, clearStarterManuscriptScaffold, isCompleteYowProjectSelection } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 function mockStore() {
@@ -287,6 +287,24 @@ describe('populateYowProject', () => {
     expect(store.calls.acts.some(item => item.title === 'Recovered outline items')).toBe(true)
     expect(store.calls.chapters.some(item => item.title === 'Lost chapter')).toBe(true)
     expect(store.calls.scenes.some(item => item.title === 'Lost scene')).toBe(true)
+  })
+})
+
+describe('isCompleteYowProjectSelection', () => {
+  const data = {
+    characters: [{ id: 'character-1' }],
+    acts: [{ id: 'act-1' }],
+    chapters: [{ id: 'chapter-1' }],
+    scenes: [{ id: 'scene-1' }],
+    ideaEntries: [],
+  }
+
+  it('uses the lossless restore path when every populated section is selected', () => {
+    expect(isCompleteYowProjectSelection(data, { characters: true, acts: true })).toBe(true)
+  })
+
+  it('keeps an explicitly partial native import on the additive population path', () => {
+    expect(isCompleteYowProjectSelection(data, { characters: true, acts: false })).toBe(false)
   })
 })
 

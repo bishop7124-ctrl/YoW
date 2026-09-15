@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { StudioSheet } from '../presentation/Studio'
 import {
   getScheduleCalendar, getScheduleViewSettings, getScheduleCategories,
   normalizeScheduleCategoryId, normalizeScheduleEvent, scheduleDateLabel,
-  scheduleRangeLabel, scheduleEventSegments, sortScheduleEvents, SCHEDULE_OPEN_MODES,
+  scheduleDateFromOrdinal, scheduleDateOrdinal, scheduleRangeLabel,
+  scheduleEventSegments, sortScheduleEvents, SCHEDULE_OPEN_MODES,
 } from '../../utils/scheduleCalendar.js'
 import ScheduleEventEditor from './ScheduleEventEditor.jsx'
 import ScheduleSettingsModal from './ScheduleSettingsModal.jsx'
@@ -23,6 +24,11 @@ function ScheduleWorkspace({ store, initialEntryId }) {
   const [viewMonth, setViewMonth] = useState(() => viewSettings.openMonth)
   const [viewMode, setViewMode] = useState('month')
   const [modal, setModal] = useState(initialEntryId ? { type: 'detail', eventId: initialEntryId } : null)
+  const [interactionPreview, setInteractionPreview] = useState(null)
+  const [interactionStatus, setInteractionStatus] = useState('')
+  const interactionRef = useRef(null)
+  const suppressRibbonClickRef = useRef(false)
+  const suppressCellClickRef = useRef(false)
   const events = useMemo(() => (store.storySchedule || []).map(normalizeScheduleEvent), [store.storySchedule])
   const eventIndex = useMemo(() => new Map(events.map(event => [event.id, event])), [events])
   const configuredCategories = useMemo(() => getScheduleCategories(store.activeNovel), [store.activeNovel])
@@ -35,7 +41,15 @@ function ScheduleWorkspace({ store, initialEntryId }) {
   }, [configuredCategories, events])
   const categoryIndex = useMemo(() => new Map(categories.map(category => [category.id, category])), [categories])
   const month = Math.max(1, Math.min(viewMonth, calendar.months.length))
-  const layout = useMemo(() => scheduleEventSegments(events, calendar, viewYear, month), [events, calendar, viewYear, month])
+  const presentedEvents = useMemo(() => events.map(event => {
+    if (event.id !== interactionPreview?.eventId) return event
+    if (interactionPreview.type === 'resize') return { ...event, duration: interactionPreview.duration }
+    if (interactionPreview.type === 'move' && Number.isFinite(interactionPreview.targetOrdinal)) {
+      return { ...event, ...scheduleDateFromOrdinal(calendar, interactionPreview.targetOrdinal) }
+    }
+    return event
+  }), [events, interactionPreview, calendar])
+  const layout = useMemo(() => scheduleEventSegments(presentedEvents, calendar, viewYear, month), [presentedEvents, calendar, viewYear, month])
   const monthEventCount = useMemo(() => new Set(layout.segments.map(segment => segment.event.id)).size, [layout.segments])
   const sortedEvents = useMemo(() => sortScheduleEvents(events, calendar), [events, calendar])
   const cells = useMemo(() => {
@@ -64,18 +78,132 @@ function ScheduleWorkspace({ store, initialEntryId }) {
     } })
   }, [activeNovelId, readOnly, updateNovel, viewSettings, viewYear, month])
 
+  useEffect(() => {
+    const ordinalAtPoint = (x, y) => {
+      const cell = document.elementsFromPoint(x, y).find(element => element.matches?.('[data-schedule-ordinal]'))
+      const ordinal = Number(cell?.dataset.scheduleOrdinal)
+      return Number.isFinite(ordinal) ? ordinal : null
+    }
+    const resetInteraction = () => {
+      interactionRef.current = null
+      setInteractionPreview(null)
+    }
+    const move = pointerEvent => {
+      const interaction = interactionRef.current
+      if (!interaction || interaction.pointerId !== pointerEvent.pointerId) return
+      const distance = Math.hypot(pointerEvent.clientX - interaction.startX, pointerEvent.clientY - interaction.startY)
+      if (interaction.type === 'move' && !interaction.dragged && distance < 5) return
+      interaction.dragged = true
+      pointerEvent.preventDefault()
+      const targetOrdinal = ordinalAtPoint(pointerEvent.clientX, pointerEvent.clientY)
+      interaction.targetOrdinal = targetOrdinal
+      if (targetOrdinal === null) {
+        setInteractionPreview(null)
+        return
+      }
+      if (interaction.type === 'resize') {
+        const duration = Math.max(1, targetOrdinal - interaction.startOrdinal + 1)
+        interaction.duration = duration
+        setInteractionPreview({ type: 'resize', eventId: interaction.event.id, duration, targetOrdinal })
+      } else {
+        setInteractionPreview({ type: 'move', eventId: interaction.event.id, targetOrdinal })
+      }
+    }
+    const finish = (pointerEvent, cancelled = false) => {
+      const interaction = interactionRef.current
+      if (!interaction || (pointerEvent?.pointerId != null && interaction.pointerId !== pointerEvent.pointerId)) return
+      if (interaction.dragged) {
+        suppressRibbonClickRef.current = true
+        suppressCellClickRef.current = true
+        window.setTimeout(() => {
+          suppressRibbonClickRef.current = false
+          suppressCellClickRef.current = false
+        }, 0)
+      }
+      if (cancelled || !interaction.dragged || interaction.targetOrdinal === null) {
+        if (cancelled && interaction.dragged) setInteractionStatus('Schedule change cancelled.')
+        resetInteraction()
+        return
+      }
+
+      const original = interaction.event
+      let saved = original
+      if (interaction.type === 'resize') {
+        if (interaction.duration !== original.duration) {
+          saved = store.updateScheduleEvent(original.id, { duration: interaction.duration }, {
+            expected: { year: original.year, month: original.month, day: original.day, duration: original.duration },
+          })
+        }
+      } else {
+        const targetDate = scheduleDateFromOrdinal(calendar, interaction.targetOrdinal)
+        if (targetDate.year !== original.year || targetDate.month !== original.month || targetDate.day !== original.day) {
+          saved = store.updateScheduleEvent(original.id, targetDate, {
+            expected: { year: original.year, month: original.month, day: original.day },
+          })
+        }
+      }
+      setInteractionStatus(saved
+        ? `${original.title || 'Event'} ${interaction.type === 'resize' ? 'duration updated' : 'moved'}.`
+        : `${original.title || 'Event'} could not be changed because it was updated elsewhere.`)
+      resetInteraction()
+    }
+    const cancelWithEscape = keyEvent => {
+      if (keyEvent.key !== 'Escape' || !interactionRef.current) return
+      keyEvent.preventDefault()
+      finish(null, true)
+    }
+    const cancelPointer = pointerEvent => finish(pointerEvent, true)
+
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', cancelPointer)
+    window.addEventListener('keydown', cancelWithEscape)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', cancelPointer)
+      window.removeEventListener('keydown', cancelWithEscape)
+    }
+  }, [calendar, store])
+
   const previousMonth = () => {
     if (month === 1) { setViewMonth(calendar.months.length); setViewYear(year => year - 1) } else setViewMonth(month - 1)
   }
   const nextMonth = () => {
     if (month === calendar.months.length) { setViewMonth(1); setViewYear(year => year + 1) } else setViewMonth(month + 1)
   }
-  const create = day => { if (!store.readOnly) setModal({ type: 'create', day }) }
+  const create = day => {
+    if (suppressCellClickRef.current) return
+    if (!store.readOnly) setModal({ type: 'create', day })
+  }
   const categoryFor = event => categoryIndex.get(normalizeScheduleCategoryId(event.category)) || { label: titleCase(event.category), color: '#94a3b8' }
   const saved = event => {
     setModal(null)
     setViewYear(event.year)
     setViewMonth(Math.max(1, Math.min(event.month, calendar.months.length)))
+  }
+  const beginInteraction = (pointerEvent, event, type) => {
+    if (store.readOnly || (pointerEvent.pointerType === 'mouse' && pointerEvent.button !== 0)) return
+    if (type === 'resize') {
+      pointerEvent.preventDefault()
+      pointerEvent.stopPropagation()
+    }
+    interactionRef.current = {
+      type,
+      event,
+      pointerId: pointerEvent.pointerId,
+      startX: pointerEvent.clientX,
+      startY: pointerEvent.clientY,
+      startOrdinal: scheduleDateOrdinal(calendar, event),
+      duration: event.duration,
+      targetOrdinal: null,
+      dragged: type === 'resize',
+    }
+    setInteractionStatus('')
+  }
+  const openEvent = eventId => {
+    if (suppressRibbonClickRef.current) return
+    setModal({ type: 'detail', eventId })
   }
 
   return (
@@ -97,10 +225,24 @@ function ScheduleWorkspace({ store, initialEntryId }) {
       <main className="flex-1 min-h-0 overflow-auto px-3 sm:px-5 pb-5">
         {viewMode === 'month' ? <>
           <h2 className="schedule-month-title">{calendar.months[month - 1].name} · Year {viewYear}</h2>
+          {!store.readOnly && monthEventCount > 0 && <p id="schedule-drag-instructions" className="schedule-drag-hint">Drag an event to move it · Drag its end handle to resize</p>}
+          <p className="sr-only" role="status" aria-live="polite">{interactionStatus}</p>
           <div className="grid gap-0.5 pt-3 mb-0.5" style={{ gridTemplateColumns: `repeat(${calendar.weekLength}, minmax(5.75rem, 1fr))`, minWidth: `${calendar.weekLength * 103}px` }}>{calendar.dayNames.map((name, index) => <div key={index} className="truncate py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{name}</div>)}</div>
           <div className="schedule-grid" style={{ '--schedule-week': calendar.weekLength, gridAutoRows: `${Math.max(88, 52 + (maxLane + 1) * 22)}px` }}>
-            {cells.map((day, index) => day ? <button key={index} type="button" disabled={store.readOnly} aria-label={`Add event on ${calendar.months[month - 1].name}, day ${day}, year ${viewYear}`} className="schedule-day-cell text-left" onClick={() => create(day)} style={{ gridColumn: index % calendar.weekLength + 1, gridRow: Math.floor(index / calendar.weekLength) + 1 }}><span className="schedule-day-number">{day}</span></button> : <span key={index} aria-hidden="true" style={{ gridColumn: index % calendar.weekLength + 1, gridRow: Math.floor(index / calendar.weekLength) + 1 }} />)}
-            {layout.segments.map((segment, index) => { const category = categoryFor(segment.event); return <button key={`${segment.event.id}-${index}`} type="button" className="schedule-ribbon" onClick={() => setModal({ type: 'detail', eventId: segment.event.id })} title={segment.event.title} style={{ '--event-color': category.color, gridColumn: `${segment.col + 1} / span ${segment.span}`, gridRow: segment.week + 1, marginTop: `${28 + segment.lane * 22}px`, borderTopLeftRadius: segment.startsBefore ? 0 : 6, borderBottomLeftRadius: segment.startsBefore ? 0 : 6, borderTopRightRadius: segment.endsAfter ? 0 : 6, borderBottomRightRadius: segment.endsAfter ? 0 : 6 }}>{segment.startsBefore ? '← ' : ''}{segment.event.title}{segment.endsAfter ? ' →' : ''}</button> })}
+            {cells.map((day, index) => {
+              if (!day) return <span key={index} aria-hidden="true" style={{ gridColumn: index % calendar.weekLength + 1, gridRow: Math.floor(index / calendar.weekLength) + 1 }} />
+              const ordinal = scheduleDateOrdinal(calendar, { year: viewYear, month, day })
+              const isTarget = interactionPreview?.targetOrdinal === ordinal
+              return <button key={index} type="button" disabled={store.readOnly} data-schedule-ordinal={ordinal} aria-label={`Add event on ${calendar.months[month - 1].name}, day ${day}, year ${viewYear}`} className={`schedule-day-cell text-left${isTarget ? ' is-drop-target' : ''}`} onClick={() => create(day)} style={{ gridColumn: index % calendar.weekLength + 1, gridRow: Math.floor(index / calendar.weekLength) + 1 }}><span className="schedule-day-number">{day}</span></button>
+            })}
+            {layout.segments.map((segment, index) => {
+              const category = categoryFor(segment.event)
+              const interacting = interactionPreview?.eventId === segment.event.id
+              return <button key={`${segment.event.id}-${index}`} type="button" className={`schedule-ribbon${interacting ? ' is-interacting' : ''}${store.readOnly ? ' is-read-only' : ''}`} onPointerDown={pointerEvent => beginInteraction(pointerEvent, segment.event, 'move')} onClick={() => openEvent(segment.event.id)} aria-describedby={!store.readOnly ? 'schedule-drag-instructions' : undefined} title={segment.event.title} style={{ '--event-color': category.color, gridColumn: `${segment.col + 1} / span ${segment.span}`, gridRow: segment.week + 1, marginTop: `${28 + segment.lane * 22}px`, borderTopLeftRadius: segment.startsBefore ? 0 : 6, borderBottomLeftRadius: segment.startsBefore ? 0 : 6, borderTopRightRadius: segment.endsAfter ? 0 : 6, borderBottomRightRadius: segment.endsAfter ? 0 : 6 }}>
+                <span className="schedule-ribbon-label">{segment.startsBefore ? '← ' : ''}{segment.event.title}{segment.endsAfter ? ' →' : ''}</span>
+                {!store.readOnly && !segment.endsAfter && <span aria-hidden="true" className="schedule-resize-handle" onPointerDown={pointerEvent => beginInteraction(pointerEvent, segment.event, 'resize')} />}
+              </button>
+            })}
           </div>
           {!monthEventCount && <div className="schedule-empty-month"><p>No events in {calendar.months[month - 1].name}, Year {viewYear}</p>{!store.readOnly && <button type="button" onClick={() => create(1)} className="schedule-primary-button">Add event</button>}</div>}
           <div className="flex flex-wrap gap-4 mt-4">{categories.map(category => <span key={category.id} className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)]"><i aria-hidden="true" className="w-2.5 h-2.5 rounded-sm" style={{ background: category.color }} />{category.label}</span>)}</div>

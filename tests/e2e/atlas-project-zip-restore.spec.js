@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import {
-  createProject, dismissLaunchPrompts, openImportZip, openProjectSettings,
+  createProject, dismissLaunchPrompts, downloadManualProjectBackup, openImportZip, openProjectSettings,
   readStorage, seedCleanStorage,
 } from './helpers.js'
 
@@ -11,7 +11,7 @@ import {
 //
 // tests/e2e/atlas-builder.spec.js already covers a single map's own
 // "Editable map JSON" export/import round trip, but nothing previously
-// exercised the whole-project backup ZIP (Project Settings -> Backup zip,
+// exercised the whole-project backup ZIP (Project Settings -> Export -> Backups,
 // the same one tests/e2e/import-into-existing-project.spec.js and
 // tests/e2e/data-safety.spec.js use for other project data) with an Atlas
 // map inside it. This confirms a map's drawn objects, geometry, and a
@@ -96,9 +96,7 @@ test('project ZIP export/import round trip preserves Atlas map drawings and link
   // Export the whole project as a backup ZIP.
   await page.getByRole('button', { name: '← Atlas', exact: true }).click()
   await openProjectSettings(page)
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/i }).click()
-  const download = await downloadPromise
+  const download = await downloadManualProjectBackup(page)
   const zipPath = await download.path()
   expect(zipPath).toBeTruthy()
   await page.getByLabel('Project Settings', { exact: true }).getByRole('button', { name: 'Done' }).click()

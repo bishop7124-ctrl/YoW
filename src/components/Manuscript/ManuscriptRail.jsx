@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SCENE_STATUSES, nextStatus } from './manuscriptUtils.js'
 import { formatOutlineChapterTitle, getOutlineSceneTitle, sortOutlineItems } from '../../utils/outlineDisplay.js'
 import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
@@ -401,6 +401,21 @@ export default function ManuscriptRail({
   const [dragOver, setDragOver] = useState(null)
   const dragRef = useRef(null)
   const sortedActs = useMemo(() => sortOutlineItems(acts), [acts])
+  const activeSceneActId = useMemo(() => {
+    const activeScene = scenes.find(scene => scene.id === activeSceneId)
+    if (!activeScene) return null
+    return chapters.find(chapter => chapter.id === activeScene.chapterId)?.actId || null
+  }, [activeSceneId, chapters, scenes])
+  const [currentActId, setCurrentActId] = useState(() => activeSceneActId || sortedActs[0]?.id || null)
+
+  // A scene can become active through the editor/URL as well as through this
+  // rail. Keep the chapter-creation target aligned with whichever act the
+  // writer is actually working in.
+  useEffect(() => {
+    if (activeSceneActId) setCurrentActId(activeSceneActId)
+  }, [activeSceneActId])
+
+  const currentAct = sortedActs.find(act => act.id === currentActId) || sortedActs[0] || null
 
   const handleAddScene = useCallback((chapId) => {
     const newScene = addScene(chapId, labels.level3)
@@ -548,7 +563,11 @@ export default function ManuscriptRail({
                       <button
                         type="button"
                         className="ms-rail-act-btn"
-                        onClick={() => { const firstChap = actChapters[0]; if (firstChap) onSelectChapter(firstChap.id) }}
+                        onClick={() => {
+                          setCurrentActId(act.id)
+                          const firstChap = actChapters[0]
+                          if (firstChap) onSelectChapter(firstChap.id)
+                        }}
                         title={act.title}
                       >
                         {act.title}
@@ -595,11 +614,17 @@ export default function ManuscriptRail({
                         chapNum={chapterNumbers[chap.id]}
                         scenes={scenes}
                         onAddScene={handleAddScene}
-                        onSelectChapter={onSelectChapter}
+                        onSelectChapter={chapterId => {
+                          setCurrentActId(act.id)
+                          onSelectChapter(chapterId)
+                        }}
                         onUpdateChapter={updateChapter}
                         onDeleteChapter={deleteChapter}
                         activeSceneId={activeSceneId}
-                        onSelectScene={onSelectScene}
+                        onSelectScene={sceneId => {
+                          setCurrentActId(act.id)
+                          onSelectScene(sceneId)
+                        }}
                         onUpdateScene={updateScene}
                         onDeleteScene={deleteScene}
                         labels={labels}
@@ -627,15 +652,23 @@ export default function ManuscriptRail({
               type="button"
               className="ms-rail-f-btn"
               onClick={() => {
-                const act = sortedActs[sortedActs.length - 1]
-                if (act) handleAddChapter(act.id)
+                if (currentAct) handleAddChapter(currentAct.id)
               }}
               disabled={acts.length === 0}
-              title={acts.length === 0 ? `Add a ${labels.level1.toLowerCase()} first` : `Add a ${labels.level2.toLowerCase()} to the end of the manuscript`}
+              title={currentAct
+                ? `Add a ${labels.level2.toLowerCase()} to ${currentAct.title}`
+                : `Add a ${labels.level1.toLowerCase()} first`}
             >
               + {labels.level2}
             </button>
-            <button type="button" className="ms-rail-f-btn" onClick={() => addAct(`${labels.level1} ${acts.length + 1}`)}>
+            <button
+              type="button"
+              className="ms-rail-f-btn"
+              onClick={() => {
+                const newAct = addAct(`${labels.level1} ${acts.length + 1}`)
+                if (newAct?.id) setCurrentActId(newAct.id)
+              }}
+            >
               + {labels.level1}
             </button>
           </div>

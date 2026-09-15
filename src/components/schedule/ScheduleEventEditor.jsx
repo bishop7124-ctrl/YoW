@@ -50,7 +50,7 @@ export default function ScheduleEventEditor({ event, date, store, categories, ca
 
   return (
     <StudioSheet title={editing ? 'Edit event' : 'New event'} eyebrow="Schedule" onClose={onClose} centered>
-      <form data-confirms-save onSubmit={submit} className="space-y-5">
+      <form data-confirms-save onSubmit={submit} className="schedule-event-form space-y-5">
         {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         <label className="block text-sm">Title *<input autoFocus={!store.readOnly} className="field w-full text-base" value={form.title} onChange={change('title')} readOnly={store.readOnly} /></label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

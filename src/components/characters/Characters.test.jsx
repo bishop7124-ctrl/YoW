@@ -46,6 +46,32 @@ beforeEach(() => {
 })
 
 describe('Characters', () => {
+  it('keeps dense dossier chips grouped and both actions in one dossier action row', () => {
+    const character = {
+      id: 'dense',
+      name: 'Brannic Sol',
+      familyGroup: 'Vale Firekeeper Bloodline',
+      factionId: 'guild',
+      pronouns: 'He/Him',
+      species: 'Fae',
+      titleJob: 'Merchant, guild broker, opportunist and keeper of exceptionally long titles',
+    }
+    const store = baseStore({
+      characters: [character],
+      selectedCharacterId: character.id,
+      factions: [{ id: 'guild', name: 'Merchant Guild of the River Exchange' }],
+    })
+    const { container } = render(<Characters store={store} />)
+
+    const summary = container.querySelector('.character-dossier-summary')
+    const tags = container.querySelector('.character-dossier-tags')
+    const actions = container.querySelector('.character-dossier-header .studio-page-actions')
+    expect(summary?.firstElementChild).not.toBe(tags)
+    expect(summary?.lastElementChild).toBe(tags)
+    expect(within(tags).getAllByText(/House Vale|Merchant Guild|He\/Him|Fae|Merchant, guild broker/)).toHaveLength(5)
+    expect(within(actions).getAllByRole('button')).toHaveLength(2)
+  })
+
   it('keeps social links to forked characters visible and deduplicates continuity aliases without rewriting records', () => {
     const a = { id: 'a', name: 'Ada', relationships: [{ targetId: 'b', type: 'friend' }, { targetId: 'b2', type: 'friend' }] }
     const b = { id: 'b', name: 'Earlier Ben', syncRootId: 'b' }

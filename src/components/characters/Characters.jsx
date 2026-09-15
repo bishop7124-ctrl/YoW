@@ -1205,6 +1205,7 @@ function CharactersWorkspace({ store, userId, membership }) {
         ) : (
           <div className="max-w-5xl">
             <StudioPageHeader
+              className="character-dossier-header"
               eyebrow="Character dossier"
               title={selected.name}
               meta={[selected.role, selected.pronouns, selectedAge ? `Age ${selectedAge}` : null].filter(Boolean).join(' · ') || 'Character'}
@@ -1220,19 +1221,19 @@ function CharactersWorkspace({ store, userId, membership }) {
                 </>
               )}
             >
-              <div className="mt-5 flex flex-wrap items-center gap-3">
+              <div className="character-dossier-summary">
                 {selected.image && (
                   <button
                     type="button"
                     onClick={() => setImagePreviewId(selected.id)}
                     aria-label={`View full-size photo of ${selected.name}`}
-                    className="flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] cursor-zoom-in"
+                    className="character-dossier-portrait flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] cursor-zoom-in"
                   >
                     <CharacterPortrait
                       src={selected.image}
                       position={selected.imagePosition}
                       zoom={selected.imageZoom}
-                      className="w-24 h-24 rounded-xl border border-[var(--border)]"
+                      className="character-dossier-photo w-24 h-24 rounded-xl border border-[var(--border)]"
                     />
                   </button>
                 )}
@@ -1248,18 +1249,20 @@ function CharactersWorkspace({ store, userId, membership }) {
                     <small>Add cover photo</small>
                   </button>
                 )}
-                <FactionLogoBadge faction={selectedFaction} size={44} className="flex-shrink-0" />
-                {selected.familyGroup && (
-                  <span className="chip">House {selected.familyGroup}</span>
-                )}
-                {selectedFaction && (
-                  <span className="chip chip-accent">
-                    {selectedFaction.name}
-                  </span>
-                )}
-                {selected.pronouns && <span className="chip">{selected.pronouns}</span>}
-                {selected.species && <span className="chip">{selected.species}</span>}
-                {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
+                <div className="character-dossier-tags">
+                  <FactionLogoBadge faction={selectedFaction} size={44} className="flex-shrink-0" />
+                  {selected.familyGroup && (
+                    <span className="chip">House {selected.familyGroup}</span>
+                  )}
+                  {selectedFaction && (
+                    <span className="chip chip-accent">
+                      {selectedFaction.name}
+                    </span>
+                  )}
+                  {selected.pronouns && <span className="chip">{selected.pronouns}</span>}
+                  {selected.species && <span className="chip">{selected.species}</span>}
+                  {selected.titleJob && <span className="chip">{selected.titleJob}</span>}
+                </div>
               </div>
             </StudioPageHeader>
             {!isEditingSelected && (

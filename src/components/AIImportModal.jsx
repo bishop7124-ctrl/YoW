@@ -981,6 +981,15 @@ export const YOW_SECTIONS = [
   { key: 'storySchedule', label: 'Story schedule' },
 ]
 
+// The default native-backup workflow selects every populated section. In that
+// case use the store's lossless, collision-safe restore implementation rather
+// than rebuilding records through normal create actions (which intentionally
+// assign new defaults/order values). Partial imports still use populateYowProject
+// because their explicit purpose is to create only the selected sections.
+export function isCompleteYowProjectSelection(data, selections) {
+  return YOW_SECTIONS.every(({ key }) => yowSectionCount(data, key) === 0 || selections?.[key] === true)
+}
+
 export function yowSectionCount(data, key) {
   if (key === 'acts') return (data.acts || []).length + (data.comicPages || []).length
   return (data[key] || []).length
@@ -1460,6 +1469,19 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
       setPhase('creating')
       setPendingImport({ novelId: target.id, data: sourceData, sel: selections, type: target.type, isYow: !!yowImport, isNewProject: false })
       if (store.activeNovelId !== target.id) store.setActiveNovelId(target.id)
+      return
+    }
+
+    if (yowImport && PROJECT_TYPES[yowImport.project?.type] && isCompleteYowProjectSelection(yowImport, selections)) {
+      setPhase('creating')
+      const restored = store.importProjectFromData?.(yowImport)
+      if (!restored) {
+        setAiError('Could not create project (read-only mode?).')
+        setPhase('preview')
+        return
+      }
+      setPhase('done')
+      setTimeout(() => { onImportDone?.(restored.id); onClose() }, 1100)
       return
     }
 

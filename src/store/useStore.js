@@ -587,6 +587,11 @@ export function useStore(userId = null, options = {}) {
   const actsRef = useRef(acts)
   const chaptersRef = useRef(chapters)
   const scenesRef = useRef(scenes)
+  // Cloud-only optimistic-concurrency state. Revisions live in the scenes
+  // table rather than project data, so they never leak into exports.
+  const sceneCloudRevisionRef = useRef(new Map())
+  const sceneCloudRevisionSupportedRef = useRef(true)
+  const sceneSaveQueueRef = useRef(new Map())
   const loreEntriesRef = useRef(loreEntries)
   const ideaEntriesRef = useRef(ideaEntries)
   const mapsRef = useRef(maps)
@@ -1227,10 +1232,52 @@ export function useStore(userId = null, options = {}) {
     [trackSync]
   )
 
-  // Debounced Firestore save for individual scenes (1s delay)
+  const saveSceneWithoutClobbering = useCallback((sceneId, uidValue, scene) => {
+    const previous = sceneSaveQueueRef.current.get(sceneId) || Promise.resolve()
+    const queued = previous.catch(() => {}).then(async () => {
+      if (!sceneCloudRevisionSupportedRef.current) {
+        throw new Error('Cloud scene saving is paused until the scene-safety database migration is deployed. Your draft remains saved on this device.')
+      }
+      const expectedRevision = sceneCloudRevisionRef.current.get(sceneId) ?? 0
+      const result = await saveSceneDoc(uidValue, scene, { expectedRevision })
+      if (result?.saved !== false) {
+        sceneCloudRevisionRef.current.set(sceneId, Number(result?.revision ?? expectedRevision + 1))
+        return result
+      }
+
+      const remoteScene = result.remoteScene
+      if (!remoteScene?.id) throw new Error('Scene changed elsewhere, but the current cloud copy could not be recovered.')
+      const conflictCopy = createSceneConflictCopy(scene)
+      sceneCloudRevisionRef.current.set(sceneId, Number(result.revision || 0))
+      commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
+        const alreadyPreserved = prev.some(item => item.conflictOf === sceneId && item.content === conflictCopy.content)
+        const withRemote = prev.map(item => item.id === sceneId ? remoteScene : item)
+        return alreadyPreserved ? withRemote : [...withRemote, conflictCopy]
+      })
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('yow-scene-save-conflict', {
+          detail: { sceneId, remoteScene, conflictId: conflictCopy.id },
+        }))
+      }
+      // The attempted prose is saved under a fresh id. Even if this secondary
+      // cloud write fails, commitLocal has already made the conflict copy durable
+      // in the browser/desktop vault and importData preserves local copies. The
+      // editor is notified before this request so it stops editing immediately.
+      await saveSceneDoc(uidValue, conflictCopy)
+      return result
+    })
+    const settled = queued.finally(() => {
+      if (sceneSaveQueueRef.current.get(sceneId) === settled) sceneSaveQueueRef.current.delete(sceneId)
+    })
+    sceneSaveQueueRef.current.set(sceneId, settled)
+    return settled
+  }, [commitLocal])
+
+  // Debounced, serialized cloud save for individual scenes (1s delay). The
+  // server atomically rejects a stale revision instead of last-write-wins.
   const debouncedSaveScene = useMemo(
-    () => createKeyedDebounce((sceneId, uid, scene) => trackSync(saveSceneDoc(uid, scene)).catch(() => {}), 1000),
-    [trackSync]
+    () => createKeyedDebounce((sceneId, uidValue, scene) => trackSync(saveSceneWithoutClobbering(sceneId, uidValue, scene)).catch(() => {}), 1000),
+    [saveSceneWithoutClobbering, trackSync]
   )
 
   // Immediately sends any debounced cloud writes that are still waiting out
@@ -1403,6 +1450,9 @@ export function useStore(userId = null, options = {}) {
         .filter(s => s.conflictOf && !importedIds.has(s.id))
       return missingLocalConflicts.length ? [...importedScenes, ...missingLocalConflicts] : importedScenes
     })())
+    sceneCloudRevisionRef.current = new Map(Object.entries(data._sceneRevisions ?? sourceData._sceneRevisions ?? {}))
+    sceneCloudRevisionSupportedRef.current = data._sceneRevisionSupported ?? sourceData._sceneRevisionSupported ?? true
+    sceneSaveQueueRef.current.clear()
     setLoreEntries(sourceData.loreEntries ?? [])
     setIdeaEntries(sourceData.ideaEntries ?? [])
     setMaps(sourceData.maps ?? [])
@@ -3619,14 +3669,46 @@ export function useStore(userId = null, options = {}) {
     const comicPageIdMap = buildIdMap(data.comicPages)
     const comicPanelIdMap = buildIdMap(data.comicPanels)
 
+    // Native project restore must preserve every field, including nested
+    // project-owned data such as AI chat sessions and their selected context.
+    // Build one complete lookup so remapping is not limited to the handful of
+    // reference fields the UI happens to know about today. Collection ids are
+    // already collision-safe above; collectIds adds ids nested inside the
+    // project record (chat sessions/messages) without replacing those maps.
+    const allIdMap = {
+      ...(data.project?.id ? { [data.project.id]: newId } : {}),
+      ...eraIdMap,
+      ...characterIdMap,
+      ...factionIdMap,
+      ...locationIdMap,
+      ...timelineIdMap,
+      ...worldHistoryIdMap,
+      ...actIdMap,
+      ...chapterIdMap,
+      ...sceneIdMap,
+      ...loreIdMap,
+      ...ideaIdMap,
+      ...mapIdMap,
+      ...whiteboardIdMap,
+      ...storyScheduleIdMap,
+      ...rpgCharacterIdMap,
+      ...comicPageIdMap,
+      ...comicPanelIdMap,
+    }
+    collectIds(data.project, allIdMap)
+
     // Fall back to the original id when it isn't in the map (e.g. a stale
     // reference to a record that no longer exists in the export) rather
     // than dropping the field — matches the existing remap convention used
     // by populateYowProject() (src/components/AIImportModal.jsx) for the
     // sibling YOW-import path this mirrors.
     const at = (map, id) => (id && map[id]) || id
-    const mapIds = (map, ids) => (ids || []).map(id => at(map, id))
-    const own = (item, idMap) => ({ ...item, id: at(idMap, item.id), novelId: newId })
+    const mapIds = (map, ids) => Array.isArray(ids) ? ids.map(id => at(map, id)) : ids
+    const own = (item, idMap) => ({
+      ...remapExportValue(item, allIdMap),
+      id: at(idMap, item.id),
+      novelId: newId,
+    })
 
     const remapJourney = (journey) => {
       if (!journey?.beats?.length) return journey
@@ -3647,12 +3729,12 @@ export function useStore(userId = null, options = {}) {
       parentIds: mapIds(characterIdMap, character.parentIds),
       childIds: mapIds(characterIdMap, character.childIds),
       spouseIds: mapIds(characterIdMap, character.spouseIds),
-      relationships: (character.relationships || []).map(rel => ({ ...rel, targetId: at(characterIdMap, rel.targetId) })),
-      familyLinks: (character.familyLinks || []).map(link => ({
+      relationships: Array.isArray(character.relationships) ? character.relationships.map(rel => ({ ...rel, targetId: at(characterIdMap, rel.targetId) })) : character.relationships,
+      familyLinks: Array.isArray(character.familyLinks) ? character.familyLinks.map(link => ({
         ...link,
         sourceCharacterId: at(characterIdMap, link.sourceCharacterId),
         targetCharacterId: at(characterIdMap, link.targetCharacterId),
-      })),
+      })) : character.familyLinks,
       ...(character.journey ? { journey: remapJourney(character.journey) } : {}),
     })
     const remapFaction = (faction) => own(faction, factionIdMap)
@@ -3689,7 +3771,7 @@ export function useStore(userId = null, options = {}) {
       ? { ...entity, id: at(linkedEntityIdMaps[entity.type], entity.id) } : entity
     const remapIdea = (idea) => ({
       ...own(idea, ideaIdMap),
-      linkedEntities: (idea.linkedEntities || []).map(remapIdeaEntity),
+      linkedEntities: Array.isArray(idea.linkedEntities) ? idea.linkedEntities.map(remapIdeaEntity) : idea.linkedEntities,
       linkedIdeas: mapIds(ideaIdMap, idea.linkedIdeas),
       convertedTo: remapIdeaEntity(idea.convertedTo),
     })
@@ -3714,7 +3796,7 @@ export function useStore(userId = null, options = {}) {
     const remapRpgCharacter = (character) => ({
       ...own(character, rpgCharacterIdMap),
       factionIds: mapIds(factionIdMap, character.factionIds),
-      npcRelationships: (character.npcRelationships || []).map(rel => ({ ...rel, characterId: at(characterIdMap, rel.characterId) })),
+      npcRelationships: Array.isArray(character.npcRelationships) ? character.npcRelationships.map(rel => ({ ...rel, characterId: at(characterIdMap, rel.characterId) })) : character.npcRelationships,
     })
     const remapComicPage = (page) => ({
       ...own(page, comicPageIdMap),
@@ -3729,7 +3811,11 @@ export function useStore(userId = null, options = {}) {
       locationIds: mapIds(locationIdMap, panel.locationIds),
     })
 
-    const project = { ...data.project, id: newId, importedAt: new Date().toISOString(), focus: false }
+    // Preserve the complete project record. The project id and every nested
+    // reference are remapped, but user settings (writing goals, focus state,
+    // AI chat history, custom calendar, images, and future fields) must not be
+    // whitelisted or normalized away during a backup restore.
+    const project = { ...remapExportValue(data.project || {}, allIdMap), id: newId }
     commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, project])
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => [...prev, ...(data.characters ?? []).map(remapCharacter)])
     commitLocal(factionsRef, setFactions, 'nf_factions', prev => [...prev, ...(data.factions ?? []).map(remapFaction)])
