@@ -185,6 +185,8 @@ jobs:
             spec: tests/e2e/new-account-onboarding.spec.js
           - name: pricing-page
             spec: tests/e2e/pricing-page.spec.js
+          - name: marketing-pages-responsive
+            spec: tests/e2e/marketing-pages-responsive.spec.js
           - name: unconfigured-ai-account
             spec: tests/e2e/unconfigured-ai-account.spec.js
           - name: manuscript-reference-panel
