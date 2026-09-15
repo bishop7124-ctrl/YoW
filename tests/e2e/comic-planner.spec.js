@@ -757,9 +757,7 @@ test('ZIP export contains comic-pages.json/comic-panels.json, and re-importing r
   })
 
   await page.getByRole('button', { name: 'Project settings' }).click()
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/i }).click()
-  const download = await downloadPromise
+  const download = await downloadManualProjectBackup(page)
   // setInputFiles(path) later needs a real .zip-extensioned path — the AI
   // Import file-type filter rejects anything else — so save explicitly
   // rather than reuse download.path()'s extensionless temp path (same
@@ -979,12 +977,11 @@ test('restoring a ZIP into an account with other projects leaves those projects 
   await waitForStorage(page, () => (JSON.parse((window.__yowStorageBridge?.getItem('nf_comicPages') ?? localStorage.getItem('nf_comicPages')) || '[]')).length >= 1)
 
   await page.getByRole('button', { name: 'Project settings' }).click()
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Backup zip/i }).click()
+  const download = await downloadManualProjectBackup(page)
   // Real .zip-extensioned path — see the comment on the equivalent save in
   // the ZIP round-trip test above.
   const zipPath = `/tmp/yow-comic-qa-existing-account-${Date.now()}.zip`
-  await (await downloadPromise).saveAs(zipPath)
+  await download.saveAs(zipPath)
   await page.keyboard.press('Escape')
 
   // A second, pre-existing project in the same account that the restore must not touch.
