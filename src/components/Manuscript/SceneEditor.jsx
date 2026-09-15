@@ -1406,14 +1406,30 @@ const SceneEditorImpl = ({
 	    setLocalContent(nextContent)
 	    debouncedUpdate.schedule(nextContent)
 	    debouncedSyncFloatingNoteButton.schedule()
+	    // Only commit a notes update when some note's anchor actually needs to
+	    // shift (editing at/before it) — most keystrokes in a scene with notes
+	    // happen after every note's anchor (e.g. typing at the end of a large
+	    // scene with earlier notes), where nothing here would change. Calling
+	    // onUpdateScene unconditionally on every keystroke — a synchronous,
+	    // un-debounced store commit, unlike the content path's debouncedUpdate —
+	    // was previously done even in that no-op case, and scene.notes.map()
+	    // always returns a new array reference regardless, so it looked like a
+	    // real update to every memo keyed on scene.notes (sortedNotes,
+	    // notesBySeq, writingBlocks, per-paragraph note overlaps) and to
+	    // SceneEditor's own props-equality memo. On a large scene this was the
+	    // dominant cost behind "typing lags once a note is attached" (2026-09-12
+	    // Bugs table row) — confirmed via CPU profiling a 190k-character scene.
 	    if (!isScript && delta !== 0 && scene.notes?.length) {
-	      onUpdateScene(scene.id, {
-	        notes: scene.notes.map(note => {
-	          const anchor = note.anchorOffset ?? localContent.length
-	          const shouldShift = anchor >= oldEnd && !(oldEnd === base && anchor === base)
-	          return shouldShift ? shiftNoteForEdit(note, base, oldEnd, delta, localContent.length) : note
-	        }),
+	      let notesChanged = false
+	      const nextNotes = scene.notes.map(note => {
+	        const anchor = note.anchorOffset ?? localContent.length
+	        const shouldShift = anchor >= oldEnd && !(oldEnd === base && anchor === base)
+	        if (!shouldShift) return note
+	        const shifted = shiftNoteForEdit(note, base, oldEnd, delta, localContent.length)
+	        if (shifted.anchorOffset !== note.anchorOffset || shifted.anchorEndOffset !== note.anchorEndOffset) notesChanged = true
+	        return shifted
 	      })
+	      if (notesChanged) onUpdateScene(scene.id, { notes: nextNotes })
 	    }
 	    if (isScript) {
       const nextBlocks = syncScriptBlocks(nextContent, localScriptBlocks, scriptElement)
