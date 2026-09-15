@@ -208,6 +208,70 @@ describe('SceneEditor note-anchor store commits on keystroke', () => {
       notes: [expect.objectContaining({ anchorOffset: 7, anchorEndOffset: 11 })],
     })
   })
+
+  it('shifts a note anchor when an edit precedes it in edit mode (regression: 2026-09-15 anchor-drift bug)', async () => {
+    // Edit mode's single textarea always reports the whole document as the edit
+    // span (data-ms-start=0, data-ms-end=content.length), so handleChange must
+    // recover where the edit actually happened — this is the exact repro that
+    // used to silently leave the note anchored to the wrong text: typing at the
+    // very start of a scene that already had a note anchored later in it.
+    // selectionStart/selectionEnd are set explicitly to the real post-typing
+    // cursor position (2, right after "XX") — jsdom otherwise moves a
+    // programmatically-set textarea value's cursor to the end, unlike a real
+    // browser typing at the start, which would give a false signal here.
+    const onUpdateScene = vi.fn()
+    const note = makeNote({ anchorOffset: 5, anchorEndOffset: 9 }) // anchors "scene" in "Test scene content."
+    const { container } = renderScene('Test scene content.', {
+      onUpdateScene,
+      scene: { id: 's1', title: 'Scene', content: 'Test scene content.', chapterId: 'c1', order: 0, notes: [note] },
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+
+    // Insert "XX" at the very start of the document, before the note's anchor.
+    fireEvent.change(textarea, { target: { value: 'XXTest scene content.', selectionStart: 2, selectionEnd: 2 } })
+
+    expect(onUpdateScene).toHaveBeenCalledWith('s1', {
+      notes: [expect.objectContaining({ anchorOffset: 7, anchorEndOffset: 11 })],
+    })
+  })
+
+  it('shifts a note anchor correctly in edit mode even when a repeated character makes the raw text diff ambiguous', async () => {
+    // Regression guard (found in code review of the fix above): a pure
+    // old/new string diff can't tell "inserted 'a' at position 0" apart from
+    // "inserted 'a' at position 3" when editing "aaab" -> "aaaab" — both
+    // produce byte-identical results. Left unresolved, this silently
+    // corrupts a note's span (not just "fails to shift") whenever a repeated
+    // character/word sits next to the note's anchor. The real post-edit
+    // cursor position (selectionStart/selectionEnd) disambiguates it.
+    const onUpdateScene = vi.fn()
+    const note = makeNote({ anchorOffset: 3, anchorEndOffset: 4 }) // anchors "b" in "aaab"
+    const { container } = renderScene('aaab', {
+      onUpdateScene,
+      scene: { id: 's1', title: 'Scene', content: 'aaab', chapterId: 'c1', order: 0, notes: [note] },
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+
+    // Type "a" at the very start: "aaab" -> "aaaab", cursor lands at index 1.
+    fireEvent.change(textarea, { target: { value: 'aaaab', selectionStart: 1, selectionEnd: 1 } })
+
+    // The note must still point at exactly "b" (now at index 4), not a
+    // corrupted span like [3,5) ("ab") that a naive diff would produce.
+    expect(onUpdateScene).toHaveBeenCalledWith('s1', {
+      notes: [expect.objectContaining({ anchorOffset: 4, anchorEndOffset: 5 })],
+    })
+  })
 })
 
 describe('SceneEditor visual caret', () => {

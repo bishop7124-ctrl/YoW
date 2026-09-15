@@ -738,6 +738,38 @@ function NoteModal({ note, onUpdate, onDelete, onClose }) {
 // receives or compares them at all.)
 const sameShape = (a, b) => (a?.length ?? Object.keys(a || {}).length) === (b?.length ?? Object.keys(b || {}).length)
 
+// Edit mode's textarea always covers the whole document (data-ms-start/end
+// hardcoded to 0/content.length — see the mode-branch below), so unlike
+// Write mode's per-block textareas, handleChange never gets a real edit
+// position from the DOM. Recovering it by diffing the old/new values alone
+// is ambiguous whenever a repeated character/substring sits next to the
+// true edit point — e.g. "aaab" -> "aaaab" (inserting "a" at position 0) is
+// character-for-character identical to "inserting at position 3" — which
+// would silently *corrupt* a note's span rather than merely fail to shift
+// it (found in review of the 2026-09-15 fix for this Bugs-table row).
+// `cursorEnd` is the browser's own post-edit cursor position
+// (`e.target.selectionStart`, collapsed after any ordinary keystroke,
+// backspace, or typing over a selection) — when available it pins the edit's
+// end boundary exactly and bounds the prefix scan, removing the ambiguity
+// and (for most edits) the need to scan the rest of the document at all.
+function computeEditRange(oldStr, newStr, cursorEnd) {
+  const oldLen = oldStr.length
+  const newLen = newStr.length
+  const maxCommon = Math.min(oldLen, newLen)
+  const delta = newLen - oldLen
+  const cursorOldEnd = Number.isFinite(cursorEnd) ? cursorEnd - delta : null
+  const hasCursorHint = Number.isFinite(cursorEnd) && cursorEnd >= 0 && cursorEnd <= newLen
+    && cursorOldEnd >= 0 && cursorOldEnd <= oldLen
+  const prefixLimit = hasCursorHint ? Math.min(maxCommon, cursorOldEnd, cursorEnd) : maxCommon
+  let prefix = 0
+  while (prefix < prefixLimit && oldStr.charCodeAt(prefix) === newStr.charCodeAt(prefix)) prefix++
+  if (hasCursorHint) return { start: prefix, end: Math.max(prefix, cursorOldEnd) }
+  const maxSuffix = maxCommon - prefix
+  let suffix = 0
+  while (suffix < maxSuffix && oldStr.charCodeAt(oldLen - 1 - suffix) === newStr.charCodeAt(newLen - 1 - suffix)) suffix++
+  return { start: prefix, end: oldLen - suffix }
+}
+
 function shiftNoteForEdit(note, editStart, editEnd, delta, previousLength) {
   const anchor = note.anchorOffset ?? previousLength
   const anchorEnd = note.anchorEndOffset ?? anchor
@@ -1462,12 +1494,18 @@ const SceneEditorImpl = ({
 	    // dominant cost behind "typing lags once a note is attached" (2026-09-12
 	    // Bugs table row) — confirmed via CPU profiling a 190k-character scene.
 	    if (!isScript && delta !== 0 && scene.notes?.length) {
+	      // Edit mode's textarea always reports base===0/oldEnd===localContent.length
+	      // (the whole document), which can't tell us where the edit actually
+	      // happened — recover the real edited range by diffing old vs. new content.
+	      // Write mode's per-block textareas already report a real base/oldEnd, so
+	      // leave those untouched.
+	      const isFullDocumentEdit = base === 0 && oldEnd === localContent.length
+	      const editRange = isFullDocumentEdit
+	        ? computeEditRange(localContent, nextValue, e.target.selectionStart)
+	        : { start: base, end: oldEnd }
 	      let notesChanged = false
 	      const nextNotes = scene.notes.map(note => {
-	        const anchor = note.anchorOffset ?? localContent.length
-	        const shouldShift = anchor >= oldEnd && !(oldEnd === base && anchor === base)
-	        if (!shouldShift) return note
-	        const shifted = shiftNoteForEdit(note, base, oldEnd, delta, localContent.length)
+	        const shifted = shiftNoteForEdit(note, editRange.start, editRange.end, delta, localContent.length)
 	        if (shifted.anchorOffset !== note.anchorOffset || shifted.anchorEndOffset !== note.anchorEndOffset) notesChanged = true
 	        return shifted
 	      })
