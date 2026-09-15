@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { populateProject, populateYowProject, populateYowProjectIntoExisting, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
+import { populateProject, populateProjectIntoExisting, populateYowProject, populateYowProjectIntoExisting, relabelActsForType, parseManuscriptSections, buildUserMessage, isPromptTooLargeError, CONTENT_CHAR_CAPS, countLabel, stripFrontBackMatter } from './AIImportModal'
 
 // Minimal store double capturing what the populate helpers create.
 // `existing` seeds the destination project's pre-existing records, read by
@@ -156,6 +156,108 @@ describe('populateProject', () => {
     populateProject(store, proseData, { ideaEntries: true }, 'novel')
     expect(store.calls.ideas).toHaveLength(1)
     expect(store.calls.ideas[0].title).toBe('Loose note')
+  })
+})
+
+// ── Import destination for AI-parsed / compatible-structured-ZIP data ────────
+// populateProject's own opts.dedupe/opts.onCreated (used by
+// populateProjectIntoExisting below) — same skip-vs-create-by-name pattern as
+// populateYowProject, but this schema (AI-extracted or structured-ZIP data)
+// never carries cross-references, so there is no id-remap pass to test here.
+describe('populateProject with dedupe', () => {
+  it('skips a same-name character/location/lore/idea when a match already exists in the destination', () => {
+    const store = mockStore({
+      characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Mika' }],
+      locations: [{ id: 'existing-loc', novelId: 'novel-new', name: 'The Keep' }],
+      loreEntries: [{ id: 'existing-lore', novelId: 'novel-new', title: 'Old Magic' }],
+      ideaEntries: [{ id: 'existing-idea', novelId: 'novel-new', title: 'A Loose Thought' }],
+    })
+    const data = {
+      characters: [{ name: 'Mika' }, { name: 'Rowan' }],
+      locations: [{ name: 'The Keep' }],
+      lore: [{ title: 'Old Magic', content: 'x' }],
+      ideaEntries: [{ title: 'A Loose Thought', description: 'y' }],
+    }
+    populateProject(store, data, { characters: true, locations: true, lore: true, ideaEntries: true }, 'novel', { dedupe: true })
+    expect(store.calls.characters).toHaveLength(1)
+    expect(store.calls.characters[0].name).toBe('Rowan')
+    expect(store.calls.locations).toHaveLength(0)
+    expect(store.calls.lore).toHaveLength(0)
+    expect(store.calls.ideas).toHaveLength(0)
+  })
+
+  it('does not dedupe against a same-name record owned by a different novel', () => {
+    const store = mockStore({ characters: [{ id: 'sibling-char', novelId: 'novel-other', name: 'Mika' }] })
+    populateProject(store, { characters: [{ name: 'Mika' }] }, { characters: true }, 'novel', { dedupe: true })
+    expect(store.calls.characters).toHaveLength(1)
+  })
+
+  it('creates a genuine duplicate when dedupe is off', () => {
+    const store = mockStore({ locations: [{ id: 'existing-loc', novelId: 'novel-new', name: 'The Keep' }] })
+    populateProject(store, { locations: [{ name: 'The Keep' }] }, { locations: true }, 'novel', { dedupe: false })
+    expect(store.calls.locations).toHaveLength(1) // a genuine new copy, distinct from the pre-existing one
+  })
+
+  it('reports every created record through onCreated, but not deduped ones', () => {
+    const store = mockStore({ characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Mika' }] })
+    const created = []
+    populateProject(store, { characters: [{ name: 'Mika' }, { name: 'Rowan' }] }, { characters: true }, 'novel', {
+      dedupe: true, onCreated: (kind, id) => created.push({ kind, id }),
+    })
+    expect(created).toHaveLength(1)
+    expect(created[0].kind).toBe('character')
+  })
+
+  it('never dedupes manuscript structure or comic pages — acts always append', () => {
+    const store = mockStore()
+    store.addAct('Existing Act') // simulate a pre-existing act in the destination
+    const data = { acts: [{ title: 'Act 1', chapters: [{ title: 'Chapter 1', scenes: [{ title: 'Chapter 1', content: 'x' }] }] }] }
+    populateProject(store, data, { acts: true }, 'novel', { dedupe: true })
+    expect(store.calls.acts).toHaveLength(2) // the pre-existing one, plus a real new one appended
+  })
+})
+
+describe('populateProjectIntoExisting', () => {
+  it('links to (does not duplicate) a same-name record and reports it as not created', () => {
+    const store = mockStore({ locations: [{ id: 'existing-loc', novelId: 'novel-new', name: 'The Keep' }] })
+    const data = { locations: [{ name: 'The Keep' }, { name: 'New Place' }] }
+    const result = populateProjectIntoExisting(store, data, { locations: true }, 'novel')
+    expect(result.ok).toBe(true)
+    expect(store.calls.locations).toHaveLength(1)
+    expect(store.calls.locations[0].name).toBe('New Place')
+    expect(result.created.map(c => c.kind)).toEqual(['location'])
+  })
+
+  it('creates duplicates anyway when dedupe is turned off', () => {
+    const store = mockStore({ characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Mika' }] })
+    const data = { characters: [{ name: 'Mika' }] }
+    populateProjectIntoExisting(store, data, { characters: true }, 'novel', { dedupe: false })
+    expect(store.calls.characters).toHaveLength(1) // a genuine second "Mika", distinct from the pre-existing one
+  })
+
+  it('routes manuscript text onto comic pages when the destination project is a comic, appended as new', () => {
+    const store = mockStore()
+    const data = { acts: [{ title: 'Act 1', chapters: [{ title: 'Issue 1', scenes: [{ title: 'Page 1', content: 'Panel text' }] }] }] }
+    populateProjectIntoExisting(store, data, { acts: true }, 'comic')
+    expect(store.calls.scenes).toHaveLength(0)
+    expect(store.calls.comicPages).toHaveLength(1)
+    expect(store.calls.comicPages[0].summary).toBe('Panel text')
+  })
+
+  it('rolls back everything it created when a later step throws, leaving pre-existing records untouched', () => {
+    const store = mockStore({ characters: [{ id: 'existing-char', novelId: 'novel-new', name: 'Keep Me' }] })
+    store.addAct = () => { throw new Error('simulated failure') }
+    const data = {
+      characters: [{ name: 'New Guy' }],
+      locations: [{ name: 'New Place' }],
+      acts: [{ title: 'Act 1' }],
+    }
+    expect(() => populateProjectIntoExisting(store, data, { characters: true, locations: true, acts: true }, 'novel'))
+      .toThrow('simulated failure')
+    expect(store.calls.characters).toHaveLength(0)
+    expect(store.calls.locations).toHaveLength(0)
+    expect(store.characters).toEqual([{ id: 'existing-char', novelId: 'novel-new', name: 'Keep Me' }])
+    expect(store.deleted.map(([kind]) => kind).sort()).toEqual(['character', 'location'])
   })
 })
 
