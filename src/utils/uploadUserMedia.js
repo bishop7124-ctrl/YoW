@@ -144,21 +144,8 @@ export async function getSignedUserMediaUrl(value, options = {}) {
   const expiresIn = options.expiresIn || SIGNED_URL_TTL_SECONDS
   const { data, error } = await supabase.storage.from(BUCKET_NAME).createSignedUrl(path, expiresIn)
   if (error) {
-    // Reproduced live against the real bucket: the sign/list endpoints can
-    // return a hard "Object not found" (S3 NoSuchKey) for an object that
-    // upload() just confirmed writing and that download()/getPublicUrl()
-    // can both reach immediately and indefinitely afterward — not a
-    // propagation race (persisted 24s+ across repeated attempts, unaffected
-    // by retries). While the bucket is still public (see
-    // supabase/migrations/20260804_private_user_media.sql — not yet
-    // applied), fall back to the plain public URL rather than showing a
-    // blank image for an object that plainly exists. Once the bucket is
-    // actually made private this fallback naturally stops helping — the
-    // public URL 403s the same way signing failed to resolve — so it's safe
-    // to leave in as a defensive fallback, not a fix for the sign endpoint
-    // itself (that needs following up with Supabase separately).
-    const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(path)
-    if (pub?.publicUrl) return pub.publicUrl
+    // The bucket is private. A public-URL fallback cannot retrieve a missing
+    // or unauthorized object and only causes a second noisy network failure.
     throw new Error(`Could not load image: ${error.message}`)
   }
   const url = data?.signedUrl || ''

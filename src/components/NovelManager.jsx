@@ -1412,8 +1412,13 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
       return
     }
 
-    const blob = createProjectZipBlob(projectData)
-    await downloadBlob(blob, getProjectExportFilename(projectData.project))
+    try {
+      const blob = await createProjectZipBlob(projectData)
+      await downloadBlob(blob, getProjectExportFilename(projectData.project))
+    } catch (error) {
+      console.error('Backup export failed:', error)
+      alert(error instanceof Error ? error.message : 'Backup export failed. Please try again.')
+    }
   }
 
   const focusStats = store.allProjectStats.find(s => s.project.focus) ?? null
@@ -1434,7 +1439,10 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   }
 
   return (
-    <div style={{ height: '100dvh', overflowY: 'auto', background: 'var(--bg-main)', color: 'var(--text-main)' }}>
+    <div
+      className="library-app-shell"
+      style={{ height: 'calc(100dvh / var(--app-density-scale, 1))', overflowY: 'auto', background: 'var(--bg-main)', color: 'var(--text-main)' }}
+    >
 
       {/* Top bar */}
       <div className="library-top-bar" data-tour="library-top-bar">

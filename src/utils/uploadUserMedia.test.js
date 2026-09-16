@@ -231,21 +231,14 @@ describe('getSignedUserMediaUrl', () => {
     expect(mockState.signedUrlCalls).toEqual([{ path: 'user-1/covers/abc.webp', expiresIn: 3600 }])
   })
 
-  // Reproduced live against the real bucket: createSignedUrl (and list) can
-  // return a hard "Object not found" for an object that upload() just
-  // confirmed writing and that download()/getPublicUrl() can both reach —
-  // not a propagation race (persisted 20s+ across repeated attempts in that
-  // session). Until that's resolved upstream, a signing failure must not
-  // render as a blank image for an object that plainly exists — fall back
-  // to the plain public URL rather than throwing.
-  it('falls back to the public URL when signing fails for an object that otherwise exists', async () => {
+  it('surfaces a signing failure without retrying through the private bucket public endpoint', async () => {
     mockState.signedUrlError = { message: 'Object not found' }
     // A path not used by an earlier test in this file — getSignedUserMediaUrl
     // caches successful resolutions at module scope, so reusing 'user-1/covers/abc.webp'
     // here would just return the previous test's cached signed URL without
     // exercising the fallback at all.
-    const url = await getSignedUserMediaUrl('yow-media:user-1/characters/def.webp')
-    expect(url).toBe(mockState.publicUrl)
+    await expect(getSignedUserMediaUrl('yow-media:user-1/characters/def.webp'))
+      .rejects.toThrow('Could not load image: Object not found')
   })
 
   it('passes through non-user-media URLs', async () => {

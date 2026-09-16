@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import Manuscript from './Manuscript.jsx'
 
 const noop = vi.fn()
+const defaultInnerWidth = window.innerWidth
 
 const baseStore = () => ({
   activeNovel: {
@@ -42,6 +43,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   localStorage.clear()
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: defaultInnerWidth })
 })
 
 describe('Manuscript campaign workflow', () => {
@@ -61,5 +63,20 @@ describe('Manuscript campaign workflow', () => {
     expect(store.updateChapter).toHaveBeenCalledWith('session-1', {
       sessionRecap: { summary: 'The party tracked wagon marks north.' },
     })
+  })
+
+  it('collapses both side panels when entering Write mode', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    render(<Manuscript store={baseStore()} userId={null} />)
+
+    expect(document.querySelector('.ms-rail.is-collapsed')).toBeNull()
+    expect(document.querySelector('.ms-insp')).toBeTruthy()
+
+    const modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Write' }))
+
+    expect(within(modeSwitcher).getByRole('button', { name: 'Write' }).getAttribute('aria-pressed')).toBe('true')
+    expect(document.querySelector('.ms-rail.is-collapsed')).toBeTruthy()
+    expect(document.querySelector('.ms-insp')).toBeNull()
   })
 })

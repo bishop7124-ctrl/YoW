@@ -142,6 +142,22 @@ describe('FamilyTree', () => {
     expect(container.querySelector('.tree-container').classList.contains('overflow-auto')).toBe(true)
   })
 
+  it('gives the desktop details sidebar its own bounded scroll region', () => {
+    render(<FamilyTree store={makeStore()} />)
+    const details = screen.getByRole('complementary', { name: 'Family details' })
+    expect(details.classList.contains('sticky')).toBe(false)
+    expect(details.classList.contains('xl:h-full')).toBe(true)
+    expect(details.classList.contains('xl:overflow-y-auto')).toBe(true)
+    expect(details.classList.contains('xl:overscroll-contain')).toBe(true)
+  })
+
+  it('collapses the descriptive header copy at the compact desktop layout', () => {
+    render(<FamilyTree store={makeStore()} />)
+    expect(screen.getByText(/Structured genealogy by direct facts/).classList.contains('xl:hidden')).toBe(true)
+    expect(screen.getByLabelText('Focus character').classList.contains('xl:py-1')).toBe(true)
+    expect(screen.getByLabelText('View').classList.contains('xl:py-1')).toBe(true)
+  })
+
   it('shows an empty state without creating free-floating tree characters', () => {
     render(<FamilyTree store={makeStore({ characters: [] })} />)
     expect(screen.getByText('No characters yet')).toBeTruthy()

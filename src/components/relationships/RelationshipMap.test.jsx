@@ -114,18 +114,16 @@ describe('RelationshipMap', () => {
     expect(screen.getByLabelText('Connection character').value).toBe('')
   })
 
-  it('paginates dense casts and counts people rather than duplicate types in badges', () => {
+  it('renders every dense-cast connection together and counts people rather than duplicate types in badges', () => {
     const characters = [{ id: 'root', name: 'Root', relationships: Array.from({ length: 9 }, (_, i) => ({ targetId: `c${i}`, type: 'friend' })) },
       ...Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, name: `Companion ${i}`, relationships: i === 0 ? [{ targetId: 'c1', type: 'ally' }, { targetId: 'c1', type: 'friend' }] : [] })),
     ]
     renderMap({ characters, selectedCharacterId: 'root' })
-    expect(screen.getAllByRole('button', { name: /^Focus on/ })).toHaveLength(8)
-    expect(screen.queryByRole('button', { name: 'Focus on Companion 8' })).toBeNull()
-    expect(screen.getAllByLabelText('1 other connected characters').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Next connections' }))
-    expect(screen.getByRole('status').textContent).toBe('Page 2 of 2')
+    expect(screen.getAllByRole('button', { name: /^Focus on/ })).toHaveLength(9)
     expect(screen.getByRole('button', { name: 'Focus on Companion 8' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: /^Focus on/ })).toHaveLength(1)
+    expect(screen.getAllByLabelText('1 other connected characters').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('navigation', { name: 'Connection pages' })).toBeNull()
+    expect(screen.getByText('9 connected characters · All shown · Select a character to refocus')).toBeTruthy()
   })
 
   it('uses continuity aliases for a selected inherited character and opens the correct profile', () => {
@@ -154,5 +152,15 @@ describe('RelationshipMap', () => {
     expect(screen.getAllByText('Petra Solace').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Mira Morven').length).toBeGreaterThan(0)
     expect(screen.getByText('from family tree')).toBeTruthy()
+  })
+
+  it('wraps complete map-card names and relationship labels instead of clamping them', () => {
+    const view = renderMap({ characters: [
+      { id: 'kael', name: 'Kael With An Intentionally Long Family Name', relationships: [{ targetId: 'petra', type: 'friend' }, { targetId: 'petra', type: 'ally' }] },
+      { id: 'petra', name: 'Petra With An Intentionally Long Family Name', relationships: [] },
+    ] })
+    const map = view.container.querySelector('[data-tour="relationships-map"]')
+    expect(map.querySelector('.line-clamp-2')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Focus on Petra With An Intentionally Long Family Name' }).textContent).toContain('Ally · Friend')
   })
 })

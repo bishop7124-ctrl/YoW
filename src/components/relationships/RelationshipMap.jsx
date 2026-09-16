@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType } from '../../constants/relationshipTypes.js'
 import { FACTION_ICONS } from '../../constants/factionIcons'
-import { buildRelationshipIndex, relationshipMapPage, RELATIONSHIP_MAP_SIZE } from '../../utils/relationshipMap.js'
+import { buildRelationshipIndex, relationshipMapLayout } from '../../utils/relationshipMap.js'
 import FactionLogo from '../Factions/FactionLogo'
 import { CharacterAvatar as PortraitAvatar } from '../shared/CharacterPortrait'
 
@@ -11,13 +11,15 @@ const displayName = character => character?.name || 'Unnamed character'
 
 function CharacterAvatar({ character, faction, size = 52 }) {
   const legacyIcon = factionIcons.get(faction?.iconId)
+  const badgeSize = size >= 34 ? 14 : 12
   return (
     <span className="relative inline-flex flex-shrink-0">
       <PortraitAvatar character={character} size={size} shape="circle" />
       {faction && (
-        <span className="absolute -right-1 -bottom-1 w-6 h-6 grid place-items-center rounded-md border border-[var(--border)] bg-[var(--bg-main)] shadow-sm overflow-hidden"
+        <span className="absolute grid place-items-center border border-[var(--border)] bg-[var(--bg-main)] shadow-sm overflow-hidden"
+          style={{ width: badgeSize, height: badgeSize, right: -2, bottom: -2, borderRadius: 4 }}
           title={`${faction.name || 'Faction'} logo`} aria-label={`${faction.name || 'Faction'} logo`}>
-          {legacyIcon ? <img src={legacyIcon.url} alt="" className="w-[70%] h-[70%] object-contain opacity-70" /> : <FactionLogo shapes={faction.logo} size={19} />}
+          {legacyIcon ? <img src={legacyIcon.url} alt="" className="w-[72%] h-[72%] object-contain opacity-70" /> : <FactionLogo shapes={faction.logo} size={badgeSize - 4} />}
         </span>
       )}
     </span>
@@ -28,10 +30,9 @@ function FocusedRelationships({ store, index, focalCharacter }) {
   const [targetId, setTargetId] = useState('')
   const [relationshipType, setRelationshipType] = useState(DEFAULT_CHARACTER_LINK_REL_TYPE)
   const [error, setError] = useState('')
-  const [page, setPage] = useState(0)
   const scrollRef = useRef(null)
   const connections = useMemo(() => index.connectionsFor(focalCharacter.id), [index, focalCharacter.id])
-  const { nodes, page: currentPage, pageCount } = useMemo(() => relationshipMapPage(connections, page), [connections, page])
+  const { nodes, dense, size: mapSize } = useMemo(() => relationshipMapLayout(connections), [connections])
   const extendedCounts = useMemo(() => new Map(nodes.map(node => [
     node.character.id, index.connectionsFor(node.character.id).filter(connection => connection.character.id !== focalCharacter.id).length,
   ])), [index, nodes, focalCharacter.id])
@@ -41,8 +42,11 @@ function FocusedRelationships({ store, index, focalCharacter }) {
   const validTarget = targetId !== focalCharacter.id && index.byId.has(targetId)
   useEffect(() => {
     const viewport = scrollRef.current
-    if (viewport) viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2)
-  }, [focalCharacter.id, currentPage])
+    if (viewport) {
+      viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2)
+      viewport.scrollTop = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2)
+    }
+  }, [focalCharacter.id])
 
   const save = (sourceId, otherId, type, remove = false) => {
     setError('')
@@ -70,31 +74,23 @@ function FocusedRelationships({ store, index, focalCharacter }) {
   const avatar = (character, size) => <CharacterAvatar character={character} faction={index.factions.get(character.factionId)} size={size} />
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-[var(--text-muted)]">{connections.length} connected character{connections.length === 1 ? '' : 's'}. Up to eight are shown at a time.</p>
-        {pageCount > 1 && (
-          <nav aria-label="Connection pages" className="flex items-center gap-3 text-xs">
-            <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} className="border border-[var(--border)] rounded-lg px-3 py-2 disabled:opacity-40">Previous connections</button>
-            <span role="status">Page {currentPage + 1} of {pageCount}</span>
-            <button disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)} className="border border-[var(--border)] rounded-lg px-3 py-2 disabled:opacity-40">Next connections</button>
-          </nav>
-        )}
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 items-start">
+    <div className="min-h-0 flex flex-1 flex-col gap-3">
+      <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 items-start xl:items-stretch">
         <section className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--bg-nav)] overflow-hidden" data-tour="relationships-map">
-          <p className="text-xs text-[var(--text-muted)] px-4 py-2">Scroll the map horizontally on smaller screens. Select a character to refocus.</p>
-          <div ref={scrollRef} tabIndex={0} role="region" aria-label="Relationship map canvas" className="overflow-x-auto">
-            <div className="relative" style={{ width: RELATIONSHIP_MAP_SIZE.width, height: RELATIONSHIP_MAP_SIZE.height }}>
+          <p className="text-xs text-[var(--text-muted)] px-4 py-2">
+            {connections.length} connected character{connections.length === 1 ? '' : 's'} · All shown · Select a character to refocus
+          </p>
+          <div ref={scrollRef} tabIndex={0} role="region" aria-label="Relationship map canvas" className="overflow-auto max-h-[400px]">
+            <div className="relative" style={{ width: mapSize.width, height: mapSize.height }}>
               <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(circle, var(--border) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${RELATIONSHIP_MAP_SIZE.width} ${RELATIONSHIP_MAP_SIZE.height}`} aria-hidden="true">
-                {nodes.map(node => <line key={node.character.id} x1={RELATIONSHIP_MAP_SIZE.centerX} y1={RELATIONSHIP_MAP_SIZE.centerY} x2={node.x} y2={node.y} stroke={getRelType(node.facts[0].type).color} strokeWidth="2.4" opacity=".82" />)}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${mapSize.width} ${mapSize.height}`} aria-hidden="true">
+                {nodes.map(node => <line key={node.character.id} x1={mapSize.centerX} y1={mapSize.centerY} x2={node.x} y2={node.y} stroke={getRelType(node.facts[0].type).color} strokeWidth="2.4" opacity=".82" />)}
               </svg>
               <button onClick={openProfile} title="Open focal character profile"
-                className="relationship-focus-enter absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-40 h-48 rounded-[2rem] border-2 border-[var(--accent)] bg-[var(--bg-main)] shadow-2xl p-4 flex flex-col items-center justify-center text-center">
-                {avatar(focalCharacter, 76)}
-                <strong className="w-full text-sm text-[var(--text-main)] mt-3 leading-tight line-clamp-2">{displayName(focalCharacter)}</strong>
-                <span className="text-[10px] uppercase tracking-wider text-[var(--accent)] mt-1">Focal character</span>
+                className="relationship-focus-enter absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-[120px] h-[112px] rounded-[1.3rem] border-2 border-[var(--accent)] bg-[var(--bg-main)] shadow-2xl p-2 flex flex-col items-center justify-center text-center">
+                {avatar(focalCharacter, 34)}
+                <strong className="w-full text-[10px] font-semibold text-[var(--text-main)] mt-1 leading-[1.15] break-words [overflow-wrap:anywhere]">{displayName(focalCharacter)}</strong>
+                <span className="text-[8px] uppercase tracking-wider text-[var(--accent)] mt-1 leading-tight">Focal character</span>
               </button>
               {nodes.map((node, position) => {
                 const color = getRelType(node.facts[0].type).color
@@ -102,13 +98,13 @@ function FocusedRelationships({ store, index, focalCharacter }) {
                 return (
                   <button key={node.character.id} onClick={() => store.setSelectedCharacterId(node.character.id)}
                     aria-label={`Focus on ${displayName(node.character)}`} title={`${displayName(node.character)}: ${node.labels.join(', ')}`}
-                    className="relationship-node-enter absolute z-20 w-[152px] h-[170px] p-3 -translate-x-1/2 -translate-y-1/2 rounded-[1.4rem] border bg-[var(--bg-main)] shadow-lg flex flex-col items-center justify-center text-center"
+                    className={`relationship-node-enter absolute z-20 p-1 -translate-x-1/2 -translate-y-1/2 border bg-[var(--bg-main)] shadow-lg flex flex-col items-center justify-center text-center ${dense ? 'w-[74px] h-[68px] rounded-xl' : 'w-[104px] h-24 rounded-2xl'}`}
                     style={{ left: node.x, top: node.y, borderColor: color, animationDelay: `${position * 35}ms` }}>
-                    {avatar(node.character, 52)}
-                    <strong className="w-full text-xs text-[var(--text-main)] mt-2 leading-tight line-clamp-2">{displayName(node.character)}</strong>
-                    <span className="text-[10px] mt-1 leading-tight line-clamp-2" style={{ color }}>{node.labels.join(' · ')}</span>
-                    {node.facts.some(fact => fact.family) && <span className="text-[9px] text-[var(--text-muted)]">from family tree</span>}
-                    {count > 0 && <span className="absolute -right-2 -bottom-2 w-7 h-7 rounded-md grid place-items-center border border-[var(--border)] bg-[var(--surface2)] text-[9px] font-bold text-[var(--text-muted)] shadow-md" title={`${count} other connected characters`} aria-label={`${count} other connected characters`}>+{count}</span>}
+                    {avatar(node.character, dense ? 14 : 22)}
+                    <strong className={`w-full font-semibold text-[var(--text-main)] mt-0.5 leading-[1.05] break-words [overflow-wrap:anywhere] ${dense ? 'text-[8px]' : 'text-[10px]'}`}>{displayName(node.character)}</strong>
+                    <span className={`w-full mt-0.5 leading-[1.05] break-words [overflow-wrap:anywhere] ${dense ? 'text-[7px]' : 'text-[9px]'}`} style={{ color }}>{node.labels.join(' · ')}</span>
+                    {node.facts.some(fact => fact.family) && <span className={`w-full leading-[1.05] text-[var(--text-muted)] break-words ${dense ? 'text-[7px]' : 'text-[8px]'}`}>from family tree</span>}
+                    {count > 0 && <span className="absolute right-1 bottom-1 w-5 h-5 rounded grid place-items-center border border-[var(--border)] bg-[var(--surface2)] text-[8px] font-bold text-[var(--text-muted)] shadow-md" title={`${count} other connected characters`} aria-label={`${count} other connected characters`}>+{count}</span>}
                   </button>
                 )
               })}
@@ -116,7 +112,7 @@ function FocusedRelationships({ store, index, focalCharacter }) {
             </div>
           </div>
         </section>
-        <aside className="rounded-2xl border border-[var(--border)] bg-[var(--bg-nav)] p-4 space-y-4 xl:sticky xl:top-4">
+        <aside className="rounded-2xl border border-[var(--border)] bg-[var(--bg-nav)] p-4 space-y-4 xl:max-h-full xl:overflow-y-auto">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">Focused on</p>
             <h2 className="text-lg font-bold text-[var(--text-main)] mt-1 break-words">{displayName(focalCharacter)}</h2>
@@ -137,7 +133,7 @@ function FocusedRelationships({ store, index, focalCharacter }) {
             {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
           </div>
           <div className="border-t border-[var(--border)] pt-4">
-            <h3 className="text-xs font-bold text-[var(--text-main)] mb-2">Connections on this page</h3>
+            <h3 className="text-xs font-bold text-[var(--text-main)] mb-2">Connections</h3>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {!nodes.length && <p className="text-xs italic text-[var(--text-muted)]">Nothing mapped yet.</p>}
               {nodes.map(connection => (
@@ -175,8 +171,8 @@ export default function RelationshipMap({ store }) {
   const index = useMemo(() => buildRelationshipIndex(characters, factions, knownCharacters), [characters, factions, knownCharacters])
   const focalCharacter = index.byId.get(index.aliases.get(store.selectedCharacterId)) || index.entries[0]
   return (
-    <div className="h-full overflow-auto bg-[var(--bg-main)] p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-5">
+    <div className="h-full overflow-auto xl:overflow-hidden bg-[var(--bg-main)] p-4">
+      <div className="max-w-7xl h-full mx-auto flex flex-col gap-3">
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between" data-tour="relationships-header">
           <div>
             <h1 className="text-2xl font-bold text-[var(--text-main)]">Relationship Map</h1>

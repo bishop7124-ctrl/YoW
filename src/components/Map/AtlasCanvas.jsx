@@ -17,15 +17,16 @@ function MapObject({ object: o, palette: p, selected, onPick, onPointPick, organ
   const closed = o.geometry?.type === 'polygon'
   const points = useMemo(() => {
     const source = o.geometry?.straightPoints || o.geometry?.points || []
-    return closed && organicBorders && !o.properties?.room ? organicOutline(source, organicStrength) : source
-  }, [o.geometry, o.properties?.room, closed, organicBorders, organicStrength])
+    return closed && organicBorders && o.properties?.organicEdges !== false && !o.properties?.room ? organicOutline(source, organicStrength) : source
+  }, [o.geometry, o.properties?.organicEdges, o.properties?.room, closed, organicBorders, organicStrength])
   const color = o.type === 'water' || o.type === 'river' ? p.water : p.ink
-  const pathStyle = { d: inkPath(points, closed, props.room || o.type === 'wall' || (closed && !organicBorders)), strokeLinejoin: 'round', strokeLinecap: 'round' }
+  const territoryLandmass = o.type === 'territory' && props.landmass === true
+  const pathStyle = { d: inkPath(points, closed, props.room || o.type === 'wall' || (closed && (!organicBorders || props.organicEdges === false))), strokeLinejoin: 'round', strokeLinecap: 'round' }
   return <g data-object-id={preview ? undefined : o.id} data-draft={draft || undefined} onPointerDown={onPick ? e => onPick(e, o) : undefined} style={{ cursor: onPick ? 'pointer' : undefined }}>
     {points.length ? <>
       {o.type === 'shape' && !props.room && <path {...pathStyle} fill="none" stroke={p.ink} strokeWidth="9" opacity=".1"/>}
       {selected && <path data-selection="true" {...pathStyle} fill="none" stroke={p.accent} strokeWidth={12} opacity=".5"/>}
-      <path {...pathStyle} fill={closed ? o.type === 'water' ? p.water : o.type === 'territory' ? p.forest : p.land : 'none'} fillOpacity={o.type === 'territory' ? .2 : 1} stroke={o.type === 'shape' ? p.ink : color} strokeWidth={closed ? props.room ? 5 : 1.8 : Number(props.size) || (o.type === 'wall' ? 7 : 5)} strokeDasharray={['road','territory'].includes(o.type) ? '7 6' : undefined}/>
+      <path {...pathStyle} fill={closed ? o.type === 'water' ? p.water : o.type === 'territory' ? territoryLandmass ? p.land : p.forest : p.land : 'none'} fillOpacity={o.type === 'territory' && !territoryLandmass ? .2 : 1} stroke={o.type === 'shape' ? p.ink : color} strokeWidth={closed ? props.room ? 5 : territoryLandmass ? 2.4 : 1.8 : Number(props.size) || (o.type === 'wall' ? 7 : 5)} strokeDasharray={['road','territory'].includes(o.type) && !territoryLandmass ? '7 6' : undefined}/>
       {!closed && <path {...pathStyle} fill="none" stroke="transparent" strokeWidth={Math.max(20, (Number(props.size) || 5) + 10)}/>}
       {props.name && <text x={points.reduce((sum,p) => sum+p.x,0)/points.length} y={points.reduce((sum,p) => sum+p.y,0)/points.length} textAnchor="middle" fill={p.ink} stroke={p.paper} strokeWidth="4" paintOrder="stroke" fontFamily="Georgia, serif" fontSize="18">{props.name}</text>}
       {selected && props.drawMode === 'points' && <g data-edit-handles="true" data-point-handles="true">{(o.geometry?.straightPoints || o.geometry?.points || []).map((point,index) => <g key={index} transform={`translate(${point.x} ${point.y})`}><circle className="atlas-point-handle" data-point-handle={index} r="13" fill="transparent" onPointerDown={event => onPointPick?.(event, o, index)}/><circle r="5" fill={p.paper} stroke={p.accent} strokeWidth="2" pointerEvents="none"/></g>)}</g>}
