@@ -360,17 +360,12 @@ export default function Manuscript({ store, userId, membership = null }) {
     }, duration)
   }, [])
 
-  // handleOpenReferenceEntry (jump from a reference-panel click to a
-  // character/location/lore/idea/timeline entry) is deliberately not carried
-  // over here — WritingSidebar's Reference tab (ManuscriptReferencePanel,
-  // the browse-everything panel this fed) has no home in the new inspector;
-  // the handoff spec defers "reference" to the breadcrumb's ⌘K palette and
-  // entity clicks. Entity clicks already work (handleEntityClick, used by
-  // both SceneEditor's inline entity links and the inspector's Scene tab
-  // chips) — the palette only searches scenes so far, not the full
-  // character/location/lore/timeline set ManuscriptReferencePanel browsed.
-  // That's a real, disclosed gap versus today, not an oversight: flagged in
-  // the redesign's final report rather than rebuilt under time pressure.
+  // Entity clicks (handleEntityClick below) open the inspector's Catalogue
+  // tab pointed at one entity already linked in the current scene; the
+  // rebuilt Reference panel (ManuscriptReferencePanel.jsx, a ManuscriptSurface
+  // panel opened via the topbar overflow menu) covers the project-wide
+  // browse/search case across all entity types — see handleOpenReferenceEntry
+  // below, which jumps a Reference-panel card into its native section.
 
   const activeScene = scenes.find(s => s.id === activeSceneId) ?? null
   const activeSceneForAI = activeScene
@@ -985,6 +980,16 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const handleCloseSurface = useCallback(() => setSurfaceId(null), [])
 
+  // Reference panel cards carry the aggregated-entry shape (id: `type:rawId`,
+  // rawId, section, title, ...) rather than the {id, section} shape
+  // handleOpenEntitySection expects — adapt, then close the panel since
+  // switch-section is about to navigate away from the manuscript entirely.
+  const handleOpenReferenceEntry = useCallback(entry => {
+    if (!entry?.rawId || !entry?.section) return
+    handleOpenEntitySection({ id: entry.rawId, section: entry.section, name: entry.title })
+    handleCloseSurface()
+  }, [handleOpenEntitySection, handleCloseSurface])
+
   // Mobile bottom bar (≤900px): one of four surfaces at a time — Outline
   // (rail sheet), Write (bare manuscript), Inspector (bottom sheet), AI.
   // Only one is ever open at a time, matching the desktop rule above that a
@@ -1028,6 +1033,7 @@ export default function Manuscript({ store, userId, membership = null }) {
         handleToggleSurface('history')
         break
       case 'finalise': handleToggleSurface('finalise'); break
+      case 'reference': handleToggleSurface('reference'); break
       case 'export': handleExport(); break
       case 'catalogue': setCatalogueOpen(true); break
       default: break
@@ -1481,6 +1487,14 @@ export default function Manuscript({ store, userId, membership = null }) {
           onExport={handleExport}
           exporting={exporting}
           exportButtonLabel={exportButtonLabel}
+          loreEntries={loreEntries}
+          factions={factions}
+          timeline={timeline}
+          worldHistory={worldHistory}
+          ideaEntries={ideaEntries}
+          storySchedule={storySchedule}
+          rpgCharacters={rpgCharacters}
+          onOpenReferenceEntry={handleOpenReferenceEntry}
           onToast={toast}
         />
       </div>

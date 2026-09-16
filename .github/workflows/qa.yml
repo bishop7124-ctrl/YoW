@@ -187,6 +187,8 @@ jobs:
             spec: tests/e2e/pricing-page.spec.js
           - name: unconfigured-ai-account
             spec: tests/e2e/unconfigured-ai-account.spec.js
+          - name: manuscript-reference-panel
+            spec: tests/e2e/manuscript-reference-panel.spec.js
     steps:
       - name: Check out repository
         uses: actions/checkout@v5

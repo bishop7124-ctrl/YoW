@@ -1,6 +1,7 @@
 import AISuggestionPanel from './AISuggestionPanel.jsx'
 import ManuscriptSearch from './ManuscriptSearch.jsx'
 import SceneVersionHistory from './SceneVersionHistory.jsx'
+import ManuscriptReferencePanel from './ManuscriptReferencePanel.jsx'
 import AIStar from '../ai/AIStar'
 import { decodeHtmlEntities } from './manuscriptUtils.js'
 
@@ -9,6 +10,7 @@ const TITLES = {
   search: 'Search & replace',
   history: 'Version history',
   finalise: 'Finalise & export',
+  reference: 'Reference',
 }
 
 // ─── Finalise pane ──────────────────────────────────────────────────────────
@@ -85,6 +87,8 @@ export default function ManuscriptSurface({
   // Finalise pane
   labels, finaliseStats, isNovelProject, finalizedDrafts, onFinalise, onOpenFinalizedDraft, onOpenCatalogue,
   onExport, exporting, exportButtonLabel,
+  // Reference pane
+  loreEntries, factions, timeline, worldHistory, ideaEntries, storySchedule, rpgCharacters, onOpenReferenceEntry,
   // Shared
   onToast,
 }) {
@@ -145,6 +149,21 @@ export default function ManuscriptSurface({
             onExport={onExport}
             exporting={exporting}
             exportButtonLabel={exportButtonLabel}
+          />
+        )}
+        {activeSurface === 'reference' && (
+          <ManuscriptReferencePanel
+            activeNovel={activeNovel}
+            characters={characters}
+            locations={locations}
+            loreEntries={loreEntries}
+            factions={factions}
+            timeline={timeline}
+            worldHistory={worldHistory}
+            ideaEntries={ideaEntries}
+            storySchedule={storySchedule}
+            rpgCharacters={rpgCharacters}
+            onOpenEntry={onOpenReferenceEntry}
           />
         )}
       </div>

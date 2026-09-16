@@ -15042,6 +15042,471 @@ body {
   cursor: pointer;
 }
 
+/* ─── Manuscript reference panel ─────────────────────────────────────────── */
+
+.ms-reference-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-nav) 54%, var(--bg-main));
+}
+
+.ms-reference-search-row {
+  flex-shrink: 0;
+  padding: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.ms-reference-search {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--r-sm);
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--bg-main) 82%, transparent);
+  color: var(--text-main);
+  font-size: 12px;
+  outline: none;
+}
+
+.ms-reference-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.ms-reference-search::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.ms-reference-type-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+}
+
+.ms-reference-type {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--r-sm);
+  padding: 0 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ms-reference-type span {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.ms-reference-type:hover,
+.ms-reference-type.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.ms-reference-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.ms-reference-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 10px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ms-reference-card {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-main) 68%, transparent);
+  color: var(--text-main);
+  text-align: left;
+}
+
+.ms-reference-card-main {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ms-reference-card:hover,
+.ms-reference-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-main));
+}
+
+.ms-reference-card strong {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ms-reference-card p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ms-reference-kicker {
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ms-reference-badge {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--r-xs);
+  padding: 2px 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-nav) 70%, transparent);
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ms-reference-badge.type-character { color: #38bdf8; border-color: color-mix(in srgb, #38bdf8 44%, var(--border)); }
+.ms-reference-badge.type-location { color: #22c55e; border-color: color-mix(in srgb, #22c55e 42%, var(--border)); }
+.ms-reference-badge.type-lore { color: #c084fc; border-color: color-mix(in srgb, #c084fc 42%, var(--border)); }
+.ms-reference-badge.type-faction { color: #f97316; border-color: color-mix(in srgb, #f97316 42%, var(--border)); }
+.ms-reference-badge.type-timeline { color: #facc15; border-color: color-mix(in srgb, #facc15 40%, var(--border)); }
+.ms-reference-badge.type-history { color: #f59e0b; border-color: color-mix(in srgb, #f59e0b 40%, var(--border)); }
+.ms-reference-badge.type-idea { color: #fb7185; border-color: color-mix(in srgb, #fb7185 40%, var(--border)); }
+.ms-reference-badge.type-schedule { color: #2dd4bf; border-color: color-mix(in srgb, #2dd4bf 40%, var(--border)); }
+.ms-reference-badge.type-rpg { color: #a3e635; border-color: color-mix(in srgb, #a3e635 40%, var(--border)); }
+
+.ms-reference-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ms-reference-tags span {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--r-xs);
+  padding: 2px 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.ms-reference-float-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9300;
+  pointer-events: none;
+}
+
+.ms-reference-modal {
+  position: fixed;
+  top: 154px;
+  right: min(394px, calc(100vw - 360px));
+  width: min(460px, calc(100vw - 430px));
+  min-width: 340px;
+  max-height: min(620px, calc(100dvh - 188px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--r-md);
+  background: var(--bg-nav);
+  color: var(--text-main);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .46);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  pointer-events: auto;
+}
+
+.ms-reference-modal.is-positioned {
+  right: auto;
+  bottom: auto;
+}
+
+.ms-reference-modal-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  cursor: move;
+  touch-action: none;
+}
+
+.ms-reference-modal-header h3 {
+  margin: 8px 0 4px;
+  color: var(--text-main);
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.ms-reference-modal-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ms-reference-modal-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ms-reference-modal-close:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ms-reference-modal-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 10px 18px 0;
+  overflow-x: auto;
+}
+
+.ms-reference-modal-tabs button {
+  min-height: 28px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.ms-reference-modal-tabs button:hover,
+.ms-reference-modal-tabs button.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.ms-reference-modal-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 18px;
+}
+
+.ms-reference-modal-overview {
+  display: grid;
+  gap: 12px;
+}
+
+.ms-reference-modal-overview p {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 13px;
+  line-height: 1.58;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ms-reference-field-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.ms-reference-field-list div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-main) 64%, transparent);
+}
+
+.ms-reference-field-list dt,
+.ms-reference-link-list h4 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ms-reference-field-list dd {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1.48;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ms-reference-field-list dd p,
+.ms-reference-value-stack p {
+  margin: 0;
+}
+
+.ms-reference-value-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.ms-reference-nested-list,
+.ms-reference-nested-card {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-nav) 64%, transparent);
+}
+
+.ms-reference-nested-list div,
+.ms-reference-nested-card div {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ms-reference-nested-list dt,
+.ms-reference-nested-card dt {
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ms-reference-nested-list dd,
+.ms-reference-nested-card dd {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ms-reference-link-list {
+  display: grid;
+  gap: 14px;
+}
+
+.ms-reference-link-list section {
+  display: grid;
+  gap: 8px;
+}
+
+.ms-reference-modal-actions {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 18px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+}
+
+.ms-reference-modal-actions button {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ms-reference-modal-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ms-reference-modal-actions button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.ms-reference-empty {
+  margin: 14px;
+  border: 1px dashed color-mix(in srgb, var(--border) 74%, transparent);
+  border-radius: var(--r-sm);
+  padding: 18px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .ms-reference-modal {
+    top: auto;
+    right: 10px;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    left: 10px;
+    width: auto;
+    min-width: 0;
+    max-height: min(56dvh, calc(100dvh - 110px));
+  }
+
+  .ms-reference-modal-header,
+  .ms-reference-modal-content,
+  .ms-reference-modal-actions {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
 .ms-character-profile {
   display: grid;
   gap: 18px;
