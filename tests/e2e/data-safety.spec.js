@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, openImportZip, readStorage,
+  createProject, dismissLaunchPrompts, openImportZip, readScenesWithContent, readStorage,
   seedCleanStorage, seedIndexedDbEntries, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
@@ -240,4 +240,56 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
 
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Restore Test Character')).toBe(true)
+})
+
+// Roadmap Bugs table: "Restore flow" — scene prose was silently lost on the
+// native-YOW backup-ZIP restore round trip. Root cause: `addNovel()` always
+// attached its own default starter act/chapter/scene, which could race with
+// (and sometimes silently win over) the real imported structure that
+// `populateYowProject` builds right after. Fixed by having the restore path
+// create its destination project with `{ withStarterStructure: false }`
+// whenever the import is about to supply its own structure. See the roadmap
+// row for the full incident writeup.
+test('exported ZIP restores scene content (regression test for the restore-flow data-loss bug)', async ({ page }) => {
+  const projectTitle = `Export Restore Scene ${Date.now()}`
+  const sceneText = `Restore test scene content ${Date.now()}`
+  await createProject(page, { title: projectTitle })
+  await writeInDefaultScene(page, sceneText)
+
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Backup zip/i }).click()
+  const download = await downloadPromise
+  const zipPath = await download.path()
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  await page.evaluate(() => { window.confirm = () => true })
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await page.locator('.dash-card-settings-button').first().click()
+  await page.getByRole('button', { name: 'Delete project' }).click()
+  await waitForStorage(page, (t) => {
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    return !novels.some(n => n.title === t)
+  }, projectTitle)
+
+  await page.goto('/')
+  await dismissLaunchPrompts(page)
+  const fileInput = await openImportZip(page)
+  const { readFileSync } = await import('node:fs')
+  await fileInput.setInputFiles({
+    name: 'project-backup.zip',
+    mimeType: 'application/zip',
+    buffer: readFileSync(zipPath),
+  })
+
+  await page.getByRole('button', { name: 'Create Project' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Create Project' }).click()
+
+  await waitForStorage(page, (t) => {
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    return novels.some(n => n.title === t)
+  }, projectTitle, 20_000)
+
+  const scenes = await readScenesWithContent(page)
+  expect(scenes.some(s => s.content.includes(sceneText))).toBe(true)
 })
