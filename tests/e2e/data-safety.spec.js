@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, openImportZip, readStorage,
+  createProject, dismissLaunchPrompts, openImportZip, readScenesWithContent, readStorage,
   seedCleanStorage, seedIndexedDbEntries, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
@@ -187,6 +187,8 @@ test('large scene content (>10k words) loads without crash', async ({ page }) =>
 
 test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   const projectTitle = `Export Restore ${Date.now()}`
+  const loreTitle = `Restore Test Lore ${Date.now()}`
+  const eventTitle = `Restore Test Event ${Date.now()}`
   await createProject(page, { title: projectTitle })
 
   await page.getByRole('button', { name: 'Characters' }).first().click()
@@ -196,6 +198,34 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await waitForStorage(page, () => {
     const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return chars.some(c => c.name === 'Restore Test Character')
+  })
+
+  // Lore entry
+  await page.getByRole('button', { name: 'Lore' }).first().click()
+  await page.getByRole('button', { name: 'New' }).first().click()
+  await page.getByPlaceholder(/binding laws/i).first().fill(loreTitle)
+  await page.getByRole('button', { name: 'Save Entry' }).click()
+  await waitForStorage(page, (t) => {
+    const lore = JSON.parse((window.__yowStorageBridge?.getItem('nf_loreEntries') ?? localStorage.getItem('nf_loreEntries')) || '[]')
+    return lore.some(e => e.title === t || e.name === t)
+  }, loreTitle)
+
+  // Timeline event (nested under the Lore room)
+  await page.getByRole('button', { name: 'Timeline' }).first().click()
+  await page.getByRole('button', { name: 'New Event' }).click()
+  await page.locator('[role="dialog"] input[required]').first().fill(eventTitle)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await waitForStorage(page, (t) => {
+    const timeline = JSON.parse((window.__yowStorageBridge?.getItem('nf_timeline') ?? localStorage.getItem('nf_timeline')) || '[]')
+    return timeline.some(e => e.title === t || e.name === t)
+  }, eventTitle)
+
+  // A second chapter
+  await page.getByRole('button', { name: 'Write' }).click()
+  await page.locator('.ms-sidebar-add-chapter').first().click()
+  await waitForStorage(page, () => {
+    const chapters = JSON.parse((window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')) || '[]')
+    return chapters.length >= 2
   })
 
   // Export via the studio project settings panel
@@ -240,4 +270,73 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
 
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Restore Test Character')).toBe(true)
+
+  const lore = await readStorage(page, 'nf_loreEntries')
+  expect(lore.some(e => e.title === loreTitle || e.name === loreTitle)).toBe(true)
+
+  const timeline = await readStorage(page, 'nf_timeline')
+  expect(timeline.some(e => e.title === eventTitle || e.name === eventTitle)).toBe(true)
+
+  const chapters = await readStorage(page, 'nf_chapters')
+  expect(chapters.length).toBeGreaterThanOrEqual(2)
+})
+
+// Roadmap Bugs table: "Restore flow" — confirmed 2026-09-16 as a real data-loss
+// bug, not just an unverified item. `addNovel` (useStore.js) always attaches
+// its own default starter act/chapter/scene, and the native-YOW restore path
+// (AIImportModal.jsx's "Create Project" button) creates the destination
+// project via that same `addNovel`, then layers the actually-imported
+// act/chapter/scene tree on top via a separate effect. Both scene records
+// briefly coexist, but only the empty default starter scene survives —
+// the correctly-populated imported scene silently disappears from `nf_scenes`
+// before storage settles. See the roadmap row for the full root-cause writeup
+// and the suspected `commitLocal` externalWrite race.
+//
+// Race-timed, so it fails most runs but not every run (confirmed passing once
+// in ~6 local runs) — too flaky for `test.fail()`, which requires a hard
+// failure every time. Skipped rather than landed red until the bug above is
+// fixed; remove `test.skip()` once it is, so this becomes the real regression
+// guard.
+test.skip('exported ZIP restores scene content — KNOWN BROKEN, see Restore flow bug row', async ({ page }) => {
+  const projectTitle = `Export Restore Scene ${Date.now()}`
+  const sceneText = `Restore test scene content ${Date.now()}`
+  await createProject(page, { title: projectTitle })
+  await writeInDefaultScene(page, sceneText)
+
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Backup zip/i }).click()
+  const download = await downloadPromise
+  const zipPath = await download.path()
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  await page.evaluate(() => { window.confirm = () => true })
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await page.locator('.dash-card-settings-button').first().click()
+  await page.getByRole('button', { name: 'Delete project' }).click()
+  await waitForStorage(page, (t) => {
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    return !novels.some(n => n.title === t)
+  }, projectTitle)
+
+  await page.goto('/')
+  await dismissLaunchPrompts(page)
+  const fileInput = await openImportZip(page)
+  const { readFileSync } = await import('node:fs')
+  await fileInput.setInputFiles({
+    name: 'project-backup.zip',
+    mimeType: 'application/zip',
+    buffer: readFileSync(zipPath),
+  })
+
+  await page.getByRole('button', { name: 'Create Project' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Create Project' }).click()
+
+  await waitForStorage(page, (t) => {
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    return novels.some(n => n.title === t)
+  }, projectTitle, 20_000)
+
+  const scenes = await readScenesWithContent(page)
+  expect(scenes.some(s => s.content.includes(sceneText))).toBe(true)
 })
