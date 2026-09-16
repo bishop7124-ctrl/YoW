@@ -42,6 +42,7 @@ const buildOverflowSections = (fullscreen, itemTitles = {}) => [
   {
     heading: 'Manuscript',
     items: [
+      { id: 'reference', label: 'Reference' },
       { id: 'pacing', label: 'Pacing chart' },
       { id: 'template', label: 'Apply a template' },
       { id: 'import', label: 'Import a document', title: itemTitles.import },
