@@ -1842,7 +1842,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-main)' }}>{t.label}</span>
                         {isBeta && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>{stage.label}</span>}
                       </div>
-                      <p style={{ margin: 0, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.3 }}>{isBeta ? stage.note : t.description}</p>
+                      <p style={{ margin: 0, fontSize: 10, color: form.type === t.id ? 'var(--accent-text)' : 'var(--text-muted)', lineHeight: 1.3 }}>{isBeta ? stage.note : t.description}</p>
                     </button>
                   )
                 })}
