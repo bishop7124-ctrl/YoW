@@ -146,7 +146,7 @@ export const PROJECT_TYPES = {
   comic: {
     label: 'Comic / Graphic Novel',
     description: 'Sequential art narrative',
-    workflowSummary: 'Sequential-art beta with volume, issue, and page-level structure.',
+    workflowSummary: 'Sequential-art planning with volume, issue, page, and panel structure.',
     structure: { level1: 'Volume', level2: 'Issue', level3: 'Page' },
     storyEventIndicators: [
       { id: 'splash', label: 'Splash moment', color: '#38bdf8' },
@@ -290,9 +290,9 @@ export const PROJECT_TYPE_STAGE = {
     note: 'System-neutral campaign bible workflow.',
   },
   comic: {
-    stage: 'beta',
-    label: 'Beta',
-    note: 'Limited workflow: page-level structure is available; panel planning and art-direction fields are still in progress.',
+    stage: 'live',
+    label: 'Live',
+    note: 'Sequential-art workflow with volume/issue/page/panel planning, art-direction fields, and comic script export.',
   },
 }
 
