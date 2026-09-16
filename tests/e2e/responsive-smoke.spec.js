@@ -4,6 +4,7 @@ import { dismissLaunchPrompts, seedCleanStorage } from './helpers.js'
 const viewports = [
   { name: 'mobile', width: 390, height: 844 },
   { name: 'tablet', width: 768, height: 1024 },
+  { name: 'desktop', width: 1280, height: 900 },
 ]
 
 test.beforeEach(async ({ page }) => {
@@ -24,7 +25,11 @@ for (const viewport of viewports) {
     await page.getByRole('button', { name: 'Create' }).click()
 
     await expect(page).toHaveURL(/\/project\//)
-    await expect(page.getByRole('heading', { name: projectTitle })).toBeVisible()
+    // At desktop width the studio nav sidebar and main content both show a
+    // heading with the project title at once (narrower widths only show one) —
+    // .first() picks whichever renders first rather than asserting on an
+    // ambiguous multi-match locator.
+    await expect(page.getByRole('heading', { name: projectTitle }).first()).toBeVisible()
 
     // At compact widths the top-nav "Write" button moves inside the collapsed
     // section hamburger menu (see docs/ROADMAP.md "Write button hidden on
