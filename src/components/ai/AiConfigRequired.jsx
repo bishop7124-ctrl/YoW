@@ -19,7 +19,7 @@ export function AiSettingsLink({ children = 'AI settings', className = '', style
         background: 'none',
         border: 'none',
         padding: 0,
-        color: 'var(--accent)',
+        color: 'var(--accent-text)',
         cursor: 'pointer',
         fontFamily: 'inherit',
         fontSize: 'inherit',
