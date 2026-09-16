@@ -2838,19 +2838,29 @@ export function useStore(userId = null, options = {}) {
     })
   }
 
-  const addNovel = (data) => {
+  // `withStarterStructure: false` is for callers that are about to populate
+  // their own act/chapter/scene tree right after creating the novel (e.g. the
+  // native-YOW backup restore path in AIImportModal.jsx) — the default
+  // starter structure is only meaningful for a genuinely blank "New Project",
+  // and creating it anyway left a stray empty act/chapter/scene behind that
+  // could race with (and sometimes silently win over) the caller's own
+  // import in `commitLocal`'s multi-tab rebase logic — see docs/ROADMAP.md's
+  // "Restore flow" Bugs row for the full incident writeup.
+  const addNovel = (data, { withStarterStructure = true } = {}) => {
     if (freeProjectId !== null) {
       notifyReadOnly('free-limit')
       return null
     }
     if (storageExceededCheck()) { return null }
     const novel = { id: uid(), createdAt: new Date().toISOString(), ...data }
-    const starter = buildStarterStructure(novel.id, novel.type)
-    commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
-    commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...starter.chapters])
-    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...starter.scenes])
-    if (canSyncCloud) {
-      starter.scenes.forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+    if (withStarterStructure) {
+      const starter = buildStarterStructure(novel.id, novel.type)
+      commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...starter.acts])
+      commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...starter.chapters])
+      commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...starter.scenes])
+      if (canSyncCloud) {
+        starter.scenes.forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
+      }
     }
     commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, novel])
     selectActiveNovel(novel.id)
