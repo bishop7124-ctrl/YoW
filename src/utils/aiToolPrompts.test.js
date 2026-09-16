@@ -201,8 +201,30 @@ describe('getManuscriptCoverage', () => {
       ],
     }
 
-    expect(getAiContextTargets(store, 'novel-1', novel, 'act_review').map(item => item.label)).toEqual(['First', 'Second'])
-    expect(getAiContextTargets(store, 'novel-1', novel, 'focused_chapter').map(item => item.label)).toEqual(['Chapter One', 'Chapter Two'])
+    // Labels now match the Outline panel's own numbering convention
+    // (formatOutlineChapterTitle): a custom title is shown as "Act N: Title"
+    // rather than the bare title alone, so entries stay distinguishable even
+    // when several share a default-looking title elsewhere in the project.
+    expect(getAiContextTargets(store, 'novel-1', novel, 'act_review').map(item => item.label)).toEqual(['Act 1: First', 'Act 2: Second'])
+    expect(getAiContextTargets(store, 'novel-1', novel, 'focused_chapter').map(item => item.label)).toEqual(['Chapter 1: Chapter One', 'Chapter 2: Chapter Two'])
+  })
+
+  it('numbers default-titled chapters distinctly instead of showing identical labels', () => {
+    const novel = { id: 'novel-1', type: 'novel' }
+    const store = {
+      acts: [{ id: 'a1', novelId: 'novel-1', title: 'Act One', order: 0 }],
+      chapters: [
+        { id: 'c1', novelId: 'novel-1', actId: 'a1', title: '', order: 0 },
+        { id: 'c2', novelId: 'novel-1', actId: 'a1', title: 'Chapter', order: 1 },
+        { id: 'c3', novelId: 'novel-1', actId: 'a1', title: 'Renamed', order: 2 },
+      ],
+    }
+
+    expect(getAiContextTargets(store, 'novel-1', novel, 'focused_chapter').map(item => item.label)).toEqual([
+      'Chapter 1',
+      'Chapter 2',
+      'Chapter 3: Renamed',
+    ])
   })
 })
 

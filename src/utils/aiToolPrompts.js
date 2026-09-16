@@ -1,5 +1,6 @@
 // Modular prompt builders for AI Tools (Plot Hole, Lore Conflict, Style Consistency, Character Interview)
 import { getProjectType } from '../constants/projectTypes'
+import { formatOutlineChapterTitle } from './outlineDisplay'
 
 const MAX_CONTENT_CHARS = 1200
 const CONTEXT_LIMITS = {
@@ -281,6 +282,27 @@ export function getManuscriptCoverage(units, selection = { mode: 'project_scan' 
   return { totalScenes, includedScenes, omittedScenes, contentTruncated, mode, contentChars: limit.contentChars }
 }
 
+// Target labels must match what the user already sees for the same record in
+// the Outline panel/manuscript view, not the raw stored `.title`: chapters
+// (and, via at least one AIImportModal.jsx import path, acts too) can be left
+// at a bare, unnumbered default title like "Chapter" rather than "Chapter 2"
+// — the Outline panel only looks correctly numbered because it separately
+// reformats that bare default for display via formatOutlineChapterTitle
+// (outlineDisplay.js), appending the record's position. Skipping that same
+// formatting here made every default-titled chapter/act indistinguishable
+// from every other one in this exact dropdown (confirmed live: a 2-act/
+// 4-chapter project with only the first chapter renamed showed
+// ["Chapter 1", "Chapter", "Chapter", "Chapter"]) — formatOutlineChapterTitle
+// is generic over any {title} object + label + position number despite its
+// chapter-specific name, so it's reused as-is for acts/volumes too rather
+// than inventing a second numbering scheme.
+const TARGET_KIND_LABELS = {
+  chapter: 'Chapter',
+  issue:   'Issue',
+  act:     'Act',
+  volume:  'Volume',
+}
+
 export function getAiContextTargets(store, novelId, novel, mode) {
   const targetKind = novel?.type === 'comic'
     ? (mode === 'focused_chapter' ? 'issue' : 'volume')
@@ -290,7 +312,8 @@ export function getAiContextTargets(store, novelId, novel, mode) {
   const source = targetKind === 'issue' || targetKind === 'chapter'
     ? sortByOrder(acts).flatMap(act => sortByOrder(chapters.filter(chapter => chapter.actId === act.id)))
     : sortByOrder(acts)
-  return source.map(item => ({ id: item.id, label: item.title || `Untitled ${targetKind}` }))
+  const label = TARGET_KIND_LABELS[targetKind] || 'Item'
+  return source.map((item, index) => ({ id: item.id, label: formatOutlineChapterTitle(item, label, index + 1) }))
 }
 
 function summarisePanel(panel, index) {
