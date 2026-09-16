@@ -224,6 +224,8 @@ test('large scene content (>10k words) loads without crash', async ({ page }) =>
 
 test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   const projectTitle = `Export Restore ${Date.now()}`
+  const loreTitle = `Restore Test Lore ${Date.now()}`
+  const eventTitle = `Restore Test Event ${Date.now()}`
   await createProject(page, { title: projectTitle })
 
   await page.getByRole('button', { name: 'Characters' }).first().click()
@@ -233,6 +235,34 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
   await waitForStorage(page, () => {
     const chars = JSON.parse((window.__yowStorageBridge?.getItem('nf_characters') ?? localStorage.getItem('nf_characters')) || '[]')
     return chars.some(c => c.name === 'Restore Test Character')
+  })
+
+  // Lore entry
+  await page.getByRole('button', { name: 'Lore' }).first().click()
+  await page.getByRole('button', { name: 'New' }).first().click()
+  await page.getByPlaceholder(/binding laws/i).first().fill(loreTitle)
+  await page.getByRole('button', { name: 'Save Entry' }).click()
+  await waitForStorage(page, (t) => {
+    const lore = JSON.parse((window.__yowStorageBridge?.getItem('nf_loreEntries') ?? localStorage.getItem('nf_loreEntries')) || '[]')
+    return lore.some(e => e.title === t || e.name === t)
+  }, loreTitle)
+
+  // Timeline event (nested under the Lore room)
+  await page.getByRole('button', { name: 'Timeline' }).first().click()
+  await page.getByRole('button', { name: 'New Event' }).click()
+  await page.locator('[role="dialog"] input[required]').first().fill(eventTitle)
+  await page.getByRole('button', { name: 'Save' }).click()
+  await waitForStorage(page, (t) => {
+    const timeline = JSON.parse((window.__yowStorageBridge?.getItem('nf_timeline') ?? localStorage.getItem('nf_timeline')) || '[]')
+    return timeline.some(e => e.title === t || e.name === t)
+  }, eventTitle)
+
+  // A second chapter
+  await page.getByRole('button', { name: 'Write' }).click()
+  await page.locator('.ms-sidebar-add-chapter').first().click()
+  await waitForStorage(page, () => {
+    const chapters = JSON.parse((window.__yowStorageBridge?.getItem('nf_chapters') ?? localStorage.getItem('nf_chapters')) || '[]')
+    return chapters.length >= 2
   })
 
   // Export via the studio project settings panel
@@ -277,6 +307,15 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
 
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Restore Test Character')).toBe(true)
+
+  const lore = await readStorage(page, 'nf_loreEntries')
+  expect(lore.some(e => e.title === loreTitle || e.name === loreTitle)).toBe(true)
+
+  const timeline = await readStorage(page, 'nf_timeline')
+  expect(timeline.some(e => e.title === eventTitle || e.name === eventTitle)).toBe(true)
+
+  const chapters = await readStorage(page, 'nf_chapters')
+  expect(chapters.length).toBeGreaterThanOrEqual(2)
 })
 
 // Roadmap Bugs table: "Restore flow" — scene prose was silently lost on the
