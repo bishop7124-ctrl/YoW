@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCharacterAliases, buildRelationshipIndex, getSocialRelationshipRows, relationshipMapPage } from './relationshipMap.js'
+import { buildCharacterAliases, buildRelationshipIndex, getSocialRelationshipRows, RELATIONSHIP_MAP_DENSE_NODE_SIZE, RELATIONSHIP_MAP_FOCUS_SIZE, RELATIONSHIP_MAP_NODE_SIZE, relationshipMapLayout } from './relationshipMap.js'
 import { getRelType } from '../constants/relationshipTypes.js'
 
 describe('relationship index', () => {
@@ -71,23 +71,34 @@ describe('relationship index', () => {
 })
 
 describe('bounded relationship layout', () => {
-  it.each([1, 2, 3, 4, 5, 6, 7, 8])('keeps %i nodes within the canvas and clear of one another and the focal card', count => {
-    const { nodes } = relationshipMapPage(Array.from({ length: count }, (_, id) => ({ id })))
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 16, 24])('keeps all %i nodes within the canvas and clear of one another and the focal card', count => {
+    const { nodes, dense, size } = relationshipMapLayout(Array.from({ length: count }, (_, id) => ({ id })))
+    const nodeSize = dense ? RELATIONSHIP_MAP_DENSE_NODE_SIZE : RELATIONSHIP_MAP_NODE_SIZE
+    const lineLengths = nodes.map(node => Math.hypot(node.x - size.centerX, node.y - size.centerY))
+    expect(nodes).toHaveLength(count)
+    expect(Math.max(...lineLengths) - Math.min(...lineLengths)).toBeLessThan(0.001)
     nodes.forEach((node, i) => {
-      expect(node.x - 76).toBeGreaterThanOrEqual(0)
-      expect(node.x + 76).toBeLessThanOrEqual(1000)
-      expect(node.y - 85).toBeGreaterThanOrEqual(0)
-      expect(node.y + 85).toBeLessThanOrEqual(720)
-      expect(Math.abs(node.x - 500) >= 156 || Math.abs(node.y - 360) >= 181).toBe(true)
-      nodes.slice(i + 1).forEach(other => expect(Math.abs(node.x - other.x) >= 152 || Math.abs(node.y - other.y) >= 170).toBe(true))
+      expect(node.x - nodeSize.width / 2).toBeGreaterThanOrEqual(0)
+      expect(node.x + nodeSize.width / 2).toBeLessThanOrEqual(size.width)
+      expect(node.y - nodeSize.height / 2).toBeGreaterThanOrEqual(0)
+      expect(node.y + nodeSize.height / 2).toBeLessThanOrEqual(size.height)
+      expect(
+        Math.abs(node.x - size.centerX) >= (nodeSize.width + RELATIONSHIP_MAP_FOCUS_SIZE.width) / 2
+        || Math.abs(node.y - size.centerY) >= (nodeSize.height + RELATIONSHIP_MAP_FOCUS_SIZE.height) / 2,
+      ).toBe(true)
+      nodes.slice(i + 1).forEach(other => expect(
+        Math.abs(node.x - other.x) >= nodeSize.width
+        || Math.abs(node.y - other.y) >= nodeSize.height,
+      ).toBe(true))
     })
   })
 
-  it('makes every dense-cast connection reachable and clamps stale pages after removal', () => {
+  it('expands very dense canvases instead of hiding connections', () => {
     const connections = Array.from({ length: 101 }, (_, id) => ({ id }))
-    const pages = Array.from({ length: 13 }, (_, page) => relationshipMapPage(connections, page))
-    expect(pages.flatMap(page => page.nodes.map(node => node.id))).toEqual(connections.map(node => node.id))
-    expect(relationshipMapPage(connections.slice(0, 2), 12).page).toBe(0)
-    expect(relationshipMapPage([]).nodes).toEqual([])
+    const layout = relationshipMapLayout(connections)
+    expect(layout.nodes.map(node => node.id)).toEqual(connections.map(node => node.id))
+    expect(layout.size.width).toBeGreaterThan(900)
+    expect(layout.size.height).toBeGreaterThan(400)
+    expect(relationshipMapLayout([]).nodes).toEqual([])
   })
 })

@@ -33,7 +33,14 @@ function useVisibleFlow(draft) {
       ;(act.chapters || []).forEach((chapter, chapterIndex) => {
         const scenesWithText = (chapter.scenes || []).filter(scene => scene.content?.trim())
         if (!scenesWithText.length) return
-        nodes.push(<h3 key={`h-${act.id || actIndex}-${chapter.id || chapterIndex}`}>{decodeHtmlEntities(chapter.title)}</h3>)
+        nodes.push(
+          <h3
+            key={`h-${act.id || actIndex}-${chapter.id || chapterIndex}`}
+            className={nodes.length === 0 ? 'ms-book-chapter is-first' : 'ms-book-chapter'}
+          >
+            {decodeHtmlEntities(chapter.title)}
+          </h3>
+        )
         scenesWithText.forEach((scene, sceneIndex) => {
           if (sceneIndex > 0) nodes.push(<div key={`b-${scene.id}`} className="ms-book-break" aria-hidden="true">···</div>)
           decodeHtmlEntities(scene.content).trim().split(/\n{2,}/).forEach((block, blockIndex) => {
@@ -69,14 +76,23 @@ export default function ManuscriptBookView({ draft, projectTitle }) {
   const flowRef = useRef(null)
   const [spread, setSpread] = useState(0)
   const [spreadCount, setSpreadCount] = useState(1)
+  const [pageCount, setPageCount] = useState(2)
+  const [pagesPerSpread, setPagesPerSpread] = useState(2)
   const [scale, setScale] = useState(1)
 
   const measure = useCallback(() => {
     const flow = flowRef.current
     if (!flow) return
-    const gap = parseFloat(getComputedStyle(flow).columnGap) || 0
-    const step = flow.clientWidth + gap
-    const count = step > 0 ? Math.max(1, Math.ceil(flow.scrollWidth / step)) : 1
+    const styles = getComputedStyle(flow)
+    const gap = parseFloat(styles.columnGap) || 0
+    const columns = Math.max(1, Number.parseInt(styles.columnCount, 10) || 2)
+    const pageWidth = (flow.clientWidth - (gap * (columns - 1))) / columns
+    const totalPages = pageWidth > 0
+      ? Math.max(1, Math.ceil((flow.scrollWidth + gap) / (pageWidth + gap)))
+      : columns
+    const count = Math.max(1, Math.ceil(totalPages / columns))
+    setPagesPerSpread(columns)
+    setPageCount(totalPages)
     setSpreadCount(count)
     setSpread(current => Math.max(0, Math.min(current, count - 1)))
   }, [])
@@ -141,13 +157,34 @@ export default function ManuscriptBookView({ draft, projectTitle }) {
 
   const goPrev = () => setSpread(s => Math.max(0, s - 1))
   const goNext = () => setSpread(s => Math.min(spreadCount - 1, s + 1))
+  const firstPhysicalPage = spread * pagesPerSpread
+  const visiblePhysicalPages = Array.from({ length: pagesPerSpread }, (_, index) => firstPhysicalPage + index)
+    .filter(index => index < pageCount)
+  const contentPageCount = Math.max(0, pageCount - 1)
+  const visibleContentPages = visiblePhysicalPages.filter(index => index > 0)
+  const pageLabel = visibleContentPages.length === 0
+    ? 'Cover'
+    : `${visiblePhysicalPages[0] === 0 ? 'Cover · ' : ''}${visibleContentPages.length > 1 ? 'Pages' : 'Page'} ${visibleContentPages.join('–')} of ${contentPageCount}`
 
   return (
     <div className="ms-book" aria-label={`${projectTitle || 'Manuscript'} — book view`}>
       <div className="ms-book-viewport" ref={viewportRef}>
         <div className="ms-book-spread" ref={spreadRef} style={{ transform: `scale(${scale})` }}>
+          <div className="ms-book-page-sheets" aria-hidden="true">
+            {Array.from({ length: pagesPerSpread }, (_, index) => {
+              const physicalPage = firstPhysicalPage + index
+              if (physicalPage >= pageCount) return null
+              return (
+                <div className="ms-book-page-sheet" key={physicalPage}>
+                  {physicalPage > 0 && <span className="ms-book-page-number">{physicalPage}</span>}
+                </div>
+              )
+            })}
+          </div>
           <div className="ms-book-flow" ref={flowRef}>
-            <h2>{decodeHtmlEntities(projectTitle) || 'Untitled'}</h2>
+            <section className="ms-book-cover" aria-label="Cover page">
+              <h2>{decodeHtmlEntities(projectTitle) || 'Untitled'}</h2>
+            </section>
             {nodes.length === 0 && <p className="ms-book-empty">Nothing finalized to read yet.</p>}
             {nodes}
           </div>
@@ -155,7 +192,7 @@ export default function ManuscriptBookView({ draft, projectTitle }) {
       </div>
       <div className="ms-book-nav font-sans">
         <button type="button" onClick={goPrev} disabled={spread <= 0} aria-label="Previous pages">‹</button>
-        <span>Pages {spread * 2 + 1}–{spread * 2 + 2} of {spreadCount * 2}</span>
+        <span aria-live="polite">{pageLabel}</span>
         <button type="button" onClick={goNext} disabled={spread >= spreadCount - 1} aria-label="Next pages">›</button>
       </div>
     </div>

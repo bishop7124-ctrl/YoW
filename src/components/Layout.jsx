@@ -341,9 +341,14 @@ function ProjectSettings({ store, onClose }) {
     return entry
   }
 
-  const exportBackup = entry => {
-    const blob = createProjectZipBlob(entry.data)
-    downloadBlob(blob, `${safeSlug(entry.title)}-${entry.createdAt.slice(0, 10)}-backup.zip`)
+  const exportBackup = async entry => {
+    try {
+      const blob = await createProjectZipBlob(entry.data)
+      await downloadBlob(blob, `${safeSlug(entry.title)}-${entry.createdAt.slice(0, 10)}-backup.zip`)
+    } catch (error) {
+      console.error('Backup export failed:', error)
+      setBackupMessage(error instanceof Error ? error.message : 'Backup export failed. Please try again.')
+    }
   }
 
   const handleExport = async (format, themeId) => {

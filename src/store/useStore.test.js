@@ -9,6 +9,7 @@ import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
 import { createMemoryBackend, resetStorageBackend, setStorageBackend } from '../storage/projectStorage.js'
 import { markLocalWriteFailed } from '../storage/writeDurability.js'
+import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
 
 // Mock Supabase-backed modules so tests run without network
 vi.mock('../utils/firestoreSync', () => ({
@@ -435,6 +436,27 @@ describe('novel CRUD', () => {
     ]))
   })
 
+  it('deleteNovel preserves media that a restored project still references', async () => {
+    vi.mocked(deleteUserMedia).mockClear()
+    const sharedPortrait = 'https://x/storage/v1/object/public/user-media/u1/characters/shared.webp'
+    const sharedCover = 'yow-media:u1/covers/shared.webp'
+    const { result } = renderHook(() => useStore(null))
+
+    let source
+    act(() => { source = result.current.addNovel({ title: 'Original', type: 'novel', coverPhoto: sharedCover }) })
+    act(() => { result.current.saveCharacter({ name: 'Shared portrait', image: sharedPortrait }) })
+    const exported = result.current.getProjectExportData(source.id)
+    act(() => { result.current.importProjectFromData(exported) })
+
+    await act(async () => { await result.current.deleteNovel(source.id) })
+
+    expect(result.current.novels).toHaveLength(1)
+    expect(result.current.characters).toHaveLength(1)
+    expect(result.current.characters[0].image).toBe(sharedPortrait)
+    expect(deleteUserMedia).not.toHaveBeenCalledWith(sharedPortrait)
+    expect(deleteUserMedia).not.toHaveBeenCalledWith(sharedCover)
+  })
+
   it('deleteNovel blocks deleting a non-active project on the free tier', async () => {
     localStorage.setItem('nf_novels', JSON.stringify([
       { id: 'free-1', title: 'Locked Free Project', type: 'novel' },
@@ -852,7 +874,10 @@ describe('getProjectExportData', () => {
     expect(data.storySchedule.some(event => event.category === 'ritual')).toBe(true)
     expect(data.storySchedule.some(event => event.category === 'council')).toBe(true)
     expect(data.storySchedule.every(event => !/draft|revise|review|research|writing|editing/i.test(event.title))).toBe(true)
-    expect(data.maps[0].mapObjects).toHaveLength(18)
+    expect(data.maps[0].metadata.builder).toBe('atlas-v1')
+    expect(data.maps[0].mapObjects.length).toBeGreaterThan(40)
+    expect(new Set(data.maps[0].mapObjects.map(object => object.type))).toEqual(new Set(['territory', 'water', 'river', 'road', 'label', 'stamp']))
+    expect(data.maps[0].mapObjects.filter(object => object.linkedEntity?.entityType === 'location')).toHaveLength(18)
     expect(data.ideaEntries.filter(entry => entry.tags?.includes('note'))).toHaveLength(20)
     expect(data.ideaEntries.filter(entry => entry.tags?.includes('idea-card'))).toHaveLength(25)
     expect(data.ideaEntries.filter(entry => entry.tags?.includes('ai-result'))).toHaveLength(12)
@@ -947,6 +972,31 @@ describe('getProjectExportData', () => {
     expect(manuscriptWords).toBeGreaterThan(700)
     expect(result.current.scenes.filter(scene => scene.wordHistory?.length >= 8)).toHaveLength(1)
     expect(localStorage.getItem('nf_sampleProjectSeeded:the-last-ember-v3:sample-user')).toBe('1')
+  })
+
+  it('upgrades only the untouched word-only sample map to the current builder', () => {
+    const { result } = renderHook(() => useStore('sample-user'))
+    let sample
+    act(() => { sample = result.current.ensureSampleProject() })
+    act(() => { result.current.setActiveNovelId(sample.id) })
+    const seededMap = result.current.mapProject.maps.find(map => map.novelId === sample.id)
+    act(() => {
+      result.current.updateMapData(seededMap.id, () => ({
+        ...lastEmberDemoProject.maps[0],
+        id: seededMap.id,
+        novelId: sample.id,
+        mapObjects: lastEmberDemoProject.maps[0].mapObjects.map((object, index) => ({ ...object, id: `legacy-map-object-${index}` })),
+      }))
+      localStorage.removeItem('nf_sampleProjectMapSeeded:atlas-layout-v4:sample-user')
+    })
+    act(() => { result.current.enrichSampleProject(sample.id) })
+
+    const upgraded = result.current.mapProject.maps.find(map => map.id === seededMap.id)
+    const locationIds = new Set(result.current.locations.filter(location => location.novelId === sample.id).map(location => location.id))
+    expect(upgraded.metadata.builder).toBe('atlas-v1')
+    expect(upgraded.mapObjects.length).toBeGreaterThan(40)
+    expect(upgraded.mapObjects.filter(object => object.linkedEntity).every(object => locationIds.has(object.linkedEntity.entityId))).toBe(true)
+    expect(localStorage.getItem('nf_sampleProjectMapSeeded:atlas-layout-v4:sample-user')).toBe('1')
   })
 
   it('restores exported project eras and remaps timeline era links', () => {

@@ -303,15 +303,17 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [finalisedSubView, setFinalisedSubView] = useState('manuscript') // 'manuscript' | 'book'
   const handleSetMode = useCallback((next) => {
     setMode(next)
-    // Surface closed in both Write ("Surface closed; AI + Inspector buttons
-    // hidden") and Finalised ("Surface hidden") per the mode table — only
-    // Edit leaves it as the user had it.
+    // Surfaces close in both Write and Finalised per the mode table — only
+    // Edit leaves the active surface as the user had it.
     if (next !== 'edit') { setSurfaceId(null) }
-    // Write's rail defaults to the spine ("collapsed to spine (expandable)"
-    // per the mode table) — a one-time default on entering the mode, not a
-    // standing restriction, so the user can still expand it afterward via
-    // the normal toggle.
-    if (next === 'write') { setRailCollapsed(true) }
+    // Entering Write clears both secondary side panels so the prose gets the
+    // full workspace. This is an entry action, not a standing restriction:
+    // the writer can reopen the outline afterward with the normal toggle.
+    if (next === 'write') {
+      setRailCollapsed(true)
+      setRailSheetOpen(false)
+      setInspectorOpen(false)
+    }
   }, [])
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
