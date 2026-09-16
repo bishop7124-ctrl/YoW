@@ -59,7 +59,7 @@ export async function exportAllProjects(store, novels, format = EXPORT_ALL_FORMA
           const folder = uniqueEntryName(sanitizeFilename(projectData.project?.title, 'project'), usedNames)
           entries.push(...await createProjectDocxEntries(projectData, `${folder}/`))
         } else {
-          const blob = createProjectZipBlob(projectData)
+          const blob = await createProjectZipBlob(projectData)
           const baseName = getProjectExportFilename(projectData.project)
           const bytes = new Uint8Array(await blob.arrayBuffer())
           entries.push({ name: uniqueEntryName(baseName, usedNames), bytes })

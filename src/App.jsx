@@ -1055,7 +1055,9 @@ function AppInner() {
   useEffect(() => {
     if (!userId || dataLoading || store.readOnly) return
     const existingSample = store.novels.find(project => project.isSampleProject && project.sampleSource === 'the-last-ember')
-    if (!existingSample || readItem(`nf_sampleProjectSeeded:the-last-ember-v3:${userId}`) === '1') return
+    const contentReady = readItem(`nf_sampleProjectSeeded:the-last-ember-v3:${userId}`) === '1'
+    const mapReady = readItem(`nf_sampleProjectMapSeeded:atlas-layout-v4:${userId}`) === '1'
+    if (!existingSample || (contentReady && mapReady)) return
     store.enrichSampleProject?.(existingSample.id)
   }, [userId, dataLoading, store.readOnly, store.novels, store.enrichSampleProject])
 

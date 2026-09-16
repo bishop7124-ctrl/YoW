@@ -25,6 +25,7 @@ import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
 import { deleteUserMedia, getUserMediaPath } from '../utils/uploadUserMedia'
 import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
+import { buildTheLastEmberMap, isUpgradeableLastEmberMap } from '../data/theLastEmberMap.js'
 
 const load = (key, def) => loadValue(key, def)
 const LOCAL_WRITE_AT_KEY = 'nf_localWriteAt'
@@ -319,6 +320,7 @@ const buildManuscriptCopy = ({ project, acts, chapters, scenes, title }) => {
 }
 
 const sampleProjectSeedKey = (ownerId) => ownerId ? `nf_sampleProjectSeeded:the-last-ember-v3:${ownerId}` : null
+const sampleProjectMapSeedKey = (ownerId) => ownerId ? `nf_sampleProjectMapSeeded:atlas-layout-v4:${ownerId}` : null
 
 const collectIds = (value, idMap) => {
   if (!value || typeof value !== 'object') return
@@ -344,6 +346,8 @@ const buildSampleProjectData = () => {
   const source = lastEmberDemoProject
   const idMap = {}
   collectIds(source, idMap)
+  const sourceMaps = [buildTheLastEmberMap()]
+  collectIds(sourceMaps, idMap)
   const projectId = idMap[source.project.id] || uid()
   idMap[source.project.id] = projectId
 
@@ -368,7 +372,7 @@ const buildSampleProjectData = () => {
     timeline: remapExportItems(source.timeline, idMap),
     worldHistory: remapExportItems(source.worldHistory, idMap),
     eras: remapExportItems(source.eras, idMap),
-    maps: remapExportItems(source.maps, idMap),
+    maps: remapExportItems(sourceMaps, idMap),
     whiteboards: remapExportItems(source.whiteboards, idMap),
     storySchedule: remapExportItems(source.storySchedule, idMap),
     ideaEntries: remapExportItems(source.ideaEntries, idMap),
@@ -2494,7 +2498,7 @@ export function useStore(userId = null, options = {}) {
     if (canSyncCloud) deleteSceneDoc(userId, conflictId).catch(console.error)
   }
 
-  const cleanupCharacterPortraits = (urls, overrides = {}) => {
+  const cleanupUnreferencedMedia = (urls, overrides = {}) => {
     const candidates = urls.filter(Boolean)
     if (!candidates.length) return
     const referenced = new Set()
@@ -2523,7 +2527,7 @@ export function useStore(userId = null, options = {}) {
       () => ({ id: characterId, novelId: activeNovelId, ...data })
     )
     if (!saved) return null
-    if (Object.hasOwn(data, 'image') && previousImage !== saved.image) cleanupCharacterPortraits([previousImage])
+    if (Object.hasOwn(data, 'image') && previousImage !== saved.image) cleanupUnreferencedMedia([previousImage])
     const savedId = saved?.id || characterId
     // Partial edits (including Family Tree and Relationship Map) must not
     // clear reciprocal links for fields that were not edited at all.
@@ -2593,7 +2597,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(charactersRef.current.map(character => character.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true // An inherited hide retains the source and its links/media.
-    cleanupCharacterPortraits(beforeDelete.filter(c => deletedSet.has(c.id)).map(c => c.image))
+    cleanupUnreferencedMedia(beforeDelete.filter(c => deletedSet.has(c.id)).map(c => c.image))
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('characters', userId, dId).catch(console.error))
     const removeLinks = (entry, field, matches = value => deletedSet.has(value)) => Array.isArray(entry[field]) && entry[field].some(matches)
       ? { ...entry, [field]: entry[field].filter(value => !matches(value)) }
@@ -2658,7 +2662,7 @@ export function useStore(userId = null, options = {}) {
     )
     if (!saved) return null
     if (Object.hasOwn(data, 'logo') && previousLogo !== saved.logo?.image) {
-      cleanupCharacterPortraits([previousLogo], { factions: factionsRef.current })
+      cleanupUnreferencedMedia([previousLogo], { factions: factionsRef.current })
     }
     return saved
   }
@@ -2687,7 +2691,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(factionsRef.current.map(faction => faction.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
-    cleanupCharacterPortraits(beforeDelete.filter(f => deletedSet.has(f.id)).map(f => f.logo?.image), { factions: factionsRef.current })
+    cleanupUnreferencedMedia(beforeDelete.filter(f => deletedSet.has(f.id)).map(f => f.logo?.image), { factions: factionsRef.current })
     if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('factions', userId, dId).catch(console.error))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
       deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
@@ -3621,7 +3625,9 @@ export function useStore(userId = null, options = {}) {
       knownSceneContentIdsRef.current.delete(sceneId)
       lastWrittenSceneContentByIdRef.current.delete(sceneId)
     })
-    deleteMediaUrls(mediaUrls)
+    // A restored or merged project may still reference the same object paths.
+    // Only remove objects that disappeared from the complete retained snapshot.
+    cleanupUnreferencedMedia(mediaUrls, nextData)
     if (nextData.activeNovelId == null) setWritingSceneId(null)
     setSelectedCharacterId(null)
     setSelectedLocationId(null)
@@ -3866,6 +3872,8 @@ export function useStore(userId = null, options = {}) {
       familyLinksByCharacter.set(existingId, remapExportValue(sourceCharacter.familyLinks || [], idMap))
     })
     const lastEmberCharacterIds = new Set(existingIdBySourceId.values())
+    const sourceLocationByName = new Map((lastEmberDemoProject.locations || []).map(location => [location.name, location]))
+    const existingLocationByName = new Map(locationsRef.current.filter(location => location.novelId === project.id).map(location => [location.name, location]))
     const sourceChapterByTitle = new Map(
       (lastEmberDemoProject.chapters || [])
         .map(chapter => [chapter.title, chapter])
@@ -3943,6 +3951,19 @@ export function useStore(userId = null, options = {}) {
         lastModified: lastHistoryEntry?.timestamp || scene.lastModified || Date.now(),
       }
     }))
+    const legacyMap = mapsRef.current.find(map => map.novelId === project.id && isUpgradeableLastEmberMap(map))
+    if (legacyMap) {
+      const sourceMap = buildTheLastEmberMap()
+      const mapIdMap = { [lastEmberDemoProject.project.id]: project.id, [sourceMap.id]: legacyMap.id }
+      sourceLocationByName.forEach((sourceLocation, name) => {
+        const existingLocation = existingLocationByName.get(name)
+        if (existingLocation?.id) mapIdMap[sourceLocation.id] = existingLocation.id
+      })
+      collectIds(sourceMap, mapIdMap)
+      const upgradedMap = { ...remapExportValue(sourceMap, mapIdMap), id: legacyMap.id, novelId: project.id }
+      commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.map(map => map.id === legacyMap.id ? upgradedMap : map))
+      if (canSyncCloud) trackSync(upsertItems('maps_data', userId, [upgradedMap])).catch(console.error)
+    }
     if (canSyncCloud) {
       // `scenes` isn't covered by the per-collection debounced sync effects
       // (each scene syncs individually as it's edited in the manuscript UI),
@@ -3954,6 +3975,8 @@ export function useStore(userId = null, options = {}) {
     }
     const key = sampleProjectSeedKey(userId)
     if (key) writeItem(key, '1')
+    const mapKey = sampleProjectMapSeedKey(userId)
+    if (mapKey) writeItem(mapKey, '1')
     return {
       ...project,
       coverPhoto: project.coverPhoto || lastEmberDemoProject.project.coverPhoto,
@@ -3966,6 +3989,8 @@ export function useStore(userId = null, options = {}) {
     if (!key || novelsRef.current.length > 0 || readItem(key) === '1') return null
     const sample = buildSampleProjectData()
     writeItem(key, '1')
+    const mapKey = sampleProjectMapSeedKey(userId)
+    if (mapKey) writeItem(mapKey, '1')
     commitLocal(novelsRef, setNovels, 'nf_novels', prev => [...prev, sample.project])
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...sample.acts])
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...sample.chapters])

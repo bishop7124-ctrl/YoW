@@ -385,37 +385,37 @@ export default function FamilyTree({ store }) {
   };
 
   return (
-    <div className="h-full bg-[var(--bg-main)] overflow-auto p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="h-full min-h-0 bg-[var(--bg-main)] overflow-auto xl:overflow-hidden p-4 md:p-6 xl:px-4 xl:py-2">
+      <div className="max-w-7xl h-full min-h-0 mx-auto flex flex-col gap-4 xl:gap-2">
         <div className="flex items-end justify-between" data-tour="familytree-header">
           <div>
-            <h1 className="text-2xl font-bold text-[var(--text-main)]">Family Tree</h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">Structured genealogy by direct facts, with extended relationships calculated around the focal character.</p>
+            <h1 className="text-2xl xl:text-xl font-bold text-[var(--text-main)]">Family Tree</h1>
+            <p className="text-sm text-[var(--text-muted)] mt-1 xl:hidden">Structured genealogy by direct facts, with extended relationships calculated around the focal character.</p>
           </div>
-          <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-nav)] border border-[var(--border)] rounded px-3 py-2">
+          <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-nav)] border border-[var(--border)] rounded px-3 py-2 xl:px-2 xl:py-1">
             Current Year: <span className="text-[var(--accent)] font-bold">{parsedCurrentYear}</span>
           </div>
         </div>
 
         {characters.length > 0 && (
-          <section className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 space-y-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end">
-              <label className="text-xs text-[var(--text-muted)] md:min-w-60">
-                Focus character
+          <section className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 xl:p-2 xl:rounded-lg">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end xl:items-center xl:gap-3">
+              <label className="text-xs text-[var(--text-muted)] md:w-60 md:shrink-0 xl:flex xl:w-auto xl:items-center xl:gap-2">
+                <span>Focus character</span>
                 <select
                   value={focusCharacterId}
                   onChange={(event) => setSelectedCharacterId(event.target.value)}
-                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)]"
+                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)] xl:mt-0 xl:w-52 xl:px-2 xl:py-1"
                 >
                   {characters.map(character => <option key={character.id} value={character.id}>{character.name || "Unnamed character"}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-[var(--text-muted)] md:min-w-52">
-                View
+              <label className="text-xs text-[var(--text-muted)] md:w-52 md:shrink-0 xl:flex xl:w-auto xl:items-center xl:gap-2">
+                <span>View</span>
                 <select
                   value={filters.scope}
                   onChange={(event) => updateFilter("scope", event.target.value)}
-                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)]"
+                  className="block mt-1 w-full bg-[var(--bg-main)] border border-[var(--border)] rounded-lg px-3 py-2 text-base text-[var(--text-main)] xl:mt-0 xl:w-40 xl:px-2 xl:py-1"
                 >
                   <option value="all">All families</option>
                   <option value="direct">Direct lineage</option>
@@ -424,29 +424,29 @@ export default function FamilyTree({ store }) {
                   <option value="full">Full dynasty</option>
                 </select>
               </label>
+              <div className="grid gap-2 sm:grid-cols-2 md:flex md:flex-1 md:flex-wrap md:items-center md:gap-x-4 md:gap-y-2 md:pb-2 xl:flex-nowrap xl:justify-end xl:gap-x-3 xl:pb-0 text-xs">
+                {[
+                  ["bloodOnly", "Blood only"],
+                  ["includePartners", "Partners"],
+                  ["includeAdoption", "Adoption"],
+                  ["includeStep", "Step-family"],
+                  ["includeGuardians", "Guardians"],
+                  ["includeDeceased", "Deceased"],
+                  ["showHidden", "Hidden / secret"],
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 whitespace-nowrap text-[var(--text-main)]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(filters[key])}
+                      onChange={(event) => updateFilter(key, event.target.checked)}
+                      className="accent-[var(--accent)]"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
-            <p className="text-xs text-[var(--text-muted)]">All families keeps the complete tree visible while you select people. The narrower views follow the focus character: direct ancestors and descendants, immediate relatives, extended family within three connections, or their full connected dynasty.</p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-              {[
-                ["bloodOnly", "Blood only"],
-                ["includePartners", "Partners"],
-                ["includeAdoption", "Adoption"],
-                ["includeStep", "Step-family"],
-                ["includeGuardians", "Guardians"],
-                ["includeDeceased", "Deceased"],
-                ["showHidden", "Hidden / secret"],
-              ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 text-[var(--text-main)]">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(filters[key])}
-                    onChange={(event) => updateFilter(key, event.target.checked)}
-                    className="accent-[var(--accent)]"
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
+            <p className="mt-3 text-xs text-[var(--text-muted)] xl:hidden">All families keeps the complete tree visible while you select people. The narrower views follow the focus character: direct ancestors and descendants, immediate relatives, extended family within three connections, or their full connected dynasty.</p>
           </section>
         )}
 
@@ -457,8 +457,8 @@ export default function FamilyTree({ store }) {
             <button onClick={() => jumpToCharacters()} className="bg-[var(--accent)] text-[var(--bg-main)] text-xs font-bold px-4 py-2 rounded hover:opacity-90">Open Characters</button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
-            <div className="space-y-6 min-w-0">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start xl:items-stretch xl:min-h-0 xl:flex-1">
+            <div className="space-y-6 min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
               {familySections.map((section) => (
                 <section key={section.familyGroup} className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-4">
                   <div className="flex items-center justify-between mb-4">
@@ -651,7 +651,10 @@ export default function FamilyTree({ store }) {
               ))}
             </div>
 
-            <aside className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 sticky top-4">
+            <aside
+              aria-label="Family details"
+              className="bg-[var(--bg-nav)] border border-[var(--border)] rounded-xl p-3 xl:h-full xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:[scrollbar-gutter:stable]"
+            >
               <h3 className="text-sm font-bold text-[var(--text-main)] mb-2">Family Details</h3>
               {!selectedCharacter ? (
                 <div className="space-y-3">
