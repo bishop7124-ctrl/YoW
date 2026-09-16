@@ -1410,7 +1410,23 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (Array.isArray(yowImport?.project?.enabledSections)) extras.enabledSections = yowImport.project.enabledSections
     if (yowImport?.project?.scheduleCalendar) extras.scheduleCalendar = yowImport.project.scheduleCalendar
     if (yowImport?.project?.categoryOptions) extras.categoryOptions = yowImport.project.categoryOptions
-    const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras })
+    // The import population effect below (populateYowProject/populateProject)
+    // builds its own act/chapter/scene tree whenever the user kept "structure"
+    // selected — creating addNovel's usual default starter structure too would
+    // leave a stray empty scene that can race with (and sometimes silently win
+    // over) the real imported content; see docs/ROADMAP.md's "Restore flow"
+    // Bugs row. Only skip the starter when the import will actually supply its
+    // own structure — an import with structure deselected still needs it.
+    // Also keep the starter when storage is already at/over quota: the
+    // population loop below silently skips any act/chapter/scene it can't
+    // afford (store.addAct/addChapter/addScene each no-op past quota), so
+    // without this fallback a quota-constrained restore could otherwise land
+    // as a project with zero manuscript content and no error shown.
+    const nearStorageQuota = store.storageQuotaBytes != null && store.storageUsedBytes >= store.storageQuotaBytes
+    const novel = store.addNovel(
+      { title: title || 'Imported Project', description, type, ...extras },
+      { withStarterStructure: !selections.acts || nearStorageQuota },
+    )
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
     setPendingImport({ novelId: novel.id, data: sourceData, sel: selections, type, isYow: !!yowImport })
