@@ -131,6 +131,8 @@ jobs:
             spec: tests/e2e/dashboard.spec.js
           - name: comic-planner
             spec: tests/e2e/comic-planner.spec.js
+          - name: comic-beta-label-removal
+            spec: tests/e2e/comic-beta-label-removal.spec.js
           - name: data-safety
             spec: tests/e2e/data-safety.spec.js
           - name: url-persistence

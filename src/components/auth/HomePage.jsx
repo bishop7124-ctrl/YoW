@@ -36,7 +36,6 @@ const PROJECT_TYPES = [
   {
     id: 'comic',
     label: 'Comic / Graphic Novel',
-    beta: true,
     tagline: 'Volume, issue, page. All connected.',
     description: 'A planning workspace for sequential art narratives — organise by volume and issue, build your world, and map out the visual story before you draw.',
     features: [
