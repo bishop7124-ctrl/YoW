@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
-  createProject, dismissLaunchPrompts, openImportZip, readStorage,
+  createProject, dismissLaunchPrompts, openImportZip, readScenesWithContent, readStorage,
   seedCleanStorage, seedIndexedDbEntries, waitForStorage, writeInDefaultScene,
 } from './helpers.js'
 
@@ -156,6 +156,43 @@ test('dashboard and writing remain usable with 10 projects in storage', async ({
   await expect(page.locator('[data-tour="manuscript-editor"]').first()).toBeVisible({ timeout: 10_000 })
 })
 
+// Roadmap Bugs table: "2026-08-07: Manuscript editor raised a false 'edited
+// in two tabs' scene-conflict copy on every normal typing pause, in a single
+// tab" — fixed by flushing the crash-safety draft write synchronously right
+// before the store's own debounced commit, so the two stay identical at the
+// moment the conflict check compares them. Verified live once already (see
+// the roadmap row's Owner/Notes); this is the automated regression guard.
+test('typing with normal pauses in a single tab never raises a false conflict-copy warning', async ({ page }) => {
+  test.setTimeout(60_000)
+
+  await createProject(page, { title: 'False Conflict Test' })
+  await page.getByRole('button', { name: 'Write' }).click()
+  // Mirrors writeInDefaultScene's guard (helpers.js) — the preview placeholder
+  // span is only present in read mode; the editor can already be in edit mode
+  // for some project/entry states, where clicking it unconditionally would hang.
+  const placeholder = page.getByText('Begin writing here…')
+  if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
+  const editor = page.getByPlaceholder('Begin writing here…')
+
+  const bursts = [
+    'First burst of prose written in the editor.',
+    ' A second burst, added after a short pause.',
+    ' A third burst, after another pause.',
+    ' A fourth and final burst.',
+  ]
+  for (const burst of bursts) {
+    await editor.pressSequentially(burst, { delay: 20 })
+    // Pause between bursts, well past both the 400ms store-commit debounce
+    // and the 1.5s throttled crash-safety draft write the bug's root cause
+    // depended on racing against each other.
+    await page.waitForTimeout(2000)
+    await expect(page.locator('.ms-toolbar-conflict-btn')).toHaveCount(0)
+  }
+
+  await expect(editor).toHaveValue(bursts.join(''))
+  await expect(page.locator('.ms-toolbar-conflict-btn')).toHaveCount(0)
+})
+
 test('large scene content (>10k words) loads without crash', async ({ page }) => {
   await createProject(page, { title: 'Large Scene Test' })
 
@@ -240,4 +277,56 @@ test('exported ZIP restores all worldbuilding data', async ({ page }) => {
 
   const chars = await readStorage(page, 'nf_characters')
   expect(chars.some(c => c.name === 'Restore Test Character')).toBe(true)
+})
+
+// Roadmap Bugs table: "Restore flow" — scene prose was silently lost on the
+// native-YOW backup-ZIP restore round trip. Root cause: `addNovel()` always
+// attached its own default starter act/chapter/scene, which could race with
+// (and sometimes silently win over) the real imported structure that
+// `populateYowProject` builds right after. Fixed by having the restore path
+// create its destination project with `{ withStarterStructure: false }`
+// whenever the import is about to supply its own structure. See the roadmap
+// row for the full incident writeup.
+test('exported ZIP restores scene content (regression test for the restore-flow data-loss bug)', async ({ page }) => {
+  const projectTitle = `Export Restore Scene ${Date.now()}`
+  const sceneText = `Restore test scene content ${Date.now()}`
+  await createProject(page, { title: projectTitle })
+  await writeInDefaultScene(page, sceneText)
+
+  await page.getByRole('button', { name: 'Project settings' }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Backup zip/i }).click()
+  const download = await downloadPromise
+  const zipPath = await download.path()
+  await page.getByRole('button', { name: 'Done' }).click()
+
+  await page.evaluate(() => { window.confirm = () => true })
+  await page.getByRole('button', { name: 'Back to projects' }).click()
+  await page.locator('.dash-card-settings-button').first().click()
+  await page.getByRole('button', { name: 'Delete project' }).click()
+  await waitForStorage(page, (t) => {
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    return !novels.some(n => n.title === t)
+  }, projectTitle)
+
+  await page.goto('/')
+  await dismissLaunchPrompts(page)
+  const fileInput = await openImportZip(page)
+  const { readFileSync } = await import('node:fs')
+  await fileInput.setInputFiles({
+    name: 'project-backup.zip',
+    mimeType: 'application/zip',
+    buffer: readFileSync(zipPath),
+  })
+
+  await page.getByRole('button', { name: 'Create Project' }).waitFor({ timeout: 15_000 })
+  await page.getByRole('button', { name: 'Create Project' }).click()
+
+  await waitForStorage(page, (t) => {
+    const novels = JSON.parse((window.__yowStorageBridge?.getItem('nf_novels') ?? localStorage.getItem('nf_novels')) || '[]')
+    return novels.some(n => n.title === t)
+  }, projectTitle, 20_000)
+
+  const scenes = await readScenesWithContent(page)
+  expect(scenes.some(s => s.content.includes(sceneText))).toBe(true)
 })
