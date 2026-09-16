@@ -52,8 +52,15 @@ test.beforeEach(async ({ page }) => {
 // isolation, and with this delay, was consistently clean; see this file's
 // PR notes for the full investigation). A small per-character delay keeps
 // every test in this file at a realistic minimum keystroke cadence instead.
+// 2026-09-16: a 20ms delay was sufficient in isolation but still reproduced
+// the same character-reordering symptom (in the "Indent first line" mode
+// this comment originally called out as unaffected, not just "Space
+// between") once several other PRs' full Smoke matrices were running
+// concurrently on shared CI runners — heavier CPU contention than this file
+// had been tuned against. Raised to 40ms, which held clean across repeated
+// runs under that same concurrent load.
 async function type(locator, text) {
-  await locator.type(text, { delay: 20 })
+  await locator.type(text, { delay: 40 })
 }
 
 async function openManuscript(page) {
