@@ -6790,7 +6790,8 @@ body {
   --ms-page-margin-x: 15mm;
   --ms-page-margin-top: 18mm;
   --ms-page-margin-bottom: 20mm;
-  --ms-spine-gap: 28mm;
+  --ms-sheet-gap: 4mm;
+  --ms-column-gap: calc(2 * var(--ms-page-margin-x) + var(--ms-sheet-gap));
   --ms-page-font: 10.5pt;
   --ms-page-leading: 14pt;
   flex: 1;
@@ -6815,28 +6816,43 @@ body {
 .ms-book-spread {
   position: relative;
   flex-shrink: 0;
-  width: calc(2 * var(--ms-page-w) + var(--ms-spine-gap) + 2 * var(--ms-page-margin-x));
+  width: calc(2 * (var(--ms-page-w) + 2 * var(--ms-page-margin-x)) + var(--ms-sheet-gap));
   height: calc(var(--ms-page-h) + var(--ms-page-margin-top) + var(--ms-page-margin-bottom));
-  border-radius: var(--r-sm);
-  background: var(--bg-raise);
-  box-shadow: var(--shadow-lg);
   padding: var(--ms-page-margin-top) var(--ms-page-margin-x) var(--ms-page-margin-bottom);
   overflow: hidden;
 }
-.ms-book-spread::before {
-  content: "";
+.ms-book-page-sheets {
   position: absolute;
-  top: var(--ms-page-margin-top);
-  bottom: var(--ms-page-margin-bottom);
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(2, calc(var(--ms-page-w) + 2 * var(--ms-page-margin-x)));
+  gap: var(--ms-sheet-gap);
+}
+.ms-book-page-sheet {
+  position: relative;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: var(--r-sm);
+  background: var(--bg-raise);
+  box-shadow: var(--shadow-lg);
+}
+.ms-book-page-number {
+  position: absolute;
+  bottom: 7mm;
   left: 50%;
-  width: 1px;
-  background: var(--border);
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-family: var(--font-serif);
+  font-size: 9pt;
+  line-height: 1;
 }
 .ms-book-flow {
+  position: relative;
+  z-index: 1;
   height: var(--ms-page-h);
   column-width: var(--ms-page-w);
   column-count: 2;
-  column-gap: var(--ms-spine-gap);
+  column-gap: var(--ms-column-gap);
   column-fill: auto;
   font-family: var(--font-serif);
   font-size: var(--ms-page-font);
@@ -6845,20 +6861,28 @@ body {
   transition: transform 0.26s ease;
   will-change: transform;
 }
-.ms-book-flow h2 {
+.ms-book-cover {
+  height: var(--ms-page-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  break-after: column;
+}
+.ms-book-flow .ms-book-cover h2 {
   font-family: var(--font-serif);
   font-size: 15pt;
-  margin: 0 0 14pt;
-  break-after: avoid;
+  margin: 0;
   color: var(--text-main);
 }
-.ms-book-flow h3 {
+.ms-book-flow .ms-book-chapter {
   font-family: var(--font-serif);
   font-size: 12.5pt;
   margin: 16pt 0 10pt;
   break-after: avoid;
   color: var(--text-main);
 }
+.ms-book-flow .ms-book-chapter.is-first { margin-top: 0; }
 .ms-book-flow p { margin: 0 0 0.9em; text-wrap: pretty; }
 .ms-book-flow p + p { text-indent: 1.4em; }
 .ms-book-break { text-align: center; margin: 18px 0; color: var(--text-faint); letter-spacing: 0.3em; }
@@ -6891,7 +6915,7 @@ body {
   .ms-book-spread {
     width: calc(var(--ms-page-w) + 2 * var(--ms-page-margin-x));
   }
-  .ms-book-spread::before { display: none; }
+  .ms-book-page-sheets { grid-template-columns: calc(var(--ms-page-w) + 2 * var(--ms-page-margin-x)); }
   .ms-book-flow { column-count: 1; }
 }
 
@@ -7243,7 +7267,7 @@ body {
 /* Compact top navigation shell */
 .studio-shell {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 72px minmax(0, 1fr);
+  grid-template-rows: 60px minmax(0, 1fr);
 }
 
 .studio-shell.has-no-context {
@@ -7260,7 +7284,7 @@ body {
   grid-row: 1;
   min-width: 0;
   min-height: 0;
-  height: 72px;
+  height: 60px;
   display: grid;
   grid-template-columns: fit-content(360px) minmax(0, 1fr) max-content max-content;
   align-items: center;
@@ -23879,3 +23903,43 @@ body {
 .ms-catalogue-pagination button { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; }
 .ms-catalogue-pagination button:disabled { opacity: .5; }
 .ms-catalogue-tab .ms-ref-detail p { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Desktop density
+ *
+ * The product is most comfortable at the equivalent of 90% browser zoom on
+ * larger screens. Applying the scale at body level keeps React portals (menus,
+ * sheets and dialogs) in the same coordinate system as the rest of the app.
+ * The compensated canvas dimensions prevent full-height workspaces from
+ * leaving an unpainted strip at the right or bottom. Mobile/tablet sizing stays
+ * at 100% so touch targets and the existing responsive breakpoints are kept. */
+:root {
+  --app-density-scale: 1;
+}
+
+@supports (zoom: 1) {
+  @media (min-width: 861px) {
+    :root {
+      --app-density-scale: .9;
+    }
+
+    html {
+      overflow-x: hidden;
+    }
+
+    body {
+      width: calc(100vw / var(--app-density-scale));
+      min-height: calc(100dvh / var(--app-density-scale));
+      zoom: var(--app-density-scale);
+    }
+
+    .studio-shell {
+      height: calc(100dvh / var(--app-density-scale));
+    }
+
+    .auth-shell,
+    .yow-home,
+    .marketing-shell {
+      min-height: calc(100dvh / var(--app-density-scale)) !important;
+    }
+  }
+}

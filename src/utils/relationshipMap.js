@@ -99,17 +99,42 @@ export function getSocialRelationshipRows(characters = []) {
   }))
 }
 
-export const RELATIONSHIP_PAGE_SIZE = 8
-export const RELATIONSHIP_MAP_SIZE = { width: 1000, height: 720, centerX: 500, centerY: 360 }
-export function relationshipMapPage(connections, requestedPage = 0) {
-  const pageCount = Math.max(1, Math.ceil(connections.length / RELATIONSHIP_PAGE_SIZE))
-  const page = Math.min(Math.max(0, requestedPage), pageCount - 1)
-  const visible = connections.slice(page * RELATIONSHIP_PAGE_SIZE, (page + 1) * RELATIONSHIP_PAGE_SIZE)
+export const RELATIONSHIP_MAP_SIZE = { width: 900, height: 400, centerX: 450, centerY: 200 }
+export const RELATIONSHIP_MAP_NODE_SIZE = { width: 104, height: 96 }
+export const RELATIONSHIP_MAP_DENSE_NODE_SIZE = { width: 74, height: 68 }
+export const RELATIONSHIP_MAP_FOCUS_SIZE = { width: 120, height: 112 }
+
+// Each density uses a true circle, rather than selecting points from a fixed
+// eight-slot layout. That keeps every connector the same length while the
+// count-specific radius/rotation prevents compact cards from overlapping.
+const RELATIONSHIP_MAP_RADII = [0, 145, 165, 165, 165, 150, 165, 154, 152, 140, 145, 160, 166]
+const RELATIONSHIP_MAP_ROTATIONS = [0, -Math.PI / 2, 0, 0, Math.PI / 4, 0, 0, 0, 0, 0, Math.PI / 10, 24.5 * Math.PI / 180, 14.5 * Math.PI / 180]
+
+export function relationshipMapLayout(connections) {
+  const dense = connections.length > 8
+  const nodeSize = dense ? RELATIONSHIP_MAP_DENSE_NODE_SIZE : RELATIONSHIP_MAP_NODE_SIZE
+  const fallbackRadius = connections.length > 12
+    ? Math.ceil((Math.hypot(nodeSize.width, nodeSize.height) + 6) / (2 * Math.sin(Math.PI / connections.length)))
+    : 0
+  const radius = RELATIONSHIP_MAP_RADII[connections.length] || fallbackRadius
+  const rotation = RELATIONSHIP_MAP_ROTATIONS[connections.length] || 0
+  const margin = Math.max(nodeSize.width, nodeSize.height) / 2 + 10
+  const diameter = Math.ceil((radius + margin) * 2)
+  const size = connections.length > 12
+    ? { width: Math.max(RELATIONSHIP_MAP_SIZE.width, diameter), height: Math.max(RELATIONSHIP_MAP_SIZE.height, diameter) }
+    : RELATIONSHIP_MAP_SIZE
+  const centerX = size.width / 2
+  const centerY = size.height / 2
   return {
-    page, pageCount,
-    nodes: visible.map((connection, i) => {
-      const angle = Math.PI * 2 * i / visible.length - Math.PI / 2
-      return { ...connection, x: RELATIONSHIP_MAP_SIZE.centerX + Math.cos(angle) * 350, y: RELATIONSHIP_MAP_SIZE.centerY + Math.sin(angle) * 250 }
+    dense,
+    size: { ...size, centerX, centerY },
+    nodes: connections.map((connection, i) => {
+      const angle = rotation + Math.PI * 2 * i / connections.length
+      return {
+        ...connection,
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius,
+      }
     }),
   }
 }

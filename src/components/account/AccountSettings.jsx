@@ -2595,8 +2595,10 @@ function DeleteAccountModal({ novels, store, onClose }) {
         projectData[field] = (store?.[field] ?? []).filter(item => item?.novelId === novel.id)
       }
       projectData.scenes = (store?.scenes ?? []).filter(s => s?.novelId === novel.id)
-      const blob = createProjectZipBlob(projectData)
+      const blob = await createProjectZipBlob(projectData)
       downloadBlob(blob, getProjectExportFilename(novel))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Backup export failed. Please try again.')
     } finally {
       setDownloadingId(null)
     }
