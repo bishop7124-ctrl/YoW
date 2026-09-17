@@ -30,6 +30,16 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        // Opt-in only, never affects CI: some sandboxed dev environments
+        // pre-install a Chromium revision that doesn't match this repo's
+        // pinned @playwright/test version, so `npx playwright install`
+        // fails to resolve one relative to a different revision folder.
+        // Setting this env var points Playwright at that pre-installed
+        // binary directly instead. Unset (the default, and always the case
+        // in CI) leaves Playwright's normal executable resolution alone.
+        ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+          ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } }
+          : {}),
       },
     },
   ],

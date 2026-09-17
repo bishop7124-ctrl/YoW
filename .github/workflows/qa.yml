@@ -92,7 +92,8 @@ jobs:
             spec: tests/e2e/pricing-page.spec.js
           - name: unconfigured-ai-account
             spec: tests/e2e/unconfigured-ai-account.spec.js
-
+          - name: qa-sweep-2026-09-17-project-delete-logout-login
+            spec: tests/e2e/qa-sweep-2026-09-17-project-delete-logout-login.spec.js
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
