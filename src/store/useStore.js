@@ -455,6 +455,15 @@ const getLocalSnapshot = () => ({
   comicPages: load('nf_comicPages', []),
   comicPanels: load('nf_comicPanels', []),
   eras: load('nf_eras', []),
+  // Without this, importData's `setRecordConflicts(sourceData.recordConflicts
+  // ?? [])` always reset to `[]` on every local-preferred boot (i.e. every
+  // normal refresh/login) even though `nf_recordConflicts` itself was written
+  // and intact on disk — silently discarding the "other tab's version" review
+  // banner (and the ability to recover it) the moment the user refreshed.
+  // Found live 2026-09-17 re-verifying the two-tab clobber Bugs-table row:
+  // the "⚠ N sync conflicts" banner disappeared across a refresh even though
+  // the conflict itself (and both tabs' saved data) were otherwise intact.
+  recordConflicts: load('nf_recordConflicts', []),
 })
 
 const _buildAppDataPayload = (data) => ({
