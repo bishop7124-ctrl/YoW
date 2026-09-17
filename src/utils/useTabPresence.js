@@ -108,6 +108,23 @@ export function useTabPresence(key, active) {
       openKeys.delete(key)
       listeners.get(key)?.delete(refresh)
       channel.postMessage({ type: 'bye', key, id: tabId })
+      // A scene's SceneEditor stays mounted across separate focus/blur
+      // "sittings" — only `active` (tied to `focused`) toggles, so `count`
+      // is this SAME hook instance's state across every future sitting, not
+      // freshly initialized per sitting. Without this reset, the *next*
+      // focus attempt's very first render sees this sitting's last known
+      // (possibly nonzero) `count` before its own fresh `refresh()` call
+      // (which only runs inside the effect below, one render later) can
+      // correct it — and SceneEditor's conflict-detection effect reads
+      // `otherEditorsCount` synchronously on that same first render, so a
+      // now-stale "someone else has this open" reading from a *previous*
+      // sitting can immediately re-trigger the warning and re-block the
+      // user even after the other tab has genuinely closed/blurred and no
+      // one is editing any more. Found live 2026-09-17 re-verifying the
+      // two-tab clobber Bugs-table row: focus, get warned, go back, wait
+      // for the other tab to release, then focus again — the warning fired
+      // again anyway, using leftover data from the *first* attempt.
+      setCount(0)
     }
   }, [key, active])
 
