@@ -2395,6 +2395,57 @@ describe('multi-tab structured record sync', () => {
     expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab A')
   })
 
+  it('a pending recordConflicts entry survives a refresh (importData preferring local) instead of being silently wiped', async () => {
+    // Regression test: getLocalSnapshot() (the object importData reads from
+    // when preferring local data — i.e. every normal boot/refresh) omitted
+    // `recordConflicts` entirely, so `setRecordConflicts(sourceData.recordConflicts
+    // ?? [])` always reset it to `[]` on refresh even though `nf_recordConflicts`
+    // itself was written and intact on disk — the "⚠ N sync conflicts" banner
+    // (and the ability to recover the other tab's version) silently vanished
+    // the moment the user refreshed. Found live 2026-09-17 re-verifying the
+    // two-tab clobber Bugs-table row.
+    const owner = 'user-conflict-survives-refresh'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabA.result.current.finishRemoteLoad(true) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.finishRemoteLoad(true) })
+
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'from tab A' }, 'char-A') })
+    await waitFor(() => {
+      const call = vi.mocked(upsertItems).mock.calls.find(c => c[0] === 'characters')
+      expect(call?.[2]).toEqual([expect.objectContaining({ notes: 'from tab A' })])
+    }, { timeout: 3000 })
+
+    act(() => { tabB.result.current.saveCharacter({ name: 'Alice', notes: 'from tab B' }, 'char-A') })
+    await waitFor(() => expect(tabB.result.current.recordConflicts).toHaveLength(1), { timeout: 3000 })
+    const conflictId = tabB.result.current.recordConflicts[0].id
+    // Let Tab B's own debounced cloud push actually land before moving on —
+    // otherwise it's still pending (a real, unmocked-away timer) when this
+    // test ends and can fire during a *later* test, appending a stray call
+    // to the shared `upsertItems` mock's history that pollutes whichever
+    // test happens to be polling it at that moment.
+    await waitFor(() => {
+      const calls = vi.mocked(upsertItems).mock.calls.filter(c => c[0] === 'characters')
+      expect(calls.some(c => c[2]?.some?.(item => item.notes === 'from tab B'))).toBe(true)
+    }, { timeout: 3000 })
+
+    // Simulate a real refresh: a local-preferred importData call, exactly
+    // what boot() does on every normal page load/reload.
+    act(() => { tabB.result.current.importData({}) })
+
+    expect(tabB.result.current.recordConflicts).toHaveLength(1)
+    expect(tabB.result.current.recordConflicts[0].id).toBe(conflictId)
+    expect(tabB.result.current.recordConflicts[0].theirs.notes).toBe('from tab A')
+
+    tabA.unmount()
+    tabB.unmount()
+  })
+
   it('discardRecordConflict keeps the current (mine) version and just dismisses the warning', async () => {
     const owner = 'user-conflict-discard'
     const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
