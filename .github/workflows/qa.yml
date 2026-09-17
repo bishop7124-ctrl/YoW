@@ -201,6 +201,8 @@ jobs:
             spec: tests/e2e/qa-sweep-2026-09-16-daily-goal-streak-edge-cases.spec.js
           - name: qa-sweep-2026-09-16-theme-visual-pass
             spec: tests/e2e/qa-sweep-2026-09-16-theme-visual-pass.spec.js
+          - name: qa-sweep-2026-09-17-batch8
+            spec: tests/e2e/qa-sweep-2026-09-17-batch8.spec.js
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
