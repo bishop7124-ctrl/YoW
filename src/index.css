@@ -9950,7 +9950,11 @@ body {
 .account-settings-tab.is-active {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
   background: var(--accent-fade);
-  color: var(--accent);
+  /* --accent-text (not --accent) for readable text on an --accent-fade
+     surface — same pattern already used by .ms-rail-scene.is-active.
+     2026-09-16 QA: the previous plain --accent color measured 2.58:1 on
+     dark-refined (WCAG AA needs 4.5:1) — see ROADMAP.md Bugs table. */
+  color: var(--accent-text);
 }
 
 .account-settings-tab-panel {
@@ -14049,7 +14053,12 @@ body {
   border-color: var(--border);
 }
 .ms-toolbar-btn.is-active {
-  color: var(--accent);
+  /* --accent-text (not --accent) for readable text on an --accent-fade
+     surface — same pattern as .ms-rail-scene.is-active and
+     .account-settings-tab.is-active. 2026-09-16 QA: the previous plain
+     --accent color measured 2.38:1 on dark-refined (WCAG AA needs 4.5:1)
+     for the active "Replace" toggle. */
+  color: var(--accent-text);
   border-color: var(--accent);
   background: var(--accent-fade);
 }
