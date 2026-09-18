@@ -20,7 +20,7 @@ export const BUILT_IN_THEMES = [
     glowPos: '85% 8%',
     swatches: {
       bgMain: '#0d282e', bgNav: '#133840', textMain: '#e2f0ee',
-      textMuted: '#7ab8b4', accent: '#e8724e', border: '#22545b',
+      textMuted: '#7ab8b4', accent: '#e8724e', border: '#1e4a50',
     },
   },
   {
@@ -33,7 +33,7 @@ export const BUILT_IN_THEMES = [
     glowPos: '80% 90%',
     swatches: {
       bgMain: '#f5f8f3', bgNav: '#eaeee6', textMain: '#1e2922',
-      textMuted: '#5a7060', accent: '#417b5c', border: '#adbea7',
+      textMuted: '#5a7060', accent: '#4a8c68', border: '#ced8ca',
     },
   },
   {
@@ -46,7 +46,7 @@ export const BUILT_IN_THEMES = [
     glowPos: '50% 50%',
     swatches: {
       bgMain: '#141720', bgNav: '#1c2028', textMain: '#dce0e8',
-      textMuted: '#6a7282', accent: '#d08820', border: '#3d4356',
+      textMuted: '#6a7282', accent: '#d08820', border: '#282c38',
     },
   },
   {
@@ -59,7 +59,7 @@ export const BUILT_IN_THEMES = [
     glowPos: '80% 90%',
     swatches: {
       bgMain: '#fef8f0', bgNav: '#f4e8d8', textMain: '#28200c',
-      textMuted: '#7a6840', accent: '#986328', border: '#d6b681',
+      textMuted: '#7a6840', accent: '#b87830', border: '#e0c8a0',
     },
   },
   {
@@ -72,7 +72,7 @@ export const BUILT_IN_THEMES = [
     glowPos: '88% 12%',
     swatches: {
       bgMain: '#07151c', bgNav: '#0e2432', textMain: '#d4eef8',
-      textMuted: '#4888a8', accent: '#189ab0', border: '#1a485c',
+      textMuted: '#4888a8', accent: '#189ab0', border: '#143848',
     },
   },
   {
@@ -85,7 +85,27 @@ export const BUILT_IN_THEMES = [
     glowPos: '50% 50%',
     swatches: {
       bgMain: '#fafaf9', bgNav: '#f0f2f1', textMain: '#1c1f23',
-      textMuted: '#656e77', accent: '#637385', border: '#b3bdc8',
+      textMuted: '#656e77', accent: '#7a8a9c', border: '#e2e6ea',
+    },
+  },
+  // Deliberately not designed for visual appeal — built purely to maximize
+  // contrast for accessibility tools/low-vision users. Pure black-on-white
+  // text (21:1), a strong blue link/accent color (8.5:1 as text, 8.5:1 as
+  // white-on-accent button text), and a dark border (11.4:1) all clear the
+  // WCAG AAA text threshold (7:1) and the non-text 3:1 guideline with a wide
+  // margin, unlike the other 6 themes' identity colors which only target AA
+  // (4.5:1) at best. No decorative glow/atmosphere effects.
+  {
+    id: 'accessible',
+    label: 'Accessible (High Contrast)',
+    description: 'Maximum contrast — black on white, no decorative effects',
+    radiusUnit: 4,
+    visualStrength: 0.4,
+    glowIntensity: 0,
+    glowPos: '50% 50%',
+    swatches: {
+      bgMain: '#ffffff', bgNav: '#f0f0f0', textMain: '#000000',
+      textMuted: '#3a3a3a', accent: '#0645ad', border: '#3a3a3a',
     },
   },
 ]
