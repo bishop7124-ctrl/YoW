@@ -427,6 +427,70 @@
   --radius-unit: 5px;
 }
 
+/* ── Accessible (High Contrast) ─ built for accessibility tools ────────────
+   Not designed to look good — designed to maximize contrast. Pure black on
+   white, a strong blue link/accent color, a dark border, and flat outline-
+   style shadows instead of soft blur (crisp edges over blur is itself a
+   known low-vision accessibility technique). Text (21:1), accent-as-text
+   (8.5:1), white-on-accent button text (8.5:1), and border (11.4:1) all
+   clear WCAG AAA (7:1) with a wide margin, unlike the other built-in
+   themes which target AA (4.5:1) on their identity colors at best. */
+[data-theme="accessible"] {
+  /* Core */
+  --color-canvas: #ffffff;
+  --color-surface: #f0f0f0;
+  --color-surface-muted: #f6f6f6;
+  --color-surface-raised: #ffffff;
+  --color-surface-hover: rgba(0, 0, 0, 0.08);
+  --color-text: #000000;
+  --color-text-muted: #3a3a3a;
+  --color-text-faint: #3a3a3a;
+  --color-prose: #000000;
+  --color-accent: #0645ad;
+  --color-accent-soft: rgba(6, 69, 173, 0.14);
+  --color-accent-text: #0645ad;
+  --color-accent-secondary: #3a3a3a;
+  --color-accent-contrast: #ffffff;
+  --color-line: #3a3a3a;
+  --color-line-strong: #000000;
+  --bg-main:    #ffffff;
+  --bg-nav:     #f0f0f0;
+  --bg-hover:   rgba(0, 0, 0, 0.08);
+  --text-main:  #000000;
+  --text-muted: #3a3a3a;
+  --accent:     #0645ad;
+  --accent-fade: rgba(6, 69, 173, 0.14);
+  --accent-contrast: #ffffff;
+  --border:     #3a3a3a;
+  --logo-filter: brightness(0);
+  --accent2:    #3a3a3a;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #ffffff;
+  --text-faint:    #3a3a3a;
+  --border-strong: #000000;
+  --accent-text:   #0645ad;
+  --accent-2:      #3a3a3a;
+  --prose-text:    #000000;
+  /* Atmosphere — none: decorative gradients/glows only reduce contrast */
+  --atmos-warm:       #f0f0f0;
+  --atmos-cool:       #f0f0f0;
+  --atmos-paper:      #f0f0f0;
+  --atmos-paper-line: #3a3a3a;
+  --atmos-wood:       #f0f0f0;
+  --atmos-cork:       #f0f0f0;
+  --atmos-spine-tint: #f0f0f0;
+  --atmos-glow-pos:   50% 50%;
+  --atmos-glow-size:  0%;
+  --atmos-glow-intensity: 0%;
+  /* Elevation — flat, no soft/blurred shadows to keep edges crisp */
+  --shadow-sm:      0 0 0 1px #3a3a3a;
+  --shadow-md:      0 0 0 1px #3a3a3a;
+  --shadow-lg:      0 0 0 1px #3a3a3a;
+  --shadow-overlay: 0 0 0 2px #000000;
+  /* Geometry — minimal */
+  --radius-unit: 4px;
+}
+
 /* Base application styling */
 * { box-sizing: border-box; }
 
