@@ -13,7 +13,7 @@
   --accent:     #e8724e;
   --accent-fade: rgba(232, 114, 78, 0.16);
   --accent-contrast: #ffffff;
-  --border:     #1e4a50;
+  --border:     #22545b;
   --logo-filter: none;
 
   /* ── Semantic aliases (backward-compat) ─────────────────────────────────── */
@@ -177,7 +177,7 @@
   --accent:     #e8724e;
   --accent-fade: rgba(232, 114, 78, 0.16);
   --accent-contrast: #151713;
-  --border:     #1e4a50;
+  --border:     #22545b;
   --logo-filter: none;
   --accent2:    #2a9a8c;
   /* Atmosphere — jungle, ocean, dusk */
@@ -210,10 +210,10 @@
   --bg-hover:   rgba(20, 32, 24, 0.05);
   --text-main:  #1e2922;
   --text-muted: #5a7060;
-  --accent:     #4a8c68;
-  --accent-fade: rgba(74, 140, 104, 0.13);
+  --accent:     #417b5c;
+  --accent-fade: rgba(65, 123, 92, 0.13);
   --accent-contrast: #151713;
-  --border:     #ced8ca;
+  --border:     #adbea7;
   --logo-filter: brightness(0);
   --accent2:    #7aaa88;
   /* Atmosphere — light, natural, airy */
@@ -249,7 +249,7 @@
   --accent:     #d08820;
   --accent-fade: rgba(208, 136, 32, 0.14);
   --accent-contrast: #151713;
-  --border:     #282c38;
+  --border:     #3d4356;
   --logo-filter: none;
   --accent2:    #7888a0;
   /* Atmosphere — concrete, steel, raw */
@@ -282,10 +282,10 @@
   --bg-hover:   rgba(30, 20, 8, 0.05);
   --text-main:  #28200c;
   --text-muted: #78663f;
-  --accent:     #b87830;
-  --accent-fade: rgba(184, 120, 48, 0.14);
+  --accent:     #986328;
+  --accent-fade: rgba(152, 99, 40, 0.14);
   --accent-contrast: #151713;
-  --border:     #e0c8a0;
+  --border:     #d6b681;
   --logo-filter: brightness(0);
   --accent2:    #9a5a28;
   /* Atmosphere — warm café, caramel, beeswax */
@@ -321,7 +321,7 @@
   --accent:     #189ab0;
   --accent-fade: rgba(24, 154, 176, 0.14);
   --accent-contrast: #151713;
-  --border:     #143848;
+  --border:     #1a485c;
   --logo-filter: none;
   --accent2:    #2a5888;
   /* Atmosphere — deep sea, bioluminescent */
@@ -354,10 +354,10 @@
   --bg-hover:   rgba(20, 24, 28, 0.04);
   --text-main:  #1c1f23;
   --text-muted: #656e77;
-  --accent:     #7a8a9c;
-  --accent-fade: rgba(122, 138, 156, 0.12);
+  --accent:     #637385;
+  --accent-fade: rgba(99, 115, 133, 0.12);
   --accent-contrast: #151713;
-  --border:     #e2e6ea;
+  --border:     #b3bdc8;
   --logo-filter: brightness(0);
   --accent2:    #a0aab8;
   /* Atmosphere — marble, pearl, clean */
