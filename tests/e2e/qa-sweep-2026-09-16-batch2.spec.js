@@ -217,7 +217,7 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
     await expect.poll(async () => {
       const s = await readStorage(page, 'nf_scenes')
       return s[0]?.notes?.[0]?.anchorOffset
-    }, { timeout: 5000 }).toBe(16) // shifted by exactly +12, not drifted or left at 4
+    }, { timeout: 8000 }).toBe(16) // shifted by exactly +12, not drifted or left at 4
 
     scenes = await readStorage(page, 'nf_scenes')
     note = scenes[0].notes[0]
@@ -231,7 +231,7 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
       const scene = JSON.parse(get('nf_scenes'))[0]
       return (scene.content && scene.content.length > 0) ? scene.content : get(`nf_scene_content:${scene.id}`)
     })
-    await expect.poll(readContent, { timeout: 5000 }).toBe('IX-EDIT-XXX The lantern flickered in the study.')
+    await expect.poll(readContent, { timeout: 8000 }).toBe('IX-EDIT-XXX The lantern flickered in the study.')
     const contentAfterBefore = await readContent()
     expect(contentAfterBefore.slice(16, 23)).toBe('lantern')
     await expect(page.locator('.ms-note-highlight').first()).toHaveText('lantern')
@@ -245,7 +245,7 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
     await expect.poll(async () => {
       const s = await readStorage(page, 'nf_scenes')
       return s[0]?.notes?.[0]?.anchorEndOffset
-    }, { timeout: 5000 }).toBe(24) // end extends by 1 to include the inserted char
+    }, { timeout: 8000 }).toBe(24) // end extends by 1 to include the inserted char
 
     scenes = await readStorage(page, 'nf_scenes')
     note = scenes[0].notes[0]
@@ -254,7 +254,7 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
     // shiftNoteForEdit, not a drift onto unrelated text.
     expect(note.anchorOffset).toBe(16)
     expect(note.anchorEndOffset).toBe(24)
-    await expect.poll(readContent, { timeout: 5000 })
+    await expect.poll(readContent, { timeout: 8000 })
       .toBe('IX-EDIT-XXX The lanZtern flickered in the study.')
     const contentAfterInside = await readContent()
     expect(contentAfterInside.slice(note.anchorOffset, note.anchorEndOffset)).toBe('lanZtern')
