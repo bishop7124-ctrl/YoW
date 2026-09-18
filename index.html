@@ -29,6 +29,7 @@
         var bgByTheme = {
           tropical: '#0d282e', 'sage-modern': '#f5f8f3', 'industrial-loft': '#141720',
           'caramel-latte': '#fef8f0', 'ocean-depth': '#07151c', 'pearl-minimal': '#fafaf9',
+          accessible: '#ffffff',
         }
         function setThemeColor(value) {
           if (!value) return
@@ -38,7 +39,7 @@
         try {
           var root = document.documentElement
           var theme = localStorage.getItem('nf-theme')
-          var builtIn = ['tropical', 'sage-modern', 'industrial-loft', 'caramel-latte', 'ocean-depth', 'pearl-minimal']
+          var builtIn = ['tropical', 'sage-modern', 'industrial-loft', 'caramel-latte', 'ocean-depth', 'pearl-minimal', 'accessible']
           if (theme === 'custom') {
             root.setAttribute('data-theme', 'custom')
             var tokens = JSON.parse(localStorage.getItem('nf-custom-computed') || 'null')
