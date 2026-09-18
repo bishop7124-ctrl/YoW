@@ -13,7 +13,7 @@
   --accent:     #e8724e;
   --accent-fade: rgba(232, 114, 78, 0.16);
   --accent-contrast: #ffffff;
-  --border:     #22545b;
+  --border:     #1e4a50;
   --logo-filter: none;
 
   /* ── Semantic aliases (backward-compat) ─────────────────────────────────── */
@@ -177,7 +177,7 @@
   --accent:     #e8724e;
   --accent-fade: rgba(232, 114, 78, 0.16);
   --accent-contrast: #151713;
-  --border:     #22545b;
+  --border:     #1e4a50;
   --logo-filter: none;
   --accent2:    #2a9a8c;
   /* Atmosphere — jungle, ocean, dusk */
@@ -210,10 +210,10 @@
   --bg-hover:   rgba(20, 32, 24, 0.05);
   --text-main:  #1e2922;
   --text-muted: #5a7060;
-  --accent:     #417b5c;
-  --accent-fade: rgba(65, 123, 92, 0.13);
+  --accent:     #4a8c68;
+  --accent-fade: rgba(74, 140, 104, 0.13);
   --accent-contrast: #151713;
-  --border:     #adbea7;
+  --border:     #ced8ca;
   --logo-filter: brightness(0);
   --accent2:    #7aaa88;
   /* Atmosphere — light, natural, airy */
@@ -249,7 +249,7 @@
   --accent:     #d08820;
   --accent-fade: rgba(208, 136, 32, 0.14);
   --accent-contrast: #151713;
-  --border:     #3d4356;
+  --border:     #282c38;
   --logo-filter: none;
   --accent2:    #7888a0;
   /* Atmosphere — concrete, steel, raw */
@@ -282,10 +282,10 @@
   --bg-hover:   rgba(30, 20, 8, 0.05);
   --text-main:  #28200c;
   --text-muted: #78663f;
-  --accent:     #986328;
-  --accent-fade: rgba(152, 99, 40, 0.14);
+  --accent:     #b87830;
+  --accent-fade: rgba(184, 120, 48, 0.14);
   --accent-contrast: #151713;
-  --border:     #d6b681;
+  --border:     #e0c8a0;
   --logo-filter: brightness(0);
   --accent2:    #9a5a28;
   /* Atmosphere — warm café, caramel, beeswax */
@@ -321,7 +321,7 @@
   --accent:     #189ab0;
   --accent-fade: rgba(24, 154, 176, 0.14);
   --accent-contrast: #151713;
-  --border:     #1a485c;
+  --border:     #143848;
   --logo-filter: none;
   --accent2:    #2a5888;
   /* Atmosphere — deep sea, bioluminescent */
@@ -354,10 +354,10 @@
   --bg-hover:   rgba(20, 24, 28, 0.04);
   --text-main:  #1c1f23;
   --text-muted: #656e77;
-  --accent:     #637385;
-  --accent-fade: rgba(99, 115, 133, 0.12);
+  --accent:     #7a8a9c;
+  --accent-fade: rgba(122, 138, 156, 0.12);
   --accent-contrast: #151713;
-  --border:     #b3bdc8;
+  --border:     #e2e6ea;
   --logo-filter: brightness(0);
   --accent2:    #a0aab8;
   /* Atmosphere — marble, pearl, clean */
@@ -378,6 +378,49 @@
   --shadow-overlay: 0 20px 50px rgba(14,18,22,.30);
   /* Geometry — minimal, clean */
   --radius-unit: 5px;
+}
+
+/* ── Accessible (High Contrast) ─ built for accessibility tools ────────────
+   Not designed to look good — designed to maximize contrast. Pure black on
+   white, a strong blue link/accent color, a dark border, and no decorative
+   glow/atmosphere effects. Text (21:1), accent-as-text (8.5:1), white-on-
+   accent button text (8.5:1), and border (11.4:1) all clear WCAG AAA (7:1
+   text / non-text has no AAA tier, but this clears it by a wide margin too),
+   unlike the other 6 themes which only target AA (4.5:1) on their identity
+   colors at best — see the 2026-07-20/2026-09-18 theme contrast audit rows
+   in docs/QA_PLAN.md for why those weren't pushed further (it would have
+   meant darkening each theme's identity color past recognition). */
+[data-theme="accessible"] {
+  /* Core */
+  --bg-main:    #ffffff;
+  --bg-nav:     #f0f0f0;
+  --bg-hover:   rgba(0, 0, 0, 0.06);
+  --text-main:  #000000;
+  --text-muted: #3a3a3a;
+  --accent:     #0645ad;
+  --accent-fade: rgba(6, 69, 173, 0.14);
+  --accent-contrast: #ffffff;
+  --border:     #3a3a3a;
+  --logo-filter: brightness(0);
+  --accent2:    #3a3a3a;
+  /* Atmosphere — none: decorative gradients/glows only reduce contrast */
+  --atmos-warm:       #f0f0f0;
+  --atmos-cool:       #f0f0f0;
+  --atmos-paper:      #f0f0f0;
+  --atmos-paper-line: #3a3a3a;
+  --atmos-wood:       #f0f0f0;
+  --atmos-cork:       #f0f0f0;
+  --atmos-spine-tint: #f0f0f0;
+  --atmos-glow-pos:   50% 50%;
+  --atmos-glow-size:  0%;
+  --atmos-glow-intensity: 0%;
+  /* Elevation — flat, no soft/blurred shadows to keep edges crisp */
+  --shadow-sm:      0 0 0 1px #3a3a3a;
+  --shadow-md:      0 0 0 1px #3a3a3a;
+  --shadow-lg:      0 0 0 1px #3a3a3a;
+  --shadow-overlay: 0 0 0 2px #000000;
+  /* Geometry — minimal */
+  --radius-unit: 4px;
 }
 
 /* Base application styling */
