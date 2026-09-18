@@ -24016,3 +24016,44 @@ body {
     }
   }
 }
+
+/* ── Mobile: let the real document scroll so iOS Safari can collapse its
+   chrome (2026-09-18, user-reported: address bar doesn't collapse when
+   scrolling) ──────────────────────────────────────────────────────────────
+   .library-app-shell (the project library/dashboard, NovelManager.jsx —
+   height/overflow set via inline style, hence !important below) was a
+   fixed-viewport-height, non-scrolling shell — content scrolled only
+   inside it via the inline overflowY, which iOS Safari never recognizes as
+   "the page scrolling," so its address bar never auto-hides on scroll.
+   Letting it grow to its natural content height and relying on
+   .library-top-bar's EXISTING `position: sticky` keeps the header's
+   current always-visible appearance while making the outer page the real
+   scroll surface.
+
+   Root cause of a regression found while building this: this app's router
+   is hand-rolled (history.pushState in App.jsx, no scroll-restoration
+   middleware), so once the library shell can scroll the real document, a
+   scroll position picked up there persisted into the next fixed-viewport
+   shell and pushed its content off-screen (Project Overview's "Open Atlas"
+   card became unreachable at 768px in
+   tests/e2e/qa-sweep-2026-09-16-theme-visual-pass.spec.js). Fixed at the
+   source with a `window.scrollTo(0, 0)` on every viewMode change in
+   App.jsx, not with more CSS here.
+
+   An equivalent scroll-surface change for .studio-shell (every in-project
+   room — Characters, Locations, Manuscript, Map, etc, via Studio.jsx) is a
+   reasonable follow-up now that the scroll-reset bug above is fixed at its
+   source, but its content flows through more layout shapes (StudioBoard,
+   StudioIndex/StudioIndexList, and whatever ProjectDashboard uses for its
+   own overview cards) than this pass mapped, and this codebase's mobile
+   layout has a documented history of regressions taking multiple passes to
+   get right — see the 2026-07-25 "mobile app feels over-zoomed" Bugs row.
+   Scoping this pass to the verified-safe library/dashboard fix rather than
+   also reworking every in-project room's mobile CSS in the same change. */
+@media (max-width: 860px) {
+  .library-app-shell {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow-y: visible !important;
+  }
+}

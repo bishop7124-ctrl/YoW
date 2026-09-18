@@ -111,7 +111,7 @@ async function openRoom(page, label) {
 }
 
 test.describe('Theme registry sanity (regression guard for the Quiet Slate finding above)', () => {
-  test('Appearance panel exposes exactly the 4 current built-in themes, no Quiet Slate', async ({ page }) => {
+  test('Appearance panel exposes exactly the 5 current built-in themes, no Quiet Slate', async ({ page }) => {
     await seedCleanStorage(page)
     await page.goto('/')
     await dismissLaunchPrompts(page)
@@ -121,7 +121,10 @@ test.describe('Theme registry sanity (regression guard for the Quiet Slate findi
       window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'appearance' } }))
     })
     const labels = await page.locator('.theme-choice-copy > span').allTextContents()
-    expect(labels).toEqual(['Match system', 'Sage Grove', 'Nocturne Grove', 'Tropical', 'Pearl Minimal'])
+    // 2026-09-18: added "Accessible (High Contrast)", a 5th built-in theme built
+    // purely to maximize contrast for accessibility tools — see the Theme system
+    // v2 row in docs/ROADMAP.md.
+    expect(labels).toEqual(['Match system', 'Sage Grove', 'Nocturne Grove', 'Tropical', 'Pearl Minimal', 'Accessible (High Contrast)'])
     await expect(page.getByText(/quiet slate/i)).toHaveCount(0)
   })
 })
