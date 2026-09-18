@@ -10,9 +10,31 @@
          flashes the default (Tropical) theme before switching to the user's
          actual choice. Mirrors applyThemeToDocument in src/utils/theme.js, but
          must run synchronously here since that module only executes after
-         React mounts. -->
+         React mounts.
+
+         Also sets the theme-color meta tag synchronously here (mirroring
+         syncThemeColorMeta in src/utils/theme.js) rather than relying only on
+         that later, post-mount update: iOS Safari reads theme-color for its own
+         status-bar/toolbar tint at initial load and is inconsistent about
+         honoring a change to the tag after the page has already painted, so a
+         non-default saved theme could keep showing the hardcoded default color
+         above even though the app's own background was already correct. -->
     <script>
       (function () {
+        // Keep in sync with each theme's `swatches.bgMain` in BUILT_IN_THEMES
+        // (src/utils/theme.js) — duplicated here only because this script must
+        // run before any JS module loads, same constraint as the `builtIn`
+        // array below. Going stale here just means a brief wrong-color flash
+        // until applyThemeToDocument corrects it post-mount, not a lasting bug.
+        var bgByTheme = {
+          tropical: '#0d282e', 'sage-modern': '#f5f8f3', 'industrial-loft': '#141720',
+          'caramel-latte': '#fef8f0', 'ocean-depth': '#07151c', 'pearl-minimal': '#fafaf9',
+        }
+        function setThemeColor(value) {
+          if (!value) return
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', value)
+        }
         try {
           var root = document.documentElement
           var theme = localStorage.getItem('nf-theme')
@@ -22,9 +44,11 @@
             var tokens = JSON.parse(localStorage.getItem('nf-custom-computed') || 'null')
             if (tokens) {
               for (var prop in tokens) root.style.setProperty(prop, tokens[prop])
+              setThemeColor(tokens['--bg-main'])
             }
           } else if (builtIn.indexOf(theme) !== -1) {
             root.setAttribute('data-theme', theme)
+            setThemeColor(bgByTheme[theme])
           }
         } catch (e) { /* localStorage unavailable — fall back to default theme */ }
       })()
