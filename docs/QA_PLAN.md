@@ -292,7 +292,7 @@ Status: Deferred
 - SEO and analytics smoke: verify title, description, OG/Twitter tags, JSON-LD, canonical, robots, keywords, and GA4 tag presence after deployment.
 - Founders directory: verify `/founders/` and profile pages, theme, nav, footer, pricing CTA, and homepage footer link.
 - Supabase security: confirm intentional linter warnings remain understood and no new security warnings appear before launch.
-- Feedback endpoint hardening (added 2026-07-13): after the next deploy, submit one real feedback message from the app and confirm it arrives by email; confirm an over-length submission (title >200 or message >8000 characters) returns a clear error; optionally confirm a burst of 6 rapid submissions from one network returns "Too many submissions" on the 6th.
+- ✅ Feedback endpoint hardening (added 2026-07-13, confirmed passed by the user 2026-09-18): real feedback submission arrives by email as expected.
 
 ## Priority 12: Final Launch Readiness Gate
 
