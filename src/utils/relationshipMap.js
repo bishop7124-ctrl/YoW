@@ -99,6 +99,92 @@ export function getSocialRelationshipRows(characters = []) {
   }))
 }
 
+// Build one whole-cast graph for the overview canvas. Social facts retain
+// their stored direction and type; immediate public family facts collapse to
+// one read-only edge per pair so reciprocal Parent/Child labels do not draw
+// duplicate lines on top of one another.
+export function buildRelationshipGraph(index) {
+  const edges = new Map()
+  const edgeFor = (a, b) => {
+    const [sourceId, targetId] = [a, b].sort()
+    const key = JSON.stringify([sourceId, targetId])
+    if (!edges.has(key)) edges.set(key, { key, sourceId, targetId, facts: [], family: false })
+    return edges.get(key)
+  }
+
+  index.socialLinks.forEach(fact => edgeFor(fact.sourceId, fact.targetId).facts.push(fact))
+  index.entries.forEach(character => index.connectionsFor(character.id).forEach(connection => {
+    if (connection.facts.some(fact => fact.family)) edgeFor(character.id, connection.character.id).family = true
+  }))
+
+  return {
+    nodes: index.entries,
+    edges: [...edges.values()].map(edge => ({
+      ...edge,
+      labels: [...new Set([
+        ...edge.facts.map(fact => fact.label),
+        ...(edge.family ? ['Family'] : []),
+      ])].sort((a, b) => a.localeCompare(b)),
+    })),
+  }
+}
+
+export const RELATIONSHIP_NETWORK_NODE_SIZE = { width: 112, height: 78 }
+
+// A deterministic degree-first orbital layout keeps dense graphs stable when
+// users refocus a character. The spacing guarantees cards do not overlap,
+// while the viewport is responsible for fitting, panning and zooming.
+export function relationshipNetworkLayout(nodes, edges) {
+  const degree = new Map(nodes.map(node => [node.id, 0]))
+  edges.forEach(edge => {
+    degree.set(edge.sourceId, (degree.get(edge.sourceId) || 0) + 1)
+    degree.set(edge.targetId, (degree.get(edge.targetId) || 0) + 1)
+  })
+  const ordered = [...nodes].sort((a, b) =>
+    (degree.get(b.id) || 0) - (degree.get(a.id) || 0)
+    || String(a.name || '').localeCompare(String(b.name || ''))
+    || a.id.localeCompare(b.id))
+  if (!ordered.length) return { nodes: [], edges, size: { width: 760, height: 500, centerX: 380, centerY: 250 } }
+
+  const positions = [{ node: ordered[0], x: 0, y: 0 }]
+  let cursor = 1
+  let ring = 1
+  let outerRadiusX = 0
+  let outerRadiusY = 0
+  while (cursor < ordered.length) {
+    const radiusX = 280 + (ring - 1) * 220
+    const radiusY = 220 + (ring - 1) * 210
+    const capacity = ring * 12
+    const count = Math.min(capacity, ordered.length - cursor)
+    const rotation = ring % 2 ? -Math.PI / 2 : -Math.PI / 2 + Math.PI / count
+    for (let i = 0; i < count; i += 1) {
+      const angle = rotation + Math.PI * 2 * i / count
+      positions.push({ node: ordered[cursor + i], x: Math.cos(angle) * radiusX, y: Math.sin(angle) * radiusY })
+    }
+    cursor += count
+    outerRadiusX = radiusX
+    outerRadiusY = radiusY
+    ring += 1
+  }
+
+  const marginX = RELATIONSHIP_NETWORK_NODE_SIZE.width / 2 + 56
+  const marginY = RELATIONSHIP_NETWORK_NODE_SIZE.height / 2 + 56
+  const width = Math.max(760, Math.ceil((outerRadiusX + marginX) * 2))
+  const height = Math.max(500, Math.ceil((outerRadiusY + marginY) * 2))
+  const centerX = width / 2
+  const centerY = height / 2
+  return {
+    edges,
+    size: { width, height, centerX, centerY },
+    nodes: positions.map(position => ({
+      ...position.node,
+      degree: degree.get(position.node.id) || 0,
+      x: centerX + position.x,
+      y: centerY + position.y,
+    })),
+  }
+}
+
 export const RELATIONSHIP_MAP_SIZE = { width: 900, height: 400, centerX: 450, centerY: 200 }
 export const RELATIONSHIP_MAP_NODE_SIZE = { width: 104, height: 96 }
 export const RELATIONSHIP_MAP_DENSE_NODE_SIZE = { width: 74, height: 68 }

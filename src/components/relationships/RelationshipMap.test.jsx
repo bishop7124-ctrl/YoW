@@ -114,16 +114,26 @@ describe('RelationshipMap', () => {
     expect(screen.getByLabelText('Connection character').value).toBe('')
   })
 
-  it('renders every dense-cast connection together and counts people rather than duplicate types in badges', () => {
+  it('renders the entire dense cast and every pair-level connection together', () => {
     const characters = [{ id: 'root', name: 'Root', relationships: Array.from({ length: 9 }, (_, i) => ({ targetId: `c${i}`, type: 'friend' })) },
       ...Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, name: `Companion ${i}`, relationships: i === 0 ? [{ targetId: 'c1', type: 'ally' }, { targetId: 'c1', type: 'friend' }] : [] })),
     ]
     renderMap({ characters, selectedCharacterId: 'root' })
-    expect(screen.getAllByRole('button', { name: /^Focus on/ })).toHaveLength(9)
+    expect(screen.getAllByRole('button', { name: /^Focus on/ })).toHaveLength(10)
     expect(screen.getByRole('button', { name: 'Focus on Companion 8' })).toBeTruthy()
-    expect(screen.getAllByLabelText('1 other connected characters').length).toBeGreaterThan(0)
     expect(screen.queryByRole('navigation', { name: 'Connection pages' })).toBeNull()
-    expect(screen.getByText('9 connected characters · All shown · Select a character to refocus')).toBeTruthy()
+    expect(screen.getByText('10 characters · 10 connections')).toBeTruthy()
+    expect(screen.getByTitle('Companion 0 · 2 connections')).toBeTruthy()
+  })
+
+  it('zooms with accessible controls and restores the whole-cast fit', () => {
+    renderMap()
+    const zoom = screen.getByRole('group', { name: 'Relationship map zoom' })
+    const before = zoom.querySelector('[aria-live="polite"]').textContent
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom relationship map in' }))
+    expect(zoom.querySelector('[aria-live="polite"]').textContent).not.toBe(before)
+    fireEvent.click(screen.getByText('Fit all'))
+    expect(zoom.querySelector('[aria-live="polite"]').textContent).toBe(before)
   })
 
   it('uses continuity aliases for a selected inherited character and opens the correct profile', () => {
@@ -151,7 +161,7 @@ describe('RelationshipMap', () => {
     expect(screen.getAllByText('Kael Morven').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Petra Solace').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Mira Morven').length).toBeGreaterThan(0)
-    expect(screen.getByText('from family tree')).toBeTruthy()
+    expect(screen.getByText('Family · read-only')).toBeTruthy()
   })
 
   it('wraps complete map-card names and relationship labels instead of clamping them', () => {
@@ -161,6 +171,7 @@ describe('RelationshipMap', () => {
     ] })
     const map = view.container.querySelector('[data-tour="relationships-map"]')
     expect(map.querySelector('.line-clamp-2')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Focus on Petra With An Intentionally Long Family Name' }).textContent).toContain('Ally · Friend')
+    expect(screen.getByRole('button', { name: 'Focus on Petra With An Intentionally Long Family Name' }).textContent).toContain('Petra With An Intentionally Long Family Name')
+    expect(screen.getByText('Ally, Friend')).toBeTruthy()
   })
 })
