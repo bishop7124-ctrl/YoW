@@ -1,6 +1,6 @@
 import { useMembership } from './utils/useMembership'
 import AccessChangeNotice from './components/account/AccessChangeNotice'
-import { Component, useCallback, useMemo, useState, useEffect, useRef } from 'react'
+import { Component, useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
@@ -700,6 +700,19 @@ function AppInner() {
       setProjectSettingsOpen(false)
     }
   }, [store.activeNovelId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // `.library-app-shell` (manager/series) and `.studio-shell` (editor) are
+  // architecturally different: below 860px the library shell now scrolls as
+  // part of the real document (src/index.css, so iOS Safari's address bar
+  // can collapse), while the studio shell stays a fixed-viewport region.
+  // This app's router is hand-rolled (history.pushState below, no
+  // scroll-restoration middleware), so a scroll position picked up while the
+  // library shell scrolled would otherwise persist into the studio shell and
+  // push its fixed-height content off-screen. Reset before paint on every
+  // shell swap.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [viewMode])
 
   useEffect(() => {
     // If the URL pointed to a specific project on load, keep that view active;
