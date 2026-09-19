@@ -190,7 +190,7 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
     const editor = page.locator('textarea.ms-textarea')
     await editor.click()
     await editor.fill('The lantern flickered in the study.')
-    await editor.press('Home')
+    await editor.evaluate((element) => element.setSelectionRange(0, 0))
     for (let i = 0; i < 4; i++) await editor.press('ArrowRight') // caret before "lantern"
     for (let i = 0; i < 7; i++) await editor.press('Shift+ArrowRight') // select "lantern"
     await expect.poll(() => editor.evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('lantern')
@@ -239,7 +239,7 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
     // Edit INSIDE the anchor's own range: place the caret 3 characters into
     // "lantern" (still within [16,23]) and type a character there.
     await editor.click()
-    await editor.press('Home')
+    await editor.evaluate((element) => element.setSelectionRange(0, 0))
     for (let i = 0; i < note.anchorOffset + 3; i++) await editor.press('ArrowRight')
     await type(editor, 'Z')
     await expect.poll(async () => {
