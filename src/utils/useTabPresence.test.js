@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useEffect, useRef } from 'react'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { presenceHasPriority } from './useTabPresence.js'
 
@@ -81,13 +81,16 @@ describe('useTabPresence (real BroadcastChannel, two simulated tabs)', () => {
 
     // Tab A focuses first.
     act(() => { tabA.rerender({ active: true }) })
+    // The production priority rule deliberately falls back to the random tab
+    // id when two editors begin in the same millisecond. Keep this scenario
+    // about arrival order by ensuring B receives a later timestamp.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
     // Tab B focuses the same key shortly after and should be blocked once
     // A's heartbeat reply actually arrives (a real async BroadcastChannel
     // round trip, not a microtask — matches browserVaultAdapter.test.js's
     // own documented behavior for this channel).
     act(() => { tabB.rerender({ active: true }) })
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
-    expect(onBlockedB).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onBlockedB).toHaveBeenCalledTimes(1))
     expect(onBlockedA).not.toHaveBeenCalled()
 
     // Tab B backs off (its own "Return to read-only").
@@ -96,7 +99,10 @@ describe('useTabPresence (real BroadcastChannel, two simulated tabs)', () => {
 
     // Tab A releases the key entirely (blurs the scene).
     act(() => { tabA.rerender({ active: false }) })
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    // BroadcastChannel delivery is a task, not a microtask. Give the real
+    // channel time to deliver A's `bye` before starting B's next sitting;
+    // a fixed 20 ms window was too small on loaded CI runners.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)) })
 
     // Tab B focuses again in a brand-new sitting. Nobody is editing any
     // more, so this must NOT be blocked — asserted on the very next
