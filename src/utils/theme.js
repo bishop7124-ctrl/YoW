@@ -66,6 +66,26 @@ export const BUILT_IN_THEMES = [
       textMuted: '#656e77', accent: '#7a8a9c', border: '#e2e6ea',
     },
   },
+  // Deliberately not designed for visual appeal — built purely to maximize
+  // contrast for accessibility tools/low-vision users. Pure black-on-white
+  // text (21:1), a strong blue link/accent color (8.5:1 as text and as
+  // white-on-accent button text), and a dark border (11.4:1) all clear the
+  // WCAG AAA text threshold (7:1) with a wide margin, unlike the other
+  // built-in themes which only target AA (4.5:1) on their identity colors
+  // at best. No decorative glow/atmosphere effects.
+  {
+    id: 'accessible',
+    label: 'Accessible (High Contrast)',
+    description: 'Maximum contrast — black on white, no decorative effects',
+    radiusUnit: 4,
+    visualStrength: 0.4,
+    glowIntensity: 0,
+    glowPos: '50% 50%',
+    swatches: {
+      bgMain: '#ffffff', bgNav: '#f0f0f0', textMain: '#000000',
+      textMuted: '#3a3a3a', accent: '#0645ad', border: '#3a3a3a',
+    },
+  },
 ]
 
 export const QUICK_PALETTES = []

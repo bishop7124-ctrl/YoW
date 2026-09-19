@@ -10,12 +10,13 @@
   try {
     var root = document.documentElement
     var theme = localStorage.getItem('nf-theme') || 'system'
-    var builtIn = ['dark-refined', 'light-refined', 'tropical', 'pearl-minimal']
+    var builtIn = ['dark-refined', 'light-refined', 'tropical', 'pearl-minimal', 'accessible']
     var themeColors = {
       'dark-refined': '#0e1a18',
       'light-refined': '#e8f3ec',
       tropical: '#0d282e',
-      'pearl-minimal': '#fafaf9'
+      'pearl-minimal': '#fafaf9',
+      accessible: '#ffffff'
     }
     var systemTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark-refined' : 'light-refined'
     var resolvedTheme = theme === 'system' ? systemTheme : theme

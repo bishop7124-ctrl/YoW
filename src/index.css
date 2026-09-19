@@ -427,6 +427,70 @@
   --radius-unit: 5px;
 }
 
+/* ── Accessible (High Contrast) ─ built for accessibility tools ────────────
+   Not designed to look good — designed to maximize contrast. Pure black on
+   white, a strong blue link/accent color, a dark border, and flat outline-
+   style shadows instead of soft blur (crisp edges over blur is itself a
+   known low-vision accessibility technique). Text (21:1), accent-as-text
+   (8.5:1), white-on-accent button text (8.5:1), and border (11.4:1) all
+   clear WCAG AAA (7:1) with a wide margin, unlike the other built-in
+   themes which target AA (4.5:1) on their identity colors at best. */
+[data-theme="accessible"] {
+  /* Core */
+  --color-canvas: #ffffff;
+  --color-surface: #f0f0f0;
+  --color-surface-muted: #f6f6f6;
+  --color-surface-raised: #ffffff;
+  --color-surface-hover: rgba(0, 0, 0, 0.08);
+  --color-text: #000000;
+  --color-text-muted: #3a3a3a;
+  --color-text-faint: #3a3a3a;
+  --color-prose: #000000;
+  --color-accent: #0645ad;
+  --color-accent-soft: rgba(6, 69, 173, 0.14);
+  --color-accent-text: #0645ad;
+  --color-accent-secondary: #3a3a3a;
+  --color-accent-contrast: #ffffff;
+  --color-line: #3a3a3a;
+  --color-line-strong: #000000;
+  --bg-main:    #ffffff;
+  --bg-nav:     #f0f0f0;
+  --bg-hover:   rgba(0, 0, 0, 0.08);
+  --text-main:  #000000;
+  --text-muted: #3a3a3a;
+  --accent:     #0645ad;
+  --accent-fade: rgba(6, 69, 173, 0.14);
+  --accent-contrast: #ffffff;
+  --border:     #3a3a3a;
+  --logo-filter: brightness(0);
+  --accent2:    #3a3a3a;
+  /* Manuscript editor redesign tokens — see docs/design/Manuscript Editor Handoff Spec.md §2.3 */
+  --bg-raise:      #ffffff;
+  --text-faint:    #3a3a3a;
+  --border-strong: #000000;
+  --accent-text:   #0645ad;
+  --accent-2:      #3a3a3a;
+  --prose-text:    #000000;
+  /* Atmosphere — none: decorative gradients/glows only reduce contrast */
+  --atmos-warm:       #f0f0f0;
+  --atmos-cool:       #f0f0f0;
+  --atmos-paper:      #f0f0f0;
+  --atmos-paper-line: #3a3a3a;
+  --atmos-wood:       #f0f0f0;
+  --atmos-cork:       #f0f0f0;
+  --atmos-spine-tint: #f0f0f0;
+  --atmos-glow-pos:   50% 50%;
+  --atmos-glow-size:  0%;
+  --atmos-glow-intensity: 0%;
+  /* Elevation — flat, no soft/blurred shadows to keep edges crisp */
+  --shadow-sm:      0 0 0 1px #3a3a3a;
+  --shadow-md:      0 0 0 1px #3a3a3a;
+  --shadow-lg:      0 0 0 1px #3a3a3a;
+  --shadow-overlay: 0 0 0 2px #000000;
+  /* Geometry — minimal */
+  --radius-unit: 4px;
+}
+
 /* Base application styling */
 * { box-sizing: border-box; }
 
@@ -23950,5 +24014,46 @@ body {
     .marketing-shell {
       min-height: calc(100dvh / var(--app-density-scale)) !important;
     }
+  }
+}
+
+/* ── Mobile: let the real document scroll so iOS Safari can collapse its
+   chrome (2026-09-18, user-reported: address bar doesn't collapse when
+   scrolling) ──────────────────────────────────────────────────────────────
+   .library-app-shell (the project library/dashboard, NovelManager.jsx —
+   height/overflow set via inline style, hence !important below) was a
+   fixed-viewport-height, non-scrolling shell — content scrolled only
+   inside it via the inline overflowY, which iOS Safari never recognizes as
+   "the page scrolling," so its address bar never auto-hides on scroll.
+   Letting it grow to its natural content height and relying on
+   .library-top-bar's EXISTING `position: sticky` keeps the header's
+   current always-visible appearance while making the outer page the real
+   scroll surface.
+
+   Root cause of a regression found while building this: this app's router
+   is hand-rolled (history.pushState in App.jsx, no scroll-restoration
+   middleware), so once the library shell can scroll the real document, a
+   scroll position picked up there persisted into the next fixed-viewport
+   shell and pushed its content off-screen (Project Overview's "Open Atlas"
+   card became unreachable at 768px in
+   tests/e2e/qa-sweep-2026-09-16-theme-visual-pass.spec.js). Fixed at the
+   source with a `window.scrollTo(0, 0)` on every viewMode change in
+   App.jsx, not with more CSS here.
+
+   An equivalent scroll-surface change for .studio-shell (every in-project
+   room — Characters, Locations, Manuscript, Map, etc, via Studio.jsx) is a
+   reasonable follow-up now that the scroll-reset bug above is fixed at its
+   source, but its content flows through more layout shapes (StudioBoard,
+   StudioIndex/StudioIndexList, and whatever ProjectDashboard uses for its
+   own overview cards) than this pass mapped, and this codebase's mobile
+   layout has a documented history of regressions taking multiple passes to
+   get right — see the 2026-07-25 "mobile app feels over-zoomed" Bugs row.
+   Scoping this pass to the verified-safe library/dashboard fix rather than
+   also reworking every in-project room's mobile CSS in the same change. */
+@media (max-width: 860px) {
+  .library-app-shell {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow-y: visible !important;
   }
 }
