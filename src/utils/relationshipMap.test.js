@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCharacterAliases, buildRelationshipIndex, getSocialRelationshipRows, RELATIONSHIP_MAP_DENSE_NODE_SIZE, RELATIONSHIP_MAP_FOCUS_SIZE, RELATIONSHIP_MAP_NODE_SIZE, relationshipMapLayout } from './relationshipMap.js'
+import { buildCharacterAliases, buildRelationshipGraph, buildRelationshipIndex, getSocialRelationshipRows, RELATIONSHIP_MAP_DENSE_NODE_SIZE, RELATIONSHIP_MAP_FOCUS_SIZE, RELATIONSHIP_MAP_NODE_SIZE, RELATIONSHIP_NETWORK_NODE_SIZE, relationshipMapLayout, relationshipNetworkLayout } from './relationshipMap.js'
 import { getRelType } from '../constants/relationshipTypes.js'
 
 describe('relationship index', () => {
@@ -100,5 +100,38 @@ describe('bounded relationship layout', () => {
     expect(layout.size.width).toBeGreaterThan(900)
     expect(layout.size.height).toBeGreaterThan(400)
     expect(relationshipMapLayout([]).nodes).toEqual([])
+  })
+})
+
+describe('whole-cast relationship graph', () => {
+  it('keeps every character and collapses social and family facts to one edge per pair', () => {
+    const index = buildRelationshipIndex([
+      { id: 'a', name: 'Ada', childIds: ['b'], relationships: [{ targetId: 'b', type: 'friend' }, { targetId: 'b', type: 'ally' }] },
+      { id: 'b', name: 'Ben', parentIds: ['a'], relationships: [] },
+      { id: 'c', name: 'Cy', relationships: [] },
+    ])
+    const graph = buildRelationshipGraph(index)
+    expect(graph.nodes).toHaveLength(3)
+    expect(graph.edges).toHaveLength(1)
+    expect(graph.edges[0].labels).toEqual(['Ally', 'Family', 'Friend'])
+  })
+
+  it('lays dense casts out deterministically inside the canvas without card overlap', () => {
+    const nodes = Array.from({ length: 55 }, (_, i) => ({ id: `c${i}`, name: `Character ${i}` }))
+    const edges = nodes.slice(1).map((node, i) => ({ sourceId: 'c0', targetId: node.id, key: `e${i}` }))
+    const first = relationshipNetworkLayout(nodes, edges)
+    const second = relationshipNetworkLayout(nodes, edges)
+    expect(second).toEqual(first)
+    expect(first.nodes).toHaveLength(55)
+    first.nodes.forEach((node, i) => {
+      expect(node.x - RELATIONSHIP_NETWORK_NODE_SIZE.width / 2).toBeGreaterThanOrEqual(0)
+      expect(node.x + RELATIONSHIP_NETWORK_NODE_SIZE.width / 2).toBeLessThanOrEqual(first.size.width)
+      expect(node.y - RELATIONSHIP_NETWORK_NODE_SIZE.height / 2).toBeGreaterThanOrEqual(0)
+      expect(node.y + RELATIONSHIP_NETWORK_NODE_SIZE.height / 2).toBeLessThanOrEqual(first.size.height)
+      first.nodes.slice(i + 1).forEach(other => expect(
+        Math.abs(node.x - other.x) >= RELATIONSHIP_NETWORK_NODE_SIZE.width
+        || Math.abs(node.y - other.y) >= RELATIONSHIP_NETWORK_NODE_SIZE.height,
+      ).toBe(true))
+    })
   })
 })
