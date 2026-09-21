@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { buildAIContext, fingerprintText, normalizeAiContextMode } from './aiContext'
+import { buildAIContext, fingerprintText, getActiveContextTargets, normalizeAiContextMode, saveAiContextMode, loadAiContextMode } from './aiContext'
 import { getSafeInputBudget } from './aiModelCapabilities'
 
 const makeStore = (overrides = {}) => ({
@@ -64,11 +65,11 @@ describe('buildAIContext', () => {
   it('falls back safely when a chapter or character is missing', () => {
     const noScene = buildAIContext({ store: makeStore({ writingSceneId: null }), mode: 'current_chapter' })
     expect(noScene.includedSources.mode).toBe('smart')
-    expect(noScene.warnings.join(' ')).toContain('No current chapter')
+    expect(noScene.warnings.join(' ')).toContain('No chapter is chosen')
 
     const noCharacter = buildAIContext({ store: makeStore({ selectedCharacterId: null }), mode: 'current_character' })
     expect(noCharacter.includedSources.mode).toBe('smart')
-    expect(noCharacter.warnings.join(' ')).toContain('No current character')
+    expect(noCharacter.warnings.join(' ')).toContain('No character is chosen')
   })
 
   it('Entire Project respects model context limits and flags truncation', () => {
@@ -123,5 +124,134 @@ describe('buildAIContext', () => {
   it('hashes deterministic context without exposing the context itself', () => {
     expect(fingerprintText('secret manuscript text')).toBe(fingerprintText('secret manuscript text'))
     expect(fingerprintText('secret manuscript text')).not.toContain('secret')
+  })
+})
+
+// The live store keeps the editor's open scene/character OUTSIDE the
+// project-scoped snapshot getProjectContextData returns. Mirror that shape.
+const makeLiveStore = (overrides = {}) => {
+  const { writingSceneId = 'scene-2', selectedCharacterId = 'char-2', ...rest } = overrides
+  const { selectedCharacterId: _c, writingSceneId: _w, ...records } = makeStore(rest)
+  return { writingSceneId, selectedSceneId: null, selectedCharacterId, getProjectContextData: () => records }
+}
+
+describe('active chapter and character from the live store', () => {
+  it('resolves the open chapter even though the scoped snapshot has no writingSceneId', () => {
+    const store = makeLiveStore()
+    expect(getActiveContextTargets(store, 'novel-1')).toEqual({ chapterId: 'chapter-2', characterId: 'char-2' })
+    const result = buildAIContext({ store, projectId: 'novel-1', mode: 'current_chapter' })
+    expect(result.includedSources.mode).toBe('current_chapter')
+    expect(result.includedSources.chapters).toEqual(['chapter-2'])
+    expect(result.context).toContain('Lena Moss blocks the dry road.')
+  })
+
+  it('an explicitly chosen chapter/character beats whatever is open in the editor', () => {
+    const store = makeLiveStore()
+    const chapter = buildAIContext({ store, projectId: 'novel-1', mode: 'current_chapter', activeChapterId: 'chapter-1' })
+    expect(chapter.includedSources.chapters).toEqual(['chapter-1'])
+    const character = buildAIContext({ store, projectId: 'novel-1', mode: 'current_character', activeCharacterId: 'char-3' })
+    expect(character.includedSources.characters).toContain('char-3')
+  })
+
+  it('Smart Context ranks the open chapter\'s scenes first even with an unrelated prompt', () => {
+    const result = buildAIContext({ store: makeLiveStore(), projectId: 'novel-1', mode: 'smart', userPrompt: 'hello' })
+    expect(result.includedSources.scenes).toContain('scene-2')
+  })
+})
+
+describe('Choose Records (custom) mode', () => {
+  const longText = 'The orchard remembers. '.repeat(400)
+  const store = () => makeStore({
+    scenes: [
+      { id: 'scene-1', title: 'Gate scene', novelId: 'novel-1', chapterId: 'chapter-1', order: 1, content: longText },
+      { id: 'scene-2', title: 'Road scene', novelId: 'novel-1', chapterId: 'chapter-2', order: 1, content: 'Lena Moss blocks the dry road.' },
+    ],
+    characters: [
+      { id: 'char-1', name: 'Mira Vale', role: 'Botanist', bio: 'Studies silver trees.', traits: { internalGoal: 'Seal the orchard', fears: 'Fire' }, background: { hometown: 'Ashford' }, relationships: [{ targetId: 'char-2', type: 'ally', notes: 'Since childhood' }] },
+      { id: 'char-2', name: 'Orren Pike', role: 'Cartographer', bio: 'Maps roads.', relationships: [] },
+      { id: 'char-3', name: 'Lena Moss', role: 'Rival', bio: 'Wants it sealed.', relationships: [] },
+    ],
+  })
+
+  it('includes exactly the chosen records and nothing else', () => {
+    const result = buildAIContext({ store: store(), mode: 'custom', selection: { characterIds: ['char-3'], loreEntryIds: ['lore-1'] } })
+    expect(result.includedSources.mode).toBe('custom')
+    expect(result.includedSources.characters).toEqual(['char-3'])
+    expect(result.includedSources.lore).toEqual(['lore-1'])
+    expect(result.includedSources.locations).toEqual([])
+    expect(result.includedSources.scenes).toEqual([])
+    expect(result.context).toContain('Lena Moss')
+    expect(result.context).not.toContain('Orren Pike')
+    expect(result.context).not.toContain('Mira Vale')
+  })
+
+  it('sends chosen chapters as full text, unclipped', () => {
+    const result = buildAIContext({ store: store(), mode: 'custom', selection: { chapterIds: ['chapter-1'] } })
+    expect(result.includedSources.chapters).toEqual(['chapter-1'])
+    expect(result.includedSources.scenes).toEqual(['scene-1'])
+    expect(result.context).toContain(longText.trim())
+    expect(result.context).not.toContain('...')
+  })
+
+  it('orders chosen chapters by act then chapter, not by raw order values', () => {
+    const result = buildAIContext({
+      store: makeStore({
+        acts: [{ id: 'act-1', order: 1 }, { id: 'act-2', order: 2 }],
+        chapters: [
+          { id: 'late', title: 'Late', novelId: 'novel-1', actId: 'act-2', order: 1 },
+          { id: 'early', title: 'Early', novelId: 'novel-1', actId: 'act-1', order: 5 },
+        ],
+        scenes: [
+          { id: 's-late', title: 'Late scene', novelId: 'novel-1', chapterId: 'late', order: 1, content: 'LATE TEXT' },
+          { id: 's-early', title: 'Early scene', novelId: 'novel-1', chapterId: 'early', order: 1, content: 'EARLY TEXT' },
+        ],
+      }),
+      mode: 'custom',
+      selection: { chapterIds: ['late', 'early'] },
+    })
+    expect(result.context.indexOf('EARLY TEXT')).toBeLessThan(result.context.indexOf('LATE TEXT'))
+  })
+
+  it('includes the full character profile: traits, goals, background, and relationship notes', () => {
+    const result = buildAIContext({ store: store(), mode: 'custom', selection: { characterIds: ['char-1', 'char-2'] } })
+    expect(result.context).toContain('Internal Goal: Seal the orchard')
+    expect(result.context).toContain('Fears: Fire')
+    expect(result.context).toContain('Hometown: Ashford')
+    expect(result.context).toContain('Mira Vale -> Orren Pike: ally (Since childhood)')
+  })
+
+  it('uses the de-duplicated history list so mirrored timeline/history entries are not doubled', () => {
+    const result = buildAIContext({
+      store: makeStore({
+        timeline: [{ id: 't1', title: 'Pact signed', worldHistoryEntryId: 'h1' }],
+        worldHistory: [{ id: 'h1', title: 'Pact signed', timelineEventId: 't1' }, { id: 'h2', title: 'Old war' }],
+      }),
+      mode: 'custom',
+      selection: { worldHistoryIds: ['t1', 'h1', 'h2'] },
+    })
+    expect(result.includedSources.timeline.sort()).toEqual(['h2', 't1'])
+  })
+
+  it('warns that the end will be cut off when the selection exceeds the model budget', () => {
+    const huge = makeStore({
+      scenes: [{ id: 'scene-1', title: 'Gate scene', novelId: 'novel-1', chapterId: 'chapter-1', order: 1, content: 'word '.repeat(200000) }],
+    })
+    const result = buildAIContext({ store: huge, mode: 'custom', selection: { chapterIds: ['chapter-1'] }, provider: 'openrouter', model: 'deepseek/deepseek-r1' })
+    expect(result.truncated).toBe(true)
+    expect(result.warnings.join(' ')).toContain('deselect some records')
+  })
+
+  it('an empty selection yields just the project summary and a real token estimate', () => {
+    const result = buildAIContext({ store: store(), mode: 'custom' })
+    expect(result.context).toContain('PROJECT SUMMARY')
+    expect(result.estimatedTokens).toBeGreaterThan(0)
+    expect(result.includedSources.characters).toEqual([])
+  })
+
+  it('is never remembered as the default mode for new chats', () => {
+    localStorage.clear()
+    saveAiContextMode('current_chapter')
+    saveAiContextMode('custom')
+    expect(loadAiContextMode()).toBe('current_chapter')
   })
 })

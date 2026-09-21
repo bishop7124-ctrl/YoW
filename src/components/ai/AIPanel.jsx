@@ -3,11 +3,13 @@ import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, createAiChatDocxBlob, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from '../../utils/aiChatHistory'
 import { AI_AGENTS, AI_FREEDOM_LEVELS, DEFAULT_AGENT_ID, DEFAULT_AI_FREEDOM_LEVEL, buildAiBehaviorDirective, getAgent, getFreedomLevel } from '../../utils/aiAgents'
-import { AI_CHAT_CONTEXT_MODES, buildAIContext, loadAiContextMode, normalizeAiContextMode, saveAiContextMode } from '../../utils/aiContext'
+import { AI_CHAT_CONTEXT_MODES, buildAIContext, loadAiContextMode, normalizeAiContextMode } from '../../utils/aiContext'
 import { addAiUsage, emptyAiUsageTotals } from '../../utils/aiUsage'
 import { fitMessagesToInputBudget, summarizeOlderConversation } from '../../utils/aiConversation'
 import { AI_CONFIG_REQUIRED_TEXT, AiConfigRequiredNotice, openAiPlans, openAiSettings } from './AiConfigRequired'
 import AIStar from './AIStar'
+import AiContextPicker from './AiContextPicker'
+import { formatCompactTokens, formatCost } from './aiFormat'
 import Modal from '../shared/Modal'
 import { downloadBlob, sanitizeFilename } from '../../utils/projectExportHelpers'
 
@@ -49,23 +51,6 @@ const DEFAULT_SETTINGS = DEFAULT_AI_SETTINGS
 
 // ── Context Selector ──────────────────────────────────────────────────────────
 
-function Section({ title, children, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border border-[var(--border)] rounded-lg overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex justify-between items-center px-3 py-2 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-main)] transition-colors"
-      >
-        {title}
-        <span className="text-[var(--accent)] text-base leading-none">{open ? '−' : '+'}</span>
-      </button>
-      {open && <div className="p-3 bg-[var(--bg-nav)] space-y-1">{children}</div>}
-    </div>
-  )
-}
-
 function AgentCard({ agent, selected, onSelect }) {
   return (
     <button
@@ -102,57 +87,6 @@ function FreedomCard({ level, selected, onSelect }) {
   )
 }
 
-function ContextModeCard({ option, selected, onSelect }) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-        selected
-          ? 'border-[var(--accent)] bg-[var(--accent-fade)]'
-          : 'border-[var(--border)] bg-[var(--bg-nav)] hover:border-[var(--accent)]/50'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className={`text-xs font-bold ${selected ? 'text-[var(--accent)]' : 'text-[var(--text-main)]'}`}>
-          <span aria-hidden="true">{option.icon}</span> {option.label}
-        </span>
-        {option.badge && (
-          <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent)] border border-[var(--accent)]/30 rounded px-1.5 py-0.5">
-            {option.badge}
-          </span>
-        )}
-      </div>
-      <div className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug">{option.helper}</div>
-    </button>
-  )
-}
-
-function formatCompactTokens(value) {
-  if (!value) return '0'
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}k`
-  return String(value)
-}
-
-function formatCost(cost) {
-  if (!cost) return ''
-  const amount = typeof cost === 'number' ? cost : cost.amount
-  if (!Number.isFinite(amount)) return ''
-  return `~$${amount < 0.01 ? amount.toFixed(4) : amount.toFixed(2)}`
-}
-
-function ContextLevelBadge({ level }) {
-  const cfg = {
-    low: { dot: '🟢', label: 'Low context' },
-    moderate: { dot: '🟡', label: 'Moderate context' },
-    high: { dot: '🟠', label: 'High context' },
-    very_high: { dot: '🔴', label: 'Very high context' },
-  }[level?.level || level] || { dot: '🟢', label: 'Low context' }
-  return <span className="text-[11px] text-[var(--text-muted)]">{cfg.dot} {cfg.label}</span>
-}
-
 function ContextSelector({ store, aiSettings, onStart, onCancel, initialContext, initialAgentId, initialFreedomLevel }) {
   const defaultContext = {
     mode: loadAiContextMode(), customInstruction: '',
@@ -160,27 +94,6 @@ function ContextSelector({ store, aiSettings, onStart, onCancel, initialContext,
   const [ctx, setCtx] = useState({ ...defaultContext, ...(initialContext || {}) })
   const [agentId, setAgentId] = useState(initialAgentId || DEFAULT_AGENT_ID)
   const [freedomLevel, setFreedomLevel] = useState(initialFreedomLevel || DEFAULT_AI_FREEDOM_LEVEL)
-  const mode = normalizeAiContextMode(ctx.mode)
-  const safeAiSettings = aiSettings || DEFAULT_SETTINGS
-  const provider = safeAiSettings.activeProvider || DEFAULT_SETTINGS.activeProvider
-  const model = safeAiSettings[provider]?.model || PROVIDERS[provider]?.defaultModel
-  const preview = useMemo(() => buildAIContext({
-    projectId: store.activeNovelId || store.activeNovel?.id,
-    mode,
-    userPrompt: '',
-    activeCharacterId: store.selectedCharacterId,
-    provider,
-    model,
-    store,
-    customInstruction: ctx.customInstruction,
-  }), [store, mode, provider, model, ctx.customInstruction])
-
-  const selectMode = nextMode => {
-    const normalized = normalizeAiContextMode(nextMode)
-    saveAiContextMode(normalized)
-    setCtx(prev => ({ ...prev, mode: normalized }))
-  }
-
   return (
     <div className="flex flex-col h-full">
       <div className="ai-panel-subheader px-4 py-3 border-b border-[var(--border)] flex-shrink-0">
@@ -207,56 +120,13 @@ function ContextSelector({ store, aiSettings, onStart, onCancel, initialContext,
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-2">Context</label>
-          <div className="grid gap-2">
-            {AI_CHAT_CONTEXT_MODES.map(option => (
-              <ContextModeCard
-                key={option.id}
-                option={option}
-                selected={mode === option.id}
-                onSelect={() => selectMode(option.id)}
-              />
-            ))}
-          </div>
-          <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-main)] px-3 py-2">
-            <div className="text-xs font-bold text-[var(--text-main)]">
-              Estimated context: ~{formatCompactTokens(preview.estimatedTokens)} tokens
-              {preview.limitsKnown && preview.contextWindow ? (
-                <span className="text-[var(--text-muted)] font-semibold"> / {formatCompactTokens(preview.contextWindow)}</span>
-              ) : null}
-            </div>
-            <div className="mt-1 flex items-center gap-2 flex-wrap">
-              <ContextLevelBadge level={preview.contextLevel} />
-              {preview.estimatedInputCost && <span className="text-[11px] text-[var(--text-muted)]">Estimated input: {formatCost(preview.estimatedInputCost)}</span>}
-            </div>
-            {preview.includedSources.labels.length > 0 && (
-              <details className="mt-2">
-                <summary className="text-[11px] font-bold text-[var(--accent)] cursor-pointer">Context included</summary>
-                <ul className="mt-1 space-y-0.5 text-[11px] text-[var(--text-muted)]">
-                  {preview.includedSources.labels.slice(0, 10).map(label => <li key={label}>- {label}</li>)}
-                </ul>
-              </details>
-            )}
-            {preview.warnings.length > 0 && (
-              <div className="mt-1 space-y-1">
-                {preview.warnings.map(warning => (
-                  <p key={warning} className="text-[11px] text-amber-400 leading-snug">{warning}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <Section title="Custom instruction" defaultOpen={!!ctx.customInstruction}>
-          <textarea
-            value={ctx.customInstruction}
-            onChange={e => setCtx(prev => ({ ...prev, customInstruction: e.target.value }))}
-            placeholder="Tell the AI anything extra — tone, style, what you're working on…"
-            rows={4}
-            className="w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-2 py-1.5 text-base text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] resize-none"
-          />
-        </Section>
+        <AiContextPicker
+          store={store}
+          novelId={store.activeNovelId || store.activeNovel?.id}
+          aiSettings={aiSettings}
+          value={ctx}
+          onChange={setCtx}
+        />
       </div>
 
       <div className="px-4 py-3 border-t border-[var(--border)] flex gap-2 flex-shrink-0">
@@ -300,6 +170,7 @@ function UsageDetails({ usage, contextStats }) {
           <div className="mt-1">
             <div className="font-bold text-[var(--text-main)]">Context included</div>
             {contextStats.includedSources.labels.slice(0, 8).map(label => <div key={label}>- {label}</div>)}
+            {contextStats.includedSources.labels.length > 8 && <div>+ {contextStats.includedSources.labels.length - 8} more</div>}
           </div>
         )}
       </div>
@@ -510,6 +381,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const [editingTitle, setEditingTitle]       = useState(false)
   const [titleDraft, setTitleDraft]           = useState('')
   const [saveModal, setSaveModal]             = useState(null) // { type, content, resolve }
+  const [contextDraft, setContextDraft]       = useState(null) // session.context copy while the Context dialog is open
   const bottomRef      = useRef(null)
   const scrollRef       = useRef(null)
   const isNearBottomRef = useRef(true)
@@ -610,21 +482,46 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
   const freedom = getFreedomLevel(session.freedomLevel)
 
+  // The chosen chapter/character/records live on the session's context; the
+  // editor's open chapter/character is only the fallback.
+  const buildSessionContext = (context, userPrompt = '') => buildAIContext({
+    projectId: session.novelId,
+    mode: context?.mode,
+    userPrompt,
+    activeCharacterId: context?.characterId || store.selectedCharacterId,
+    activeChapterId: context?.chapterId || undefined,
+    selection: context,
+    provider,
+    model: provCfg.model || PROVIDERS[provider]?.defaultModel,
+    store,
+    customInstruction: context?.customInstruction,
+  })
+
+  const applyContext = draft => {
+    const built = buildSessionContext(draft)
+    onUpdate(session.id, {
+      context: draft,
+      contextStats: {
+        ...session.contextStats,
+        estimatedTokens: built.estimatedTokens,
+        safeInputBudget: built.safeInputBudget,
+        contextWindow: built.contextWindow,
+        truncated: built.truncated,
+        warnings: built.warnings,
+        includedSources: built.includedSources,
+        contextLevel: built.contextLevel,
+        estimatedInputCost: built.estimatedInputCost,
+      },
+    })
+    setContextDraft(null)
+  }
+
   // Shared by send() (appends a new user+assistant pair) and retry() (replaces
   // a failed assistant reply in place) — nextMessages is the full messages
   // array to write, already containing the fresh streaming placeholder.
   const runAssistantStream = (nextMessages, assistantMsgId, apiMessages, userPrompt) => {
     const model = provCfg.model || PROVIDERS[provider]?.defaultModel
-    const builtContext = buildAIContext({
-      projectId: session.novelId,
-      mode: session.context?.mode,
-      userPrompt,
-      activeCharacterId: store.selectedCharacterId,
-      provider,
-      model,
-      store,
-      customInstruction: session.context?.customInstruction,
-    })
+    const builtContext = buildSessionContext(session.context, userPrompt)
     const systemPrompt = buildSystemPrompt(
       promptStore.activeNovel,
       {
@@ -664,7 +561,6 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
     onUpdate(session.id, {
       messages: nextMessages,
-      context: { ...session.context, mode: builtContext.includedSources.mode },
       contextStats: {
         ...messageContextStats,
       },
@@ -811,6 +707,9 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   ]
 
   const contextMode = AI_CHAT_CONTEXT_MODES.find(item => item.id === normalizeAiContextMode(session.context?.mode)) || AI_CHAT_CONTEXT_MODES[0]
+  // A Current Chapter/Character chat with nothing to focus on quietly runs as Smart Context; say so.
+  const effectiveMode = session.contextStats?.includedSources?.mode
+  const contextFellBack = !!effectiveMode && effectiveMode !== contextMode.id
 
   return (
     <>
@@ -856,10 +755,16 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
             >
               {AI_FREEDOM_LEVELS.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
             </select>
-            <span className="text-[10px] text-[var(--accent)]">
+            <button
+              type="button"
+              onClick={() => setContextDraft({ ...session.context })}
+              title="Change what the AI can see in this chat"
+              className="text-[10px] text-[var(--accent)] border border-[var(--accent)]/30 rounded px-1.5 py-0.5 hover:bg-[var(--accent-fade)] transition-colors"
+            >
               <span aria-hidden="true">{contextMode.icon}</span> {contextMode.label}
               {session.contextStats?.estimatedTokens ? ` · ~${formatCompactTokens(session.contextStats.estimatedTokens)} tokens` : ''}
-            </span>
+              {contextFellBack ? ' · using Smart' : ''} ▾
+            </button>
             {editingCategory ? (
               <input
                 ref={categoryInputRef}
@@ -979,6 +884,25 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         </div>
       </div>
     </div>
+    {contextDraft && (
+      <Modal title="Chat context" onClose={() => setContextDraft(null)} wide centered>
+        <div className="text-left space-y-3">
+          <AiContextPicker
+            store={store}
+            novelId={session.novelId}
+            aiSettings={aiSettings}
+            value={contextDraft}
+            onChange={setContextDraft}
+          />
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={() => applyContext(contextDraft)} className="flex-1 bg-[var(--accent)] text-[var(--bg-main)] font-bold py-2 rounded text-sm hover:opacity-90">
+              Save context
+            </button>
+            <button type="button" onClick={() => setContextDraft(null)} className="px-4 py-2 text-[var(--text-muted)] text-sm hover:text-[var(--text-main)]">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+    )}
     {saveModal && (
       <SaveEntryModal
         type={saveModal.type}
