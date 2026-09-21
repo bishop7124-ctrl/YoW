@@ -95,3 +95,38 @@ test('a bottom AI bar exchange survives reload and is included in the Word docs 
   const documentXml = strFromU8(docxInner['word/document.xml'])
   expect(documentXml).toContain(userMarker)
 })
+
+test('AI Chat can choose records, follow the open chapter, and change context after starting', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await createProject(page, { title: `AI Context Picker ${Date.now()}` })
+  await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).first().click()
+  await page.getByText('Begin writing here…').click()
+  await expect(page.locator('textarea.ms-textarea')).toBeVisible()
+
+  await page.getByTitle('Open AI chat').click()
+  await page.getByRole('button', { name: '+ New chat' }).click()
+
+  await page.getByRole('button', { name: /Current Chapter/ }).click()
+  const chapterPicker = page.getByLabel('Which chapter?')
+  await expect(chapterPicker).toBeVisible()
+  await expect(chapterPicker.locator('option').first()).toContainText(/Follow the editor \(now:/)
+
+  await page.getByRole('button', { name: /Choose Records/ }).click()
+  await expect(page.getByText(/0 of \d+ selected/)).toBeVisible()
+  await page.getByText(/Chapters \(full text\)/).click()
+  await page.getByRole('checkbox', { name: /Chapter/ }).first().check()
+  await expect(page.getByText(/1 of \d+ selected/)).toBeVisible()
+  await expect(page.getByText(/Nothing is selected yet/)).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Start Chat' }).click()
+  const contextButton = page.getByTitle('Change what the AI can see in this chat')
+  await expect(contextButton).toContainText('Choose Records')
+
+  await contextButton.click()
+  await expect(page.getByRole('dialog', { name: 'Chat context' })).toBeVisible()
+  await page.getByRole('button', { name: /Current Chapter/ }).click()
+  await page.getByRole('button', { name: 'Save context' }).click()
+  await expect(page.getByRole('dialog', { name: 'Chat context' })).toHaveCount(0)
+  await expect(contextButton).toContainText('Current Chapter')
+})
