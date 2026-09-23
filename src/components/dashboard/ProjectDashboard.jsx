@@ -54,7 +54,14 @@ const shiftDate = (base, offset) => {
   return date
 }
 const formatShortDate = key => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${key}T00:00:00`))
-const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+// Character/keyword terms can carry a non-string value (e.g. a legacy or
+// imported character record whose `name` is a raw number) — coerce first so
+// this never throws "value.replace is not a function" and crashes the whole
+// dashboard (caught by SectionErrorBoundary, but still a real user-visible
+// regression). Mirrors the same String()-coercion pattern normalizeCharacter
+// already applies to `name` elsewhere (src/utils/characterEntries.js's
+// `text()`), just not yet applied here.
+const escapeRegExp = value => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 function InfoTip({ title, children }) {
   return (
