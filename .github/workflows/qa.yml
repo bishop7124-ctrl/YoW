@@ -171,6 +171,10 @@ jobs:
             spec: tests/e2e/qa-sweep-2026-09-10-scene-wipe-cross-project.spec.js
           - name: schedule-corrective-audit
             spec: tests/e2e/schedule-corrective-audit.spec.js
+          - name: lore-corrective-audit
+            spec: tests/e2e/lore-corrective-audit.spec.js
+          - name: timeline-history-corrective-audit
+            spec: tests/e2e/timeline-history-corrective-audit.spec.js
           - name: onboarding-tour-responsive-polish
             spec: tests/e2e/onboarding-tour-responsive-polish.spec.js
           - name: qa-sweep-2026-09-12-project-delete-cross-tab
