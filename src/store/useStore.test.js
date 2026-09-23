@@ -2291,6 +2291,78 @@ describe('multi-tab structured record sync', () => {
     expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
   })
 
+  // Regression test for the "cross-tab delete can be silently undone by a stale
+  // tab's next unrelated save" bug: commitLocal's per-record merge loop treated
+  // "no newer version on disk" (theirs === undefined) the same whether the record
+  // was never on disk at all in a way this tab cares about, OR was deleted by
+  // another tab since this tab's last read — in the latter case it fell through
+  // to `item`, writing this tab's stale in-memory copy straight back out and
+  // resurrecting the deleted record.
+  it('a stale tab\'s next unrelated commit does not resurrect a record another tab deleted', () => {
+    const owner = 'user-multitab-deletion'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab B deletes Bob through the real delete path — this is genuinely gone
+    // from disk now.
+    act(() => { tabB.result.current.deleteCharacter('char-B') })
+    expect(JSON.parse(localStorage.getItem('nf_characters')).some(c => c.id === 'char-B')).toBe(false)
+
+    // Tab A never reloaded — it still holds its stale in-memory copy of Bob.
+    expect(tabA.result.current.characters.some(c => c.id === 'char-B')).toBe(true)
+
+    // Tab A now performs a completely unrelated commit (adding a new character,
+    // touching neither Alice nor Bob) — this is the "next unrelated save" from
+    // the bug report.
+    act(() => { tabA.result.current.saveCharacter({ name: 'Carol' }) })
+
+    // Bob must stay deleted — not resurrected by tab A's stale copy — both on
+    // disk and in tab A's own in-memory state.
+    const stored = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(stored.some(c => c.id === 'char-B')).toBe(false)
+    expect(tabA.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
+    // Untouched records and the new one are unaffected.
+    expect(stored.find(c => c.id === 'char-A').notes).toBe('original')
+    expect(stored.some(c => c.name === 'Carol')).toBe(true)
+    expect(tabA.result.current.characters.some(c => c.name === 'Carol')).toBe(true)
+  })
+
+  // The opposite scenario from the deletion test above must keep working: a
+  // record present on disk that this tab has NEVER seen (not in its prevLocal
+  // at all) was created by another tab, not deleted by this one — it must be
+  // kept, not dropped.
+  it('a stale tab\'s next unrelated commit still adopts a record another tab created that this tab never saw', () => {
+    const owner = 'user-multitab-addition'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab B creates a brand-new character tab A has never seen.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Dave' }) })
+    const daveId = tabB.result.current.characters.find(c => c.name === 'Dave').id
+    expect(tabA.result.current.characters.some(c => c.id === daveId)).toBe(false)
+
+    // Tab A performs an unrelated commit.
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+
+    // Dave must be adopted, not dropped.
+    const stored = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(stored.some(c => c.id === daveId)).toBe(true)
+    expect(tabA.result.current.characters.some(c => c.id === daveId)).toBe(true)
+  })
+
   // commitLocal caches the raw string it last wrote per key (see useStore.js) so a
   // *later* commit for the same key can skip the expensive re-read/re-merge when
   // nothing else has touched storage since — but only once a tab has actually

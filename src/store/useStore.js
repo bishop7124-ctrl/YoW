@@ -981,13 +981,23 @@ export function useStore(userId = null, options = {}) {
         const persistedMap = new Map(persisted.map(r => [r?.id, r]))
         const prevMap = new Map(prevLocal.map(r => [r?.id, r]))
         const conflicts = []
+        const deletedIds = new Set()
         next = rawNext.map(item => {
           if (!item || item.id == null) return item
           const mineBase = prevMap.get(item.id)
           const touchedByThisUpdate = !mineBase || mineBase !== item
           const theirs = persistedMap.get(item.id)
           if (!touchedByThisUpdate) {
-            return theirs && !jsonEq(theirs, item) ? theirs : item
+            if (!theirs) {
+              // !touchedByThisUpdate means mineBase exists (this tab already
+              // knew this record), yet it's missing from disk right now —
+              // another tab deleted it since this tab's last read. Drop it
+              // instead of falling through to `item`, which would write this
+              // tab's stale in-memory copy back out and resurrect the record.
+              deletedIds.add(item.id)
+              return item
+            }
+            return jsonEq(theirs, item) ? item : theirs
           }
           if (!mineBase || !theirs || theirs === mineBase || jsonEq(theirs, mineBase)) return item
           const keys = new Set([...Object.keys(item), ...Object.keys(theirs), ...Object.keys(mineBase)])
@@ -1020,6 +1030,7 @@ export function useStore(userId = null, options = {}) {
           }
           return merged || item
         })
+        if (deletedIds.size) next = next.filter(item => !item || item.id == null || !deletedIds.has(item.id))
         // A record present on disk but never seen by this tab at all (not in
         // prevLocal, so this update can't have deleted it) — another tab
         // created it since this tab last loaded; keep it rather than drop it.
