@@ -31,8 +31,10 @@
 import { readItem, writeItem, removeItem } from './projectStorage'
 
 const CONTENT_KEY_PREFIX = 'nf_scene_content:'
+const TRACKED_CHANGES_KEY_PREFIX = 'nf_scene_tracked_changes:'
 
 export const sceneContentKey = (id) => `${CONTENT_KEY_PREFIX}${id}`
+export const sceneTrackedChangesKey = (id) => `${TRACKED_CHANGES_KEY_PREFIX}${id}`
 
 /**
  * Given full scene objects (each with an inline `.content` string, exactly
@@ -89,6 +91,7 @@ export function splitScenesForStorage(scenes, prevScenes, lastWrittenContentById
     if (!scene || typeof scene !== 'object' || scene.id == null) return scene
     nextIds.add(scene.id)
     const content = typeof scene.content === 'string' ? scene.content : ''
+    const trackedChanges = scene.trackedChanges
     const prevScene = prevById.get(scene.id)
     const touchedByThisUpdate = scene !== prevScene && (!prevScene || prevScene.content !== content)
     const needsContentKey = touchedByThisUpdate || !knownContentKeyIds.has(scene.id)
@@ -106,9 +109,29 @@ export function splitScenesForStorage(scenes, prevScenes, lastWrittenContentById
       }
       knownContentKeyIds.add(scene.id)
     }
-    // eslint-disable-next-line no-unused-vars
-    const { content: _omit, ...meta } = scene
-    return meta
+    let trackedChangesMetadata = trackedChanges
+    if (trackedChanges?.baseContent != null && trackedChanges?.proposedContent != null) {
+      const trackedKey = sceneTrackedChangesKey(scene.id)
+      const trackedChanged = !prevScene || JSON.stringify(prevScene.trackedChanges) !== JSON.stringify(trackedChanges)
+      let hasStoredTrackedChanges = false
+      try { hasStoredTrackedChanges = readItem(trackedKey) != null } catch { /* retry the write below */ }
+      try {
+        if (trackedChanged || !hasStoredTrackedChanges) writeItem(trackedKey, JSON.stringify(trackedChanges))
+        trackedChangesMetadata = {
+          stored: true,
+          createdAt: trackedChanges.createdAt,
+          updatedAt: trackedChanges.updatedAt,
+        }
+      } catch {
+        // Keep the full proposal inline if its dedicated write fails. The
+        // metadata blob may be larger, but no tracked prose is lost.
+        trackedChangesMetadata = trackedChanges
+      }
+    } else {
+      try { removeItem(sceneTrackedChangesKey(scene.id)) } catch { /* best effort */ }
+    }
+    const { content: _omit, trackedChanges: _trackedChanges, ...meta } = scene
+    return trackedChangesMetadata == null ? meta : { ...meta, trackedChanges: trackedChangesMetadata }
   })
   // A scene id we previously confirmed has a content key but isn't part of
   // this write at all anymore (deleted, or merged away) leaves an orphaned
@@ -116,6 +139,7 @@ export function splitScenesForStorage(scenes, prevScenes, lastWrittenContentById
   knownContentKeyIds.forEach(id => {
     if (!nextIds.has(id)) {
       try { removeItem(sceneContentKey(id)) } catch { /* best effort */ }
+      try { removeItem(sceneTrackedChangesKey(id)) } catch { /* best effort */ }
       lastWrittenContentById.delete(id)
       knownContentKeyIds.delete(id)
     }
@@ -145,13 +169,23 @@ export function hydrateScenesFromStorage(metaScenes) {
   if (!Array.isArray(metaScenes)) return metaScenes
   return metaScenes.map(scene => {
     if (!scene || typeof scene !== 'object') return scene
-    if (typeof scene.content === 'string' && scene.content.length > 0) return scene
-    let content = ''
-    try {
-      const stored = readItem(sceneContentKey(scene.id))
-      if (typeof stored === 'string') content = stored
-    } catch { /* fall through with empty content rather than throw */ }
-    return { ...scene, content }
+    let content = typeof scene.content === 'string' ? scene.content : ''
+    if (!content) {
+      try {
+        const stored = readItem(sceneContentKey(scene.id))
+        if (typeof stored === 'string') content = stored
+      } catch { /* fall through with empty content rather than throw */ }
+    }
+    let trackedChanges = scene.trackedChanges
+    if (trackedChanges?.stored) {
+      try {
+        const stored = readItem(sceneTrackedChangesKey(scene.id))
+        trackedChanges = stored ? JSON.parse(stored) : null
+      } catch { trackedChanges = null }
+    }
+    const hydrated = { ...scene, content }
+    if (trackedChanges !== undefined) hydrated.trackedChanges = trackedChanges
+    return hydrated
   })
 }
 

@@ -7,6 +7,7 @@ import ManuscriptInspector from './ManuscriptInspector.jsx'
 import ManuscriptTopbar from './ManuscriptTopbar.jsx'
 import ManuscriptSurface from './ManuscriptSurface.jsx'
 import ManuscriptBookView from './ManuscriptBookView.jsx'
+import ManuscriptReview from './ManuscriptReview.jsx'
 import { useToast } from './Toast.jsx'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
@@ -21,17 +22,20 @@ import ManuscriptZoomControl from './ManuscriptZoomControl.jsx'
 import SceneConflictReview from './SceneConflictReview.jsx'
 import { useSceneWindow } from './useSceneWindow.js'
 import { withDailyGoalHistory } from '../../utils/writingStreak.js'
+import {
+  acceptTrackedChange,
+  hasTrackedChanges,
+  rejectTrackedChange,
+  shiftNotesForAcceptedChange,
+  shiftNotesForAcceptedDraft,
+} from './trackedChanges.js'
 
 const CAMPAIGN_PROJECT_TYPES = new Set(['dnd_campaign', 'tabletop_rpg'])
 
-// Prose column target width (at the default 19px font) -- shared by Write
-// and Edit mode via the --ms-prose-w custom property set below, so the line
-// length is identical in both. Edit mode's document is simply this much
-// wider again, reserved for the note gutter (.ms-scene-gutter's own 188px
-// plus its 28px gap from the prose column) -- see .ms-scene-body/
-// .ms-scene-body--write in index.css.
+// Prose column target width (at the default 19px font), shared by Writing
+// and tracked Editing so switching modes never changes the manuscript's
+// line length.
 const PROSE_WIDTH_BASE = 1080
-const PROSE_GUTTER_RESERVE = 216
 // Matches .manuscript-document's own md:px-12 Tailwind padding (48px each side).
 const MANUSCRIPT_DOC_PADDING = 96
 
@@ -284,28 +288,51 @@ export default function Manuscript({ store, userId, membership = null }) {
       return 'ai'
     }
   })
-  // Three modes per spec §8 — persisted per project, same lazy-initializer
-  // pattern as lastSurfaceId above (reads once on mount, no hydration
-  // effect). 'edit' is the full apparatus and was this component's only
-  // behavior before this step, so it's the fallback for a first-ever visit.
+  // Four modes — Writing is the ordinary direct editor, Editing records a
+  // proposed version, Review resolves its redline, and Finalised is read-only.
+  // Uses a new preference key because the old Edit value represented the
+  // ordinary editor; every project should enter the new workflow in Writing.
   const [mode, setMode] = useState(() => {
     try {
-      return (activeNovel?.id && localStorage.getItem(`nf-manuscript-mode:${activeNovel.id}`)) || 'edit'
+      // v2 deliberately ignores the old Write/Edit preference because Edit
+      // used to mean ordinary writing. Reusing it would unexpectedly open
+      // existing projects in tracked-change mode after this workflow change.
+      return (activeNovel?.id && localStorage.getItem(`nf-manuscript-mode-v2:${activeNovel.id}`)) || 'write'
     } catch {
-      return 'edit'
+      return 'write'
     }
   })
-  const modeStorageKey = activeNovel?.id ? `nf-manuscript-mode:${activeNovel.id}` : null
+  const [liveSceneContent, setLiveSceneContent] = useState({})
+  const modeStorageKey = activeNovel?.id ? `nf-manuscript-mode-v2:${activeNovel.id}` : null
   useEffect(() => {
     if (!modeStorageKey) return
     try { localStorage.setItem(modeStorageKey, mode) } catch { /* ignore */ }
   }, [modeStorageKey, mode])
+  const pendingReviewScenes = useMemo(
+    () => scenes.filter(scene => hasTrackedChanges(scene.trackedChanges)),
+    [scenes]
+  )
   const [finalisedSubView, setFinalisedSubView] = useState('manuscript') // 'manuscript' | 'book'
   const handleSetMode = useCallback((next) => {
+    // Mode tabs are selections, not commands. Re-selecting Writing must not
+    // close an Inspector the writer opened to consult a manuscript reference.
+    if (next === mode) return
+    // Do not let an unresolved proposal be bypassed by returning to ordinary
+    // writing or final output. Review is the deliberate hand-off between the
+    // two modes, and keeps unapproved prose out of exports/finalised copies.
+    const hasUncommittedProposal = mode === 'edit' && Object.keys(liveSceneContent).length > 0
+    if ((pendingReviewScenes.length > 0 || hasUncommittedProposal) && next !== 'edit' && next !== 'review') {
+      setMode('review')
+      setSurfaceId(null)
+      setInspectorOpen(false)
+      setLiveSceneContent({})
+      return
+    }
     setMode(next)
     // Surfaces close in both Write and Finalised per the mode table — only
     // Edit leaves the active surface as the user had it.
     if (next !== 'edit') { setSurfaceId(null) }
+    setLiveSceneContent({})
     // Entering Write clears both secondary side panels so the prose gets the
     // full workspace. This is an entry action, not a standing restriction:
     // the writer can reopen the outline afterward with the normal toggle.
@@ -314,7 +341,7 @@ export default function Manuscript({ store, userId, membership = null }) {
       setRailSheetOpen(false)
       setInspectorOpen(false)
     }
-  }, [])
+  }, [liveSceneContent, mode, pendingReviewScenes.length])
   const [highlightedNoteSeq, setHighlightedNoteSeq] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [formatSettings, setFormatSettings] = useState(loadFormat)
@@ -333,7 +360,6 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [versionHistorySceneId, setVersionHistorySceneId] = useState(null)
   const [pacingOpen, setPacingOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
-  const [liveSceneContent, setLiveSceneContent] = useState({})
   const [aiSelectionContext, setAiSelectionContext] = useState({ sceneId: null, text: '' })
   const { toast, toastNode } = useToast()
   // Scenes forced to mount a real SceneEditor regardless of viewport position — see
@@ -446,6 +472,68 @@ export default function Manuscript({ store, userId, membership = null }) {
     updateSceneContent(sceneId, content)
     setSaveState('saving')
   }, [updateSceneContent])
+
+  const handleTrackedContentUpdate = useCallback((sceneId, proposedContent, segments = null) => {
+    const source = scenes.find(scene => scene.id === sceneId)
+    if (!source) return
+    updateScene(sceneId, {
+      trackedChanges: previous => {
+        const baseContent = hasTrackedChanges(previous)
+          ? String(previous.baseContent ?? '')
+          : String(source.content || '')
+        if (proposedContent === baseContent) return null
+        const now = new Date().toISOString()
+        return {
+          baseContent,
+          proposedContent,
+          ...(segments ? { segments } : {}),
+          createdAt: previous?.createdAt || now,
+          updatedAt: now,
+        }
+      },
+    })
+    setSaveState('saving')
+  }, [scenes, updateScene])
+
+  const settleTrackedScene = useCallback((sceneId, resolution) => {
+    const scene = scenes.find(item => item.id === sceneId)
+    if (!scene || !hasTrackedChanges(scene.trackedChanges)) return
+    const content = resolution === 'accept'
+      ? String(scene.trackedChanges.proposedContent ?? '')
+      : String(scene.trackedChanges.baseContent ?? scene.content ?? '')
+    const notes = resolution === 'accept'
+      ? shiftNotesForAcceptedDraft(scene.notes || [], scene.trackedChanges)
+      : scene.notes
+    updateScene(sceneId, { content, notes, trackedChanges: null })
+    setLiveSceneContent(prev => {
+      if (!Object.prototype.hasOwnProperty.call(prev, sceneId)) return prev
+      const next = { ...prev }
+      delete next[sceneId]
+      return next
+    })
+  }, [scenes, updateScene])
+
+  const settleTrackedChange = useCallback((sceneId, changeIndex, resolution) => {
+    const scene = scenes.find(item => item.id === sceneId)
+    if (!scene || !hasTrackedChanges(scene.trackedChanges)) return
+    const next = resolution === 'accept'
+      ? acceptTrackedChange(scene.trackedChanges, changeIndex)
+      : rejectTrackedChange(scene.trackedChanges, changeIndex)
+    const resolved = next.baseContent === next.proposedContent
+    updateScene(sceneId, {
+      content: next.baseContent,
+      notes: resolution === 'accept'
+        ? shiftNotesForAcceptedChange(scene.notes || [], next.acceptedChange)
+        : scene.notes,
+      trackedChanges: resolved ? null : {
+        ...scene.trackedChanges,
+        baseContent: next.baseContent,
+        proposedContent: next.proposedContent,
+        segments: next.segments,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+  }, [scenes, updateScene])
 
   const handleLiveContentChange = useCallback((sceneId, content) => {
     setLiveSceneContent(prev => prev[sceneId] === content ? prev : { ...prev, [sceneId]: content })
@@ -1137,7 +1225,8 @@ export default function Manuscript({ store, userId, membership = null }) {
             if (next) setSurfaceId(null)
             return next
           })}
-          hideAIAndInspector={mode !== 'edit'}
+          hideAI={mode !== 'edit'}
+          hideInspector={false}
           onOverflowAction={handleOverflowAction}
           conflictCount={sceneConflicts.length}
           onOpenConflicts={() => setConflictReviewOpen(true)}
@@ -1150,6 +1239,7 @@ export default function Manuscript({ store, userId, membership = null }) {
             </span>
           )}
           overflowItemTitles={{ import: importTitle, export: exportTitle }}
+          trackedChangeCount={pendingReviewScenes.length}
         />
       )}
 
@@ -1163,6 +1253,18 @@ export default function Manuscript({ store, userId, membership = null }) {
             onPageIndexChange={setFinalizedPageIndex}
           />
         </div>
+      ) : mode === 'review' ? (
+        <ManuscriptReview
+          scenes={scenes}
+          chapters={chapters}
+          acts={acts}
+          labels={labels}
+          onAcceptChange={(sceneId, index) => settleTrackedChange(sceneId, index, 'accept')}
+          onRejectChange={(sceneId, index) => settleTrackedChange(sceneId, index, 'reject')}
+          onAcceptScene={(sceneId) => settleTrackedScene(sceneId, 'accept')}
+          onRejectScene={(sceneId) => settleTrackedScene(sceneId, 'reject')}
+          onReturnToWriting={() => handleSetMode('write')}
+        />
       ) : mode === 'final' ? (
         // Finalised MODE (not activeFinalizedDraft above, a saved snapshot —
         // this is the live current manuscript, read-only, rail/inspector/
@@ -1231,11 +1333,8 @@ export default function Manuscript({ store, userId, membership = null }) {
             className="manuscript-document mx-auto py-16 px-6 md:px-12"
             style={{
               zoom: pageZoom,
-              // Prose width is shared between Write and Edit via --ms-prose-w
-              // (see .ms-scene-body/.ms-scene-body--write in index.css) so the
-              // line length never changes between modes -- Edit's document is
-              // simply PROSE_GUTTER_RESERVE px wider than Write's, and that
-              // extra width belongs to the note gutter, not the prose column.
+              // Prose width is shared between Writing and tracked Editing via
+              // --ms-prose-w so the line length never changes between modes.
               // The 1080 base is tuned to read as "nearly the whole page" on a
               // typical wide laptop/desktop screen rather than a traditional
               // narrow reading column, per an explicit request, while still
@@ -1251,7 +1350,7 @@ export default function Manuscript({ store, userId, membership = null }) {
               // override below 640px, since inline styles otherwise take
               // precedence over that media query.
               '--ms-prose-w': `${proseWidth}px`,
-              maxWidth: `min(100%, ${proseWidth + MANUSCRIPT_DOC_PADDING + (mode === 'write' ? 0 : PROSE_GUTTER_RESERVE)}px)`,
+              maxWidth: `min(100%, ${proseWidth + MANUSCRIPT_DOC_PADDING}px)`,
             }}
           >
 
@@ -1324,9 +1423,15 @@ export default function Manuscript({ store, userId, membership = null }) {
                 const { sceneIndex, chapterSceneCount, chap } = item
                 // Merge in-progress content back in only for this one scene, at the point
                 // it's actually rendered — see the orderedContent comment above.
-                const scene = Object.prototype.hasOwnProperty.call(liveSceneContent, item.scene.id)
-                  ? { ...item.scene, content: liveSceneContent[item.scene.id] }
-                  : item.scene
+                const committedContent = mode === 'edit' && hasTrackedChanges(item.scene.trackedChanges)
+                  ? item.scene.trackedChanges.proposedContent
+                  : item.scene.content
+                const scene = {
+                  ...item.scene,
+                  content: Object.prototype.hasOwnProperty.call(liveSceneContent, item.scene.id)
+                    ? liveSceneContent[item.scene.id]
+                    : committedContent,
+                }
                 const isLastInChapter = sceneIndex === chapterSceneCount - 1
                 // See useSceneWindow.js / SceneSlot above: only mount a real SceneEditor
                 // (textarea or ContentPreview) for the currently-active scene, a
@@ -1363,9 +1468,10 @@ export default function Manuscript({ store, userId, membership = null }) {
                       onActivatePlaceholder={handleActivatePlaceholder}
                     >
                       <SceneEditor
+                        key={`${scene.id}:${mode}`}
                         scene={scene}
                         sceneIndex={sceneIndex}
-                        onUpdate={handleContentUpdate}
+                        onUpdate={mode === 'edit' ? handleTrackedContentUpdate : handleContentUpdate}
                         onUpdateScene={updateScene}
                         onSplit={handleSplitScene}
                         innerRef={proxy => {
@@ -1379,13 +1485,16 @@ export default function Manuscript({ store, userId, membership = null }) {
 	                        onNoteClick={handleNoteClick}
 	                        highlightedNoteSeq={highlightedNoteSeq}
 	                        formatSettings={formatSettings}
-                        onPersistDraft={handlePersistDraft}
+                        onPersistDraft={mode === 'edit' ? () => {} : handlePersistDraft}
                         onLiveContentChange={handleLiveContentChange}
                         onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
                         onOpenVersionHistory={id => { setVersionHistorySceneId(id); handleToggleSurface('history') }}
                         onOpenSceneDetails={handleOpenSceneDetails}
                         onAskAI={handleAskAI}
                         mode={mode === 'write' ? 'write' : 'edit'}
+                        trackingChanges={mode === 'edit'}
+                        trackingBaseContent={item.scene.trackedChanges?.baseContent ?? item.scene.content ?? ''}
+                        trackingSegments={item.scene.trackedChanges?.segments ?? null}
                         projectType={activeNovel?.type || 'novel'}
                         caretFollowEnabled={false}
                         scrollContainerRef={scrollContainerRef}
@@ -1505,7 +1614,7 @@ export default function Manuscript({ store, userId, membership = null }) {
       {/* Mobile-only (≤900px, CSS-hidden above that) bottom bar — hidden
           during focused writing and while viewing a finalized draft, same
           as the desktop chrome those two states already hide. */}
-      {!activeFinalizedDraft && (
+      {!activeFinalizedDraft && mode !== 'review' && mode !== 'final' && (
         <nav className="ms-tabbar font-sans" aria-label="Manuscript navigation">
           <button type="button" className={mobileTab === 'outline' ? 'is-on' : ''} onClick={() => handleMobileTab('outline')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>

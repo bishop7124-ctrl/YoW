@@ -4,7 +4,7 @@
   <!-- Core -->
   <url>
     <loc>https://www.yourownworld.co.uk/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -12,25 +12,25 @@
   <!-- High-priority marketing pages -->
   <url>
     <loc>https://www.yourownworld.co.uk/features/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/pricing/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/worldbuilding-software/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-07-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/novel-writing-software/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -38,43 +38,43 @@
   <!-- Feature-specific landing pages -->
   <url>
     <loc>https://www.yourownworld.co.uk/dnd-campaign-manager/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/story-planning-software/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/timeline-tool-for-writers/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/family-tree-builder/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-07-26</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/map-builder-for-writers/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-07-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/lore-management/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/ai-overview/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-08-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.85</priority>
   </url>
@@ -82,28 +82,35 @@
   <!-- Info pages -->
   <url>
     <loc>https://www.yourownworld.co.uk/faq/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/about/</loc>
-    <lastmod>2026-05-21</lastmod>
+    <lastmod>2026-07-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
   <url>
     <loc>https://www.yourownworld.co.uk/beta-disclaimer/</loc>
-    <lastmod>2026-05-22</lastmod>
+    <lastmod>2026-07-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
 
   <url>
     <loc>https://www.yourownworld.co.uk/founders/</loc>
-    <lastmod>2026-06-11</lastmod>
+    <lastmod>2026-09-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://www.yourownworld.co.uk/founders/morgan-bishop/</loc>
+    <lastmod>2026-08-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
 
 </urlset>

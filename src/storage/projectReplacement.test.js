@@ -6,16 +6,27 @@ describe('atomic project storage replacement', () => {
   beforeEach(() => resetStorageBackend())
 
   it('serializes scene prose separately and supplies complete defaults', () => {
+    const trackedChanges = {
+      baseContent: 'Prose',
+      proposedContent: 'Revised prose',
+      segments: [
+        { type: 'delete', text: 'Prose' },
+        { type: 'insert', text: 'Revised prose' },
+      ],
+      createdAt: 'now',
+      updatedAt: 'now',
+    }
     const entries = buildProjectReplacementEntries({
       novels: [{ id: 'novel-1' }],
-      scenes: [{ id: 'scene-1', novelId: 'novel-1', title: 'Opening', content: 'Prose' }],
+      scenes: [{ id: 'scene-1', novelId: 'novel-1', title: 'Opening', content: 'Prose', trackedChanges }],
       activeNovelId: 'novel-1',
     }, { ownerId: 'user-1', writtenAt: 123 })
 
     expect(JSON.parse(entries.nf_scenes)).toEqual([
-      { id: 'scene-1', novelId: 'novel-1', title: 'Opening' },
+      { id: 'scene-1', novelId: 'novel-1', title: 'Opening', trackedChanges: { stored: true, createdAt: 'now', updatedAt: 'now' } },
     ])
     expect(entries['nf_scene_content:scene-1']).toBe('Prose')
+    expect(JSON.parse(entries['nf_scene_tracked_changes:scene-1'])).toEqual(trackedChanges)
     expect(entries.nf_characters).toBe('[]')
     expect(entries.nf_activeMapByNovel).toBe('{}')
     expect(entries.nf_scene_versions).toBe('[]')
@@ -26,6 +37,7 @@ describe('atomic project storage replacement', () => {
   it('removes stale scene prose in the same backend operation', async () => {
     const backend = createMemoryBackend({
       'nf_scene_content:stale': 'old prose',
+      'nf_scene_tracked_changes:stale': '{"baseContent":"old","proposedContent":"new"}',
       nf_localWriteFailed: '["nf_scenes"]',
     })
     backend.replaceItems = vi.fn(backend.replaceItems)
@@ -37,8 +49,9 @@ describe('atomic project storage replacement', () => {
 
     expect(backend.replaceItems).toHaveBeenCalledOnce()
     const [, removed] = backend.replaceItems.mock.calls[0]
-    expect(removed).toEqual(expect.arrayContaining(['nf_localWriteFailed', 'nf_scene_content:stale']))
+    expect(removed).toEqual(expect.arrayContaining(['nf_localWriteFailed', 'nf_scene_content:stale', 'nf_scene_tracked_changes:stale']))
     expect(backend.getItem('nf_scene_content:stale')).toBeNull()
+    expect(backend.getItem('nf_scene_tracked_changes:stale')).toBeNull()
     expect(backend.getItem('nf_scene_content:kept')).toBe('new prose')
   })
 })

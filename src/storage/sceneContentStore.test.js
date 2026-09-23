@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from './sceneContentStore'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from './sceneContentStore'
 import { resetStorageBackend } from './projectStorage'
 
 describe('sceneContentStore', () => {
@@ -139,6 +139,52 @@ describe('sceneContentStore', () => {
     it('falls back to empty content, not a throw, when no key exists', () => {
       const result = hydrateScenesFromStorage([{ id: 'missing' }])
       expect(result[0].content).toBe('')
+    })
+
+    it('stores tracked drafts per scene and hydrates them without bloating scene metadata', () => {
+      const trackedChanges = {
+        baseContent: 'Approved prose.',
+        proposedContent: 'Proposed revised prose.',
+        segments: [
+          { type: 'delete', text: 'Approved prose.' },
+          { type: 'insert', text: 'Proposed revised prose.' },
+        ],
+        createdAt: '2026-09-21T08:00:00.000Z',
+        updatedAt: '2026-09-21T08:01:00.000Z',
+      }
+      const metadata = splitScenesForStorage(
+        [{ id: 'tracked', content: 'Approved prose.', trackedChanges }],
+        [],
+        new Map(),
+        new Set(),
+      )
+
+      expect(metadata[0].trackedChanges).toEqual(expect.objectContaining({ stored: true }))
+      expect(metadata[0].trackedChanges.baseContent).toBeUndefined()
+      expect(JSON.parse(localStorage.getItem(sceneTrackedChangesKey('tracked')))).toEqual(trackedChanges)
+      expect(hydrateScenesFromStorage(metadata)[0]).toEqual(expect.objectContaining({
+        content: 'Approved prose.',
+        trackedChanges,
+      }))
+    })
+
+    it('does not overwrite another tab\'s tracked draft when this tab updates a different scene', () => {
+      const staleTracked = { baseContent: 'Approved.', proposedContent: 'Stale proposal.' }
+      const freshTracked = { baseContent: 'Approved.', proposedContent: 'Fresh proposal from tab A.' }
+      const previous = [
+        { id: 'a', content: 'Approved.', trackedChanges: staleTracked },
+        { id: 'b', content: 'Other scene.' },
+      ]
+      localStorage.setItem(sceneTrackedChangesKey('a'), JSON.stringify(freshTracked))
+
+      splitScenesForStorage(
+        [previous[0], { id: 'b', content: 'Other scene edited by tab B.' }],
+        previous,
+        new Map([['a', 'Approved.'], ['b', 'Other scene.']]),
+        new Set(['a', 'b']),
+      )
+
+      expect(JSON.parse(localStorage.getItem(sceneTrackedChangesKey('a')))).toEqual(freshTracked)
     })
   })
 })

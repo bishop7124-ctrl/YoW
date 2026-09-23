@@ -11,6 +11,13 @@ import { sanitizeEditableProfileMetadata } from '../utils/profileMetadata'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
+function isPasswordRecoveryUrl() {
+  if (typeof window === 'undefined') return false
+  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/reset-password') return true
+  return new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery'
+}
+
 // Read the cached Supabase session from localStorage synchronously so the app
 // renders immediately on return visits without waiting for a network round-trip.
 function readCachedUser() {
@@ -27,9 +34,7 @@ function readCachedUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(OFFLINE_MODE ? OFFLINE_USER : readCachedUser)
   const [loading] = useState(false)
-  const [recoveryMode, setRecoveryMode] = useState(
-    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
-  )
+  const [recoveryMode, setRecoveryMode] = useState(isPasswordRecoveryUrl)
 
   useEffect(() => {
     if (OFFLINE_MODE) return
@@ -49,6 +54,10 @@ export function AuthProvider({ children }) {
     // Exchange PKCE code from email confirmation/magic links before reading session
     const code = new URLSearchParams(window.location.search).get('code')
     if (code) {
+      // PKCE recovery callbacks create a signed-in session, but do not reliably
+      // emit PASSWORD_RECOVERY before this provider subscribes. The dedicated
+      // callback path has already initialized recoveryMode synchronously, so the
+      // session stays behind the password form while this exchange completes.
       supabase.auth.exchangeCodeForSession(code)
         .then(() => window.history.replaceState({}, '', window.location.pathname))
         .catch(console.warn)
@@ -222,7 +231,7 @@ export function AuthProvider({ children }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ email, redirectTo: `${window.location.origin}/login` }),
+          body: JSON.stringify({ email, redirectTo: `${window.location.origin}/reset-password` }),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -235,7 +244,12 @@ export function AuthProvider({ children }) {
     ? () => Promise.resolve({ data: null, error: null })
     : (password) => supabase.auth.updateUser({ password })
 
-  const clearRecoveryMode = () => setRecoveryMode(false)
+  const clearRecoveryMode = () => {
+    setRecoveryMode(false)
+    if (typeof window === 'undefined') return
+    const path = window.location.pathname.replace(/\/+$/, '') || '/'
+    if (path === '/reset-password') window.history.replaceState({}, '', '/login')
+  }
 
   // Only an allowlisted set of harmless profile/preference fields may ever be
   // written to user_metadata here — entitlement (plan, subscription status,

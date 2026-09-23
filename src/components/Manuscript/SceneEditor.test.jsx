@@ -94,6 +94,108 @@ describe('SceneEditor content preview — mismatched markdown emphasis', () => {
   })
 })
 
+describe('SceneEditor manuscript references', () => {
+  it('identifies every entity reference separately from tracked-edit markup', () => {
+    const entityMap = {
+      'the archive': {
+        id: 'lore-1',
+        section: 'lore',
+        sectionLabel: 'Lore',
+        name: 'The Archive',
+        preview: 'A repository of forbidden records.',
+      },
+      cara: {
+        id: 'character-1',
+        section: 'characters',
+        sectionLabel: 'Character',
+        name: 'Cara',
+        preview: 'The protagonist’s sister.',
+      },
+    }
+    const { container } = renderScene('Cara entered The Archive beneath the city.', { entityMap })
+
+    expect(container.querySelector('.ms-entity--lore')?.textContent).toBe('The Archive')
+    expect(container.querySelector('.ms-entity--characters')?.textContent).toBe('Cara')
+    expect(container.querySelectorAll('.ms-entity')).toHaveLength(2)
+    expect(container.querySelector('.ms-entity--lore')?.classList.contains('ms-tracked-proposed')).toBe(false)
+  })
+})
+
+describe('SceneEditor tracked editing presentation', () => {
+  it('renders proposed prose inline in the tracked-change colour', () => {
+    const scene = { ...makeScene('The winding road.'), trackedChanges: { baseContent: 'The old road.', proposedContent: 'The winding road.' } }
+    const { container } = renderScene(scene.content, {
+      scene,
+      trackingChanges: true,
+      trackingBaseContent: scene.trackedChanges.baseContent,
+    })
+
+    expect(container.querySelector('.ms-tracked-proposed')?.textContent).toContain('winding')
+    expect(container.querySelector('.ms-tracked-deleted')?.textContent).toContain('old')
+    expect(container.querySelector('.ms-tracking-summary')).toBeNull()
+    expect(container.querySelector('.ms-tracking-chip')?.textContent).toBe('1 change tracked')
+  })
+
+  it('shows an appended sentence as an addition without a false paragraph deletion', () => {
+    const baseContent = 'The bell rang in the square, and the crowd looked up.\n\nThe bell rang in the tower, and the guard looked down.'
+    const appended = ' The bell rang once more, and nobody moved.'
+    const content = `The bell rang in the square, and the crowd looked up.${appended}\n\nThe bell rang in the tower, and the guard looked down.`
+    const scene = { ...makeScene(content), trackedChanges: { baseContent, proposedContent: content } }
+    const { container } = renderScene(content, { scene, trackingChanges: true, trackingBaseContent: baseContent })
+
+    expect(container.querySelector('.ms-tracked-proposed')?.textContent).toBe(appended)
+    expect(container.querySelector('.ms-tracking-summary')).toBeNull()
+  })
+
+  it('keeps replaced sentences visible as crossed-out text beside the replacement', async () => {
+    const baseContent = 'The lantern went dark. The watchman crossed the yard.'
+    const content = 'The lantern burned brighter. The watchman crossed the yard.'
+    const scene = { ...makeScene(content), trackedChanges: { baseContent, proposedContent: content } }
+    const { container } = renderScene(content, { scene, trackingChanges: true, trackingBaseContent: baseContent })
+
+    const deletedBlocks = [...container.querySelectorAll('.ms-tracked-deleted')]
+    const proposedBlocks = [...container.querySelectorAll('.ms-tracked-proposed')]
+    expect(deletedBlocks).toHaveLength(1)
+    expect(deletedBlocks[0].textContent).toBe('went dark')
+    expect(proposedBlocks).toHaveLength(1)
+    expect(proposedBlocks[0].textContent).toBe('burned brighter')
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+    expect(textarea.value).toBe(content)
+    expect(textarea.value).not.toContain('went dark')
+    const focusedDeletedBlocks = [...container.querySelectorAll('.ms-rich-preview .ms-tracked-deleted')]
+    expect(focusedDeletedBlocks).toHaveLength(1)
+    expect(focusedDeletedBlocks[0].textContent).toBe('went dark')
+  })
+
+  it('paints a textarea selection on the matching visible tracked text', async () => {
+    const baseContent = 'First line.\nThe lantern went dark beside the gate.'
+    const content = 'First line.\nThe lantern burned much brighter beside the gate.'
+    const scene = { ...makeScene(content), trackedChanges: { baseContent, proposedContent: content } }
+    const { container } = renderScene(content, { scene, trackingChanges: true, trackingBaseContent: baseContent })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+    const start = content.indexOf('burned much brighter')
+    textarea.setSelectionRange(start, start + 'burned much brighter'.length)
+    fireEvent.select(textarea)
+
+    await waitFor(() => {
+      const highlighted = [...container.querySelectorAll('.ms-tracked-selection')]
+      expect(highlighted.map(node => node.textContent).join('')).toBe('burned much brighter')
+    })
+  })
+})
+
 describe('SceneEditor semantic paragraph indentation', () => {
   it('renders every explicit line without adding paragraph spacing', () => {
     const { container } = renderScene('First paragraph.\n\nSecond paragraph.')

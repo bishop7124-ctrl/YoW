@@ -12,7 +12,7 @@ import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/r
 import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
-import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey } from '../storage/sceneContentStore'
+import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import {
   LOCAL_WRITE_FAILED_KEY,
@@ -111,7 +111,11 @@ const loadLastActiveProject = (ownerId) => {
 const clearProjectLocalStorage = (sceneIds = []) => {
   try {
     PROJECT_STORAGE_KEYS.forEach(key => removeItem(key))
-    sceneIds.forEach(id => { if (id != null) removeItem(sceneContentKey(id)) })
+    sceneIds.forEach(id => {
+      if (id == null) return
+      removeItem(sceneContentKey(id))
+      removeItem(sceneTrackedChangesKey(id))
+    })
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {

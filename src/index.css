@@ -1916,15 +1916,23 @@ textarea:focus {
 }
 
 .ms-entity {
-  color: var(--accent-text);
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 54%, transparent);
+  --ms-reference-color: color-mix(in srgb, #a855f7 72%, var(--text-main));
+  color: var(--ms-reference-color);
+  border-bottom: 1px solid color-mix(in srgb, var(--ms-reference-color) 62%, transparent);
   cursor: pointer;
 }
 
 .ms-entity:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ms-reference-color);
   outline-offset: 2px;
   border-radius: 3px;
+}
+
+/* Manuscript references (characters, locations, lore, and history) are one
+   semantic system. Keep them distinct from tracked edits, which deliberately
+   retain the primary theme accent. */
+.ms-entity-wrap .ms-entity-popover small {
+  color: color-mix(in srgb, #a855f7 68%, var(--text-main));
 }
 
 .ms-entity-wrap {
@@ -2009,6 +2017,26 @@ textarea:focus {
   inset: 0;
   pointer-events: none;
   z-index: 2;
+}
+
+.ms-rich-edit.is-tracking .ms-rich-preview {
+  pointer-events: auto;
+  cursor: text;
+}
+
+/* The clean proposal textarea and the visible redline wrap differently because
+   the redline also contains deleted prose. Suppress the textarea's misplaced
+   native selection; SceneEditor paints the same range on the visible text. */
+.ms-rich-edit.is-tracking .ms-textarea--rich::selection {
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.ms-tracked-selection {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .ms-rich-preview .ms-entity-wrap,
@@ -15898,6 +15926,51 @@ body {
   white-space: nowrap;
 }
 
+.ms-tracking-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--r-pill);
+  background: var(--accent-fade);
+  color: var(--accent-text);
+  font: 700 10px/1.2 var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ms-tracking-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.ms-tracked-proposed {
+  margin: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: .16em;
+}
+
+.ms-tracked-deleted {
+  color: color-mix(in srgb, var(--accent-text) 82%, var(--text-main));
+  text-decoration-line: line-through;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+}
+
+.ms-tracked-deleted + .ms-tracked-proposed,
+.ms-review-redline del + ins {
+  margin-inline-start: .22em;
+}
+
 .ms-topbar-btn {
   display: inline-flex;
   align-items: center;
@@ -16013,6 +16086,12 @@ body {
   .ms-topbar-zone-left {
     flex: 1 1 auto;
   }
+  .ms-modes {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ms-modes::-webkit-scrollbar { display: none; }
   .ms-topbar-crumb {
     flex: 1 1 auto;
     overflow: hidden;
@@ -16032,6 +16111,256 @@ body {
      rail toggle is redundant with the bottom bar's Outline tab too. */
   .ms-topbar-zone-left .ms-topbar-iconbtn { display: none; }
   .ms-topbar-zone-tools > *:not(.ms-topbar-menu-wrap) { display: none; }
+}
+
+/* ── Tracked-change review ─────────────────────────────────────────────── */
+.ms-review {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(24px, 4vw, 56px);
+  background: var(--bg-main);
+  color: var(--text-main);
+}
+.ms-review-intro,
+.ms-review-document {
+  width: min(980px, 100%);
+  margin-inline: auto;
+}
+.ms-review-intro {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+.ms-review-eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.ms-review-intro h1 {
+  margin: 0 0 8px;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 4vw, 38px);
+  font-weight: 650;
+  line-height: 1.15;
+}
+.ms-review-intro p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.ms-review-navigator {
+  position: sticky;
+  top: -1px;
+  z-index: 5;
+  width: min(980px, 100%);
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-raise) 94%, var(--accent-fade));
+  box-shadow: var(--shadow-sm);
+}
+.ms-review-progress {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.ms-review-progress strong { color: var(--accent-text); font-size: 13px; }
+.ms-review-progress span {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ms-review-navigator-controls,
+.ms-review-nav-actions,
+.ms-review-decision-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+.ms-review-navigator-controls { gap: 12px; }
+.ms-review-decision-actions {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.ms-review-nav-actions button,
+.ms-review-decision-actions button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.ms-review-nav-actions button:hover:not(:disabled),
+.ms-review-decision-actions button:hover { border-color: var(--accent); background: var(--accent-fade); }
+.ms-review-decision-actions button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.ms-review-nav-actions button:focus-visible,
+.ms-review-decision-actions button:focus-visible,
+.ms-review-inline-change:focus-visible,
+.ms-review-scene-actions button:focus-visible,
+.ms-review-change-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ms-review-nav-actions button:disabled { cursor: default; opacity: .42; }
+.ms-review-document {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-raise);
+  box-shadow: var(--shadow-sm);
+}
+.ms-review-scene + .ms-review-scene { border-top: 1px solid var(--border); }
+.ms-review-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 17px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.ms-review-card-header span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ms-review-card-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+}
+.ms-review-scene-actions,
+.ms-review-change-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.ms-review-scene-actions button,
+.ms-review-change-actions button {
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ms-review-scene-actions button:hover,
+.ms-review-change-actions button:hover { background: var(--bg-hover); }
+.ms-review-scene-actions button.is-primary,
+.ms-review-change-actions button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.ms-review-redline {
+  padding: 28px 40px 42px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--manuscript-text, var(--text-main));
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.85;
+}
+.ms-review-inline-change {
+  border-radius: 3px;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.ms-review-inline-change:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ms-review-redline ins,
+.ms-review-change-copy ins {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 17%, transparent);
+  color: var(--accent-text);
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+}
+.ms-review-redline del,
+.ms-review-change-copy del {
+  border-radius: 3px;
+  background: color-mix(in srgb, #c1602f 15%, transparent);
+  color: color-mix(in srgb, #c1602f 75%, var(--text-main));
+  text-decoration-thickness: 2px;
+}
+.ms-review-inline-change.is-active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.ms-review-empty {
+  display: grid;
+  place-items: center;
+}
+.ms-review-empty-card {
+  width: min(460px, 100%);
+  padding: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-raise);
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+.ms-review-check {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--accent-fade);
+  color: var(--accent-text);
+  font-size: 22px;
+  font-weight: 800;
+}
+.ms-review-empty-card h2 { margin: 0 0 8px; font-size: 22px; }
+.ms-review-empty-card p { margin: 0 0 20px; color: var(--text-muted); }
+
+@media (max-width: 640px) {
+  .ms-topbar-crumb { display: none; }
+  .ms-modes button { padding-inline: 10px; }
+  .ms-review { padding: 22px 14px; }
+  .ms-review-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ms-review-scene-actions,
+  .ms-review-change-actions { justify-content: flex-end; }
+  .ms-review-redline { padding: 20px; font-size: 16px; }
+  .ms-review-navigator { align-items: stretch; flex-direction: column; gap: 9px; }
+  .ms-review-nav-actions button { flex: 1; }
+  .ms-review-navigator-controls { align-items: stretch; flex-direction: column; width: 100%; }
+  .ms-review-nav-actions,
+  .ms-review-decision-actions { width: 100%; }
+  .ms-review-decision-actions { padding: 8px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+  .ms-review-decision-actions button { flex: 1; }
 }
 
 /* ─── Mobile bottom tab bar (redesign) — Outline/Write/Inspector/AI drives
