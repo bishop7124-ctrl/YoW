@@ -75,6 +75,17 @@ describe('ProjectDashboard writing goal streak', () => {
     expect(card.querySelectorAll('.overview-streak-days .is-met')).toHaveLength(3)
   })
 
+  it('does not crash Character Focus when a character has a non-string (e.g. numeric) name', () => {
+    // Regression test: buildCharacterFocus's term list ran every character's
+    // `name` straight through escapeRegExp's `value.replace(...)`, which
+    // throws for a raw number (a legacy/imported character record can carry
+    // one) and crashed the whole dashboard on mount, since this useMemo runs
+    // unconditionally, not only when the Insights panel is open.
+    const store = makeStore()
+    store.activeProjectStats.characters = [{ id: 'char-1', name: 42, keywords: [] }]
+    expect(() => render(<ProjectDashboard store={store} />)).not.toThrow()
+  })
+
   it('records the previous goal when the daily target changes', () => {
     const store = makeStore()
     const { getByRole } = render(<ProjectDashboard store={store} />)
