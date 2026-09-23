@@ -11,11 +11,6 @@
       "destination": "https://www.yourownworld.co.uk/$1",
       "permanent": true
     },
-    { "source": "/features", "destination": "/features/", "permanent": true },
-    { "source": "/pricing", "destination": "/pricing/", "permanent": true },
-    { "source": "/faq", "destination": "/faq/", "permanent": true },
-    { "source": "/founders", "destination": "/founders/", "permanent": true },
-    { "source": "/founders/morgan-bishop", "destination": "/founders/morgan-bishop/", "permanent": true },
     { "source": "/about", "destination": "/about/", "permanent": true },
     { "source": "/ai-overview", "destination": "/ai-overview/", "permanent": true },
     { "source": "/worldbuilding-software", "destination": "/worldbuilding-software/", "permanent": true },
@@ -30,11 +25,6 @@
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
-    { "source": "/features/", "destination": "/features/index.html" },
-    { "source": "/pricing/", "destination": "/pricing/index.html" },
-    { "source": "/faq/", "destination": "/faq/index.html" },
-    { "source": "/founders/", "destination": "/founders/index.html" },
-    { "source": "/founders/morgan-bishop/", "destination": "/founders/morgan-bishop/index.html" },
     { "source": "/beta-disclaimer/", "destination": "/beta-disclaimer/index.html" },
     { "source": "/about/", "destination": "/about/index.html" },
     { "source": "/ai-overview/", "destination": "/ai-overview/index.html" },
