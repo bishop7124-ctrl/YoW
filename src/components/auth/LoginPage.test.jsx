@@ -17,6 +17,8 @@ vi.mock('../../context/AuthContext', () => ({
     resetPassword: vi.fn(),
     updatePassword: auth.updatePassword,
     clearRecoveryMode: auth.clearRecoveryMode,
+    recoveryVerifying: false,
+    recoveryError: '',
   }),
 }))
 

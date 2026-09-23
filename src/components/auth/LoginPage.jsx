@@ -110,7 +110,7 @@ export default function LoginPage({
   initialEmail = '',
   variant = 'web',
 }) {
-  const { signIn, signUp, signInWithGoogle, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
+  const { signIn, signUp, signInWithGoogle, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode, recoveryVerifying, recoveryError } = useAuth()
   const [screen, setScreen] = useState(initialScreen)
   const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState(initialEmail || (import.meta.env.VITE_DEV_EMAIL ?? ''))
@@ -392,17 +392,17 @@ export default function LoginPage({
                       required
                       className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
-                    {error && (
+                    {(error || recoveryError) && (
                       <p className="text-red-400 text-sm text-center bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">
-                        {error}
+                        {error || recoveryError}
                       </p>
                     )}
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={loading || recoveryVerifying || Boolean(recoveryError)}
                       className="btn btn-primary w-full justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading ? '…' : 'Update password'}
+                      {recoveryVerifying ? 'Verifying link…' : loading ? '…' : 'Update password'}
                     </button>
                   </form>
                 </>
