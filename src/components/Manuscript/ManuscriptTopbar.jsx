@@ -18,8 +18,9 @@ const MoreIcon = () => (
 )
 
 const MODES = [
-  { id: 'write', label: 'Write' },
-  { id: 'edit', label: 'Edit' },
+  { id: 'write', label: 'Writing' },
+  { id: 'edit', label: 'Editing' },
+  { id: 'review', label: 'Review' },
   { id: 'final', label: 'Finalised' },
 ]
 
@@ -177,10 +178,12 @@ export default function ManuscriptTopbar({
   zoomControl,
   scriptBetaBadge,
   overflowItemTitles,
-  // Write/Finalised modes hide the AI and Inspector buttons entirely per
-  // spec §8's mode table — Edit is the only mode where either surface makes
-  // sense to open from here.
-  hideAIAndInspector = false,
+  trackedChangeCount = 0,
+  // Writing keeps the reference/scene Inspector available without exposing
+  // the editing-only AI surface. Review/Finalised hide both via their own
+  // layouts or these independent flags.
+  hideAI = false,
+  hideInspector = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [gotoOpen, setGotoOpen] = useState(false)
@@ -217,7 +220,7 @@ export default function ManuscriptTopbar({
             <div className="ms-modes" role="group" aria-label="Editor mode">
               {MODES.map(m => (
                 <button key={m.id} type="button" aria-pressed={mode === m.id} className={mode === m.id ? 'is-on' : ''} onClick={() => onSetMode(m.id)}>
-                  {m.label}
+                  {m.label}{m.id === 'review' && trackedChangeCount > 0 ? ` (${trackedChangeCount})` : ''}
                 </button>
               ))}
             </div>
@@ -242,15 +245,15 @@ export default function ManuscriptTopbar({
 
         <div className="ms-topbar-zone ms-topbar-zone-tools">
           {zoomControl}
-          {!hideAIAndInspector && (
-            <>
-              <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
-                <AIStar size={13} /> AI
-              </button>
-              <button type="button" className={`ms-topbar-btn${inspectorOpen ? ' is-on' : ''}`} onClick={onToggleInspector} aria-pressed={inspectorOpen}>
-                <InspectorIcon /> Inspector
-              </button>
-            </>
+          {!hideAI && (
+            <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
+              <AIStar size={13} /> AI
+            </button>
+          )}
+          {!hideInspector && (
+            <button type="button" className={`ms-topbar-btn${inspectorOpen ? ' is-on' : ''}`} onClick={onToggleInspector} aria-pressed={inspectorOpen}>
+              <InspectorIcon /> Inspector
+            </button>
           )}
           <div className="ms-topbar-sep" />
           {onOpenProject && (

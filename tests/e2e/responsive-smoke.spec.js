@@ -48,11 +48,15 @@ for (const viewport of viewports) {
     const breadcrumb = page.locator('.ms-topbar-crumb')
     await expect(modeSwitch).toBeVisible()
     await expect(page.locator('.ms-topbar-crumb-path')).toBeHidden()
-    await expect.poll(async () => (await breadcrumb.boundingBox())?.width || 0).toBeGreaterThan(40)
-    await expect.poll(async () => {
-      const [crumbBox, modeBox] = await Promise.all([breadcrumb.boundingBox(), modeSwitch.boundingBox()])
-      return crumbBox && modeBox ? crumbBox.x + crumbBox.width - modeBox.x : Number.POSITIVE_INFINITY
-    }).toBeLessThanOrEqual(1)
+    if (viewport.width <= 640) {
+      await expect(breadcrumb).toBeHidden()
+    } else {
+      await expect.poll(async () => (await breadcrumb.boundingBox())?.width || 0).toBeGreaterThan(40)
+      await expect.poll(async () => {
+        const [crumbBox, modeBox] = await Promise.all([breadcrumb.boundingBox(), modeSwitch.boundingBox()])
+        return crumbBox && modeBox ? crumbBox.x + crumbBox.width - modeBox.x : Number.POSITIVE_INFINITY
+      }).toBeLessThanOrEqual(1)
+    }
 
     if (viewport.width <= 640) {
       const noteButton = page.getByRole('button', { name: 'Add note', exact: true })

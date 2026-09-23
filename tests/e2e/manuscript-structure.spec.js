@@ -124,9 +124,9 @@ test('scene status cycles and persists', async ({ page }) => {
   await page.locator('.ms-preview').first().click()
 
   // The status chip (SceneEditor.jsx's `.ms-meta-status`) is hidden by CSS
-  // while the editor is in Write mode (`.ms-scene-header--write .ms-meta-status
-  // { display: none }`) — it only renders in Edit mode.
-  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Edit' }).click()
+  // while the editor is in Writing mode (`.ms-scene-header--write .ms-meta-status
+  // { display: none }`) — it only renders in Editing mode.
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Editing' }).click()
 
   const statusBtn = page.locator('.ms-meta-status').first()
   if (!(await statusBtn.isVisible().catch(() => false))) {
@@ -158,7 +158,7 @@ test('scene status cycles and persists', async ({ page }) => {
 test('finalized draft can be created and viewed', async ({ page }) => {
   // The 2026-08-27 manuscript-editor-redesign replaced the old one-off
   // "Finalize draft" action button with a persistent "Finalised" mode
-  // alongside Write/Edit in the topbar's mode switcher (ManuscriptTopbar.jsx
+  // alongside Writing/Editing in the topbar's mode switcher (ManuscriptTopbar.jsx
   // MODES, `[role=group][aria-label="Editor mode"]`) — a live read view of
   // the current manuscript, not a saved snapshot. Write some content first
   // so there's something to see in that read view.

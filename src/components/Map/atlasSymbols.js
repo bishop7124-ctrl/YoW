@@ -1,10 +1,15 @@
 // Original cartographic pen drawings used by the picker, live preview and export.
 export const SYMBOL_GROUPS = [
-  { name: 'Landscape', interior: false, symbols: ['mountain','hills','volcano','forest','palm','marsh','dune'] },
-  { name: 'Settlements', interior: false, symbols: ['village','castle','tower','temple','camp','windmill'] },
-  { name: 'Landmarks', interior: false, symbols: ['ruin','cave','mine','bridge','harbour','lighthouse','well','graveyard'] },
-  { name: 'Rooms & furnishings', interior: true, symbols: ['door','stairs','table','bed','chest','barrel','throne','fireplace','pillar','ruin'] },
+  { name: 'Landscape', mapTypes: ['world','region'], symbols: ['mountain','hills','volcano','forest','palm','marsh','dune'] },
+  { name: 'Settlements', mapTypes: ['world','region'], symbols: ['village','castle','tower','temple','camp','windmill'] },
+  { name: 'Landmarks', mapTypes: ['world','region'], symbols: ['ruin','cave','mine','bridge','harbour','lighthouse','well','graveyard'] },
+  { name: 'Local buildings', mapTypes: ['local'], symbols: ['house','cottage','farm','shop','inn','tower','temple','windmill'] },
+  { name: 'Local features', mapTypes: ['local'], symbols: ['well','fountain','gate','bridge','harbour','ruin'] },
+  { name: 'Local nature', mapTypes: ['local'], symbols: ['tree','forest','marsh','camp'] },
+  { name: 'Rooms & furnishings', mapTypes: ['interior'], symbols: ['door','stairs','table','bed','chest','barrel','throne','fireplace','pillar','ruin'] },
 ]
+
+export const getSymbolGroups = mapType => SYMBOL_GROUPS.filter(group => group.mapTypes.includes(mapType))
 
 // Uneven contours, perspective and fine hatching replace the geometric badges.
 // The three paths are the silhouette, interior ink, and lighter hatch marks.

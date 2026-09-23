@@ -8,7 +8,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-const DEFAULT_REDIRECT = 'https://www.yourownworld.co.uk/login'
+const DEFAULT_REDIRECT = 'https://www.yourownworld.co.uk/reset-password'
 
 // Audit finding P0-03: redirectTo was accepted from the caller with no
 // validation, so a crafted request could get Supabase to embed an

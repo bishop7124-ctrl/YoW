@@ -10,7 +10,7 @@ describe('organic ink contours', () => {
     expect(organicInkPath('M0 0q5 10 10 0t10 0m5 5l4 0')).toBe(organicInkPath('M0 0Q5 10 10 0Q15-10 20 0M25 5L29 5'))
   })
   it('renders all artwork as stable finite curves with filled ink intact', () => {
-    expect(Object.keys(INK_ARTWORK)).toHaveLength(30)
+    expect(Object.keys(INK_ARTWORK)).toHaveLength(38)
     for (const layers of Object.values(INK_ARTWORK)) {
       expect(layers.some(layer => layer.fill === 'ink')).toBe(true)
       for (const layer of layers) {

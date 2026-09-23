@@ -1,5 +1,5 @@
 import { listKeys, replaceItemsAtomically } from './projectStorage.js'
-import { sceneContentKey } from './sceneContentStore.js'
+import { sceneContentKey, sceneTrackedChangesKey } from './sceneContentStore.js'
 
 const COLLECTIONS = [
   ['nf_novels', 'novels'],
@@ -42,8 +42,19 @@ export function buildProjectReplacementEntries(data, { ownerId = null, writtenAt
   const scenes = Array.isArray(source.scenes) ? source.scenes : []
   entries.nf_scenes = JSON.stringify(scenes.map(scene => {
     if (!scene || typeof scene !== 'object' || scene.id == null) return scene
-    const { content: _content, ...metadata } = scene
+    const { content: _content, trackedChanges, ...metadata } = scene
     entries[sceneContentKey(scene.id)] = typeof scene.content === 'string' ? scene.content : ''
+    if (trackedChanges?.baseContent != null && trackedChanges?.proposedContent != null) {
+      entries[sceneTrackedChangesKey(scene.id)] = JSON.stringify(trackedChanges)
+      return {
+        ...metadata,
+        trackedChanges: {
+          stored: true,
+          createdAt: trackedChanges.createdAt,
+          updatedAt: trackedChanges.updatedAt,
+        },
+      }
+    }
     return metadata
   }))
   return entries
@@ -53,7 +64,9 @@ export async function replaceProjectStorageAtomically(data, options = {}) {
   const entries = buildProjectReplacementEntries(data, options)
   const retainedSceneKeys = new Set(Object.keys(entries).filter(key => key.startsWith('nf_scene_content:')))
   const staleSceneKeys = listKeys('nf_scene_content:').filter(key => !retainedSceneKeys.has(key))
-  const keysToRemove = ['nf_localWriteFailed', ...staleSceneKeys]
+  const retainedTrackedKeys = new Set(Object.keys(entries).filter(key => key.startsWith('nf_scene_tracked_changes:')))
+  const staleTrackedKeys = listKeys('nf_scene_tracked_changes:').filter(key => !retainedTrackedKeys.has(key))
+  const keysToRemove = ['nf_localWriteFailed', ...staleSceneKeys, ...staleTrackedKeys]
   if (!options.ownerId) keysToRemove.push('nf_localOwner')
   await replaceItemsAtomically(entries, keysToRemove)
   return entries
