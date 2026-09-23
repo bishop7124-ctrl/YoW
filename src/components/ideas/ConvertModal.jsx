@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { StudioSheet } from '../presentation/Studio'
 import { getEnabledSections } from '../../constants/projectTypes.js'
 import { IDEA_ENTITY_TYPES, normalizeIdea } from '../../utils/ideaEntries.js'
+import { loadValue } from '../../storage/projectStorage.js'
 
 export default function ConvertModal({ idea, store, onClose, onConverted }) {
   const [type, setType] = useState('')
@@ -20,7 +21,16 @@ export default function ConvertModal({ idea, store, onClose, onConverted }) {
     try {
       let entity = createdRef.current
       if (!entity) {
-        const source = store.ideaEntries?.find(item => item.id === idea.id)
+        // Read the raw persisted collection directly (bypassing the
+        // `store.ideaEntries` React prop) so a rename/delete committed by
+        // another browser tab while this dialog was open is actually caught
+        // here. Another tab's write only reaches this tab's own React state
+        // once *this* tab performs its own store write (commitLocal's own
+        // fresh-disk-read merge) — until then `store.ideaEntries` is exactly
+        // what it was when the dialog opened, so comparing against it can
+        // never detect a genuine cross-tab change and would silently create
+        // the entity from stale data instead of refusing.
+        const source = loadValue('nf_ideaEntries', [])?.find(item => item.id === idea.id)
         const current = source && normalizeIdea(source)
         const original = normalizeIdea(idea)
         if (!current || current.convertedTo || current.title !== original.title || current.description !== original.description) {

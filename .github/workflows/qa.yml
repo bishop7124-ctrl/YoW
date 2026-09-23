@@ -213,6 +213,8 @@ jobs:
             spec: tests/e2e/characters-corrective-audit.spec.js
           - name: relationships-corrective-audit
             spec: tests/e2e/relationships-corrective-audit.spec.js
+          - name: ideas-corrective-audit
+            spec: tests/e2e/ideas-corrective-audit.spec.js
     steps:
       - name: Check out repository
         uses: actions/checkout@v5

@@ -184,6 +184,19 @@ describe('Ideas Board', () => {
 })
 
 describe('idea conversion', () => {
+  // ConvertModal's own staleness/existence guard reads the raw persisted
+  // `nf_ideaEntries` collection directly (via projectStorage's `loadValue`,
+  // the same fresh-disk-read mechanism the store's own commitLocal uses)
+  // rather than the `store.ideaEntries` React prop, so a genuine cross-tab
+  // rename/delete committed while the dialog is open is actually caught —
+  // see the matching e2e coverage in tests/e2e/ideas-corrective-audit.spec.js.
+  // These component tests exercise ConvertModal against a fully mocked
+  // `store`, so they must seed that same raw storage key to match, or the
+  // guard would (correctly, but for the wrong in-test reason) treat every
+  // source as missing.
+  beforeEach(() => { localStorage.setItem('nf_ideaEntries', JSON.stringify(entries)) })
+  afterEach(() => { localStorage.removeItem('nf_ideaEntries') })
+
   it.each([
     { ideaEntries: [] },
     { ideaEntries: [{ ...entries[0], description: 'Updated elsewhere' }] },
@@ -192,6 +205,9 @@ describe('idea conversion', () => {
     const store = makeStore({ saveCharacter: vi.fn() })
     const view = render(<ConvertModal idea={entries[0]} store={store} onConverted={vi.fn()} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Character', exact: true }))
+    // The prop rerender is kept for readability of intent, but what the guard
+    // actually reads at submit time is the raw storage key below.
+    localStorage.setItem('nf_ideaEntries', JSON.stringify(ideaEntries))
     view.rerender(<ConvertModal idea={entries[0]} store={{ ...store, ideaEntries }} onConverted={vi.fn()} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Convert & Link' }))
     expect(screen.getByRole('alert').textContent).toContain('source idea changed')
