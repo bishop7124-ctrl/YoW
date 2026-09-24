@@ -285,19 +285,17 @@ test.describe('Add/remove connection validation and draft protection', () => {
   // only updates the OTHER tab's storage-backend mirror, never that tab's
   // live React `characters` state — nothing subscribes to the channel to
   // trigger a re-render. So an idle tab's Add-connection draft is genuinely
-  // NOT invalidated while it sits idle. Worse, confirmed directly below: if
-  // that stale tab then performs any unrelated save, src/store/useStore.js's
-  // commitLocal cross-tab merge (~line 989: `if (!touchedByThisUpdate) return
-  // theirs && !jsonEq(theirs, item) ? theirs : item`) treats "this record
-  // vanished from disk and I never touched it" the same as "no conflict,
-  // keep my copy" — silently WRITING THE DELETED CHARACTER BACK. This is a
-  // real, reproducible data-safety bug, but it lives in commitLocal's generic
-  // merge logic shared by every entity type (characters, locations, lore,
-  // schedule events, …), not anything Relationships-specific, so per this
-  // audit's scope it is documented and flagged for a dedicated fix rather
-  // than patched here (see the spawn_task queued alongside this branch and
-  // the docs/QA_PLAN.md note next to this checklist item).
-  test('documents that an idle tab does not react live to a cross-tab delete (and can resurrect the deleted record on its next unrelated save), while a real reload correctly invalidates the stale draft', async ({ page, context }) => {
+  // NOT invalidated while it sits idle. This part remains true and is still
+  // exercised below. It USED TO be worse: if that stale tab then performed
+  // any unrelated save, src/store/useStore.js's commitLocal cross-tab merge
+  // treated "this record vanished from disk and I never touched it" the same
+  // as "no conflict, keep my copy" — silently writing the deleted character
+  // back. Fixed 2026-09-24 (see docs/ROADMAP.md's 2026-08-02 Bugs-table row,
+  // item (8)): commitLocal now returns a DELETED_ELSEWHERE sentinel instead,
+  // filtered out before the write. Confirmed directly below, against the
+  // real app, not just by code reading — clicking Add Connection on a stale
+  // draft no longer resurrects the deleted character.
+  test('an idle tab does not react live to a cross-tab delete, but no longer resurrects the deleted record on its next unrelated save; a real reload also correctly invalidates the stale draft', async ({ page, context }) => {
     const projectId = new URL(page.url()).pathname.split('/')[2]
     await seedCharacters(page, [
       { id: 'xt-ada', novelId: projectId, name: 'Ada' },
@@ -346,24 +344,17 @@ test.describe('Add/remove connection validation and draft protection', () => {
     await expect(page.getByRole('button', { name: 'Add Connection', exact: true })).toBeEnabled()
     await expect(page.getByLabel('Connection character')).toHaveValue('xt-ben')
 
-    // Clicking it anyway resurrects Ben in storage — the commitLocal bug
-    // described above, confirmed here against the real app rather than by
-    // code reading alone.
+    // Clicking it anyway must NOT resurrect Ben in storage — the commitLocal
+    // fix described above, confirmed here against the real app rather than
+    // by code reading alone.
     await page.getByRole('button', { name: 'Add Connection', exact: true }).click()
     const storedAfterStaleSave = await readStorage(page, 'nf_characters')
-    expect(storedAfterStaleSave.some(c => c.id === 'xt-ben')).toBe(true)
+    expect(storedAfterStaleSave.some(c => c.id === 'xt-ben')).toBe(false)
 
     // The real, working safety net is a reload (not live cross-tab
     // reactivity): after reloading, tab A's fresh read correctly excludes
     // whatever is actually gone on disk and the draft cannot reference it.
     await pageB.close()
-    // Undo the resurrection this test just caused so a clean slate is left
-    // in storage for the "Ben genuinely deleted" reload assertion below.
-    await page.evaluate((benId) => {
-      const chars = JSON.parse(window.__yowStorageBridge?.getItem('nf_characters') || '[]')
-      window.__yowStorageBridge?.setItem('nf_characters', JSON.stringify(chars.filter(c => c.id !== benId)))
-    }, 'xt-ben')
-    await page.evaluate(() => window.__yowStorageBridge?.flush())
     await page.reload()
     await waitForStorageHydration(page)
     await openRelationshipMap(page)
