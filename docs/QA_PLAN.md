@@ -444,6 +444,8 @@ Status: Deferred
 - AI import launch-scope review: product decision 2026-07-08 — AI import supports all 6 active project types. Verify copy and behaviour match: no "deferred until after launch" or Novel-only language anywhere, and the type-specific import checks in Priority 3 and Priority 7 pass.
 ## Priority 9: Map Builder
 
+**Owner decision 2026-09-24: accepted for launch.** Everything below this line in Priority 9 (the remaining "Required before launch acceptance" checklist and the full map-builder QA checklist) is downgraded from a launch blocker to optional, post-launch verification/polish. See `docs/ROADMAP.md`'s "PRD: Map Builder Rebuild" → "2026-09-24 owner launch acceptance decision" for the product-scope decision this implements. Pick any item back up later if desired; none of it is required before paid/public launch.
+
 ### 2026-09-08 replacement acceptance
 
 Owner follow-up fixes: map header is 44px with an expanded canvas mode and collapsible inspector; pointer conversion handles scaled/panned visible bounds, pin tips follow placement, and snapping is explicit. Organic borders toggles polygon rendering without modifying the stored points and persists with the map. Expanded Chromium coverage now totals 3 passing flows; focused map unit coverage totals 18 passing tests. Verify physical Safari/touch/stylus placement at different zoom levels, especially the final release position and explicit grid snapping. No new live-cloud verification was performed.
