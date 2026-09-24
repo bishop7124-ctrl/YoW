@@ -309,15 +309,14 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Map competing guilds, political parties, or cults — track their agendas, leadership, and how they evolve across the story.' },
       { type: 'TTRPG Campaign', text: 'Track guilds, factions, governments, and rivals as their power shifts between sessions.' },
-      { type: 'D&D Campaign', text: 'Build a living political web — track faction reputation, NPC allegiances, and how player choices shift the balance of power.' },
+      { type: 'D&D Campaign', text: 'Build a living political web — document faction standing, NPC allegiances, and how player choices shift the balance of power in your own private prep.' },
     ],
     capabilities: [
-      'Faction profiles with goals and leadership',
-      'Member character linking',
-      'Faction relationship and rivalry mapping',
-      'Alliance and conflict tracking',
-      'Character loyalty and reputation scores',
-      'Faction history event log',
+      'Faction profiles with a logo and description',
+      'Member character linking with custom role labels',
+      'Free-text notes for alliances, rivalries, and political history',
+      'Sorting by name or member count',
+      'Project-scoped faction records',
     ],
   },
   {
