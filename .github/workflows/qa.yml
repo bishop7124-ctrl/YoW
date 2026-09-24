@@ -197,6 +197,8 @@ jobs:
             spec: tests/e2e/unconfigured-ai-account.spec.js
           - name: manuscript-reference-panel
             spec: tests/e2e/manuscript-reference-panel.spec.js
+          - name: manuscript-writing-mode-side-panel
+            spec: tests/e2e/manuscript-writing-mode-side-panel.spec.js
           - name: qa-sweep-2026-09-16-ai-context-selector
             spec: tests/e2e/qa-sweep-2026-09-16-ai-context-selector.spec.js
           - name: qa-sweep-2026-09-16-batch2
