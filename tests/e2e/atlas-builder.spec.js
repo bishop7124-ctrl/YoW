@@ -219,6 +219,13 @@ test('cursor placement stays aligned through zoom, pan and expanded view; border
   await page.locator('.atlas-editor').evaluate(el => { el.style.zoom=1 })
   await page.getByRole('button', { name: 'Fit', exact: true }).click()
   await page.getByRole('button', { name: 'Land', exact: true }).click()
+  // NOTE: a fullPage screenshot here can render a stale, non-expanded frame
+  // even though the DOM/computed styles are genuinely still in expanded
+  // state (getBoundingClientRect/computed style checked directly all agree)
+  // — a headless-Chromium fullPage-capture quirk with `position:fixed`
+  // content under this app's ancestor `zoom` density scale, reproducing only
+  // on a second fullPage capture in the same page session. Don't treat this
+  // screenshot alone as evidence the expanded view broke; verify live.
   await page.screenshot({ path: debugScreenshotPath('yow-atlas-expanded.png'), fullPage: true })
   const exitExpanded = page.getByRole('button', { name: 'Exit expanded view', exact: true })
   if (await exitExpanded.isVisible()) await exitExpanded.click()
@@ -226,6 +233,12 @@ test('cursor placement stays aligned through zoom, pan and expanded view; border
   await page.evaluate(() => window.__yowStorageBridge.flush())
   await page.reload()
   await waitForStorageHydration(page)
+  // waitForStorageHydration only proves #root has *a* child, which the
+  // "Loading workspace…" Suspense fallback (Layout.jsx) already satisfies —
+  // the lazy-loaded Atlas editor chunk can still be mounting. A keyboard
+  // shortcut has no actionability wait the way a locator click does, so
+  // pressing 'l' before the editor mounts is silently swallowed.
+  await expect(page.getByRole('button', { name: 'Land', exact: true })).toBeVisible()
   await page.keyboard.press('l')
   await expect(page.getByLabel('Organic borders', { exact: true })).not.toBeChecked()
 })
