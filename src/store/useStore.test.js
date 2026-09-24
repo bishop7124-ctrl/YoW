@@ -2446,6 +2446,85 @@ describe('multi-tab structured record sync', () => {
     tabB.unmount()
   })
 
+  // Regression test for the latest link in the two-tab silent-clobber chain
+  // (docs/ROADMAP.md's 2026-08-02 Bugs row), found live during the
+  // Relationships corrective audit: commitLocal's externalWrite rebase (see
+  // its own tombstone-check comment above) adopted another tab's fresher
+  // version of an UNTOUCHED record, or kept this tab's own version, but had
+  // no third case for "the record is gone from disk entirely" — so a record
+  // deleted in one tab could be silently resurrected by a second tab's own
+  // unrelated save, because that save's updater still carries the deleted
+  // record forward unchanged (a `.map()` over every record it had) and the
+  // old logic only ever asked "did the other tab change it," never "did the
+  // other tab delete it."
+  it('a stale second tab\'s unrelated save does not resurrect a record the first tab deleted', () => {
+    const owner = 'user-multitab-delete'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab B deletes char-B — this tab's own local store and localStorage no
+    // longer have it at all.
+    act(() => { expect(tabB.result.current.deleteCharacter('char-B')).toBe(true) })
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(c => c.id === 'char-B')).toBeUndefined()
+
+    // Tab A still holds its stale in-memory copy of char-B (it never learned
+    // about the deletion) and now performs a completely unrelated save —
+    // editing char-A only.
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+
+    // char-B must stay deleted: neither Tab A's own in-memory state nor the
+    // shared localStorage blob should have resurrected it.
+    expect(tabA.result.current.characters.find(c => c.id === 'char-B')).toBeUndefined()
+    expect(tabA.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+    const stored = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(stored.find(c => c.id === 'char-B')).toBeUndefined()
+    expect(stored.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+  })
+
+  // Regression test for a real bug `code-reviewer` caught in the fix above
+  // before it shipped: the new tombstone check can't tell "another tab
+  // deleted this record" apart from "this tab's own last write of the whole
+  // key never actually reached disk" (a real QuotaExceededError, or an async
+  // IndexedDB/vault persist failure — see storage/writeDurability.js) purely
+  // from "the record I have isn't on disk." Without the write-failure guard,
+  // a record this tab itself just added/kept — but whose save() call failed
+  // — would be silently purged as if deleted, on the very next unrelated
+  // commit to the same key, which is its own data-loss bug.
+  it('a record is not tombstoned just because this tab\'s own last write of the key is flagged as failed', () => {
+    const owner = 'user-write-failure-safety'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const { result } = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    let charCId
+    act(() => { charCId = result.current.saveCharacter({ name: 'Charlie', notes: 'added locally' }) })
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(c => c.id === charCId)).toBeTruthy()
+
+    // Simulate char-C's add having actually failed to reach disk (e.g. a
+    // real QuotaExceededError on that write): the shared storage blob is
+    // rewritten from outside the store to a version without it, and the key
+    // is flagged failed exactly as save()'s own catch branch would.
+    localStorage.setItem('nf_characters', JSON.stringify([seed[0]]))
+    act(() => { markLocalWriteFailed('nf_characters') })
+
+    // An unrelated commit to the same key (editing char-A) must not treat
+    // char-C's absence from disk as a deletion and drop this tab's own
+    // pending copy of it.
+    act(() => { result.current.saveCharacter({ name: 'Alice', notes: 'edited' }, 'char-A') })
+
+    expect(result.current.characters.find(c => c.id === charCId)).toMatchObject({ name: 'Charlie', notes: 'added locally' })
+  })
+
   it('discardRecordConflict keeps the current (mine) version and just dismisses the warning', async () => {
     const owner = 'user-conflict-discard'
     const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
