@@ -208,8 +208,14 @@ function runPersistSceneDraft(scene, content) {
     writeItem('nf_scenes', raw)
 
     // Version history is a periodic checkpoint, not a per-keystroke log — cap how
-    // often a snapshot (a full copy of the scene's content, across every scene's
-    // history in nf_scene_versions) gets written regardless of how often drafts do.
+    // often a snapshot (a full copy of the scene's content, under this scene's
+    // own nf_scene_versions:<id> key — see src/utils/sceneVersions.js) gets
+    // written regardless of how often drafts do. Per-scene, not one shared key
+    // across every scene: two tabs each hitting this throttle for a
+    // *different* scene at the same instant (e.g. both fire on the same
+    // `visibilitychange`, when the user switches away from the browser
+    // entirely) must never race on the same storage key/BroadcastChannel
+    // message — see sceneVersions.js's own comment for the full history.
     const lastSnapshot = lastVersionSnapshotAt.get(scene.id) || 0
     if (now - lastSnapshot >= VERSION_SNAPSHOT_THROTTLE_MS) {
       lastVersionSnapshotAt.set(scene.id, now)
