@@ -14,6 +14,7 @@ import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
+import { clearSceneVersions } from '../utils/sceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -2297,7 +2298,7 @@ export function useStore(userId = null, options = {}) {
     const chapterSet = new Set(chapterIds)
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && chapterSet.has(s.chapterId)).map(s => s.id)
     const sceneSet = new Set(sceneIds)
-    sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
     if (canSyncCloud) {
       deleteItem('acts', userId, id).catch(console.error)
       chapterIds.forEach(cId => deleteItem('chapters', userId, cId).catch(console.error))
@@ -2324,7 +2325,7 @@ export function useStore(userId = null, options = {}) {
     if (!projectId || !chaptersRef.current.some(chapter => chapter.id === id && chapter.novelId === projectId)) return false
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && s.chapterId === id).map(s => s.id)
     const sceneSet = new Set(sceneIds)
-    sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
     if (canSyncCloud) deleteItem('chapters', userId, id).catch(console.error)
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.id === id && c.novelId === projectId)))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
@@ -2346,6 +2347,15 @@ export function useStore(userId = null, options = {}) {
     const projectId = activeOutlineProjectId()
     if (!projectId || !scenesRef.current.some(scene => scene.id === id && scene.novelId === projectId)) return false
     debouncedSaveScene.cancel(id)
+    // Version history (nf_scene_versions:<id> — see src/utils/sceneVersions.js)
+    // is a standalone per-scene key, not part of the nf_scenes collection
+    // commitLocal below persists, so nothing else cleans it up when a single
+    // scene (as opposed to a whole project — see deleteNovel/
+    // replaceProjectStorageAtomically's own sweep) is deleted. Without this
+    // it's left behind permanently, orphaned under an id no project
+    // references any more (audit finding #16, docs/QA_PLAN.md's Priority -1
+    // section). This single-key removal is already atomic on its own.
+    clearSceneVersions(id)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => !(s.id === id && s.novelId === projectId)))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
@@ -2428,7 +2438,7 @@ export function useStore(userId = null, options = {}) {
     const currentSceneIds = scenesRef.current
       .filter(scene => scene.novelId === projectId)
       .map(scene => scene.id)
-    currentSceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    currentSceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
 
     const nextActs = (nextStructure.acts || []).map(act => ({ ...act, novelId: projectId }))
     const nextChapters = (nextStructure.chapters || []).map(chapter => ({ ...chapter, novelId: projectId }))
@@ -2547,6 +2557,7 @@ export function useStore(userId = null, options = {}) {
   // Discards a conflict copy without touching the original scene.
   const discardSceneConflict = (conflictId) => {
     debouncedSaveScene.cancel(conflictId)
+    clearSceneVersions(conflictId)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== conflictId))
     if (canSyncCloud) deleteSceneDoc(userId, conflictId).catch(console.error)
   }
@@ -3638,9 +3649,6 @@ export function useStore(userId = null, options = {}) {
       currentYear: currentYearRef.current,
       activeNovelId: activeNovelIdRef.current === id ? null : activeNovelIdRef.current,
       recordConflicts,
-      sceneVersions: load('nf_scene_versions', []).filter(version =>
-        version.novelId !== id && !(version.novelId == null && removedSceneIds.has(version.sceneId))
-      ),
     }
 
     if (canSyncCloud) await trackSync(deleteProjectData(userId, id))
