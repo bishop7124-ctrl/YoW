@@ -815,16 +815,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.studio-kicker,
-.eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
 .studio-volume {
   margin: 12px 10px 10px;
   padding: 10px 8px 12px;
@@ -3035,14 +3025,6 @@ textarea:focus {
     gap: 20px;
     padding-bottom: 18px;
     border-bottom: 1px solid var(--border);
-  }
-
-  .eyebrow {
-    color: var(--accent);
-    font-size: 10px;
-    font-weight: 850;
-    letter-spacing: .18em;
-    text-transform: uppercase;
   }
 
   .page-title {
@@ -9776,6 +9758,10 @@ body {
   justify-content: space-between;
   gap: 20px;
   padding: 4px 0 24px;
+}
+
+.account-settings-header .eyebrow {
+  color: var(--accent-text);
 }
 
 .account-settings-header h1,
