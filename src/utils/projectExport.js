@@ -8,7 +8,7 @@ export {
   getProjectPdfFilename,
 } from './projectExportHelpers.js'
 
-import { isComicProject } from './projectExportHelpers.js'
+import { isComicProject, YOW_EXPORT_SCHEMA_VERSION } from './projectExportHelpers.js'
 import { buildZipBlob, encodeTextFile } from './zipUtils.js'
 import { getSignedUserMediaUrl, getUserMediaPath } from './uploadUserMedia.js'
 
@@ -108,6 +108,7 @@ export const createProjectZipBlob = async (projectData, options = {}) => {
     jsonFile('manifest.json', {
       app: 'YOW',
       format: 'yow-project-export',
+      schemaVersion: YOW_EXPORT_SCHEMA_VERSION,
       exportedAt: now.toISOString(),
       projectId: portableProjectData.project?.id ?? null,
       projectTitle: portableProjectData.project?.title ?? 'Untitled Project',

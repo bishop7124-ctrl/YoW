@@ -1,5 +1,5 @@
 import { unzipSync } from 'fflate'
-import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter } from './archiveImportLimits'
+import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter, assertArchiveNestingDepthOk } from './archiveImportLimits'
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
@@ -135,8 +135,24 @@ function sanitizeHeadingLevels(paragraphs) {
   ))
 }
 
+// DOMParser never throws on malformed XML — every mainstream implementation
+// (jsdom included) instead reports the failure by returning a document
+// whose root element is a `<parsererror>` (or that otherwise contains one),
+// so a corrupted/truncated/hand-tampered `word/document.xml` would
+// otherwise silently parse to zero <w:p> elements found, and
+// buildStructure() would then quietly "succeed" with its own placeholder
+// single empty act/chapter — a corrupted file appearing to import fine as
+// an empty project, rather than a clear error telling the user the file
+// itself couldn't be read.
+function isMalformedXmlDoc(xmlDoc) {
+  return xmlDoc.getElementsByTagName('parsererror').length > 0
+}
+
 function parseParagraphs(xmlStr) {
   const xmlDoc = new DOMParser().parseFromString(xmlStr, 'application/xml')
+  if (isMalformedXmlDoc(xmlDoc)) {
+    throw new Error('This .docx file appears to be corrupted (its document content could not be read). Try re-saving it and importing again.')
+  }
   const paras = Array.from(xmlDoc.getElementsByTagNameNS(W_NS, 'p'))
 
   const withRawLevels = paras.map(para => {
@@ -263,6 +279,7 @@ export async function parseDocxToStructure(file) {
   const buffer = await file.arrayBuffer()
   const label = file.name ? `"${file.name}"` : 'This file'
   assertArchiveInputSizeOk(buffer.byteLength, label)
+  assertArchiveNestingDepthOk(0, label)
   const uint8 = new Uint8Array(buffer)
 
   let files
