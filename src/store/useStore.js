@@ -985,15 +985,39 @@ export function useStore(userId = null, options = {}) {
         const persistedMap = new Map(persisted.map(r => [r?.id, r]))
         const prevMap = new Map(prevLocal.map(r => [r?.id, r]))
         const conflicts = []
+        // Sentinel for "this record was deleted by another tab and must not
+        // be written back" — distinct from a real `null`/`undefined` record,
+        // which the `!item` guard below already passes through unchanged.
+        const DELETED_ELSEWHERE = Symbol('deletedElsewhere')
         next = rawNext.map(item => {
           if (!item || item.id == null) return item
           const mineBase = prevMap.get(item.id)
           const touchedByThisUpdate = !mineBase || mineBase !== item
           const theirs = persistedMap.get(item.id)
           if (!touchedByThisUpdate) {
-            return theirs && !jsonEq(theirs, item) ? theirs : item
+            // mineBase is guaranteed truthy here (touchedByThisUpdate is true
+            // whenever !mineBase), so this tab already knew this record and
+            // this update didn't touch it. A missing `theirs` then means the
+            // record existed on this tab's last-known snapshot but is now
+            // absent from the freshest on-disk data — another tab deleted it
+            // since, not "just never made it to disk yet". Previously this
+            // fell through to `item`, silently writing the deleted record
+            // back on this tab's next unrelated save (2026-09-23 finding,
+            // see docs/ROADMAP.md's 2026-08-02 Bugs-table row, item (8)).
+            if (!theirs) return DELETED_ELSEWHERE
+            return jsonEq(theirs, item) ? item : theirs
           }
-          if (!mineBase || !theirs || theirs === mineBase || jsonEq(theirs, mineBase)) return item
+          // This update DID touch the record. `!mineBase` means it's brand
+          // new to this tab this update (nothing on disk could have deleted
+          // it yet) — keep it. Otherwise `mineBase` is guaranteed truthy, so
+          // a missing `theirs` here means the same "deleted by another tab"
+          // case as above, just discovered via an edit instead of an
+          // unrelated save — respect the deletion rather than writing this
+          // tab's edit of a since-deleted record back (same 2026-09-23
+          // finding as the branch above).
+          if (!mineBase) return item
+          if (!theirs) return DELETED_ELSEWHERE
+          if (theirs === mineBase || jsonEq(theirs, mineBase)) return item
           const keys = new Set([...Object.keys(item), ...Object.keys(theirs), ...Object.keys(mineBase)])
           let merged = null
           let fieldConflict = false
@@ -1023,7 +1047,7 @@ export function useStore(userId = null, options = {}) {
             })
           }
           return merged || item
-        })
+        }).filter(item => item !== DELETED_ELSEWHERE)
         // A record present on disk but never seen by this tab at all (not in
         // prevLocal, so this update can't have deleted it) — another tab
         // created it since this tab last loaded; keep it rather than drop it.
