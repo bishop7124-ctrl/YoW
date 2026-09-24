@@ -117,6 +117,8 @@ jobs:
             spec: tests/e2e/export-formats.spec.js
           - name: responsive
             spec: tests/e2e/responsive-smoke.spec.js
+          - name: writing-progress-footer-badge-responsive
+            spec: tests/e2e/writing-progress-footer-badge-responsive.spec.js
           - name: autosave
             spec: tests/e2e/autosave.spec.js
           - name: manuscript-structure
