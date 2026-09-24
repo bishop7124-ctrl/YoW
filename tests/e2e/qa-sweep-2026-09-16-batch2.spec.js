@@ -211,9 +211,20 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
 
     // Edit BEFORE the anchor: type 12 characters at the very start of the
     // document — the exact reproduction shape from the original bug report.
-    await editor.click()
-    await editor.press('Home')
-    await type(editor, 'IX-EDIT-XXX ') // exactly 12 characters
+    //
+    // Once a note is anchored to a real text range, the Writing-mode editor
+    // (the default/ordinary editor — see the nf-manuscript-mode-v2 comment in
+    // Manuscript.jsx) splits into one `textarea.ms-textarea` per
+    // buildWritingBlocks block, so the note's own anchored text can carry its
+    // own `.ms-note-highlight` overlay (see SceneEditor.jsx). `editor` (the
+    // single full-document textarea used above, before any note existed) is
+    // no longer unique once that split happens — target the specific block
+    // that starts at the document's own offset 0 (the text before the note,
+    // "The "), which is where this edit belongs.
+    const editorBefore = page.locator('textarea.ms-textarea[data-ms-start="0"]')
+    await editorBefore.click()
+    await editorBefore.evaluate((element) => element.setSelectionRange(0, 0))
+    await type(editorBefore, 'IX-EDIT-XXX ') // exactly 12 characters
     await expect.poll(async () => {
       const s = await readStorage(page, 'nf_scenes')
       return s[0]?.notes?.[0]?.anchorOffset
@@ -237,11 +248,15 @@ test.describe('Note anchor tracks edits correctly, does not drift (2026-09-15 fi
     await expect(page.locator('.ms-note-highlight').first()).toHaveText('lantern')
 
     // Edit INSIDE the anchor's own range: place the caret 3 characters into
-    // "lantern" (still within [16,23]) and type a character there.
-    await editor.click()
-    await editor.evaluate((element) => element.setSelectionRange(0, 0))
-    for (let i = 0; i < note.anchorOffset + 3; i++) await editor.press('ArrowRight')
-    await type(editor, 'Z')
+    // "lantern" (still within [16,23]) and type a character there. The
+    // note's own anchor range is its own block now (see above) — its
+    // `data-ms-start` is the note's current `anchorOffset`, and offset 3
+    // *within that block* is exactly 3 characters into "lantern", matching
+    // the pre-block-editor test's absolute `anchorOffset + 3` caret target.
+    const anchorEditor = page.locator(`textarea.ms-textarea[data-ms-start="${note.anchorOffset}"]`)
+    await anchorEditor.click()
+    await anchorEditor.evaluate((element) => element.setSelectionRange(3, 3))
+    await type(anchorEditor, 'Z')
     await expect.poll(async () => {
       const s = await readStorage(page, 'nf_scenes')
       return s[0]?.notes?.[0]?.anchorEndOffset
