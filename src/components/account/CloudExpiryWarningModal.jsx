@@ -93,7 +93,7 @@ export default function CloudExpiryWarningModal({ membership, store, novels, des
             {busyFormat === 'docx' && progress ? `Exporting ${progress.done}/${progress.total}…` : 'Export all as Word docs ZIP'}
           </button>
         </div>
-        {message && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--accent)', fontWeight: 800 }}>{message}</p>}
+        {message && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--accent-text)', fontWeight: 800 }}>{message}</p>}
         {error && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#ef4444', fontWeight: 800 }}>{error}</p>}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
