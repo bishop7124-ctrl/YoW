@@ -510,12 +510,13 @@ describe('novel CRUD', () => {
   // every retained scene's content key from the full authoritative dataset
   // being written and removes any other nf_scene_content:* key already in
   // storage in the same atomic operation — rather than relying on whatever
-  // `scenesRef` already tracked — and writes `nf_scene_versions` as a full
-  // replacement filtered to the retained projects too, a step deleteNovel
-  // had no code path for at all before this fix. Mirrors the analogous cloud-side test
-  // ("scene cloud cleanup on project delete" in firestoreSync.test.js):
-  // seed storage directly rather than building state up through the store's
-  // own add* methods, then assert only the deleted project's data is gone.
+  // `scenesRef` already tracked — and sweeps every retained scene's
+  // nf_scene_versions:<id> key (see src/utils/sceneVersions.js) the same way,
+  // a step deleteNovel had no code path for at all before this fix. Mirrors
+  // the analogous cloud-side test ("scene cloud cleanup on project delete" in
+  // firestoreSync.test.js): seed storage directly rather than building state
+  // up through the store's own add* methods, then assert only the deleted
+  // project's data is gone.
   it('deleteNovel removes every per-scene content key and version-history entry for the project, leaving other projects untouched', async () => {
     localStorage.setItem('nf_novels', JSON.stringify([
       { id: 'novel-1', title: 'To Delete', type: 'novel' },
@@ -529,9 +530,13 @@ describe('novel CRUD', () => {
     localStorage.setItem('nf_scene_content:scene-1', 'Novel 1 scene 1 prose.')
     localStorage.setItem('nf_scene_content:scene-2', 'Novel 1 scene 2 prose.')
     localStorage.setItem('nf_scene_content:scene-3', 'Novel 2 scene prose.')
-    localStorage.setItem('nf_scene_versions', JSON.stringify([
+    localStorage.setItem('nf_scene_versions:scene-1', JSON.stringify([
       { id: 'v1', sceneId: 'scene-1', novelId: 'novel-1', title: 'Scene One', content: 'v1', wordCount: 1, timestamp: 1 },
+    ]))
+    localStorage.setItem('nf_scene_versions:scene-2', JSON.stringify([
       { id: 'v2', sceneId: 'scene-2', novelId: 'novel-1', title: 'Scene Two', content: 'v1', wordCount: 1, timestamp: 2 },
+    ]))
+    localStorage.setItem('nf_scene_versions:scene-3', JSON.stringify([
       { id: 'v3', sceneId: 'scene-3', novelId: 'novel-2', title: 'Other Project Scene', content: 'v1', wordCount: 1, timestamp: 3 },
     ]))
     localStorage.setItem('nf_series', JSON.stringify([{ id: 'series-1', projectOrder: ['novel-1', 'novel-2'] }]))
@@ -544,8 +549,9 @@ describe('novel CRUD', () => {
     // Untouched project's scene content survives.
     expect(localStorage.getItem('nf_scene_content:scene-3')).toBe('Novel 2 scene prose.')
 
-    const remainingVersions = JSON.parse(localStorage.getItem('nf_scene_versions'))
-    expect(remainingVersions.map(v => v.id)).toEqual(['v3'])
+    expect(localStorage.getItem('nf_scene_versions:scene-1')).toBeNull()
+    expect(localStorage.getItem('nf_scene_versions:scene-2')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('nf_scene_versions:scene-3')).map(v => v.id)).toEqual(['v3'])
     expect(JSON.parse(localStorage.getItem('nf_series'))[0].projectOrder).toEqual(['novel-2'])
   })
 
@@ -566,6 +572,57 @@ describe('novel CRUD', () => {
 
     expect(localStorage.getItem('nf_scene_content:scene-1')).toBeNull()
     expect(localStorage.getItem('nf_scene_content:orphan-1')).toBeNull()
+  })
+
+  // Same sweep, for the version-history half of finding #16: a
+  // `nf_scene_versions:<id>` key whose scene is already missing from
+  // `nf_scenes` entirely gets cleaned up too, regardless of which project is
+  // actually being deleted.
+  it('deleteNovel also sweeps orphaned scene version-history keys that belong to no project in nf_scenes', async () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'novel-1', title: 'To Delete', type: 'novel' }]))
+    localStorage.setItem('nf_scenes', JSON.stringify([{ id: 'scene-1', novelId: 'novel-1', title: 'Scene One' }]))
+    localStorage.setItem('nf_scene_versions:scene-1', JSON.stringify([
+      { id: 'v1', sceneId: 'scene-1', novelId: 'novel-1', title: 'Scene One', content: 'v1', wordCount: 1, timestamp: 1 },
+    ]))
+    // No nf_scenes entry anywhere references this id.
+    localStorage.setItem('nf_scene_versions:orphan-1', JSON.stringify([
+      { id: 'v-orphan', sceneId: 'orphan-1', novelId: null, title: 'Gone', content: 'v', wordCount: 1, timestamp: 1 },
+    ]))
+
+    const { result } = renderHook(() => useStore(null))
+    await act(async () => { await result.current.deleteNovel('novel-1') })
+
+    expect(localStorage.getItem('nf_scene_versions:scene-1')).toBeNull()
+    expect(localStorage.getItem('nf_scene_versions:orphan-1')).toBeNull()
+  })
+
+  // Regression coverage for the other half of audit finding #16: deleting a
+  // single SCENE (as opposed to a whole project) never went through
+  // replaceProjectStorageAtomically's sweep at all, so its version history
+  // was left behind forever under an id no project references any more. See
+  // docs/QA_PLAN.md's Priority -1 section and the 2026-09-24 fix in
+  // docs/ROADMAP.md's Bugs table.
+  it('deleteScene removes only that scene\'s version-history key, leaving other scenes\' history untouched', () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'novel-1', title: 'Project', type: 'novel' }]))
+    localStorage.setItem('nf_acts', JSON.stringify([{ id: 'act-1', novelId: 'novel-1', order: 0 }]))
+    localStorage.setItem('nf_chapters', JSON.stringify([{ id: 'chapter-1', novelId: 'novel-1', actId: 'act-1', order: 0 }]))
+    localStorage.setItem('nf_scenes', JSON.stringify([
+      { id: 'scene-1', novelId: 'novel-1', chapterId: 'chapter-1', title: 'Scene One', order: 0 },
+      { id: 'scene-2', novelId: 'novel-1', chapterId: 'chapter-1', title: 'Scene Two', order: 1 },
+    ]))
+    localStorage.setItem('nf_scene_versions:scene-1', JSON.stringify([
+      { id: 'v1', sceneId: 'scene-1', novelId: 'novel-1', title: 'Scene One', content: 'v1', wordCount: 1, timestamp: 1 },
+    ]))
+    localStorage.setItem('nf_scene_versions:scene-2', JSON.stringify([
+      { id: 'v2', sceneId: 'scene-2', novelId: 'novel-1', title: 'Scene Two', content: 'v1', wordCount: 1, timestamp: 2 },
+    ]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('novel-1'))
+
+    const { result } = renderHook(() => useStore(null))
+    act(() => { result.current.deleteScene('scene-1') })
+
+    expect(localStorage.getItem('nf_scene_versions:scene-1')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('nf_scene_versions:scene-2')).map(v => v.id)).toEqual(['v2'])
   })
 
   it('uses the locked free project as the dashboard active project during import', () => {
@@ -2444,6 +2501,85 @@ describe('multi-tab structured record sync', () => {
 
     tabA.unmount()
     tabB.unmount()
+  })
+
+  // Regression test for the latest link in the two-tab silent-clobber chain
+  // (docs/ROADMAP.md's 2026-08-02 Bugs row), found live during the
+  // Relationships corrective audit: commitLocal's externalWrite rebase (see
+  // its own tombstone-check comment above) adopted another tab's fresher
+  // version of an UNTOUCHED record, or kept this tab's own version, but had
+  // no third case for "the record is gone from disk entirely" — so a record
+  // deleted in one tab could be silently resurrected by a second tab's own
+  // unrelated save, because that save's updater still carries the deleted
+  // record forward unchanged (a `.map()` over every record it had) and the
+  // old logic only ever asked "did the other tab change it," never "did the
+  // other tab delete it."
+  it('a stale second tab\'s unrelated save does not resurrect a record the first tab deleted', () => {
+    const owner = 'user-multitab-delete'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab B deletes char-B — this tab's own local store and localStorage no
+    // longer have it at all.
+    act(() => { expect(tabB.result.current.deleteCharacter('char-B')).toBe(true) })
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(c => c.id === 'char-B')).toBeUndefined()
+
+    // Tab A still holds its stale in-memory copy of char-B (it never learned
+    // about the deletion) and now performs a completely unrelated save —
+    // editing char-A only.
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+
+    // char-B must stay deleted: neither Tab A's own in-memory state nor the
+    // shared localStorage blob should have resurrected it.
+    expect(tabA.result.current.characters.find(c => c.id === 'char-B')).toBeUndefined()
+    expect(tabA.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+    const stored = JSON.parse(localStorage.getItem('nf_characters'))
+    expect(stored.find(c => c.id === 'char-B')).toBeUndefined()
+    expect(stored.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+  })
+
+  // Regression test for a real bug `code-reviewer` caught in the fix above
+  // before it shipped: the new tombstone check can't tell "another tab
+  // deleted this record" apart from "this tab's own last write of the whole
+  // key never actually reached disk" (a real QuotaExceededError, or an async
+  // IndexedDB/vault persist failure — see storage/writeDurability.js) purely
+  // from "the record I have isn't on disk." Without the write-failure guard,
+  // a record this tab itself just added/kept — but whose save() call failed
+  // — would be silently purged as if deleted, on the very next unrelated
+  // commit to the same key, which is its own data-loss bug.
+  it('a record is not tombstoned just because this tab\'s own last write of the key is flagged as failed', () => {
+    const owner = 'user-write-failure-safety'
+    const seed = [{ id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' }]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    const { result } = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    let charCId
+    act(() => { charCId = result.current.saveCharacter({ name: 'Charlie', notes: 'added locally' }) })
+    expect(JSON.parse(localStorage.getItem('nf_characters')).find(c => c.id === charCId)).toBeTruthy()
+
+    // Simulate char-C's add having actually failed to reach disk (e.g. a
+    // real QuotaExceededError on that write): the shared storage blob is
+    // rewritten from outside the store to a version without it, and the key
+    // is flagged failed exactly as save()'s own catch branch would.
+    localStorage.setItem('nf_characters', JSON.stringify([seed[0]]))
+    act(() => { markLocalWriteFailed('nf_characters') })
+
+    // An unrelated commit to the same key (editing char-A) must not treat
+    // char-C's absence from disk as a deletion and drop this tab's own
+    // pending copy of it.
+    act(() => { result.current.saveCharacter({ name: 'Alice', notes: 'edited' }, 'char-A') })
+
+    expect(result.current.characters.find(c => c.id === charCId)).toMatchObject({ name: 'Charlie', notes: 'added locally' })
   })
 
   it('discardRecordConflict keeps the current (mine) version and just dismisses the warning', async () => {

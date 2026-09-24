@@ -6,10 +6,16 @@ import {
   MAX_ARCHIVE_UNCOMPRESSED_BYTES,
   MAX_ARCHIVE_COMPRESSION_RATIO,
   MIN_RATIO_CHECK_UNCOMPRESSED_BYTES,
+  MAX_ARCHIVE_NESTING_DEPTH,
+  MAX_PDF_INPUT_BYTES,
+  MAX_PDF_RESTORE_MARKER_BYTES,
   assertArchiveInputSizeOk,
   assertUnzippedResultOk,
   assertZipEntryCompressionRatioOk,
   makeZipEntryRatioFilter,
+  assertArchiveNestingDepthOk,
+  assertPdfInputSizeOk,
+  assertPdfRestoreMarkerSizeOk,
 } from './archiveImportLimits.js'
 
 describe('assertArchiveInputSizeOk', () => {
@@ -171,5 +177,67 @@ describe('makeZipEntryRatioFilter against real fflate fixtures', () => {
     const files = unzipSync(zipped, { filter: ratioFilter })
     expect(() => ratioFilter.check()).not.toThrow()
     expect(Object.keys(files).sort()).toEqual(['chapter-1.txt', 'metadata.json'])
+  })
+})
+
+describe('assertArchiveNestingDepthOk', () => {
+  it('allows a top-level archive (depth 0) and the one nested archive this app supports (depth 1)', () => {
+    expect(() => assertArchiveNestingDepthOk(0, '"ok.zip"')).not.toThrow()
+    expect(() => assertArchiveNestingDepthOk(MAX_ARCHIVE_NESTING_DEPTH, '"ok.zip"')).not.toThrow()
+  })
+
+  it('rejects an archive nested deeper than this app supports, with a clear, specific error', () => {
+    expect(() => assertArchiveNestingDepthOk(MAX_ARCHIVE_NESTING_DEPTH + 1, '"deep.zip"'))
+      .toThrow(/"deep\.zip" is nested too deeply to import safely/)
+  })
+
+  it('marks its thrown error the same way every other archive-limit guard does, so a broad try/catch can still tell it apart from an ordinary parse failure', () => {
+    try {
+      assertArchiveNestingDepthOk(MAX_ARCHIVE_NESTING_DEPTH + 1, '"deep.zip"')
+      throw new Error('expected assertArchiveNestingDepthOk to throw')
+    } catch (err) {
+      expect(err.isArchiveLimitError).toBe(true)
+    }
+  })
+
+  it('ignores a missing/non-numeric depth rather than false-positive rejecting', () => {
+    expect(() => assertArchiveNestingDepthOk(undefined, '"ok.zip"')).not.toThrow()
+    expect(() => assertArchiveNestingDepthOk(NaN, '"ok.zip"')).not.toThrow()
+  })
+})
+
+describe('assertPdfInputSizeOk', () => {
+  it('allows a buffer at or under the cap', () => {
+    expect(() => assertPdfInputSizeOk(MAX_PDF_INPUT_BYTES, '"ok.pdf"')).not.toThrow()
+    expect(() => assertPdfInputSizeOk(1024, '"ok.pdf"')).not.toThrow()
+  })
+
+  it('throws a clear, user-facing error for a buffer over the cap', () => {
+    expect(() => assertPdfInputSizeOk(MAX_PDF_INPUT_BYTES + 1, '"huge.pdf"'))
+      .toThrow(/"huge\.pdf" is too large to import \(max \d+MB\)/)
+  })
+
+  it('ignores a missing/non-numeric byteLength rather than false-positive rejecting', () => {
+    expect(() => assertPdfInputSizeOk(undefined, '"ok.pdf"')).not.toThrow()
+  })
+})
+
+describe('assertPdfRestoreMarkerSizeOk', () => {
+  it('allows a marker at or under the cap', () => {
+    expect(() => assertPdfRestoreMarkerSizeOk(MAX_PDF_RESTORE_MARKER_BYTES, '"ok.pdf"')).not.toThrow()
+  })
+
+  it('throws a clear, user-facing error for a marker over the cap, without needing to allocate one that large', () => {
+    expect(() => assertPdfRestoreMarkerSizeOk(MAX_PDF_RESTORE_MARKER_BYTES + 1, '"huge.pdf"'))
+      .toThrow(/"huge\.pdf" contains an embedded project payload that is too large to import safely/)
+  })
+
+  it('marks its thrown error isArchiveLimitError so callers can distinguish it from "not a YOW export PDF"', () => {
+    try {
+      assertPdfRestoreMarkerSizeOk(MAX_PDF_RESTORE_MARKER_BYTES + 1, '"huge.pdf"')
+      throw new Error('expected assertPdfRestoreMarkerSizeOk to throw')
+    } catch (err) {
+      expect(err.isArchiveLimitError).toBe(true)
+    }
   })
 })
