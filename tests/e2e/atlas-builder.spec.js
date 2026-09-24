@@ -219,13 +219,18 @@ test('cursor placement stays aligned through zoom, pan and expanded view; border
   await page.locator('.atlas-editor').evaluate(el => { el.style.zoom=1 })
   await page.getByRole('button', { name: 'Fit', exact: true }).click()
   await page.getByRole('button', { name: 'Land', exact: true }).click()
-  // NOTE: a fullPage screenshot here can render a stale, non-expanded frame
-  // even though the DOM/computed styles are genuinely still in expanded
-  // state (getBoundingClientRect/computed style checked directly all agree)
-  // — a headless-Chromium fullPage-capture quirk with `position:fixed`
-  // content under this app's ancestor `zoom` density scale, reproducing only
-  // on a second fullPage capture in the same page session. Don't treat this
-  // screenshot alone as evidence the expanded view broke; verify live.
+  // NOTE: in one investigation (2026-09-24) a fullPage screenshot here
+  // rendered a stale, non-expanded frame even though the DOM/computed
+  // styles were genuinely still in expanded state (getBoundingClientRect/
+  // computed style checked directly agreed: position:fixed, inset:0,
+  // z-index:1050, geometry covering the full viewport). A follow-up
+  // independent pass could not reproduce the stale-screenshot artifact
+  // (same setup, same checks, correct frame both times) — so treat it as
+  // an intermittent/non-deterministic quirk under this app's ancestor
+  // `zoom` density scale, not a settled mechanism. Either way: don't treat
+  // this screenshot alone as evidence the expanded view broke — verify
+  // live (computed style/getBoundingClientRect or a plain screenshot) if
+  // this ever looks wrong again.
   await page.screenshot({ path: debugScreenshotPath('yow-atlas-expanded.png'), fullPage: true })
   const exitExpanded = page.getByRole('button', { name: 'Exit expanded view', exact: true })
   if (await exitExpanded.isVisible()) await exitExpanded.click()
