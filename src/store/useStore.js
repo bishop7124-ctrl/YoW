@@ -20,6 +20,7 @@ import {
   clearLocalWriteFailed,
   hasLocalWriteFailed,
   hasCorruptLocalData,
+  readFailedWriteKeys,
 } from '../storage/writeDurability'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
@@ -245,6 +246,12 @@ const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const STORAGE_KEY_TO_TABLE = Object.fromEntries(
   Object.entries(CLOUD_TABLE_CONFIG).map(([table, config]) => [config.storageKey, table])
 )
+// Sentinel returned by commitLocal's externalWrite rebase (below) for a
+// record another tab tombstoned (deleted) since this tab last had a fresh
+// copy of it, then filtered back out of `next` — see that rebase's own
+// comment for why a record can still be sitting in `rawNext` at all despite
+// being deleted elsewhere.
+const DELETED_ELSEWHERE = Symbol('deleted-elsewhere')
 
 const normalizeSyncText = value => String(value || '').trim().toLowerCase()
 
@@ -984,12 +991,45 @@ export function useStore(userId = null, options = {}) {
         const config = table ? CLOUD_TABLE_CONFIG[table] : null
         const persistedMap = new Map(persisted.map(r => [r?.id, r]))
         const prevMap = new Map(prevLocal.map(r => [r?.id, r]))
+        // A record can be missing from `persisted` for two very different
+        // reasons: another tab deleted it, or THIS tab's own most recent
+        // write of `key` itself never actually reached disk (quota exceeded,
+        // or an async IndexedDB/vault persist failure — see
+        // storage/writeDurability.js, fed by `save()`'s catch below and by
+        // the vault backends' own retry queue). `ref.current`/`prevLocal` is
+        // updated optimistically regardless of whether `save()` succeeded
+        // (see the end of this function), so a record this tab added or kept
+        // can still be sitting in `prevLocal` — and therefore look
+        // "tombstoned" below — purely because its own write failed, not
+        // because anyone deleted it. Treating that as a deletion would
+        // silently purge an edit that's still only pending a retry, which is
+        // its own data-loss bug (a real regression a code-review pass on
+        // this exact fix caught before it shipped). Skip the tombstone
+        // check entirely while this key's last write is flagged unreliable;
+        // the pre-existing touched/untouched fallback below already keeps
+        // this tab's copy in that case, exactly as it did before this
+        // deletion fix existed.
+        const writeUnreliableForKey = readFailedWriteKeys().has(key)
         const conflicts = []
         next = rawNext.map(item => {
           if (!item || item.id == null) return item
           const mineBase = prevMap.get(item.id)
-          const touchedByThisUpdate = !mineBase || mineBase !== item
           const theirs = persistedMap.get(item.id)
+          // Tombstone check: `mineBase` means this tab previously had this
+          // record as of its own last successful commit — at which point it
+          // was, by construction, already written to `persisted` (or this
+          // tab wouldn't have it in `prevLocal` at all, modulo the write-
+          // failure case excluded above). If it's gone from `persisted` now,
+          // another tab deleted it since, and the ONLY reason it can still
+          // be sitting in `rawNext` here is that this update's own updater
+          // rebuilt the collection from `prevLocal` without intentionally
+          // dropping it (e.g. a `.map()` over every record for an unrelated
+          // edit) — an "unrelated save while holding a stale copy" race, not
+          // a real re-creation. Filtered back out below. Checked before
+          // touched/untouched so a still-in-flight edit to the very record
+          // another tab just deleted doesn't resurrect it either.
+          if (mineBase && !theirs && !writeUnreliableForKey) return DELETED_ELSEWHERE
+          const touchedByThisUpdate = !mineBase || mineBase !== item
           if (!touchedByThisUpdate) {
             return theirs && !jsonEq(theirs, item) ? theirs : item
           }
@@ -1023,7 +1063,7 @@ export function useStore(userId = null, options = {}) {
             })
           }
           return merged || item
-        })
+        }).filter(item => item !== DELETED_ELSEWHERE)
         // A record present on disk but never seen by this tab at all (not in
         // prevLocal, so this update can't have deleted it) — another tab
         // created it since this tab last loaded; keep it rather than drop it.
