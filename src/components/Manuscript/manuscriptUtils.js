@@ -329,6 +329,25 @@ export function loadFormat() {
   } catch { return DEFAULT_FORMAT }
 }
 
+// ─── Manuscript page zoom ───────────────────────────────────────────────────
+// Same persistence shape as loadFormat() above: a flat, non-account-scoped
+// localStorage key so the zoom level survives refresh and project switches
+// (Manuscript.jsx previously kept this in plain useState with no persistence
+// at all, so every reload silently reset it back to 100%).
+
+export const DEFAULT_PAGE_ZOOM = 1
+const PAGE_ZOOM_MIN = 0.8
+const PAGE_ZOOM_MAX = 1.5
+
+export function loadPageZoom() {
+  try {
+    const s = localStorage.getItem('nf-page-zoom')
+    const parsed = s ? Number(JSON.parse(s)) : DEFAULT_PAGE_ZOOM
+    if (!Number.isFinite(parsed)) return DEFAULT_PAGE_ZOOM
+    return Math.min(PAGE_ZOOM_MAX, Math.max(PAGE_ZOOM_MIN, parsed))
+  } catch { return DEFAULT_PAGE_ZOOM }
+}
+
 // ─── Scene statuses ───────────────────────────────────────────────────────────
 
 export const SCENE_STATUSES = [
