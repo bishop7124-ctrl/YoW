@@ -1296,10 +1296,7 @@ function AppInner() {
             <button
               type="button"
               className="membership-toast-link"
-              onClick={() => {
-                setAccountTab('membership')
-                setAccountOpen(true)
-              }}
+              onClick={openCloudSettings}
             >
               Storage settings
             </button>
@@ -1325,7 +1322,7 @@ function AppInner() {
           <button
             type="button"
             className="membership-toast-link"
-            onClick={() => { setAccountTab('membership'); setAccountOpen(true) }}
+            onClick={openCloudSettings}
           >
             Storage settings
           </button>
@@ -1377,7 +1374,7 @@ function AppInner() {
           <button
             type="button"
             className="membership-toast-link"
-            onClick={() => { setAccountTab('membership'); setAccountOpen(true) }}
+            onClick={openCloudSettings}
           >
             Storage settings
           </button>

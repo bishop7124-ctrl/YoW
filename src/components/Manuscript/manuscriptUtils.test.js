@@ -1,13 +1,39 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  DEFAULT_PAGE_ZOOM,
   buildFinalizedDraft,
   copyTextToClipboard,
   dailyWordsForScenes,
   decodeHtmlEntities,
   getFinalizedContentBlocks,
+  loadPageZoom,
   subtractDays,
 } from './manuscriptUtils.js'
+
+describe('loadPageZoom', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('defaults to 100% when nothing is stored', () => {
+    expect(loadPageZoom()).toBe(DEFAULT_PAGE_ZOOM)
+  })
+
+  it('reads back a previously saved zoom level', () => {
+    localStorage.setItem('nf-page-zoom', JSON.stringify(1.2))
+    expect(loadPageZoom()).toBe(1.2)
+  })
+
+  it('clamps an out-of-range or corrupted stored value back to the 80-150% bounds', () => {
+    localStorage.setItem('nf-page-zoom', JSON.stringify(5))
+    expect(loadPageZoom()).toBe(1.5)
+    localStorage.setItem('nf-page-zoom', JSON.stringify(0.1))
+    expect(loadPageZoom()).toBe(0.8)
+    localStorage.setItem('nf-page-zoom', 'not json')
+    expect(loadPageZoom()).toBe(DEFAULT_PAGE_ZOOM)
+  })
+})
 
 describe('writing progress dates', () => {
   it('moves across calendar boundaries without using UTC date conversion', () => {
