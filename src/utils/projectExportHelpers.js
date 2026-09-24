@@ -2,6 +2,17 @@ import { getProjectType, getStoryEventIndicators } from '../constants/projectTyp
 import { isDesktopAppRuntime } from './runtime.js'
 import { SESSION_PLAN_FIELDS, SESSION_RECAP_FIELDS, buildOutlineModel } from './outlineDisplay.js'
 
+// The `project-data.json`/`manifest.json` shape written by `createProjectZipBlob()`
+// (projectExport.js) and read back by `tryReadYowZip()` (AIImportModal.jsx).
+// Bump this whenever a future change to that shape would make an older
+// importer misinterpret the data rather than merely see new optional
+// fields — the importer rejects any `manifest.schemaVersion` greater than
+// this with a clear error instead of silently importing a file whose shape
+// it doesn't actually understand. A missing `schemaVersion` (every export
+// written before this field existed) is treated as version 1 for backward
+// compatibility.
+export const YOW_EXPORT_SCHEMA_VERSION = 1
+
 export const sanitizeFilename = (value, fallback = 'project') => {
   const name = String(value || fallback)
     .trim()

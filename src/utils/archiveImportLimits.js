@@ -1,5 +1,7 @@
-// Shared defense-in-depth limits for client-side archive (ZIP/DOCX) import
-// parsing — see docs/YOW_CODE_AUDIT_2026-09-01.md finding #19.
+// Shared defense-in-depth limits for client-side archive (ZIP/DOCX) and PDF
+// import parsing — see docs/YOW_CODE_AUDIT_2026-09-01.md finding #19 and
+// docs/QA_PLAN.md's Priority -1 "Archive/document imports have no
+// decompression limits" line for the nested-archive/PDF-marker follow-up.
 //
 // fflate's `unzip`/`unzipSync` decompress synchronously in one shot — there
 // is no true streaming/incremental API to abort mid-decompression — so the
@@ -124,7 +126,7 @@ export function assertArchiveInputSizeOk(byteLength, label = 'This file') {
   }
 }
 
-// Marks errors thrown by the two guards above so callers that wrap
+// Marks errors thrown by the guards in this file so callers that wrap
 // decompression in a broad try/catch (e.g. to tolerate a corrupt nested
 // document without aborting the whole import) can tell a deliberate
 // limit-exceeded rejection apart from a generic parse failure and make sure
@@ -133,6 +135,82 @@ function makeArchiveLimitError(message) {
   const err = new Error(message)
   err.isArchiveLimitError = true
   return err
+}
+
+// ── Nested-archive recursion depth cap ──────────────────────────────────
+// Exactly one nesting point exists in this app's import code: a
+// "compatible structured ZIP" (`tryReadStructuredZip()` in
+// AIImportModal.jsx) may contain a `novel.docx` entry, itself a ZIP
+// (OOXML), which gets unzipped a second time to pull out the manuscript.
+// fflate never recurses into a nested archive by itself — only code that
+// explicitly calls unzip/unzipSync again on an already-decompressed
+// entry's bytes creates another nesting level — so there is no actual
+// unbounded-recursion path today. This cap exists so that stays true
+// deliberately, not by accident: every archive-extraction call site
+// declares its own nesting depth (0 for a top-level upload, 1 for the
+// nested novel.docx), and if a future import path added another nesting
+// point (e.g. a zip inside that novel.docx, or a self-referential archive
+// that points back at itself) it would be rejected with a clear error
+// instead of silently being allowed to recurse further and further.
+//
+// IMPORTANT for future call sites: `depth` is a literal each caller passes
+// for itself (0 at every current top-level entry point, 1 at the one nested
+// novel.docx unzip) — it is NOT threaded through automatically. Adding a
+// new nesting point by copy-pasting an existing top-level call's `depth: 0`
+// instead of correctly incrementing from the real nesting level would let
+// this guard silently miss it. If a shared "unzip a nested entry" helper is
+// ever introduced, thread `depth` through it explicitly rather than relying
+// on each call site to hand-compute the right number.
+export const MAX_ARCHIVE_NESTING_DEPTH = 1
+
+export function assertArchiveNestingDepthOk(depth, label = 'This archive') {
+  if (typeof depth === 'number' && depth > MAX_ARCHIVE_NESTING_DEPTH) {
+    throw makeArchiveLimitError(
+      `${label} is nested too deeply to import safely (archives nested more than ${MAX_ARCHIVE_NESTING_DEPTH} level${MAX_ARCHIVE_NESTING_DEPTH === 1 ? '' : 's'} deep are not supported).`
+    )
+  }
+}
+
+// ── PDF import limits ───────────────────────────────────────────────────
+// PDF import doesn't go through fflate/decompression at all — it's a
+// direct latin1 text scan over the raw file bytes (see this app's own
+// hand-rolled visual-PDF reader in AIImportModal.jsx), a different risk
+// shape from the ZIP/DOCX archive limits above. Two things can still go
+// wrong on an oversized or hostile PDF: decoding the whole file into one
+// JS string (done unconditionally by both `readPdfFile()` and
+// `tryReadYowPdf()`), and, for a legacy YOW-export PDF that still carries
+// the old `%%YOW-DATA-BEGIN%% ... %%YOW-DATA-END%%` embedded
+// full-project-JSON marker (export stopped writing this 2026-09-07, but
+// old files must still import losslessly), handing an unbounded amount of
+// attacker-controlled text to `JSON.parse` — a corrupted or maliciously
+// crafted PDF could put its BEGIN marker near the start and its END marker
+// (or none at all, but with a huge amount of intervening bytes before the
+// scan gives up) far away, forcing a huge string to be parsed.
+//
+// 150MB is comfortably above anything this app's own PDF generator
+// produces (a hand-rolled, mostly text/vector document — see
+// projectExportPdf.js) even for a very large project, while still bounding
+// the one-shot latin1 decode of a hostile upload.
+export const MAX_PDF_INPUT_BYTES = 150 * 1024 * 1024 // 150MB
+
+// The embedded legacy restore marker is a JSON-encoded project — smaller
+// than the whole PDF it lives inside, but potentially large for a real
+// project with many inline base64 images. 50MB of JSON is generous
+// headroom for any real legacy export while still bounding a hostile
+// marker's blast radius on `JSON.parse` specifically, independent of the
+// overall PDF input cap above.
+export const MAX_PDF_RESTORE_MARKER_BYTES = 50 * 1024 * 1024 // 50MB
+
+export function assertPdfInputSizeOk(byteLength, label = 'This file') {
+  if (typeof byteLength === 'number' && byteLength > MAX_PDF_INPUT_BYTES) {
+    throw makeArchiveLimitError(`${label} is too large to import (max ${formatMb(MAX_PDF_INPUT_BYTES)}).`)
+  }
+}
+
+export function assertPdfRestoreMarkerSizeOk(byteLength, label = 'This file') {
+  if (typeof byteLength === 'number' && byteLength > MAX_PDF_RESTORE_MARKER_BYTES) {
+    throw makeArchiveLimitError(`${label} contains an embedded project payload that is too large to import safely (max ${formatMb(MAX_PDF_RESTORE_MARKER_BYTES)}).`)
+  }
 }
 
 /**
