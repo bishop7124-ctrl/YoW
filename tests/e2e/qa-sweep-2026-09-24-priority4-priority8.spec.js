@@ -94,11 +94,16 @@ test.describe('Priority 4: Manuscript note-field containment', () => {
     await enterWritingMode(page)
     await waitForManuscriptReady(page)
 
-    // Switch to Edit mode, focus the scene (the "Add note" toolbar button only
-    // appears once a scene is active), and add a note — Edit mode routes it
-    // straight into the Inspector's Notes tab (Write mode shows a separate
-    // inline note block instead).
-    await page.getByRole('button', { name: 'Edit', exact: true }).click()
+    // Focus the scene, then add a note via the toolbar's "Add note" button —
+    // it opens the note in the Inspector's Notes tab regardless of mode.
+    // Nothing focuses a scene by default on entering the writing view
+    // (matching the established pattern in manuscript-structure.spec.js):
+    // click the preview's placeholder text first to focus it.
+    // Deliberately stays in the default Write mode: SceneEditor.jsx gates the
+    // "Add note" button behind `!trackingChanges`, and Manuscript.jsx sets
+    // `trackingChanges={mode === 'edit'}` — so Edit mode hides the Add-note
+    // button entirely rather than routing to it, contrary to what an earlier
+    // version of this test assumed.
     await page.getByText('Begin writing here…').click()
     await page.getByRole('button', { name: /Add note/ }).first().click()
 
@@ -137,7 +142,6 @@ test.describe('Priority 4: Manuscript note-field containment', () => {
     await page.setViewportSize({ width: 390, height: 900 })
     await page.reload()
     await waitForWritingMode(page)
-    await page.getByRole('button', { name: 'Edit', exact: true }).click()
     await openInspectorIfCompact(390)
     const persistedTextarea = page.locator('textarea[placeholder="Write your note here…"]').first()
     await expect(persistedTextarea).toHaveValue(longParagraph)
@@ -632,9 +636,10 @@ test.describe('Priority 8: Finalized draft reader', () => {
     // Returning to the working draft, it is still fully editable. Switch to
     // Write mode explicitly — Edit mode's own textarea is an
     // aria-hidden/tabindex=-1 accessibility mirror, not the directly
-    // clickable editing surface.
+    // clickable editing surface. The button's accessible name is "Writing"
+    // (see ManuscriptTopbar.jsx's MODES array), not "Write".
     await page.getByRole('button', { name: '← Working draft' }).click()
-    await page.getByLabel('Editor mode').getByRole('button', { name: 'Write' }).click()
+    await page.getByLabel('Editor mode').getByRole('button', { name: 'Writing' }).click()
     // Write mode shows a lightweight preview <div> until the scene is
     // clicked/focused, which swaps in the live editing textarea.
     await page.getByText('This is the working draft before finalizing.').first().click()
