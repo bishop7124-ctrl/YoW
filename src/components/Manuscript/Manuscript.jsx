@@ -16,7 +16,7 @@ import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
 import ManuscriptCatalogue from './ManuscriptCatalogue.jsx'
-import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
+import { SCRIPT_TYPES, buildFinalizedDraft, decodeHtmlEntities, loadFormat, loadPageZoom, persistSceneDraftToLocalStorage } from './manuscriptUtils.js'
 import ManuscriptZoomControl from './ManuscriptZoomControl.jsx'
 import SceneConflictReview from './SceneConflictReview.jsx'
 import { useSceneWindow } from './useSceneWindow.js'
@@ -536,9 +536,11 @@ export default function Manuscript({ store, userId, membership = null }) {
     })
   }, [activeSceneId, scenes])
 
-  const [pageZoom, setPageZoom] = useState(1)
+  const [pageZoom, setPageZoom] = useState(loadPageZoom)
   const handlePageZoomChange = useCallback((nextZoom) => {
-    setPageZoom(Math.min(1.5, Math.max(0.8, Number(nextZoom) || 1)))
+    const clamped = Math.min(1.5, Math.max(0.8, Number(nextZoom) || 1))
+    setPageZoom(clamped)
+    localStorage.setItem('nf-page-zoom', JSON.stringify(clamped))
   }, [])
 
   const handleFormatChange = useCallback((next) => {
@@ -1150,6 +1152,7 @@ export default function Manuscript({ store, userId, membership = null }) {
             </span>
           )}
           overflowItemTitles={{ import: importTitle, export: exportTitle }}
+          isNovelProject={isNovelProject}
         />
       )}
 
