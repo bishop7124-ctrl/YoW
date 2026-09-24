@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getSceneVersions, clearSceneVersions, deleteSceneVersion } from '../../utils/sceneVersions'
 
-function deleteVersion(id) {
-  try { deleteSceneVersion(id) } catch { /* ignore */ }
+function deleteVersion(id, sceneId) {
+  try { deleteSceneVersion(id, sceneId) } catch { /* ignore */ }
 }
 
 function formatTimestamp(ts) {
@@ -54,10 +54,10 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
   }, [onClose, confirmClear])
 
   const handleDeleteOne = useCallback((id) => {
-    deleteVersion(id)
+    deleteVersion(id, scene?.id)
     if (previewId === id) setPreviewId(null)
     reload()
-  }, [previewId, reload])
+  }, [previewId, reload, scene?.id])
 
   const handleClearAll = useCallback(() => {
     clearSceneVersions(scene?.id)

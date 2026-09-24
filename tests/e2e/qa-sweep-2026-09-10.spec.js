@@ -53,15 +53,22 @@ test('importing a ZIP with too many entries shows a clear error instead of hangi
 // Bugs row "2026-09-04 (audit finding #16 ...): Project deletion can leave
 // per-scene keys" (fixed in code and unit-tested against jsdom/localStorage
 // — QA_PLAN.md Priority -1 explicitly calls out that a real IndexedDB vault
-// still needed checking). Confirms both passes deleteAllSceneContentForNovel
-// documents: (1) the deleted project's own nf_scene_content:<id> key is
-// actually gone from the real IndexedDB-backed vault, not just absent from
-// the nf_scenes metadata array, and (2) its orphan sweep also removes an
-// unrelated, already-orphaned nf_scene_content:* key with no owning scene
-// anywhere — the exact "orphan left by an earlier gap" case the fix targets.
-// Does not cover the desktop Tauri/SQLite vault or the second-tab-never-
-// opened-it race also named in that QA_PLAN row — both still need a
-// separate live pass.
+// still needed checking). Confirms: (1) the deleted project's own
+// nf_scene_content:<id> key is actually gone from the real IndexedDB-backed
+// vault, not just absent from the nf_scenes metadata array; (2) the orphan
+// sweep also removes an unrelated, already-orphaned nf_scene_content:* key
+// with no owning scene anywhere — the exact "orphan left by an earlier gap"
+// case the fix targets; and (3), since the 2026-09-24 fix moved version
+// history to its own per-scene nf_scene_versions:<id> key (see
+// src/utils/sceneVersions.js), that the deleted scene's version-history key
+// is swept too — seeded directly here since a real snapshot's own 60s
+// background throttle isn't a reliable trigger for a short-lived e2e test
+// (see docs/QA_PLAN.md's Priority -1 entry, which previously flagged this
+// specific check as never actually confirmed). Does not cover the desktop
+// Tauri/SQLite vault or the second-tab-never-opened-it race also named in
+// that QA_PLAN row — both still need a separate live pass (the latter is
+// tracked and closed separately — see docs/ROADMAP.md's 2026-09-24 Bugs-table
+// entry for the tombstone-check fix).
 test('deleting a project purges its IndexedDB scene-content keys, including a pre-existing orphan', async ({ page }) => {
   const orphanKey = 'nf_scene_content:pre-existing-orphan-id'
 
@@ -89,6 +96,21 @@ test('deleting a project purges its IndexedDB scene-content keys, including a pr
   const scenes = await readStorage(page, 'nf_scenes')
   const sceneId = scenes[0].id
   const contentKey = `nf_scene_content:${sceneId}`
+  const versionsKey = `nf_scene_versions:${sceneId}`
+
+  // Version history (src/utils/sceneVersions.js) is written under its own
+  // per-scene key, populated by a periodic (60s-throttled) background
+  // snapshot rather than on every keystroke — not a reliable trigger to wait
+  // on in a short-lived e2e test. Write one directly through the same
+  // storage bridge the app itself uses (window.__yowStorageBridge, see
+  // projectStorage.js) so it lands in the live in-memory mirror
+  // replaceProjectStorageAtomically's orphan sweep actually reads from —
+  // exactly as if a real snapshot had already been saved for this scene
+  // before it's deleted.
+  await page.evaluate(({ key, value }) => window.__yowStorageBridge?.setItem(key, value), {
+    key: versionsKey,
+    value: JSON.stringify([{ id: 'seeded-version', sceneId, title: 'Seeded', content: 'v1', wordCount: 1, timestamp: Date.now() }]),
+  })
 
   const readKv = async (key) => page.evaluate((k) => new Promise((resolve, reject) => {
     const req = indexedDB.open('yow-storage', 1)
@@ -104,6 +126,7 @@ test('deleting a project purges its IndexedDB scene-content keys, including a pr
   // Sanity-check both keys are actually present before delete.
   expect(await readKv(contentKey)).not.toBeNull()
   expect(await readKv(orphanKey)).not.toBeNull()
+  expect(await readStorage(page, versionsKey)).not.toBeNull()
 
   await page.evaluate(() => { window.confirm = () => true })
   await page.getByRole('button', { name: 'Back to projects' }).click()
@@ -117,8 +140,5 @@ test('deleting a project purges its IndexedDB scene-content keys, including a pr
 
   await expect.poll(() => readKv(contentKey), { timeout: 8000 }).toBeNull()
   await expect.poll(() => readKv(orphanKey), { timeout: 8000 }).toBeNull()
-
-  const versions = await readStorage(page, 'nf_scene_versions')
-  const versionSceneIds = Array.isArray(versions) ? versions.map(v => v.sceneId) : Object.keys(versions || {})
-  expect(versionSceneIds).not.toContain(sceneId)
+  await expect.poll(() => readStorage(page, versionsKey), { timeout: 8000 }).toBeNull()
 })
