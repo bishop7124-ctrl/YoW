@@ -54,7 +54,12 @@ export default function StorageCard({ usedBytes = 0, quotaBytes, planLabel, limi
         {quotaBytes && (
           <span style={{
             fontSize: 12, fontWeight: 800,
-            color: barColor,
+            // `--accent` (barColor for the 'ok' level) fails 4.5:1 AA text
+            // contrast on dark-refined/pearl-minimal (see docs/ROADMAP.md's
+            // "Theme contrast audit" row) — use `--accent-text` for this
+            // text label while leaving the progress-bar fill (below) on the
+            // brand `--accent` color, since that's a non-text fill, not text.
+            color: level === 'ok' ? 'var(--accent-text)' : barColor,
             flexShrink: 0,
           }}>
             {pct}%

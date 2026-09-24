@@ -35,7 +35,7 @@ export default function FreeProjectSelector({ novels, store, onConfirm, busy }) 
           padding: '32px 28px',
         }}
       >
-        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 8 }}>
+        <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--accent-text)', marginBottom: 8 }}>
           Free plan
         </p>
         <h2 id="free-selector-title" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-main)', marginBottom: 10, lineHeight: 1.2 }}>
@@ -94,7 +94,7 @@ export default function FreeProjectSelector({ novels, store, onConfirm, busy }) 
                 )}
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: selectedId === novel.id ? 'var(--accent)' : 'var(--text-main)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: selectedId === novel.id ? 'var(--accent-text)' : 'var(--text-main)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {novel.title || 'Untitled Project'}
                 </p>
                 {novel.description && (
