@@ -311,6 +311,37 @@ describe('SceneEditor note-anchor store commits on keystroke', () => {
     })
   })
 
+  it('highlights a range-anchored note exactly once in write mode (regression: 2026-09-24 lost-highlight/duplicate-card bug)', async () => {
+    // Writing mode (the redesigned default editor's `mode: 'write'` — see the
+    // nf-manuscript-mode-v2 comment in Manuscript.jsx) used to lose a
+    // range-anchored note's highlight entirely: buildWritingBlocks only ever
+    // split at the note's *start* offset, so the anchored text itself fell
+    // into the next plain block with no `.ms-note-highlight` at all (fixed by
+    // giving the anchor range its own block). The first fix for that
+    // regressed a different way in code review: passing the note through to
+    // that block's own ContentPreview re-activated ContentPreview's
+    // write-mode point-note-marker branch too, rendering a *second*
+    // `.ms-inline-note` card for the same note stacked on top of the real one
+    // buildWritingBlocks already renders. Assert both: the highlight exists
+    // (with the anchored text, not lost) and the note's own editable card
+    // renders exactly once (not duplicated).
+    const note = makeNote({ anchorOffset: 5, anchorEndOffset: 10 }) // anchors "scene" in "Test scene content."
+    const { container } = renderScene('Test scene content.', {
+      mode: 'write',
+      scene: { id: 's1', title: 'Scene', content: 'Test scene content.', chapterId: 'c1', order: 0, notes: [note] },
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    await waitFor(() => {
+      expect(container.querySelector('textarea.ms-textarea[data-ms-start="0"]')).toBeTruthy()
+    })
+
+    const highlights = container.querySelectorAll('.ms-note-highlight')
+    expect(highlights).toHaveLength(1)
+    expect(highlights[0].textContent).toBe('scene')
+    expect(container.querySelectorAll('.ms-inline-note')).toHaveLength(1)
+  })
+
   it('shifts a note anchor when an edit precedes it in edit mode (regression: 2026-09-15 anchor-drift bug)', async () => {
     // Edit mode's single textarea always reports the whole document as the edit
     // span (data-ms-start=0, data-ms-end=content.length), so handleChange must
