@@ -400,16 +400,64 @@ function buildWritingBlocks(content, notes) {
   let pos = 0
 
   for (const note of notes) {
-    const anchor = Math.max(0, Math.min(note.anchorOffset ?? length, length))
+    const rawAnchor = Math.max(0, Math.min(note.anchorOffset ?? length, length))
+    const rawAnchorEnd = Math.max(rawAnchor, Math.min(note.anchorEndOffset ?? rawAnchor, length))
+    // Clamp to `pos`, not just to the content bounds: notes are expected
+    // sorted by anchorOffset (see `sortedNotes`), but nothing stops a later
+    // note's own range from starting inside — or entirely before — text an
+    // earlier note's block already covered (e.g. a point note added by
+    // placing the caret, no selection, *inside* an earlier note's
+    // highlighted range). Without this, `pos` could move backward and the
+    // same characters would render twice, in two independently-editable
+    // `<textarea>`s. `parseSegments` (a few dozen lines above) already
+    // guards the identical overlap case the same way.
+    const anchor = Math.max(rawAnchor, pos)
+    const anchorEnd = Math.max(rawAnchorEnd, pos)
     if (anchor > pos) {
-      blocks.push({ type: 'text', start: pos, end: anchor, key: `text-${pos}-${anchor}` })
+      // Keyed by the note that follows, not by this block's own (start, end)
+      // offsets: editing anywhere in this block is exactly what moves that
+      // note's anchor, so this block's own `end` shifts on every keystroke.
+      // Baking that into the key made React treat every keystroke as a brand
+      // new <textarea> (remount, not update) — losing focus and silently
+      // dropping the rest of whatever was being typed after the first
+      // character. Confirmed live: typing multiple characters before a note
+      // in Writing mode only ever committed the first one. A stable,
+      // offset-independent key (the same block, just resized) fixes typing
+      // before *or* after a note, not only the anchor's own highlight above.
+      blocks.push({ type: 'text', start: pos, end: anchor, key: `text-before-${note.id}` })
+    }
+    // A note anchored to a real selection (anchorEnd > anchor, e.g. added via
+    // the "Note" button on a keyboard selection) used to be skipped entirely
+    // here: this loop only ever advanced `pos` to `anchor` (the *start* of
+    // the range), so the anchored substring itself silently fell into the
+    // next plain 'text' block with no highlight at all — the note's own
+    // anchored text became indistinguishable from ordinary prose the moment
+    // Writing mode (the redesigned default editor, see the mode-v2 note in
+    // Manuscript.jsx) rendered it, even though the anchor offsets themselves
+    // were tracked correctly (this is what let the underlying anchor-shift
+    // fix's own regression test keep passing while the visible highlight was
+    // simply never there — confirmed live, `.ms-note-highlight` never
+    // rendered for a Writing-mode note; see qa-sweep-2026-09-16-batch2's
+    // note-anchor test and docs/ROADMAP.md's Bugs table for the full trail).
+    // Fixed by giving the anchored text its own tiny block, still a real
+    // `.ms-textarea` (so it stays natively editable, same as every other
+    // block here) but with that one note passed through so its own
+    // `ContentPreview` overlay renders the `.ms-note-highlight` span, exactly
+    // the same technique the non-Writing modes' single-textarea overlay
+    // already uses successfully for the same note.
+    if (anchorEnd > anchor) {
+      blocks.push({ type: 'text', start: anchor, end: anchorEnd, note, key: `text-anchor-${note.id}` })
     }
     blocks.push({ type: 'note', note, key: `note-${note.id}` })
-    pos = anchor
+    pos = anchorEnd
   }
 
   if (pos < length || !blocks.some(block => block.type === 'text') || blocks[blocks.length - 1]?.type === 'note') {
-    blocks.push({ type: 'text', start: pos, end: length, key: `text-${pos}-${length}` })
+    // Same reasoning as the leading block above: a fixed key, not one built
+    // from `length`, which changes on every keystroke typed into this
+    // (trailing, and usually the *only* block when the scene has one note at
+    // its own end) block.
+    blocks.push({ type: 'text', start: pos, end: length, key: 'text-end' })
   }
 
   return blocks
@@ -2160,14 +2208,18 @@ const SceneEditorImpl = ({
       </div>
 
       {/* Prose column (620px) + note gutter (188px) — spec §4/§5.3, refined
-          per a later note: Edit and Write never show a note the same way at
-          once. Edit shows a floating icon per note in the gutter, always
-          visible, in document order rather than pixel-aligned to its exact
-          line (measuring each note mark's offsetTop against the prose
-          column would mean a layout read in the scene render path, exactly
-          what useSceneWindow's virtualization exists to avoid across dozens
-          of mounted scenes). Write shows the note only as the inline box,
-          anchored right in the text, and never renders the gutter at all.
+          per a later note: non-Writing modes and Writing never show a note
+          the same way at once (mode ids kept their original names — see the
+          nf-manuscript-mode-v2 comment above — even though Writing is now
+          the ordinary default editor, not the specialised mode 'write' used
+          to be). Non-Writing modes show a floating icon per note in the
+          gutter, always visible, in document order rather than pixel-aligned
+          to its exact line (measuring each note mark's offsetTop against the
+          prose column would mean a layout read in the scene render path,
+          exactly what useSceneWindow's virtualization exists to avoid across
+          dozens of mounted scenes). Writing shows the note only as the inline
+          box, anchored right in the text via its own small editable block
+          (see buildWritingBlocks), and never renders the gutter at all.
           Container-query drop-out (per the handoff spec, not a viewport
           media query) lands in step 7 once the scroll container gets
           `container-type: inline-size`; a plain breakpoint covers it in
@@ -2196,7 +2248,19 @@ const SceneEditorImpl = ({
 	                      <ContentPreview
 	                        content={localContent.slice(block.start, block.end)}
 	                        entityMap={entityMap}
-	                        notesBySeq={new Map()}
+	                        // Most blocks here are surrounding prose with no note
+	                        // of their own (`new Map()`). A block built from a
+	                        // note's own anchor range (see buildWritingBlocks)
+	                        // carries that note on `block` — pass it through,
+	                        // offsets rebased to this block's own local content,
+	                        // so this overlay renders the real `.ms-note-highlight`
+	                        // span instead of silently losing the highlight the
+	                        // way an always-empty map did (2026-09-24 fix).
+	                        notesBySeq={block.note ? new Map([[block.note.seq, {
+	                          ...block.note,
+	                          anchorOffset: 0,
+	                          anchorEndOffset: block.end - block.start,
+	                        }]]) : new Map()}
 	                        highlightedNoteSeq={highlightedNoteSeq}
 	                        onEntityClick={onEntityClick}
 	                        onNoteClick={() => {}}
@@ -2206,7 +2270,25 @@ const SceneEditorImpl = ({
 	                        isBullets={false}
 	                        isScript={false}
 	                        projectType={projectType}
-	                        mode={mode}
+	                        // Not `mode` (always 'write' in this branch): when this
+	                        // block carries the note's own anchor range,
+	                        // parseSegments pairs its `noteRange` highlight with a
+	                        // trailing zero-width `note` marker for the *same* note
+	                        // (its normal highlight+point-marker pairing — see
+	                        // parseSegments above), and ContentPreview's own
+	                        // `seg.type === 'note'` branch renders that marker as a
+	                        // full InlineNoteBlock whenever `mode === 'write'`. The
+	                        // block right after this one (pushed by
+	                        // buildWritingBlocks) already renders that same note's
+	                        // real, interactive InlineNoteBlock — passing `mode`
+	                        // through here too would render it *twice* (confirmed
+	                        // in review: a second title/textarea/Open-Delete card
+	                        // for the same note, stacked inside this tiny anchor
+	                        // block's own aria-hidden preview). Any non-'write'
+	                        // value suppresses just that inline duplicate; it
+	                        // doesn't otherwise affect this call (mode has no other
+	                        // branch inside ContentPreview).
+	                        mode={block.note ? 'edit' : mode}
 	                        indentParagraphs={autoIndentEnabled}
 	                        baseOffset={block.start}
 	                        trackedRanges={trackedRanges}
