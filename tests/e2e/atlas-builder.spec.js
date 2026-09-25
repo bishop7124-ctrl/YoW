@@ -226,6 +226,16 @@ test('cursor placement stays aligned through zoom, pan and expanded view; border
   await page.evaluate(() => window.__yowStorageBridge.flush())
   await page.reload()
   await waitForStorageHydration(page)
+  // waitForStorageHydration only confirms the storage bridge exists and #root
+  // has rendered *something* — it resolves before the async store load from
+  // IndexedDB finishes and the Atlas editor actually remounts for this map.
+  // A keyboard shortcut dispatched in that window lands on document.body (no
+  // element has focus, so AtlasBuilder's own keydown guard would otherwise
+  // accept it) with no listener yet mounted to receive it, and is lost — not
+  // a real product bug, since a human would see the map rendered before
+  // pressing a shortcut. Wait for the editor's own tool button to be visible
+  // first so the keypress has a live listener to land on.
+  await expect(page.getByRole('button', { name: 'Land', exact: true })).toBeVisible()
   await page.keyboard.press('l')
   await expect(page.getByLabel('Organic borders', { exact: true })).not.toBeChecked()
 })
