@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
 import { parseDocxToStructure } from './docxImport.js'
+import { createProjectDocxBlob } from './projectExportDocx.js'
+import { exportToDocx } from '../components/Manuscript/FinalizedReader.jsx'
 
 // Builds a docx paragraph the same way exportToDocx (Manuscript/FinalizedReader.jsx)
 // and addDocParagraphs (projectExportDocx.js) do: one <w:p> per `\n{2,}`-separated
@@ -48,6 +50,58 @@ describe('docx export/import line-break round trip', () => {
     const acts = await parseDocxToStructure(file)
     const sceneText = acts.flatMap(a => a.chapters).flatMap(c => c.scenes).map(s => s.content).join('\n\n')
     expect(sceneText).toContain('Line one.\nLine two.\n\nA new paragraph.\nWith its own second line.')
+  })
+})
+
+// Both tests above build their fixture .docx by hand-rolling the docx
+// package calls, mirroring but not literally calling the production export
+// code. These two confirm the *actual* production functions round-trip
+// correctly end to end — generating a real .docx via the real exported
+// createProjectDocxBlob() (projectExportDocx.js) and exportToDocx()
+// (FinalizedReader.jsx, the manuscript toolbar's export button), then
+// re-importing that same file through the real parseDocxToStructure().
+describe('docx export/import line-break round trip — via the real production export functions', () => {
+  const dialogueContent =
+    '"Are you coming?" Mira asked.\n"Not yet," said Tomas.\n"We don\'t have much time."\n\nThe rain had not let up since morning, and the road ahead was a ribbon of mud.'
+
+  it('round-trips through createProjectDocxBlob (projectExportDocx.js) unchanged', async () => {
+    const projectData = {
+      project: { id: 'proj-1', title: 'QA Project', type: 'novel', enabledSections: ['manuscript'] },
+      acts: [{ id: 'act-1', title: 'Act 1', order: 0 }],
+      chapters: [{ id: 'ch-1', title: 'Chapter 1', order: 0, actId: 'act-1' }],
+      scenes: [{ id: 'scene-1', title: 'Opening', order: 0, chapterId: 'ch-1', content: dialogueContent }],
+      characters: [],
+    }
+    const blob = await createProjectDocxBlob(projectData)
+    const file = { name: 'export.docx', arrayBuffer: () => blob.arrayBuffer() }
+    const acts = await parseDocxToStructure(file)
+    const sceneText = acts.flatMap(a => a.chapters).flatMap(c => c.scenes).map(s => s.content).join('\n\n')
+    expect(sceneText).toContain(dialogueContent)
+  })
+
+  it('round-trips through exportToDocx (FinalizedReader.jsx, the manuscript toolbar export button) unchanged', async () => {
+    const originalCreate = globalThis.URL.createObjectURL
+    const originalRevoke = globalThis.URL.revokeObjectURL
+    let capturedBlob = null
+    globalThis.URL.createObjectURL = (blob) => { capturedBlob = blob; return 'blob:qa-test' }
+    globalThis.URL.revokeObjectURL = () => {}
+    try {
+      await exportToDocx(
+        { id: 'proj-1', title: 'QA Manuscript', type: 'novel' },
+        [{ id: 'act-1', title: 'Act 1', order: 0 }],
+        [{ id: 'ch-1', actId: 'act-1', title: 'Chapter 1', order: 0 }],
+        [{ id: 'scene-1', chapterId: 'ch-1', title: 'Opening', order: 0, content: dialogueContent }],
+        { 'ch-1': 1 },
+      )
+    } finally {
+      globalThis.URL.createObjectURL = originalCreate
+      globalThis.URL.revokeObjectURL = originalRevoke
+    }
+    expect(capturedBlob).toBeTruthy()
+    const file = { name: 'export.docx', arrayBuffer: () => capturedBlob.arrayBuffer() }
+    const acts = await parseDocxToStructure(file)
+    const sceneText = acts.flatMap(a => a.chapters).flatMap(c => c.scenes).map(s => s.content).join('\n\n')
+    expect(sceneText).toContain(dialogueContent)
   })
 })
 
