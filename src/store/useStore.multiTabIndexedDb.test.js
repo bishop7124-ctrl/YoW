@@ -316,4 +316,80 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     expect(stored.status).toBe('editing')
     expect(tabB.result.current.sceneConflicts).toHaveLength(0)
   })
+
+  it('a stale tab does not resurrect a record another tab deleted, on its own next unrelated save (2026-09-23 finding)', async () => {
+    const { initializeIndexedDbStorage } = await import('../storage/browserVaultAdapter.js')
+    const { resetStorageBackend } = await import('../storage/projectStorage.js')
+
+    await initializeIndexedDbStorage()
+    const owner = 'user-indexeddb-delete-resurrection'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    resetStorageBackend()
+    await initializeIndexedDbStorage()
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab A deletes char-B. The BroadcastChannel bridge updates Tab B's
+    // storage-backend mirror, but nothing re-renders Tab B's already-mounted
+    // React state — it keeps holding char-B in memory even though it's now
+    // gone on disk, same as a real open (uncommitted) draft in another panel.
+    act(() => { tabA.result.current.deleteCharacter('char-B') })
+    await new Promise(resolve => setTimeout(resolve, 60))
+    expect(tabB.result.current.characters.some(c => c.id === 'char-B')).toBe(true)
+
+    // Tab B now performs any unrelated save while still holding the deleted
+    // record — this must not write char-B back to storage.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab B' }, 'char-A') })
+    expect(tabB.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
+
+    // Confirm it's genuinely gone on disk too, via a fresh tab C mount.
+    resetStorageBackend()
+    await initializeIndexedDbStorage()
+    const tabC = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    expect(tabC.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
+    expect(tabC.result.current.characters.find(c => c.id === 'char-A')?.notes).toBe('edited by tab B')
+  })
+
+  it('a stale tab does not resurrect a record another tab deleted, by editing that same (already-deleted) record (2026-09-23 finding, code-review follow-up)', async () => {
+    const { initializeIndexedDbStorage } = await import('../storage/browserVaultAdapter.js')
+    const { resetStorageBackend } = await import('../storage/projectStorage.js')
+
+    await initializeIndexedDbStorage()
+    const owner = 'user-indexeddb-delete-resurrection-via-edit'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    resetStorageBackend()
+    await initializeIndexedDbStorage()
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab A deletes char-B; Tab B's mounted state doesn't learn about it.
+    act(() => { tabA.result.current.deleteCharacter('char-B') })
+    await new Promise(resolve => setTimeout(resolve, 60))
+    expect(tabB.result.current.characters.some(c => c.id === 'char-B')).toBe(true)
+
+    // Tab B edits the very record that was just deleted elsewhere — this is
+    // the sibling code path (this update DID touch the record) to the
+    // unrelated-save case above, and must not resurrect char-B either.
+    act(() => { tabB.result.current.saveCharacter({ name: 'Bob', notes: 'edited by stale tab B' }, 'char-B') })
+    expect(tabB.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
+
+    resetStorageBackend()
+    await initializeIndexedDbStorage()
+    const tabC = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    expect(tabC.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
+  })
 })
