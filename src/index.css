@@ -491,6 +491,22 @@
   --radius-unit: 4px;
 }
 
+/* Owner decision 2026-09-25: WCAG AA contrast is a hard requirement for this
+   theme specifically (see tests/e2e/accessibility.spec.js's dedicated
+   Accessible-theme check). `.ms-scene-header--write.ms-scene-header`'s
+   default 45% opacity (a deliberate de-emphasis for Write mode elsewhere —
+   see its own rule in the Manuscript editor section below) blends
+   `--text-muted` (#3a3a3a) down to an effective ~#a3a3a3 on a near-white
+   background, well under the 4.5:1 floor no amount of underlying color
+   choice can fix while opacity stays reduced. Same category as this theme's
+   existing "no decorative gradients/glows, no soft shadows" choices above:
+   remove the contrast-reducing effect rather than fight it with color.
+   Restored to full opacity only for this theme; every other theme keeps the
+   original de-emphasis look. */
+[data-theme="accessible"] .ms-scene-header--write.ms-scene-header {
+  opacity: 1;
+}
+
 /* Base application styling */
 * { box-sizing: border-box; }
 
