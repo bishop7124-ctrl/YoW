@@ -35,15 +35,6 @@ for (const viewport of viewports) {
     const editor = page.locator('main textarea').first()
     await expect(editor).toBeVisible()
 
-    // Focusing a scene reveals its complete formatting/action cluster. That
-    // cluster used to stay on one intrinsic-width row on phones, pushing
-    // "Copy scene" (and the manuscript canvas) beyond the right edge.
-    const writingCanvas = page.locator('.ms-scroll-container')
-    await expect(page.getByRole('button', { name: 'Copy scene' })).toBeVisible()
-    await expect.poll(() => writingCanvas.evaluate(
-      node => node.scrollWidth - node.clientWidth,
-    )).toBeLessThanOrEqual(1)
-
     const modeSwitch = page.getByRole('group', { name: 'Editor mode' })
     const breadcrumb = page.locator('.ms-topbar-crumb')
     await expect(modeSwitch).toBeVisible()
@@ -87,6 +78,20 @@ for (const viewport of viewports) {
       const scenes = await readScenesWithContent(page)
       return scenes.some(scene => scene.content === sentence)
     }).toBe(true)
+
+    // The formatting/action cluster (incl. "Copy scene") is hidden outright
+    // in Write mode by design (index.css's .ms-scene-header--write rules) —
+    // switch to Editing mode, where focusing a scene reveals the complete
+    // cluster, to check it. That cluster used to stay on one intrinsic-width
+    // row on phones, pushing "Copy scene" (and the manuscript canvas) beyond
+    // the right edge. Done last, after the Write-mode flow above, since
+    // switching modes replaces the editing surface the rest of this test
+    // exercises.
+    await page.getByRole('button', { name: 'Editing' }).click()
+    await expect(page.getByRole('button', { name: 'Copy scene' })).toBeVisible()
+    await expect.poll(() => page.locator('.ms-scroll-container').evaluate(
+      node => node.scrollWidth - node.clientWidth,
+    )).toBeLessThanOrEqual(1)
   })
 }
 
@@ -146,6 +151,16 @@ test('no .ms-surface pane overflows the viewport at a 320px phone width', async 
   // Seed a couple of real version-history entries directly into storage so
   // SceneVersionHistory renders its populated `.ms-vh-cols` two-pane layout
   // (time/badge/word-count/title-tag rows) rather than its empty state.
+  //
+  // Scene-version history moved from one shared `nf_scene_versions` blob to
+  // per-scene `nf_scene_versions:<sceneId>` keys (sceneVersions.js,
+  // 2026-09-24) — the old shared key is now only a one-time migration
+  // source that's skipped whenever the new per-scene key already has data,
+  // so seeding it directly no-ops the instant a real autosave has already
+  // written a version for this scene (as it reliably has by this point in
+  // the test) and silently drops back to that single real version. Write
+  // straight to the new per-scene key instead, which deterministically
+  // replaces whatever's already there.
   await page.evaluate(() => {
     const scenes = JSON.parse(window.__yowStorageBridge.getItem('nf_scenes') || '[]')
     const scene = scenes[0]
@@ -155,7 +170,7 @@ test('no .ms-surface pane overflows the viewport at a 320px phone width', async 
       { id: 'w320-v1', sceneId: scene.id, novelId: scene.novelId, title: longTitle, content: 'First version content.', wordCount: 3, timestamp: Date.now() - 60000 },
       { id: 'w320-v2', sceneId: scene.id, novelId: scene.novelId, title: longTitle, content: 'Second, slightly longer version content.', wordCount: 5, timestamp: Date.now() },
     ]
-    window.__yowStorageBridge.setItem('nf_scene_versions', JSON.stringify(versions))
+    window.__yowStorageBridge.setItem(`nf_scene_versions:${scene.id}`, JSON.stringify(versions))
   })
 
   const surface = page.locator('.ms-surface')
