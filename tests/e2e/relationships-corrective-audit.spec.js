@@ -278,24 +278,26 @@ test.describe('Add/remove connection validation and draft protection', () => {
     await expect(page.getByLabel('Connection character')).toHaveValue('')
   })
 
-  // NOTE ON A REAL FINDING: this checklist item's wording ("delete the
-  // selected target externally... stale targets cannot save") assumes an
-  // idle tab reactively notices another tab's write. Measured directly, it
-  // does not: src/storage/browserVaultAdapter.js's cross-tab BroadcastChannel
-  // only updates the OTHER tab's storage-backend mirror, never that tab's
-  // live React `characters` state — nothing subscribes to the channel to
-  // trigger a re-render. So an idle tab's Add-connection draft is genuinely
-  // NOT invalidated while it sits idle. This part remains true and is still
-  // exercised below. It USED TO be worse: if that stale tab then performed
-  // any unrelated save, src/store/useStore.js's commitLocal cross-tab merge
-  // treated "this record vanished from disk and I never touched it" the same
-  // as "no conflict, keep my copy" — silently writing the deleted character
-  // back. Fixed 2026-09-24 (see docs/ROADMAP.md's 2026-08-02 Bugs-table row,
-  // item (8)): commitLocal now returns a DELETED_ELSEWHERE sentinel instead,
-  // filtered out before the write. Confirmed directly below, against the
-  // real app, not just by code reading — clicking Add Connection on a stale
-  // draft no longer resurrects the deleted character.
-  test('an idle tab does not react live to a cross-tab delete, but no longer resurrects the deleted record on its next unrelated save; a real reload also correctly invalidates the stale draft', async ({ page, context }) => {
+  // NOTE ON A REAL FINDING (fixed 2026-09-24): this checklist item's wording
+  // ("delete the selected target externally... stale targets cannot save")
+  // assumes an idle tab reactively notices another tab's write. Measured
+  // directly, it does not: src/storage/browserVaultAdapter.js's cross-tab
+  // BroadcastChannel only updates the OTHER tab's storage-backend mirror,
+  // never that tab's live React `characters` state — nothing subscribes to
+  // the channel to trigger a re-render. So an idle tab's Add-connection
+  // draft is genuinely NOT invalidated while it sits idle. This part remains
+  // true and is asserted below. What used to be worse — confirmed directly
+  // below, that stale tab performing any unrelated save resurrected the
+  // deleted character — is now fixed: src/store/useStore.js's commitLocal
+  // gained a tombstone check (a record this tab last held that's now absent
+  // from the freshest on-disk snapshot is dropped rather than carried
+  // forward) that lives in commitLocal's generic merge logic shared by every
+  // entity type, not anything Relationships-specific, so the fix was made
+  // there rather than in this Relationships-only test file. See
+  // docs/ROADMAP.md's 2026-08-02 "two-tab silent clobber" Bugs-table row for
+  // the fix detail and regression coverage in src/store/useStore.test.js and
+  // src/store/useStore.multiTabIndexedDb.test.js.
+  test('documents that an idle tab does not react live to a cross-tab delete, but its next unrelated save no longer resurrects the deleted record (fixed 2026-09-24) — a real reload remains the safety net for the stale draft itself', async ({ page, context }) => {
     const projectId = new URL(page.url()).pathname.split('/')[2]
     await seedCharacters(page, [
       { id: 'xt-ada', novelId: projectId, name: 'Ada' },
@@ -344,16 +346,19 @@ test.describe('Add/remove connection validation and draft protection', () => {
     await expect(page.getByRole('button', { name: 'Add Connection', exact: true })).toBeEnabled()
     await expect(page.getByLabel('Connection character')).toHaveValue('xt-ben')
 
-    // Clicking it anyway must NOT resurrect Ben in storage — the commitLocal
-    // fix described above, confirmed here against the real app rather than
-    // by code reading alone.
+    // Clicking it anyway used to resurrect Ben in storage (the commitLocal
+    // bug described above) — confirmed here, against the real app, that the
+    // 2026-09-24 tombstone-check fix actually stops it: Ben's own character
+    // record is dropped from this tab's rebase because it's absent from the
+    // freshest on-disk snapshot, rather than carried forward unchanged.
     await page.getByRole('button', { name: 'Add Connection', exact: true }).click()
     const storedAfterStaleSave = await readStorage(page, 'nf_characters')
     expect(storedAfterStaleSave.some(c => c.id === 'xt-ben')).toBe(false)
 
-    // The real, working safety net is a reload (not live cross-tab
-    // reactivity): after reloading, tab A's fresh read correctly excludes
-    // whatever is actually gone on disk and the draft cannot reference it.
+    // The reload safety net (for the stale draft UI itself, not the
+    // now-fixed resurrection above) still matters on its own: after
+    // reloading, tab A's fresh read correctly excludes whatever is actually
+    // gone on disk and the draft cannot reference it.
     await pageB.close()
     await page.reload()
     await waitForStorageHydration(page)

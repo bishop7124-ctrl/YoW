@@ -208,8 +208,14 @@ function runPersistSceneDraft(scene, content) {
     writeItem('nf_scenes', raw)
 
     // Version history is a periodic checkpoint, not a per-keystroke log — cap how
-    // often a snapshot (a full copy of the scene's content, across every scene's
-    // history in nf_scene_versions) gets written regardless of how often drafts do.
+    // often a snapshot (a full copy of the scene's content, under this scene's
+    // own nf_scene_versions:<id> key — see src/utils/sceneVersions.js) gets
+    // written regardless of how often drafts do. Per-scene, not one shared key
+    // across every scene: two tabs each hitting this throttle for a
+    // *different* scene at the same instant (e.g. both fire on the same
+    // `visibilitychange`, when the user switches away from the browser
+    // entirely) must never race on the same storage key/BroadcastChannel
+    // message — see sceneVersions.js's own comment for the full history.
     const lastSnapshot = lastVersionSnapshotAt.get(scene.id) || 0
     if (now - lastSnapshot >= VERSION_SNAPSHOT_THROTTLE_MS) {
       lastVersionSnapshotAt.set(scene.id, now)
@@ -327,6 +333,25 @@ export function loadFormat() {
     const s = localStorage.getItem('nf-format-settings')
     return s ? { ...DEFAULT_FORMAT, ...JSON.parse(s) } : DEFAULT_FORMAT
   } catch { return DEFAULT_FORMAT }
+}
+
+// ─── Manuscript page zoom ───────────────────────────────────────────────────
+// Same persistence shape as loadFormat() above: a flat, non-account-scoped
+// localStorage key so the zoom level survives refresh and project switches
+// (Manuscript.jsx previously kept this in plain useState with no persistence
+// at all, so every reload silently reset it back to 100%).
+
+export const DEFAULT_PAGE_ZOOM = 1
+const PAGE_ZOOM_MIN = 0.8
+const PAGE_ZOOM_MAX = 1.5
+
+export function loadPageZoom() {
+  try {
+    const s = localStorage.getItem('nf-page-zoom')
+    const parsed = s ? Number(JSON.parse(s)) : DEFAULT_PAGE_ZOOM
+    if (!Number.isFinite(parsed)) return DEFAULT_PAGE_ZOOM
+    return Math.min(PAGE_ZOOM_MAX, Math.max(PAGE_ZOOM_MIN, parsed))
+  } catch { return DEFAULT_PAGE_ZOOM }
 }
 
 // ─── Scene statuses ───────────────────────────────────────────────────────────

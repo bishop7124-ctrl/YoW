@@ -3,7 +3,11 @@ import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
-import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter } from '../utils/archiveImportLimits'
+import {
+  assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter,
+  assertArchiveNestingDepthOk, assertPdfInputSizeOk, assertPdfRestoreMarkerSizeOk,
+} from '../utils/archiveImportLimits'
+import { YOW_EXPORT_SCHEMA_VERSION } from '../utils/projectExportHelpers'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -24,6 +28,7 @@ export async function readZipFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  assertArchiveNestingDepthOk(0, `"${file.name}"`)
   const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
@@ -50,6 +55,7 @@ export async function tryReadYowZip(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  assertArchiveNestingDepthOk(0, `"${file.name}"`)
   const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
@@ -60,27 +66,60 @@ export async function tryReadYowZip(file) {
       if (err) { resolve(null); return }
       try { assertUnzippedResultOk(files, `"${file.name}"`) } catch (guardErr) { reject(guardErr); return }
       if (!files['manifest.json'] || !files['project-data.json']) { resolve(null); return }
+      // manifest.json is parsed on its own, separately from project-data.json
+      // below: a manifest that fails to parse, or doesn't identify itself as
+      // a YOW export, means "not a YOW zip" (fall through to another
+      // importer) — but once the manifest confirms this *is* a YOW export,
+      // a subsequent failure (corrupted project-data.json, or a schema
+      // version newer than this app understands) must reject with a clear,
+      // specific error instead of being flattened into the same "not a YOW
+      // zip" fallthrough, which would otherwise go on to silently try (and
+      // likely fail confusingly in) another importer, or — for a future
+      // schema this app doesn't actually understand — risk misinterpreting
+      // the data instead of refusing it outright.
+      let manifest
       try {
-        const manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
-        if (manifest?.app !== 'YOW' || manifest?.format !== 'yow-project-export') { resolve(null); return }
+        manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
+      } catch { resolve(null); return }
+      if (manifest?.app !== 'YOW' || manifest?.format !== 'yow-project-export') { resolve(null); return }
+      const schemaVersion = manifest?.schemaVersion
+      if (typeof schemaVersion === 'number' && schemaVersion > YOW_EXPORT_SCHEMA_VERSION) {
+        reject(new Error(
+          `"${file.name}" was exported by a newer version of YOW (schema version ${schemaVersion}) than this app supports (max ${YOW_EXPORT_SCHEMA_VERSION}). ` +
+          `Update YOW and try importing again.`
+        ))
+        return
+      }
+      try {
         resolve(JSON.parse(new TextDecoder().decode(files['project-data.json'])))
-      } catch { resolve(null) }
+      } catch (parseErr) {
+        reject(new Error(`"${file.name}" looks like a YOW backup, but its project data is corrupted and could not be read. Try a different export.`, { cause: parseErr }))
+      }
     })
   })
 }
 
 // Detect a YOW PDF with embedded project JSON and extract it for lossless re-import.
 // Returns parsed projectData or null if not a YOW export PDF.
-async function tryReadYowPdf(file) {
+export async function tryReadYowPdf(file) {
   try {
     const buffer = await file.arrayBuffer()
+    assertPdfInputSizeOk(buffer.byteLength, `"${file.name}"`)
     const raw = new TextDecoder('latin1').decode(buffer)
     const begin = raw.indexOf('%%YOW-DATA-BEGIN%%')
     const end = raw.indexOf('%%YOW-DATA-END%%')
     if (begin === -1 || end === -1 || end <= begin) return null
-    const json = raw.slice(begin + '%%YOW-DATA-BEGIN%%'.length, end).trim()
+    const markerStart = begin + '%%YOW-DATA-BEGIN%%'.length
+    assertPdfRestoreMarkerSizeOk(end - markerStart, `"${file.name}"`)
+    const json = raw.slice(markerStart, end).trim()
     return JSON.parse(json)
-  } catch { return null }
+  } catch (err) {
+    // A limit-exceeded guard must abort with a clear, specific error rather
+    // than being swallowed into "not a YOW export PDF" like an ordinary
+    // parse failure (a genuinely corrupt/foreign PDF) is below.
+    if (err?.isArchiveLimitError) throw err
+    return null
+  }
 }
 
 // Extract plain text from a YOW visual PDF (uncompressed content streams).
@@ -88,6 +127,7 @@ async function tryReadYowPdf(file) {
 // from BT...ET blocks — the exact format YOW's hand-crafted PDF generator produces.
 async function readPdfFile(file) {
   const buffer = await file.arrayBuffer()
+  assertPdfInputSizeOk(buffer.byteLength, `"${file.name}"`)
   const raw = new TextDecoder('latin1').decode(buffer)
   const parts = []
   const btRe = /BT([\s\S]*?)ET/g
@@ -111,6 +151,7 @@ export async function readDocxFile(file) {
   const { unzip } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  assertArchiveNestingDepthOk(0, `"${file.name}"`)
   const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
@@ -824,6 +865,7 @@ export async function tryReadStructuredZip(file) {
   const { unzip, unzipSync } = await import('fflate')
   const buffer = await file.arrayBuffer()
   assertArchiveInputSizeOk(buffer.byteLength, `"${file.name}"`)
+  assertArchiveNestingDepthOk(0, `"${file.name}"`)
   const ratioFilter = makeZipEntryRatioFilter(`"${file.name}"`)
   return new Promise((resolve, reject) => {
     unzip(new Uint8Array(buffer), { filter: ratioFilter }, (err, files) => {
@@ -890,6 +932,7 @@ export async function tryReadStructuredZip(file) {
       if (docxBytes) {
         try {
           assertArchiveInputSizeOk(docxBytes.byteLength, `"${file.name}" (novel.docx)`)
+          assertArchiveNestingDepthOk(1, `"${file.name}" (novel.docx)`)
           const docxRatioFilter = makeZipEntryRatioFilter(`"${file.name}" (novel.docx)`)
           const docxFiles = unzipSync(docxBytes, { filter: docxRatioFilter })
           docxRatioFilter.check()

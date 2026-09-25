@@ -32,7 +32,7 @@ const MODES = [
 // list, but the old toolbar's working fullscreen toggle has to land
 // *somewhere*, and burying it in "View" here is lower-cost than inventing a
 // new always-visible button the spec's three-zone layout doesn't have room for.
-const buildOverflowSections = (fullscreen, itemTitles = {}) => [
+const buildOverflowSections = (fullscreen, itemTitles = {}, isNovelProject = true) => [
   {
     heading: 'Find',
     items: [
@@ -53,7 +53,12 @@ const buildOverflowSections = (fullscreen, itemTitles = {}) => [
   {
     heading: 'Finish',
     items: [
-      { id: 'finalise', label: 'Finalise draft' },
+      // Finalise draft creates an uneditable reading copy of the manuscript —
+      // Manuscript.jsx's handleFinaliseDraft only supports novel-type
+      // projects today and silently no-ops for every other type, so the
+      // action itself must not appear there rather than look clickable and
+      // do nothing (see docs/QA_PLAN.md's "Finalized draft reader" item).
+      ...(isNovelProject ? [{ id: 'finalise', label: 'Finalise draft' }] : []),
       { id: 'export', label: 'Export…', kbd: '⌘E', title: itemTitles.export },
       { id: 'catalogue', label: 'Retired drafts' },
     ],
@@ -132,7 +137,7 @@ function GoToScenePalette({ onClose, acts, chapters, scenes, labels, onSelectSce
 
 // ─── Overflow menu ──────────────────────────────────────────────────────────
 
-function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
+function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles, isNovelProject }) {
   const ref = useRef(null)
   useEffect(() => {
     if (!open) return undefined
@@ -142,7 +147,7 @@ function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
   }, [open, onClose])
 
   if (!open) return null
-  const sections = buildOverflowSections(fullscreen, itemTitles)
+  const sections = buildOverflowSections(fullscreen, itemTitles, isNovelProject)
   return (
     <div className="ms-topbar-menu" ref={ref} role="menu">
       {sections.map(section => (
@@ -179,6 +184,7 @@ export default function ManuscriptTopbar({
   scriptBetaBadge,
   overflowItemTitles,
   trackedChangeCount = 0,
+  isNovelProject = true,
   // Writing keeps the reference/scene Inspector available without exposing
   // the editing-only AI surface. Review/Finalised hide both via their own
   // layouts or these independent flags.
@@ -271,6 +277,7 @@ export default function ManuscriptTopbar({
               onAction={handleOverflowAction}
               fullscreen={fullscreen}
               itemTitles={overflowItemTitles}
+              isNovelProject={isNovelProject}
             />
           </div>
         </div>

@@ -14,12 +14,14 @@ import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils
 import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
+import { clearSceneVersions } from '../utils/sceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
   clearLocalWriteFailed,
   hasLocalWriteFailed,
   hasCorruptLocalData,
+  readFailedWriteKeys,
 } from '../storage/writeDurability'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
@@ -245,6 +247,12 @@ const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const STORAGE_KEY_TO_TABLE = Object.fromEntries(
   Object.entries(CLOUD_TABLE_CONFIG).map(([table, config]) => [config.storageKey, table])
 )
+// Sentinel returned by commitLocal's externalWrite rebase (below) for a
+// record another tab tombstoned (deleted) since this tab last had a fresh
+// copy of it, then filtered back out of `next` — see that rebase's own
+// comment for why a record can still be sitting in `rawNext` at all despite
+// being deleted elsewhere.
+const DELETED_ELSEWHERE = Symbol('deleted-elsewhere')
 
 const normalizeSyncText = value => String(value || '').trim().toLowerCase()
 
@@ -984,40 +992,49 @@ export function useStore(userId = null, options = {}) {
         const config = table ? CLOUD_TABLE_CONFIG[table] : null
         const persistedMap = new Map(persisted.map(r => [r?.id, r]))
         const prevMap = new Map(prevLocal.map(r => [r?.id, r]))
+        // A record can be missing from `persisted` for two very different
+        // reasons: another tab deleted it, or THIS tab's own most recent
+        // write of `key` itself never actually reached disk (quota exceeded,
+        // or an async IndexedDB/vault persist failure — see
+        // storage/writeDurability.js, fed by `save()`'s catch below and by
+        // the vault backends' own retry queue). `ref.current`/`prevLocal` is
+        // updated optimistically regardless of whether `save()` succeeded
+        // (see the end of this function), so a record this tab added or kept
+        // can still be sitting in `prevLocal` — and therefore look
+        // "tombstoned" below — purely because its own write failed, not
+        // because anyone deleted it. Treating that as a deletion would
+        // silently purge an edit that's still only pending a retry, which is
+        // its own data-loss bug (a real regression a code-review pass on
+        // this exact fix caught before it shipped). Skip the tombstone
+        // check entirely while this key's last write is flagged unreliable;
+        // the pre-existing touched/untouched fallback below already keeps
+        // this tab's copy in that case, exactly as it did before this
+        // deletion fix existed.
+        const writeUnreliableForKey = readFailedWriteKeys().has(key)
         const conflicts = []
-        // Sentinel for "this record was deleted by another tab and must not
-        // be written back" — distinct from a real `null`/`undefined` record,
-        // which the `!item` guard below already passes through unchanged.
-        const DELETED_ELSEWHERE = Symbol('deletedElsewhere')
         next = rawNext.map(item => {
           if (!item || item.id == null) return item
           const mineBase = prevMap.get(item.id)
-          const touchedByThisUpdate = !mineBase || mineBase !== item
           const theirs = persistedMap.get(item.id)
+          // Tombstone check: `mineBase` means this tab previously had this
+          // record as of its own last successful commit — at which point it
+          // was, by construction, already written to `persisted` (or this
+          // tab wouldn't have it in `prevLocal` at all, modulo the write-
+          // failure case excluded above). If it's gone from `persisted` now,
+          // another tab deleted it since, and the ONLY reason it can still
+          // be sitting in `rawNext` here is that this update's own updater
+          // rebuilt the collection from `prevLocal` without intentionally
+          // dropping it (e.g. a `.map()` over every record for an unrelated
+          // edit) — an "unrelated save while holding a stale copy" race, not
+          // a real re-creation. Filtered back out below. Checked before
+          // touched/untouched so a still-in-flight edit to the very record
+          // another tab just deleted doesn't resurrect it either.
+          if (mineBase && !theirs && !writeUnreliableForKey) return DELETED_ELSEWHERE
+          const touchedByThisUpdate = !mineBase || mineBase !== item
           if (!touchedByThisUpdate) {
-            // mineBase is guaranteed truthy here (touchedByThisUpdate is true
-            // whenever !mineBase), so this tab already knew this record and
-            // this update didn't touch it. A missing `theirs` then means the
-            // record existed on this tab's last-known snapshot but is now
-            // absent from the freshest on-disk data — another tab deleted it
-            // since, not "just never made it to disk yet". Previously this
-            // fell through to `item`, silently writing the deleted record
-            // back on this tab's next unrelated save (2026-09-23 finding,
-            // see docs/ROADMAP.md's 2026-08-02 Bugs-table row, item (8)).
-            if (!theirs) return DELETED_ELSEWHERE
-            return jsonEq(theirs, item) ? item : theirs
+            return theirs && !jsonEq(theirs, item) ? theirs : item
           }
-          // This update DID touch the record. `!mineBase` means it's brand
-          // new to this tab this update (nothing on disk could have deleted
-          // it yet) — keep it. Otherwise `mineBase` is guaranteed truthy, so
-          // a missing `theirs` here means the same "deleted by another tab"
-          // case as above, just discovered via an edit instead of an
-          // unrelated save — respect the deletion rather than writing this
-          // tab's edit of a since-deleted record back (same 2026-09-23
-          // finding as the branch above).
-          if (!mineBase) return item
-          if (!theirs) return DELETED_ELSEWHERE
-          if (theirs === mineBase || jsonEq(theirs, mineBase)) return item
+          if (!mineBase || !theirs || theirs === mineBase || jsonEq(theirs, mineBase)) return item
           const keys = new Set([...Object.keys(item), ...Object.keys(theirs), ...Object.keys(mineBase)])
           let merged = null
           let fieldConflict = false
@@ -2281,7 +2298,7 @@ export function useStore(userId = null, options = {}) {
     const chapterSet = new Set(chapterIds)
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && chapterSet.has(s.chapterId)).map(s => s.id)
     const sceneSet = new Set(sceneIds)
-    sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
     if (canSyncCloud) {
       deleteItem('acts', userId, id).catch(console.error)
       chapterIds.forEach(cId => deleteItem('chapters', userId, cId).catch(console.error))
@@ -2308,7 +2325,7 @@ export function useStore(userId = null, options = {}) {
     if (!projectId || !chaptersRef.current.some(chapter => chapter.id === id && chapter.novelId === projectId)) return false
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && s.chapterId === id).map(s => s.id)
     const sceneSet = new Set(sceneIds)
-    sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
     if (canSyncCloud) deleteItem('chapters', userId, id).catch(console.error)
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.id === id && c.novelId === projectId)))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
@@ -2330,6 +2347,15 @@ export function useStore(userId = null, options = {}) {
     const projectId = activeOutlineProjectId()
     if (!projectId || !scenesRef.current.some(scene => scene.id === id && scene.novelId === projectId)) return false
     debouncedSaveScene.cancel(id)
+    // Version history (nf_scene_versions:<id> — see src/utils/sceneVersions.js)
+    // is a standalone per-scene key, not part of the nf_scenes collection
+    // commitLocal below persists, so nothing else cleans it up when a single
+    // scene (as opposed to a whole project — see deleteNovel/
+    // replaceProjectStorageAtomically's own sweep) is deleted. Without this
+    // it's left behind permanently, orphaned under an id no project
+    // references any more (audit finding #16, docs/QA_PLAN.md's Priority -1
+    // section). This single-key removal is already atomic on its own.
+    clearSceneVersions(id)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => !(s.id === id && s.novelId === projectId)))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
@@ -2412,7 +2438,7 @@ export function useStore(userId = null, options = {}) {
     const currentSceneIds = scenesRef.current
       .filter(scene => scene.novelId === projectId)
       .map(scene => scene.id)
-    currentSceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+    currentSceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
 
     const nextActs = (nextStructure.acts || []).map(act => ({ ...act, novelId: projectId }))
     const nextChapters = (nextStructure.chapters || []).map(chapter => ({ ...chapter, novelId: projectId }))
@@ -2531,6 +2557,7 @@ export function useStore(userId = null, options = {}) {
   // Discards a conflict copy without touching the original scene.
   const discardSceneConflict = (conflictId) => {
     debouncedSaveScene.cancel(conflictId)
+    clearSceneVersions(conflictId)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== conflictId))
     if (canSyncCloud) deleteSceneDoc(userId, conflictId).catch(console.error)
   }
@@ -3622,9 +3649,6 @@ export function useStore(userId = null, options = {}) {
       currentYear: currentYearRef.current,
       activeNovelId: activeNovelIdRef.current === id ? null : activeNovelIdRef.current,
       recordConflicts,
-      sceneVersions: load('nf_scene_versions', []).filter(version =>
-        version.novelId !== id && !(version.novelId == null && removedSceneIds.has(version.sceneId))
-      ),
     }
 
     if (canSyncCloud) await trackSync(deleteProjectData(userId, id))
