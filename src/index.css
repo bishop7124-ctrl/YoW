@@ -8415,18 +8415,47 @@ body {
 }
 
 @media (max-width: 860px) {
-  html,
+  /* overflow-y was `hidden`/`clip` here, which let .library-app-shell's
+     2026-09-18 fix (height: auto, no self-scroll, so the real document
+     becomes the scroll surface — see that rule's own comment near
+     `.library-app-shell` below) grow its own box but still clipped that
+     overflow at this ancestor chain before it ever reached the real
+     document, leaving `document.documentElement.scrollHeight ===
+     clientHeight` with zero scrollable overflow — the literal reason iOS
+     Safari's chrome still won't auto-hide there (2026-09-24 real-device
+     retest). Every other mobile shell (.auth-shell, .yow-home,
+     .studio-shell, etc.) already caps its own height/overflow
+     independently of this ancestor chain, so relaxing it here doesn't
+     change their behavior.
+
+     `html` deliberately has NO overflow declared: per the CSS Overflow
+     spec, a root <html> element propagates its overflow up to become the
+     actual viewport/scrolling-element behavior only while html's own
+     overflow is left at its initial `visible` value — the moment html
+     gets its own explicit non-visible overflow (on either axis; setting
+     just one axis computes the other to `auto`, not `visible`), that
+     propagation stops and `body` becomes its own inner scroll box
+     instead of the real document, which is the exact anti-pattern this
+     fix exists to undo. `body`'s own `overflow-x: hidden` below (kept
+     for the 2026-08-08 sitewide horizontal-overflow fix) is what actually
+     propagates up to the viewport; its overflow-y is deliberately left
+     unset so it computes to `auto` and becomes the real, Safari-visible
+     page scroll. */
   body {
     min-height: 100%;
     height: 100%;
-    overflow: hidden;
+    overflow-x: hidden;
     overscroll-behavior: none;
   }
 
   #root {
+    /* No overflow declared here either, for the same reason as `body`
+       above one level down: mixing `overflow-x: hidden` with
+       `overflow-y: visible` doesn't work (see above), and #root having
+       any non-visible overflow at all would make it its own inner scroll
+       container instead of letting content flow into `body`. */
     min-height: 100%;
     height: 100%;
-    overflow: clip;
   }
 
   .auth-shell {
@@ -22093,8 +22122,16 @@ body {
   body,
   #root {
     max-width: 100%;
-    overflow-x: hidden;
   }
+
+  /* No overflow-x declared on html/body/#root here — 600px is already
+     inside the ≤860px block above, whose `body { overflow-x: hidden }`
+     already applies. Do NOT add overflow to `html` or `#root` here: either
+     one having ANY explicit overflow (even just one axis) breaks the
+     html→body overflow-propagation the ≤860px fix relies on to let the
+     real document scroll so iOS Safari's chrome can auto-hide (see the
+     `@media (max-width: 860px)` html/body/#root rules above for the full
+     explanation). */
 
   .yow-section {
     overflow-x: clip;
