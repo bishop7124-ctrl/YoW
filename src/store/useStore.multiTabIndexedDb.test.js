@@ -71,6 +71,47 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     expect(tabB.result.current.characters.find(c => c.id === 'char-B').notes).toBe('edited by tab B')
   })
 
+  // Regression test for the latest link in the two-tab silent-clobber chain
+  // (docs/ROADMAP.md's 2026-08-02 Bugs row), found live during the
+  // Relationships corrective audit — mirrored here against the REAL
+  // IndexedDB-backed adapter specifically because this exact bug chain's own
+  // history (see this file's header comment) already includes one prior fix
+  // that unit-tested clean against jsdom's plain localStorage while the live
+  // bug persisted, because those tests never exercised this adapter/
+  // BroadcastChannel code path at all.
+  it('a second tab\'s unrelated save does not resurrect a record the first tab deleted (real IndexedDB backend)', async () => {
+    const { initializeIndexedDbStorage } = await import('../storage/browserVaultAdapter.js')
+    const { resetStorageBackend } = await import('../storage/projectStorage.js')
+
+    const owner = 'user-indexeddb-delete'
+    const seed = [
+      { id: 'char-A', novelId: 'novel-1', name: 'Alice', notes: 'original' },
+      { id: 'char-B', novelId: 'novel-1', name: 'Bob', notes: 'original' },
+    ]
+    const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
+
+    await initializeIndexedDbStorage()
+    const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    resetStorageBackend()
+    await initializeIndexedDbStorage()
+    const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
+
+    // Tab B deletes char-B and its own cross-tab BroadcastChannel bridge
+    // publishes the removal.
+    act(() => { expect(tabB.result.current.deleteCharacter('char-B')).toBe(true) })
+    await new Promise(resolve => setTimeout(resolve, 60))
+
+    // Tab A still has its stale in-memory char-B and now performs a
+    // completely unrelated save (editing char-A only).
+    act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
+
+    expect(tabA.result.current.characters.find(c => c.id === 'char-B')).toBeUndefined()
+    expect(tabA.result.current.characters.find(c => c.id === 'char-A').notes).toBe('edited by tab A')
+  })
+
   it('two tabs editing the SAME scene: main scene keeps the latest edit and the other survives as a conflict copy (real IndexedDB backend)', async () => {
     const { initializeIndexedDbStorage } = await import('../storage/browserVaultAdapter.js')
     const { resetStorageBackend } = await import('../storage/projectStorage.js')

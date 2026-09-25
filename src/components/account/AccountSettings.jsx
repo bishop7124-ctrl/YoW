@@ -331,7 +331,7 @@ function DesktopDevicesPanel() {
             >
               <span style={{ color: 'var(--text-main)', fontWeight: 700, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {device.device_name || device.platform || 'Desktop device'}
-                {isCurrent && <span style={{ marginLeft: 8, color: 'var(--accent)', fontWeight: 800 }}>This device</span>}
+                {isCurrent && <span style={{ marginLeft: 8, color: 'var(--accent-text)', fontWeight: 800 }}>This device</span>}
               </span>
               <button
                 type="button"
@@ -533,7 +533,7 @@ function DesktopVaultPanel() {
             borderRadius: 7,
             background: integrity.ok ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'color-mix(in srgb, #ef4444 10%, transparent)',
             border: `1px solid ${integrity.ok ? 'color-mix(in srgb, var(--accent) 35%, var(--border))' : 'color-mix(in srgb, #ef4444 40%, var(--border))'}`,
-            color: integrity.ok ? 'var(--accent)' : '#ef4444',
+            color: integrity.ok ? 'var(--accent-text)' : '#ef4444',
             fontSize: 12,
             fontWeight: 700,
             lineHeight: 1.45,
@@ -717,7 +717,7 @@ function DesktopVaultPanel() {
             </div>
           </div>
         )}
-        {message && <p style={{ margin: 0, fontSize: 12, color: 'var(--accent)', lineHeight: 1.5 }}>{message}</p>}
+        {message && <p style={{ margin: 0, fontSize: 12, color: 'var(--accent-text)', lineHeight: 1.5 }}>{message}</p>}
         {error && <p style={{ margin: 0, fontSize: 12, color: '#ef4444', lineHeight: 1.5 }}>{error}</p>}
       </div>
     </div>
@@ -800,7 +800,7 @@ function PreferencesPanel({ tourStore }) {
             <button type="button" onClick={saveCookies} className="account-primary-button" style={{ width: 'auto', padding: '8px 16px' }}>
               Save cookie preferences
             </button>
-            {cookieSaved && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>Saved</span>}
+            {cookieSaved && <span style={{ fontSize: 12, color: 'var(--accent-text)', fontWeight: 700 }}>Saved</span>}
           </div>
         </div>
       )}
@@ -915,7 +915,7 @@ function ExportAllProjectsCard({ store, novels }) {
       {!novels.length && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No projects to export yet.</div>
       )}
-      {message && <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 800 }}>{message}</div>}
+      {message && <div style={{ fontSize: 12, color: 'var(--accent-text)', fontWeight: 800 }}>{message}</div>}
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 800 }}>{error}</div>}
     </div>
   )
@@ -1143,7 +1143,7 @@ function StorageConfigurationPanel({
               flexDirection: 'column',
               gap: 10,
             }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--accent)' }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--accent-text)' }}>
                 Cloud sync unavailable
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55 }}>
@@ -1255,7 +1255,7 @@ function StorageConfigurationPanel({
                 </div>
               )}
               {manualSyncMessage && (
-                <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 800 }}>
+                <div style={{ fontSize: 12, color: 'var(--accent-text)', fontWeight: 800 }}>
                   {manualSyncMessage}
                 </div>
               )}
@@ -1496,7 +1496,7 @@ function StorageConfigurationPanel({
           fontSize: 12,
           lineHeight: 1.55,
         }}>
-          <strong style={{ color: 'var(--accent)' }}>Local Mode is active.</strong> Local edits are stored in this device vault and automatic cloud writes are paused.
+          <strong style={{ color: 'var(--accent-text)' }}>Local Mode is active.</strong> Local edits are stored in this device vault and automatic cloud writes are paused.
         </div>
       )}
     </section>
@@ -1979,7 +1979,7 @@ function AISettingsPanel({ userId, membership }) {
         {(cfg.apiKey?.trim()) && (
           <span style={{
             flexShrink: 0, fontSize: 10, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase',
-            color: 'var(--accent)', background: 'var(--accent-fade)',
+            color: 'var(--accent-text)', background: 'var(--accent-fade)',
             border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
             borderRadius: 4, padding: '3px 8px',
           }}>Connected</span>
@@ -2014,7 +2014,7 @@ function AISettingsPanel({ userId, membership }) {
                     {isActive && (
                       <span style={{
                         fontSize: 9, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase',
-                        color: 'var(--accent)', padding: '2px 6px',
+                        color: 'var(--accent-text)', padding: '2px 6px',
                         background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
                         borderRadius: 3,
                       }}>Active</span>
@@ -2023,7 +2023,7 @@ function AISettingsPanel({ userId, membership }) {
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{provModelLabel}</span>
                 </div>
                 {connected ? (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>● Connected</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-text)', flexShrink: 0 }}>● Connected</span>
                 ) : (
                   <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>No key</span>
                 )}
@@ -2047,7 +2047,7 @@ function AISettingsPanel({ userId, membership }) {
         <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.freeUsage}</p>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.billing}</p>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 8px' }}>{prov?.limitations}</p>
-        <a href={prov?.setupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent)' }}>Get an API key</a>
+        <a href={prov?.setupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-text)' }}>Get an API key</a>
         <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.45, margin: '8px 0 0' }}>
           Provider availability, pricing, model access, and limits can change. YOW is not partnered with or endorsed by these providers unless explicitly stated elsewhere.
         </p>
@@ -2134,7 +2134,7 @@ function AISettingsPanel({ userId, membership }) {
       <div style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
           API Key
-          {cfg.apiKey?.trim() && <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--accent)', marginLeft: 6 }}>· saved</span>}
+          {cfg.apiKey?.trim() && <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--accent-text)', marginLeft: 6 }}>· saved</span>}
         </p>
         <input
           type="password"
@@ -2272,13 +2272,13 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
           {plan.badge && (
             <span style={{
               fontSize: 10, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase',
-              color: 'var(--accent)', background: 'var(--accent-fade)', borderRadius: 4, padding: '2px 6px',
+              color: 'var(--accent-text)', background: 'var(--accent-fade)', borderRadius: 4, padding: '2px 6px',
             }}>{plan.badge}</span>
           )}
           {isCurrent && (
             <span style={{
               fontSize: 10, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase',
-              color: membership.isTrialActive ? '#fbbf24' : 'var(--accent)',
+              color: membership.isTrialActive ? '#fbbf24' : 'var(--accent-text)',
             }}>
               {membership.isTrialActive ? 'Trial' : 'Active'}
             </span>
@@ -2296,7 +2296,7 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
       </div>
       <div style={{ flexShrink: 0, minWidth: 110, textAlign: 'right' }}>
         {isCurrent ? (
-          <span style={{ fontSize: 12, fontWeight: 800, color: membership.isTrialActive ? '#fbbf24' : 'var(--accent)' }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: membership.isTrialActive ? '#fbbf24' : 'var(--accent-text)' }}>
             {membership.isTrialActive ? 'Your trial' : 'Current plan'}
           </span>
         ) : isDowngrade ? null
@@ -2692,7 +2692,7 @@ function DeleteAccountModal({ novels, store, onClose }) {
                     style={{
                       width: '100%', padding: '9px 0',
                       background: 'var(--accent-fade)', border: '1px solid color-mix(in srgb, var(--accent) 40%, var(--border))',
-                      borderRadius: 8, fontSize: 13, fontWeight: 800, color: 'var(--accent)',
+                      borderRadius: 8, fontSize: 13, fontWeight: 800, color: 'var(--accent-text)',
                       cursor: 'pointer',
                     }}
                   >
@@ -3112,7 +3112,7 @@ export default function AccountSettings({
                 flexDirection: 'column',
                 gap: 6,
               }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent)' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-text)' }}>
                   Desktop app included
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -3121,7 +3121,7 @@ export default function AccountSettings({
                 <a
                   href="/download"
                   onClick={e => { e.preventDefault(); window.history.pushState(null, '', '/download'); window.dispatchEvent(new PopStateEvent('popstate')) }}
-                  style={{ marginTop: 4, fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}
+                  style={{ marginTop: 4, fontSize: 12, color: 'var(--accent-text)', textDecoration: 'none', fontWeight: 700 }}
                 >
                   Download the desktop app →
                 </a>
@@ -3161,7 +3161,7 @@ export default function AccountSettings({
                 flexDirection: 'column',
                 gap: 6,
               }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent)' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-text)' }}>
                   Local Mode is active
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -3241,7 +3241,7 @@ export default function AccountSettings({
               <a
                 href="/pricing"
                 onClick={e => { e.preventDefault(); window.history.pushState(null, '', '/pricing'); window.dispatchEvent(new PopStateEvent('popstate')) }}
-                style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}
+                style={{ fontSize: 12, color: 'var(--accent-text)', textDecoration: 'none', fontWeight: 700 }}
               >
                 View full pricing page →
               </a>

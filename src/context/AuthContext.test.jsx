@@ -26,6 +26,7 @@ vi.mock('../supabase', () => ({
       signOut: vi.fn(() => Promise.resolve({ error: null })),
       refreshSession: vi.fn(() => Promise.resolve({ data: { session: mocks.session }, error: null })),
       getUser: vi.fn(() => Promise.resolve({ data: { user: mocks.session?.user ?? null }, error: null })),
+      verifyOtp: vi.fn(() => Promise.resolve({ data: { user: { id: 'recovery-user' }, session: { user: { id: 'recovery-user' } } }, error: null })),
       updateUser: vi.fn(() => Promise.resolve({ data: { user: { id: 'user-1' } }, error: null })),
     },
     rpc: vi.fn(),
@@ -110,6 +111,22 @@ describe('AuthProvider session policy', () => {
 
     expect(screen.getByTestId('recovery-mode').textContent).toBe('standard')
     expect(window.location.pathname).toBe('/login')
+  })
+
+  it('verifies a direct recovery token without using the hosted redirect', async () => {
+    window.history.replaceState({}, '', '/reset-password#token_hash=one-time-hash&type=recovery')
+
+    render(<AuthProvider><Probe /></AuthProvider>)
+
+    expect(screen.getByTestId('recovery-mode').textContent).toBe('recovery')
+    await waitFor(() => expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
+      token_hash: 'one-time-hash',
+      type: 'recovery',
+    }))
+    await waitFor(() => expect(screen.getByTestId('user-id').textContent).toBe('recovery-user'))
+    expect(window.location.pathname).toBe('/reset-password')
+    expect(window.location.search).toBe('')
+    expect(window.location.hash).toBe('')
   })
 
   it('auto-logs out stale browser sessions', async () => {
