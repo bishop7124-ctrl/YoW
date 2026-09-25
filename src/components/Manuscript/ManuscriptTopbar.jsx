@@ -18,8 +18,9 @@ const MoreIcon = () => (
 )
 
 const MODES = [
-  { id: 'write', label: 'Write' },
-  { id: 'edit', label: 'Edit' },
+  { id: 'write', label: 'Writing' },
+  { id: 'edit', label: 'Editing' },
+  { id: 'review', label: 'Review' },
   { id: 'final', label: 'Finalised' },
 ]
 
@@ -31,7 +32,7 @@ const MODES = [
 // list, but the old toolbar's working fullscreen toggle has to land
 // *somewhere*, and burying it in "View" here is lower-cost than inventing a
 // new always-visible button the spec's three-zone layout doesn't have room for.
-const buildOverflowSections = (fullscreen, itemTitles = {}) => [
+const buildOverflowSections = (fullscreen, itemTitles = {}, isNovelProject = true) => [
   {
     heading: 'Find',
     items: [
@@ -52,7 +53,12 @@ const buildOverflowSections = (fullscreen, itemTitles = {}) => [
   {
     heading: 'Finish',
     items: [
-      { id: 'finalise', label: 'Finalise draft' },
+      // Finalise draft creates an uneditable reading copy of the manuscript —
+      // Manuscript.jsx's handleFinaliseDraft only supports novel-type
+      // projects today and silently no-ops for every other type, so the
+      // action itself must not appear there rather than look clickable and
+      // do nothing (see docs/QA_PLAN.md's "Finalized draft reader" item).
+      ...(isNovelProject ? [{ id: 'finalise', label: 'Finalise draft' }] : []),
       { id: 'export', label: 'Export…', kbd: '⌘E', title: itemTitles.export },
       { id: 'catalogue', label: 'Retired drafts' },
     ],
@@ -131,7 +137,7 @@ function GoToScenePalette({ onClose, acts, chapters, scenes, labels, onSelectSce
 
 // ─── Overflow menu ──────────────────────────────────────────────────────────
 
-function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
+function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles, isNovelProject }) {
   const ref = useRef(null)
   useEffect(() => {
     if (!open) return undefined
@@ -141,7 +147,7 @@ function OverflowMenu({ open, onClose, onAction, fullscreen, itemTitles }) {
   }, [open, onClose])
 
   if (!open) return null
-  const sections = buildOverflowSections(fullscreen, itemTitles)
+  const sections = buildOverflowSections(fullscreen, itemTitles, isNovelProject)
   return (
     <div className="ms-topbar-menu" ref={ref} role="menu">
       {sections.map(section => (
@@ -177,10 +183,13 @@ export default function ManuscriptTopbar({
   zoomControl,
   scriptBetaBadge,
   overflowItemTitles,
-  // Write/Finalised modes hide the AI and Inspector buttons entirely per
-  // spec §8's mode table — Edit is the only mode where either surface makes
-  // sense to open from here.
-  hideAIAndInspector = false,
+  trackedChangeCount = 0,
+  isNovelProject = true,
+  // Writing keeps the reference/scene Inspector available without exposing
+  // the editing-only AI surface. Review/Finalised hide both via their own
+  // layouts or these independent flags.
+  hideAI = false,
+  hideInspector = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [gotoOpen, setGotoOpen] = useState(false)
@@ -217,7 +226,7 @@ export default function ManuscriptTopbar({
             <div className="ms-modes" role="group" aria-label="Editor mode">
               {MODES.map(m => (
                 <button key={m.id} type="button" aria-pressed={mode === m.id} className={mode === m.id ? 'is-on' : ''} onClick={() => onSetMode(m.id)}>
-                  {m.label}
+                  {m.label}{m.id === 'review' && trackedChangeCount > 0 ? ` (${trackedChangeCount})` : ''}
                 </button>
               ))}
             </div>
@@ -242,15 +251,15 @@ export default function ManuscriptTopbar({
 
         <div className="ms-topbar-zone ms-topbar-zone-tools">
           {zoomControl}
-          {!hideAIAndInspector && (
-            <>
-              <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
-                <AIStar size={13} /> AI
-              </button>
-              <button type="button" className={`ms-topbar-btn${inspectorOpen ? ' is-on' : ''}`} onClick={onToggleInspector} aria-pressed={inspectorOpen}>
-                <InspectorIcon /> Inspector
-              </button>
-            </>
+          {!hideAI && (
+            <button type="button" className={`ms-topbar-btn${aiOpen ? ' is-on' : ''}`} onClick={onToggleAI} aria-pressed={aiOpen}>
+              <AIStar size={13} /> AI
+            </button>
+          )}
+          {!hideInspector && (
+            <button type="button" className={`ms-topbar-btn${inspectorOpen ? ' is-on' : ''}`} onClick={onToggleInspector} aria-pressed={inspectorOpen}>
+              <InspectorIcon /> Inspector
+            </button>
           )}
           <div className="ms-topbar-sep" />
           {onOpenProject && (
@@ -268,6 +277,7 @@ export default function ManuscriptTopbar({
               onAction={handleOverflowAction}
               fullscreen={fullscreen}
               itemTitles={overflowItemTitles}
+              isNovelProject={isNovelProject}
             />
           </div>
         </div>

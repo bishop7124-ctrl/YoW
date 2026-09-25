@@ -8,7 +8,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-const DEFAULT_REDIRECT = 'https://www.yourownworld.co.uk/login'
+const DEFAULT_REDIRECT = 'https://www.yourownworld.co.uk/reset-password'
 
 // Audit finding P0-03: redirectTo was accepted from the caller with no
 // validation, so a crafted request could get Supabase to embed an
@@ -28,7 +28,9 @@ function sanitizeRedirectTo(candidate: unknown): string {
   if (typeof candidate !== 'string' || !candidate) return DEFAULT_REDIRECT
   try {
     const url = new URL(candidate)
-    return ALLOWED_REDIRECT_ORIGINS.has(url.origin) ? candidate : DEFAULT_REDIRECT
+    return ALLOWED_REDIRECT_ORIGINS.has(url.origin)
+      ? new URL('/reset-password', url.origin).toString()
+      : DEFAULT_REDIRECT
   } catch {
     return DEFAULT_REDIRECT
   }
@@ -180,13 +182,21 @@ Deno.serve(async (req) => {
     options: { redirectTo },
   })
 
-  if (linkError || !linkData?.properties?.action_link) {
+  if (linkError || !linkData?.properties?.hashed_token) {
     // Expected/routine for an email with no account — not logged as an
     // error. Still returns success to the caller (no enumeration).
     return genericOk()
   }
 
-  const resetUrl = linkData.properties.action_link
+  // Link directly to YOW and let the browser exchange the one-time token hash.
+  // Going through properties.action_link first delegates the final destination
+  // to Supabase's redirect allowlist, which can fall back to /login and turn a
+  // recovery attempt into an ordinary signed-in session.
+  const resetUrl = new URL(redirectTo)
+  resetUrl.hash = new URLSearchParams({
+    token_hash: linkData.properties.hashed_token,
+    type: 'recovery',
+  }).toString()
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -198,7 +208,7 @@ Deno.serve(async (req) => {
       from: 'Your Own World <hello@yourownworld.co.uk>',
       to: [email],
       subject: 'Reset your Your Own World password',
-      html: resetEmailHtml(email, resetUrl),
+      html: resetEmailHtml(email, resetUrl.toString()),
     }),
   })
 

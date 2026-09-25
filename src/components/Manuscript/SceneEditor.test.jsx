@@ -94,6 +94,108 @@ describe('SceneEditor content preview — mismatched markdown emphasis', () => {
   })
 })
 
+describe('SceneEditor manuscript references', () => {
+  it('identifies every entity reference separately from tracked-edit markup', () => {
+    const entityMap = {
+      'the archive': {
+        id: 'lore-1',
+        section: 'lore',
+        sectionLabel: 'Lore',
+        name: 'The Archive',
+        preview: 'A repository of forbidden records.',
+      },
+      cara: {
+        id: 'character-1',
+        section: 'characters',
+        sectionLabel: 'Character',
+        name: 'Cara',
+        preview: 'The protagonist’s sister.',
+      },
+    }
+    const { container } = renderScene('Cara entered The Archive beneath the city.', { entityMap })
+
+    expect(container.querySelector('.ms-entity--lore')?.textContent).toBe('The Archive')
+    expect(container.querySelector('.ms-entity--characters')?.textContent).toBe('Cara')
+    expect(container.querySelectorAll('.ms-entity')).toHaveLength(2)
+    expect(container.querySelector('.ms-entity--lore')?.classList.contains('ms-tracked-proposed')).toBe(false)
+  })
+})
+
+describe('SceneEditor tracked editing presentation', () => {
+  it('renders proposed prose inline in the tracked-change colour', () => {
+    const scene = { ...makeScene('The winding road.'), trackedChanges: { baseContent: 'The old road.', proposedContent: 'The winding road.' } }
+    const { container } = renderScene(scene.content, {
+      scene,
+      trackingChanges: true,
+      trackingBaseContent: scene.trackedChanges.baseContent,
+    })
+
+    expect(container.querySelector('.ms-tracked-proposed')?.textContent).toContain('winding')
+    expect(container.querySelector('.ms-tracked-deleted')?.textContent).toContain('old')
+    expect(container.querySelector('.ms-tracking-summary')).toBeNull()
+    expect(container.querySelector('.ms-tracking-chip')?.textContent).toBe('1 change tracked')
+  })
+
+  it('shows an appended sentence as an addition without a false paragraph deletion', () => {
+    const baseContent = 'The bell rang in the square, and the crowd looked up.\n\nThe bell rang in the tower, and the guard looked down.'
+    const appended = ' The bell rang once more, and nobody moved.'
+    const content = `The bell rang in the square, and the crowd looked up.${appended}\n\nThe bell rang in the tower, and the guard looked down.`
+    const scene = { ...makeScene(content), trackedChanges: { baseContent, proposedContent: content } }
+    const { container } = renderScene(content, { scene, trackingChanges: true, trackingBaseContent: baseContent })
+
+    expect(container.querySelector('.ms-tracked-proposed')?.textContent).toBe(appended)
+    expect(container.querySelector('.ms-tracking-summary')).toBeNull()
+  })
+
+  it('keeps replaced sentences visible as crossed-out text beside the replacement', async () => {
+    const baseContent = 'The lantern went dark. The watchman crossed the yard.'
+    const content = 'The lantern burned brighter. The watchman crossed the yard.'
+    const scene = { ...makeScene(content), trackedChanges: { baseContent, proposedContent: content } }
+    const { container } = renderScene(content, { scene, trackingChanges: true, trackingBaseContent: baseContent })
+
+    const deletedBlocks = [...container.querySelectorAll('.ms-tracked-deleted')]
+    const proposedBlocks = [...container.querySelectorAll('.ms-tracked-proposed')]
+    expect(deletedBlocks).toHaveLength(1)
+    expect(deletedBlocks[0].textContent).toBe('went dark')
+    expect(proposedBlocks).toHaveLength(1)
+    expect(proposedBlocks[0].textContent).toBe('burned brighter')
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+    expect(textarea.value).toBe(content)
+    expect(textarea.value).not.toContain('went dark')
+    const focusedDeletedBlocks = [...container.querySelectorAll('.ms-rich-preview .ms-tracked-deleted')]
+    expect(focusedDeletedBlocks).toHaveLength(1)
+    expect(focusedDeletedBlocks[0].textContent).toBe('went dark')
+  })
+
+  it('paints a textarea selection on the matching visible tracked text', async () => {
+    const baseContent = 'First line.\nThe lantern went dark beside the gate.'
+    const content = 'First line.\nThe lantern burned much brighter beside the gate.'
+    const scene = { ...makeScene(content), trackedChanges: { baseContent, proposedContent: content } }
+    const { container } = renderScene(content, { scene, trackingChanges: true, trackingBaseContent: baseContent })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+    const start = content.indexOf('burned much brighter')
+    textarea.setSelectionRange(start, start + 'burned much brighter'.length)
+    fireEvent.select(textarea)
+
+    await waitFor(() => {
+      const highlighted = [...container.querySelectorAll('.ms-tracked-selection')]
+      expect(highlighted.map(node => node.textContent).join('')).toBe('burned much brighter')
+    })
+  })
+})
+
 describe('SceneEditor semantic paragraph indentation', () => {
   it('renders every explicit line without adding paragraph spacing', () => {
     const { container } = renderScene('First paragraph.\n\nSecond paragraph.')
@@ -207,6 +309,37 @@ describe('SceneEditor note-anchor store commits on keystroke', () => {
     expect(onUpdateScene).toHaveBeenCalledWith('s1', {
       notes: [expect.objectContaining({ anchorOffset: 7, anchorEndOffset: 11 })],
     })
+  })
+
+  it('highlights a range-anchored note exactly once in write mode (regression: 2026-09-24 lost-highlight/duplicate-card bug)', async () => {
+    // Writing mode (the redesigned default editor's `mode: 'write'` — see the
+    // nf-manuscript-mode-v2 comment in Manuscript.jsx) used to lose a
+    // range-anchored note's highlight entirely: buildWritingBlocks only ever
+    // split at the note's *start* offset, so the anchored text itself fell
+    // into the next plain block with no `.ms-note-highlight` at all (fixed by
+    // giving the anchor range its own block). The first fix for that
+    // regressed a different way in code review: passing the note through to
+    // that block's own ContentPreview re-activated ContentPreview's
+    // write-mode point-note-marker branch too, rendering a *second*
+    // `.ms-inline-note` card for the same note stacked on top of the real one
+    // buildWritingBlocks already renders. Assert both: the highlight exists
+    // (with the anchored text, not lost) and the note's own editable card
+    // renders exactly once (not duplicated).
+    const note = makeNote({ anchorOffset: 5, anchorEndOffset: 10 }) // anchors "scene" in "Test scene content."
+    const { container } = renderScene('Test scene content.', {
+      mode: 'write',
+      scene: { id: 's1', title: 'Scene', content: 'Test scene content.', chapterId: 'c1', order: 0, notes: [note] },
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    await waitFor(() => {
+      expect(container.querySelector('textarea.ms-textarea[data-ms-start="0"]')).toBeTruthy()
+    })
+
+    const highlights = container.querySelectorAll('.ms-note-highlight')
+    expect(highlights).toHaveLength(1)
+    expect(highlights[0].textContent).toBe('scene')
+    expect(container.querySelectorAll('.ms-inline-note')).toHaveLength(1)
   })
 
   it('shifts a note anchor when an edit precedes it in edit mode (regression: 2026-09-15 anchor-drift bug)', async () => {

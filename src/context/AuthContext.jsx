@@ -9,7 +9,22 @@ import { isDesktopAppRuntime } from '../utils/runtime'
 import { clearLastWebActivity, isWebSessionIdleExpired, writeLastWebActivity } from '../utils/sessionActivity'
 import { sanitizeEditableProfileMetadata } from '../utils/profileMetadata'
 
-const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
+const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, recoveryVerifying: false, recoveryError: '', signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
+
+function isPasswordRecoveryUrl() {
+  if (typeof window === 'undefined') return false
+  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/reset-password') return true
+  return new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery'
+}
+
+function hasRecoveryToken() {
+  if (typeof window === 'undefined') return false
+  const searchParams = new URLSearchParams(window.location.search)
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const params = searchParams.get('token_hash') ? searchParams : hashParams
+  return params.get('type') === 'recovery' && Boolean(params.get('token_hash'))
+}
 
 // Read the cached Supabase session from localStorage synchronously so the app
 // renders immediately on return visits without waiting for a network round-trip.
@@ -27,9 +42,9 @@ function readCachedUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(OFFLINE_MODE ? OFFLINE_USER : readCachedUser)
   const [loading] = useState(false)
-  const [recoveryMode, setRecoveryMode] = useState(
-    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
-  )
+  const [recoveryMode, setRecoveryMode] = useState(isPasswordRecoveryUrl)
+  const [recoveryVerifying, setRecoveryVerifying] = useState(hasRecoveryToken)
+  const [recoveryError, setRecoveryError] = useState('')
 
   useEffect(() => {
     if (OFFLINE_MODE) return
@@ -46,15 +61,49 @@ export function AuthProvider({ children }) {
       await supabase.auth.signOut().catch(() => null)
     }
 
-    // Exchange PKCE code from email confirmation/magic links before reading session
-    const code = new URLSearchParams(window.location.search).get('code')
-    if (code) {
+    const callbackParams = new URLSearchParams(window.location.search)
+    const callbackHashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const recoveryParams = callbackParams.get('token_hash') ? callbackParams : callbackHashParams
+    const tokenHash = recoveryParams.get('token_hash')
+    const callbackType = recoveryParams.get('type')
+    const code = callbackParams.get('code')
+    const directRecoveryCallback = Boolean(tokenHash && callbackType === 'recovery')
+
+    // Custom reset emails land directly in YOW with a one-time token hash.
+    // Verify it here rather than relying on Supabase's hosted redirect, whose
+    // allowlist fallback can silently replace /reset-password with /login.
+    if (directRecoveryCallback) {
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+        .then(({ data, error }) => {
+          if (error) {
+            setRecoveryError('This password reset link is invalid or has expired. Request a new link and try again.')
+            return
+          }
+          setUser(data?.user ?? data?.session?.user ?? null)
+        })
+        .catch(() => {
+          setRecoveryError('We could not verify this password reset link. Request a new link and try again.')
+        })
+        .finally(() => {
+          setRecoveryVerifying(false)
+          window.history.replaceState({}, '', window.location.pathname)
+        })
+    // Exchange PKCE code from email confirmation/magic links before reading session.
+    } else if (code) {
+      // PKCE recovery callbacks create a signed-in session, but do not reliably
+      // emit PASSWORD_RECOVERY before this provider subscribes. The dedicated
+      // callback path has already initialized recoveryMode synchronously, so the
+      // session stays behind the password form while this exchange completes.
       supabase.auth.exchangeCodeForSession(code)
         .then(() => window.history.replaceState({}, '', window.location.pathname))
         .catch(console.warn)
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      // The initial session read and token verification run concurrently. A
+      // signed-out getSession result must not overwrite the user returned by
+      // the in-flight recovery verification.
+      if (!session?.user && directRecoveryCallback) return
       if (session?.user && !desktopApp && isWebSessionIdleExpired()) {
         idleSignOut()
         return
@@ -222,7 +271,7 @@ export function AuthProvider({ children }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ email, redirectTo: `${window.location.origin}/login` }),
+          body: JSON.stringify({ email, redirectTo: `${window.location.origin}/reset-password` }),
         })
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
@@ -235,7 +284,12 @@ export function AuthProvider({ children }) {
     ? () => Promise.resolve({ data: null, error: null })
     : (password) => supabase.auth.updateUser({ password })
 
-  const clearRecoveryMode = () => setRecoveryMode(false)
+  const clearRecoveryMode = () => {
+    setRecoveryMode(false)
+    if (typeof window === 'undefined') return
+    const path = window.location.pathname.replace(/\/+$/, '') || '/'
+    if (path === '/reset-password') window.history.replaceState({}, '', '/login')
+  }
 
   // Only an allowlisted set of harmless profile/preference fields may ever be
   // written to user_metadata here — entitlement (plan, subscription status,
@@ -296,7 +350,7 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.app_metadata?.is_admin === true
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, signUp, resendConfirmation, sendWelcomeEmail, signIn, signInWithGoogle, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, recoveryMode, recoveryVerifying, recoveryError, signUp, resendConfirmation, sendWelcomeEmail, signIn, signInWithGoogle, signOut, updateProfile, refreshUser, getAccessToken, resetPassword, updatePassword, clearRecoveryMode, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )

@@ -10,7 +10,18 @@
       ],
       "destination": "https://www.yourownworld.co.uk/$1",
       "permanent": true
-    }
+    },
+    { "source": "/about", "destination": "/about/", "permanent": true },
+    { "source": "/ai-overview", "destination": "/ai-overview/", "permanent": true },
+    { "source": "/worldbuilding-software", "destination": "/worldbuilding-software/", "permanent": true },
+    { "source": "/novel-writing-software", "destination": "/novel-writing-software/", "permanent": true },
+    { "source": "/dnd-campaign-manager", "destination": "/dnd-campaign-manager/", "permanent": true },
+    { "source": "/story-planning-software", "destination": "/story-planning-software/", "permanent": true },
+    { "source": "/timeline-tool-for-writers", "destination": "/timeline-tool-for-writers/", "permanent": true },
+    { "source": "/family-tree-builder", "destination": "/family-tree-builder/", "permanent": true },
+    { "source": "/map-builder-for-writers", "destination": "/map-builder-for-writers/", "permanent": true },
+    { "source": "/lore-management", "destination": "/lore-management/", "permanent": true },
+    { "source": "/beta-disclaimer", "destination": "/beta-disclaimer/", "permanent": true }
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },

@@ -11,6 +11,7 @@ import { useTextareaCaretRect } from './useTextareaCaretRect.js'
 import { useTabPresence } from '../../utils/useTabPresence.js'
 import EditingElsewhereWarning from '../shared/EditingElsewhereWarning.jsx'
 import Modal from '../shared/Modal.jsx'
+import { applyTrackedEdit, buildTrackedDiff } from './trackedChanges.js'
 
 const InlineInput = ({ value, onSave, className, placeholder }) => {
   const [temp, setTemp] = useState(value)
@@ -80,6 +81,83 @@ function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
   return parts
 }
 
+function renderTrackedMarkdown(text, keyPrefix, baseOffset, trackedRanges = []) {
+  if (!trackedRanges.length) return renderInlineMarkdown(text, keyPrefix, baseOffset)
+  const textEnd = baseOffset + text.length
+  const boundaries = new Set([baseOffset, textEnd])
+  trackedRanges.forEach(range => {
+    if (range.end <= baseOffset || range.start >= textEnd) return
+    boundaries.add(Math.max(baseOffset, range.start))
+    boundaries.add(Math.min(textEnd, range.end))
+  })
+  const points = [...boundaries].sort((a, b) => a - b)
+  return points.slice(0, -1).map((start, index) => {
+    const end = points[index + 1]
+    const changed = trackedRanges.some(range => range.start < end && range.end > start)
+    const value = text.slice(start - baseOffset, end - baseOffset)
+    const rendered = renderInlineMarkdown(value, `${keyPrefix}-${index}`, start)
+    return changed
+      ? <mark key={`${keyPrefix}-tracked-${index}`} className="ms-tracked-proposed">{rendered}</mark>
+      : <span key={`${keyPrefix}-plain-${index}`}>{rendered}</span>
+  })
+}
+
+const overlapsTrackedRange = (start, end, trackedRanges = []) => trackedRanges.some(
+  range => range.start < end && range.end > start
+)
+
+function renderTrackedSelection(text, keyPrefix, baseOffset, selection) {
+  const textEnd = baseOffset + text.length
+  if (!selection || selection.end <= baseOffset || selection.start >= textEnd) {
+    return renderInlineMarkdown(text, keyPrefix, baseOffset)
+  }
+  const selectionStart = Math.max(baseOffset, selection.start)
+  const selectionEnd = Math.min(textEnd, selection.end)
+  const boundaries = [baseOffset, selectionStart, selectionEnd, textEnd]
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .sort((a, b) => a - b)
+  return boundaries.slice(0, -1).map((start, index) => {
+    const end = boundaries[index + 1]
+    const content = renderInlineMarkdown(
+      text.slice(start - baseOffset, end - baseOffset),
+      `${keyPrefix}-${index}`,
+      start,
+    )
+    return start < selectionEnd && end > selectionStart
+      ? <span key={`${keyPrefix}-selection-${index}`} className="ms-tracked-selection">{content}</span>
+      : <span key={`${keyPrefix}-plain-${index}`}>{content}</span>
+  })
+}
+
+function TrackedContentPreview({ segments, indentParagraphs, selection = null }) {
+  return (
+    <div className={indentParagraphs ? 'ms-prose-auto-indent' : undefined}>
+      {segments.map((segment, index) => {
+        if (segment.type === 'delete') {
+          return (
+            <del
+              key={`delete-${index}`}
+              className="ms-tracked-deleted"
+              data-raw-start={segment.proposedStart}
+              data-raw-end={segment.proposedStart}
+            >
+              {segment.text}
+            </del>
+          )
+        }
+        const content = renderTrackedSelection(
+          segment.text,
+          `tracked-${index}`,
+          segment.proposedStart,
+          selection,
+        )
+        if (segment.type === 'insert') return <ins key={`insert-${index}`} className="ms-tracked-proposed">{content}</ins>
+        return <span key={`equal-${index}`}>{content}</span>
+      })}
+    </div>
+  )
+}
+
 // ─── Preview click → caret offset mapping ─────────────────────────────────────
 // Every rendered leaf in the preview carries data-raw-start/data-raw-end (see
 // renderInlineMarkdown and the entity/line offsets below). To place the caret exactly
@@ -103,7 +181,9 @@ function resolveRawOffsetFromRange(range, container) {
   if (startContainer.nodeType === Node.TEXT_NODE) {
     const el = findTagged(startContainer)
     if (!el) return null
-    return Number(el.getAttribute('data-raw-start')) + startOffset
+    const rawStart = Number(el.getAttribute('data-raw-start'))
+    const rawEnd = Number(el.getAttribute('data-raw-end'))
+    return Math.min(rawEnd, rawStart + startOffset)
   }
 
   const children = startContainer.childNodes
@@ -320,16 +400,64 @@ function buildWritingBlocks(content, notes) {
   let pos = 0
 
   for (const note of notes) {
-    const anchor = Math.max(0, Math.min(note.anchorOffset ?? length, length))
+    const rawAnchor = Math.max(0, Math.min(note.anchorOffset ?? length, length))
+    const rawAnchorEnd = Math.max(rawAnchor, Math.min(note.anchorEndOffset ?? rawAnchor, length))
+    // Clamp to `pos`, not just to the content bounds: notes are expected
+    // sorted by anchorOffset (see `sortedNotes`), but nothing stops a later
+    // note's own range from starting inside — or entirely before — text an
+    // earlier note's block already covered (e.g. a point note added by
+    // placing the caret, no selection, *inside* an earlier note's
+    // highlighted range). Without this, `pos` could move backward and the
+    // same characters would render twice, in two independently-editable
+    // `<textarea>`s. `parseSegments` (a few dozen lines above) already
+    // guards the identical overlap case the same way.
+    const anchor = Math.max(rawAnchor, pos)
+    const anchorEnd = Math.max(rawAnchorEnd, pos)
     if (anchor > pos) {
-      blocks.push({ type: 'text', start: pos, end: anchor, key: `text-${pos}-${anchor}` })
+      // Keyed by the note that follows, not by this block's own (start, end)
+      // offsets: editing anywhere in this block is exactly what moves that
+      // note's anchor, so this block's own `end` shifts on every keystroke.
+      // Baking that into the key made React treat every keystroke as a brand
+      // new <textarea> (remount, not update) — losing focus and silently
+      // dropping the rest of whatever was being typed after the first
+      // character. Confirmed live: typing multiple characters before a note
+      // in Writing mode only ever committed the first one. A stable,
+      // offset-independent key (the same block, just resized) fixes typing
+      // before *or* after a note, not only the anchor's own highlight above.
+      blocks.push({ type: 'text', start: pos, end: anchor, key: `text-before-${note.id}` })
+    }
+    // A note anchored to a real selection (anchorEnd > anchor, e.g. added via
+    // the "Note" button on a keyboard selection) used to be skipped entirely
+    // here: this loop only ever advanced `pos` to `anchor` (the *start* of
+    // the range), so the anchored substring itself silently fell into the
+    // next plain 'text' block with no highlight at all — the note's own
+    // anchored text became indistinguishable from ordinary prose the moment
+    // Writing mode (the redesigned default editor, see the mode-v2 note in
+    // Manuscript.jsx) rendered it, even though the anchor offsets themselves
+    // were tracked correctly (this is what let the underlying anchor-shift
+    // fix's own regression test keep passing while the visible highlight was
+    // simply never there — confirmed live, `.ms-note-highlight` never
+    // rendered for a Writing-mode note; see qa-sweep-2026-09-16-batch2's
+    // note-anchor test and docs/ROADMAP.md's Bugs table for the full trail).
+    // Fixed by giving the anchored text its own tiny block, still a real
+    // `.ms-textarea` (so it stays natively editable, same as every other
+    // block here) but with that one note passed through so its own
+    // `ContentPreview` overlay renders the `.ms-note-highlight` span, exactly
+    // the same technique the non-Writing modes' single-textarea overlay
+    // already uses successfully for the same note.
+    if (anchorEnd > anchor) {
+      blocks.push({ type: 'text', start: anchor, end: anchorEnd, note, key: `text-anchor-${note.id}` })
     }
     blocks.push({ type: 'note', note, key: `note-${note.id}` })
-    pos = anchor
+    pos = anchorEnd
   }
 
   if (pos < length || !blocks.some(block => block.type === 'text') || blocks[blocks.length - 1]?.type === 'note') {
-    blocks.push({ type: 'text', start: pos, end: length, key: `text-${pos}-${length}` })
+    // Same reasoning as the leading block above: a fixed key, not one built
+    // from `length`, which changes on every keystroke typed into this
+    // (trailing, and usually the *only* block when the scene has one note at
+    // its own end) block.
+    blocks.push({ type: 'text', start: pos, end: length, key: 'text-end' })
   }
 
   return blocks
@@ -351,7 +479,7 @@ function locateScriptBlockOffsets(content, blocks) {
   })
 }
 
-const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames, entityMap, notesBySeq, highlightedNoteSeq, onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes }) => {
+const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames, entityMap, notesBySeq, highlightedNoteSeq, onEntityClick, onNoteClick, onUpdateNote, onDeleteNote, onOpenNotes, trackedRanges }) => {
   const resolvedBlocks = blocks?.length ? blocks : buildScriptBlocks('', elementType)
   if (!resolvedBlocks.length) return <span className="ms-placeholder">Begin writing here…</span>
   const blockOffsets = locateScriptBlockOffsets(content || '', resolvedBlocks)
@@ -367,7 +495,12 @@ const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames,
             <span className="ms-script-block-label">{getScriptElementLabel(projectType, type)}</span>
             <p>
               {segs.map((seg, i) => {
-                if (seg.type === 'entity') return <EntityLink key={i} seg={{ ...seg, start: blockStart + seg.start, end: blockStart + seg.end }} onOpen={onEntityClick} />
+                if (seg.type === 'entity') {
+                  const entity = <EntityLink seg={{ ...seg, start: blockStart + seg.start, end: blockStart + seg.end }} onOpen={onEntityClick} />
+                  return overlapsTrackedRange(blockStart + seg.start, blockStart + seg.end, trackedRanges)
+                    ? <mark key={i} className="ms-tracked-proposed">{entity}</mark>
+                    : <span key={i}>{entity}</span>
+                }
                 if (seg.type === 'note') {
                   const note = notesBySeq.get(seg.seq)
                   if (!note) return null
@@ -384,7 +517,7 @@ const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames,
                   )
                 }
                 if (seg.type === 'noteRange') return <span key={i} className={`ms-note-highlight${highlightedNoteSeq === seg.note.seq ? ' is-highlighted' : ''}`} data-raw-start={blockStart + seg.start} data-raw-end={blockStart + seg.end}>{renderInlineMarkdown(seg.value ?? block.text.slice(seg.start, seg.end), `sr${index}-${i}`, blockStart + seg.start)}</span>
-                return <span key={i}>{renderInlineMarkdown(seg.value, `sb${index}-${i}`, blockStart + seg.start)}</span>
+                return <span key={i}>{renderTrackedMarkdown(seg.value, `sb${index}-${i}`, blockStart + seg.start, trackedRanges)}</span>
               })}
             </p>
           </div>
@@ -398,15 +531,16 @@ function EntityLink({ seg, onOpen }) {
   const entity = seg.entity
   const label = entity?.name || seg.value
   const preview = entity?.preview || 'No preview yet.'
+  const entityType = String(entity?.section || '').toLowerCase().replace(/[^a-z0-9_-]/g, '')
   const openEntity = event => {
     event.preventDefault()
     event.stopPropagation()
     if (entity) onOpen(entity)
   }
   return (
-    <span className="ms-entity-wrap" onClick={openEntity}>
+    <span className={`ms-entity-wrap${entityType ? ` ms-entity-wrap--${entityType}` : ''}`} onClick={openEntity}>
       <span
-        className="ms-entity"
+        className={`ms-entity${entityType ? ` ms-entity--${entityType}` : ''}`}
         data-raw-start={seg.start}
         data-raw-end={seg.end}
         role="button"
@@ -432,6 +566,7 @@ const ContentPreview = ({
   mode = 'edit',
   indentParagraphs = false,
   baseOffset = 0,
+  trackedRanges = [],
 }) => {
   const entityNames = useMemo(
     () => Object.keys(entityMap).sort((a, b) => b.length - a.length),
@@ -456,6 +591,7 @@ const ContentPreview = ({
         onUpdateNote={onUpdateNote}
         onDeleteNote={onDeleteNote}
         onOpenNotes={onOpenNotes}
+        trackedRanges={trackedRanges}
       />
     )
   }
@@ -469,7 +605,7 @@ const ContentPreview = ({
     if (!lineInfos.length) return <span className="ms-placeholder">One item per line…</span>
     return (
       <ul className="ms-bullets">
-        {lineInfos.map((info, i) => <li key={i}>{renderInlineMarkdown(info.line, `bl${i}`, baseOffset + info.start)}</li>)}
+        {lineInfos.map((info, i) => <li key={i}>{renderTrackedMarkdown(info.line, `bl${i}`, baseOffset + info.start, trackedRanges)}</li>)}
       </ul>
     )
   }
@@ -532,6 +668,7 @@ const ContentPreview = ({
                   mode={mode}
                   indentParagraphs={false}
                   baseOffset={baseOffset + paragraph.start}
+                  trackedRanges={trackedRanges}
                 />
               ) : (
                 <span data-raw-start={baseOffset + paragraph.start} data-raw-end={baseOffset + paragraph.end}>{'\u00a0'}</span>
@@ -547,7 +684,12 @@ const ContentPreview = ({
   return (
     <>
       {segs.map((seg, i) => {
-        if (seg.type === 'entity') return <EntityLink key={i} seg={{ ...seg, start: baseOffset + seg.start, end: baseOffset + seg.end }} onOpen={onEntityClick} />
+        if (seg.type === 'entity') {
+          const entity = <EntityLink seg={{ ...seg, start: baseOffset + seg.start, end: baseOffset + seg.end }} onOpen={onEntityClick} />
+          return overlapsTrackedRange(baseOffset + seg.start, baseOffset + seg.end, trackedRanges)
+            ? <mark key={i} className="ms-tracked-proposed">{entity}</mark>
+            : <span key={i}>{entity}</span>
+        }
         if (seg.type === 'note') {
           // Write mode: notes exist only as this inline box. Edit mode: notes
           // exist only as the gutter's floating icon (rendered by the parent,
@@ -581,7 +723,7 @@ const ContentPreview = ({
             </span>
           )
         }
-        return <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`, baseOffset + seg.start)}</span>
+        return <span key={i}>{renderTrackedMarkdown(seg.value, `s${i}`, baseOffset + seg.start, trackedRanges)}</span>
       })}
     </>
   )
@@ -792,7 +934,10 @@ const sceneEditorPropsEqual = (prev, next) => (
   prev.scrollContainerRef === next.scrollContainerRef &&
   prev.pageZoom === next.pageZoom &&
   prev.keepEditingOnExternalBlur === next.keepEditingOnExternalBlur &&
-  prev.mode === next.mode
+  prev.mode === next.mode &&
+  prev.trackingChanges === next.trackingChanges &&
+  prev.trackingBaseContent === next.trackingBaseContent &&
+  prev.trackingSegments === next.trackingSegments
 )
 
 const SceneEditorImpl = ({
@@ -814,6 +959,9 @@ const SceneEditorImpl = ({
   // whole body for a read-only render). Defaults to 'edit' so every existing
   // caller/test that doesn't pass this keeps today's full-apparatus behavior.
   mode = 'edit',
+  trackingChanges = false,
+  trackingBaseContent = '',
+  trackingSegments = null,
   projectType,
   caretFollowEnabled = false,
   scrollContainerRef,
@@ -826,6 +974,11 @@ const SceneEditorImpl = ({
     : buildScriptBlocks(stripNoteMarkers(scene.content || ''), scene.scriptElement || 'action'))
   const [activeScriptBlockIndex, setActiveScriptBlockIndex] = useState(0)
   const [focused, setFocused] = useState(false)
+  const [trackedSelection, setTrackedSelection] = useState(null)
+  const [localTrackedSegments, setLocalTrackedSegments] = useState(() => trackingChanges
+    ? buildTrackedDiff(trackingBaseContent, stripNoteMarkers(scene.content || ''), trackingSegments).segments
+      .map(({ type, text }) => ({ type, text }))
+    : null)
   const [editingTitle, setEditingTitle] = useState(false)
   const [floatingNotePos, setFloatingNotePos] = useState(null)
   const [openNoteId, setOpenNoteId] = useState(null)
@@ -847,7 +1000,9 @@ const SceneEditorImpl = ({
   const wrapperRef = useRef(null)
   const visualCaretFrameRef = useRef(null)
   const activeVisualCaretRef = useRef({ marker: null, textarea: null })
+  const pointerSelectionCleanupRef = useRef(null)
   const localContentRef = useRef(localContent)
+  const trackedSegmentsRef = useRef(localTrackedSegments)
   // Manuscript.jsx overlays live (uncommitted) content onto the `scene` prop for
   // whichever scene is actively being edited, which means `scene` gets a brand new
   // object identity on every keystroke. Any effect keyed on `scene` itself therefore
@@ -871,6 +1026,12 @@ const SceneEditorImpl = ({
   const isBullets = !isScript && scene.textMode === 'bullets'
   const scriptElement = localScriptBlocks[activeScriptBlockIndex]?.type || scene.scriptElement || 'action'
   const scriptElements = getScriptElements(projectType)
+  const trackedDiff = useMemo(() => trackingChanges
+    ? buildTrackedDiff(trackingBaseContent, localContent, localTrackedSegments)
+    : null, [localContent, localTrackedSegments, trackingBaseContent, trackingChanges])
+  const trackedRanges = useMemo(() => (trackedDiff?.changes || [])
+    .filter(change => change.proposedEnd > change.proposedStart)
+    .map(change => ({ start: change.proposedStart, end: change.proposedEnd })), [trackedDiff])
 
   const hideVisualCaret = useCallback(() => {
     const { marker, textarea } = activeVisualCaretRef.current
@@ -938,6 +1099,7 @@ const SceneEditorImpl = ({
 
   useEffect(() => () => {
     if (visualCaretFrameRef.current) window.cancelAnimationFrame(visualCaretFrameRef.current)
+    pointerSelectionCleanupRef.current?.()
     hideVisualCaret()
   }, [hideVisualCaret])
 
@@ -974,11 +1136,17 @@ const SceneEditorImpl = ({
     const sync = window.requestAnimationFrame(() => {
       const content = stripNoteMarkers(scene.content || '')
       setLocalContent(content)
+      if (trackingChanges) {
+        const segments = buildTrackedDiff(trackingBaseContent, content, trackingSegments).segments
+          .map(({ type, text }) => ({ type, text }))
+        trackedSegmentsRef.current = segments
+        setLocalTrackedSegments(segments)
+      }
       setLocalScriptBlocks(scene.scriptBlocks?.length ? scene.scriptBlocks : buildScriptBlocks(content, scene.scriptElement || 'action'))
       setActiveScriptBlockIndex(0)
     })
     return () => window.cancelAnimationFrame(sync)
-  }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused])
+  }, [scene.content, scene.scriptBlocks, scene.scriptElement, focused, trackingBaseContent, trackingChanges, trackingSegments])
 
   // `ta.style.height = 'auto'` followed by reading `scrollHeight` forces the browser
   // to lay out the textarea's entire content to find its natural height — cheap for a
@@ -1004,15 +1172,22 @@ const SceneEditorImpl = ({
   const hasResizeBaselineRef = useRef(false)
   const growthAppliedRef = useRef(false)
 
+  const resizeTextareaPrecisely = useCallback(ta => {
+    ta.style.height = 'auto'
+    const proposalHeight = ta.scrollHeight
+    ta.style.height = proposalHeight + 'px'
+    if (!trackingChanges) return
+    const preview = ta.closest('.ms-rich-edit')?.querySelector('.ms-rich-preview')
+    const redlineHeight = preview?.scrollHeight || 0
+    if (redlineHeight > proposalHeight) ta.style.height = redlineHeight + 'px'
+  }, [trackingChanges])
+
   const preciseResize = useCallback(() => {
     const textareas = wrapperRef.current?.querySelectorAll('textarea.ms-textarea') || []
-    textareas.forEach(ta => {
-      ta.style.height = 'auto'
-      ta.style.height = ta.scrollHeight + 'px'
-    })
+    textareas.forEach(resizeTextareaPrecisely)
     hasResizeBaselineRef.current = true
     growthAppliedRef.current = false
-  }, [])
+  }, [resizeTextareaPrecisely])
   const debouncedPreciseResize = useDebouncedCallback(preciseResize, 200)
 
   useEffect(() => {
@@ -1025,10 +1200,7 @@ const SceneEditorImpl = ({
     if (!textareas.length) return
 
     if (localContent.length <= RESIZE_PRECISE_THRESHOLD || !hasResizeBaselineRef.current) {
-      textareas.forEach(ta => {
-        ta.style.height = 'auto'
-        ta.style.height = ta.scrollHeight + 'px'
-      })
+      textareas.forEach(resizeTextareaPrecisely)
       hasResizeBaselineRef.current = true
       growthAppliedRef.current = false
       return
@@ -1042,7 +1214,7 @@ const SceneEditorImpl = ({
       growthAppliedRef.current = true
     }
     debouncedPreciseResize.schedule()
-  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom, writingBlocks, debouncedPreciseResize])
+  }, [localContent, focused, formatSettings.fontFamily, formatSettings.fontSize, formatSettings.lineHeight, pageZoom, writingBlocks, debouncedPreciseResize, resizeTextareaPrecisely])
 
   const scheduleCaretFollow = useCaretComfortScroll({
     textareaRef,
@@ -1075,7 +1247,7 @@ const SceneEditorImpl = ({
   // doesn't reintroduce the per-keystroke cost the throttle was fixing.
   const debouncedUpdate = useDebouncedCallback(text => {
     onPersistDraft(sceneRef.current, text, { immediate: true })
-    onUpdate(scene.id, text)
+    onUpdate(scene.id, text, trackingChanges ? trackedSegmentsRef.current : null)
   }, 400)
 
   useEffect(() => {
@@ -1125,10 +1297,13 @@ const SceneEditorImpl = ({
       end: base + (ta.selectionEnd ?? ta.selectionStart ?? localContentRef.current.length),
     }
     lastSelectionRef.current = selection
+    if (trackingChanges) {
+      setTrackedSelection(selection.start === selection.end ? null : selection)
+    }
     const start = Math.max(0, Math.min(selection.start, localContentRef.current.length))
     const end = Math.max(start, Math.min(selection.end, localContentRef.current.length))
     onSelectionContextChange(start === end ? '' : localContentRef.current.slice(start, end))
-  }, [onSelectionContextChange])
+  }, [onSelectionContextChange, trackingChanges])
 
   // hasSelection here (not a separate measurement pass) is what switches the
   // floating "+" note button into the selection bar (Note/Ask AI/B/I) below —
@@ -1189,6 +1364,7 @@ const SceneEditorImpl = ({
       const base = Number(ta.dataset.msStart) || 0
       ta.setSelectionRange(Math.max(0, start - base), Math.max(0, end - base))
       lastSelectionRef.current = { start, end }
+      if (trackingChanges) setTrackedSelection(start === end ? null : { start, end })
       syncFloatingNoteButton()
       scheduleVisualCaret()
       // `preventScroll` only governs `.focus()` — it does nothing for the
@@ -1208,7 +1384,7 @@ const SceneEditorImpl = ({
       // centered while typing" feature `caretFollowEnabled` toggles.
       scheduleCaretFollow({ immediate: true })
     }, 0)
-  }, [scheduleCaretFollow, scheduleVisualCaret, syncFloatingNoteButton])
+  }, [scheduleCaretFollow, scheduleVisualCaret, syncFloatingNoteButton, trackingChanges])
 
   // ─── Undo / redo ─────────────────────────────────────────────────────────
   // Snapshots cover raw content (+ script blocks, for script projects) and the caret
@@ -1218,6 +1394,7 @@ const SceneEditorImpl = ({
 
   const snapshotNow = useCallback(() => ({
     content: localContentRef.current,
+    trackedSegments: trackedSegmentsRef.current,
     scriptBlocks: localScriptBlocks,
     scriptElement,
     selection: lastSelectionRef.current,
@@ -1240,6 +1417,10 @@ const SceneEditorImpl = ({
 
   const applySnapshot = useCallback(snap => {
     localContentRef.current = snap.content
+    if (trackingChanges && snap.trackedSegments) {
+      trackedSegmentsRef.current = snap.trackedSegments
+      setLocalTrackedSegments(snap.trackedSegments)
+    }
     onPersistDraft(scene, snap.content)
     onLiveContentChange(scene.id, snap.content)
     setLocalContent(snap.content)
@@ -1252,7 +1433,7 @@ const SceneEditorImpl = ({
     const end = snap.selection?.end ?? snap.content.length
     const start = snap.selection?.start ?? end
     focusRange(start, end)
-  }, [debouncedUpdate, focusRange, isScript, onLiveContentChange, onPersistDraft, onUpdateScene, scene])
+  }, [debouncedUpdate, focusRange, isScript, onLiveContentChange, onPersistDraft, onUpdateScene, scene, trackingChanges])
 
   const handleUndo = useCallback(() => {
     if (!undoStackRef.current.length) return
@@ -1470,10 +1651,24 @@ const SceneEditorImpl = ({
 	      ? nextValue
 	      : localContent.slice(0, base) + nextValue + localContent.slice(oldEnd)
 	    const delta = nextValue.length - (oldEnd - base)
+	    if (trackingChanges) {
+	      const editRange = computeEditRange(localContent, nextContent, base + e.target.selectionStart)
+	      const insertedLength = nextContent.length - (localContent.length - (editRange.end - editRange.start))
+	      const insertedText = nextContent.slice(editRange.start, editRange.start + Math.max(0, insertedLength))
+	      const nextSegments = applyTrackedEdit(
+	        trackedSegmentsRef.current || buildTrackedDiff(trackingBaseContent, localContent).segments,
+	        editRange.start,
+	        editRange.end,
+	        insertedText,
+	      )
+	      trackedSegmentsRef.current = nextSegments
+	      setLocalTrackedSegments(nextSegments)
+	    }
 	    lastSelectionRef.current = {
 	      start: base + e.target.selectionStart,
 	      end: base + e.target.selectionEnd,
 	    }
+	    if (trackingChanges) setTrackedSelection(null)
 	    localContentRef.current = nextContent
 	    onPersistDraft(scene, nextContent)
 	    onLiveContentChange(scene.id, nextContent)
@@ -1623,7 +1818,7 @@ const SceneEditorImpl = ({
     // ⌘'/Ctrl+' — spec §5.5's keyboard shortcut for the selection bar's Note
     // action; handleAddNote already anchors at the current selection/caret via
     // lastSelectionRef, so this is the same code path the Note button uses.
-    if ((e.ctrlKey || e.metaKey) && e.key === "'") { e.preventDefault(); handleAddNote(); return }
+    if (!trackingChanges && (e.ctrlKey || e.metaKey) && e.key === "'") { e.preventDefault(); handleAddNote(); return }
 
     if (isScript && (e.ctrlKey || e.metaKey) && /^[1-6]$/.test(e.key)) {
       const next = scriptElements[Number(e.key) - 1]
@@ -1775,6 +1970,62 @@ const SceneEditorImpl = ({
 	    focusRange(target, target)
 	  }
 
+  const handleTrackedPointerDown = e => {
+    if (e.button !== 0) return
+    const preview = e.currentTarget
+    const textarea = textareaRef.current
+    const initialRange = caretRangeFromPoint(e.clientX, e.clientY)
+    const anchor = initialRange ? resolveRawOffsetFromRange(initialRange, preview) : null
+    if (!textarea || anchor == null) return
+    e.preventDefault()
+    textarea.focus({ preventScroll: true })
+    const boundedAnchor = Math.max(0, Math.min(anchor, localContentRef.current.length))
+    textarea.setSelectionRange(boundedAnchor, boundedAnchor)
+    lastSelectionRef.current = { start: boundedAnchor, end: boundedAnchor }
+    setTrackedSelection(null)
+    scheduleVisualCaret()
+
+    const move = event => {
+      const range = caretRangeFromPoint(event.clientX, event.clientY)
+      const offset = range ? resolveRawOffsetFromRange(range, preview) : null
+      if (offset == null) return
+      const bounded = Math.max(0, Math.min(offset, localContentRef.current.length))
+      const start = Math.min(boundedAnchor, bounded)
+      const end = Math.max(boundedAnchor, bounded)
+      textarea.setSelectionRange(start, end, bounded < boundedAnchor ? 'backward' : 'forward')
+      lastSelectionRef.current = { start, end }
+      setTrackedSelection(start === end ? null : { start, end })
+      scheduleVisualCaret()
+    }
+    const finish = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      pointerSelectionCleanupRef.current = null
+      syncCursorTools()
+    }
+    pointerSelectionCleanupRef.current?.()
+    pointerSelectionCleanupRef.current = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish, { once: true })
+  }
+
+  const handleEditorClick = e => {
+    syncActiveScriptBlock()
+    if (!trackingChanges || e.currentTarget.selectionStart !== e.currentTarget.selectionEnd) return
+    const preview = e.currentTarget.closest('.ms-rich-edit')?.querySelector('.ms-rich-preview')
+    const range = preview ? caretRangeFromPoint(e.clientX, e.clientY) : null
+    const resolved = range ? resolveRawOffsetFromRange(range, preview) : null
+    if (resolved == null) return
+    const target = Math.max(0, Math.min(resolved, localContentRef.current.length))
+    e.currentTarget.setSelectionRange(target, target)
+    lastSelectionRef.current = { start: target, end: target }
+    setTrackedSelection(null)
+    scheduleVisualCaret()
+  }
+
   const displayTitle = scene.title && scene.title !== 'Scene'
     ? scene.title
     : `Scene ${sceneIndex + 1}`
@@ -1868,14 +2119,24 @@ const SceneEditorImpl = ({
             {statusCfg.label}
           </button>
 
-          <button
-            type="button"
-            className="ms-meta-chip ms-mobile-note-btn"
-            onMouseDown={e => e.preventDefault()}
-            onClick={handleAddNote}
-            title="Add note at cursor"
-            aria-label="Add note"
-          >+ Note</button>
+          {!trackingChanges && (
+            <button
+              type="button"
+              className="ms-meta-chip ms-mobile-note-btn"
+              onMouseDown={e => e.preventDefault()}
+              onClick={handleAddNote}
+              title="Add note at cursor"
+              aria-label="Add note"
+            >+ Note</button>
+          )}
+
+          {trackingChanges && (
+            <span className="ms-tracking-chip">
+              {trackedDiff?.changes.length
+                ? `${trackedDiff.changes.length} ${trackedDiff.changes.length === 1 ? 'change' : 'changes'} tracked`
+                : 'Tracking changes'}
+            </span>
+          )}
 
           <div className="flex-1 h-px bg-[var(--border)]" />
 
@@ -1947,19 +2208,23 @@ const SceneEditorImpl = ({
       </div>
 
       {/* Prose column (620px) + note gutter (188px) — spec §4/§5.3, refined
-          per a later note: Edit and Write never show a note the same way at
-          once. Edit shows a floating icon per note in the gutter, always
-          visible, in document order rather than pixel-aligned to its exact
-          line (measuring each note mark's offsetTop against the prose
-          column would mean a layout read in the scene render path, exactly
-          what useSceneWindow's virtualization exists to avoid across dozens
-          of mounted scenes). Write shows the note only as the inline box,
-          anchored right in the text, and never renders the gutter at all.
+          per a later note: non-Writing modes and Writing never show a note
+          the same way at once (mode ids kept their original names — see the
+          nf-manuscript-mode-v2 comment above — even though Writing is now
+          the ordinary default editor, not the specialised mode 'write' used
+          to be). Non-Writing modes show a floating icon per note in the
+          gutter, always visible, in document order rather than pixel-aligned
+          to its exact line (measuring each note mark's offsetTop against the
+          prose column would mean a layout read in the scene render path,
+          exactly what useSceneWindow's virtualization exists to avoid across
+          dozens of mounted scenes). Writing shows the note only as the inline
+          box, anchored right in the text via its own small editable block
+          (see buildWritingBlocks), and never renders the gutter at all.
           Container-query drop-out (per the handoff spec, not a viewport
           media query) lands in step 7 once the scroll container gets
           `container-type: inline-size`; a plain breakpoint covers it in
           the meantime. */}
-      <div className={`ms-scene-body${!isScript && sortedNotes.length > 0 && mode !== 'write' ? ' has-gutter' : ''}${mode === 'write' ? ' ms-scene-body--write' : ''}`}>
+      <div className={`ms-scene-body${!trackingChanges && !isScript && sortedNotes.length > 0 && mode !== 'write' ? ' has-gutter' : ''}${mode === 'write' ? ' ms-scene-body--write' : ''}`}>
         <div className="ms-scene-prose-col">
 	      {focused ? (
 	        !isScript && sortedNotes.length > 0 && mode === 'write' ? (
@@ -1983,7 +2248,19 @@ const SceneEditorImpl = ({
 	                      <ContentPreview
 	                        content={localContent.slice(block.start, block.end)}
 	                        entityMap={entityMap}
-	                        notesBySeq={new Map()}
+	                        // Most blocks here are surrounding prose with no note
+	                        // of their own (`new Map()`). A block built from a
+	                        // note's own anchor range (see buildWritingBlocks)
+	                        // carries that note on `block` — pass it through,
+	                        // offsets rebased to this block's own local content,
+	                        // so this overlay renders the real `.ms-note-highlight`
+	                        // span instead of silently losing the highlight the
+	                        // way an always-empty map did (2026-09-24 fix).
+	                        notesBySeq={block.note ? new Map([[block.note.seq, {
+	                          ...block.note,
+	                          anchorOffset: 0,
+	                          anchorEndOffset: block.end - block.start,
+	                        }]]) : new Map()}
 	                        highlightedNoteSeq={highlightedNoteSeq}
 	                        onEntityClick={onEntityClick}
 	                        onNoteClick={() => {}}
@@ -1993,9 +2270,28 @@ const SceneEditorImpl = ({
 	                        isBullets={false}
 	                        isScript={false}
 	                        projectType={projectType}
-	                        mode={mode}
+	                        // Not `mode` (always 'write' in this branch): when this
+	                        // block carries the note's own anchor range,
+	                        // parseSegments pairs its `noteRange` highlight with a
+	                        // trailing zero-width `note` marker for the *same* note
+	                        // (its normal highlight+point-marker pairing — see
+	                        // parseSegments above), and ContentPreview's own
+	                        // `seg.type === 'note'` branch renders that marker as a
+	                        // full InlineNoteBlock whenever `mode === 'write'`. The
+	                        // block right after this one (pushed by
+	                        // buildWritingBlocks) already renders that same note's
+	                        // real, interactive InlineNoteBlock — passing `mode`
+	                        // through here too would render it *twice* (confirmed
+	                        // in review: a second title/textarea/Open-Delete card
+	                        // for the same note, stacked inside this tiny anchor
+	                        // block's own aria-hidden preview). Any non-'write'
+	                        // value suppresses just that inline duplicate; it
+	                        // doesn't otherwise affect this call (mode has no other
+	                        // branch inside ContentPreview).
+	                        mode={block.note ? 'edit' : mode}
 	                        indentParagraphs={autoIndentEnabled}
 	                        baseOffset={block.start}
+	                        trackedRanges={trackedRanges}
 	                      />
 	                    </div>
 	                    <span className="ms-editor-caret" aria-hidden="true" />
@@ -2010,7 +2306,7 @@ const SceneEditorImpl = ({
 	                      onBlur={handleEditorBlur}
 	                      onChange={handleChange}
 	                      onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
-	                      onClick={syncActiveScriptBlock}
+	                      onClick={handleEditorClick}
 	                      onKeyUp={syncActiveScriptBlock}
 	                      onSelect={syncActiveScriptBlock}
 	                      placeholder={isBullets ? 'One item per line...' : 'Begin writing here...'}
@@ -2024,9 +2320,15 @@ const SceneEditorImpl = ({
 	            })}
 	          </div>
 	        ) : (
-	          <div className="ms-rich-edit">
-	            <div className={`ms-rich-preview ms-preview${isScript ? ' ms-script-mode' : ''}`} aria-hidden="true" style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}>
-	              <ContentPreview
+	          <div className={`ms-rich-edit${trackingChanges ? ' is-tracking' : ''}`}>
+	            <div className={`ms-rich-preview ms-preview${isScript ? ' ms-script-mode' : ''}`} aria-hidden="true" onPointerDown={trackingChanges ? handleTrackedPointerDown : undefined} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}>
+	              {trackingChanges ? (
+	                <TrackedContentPreview
+	                  segments={trackedDiff?.segments || []}
+	                  indentParagraphs={autoIndentEnabled}
+	                  selection={focused ? trackedSelection : null}
+	                />
+	              ) : <ContentPreview
 	                content={localContent}
 	                entityMap={entityMap}
 	                notesBySeq={notesBySeq}
@@ -2043,7 +2345,8 @@ const SceneEditorImpl = ({
 	                projectType={projectType}
 	                mode={mode}
 	                indentParagraphs={autoIndentEnabled}
-	              />
+	                trackedRanges={trackedRanges}
+	              />}
 	            </div>
 	            <span className="ms-editor-caret" aria-hidden="true" />
 	            <textarea
@@ -2055,7 +2358,7 @@ const SceneEditorImpl = ({
 	              onBlur={handleEditorBlur}
 	              onChange={handleChange}
 	              onKeyDown={e => { handleKeyDown(e); window.setTimeout(syncActiveScriptBlock, 0) }}
-	              onClick={syncActiveScriptBlock}
+	              onClick={handleEditorClick}
 	              onKeyUp={syncActiveScriptBlock}
 	              onSelect={syncActiveScriptBlock}
 	              placeholder={isBullets ? 'One item per line…' : 'Begin writing here…'}
@@ -2068,7 +2371,9 @@ const SceneEditorImpl = ({
 	        )
 	      ) : (
         <div className={`ms-preview${isScript ? ' ms-script-mode' : ''}`} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle} onClick={activateAt}>
-	          <ContentPreview
+	          {trackingChanges ? (
+	            <TrackedContentPreview segments={trackedDiff?.segments || []} indentParagraphs={autoIndentEnabled} />
+	          ) : <ContentPreview
 	            content={localContent}
 	            entityMap={entityMap}
 	            notesBySeq={notesBySeq}
@@ -2085,12 +2390,13 @@ const SceneEditorImpl = ({
             projectType={projectType}
             mode={mode}
             indentParagraphs={autoIndentEnabled}
-          />
+            trackedRanges={trackedRanges}
+          />}
 	        </div>
 	      )}
         </div>
 
-        {!isScript && sortedNotes.length > 0 && mode !== 'write' && (
+        {!trackingChanges && !isScript && sortedNotes.length > 0 && mode !== 'write' && (
           <div className="ms-scene-gutter">
             {sortedNotes.map(note => (
               <GutterNoteCard
@@ -2122,15 +2428,15 @@ const SceneEditorImpl = ({
 	                ContentPreview above). Ask AI is still an editing-tool-only
 	                affordance per spec §5.4/§8: Write's selection bar otherwise
 	                offers formatting only. */}
-	            <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>
+	            {!trackingChanges && <button type="button" onMouseDown={e => e.preventDefault()} onClick={handleAddNote} title="Note (⌘')">Note</button>}
 	            {mode !== 'write' && onAskAI && (
 	              <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => onAskAI(scene.id)} title="Ask AI about this selection">Ask AI</button>
 	            )}
-	            <span className="ms-selbar-sep" />
+	            {!trackingChanges && <span className="ms-selbar-sep" />}
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} title="Bold (Ctrl+B)"><b>B</b></button>
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} title="Italic (Ctrl+I)"><em>I</em></button>
 	          </div>
-	        ) : (
+	        ) : !trackingChanges ? (
 	          <button
 	            type="button"
 	            className="ms-floating-note-btn font-sans"
@@ -2145,7 +2451,7 @@ const SceneEditorImpl = ({
 	          >
 	            +
 	          </button>
-	        )
+	        ) : null
 	      )}
 
 	      {!focused && (

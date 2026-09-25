@@ -6,7 +6,7 @@ import Manuscript from './Manuscript.jsx'
 const noop = vi.fn()
 const defaultInnerWidth = window.innerWidth
 
-const baseStore = () => ({
+const baseStore = (overrides = {}) => ({
   activeNovel: {
     id: 'campaign-1',
     title: 'The Ember Road',
@@ -37,6 +37,7 @@ const baseStore = () => ({
   sceneConflicts: [],
   restoreSceneConflict: noop,
   discardSceneConflict: noop,
+  ...overrides,
 })
 
 afterEach(() => {
@@ -73,10 +74,36 @@ describe('Manuscript campaign workflow', () => {
     expect(document.querySelector('.ms-insp')).toBeTruthy()
 
     const modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
-    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Write' }))
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Editing' }))
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Writing' }))
 
-    expect(within(modeSwitcher).getByRole('button', { name: 'Write' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(modeSwitcher).getByRole('button', { name: 'Writing' }).getAttribute('aria-pressed')).toBe('true')
     expect(document.querySelector('.ms-rail.is-collapsed')).toBeTruthy()
     expect(document.querySelector('.ms-insp')).toBeNull()
+  })
+
+  it('opens a manuscript reference in the side panel without leaving Writing mode', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    const store = baseStore({
+      scenes: [{ id: 'encounter-1', novelId: 'campaign-1', chapterId: 'session-1', title: 'Road Ambush', content: 'Cara crossed the bridge.', order: 0 }],
+      characters: [{ id: 'cara', name: 'Cara', summary: 'A determined scout.' }],
+    })
+    render(<Manuscript store={store} userId={null} />)
+
+    const modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Editing' }))
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Writing' }))
+    expect(document.querySelector('.ms-insp')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open in side panel' }))
+
+    expect(within(modeSwitcher).getByRole('button', { name: 'Writing' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('complementary', { name: 'Scene inspector' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Selected catalogue entry' }).textContent).toContain('Cara')
+    expect(within(document.querySelector('.ms-topbar')).getByRole('button', { name: 'Inspector' })).toBeTruthy()
+
+    // Re-selecting the current mode must not act like a panel-close command.
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Writing' }))
+    expect(screen.getByRole('complementary', { name: 'Scene inspector' })).toBeTruthy()
   })
 })

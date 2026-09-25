@@ -1,5 +1,6 @@
 import { listKeys, replaceItemsAtomically } from './projectStorage.js'
-import { sceneContentKey } from './sceneContentStore.js'
+import { sceneContentKey, sceneTrackedChangesKey } from './sceneContentStore.js'
+import { ensureLegacySceneVersionsMigrated } from '../utils/sceneVersions.js'
 
 const COLLECTIONS = [
   ['nf_novels', 'novels'],
@@ -32,28 +33,63 @@ export function buildProjectReplacementEntries(data, { ownerId = null, writtenAt
   entries.nf_activeMapByNovel = JSON.stringify(source.activeMapByNovel ?? {})
   entries.nf_currentYear = JSON.stringify(source.currentYear ?? 0)
   entries.nf_activeNovel = JSON.stringify(source.activeNovelId ?? null)
-  // Version history is local recovery data rather than part of cloud exports.
-  // A full replacement clears it unless a local destructive operation supplies
-  // the subset that still belongs to retained projects.
-  entries.nf_scene_versions = JSON.stringify(source.sceneVersions ?? [])
   entries.nf_localWriteAt = String(writtenAt)
   if (ownerId) entries.nf_localOwner = String(ownerId)
 
   const scenes = Array.isArray(source.scenes) ? source.scenes : []
   entries.nf_scenes = JSON.stringify(scenes.map(scene => {
     if (!scene || typeof scene !== 'object' || scene.id == null) return scene
-    const { content: _content, ...metadata } = scene
+    const { content: _content, trackedChanges, ...metadata } = scene
     entries[sceneContentKey(scene.id)] = typeof scene.content === 'string' ? scene.content : ''
+    if (trackedChanges?.baseContent != null && trackedChanges?.proposedContent != null) {
+      entries[sceneTrackedChangesKey(scene.id)] = JSON.stringify(trackedChanges)
+      return {
+        ...metadata,
+        trackedChanges: {
+          stored: true,
+          createdAt: trackedChanges.createdAt,
+          updatedAt: trackedChanges.updatedAt,
+        },
+      }
+    }
     return metadata
   }))
   return entries
 }
 
+const SCENE_CONTENT_PREFIX = 'nf_scene_content:'
+// Version history now lives under its own per-scene key (see
+// src/utils/sceneVersions.js for why: a single shared `nf_scene_versions`
+// blob let two tabs snapshotting two *different* scenes race on the same
+// storage key). It is local recovery data, not part of a scene's own
+// metadata/content, so a replacement never rewrites it directly — it only
+// sweeps the version-history key of any scene that no longer exists in the
+// complete authoritative dataset being written, the same way stale content
+// keys are swept below (audit finding #16's "orphaned nf_scene_versions
+// entries" half).
+const SCENE_VERSIONS_PREFIX = 'nf_scene_versions:'
+const SCENE_TRACKED_CHANGES_PREFIX = 'nf_scene_tracked_changes:'
+
 export async function replaceProjectStorageAtomically(data, options = {}) {
+  // Must run before computing the sweep below: a scene (or whole project)
+  // being deleted right now might have its version history still trapped in
+  // the legacy shared blob rather than its own `nf_scene_versions:<id>` key
+  // (e.g. this is the very first scene-version-touching operation this
+  // session) — the sweep below only ever looks at keys that already exist,
+  // so without this it would miss that data entirely, leaving it to be
+  // wrongly resurrected later. See ensureLegacySceneVersionsMigrated's own
+  // comment for the full explanation.
+  ensureLegacySceneVersionsMigrated()
   const entries = buildProjectReplacementEntries(data, options)
-  const retainedSceneKeys = new Set(Object.keys(entries).filter(key => key.startsWith('nf_scene_content:')))
-  const staleSceneKeys = listKeys('nf_scene_content:').filter(key => !retainedSceneKeys.has(key))
-  const keysToRemove = ['nf_localWriteFailed', ...staleSceneKeys]
+  const retainedSceneIds = new Set(
+    Object.keys(entries)
+      .filter(key => key.startsWith(SCENE_CONTENT_PREFIX))
+      .map(key => key.slice(SCENE_CONTENT_PREFIX.length))
+  )
+  const staleSceneKeys = listKeys(SCENE_CONTENT_PREFIX).filter(key => !retainedSceneIds.has(key.slice(SCENE_CONTENT_PREFIX.length)))
+  const staleTrackedKeys = listKeys(SCENE_TRACKED_CHANGES_PREFIX).filter(key => !retainedSceneIds.has(key.slice(SCENE_TRACKED_CHANGES_PREFIX.length)))
+  const staleSceneVersionKeys = listKeys(SCENE_VERSIONS_PREFIX).filter(key => !retainedSceneIds.has(key.slice(SCENE_VERSIONS_PREFIX.length)))
+  const keysToRemove = ['nf_localWriteFailed', ...staleSceneKeys, ...staleTrackedKeys, ...staleSceneVersionKeys]
   if (!options.ownerId) keysToRemove.push('nf_localOwner')
   await replaceItemsAtomically(entries, keysToRemove)
   return entries

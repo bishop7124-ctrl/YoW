@@ -1,5 +1,6 @@
 import { SYMBOL_GROUPS } from './atlasSymbols.js'
 import { uid } from './mapUtils.js'
+import { LOCAL_STARTER_OBJECTS } from './localStarter.js'
 
 export const ATLAS_VERSION = 'atlas-v1'
 export const WIDTH = 1200
@@ -15,7 +16,21 @@ export const PALETTES = {
   sage: { name: 'Woodland', paper: '#f2f2e8', land: '#dee3ca', water: '#b9d0cf', ink: '#3f5145', forest: '#647e59', mountain: '#899184', accent: '#a76045' },
   mono: { name: 'Pen & ink', paper: '#f6f3eb', land: '#eee9dc', water: '#d9dfdd', ink: '#424744', forest: '#7c8579', mountain: '#9a9a91', accent: '#515d60' },
 }
+export const ORGANIC_BORDER_TYPES = ['shape', 'water', 'territory']
 export const SYMBOLS = [...new Set(SYMBOL_GROUPS.flatMap(group => group.symbols))]
+
+export function getOrganicStrength(metadata = {}, objectType) {
+  const specific = Number(metadata.organicStrengthByType?.[objectType])
+  if (Number.isFinite(specific)) return Math.max(2, Math.min(30, specific))
+  const legacy = Number(metadata.organicStrength)
+  return Number.isFinite(legacy) ? Math.max(2, Math.min(30, legacy)) : 12
+}
+
+export function zoomFromWheel(currentZoom, delta) {
+  if (!delta) return currentZoom
+  const next = currentZoom + (delta < 0 ? .1 : -.1)
+  return Math.round(Math.max(.5, Math.min(3, next)) * 100) / 100
+}
 // The editor only translates/scales its paper. Using its visible bounds also
 // accounts for CSS zoom and avoids browser differences in SVG screen matrices.
 export function canvasPoint(clientX, clientY, rect, snap = 0) {
@@ -81,6 +96,14 @@ export function moveObject(object, dx, dy) {
   return { ...object, x: object.x + dx, y: object.y + dy,
     ...(object.geometry ? { geometry: { ...object.geometry, points: object.geometry.points.map(p => ({ x: p.x + dx, y: p.y + dy })), ...(object.geometry.straightPoints ? { straightPoints: object.geometry.straightPoints.map(p => ({ x: p.x + dx, y: p.y + dy })) } : {}) } } : {}) }
 }
+function cloneStarterObject(object) {
+  return {
+    ...object,
+    id: uid('atlas'),
+    properties: { ...object.properties },
+    ...(object.geometry ? { geometry: { ...object.geometry, points: object.geometry.points.map(point => ({ ...point })) } } : {}),
+  }
+}
 export function starterObjects(type, blank = false) {
   if (blank) return []
   const objects = []
@@ -90,7 +113,7 @@ export function starterObjects(type, blank = false) {
     if (detailed) object.geometry.straightPoints = points.map(([x,y]) => ({ x,y }))
     objects.push(object)
   }
-  const symbol = (kind, x, y, name = '') => objects.push(makeObject('stamp', { x, y }, { symbol: kind, name, size: 42 }))
+  const symbol = (kind, x, y, name = '', size = 42) => objects.push(makeObject('stamp', { x, y }, { symbol: kind, name, size }))
   if (type === 'world') {
     path('shape', [[195,260],[230,190],[318,180],[350,121],[434,143],[496,192],[571,180],[648,220],[662,279],[728,316],[697,382],[713,450],[650,483],[612,551],[539,530],[491,596],[416,563],[392,498],[308,472],[287,402],[218,365]])
     path('shape', [[806,447],[864,408],[903,428],[957,410],[1011,459],[988,516],[1022,558],[976,610],[906,588],[859,615],[819,553],[840,502]])
@@ -101,24 +124,21 @@ export function starterObjects(type, blank = false) {
   } else if (type === 'interior') {
     for (const pts of [[[280,220],[480,220],[480,420],[280,420]],[[480,300],[700,300],[700,360],[480,360]],[[700,200],[940,200],[940,460],[700,460]],[[760,460],[820,460],[820,590],[760,590]],[[680,590],[900,590],[900,690],[680,690]]]) path('shape',pts,{ room: true })
     symbol('door',480,330);symbol('door',700,330);symbol('door',790,460);symbol('table',810,310);symbol('stairs',366,316)
-  } else {
+  } else if (type === 'region') {
     path('water', [[710,0],[780,0],[749,105],[677,188],[706,271],[644,369],[670,470],[620,559],[650,670],[594,800],[525,800],[578,669],[548,558],[601,466],[580,365],[637,267],[610,184],[682,91]])
     path('road', [[135,590],[302,485],[452,443],[625,424],[804,393],[1040,275]],{ size: 5 })
-    if (type === 'region') {
-      for (const [x,y] of [[233,199],[272,225],[305,170],[341,209],[378,162],[417,206]]) symbol('mountain',x,y)
-      for (const [x,y] of [[817,540],[860,514],[899,548],[844,582],[898,599],[936,569],[290,613],[337,632]]) symbol('forest',x,y)
-      symbol('castle',445,416,'Your stronghold');symbol('village',823,368,'River town');symbol('tower',345,553,'Watchtower')
-    } else {
-      for (const [x,y] of [[401,363],[469,340],[458,494],[368,479],[807,335],[846,434]]) symbol('village',x,y)
-      symbol('castle',330,280,'The hall');symbol('tower',741,501,'Mill')
-      for (const [x,y] of [[905,211],[945,248],[976,209],[998,260],[923,294],[243,537],[281,568]]) symbol('forest',x,y)
-    }
+    for (const [x,y] of [[233,199],[272,225],[305,170],[341,209],[378,162],[417,206]]) symbol('mountain',x,y)
+    for (const [x,y] of [[817,540],[860,514],[899,548],[844,582],[898,599],[936,569],[290,613],[337,632]]) symbol('forest',x,y)
+    symbol('castle',445,416,'Your stronghold');symbol('village',823,368,'River town');symbol('tower',345,553,'Watchtower')
+  } else {
+    objects.push(...LOCAL_STARTER_OBJECTS.map(cloneStarterObject))
   }
   return objects
 }
 export function newMapData(type, blank, palette) {
   return { width: WIDTH, height: HEIGHT, mapObjects: starterObjects(type, blank), mapLayers: [], metadata: {
     builder: ATLAS_VERSION, palette, organicBorders: true, baseLayer: type === 'world' ? 'water' : 'land',
+    organicStrengthByType: { shape: 12, water: 12, territory: 12 },
     gridSettings: { enabled: type === 'interior', snapToGrid: false, size: 40, scale: SCALES.find(s => s.id === type).scale },
   } }
 }

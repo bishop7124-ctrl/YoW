@@ -110,7 +110,7 @@ export default function LoginPage({
   initialEmail = '',
   variant = 'web',
 }) {
-  const { signIn, signUp, signInWithGoogle, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode } = useAuth()
+  const { signIn, signUp, signInWithGoogle, resendConfirmation, resetPassword, updatePassword, clearRecoveryMode, recoveryVerifying, recoveryError } = useAuth()
   const [screen, setScreen] = useState(initialScreen)
   const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState(initialEmail || (import.meta.env.VITE_DEV_EMAIL ?? ''))
@@ -124,6 +124,7 @@ export default function LoginPage({
   const [confirmPwd, setConfirmPwd] = useState('')
   const [pwdUpdated, setPwdUpdated] = useState(false)
   const isDesktop = variant === 'desktop'
+  const activeScreen = recoveryMode ? 'newPassword' : screen
 
   // Surface auth errors that Supabase encodes in the URL hash (e.g. expired link)
   useEffect(() => {
@@ -142,19 +143,11 @@ export default function LoginPage({
     }
   }, [onAuthModeChange])
 
-  // When Supabase fires PASSWORD_RECOVERY, switch straight to the new-password screen
   useEffect(() => {
-    if (recoveryMode) {
-      setScreen('newPassword')
-      setError('')
-    }
-  }, [recoveryMode])
-
-  useEffect(() => {
-    if (screen !== 'auth') return
+    if (activeScreen !== 'auth') return
     if (mode === 'signup') trackEvent('signup_page_view', { source: 'auth_screen', platform: isDesktop ? 'desktop' : 'web' })
     if (mode === 'login') trackEvent('login_page_view', { source: 'auth_screen', platform: isDesktop ? 'desktop' : 'web' })
-  }, [screen, mode, isDesktop])
+  }, [activeScreen, mode, isDesktop])
 
   const handleReset = async (e) => {
     e.preventDefault()
@@ -191,7 +184,6 @@ export default function LoginPage({
         setError(err.message)
       } else {
         setPwdUpdated(true)
-        clearRecoveryMode()
       }
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -275,7 +267,7 @@ export default function LoginPage({
     }
   }
 
-  if (screen === 'home' && !isDesktop) {
+  if (activeScreen === 'home' && !isDesktop) {
     return (
       <div className="auth-shell">
         <HomePage
@@ -354,21 +346,21 @@ export default function LoginPage({
             )}
 
             {/* ── Set new password (arrived via reset link) ── */}
-            {screen === 'newPassword' ? (
+            {activeScreen === 'newPassword' ? (
               pwdUpdated ? (
                 <>
                   <div className="mb-6">
                     <p className="eyebrow mb-2">Your Own World</p>
                     <h2 className="font-serif text-4xl font-medium leading-none">Password updated</h2>
                     <p className="page-copy mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
-                      Your password has been changed. You can now sign in with your new password.
+                      Your password has been changed. You can continue securely to your workspace.
                     </p>
                   </div>
                   <button
-                    onClick={() => { setPwdUpdated(false); openAuth('login'); setNewPwd(''); setConfirmPwd('') }}
+                    onClick={() => { setPwdUpdated(false); setNewPwd(''); setConfirmPwd(''); clearRecoveryMode() }}
                     className="btn btn-primary w-full justify-center py-3"
                   >
-                    Go to login
+                    Continue to your workspace
                   </button>
                 </>
               ) : (
@@ -400,17 +392,17 @@ export default function LoginPage({
                       required
                       className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
-                    {error && (
+                    {(error || recoveryError) && (
                       <p className="text-red-400 text-sm text-center bg-red-400/10 border border-red-400/20 rounded-lg px-4 py-3">
-                        {error}
+                        {error || recoveryError}
                       </p>
                     )}
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={loading || recoveryVerifying || Boolean(recoveryError)}
                       className="btn btn-primary w-full justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading ? '…' : 'Update password'}
+                      {recoveryVerifying ? 'Verifying link…' : loading ? '…' : 'Update password'}
                     </button>
                   </form>
                 </>

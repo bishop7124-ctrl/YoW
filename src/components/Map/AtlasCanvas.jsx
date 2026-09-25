@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react'
-import { PALETTES, WIDTH, HEIGHT, inkPath, organicOutline } from './atlasModel.js'
+import { PALETTES, WIDTH, HEIGHT, getOrganicStrength, inkPath, organicOutline } from './atlasModel.js'
 
 import { INK_ARTWORK } from './atlasInkArtwork.js'
 
@@ -11,7 +11,7 @@ export function InkSymbol({ kind, ink = '#292923', fill = '#f4eedf' }) {
   </g>
 }
 
-function MapObject({ object: o, palette: p, selected, onPick, onPointPick, organicBorders, organicStrength, preview, draft }) {
+function MapObject({ object: o, palette: p, mapType, selected, onPick, onPointPick, organicBorders, organicStrength, preview, draft }) {
   const props = o.properties || {}
   const size = Math.max(12, Math.min(180, Number(props.size) || 42))
   const closed = o.geometry?.type === 'polygon'
@@ -21,12 +21,15 @@ function MapObject({ object: o, palette: p, selected, onPick, onPointPick, organ
   }, [o.geometry, o.properties?.organicEdges, o.properties?.room, closed, organicBorders, organicStrength])
   const color = o.type === 'water' || o.type === 'river' ? p.water : p.ink
   const territoryLandmass = o.type === 'territory' && props.landmass === true
-  const pathStyle = { d: inkPath(points, closed, props.room || o.type === 'wall' || (closed && (!organicBorders || props.organicEdges === false))), strokeLinejoin: 'round', strokeLinecap: 'round' }
+  const pointRoute = o.type === 'road' && props.drawMode === 'points'
+  const dashedRoute = o.type === 'road' && mapType !== 'local'
+  const dashedTerritory = o.type === 'territory' && !territoryLandmass
+  const pathStyle = { d: inkPath(points, closed, props.room || o.type === 'wall' || pointRoute || (closed && (!organicBorders || props.organicEdges === false))), strokeLinejoin: 'round', strokeLinecap: 'round' }
   return <g data-object-id={preview ? undefined : o.id} data-draft={draft || undefined} onPointerDown={onPick ? e => onPick(e, o) : undefined} style={{ cursor: onPick ? 'pointer' : undefined }}>
     {points.length ? <>
       {o.type === 'shape' && !props.room && <path {...pathStyle} fill="none" stroke={p.ink} strokeWidth="9" opacity=".1"/>}
       {selected && <path data-selection="true" {...pathStyle} fill="none" stroke={p.accent} strokeWidth={12} opacity=".5"/>}
-      <path {...pathStyle} fill={closed ? o.type === 'water' ? p.water : o.type === 'territory' ? territoryLandmass ? p.land : p.forest : p.land : 'none'} fillOpacity={o.type === 'territory' && !territoryLandmass ? .2 : 1} stroke={o.type === 'shape' ? p.ink : color} strokeWidth={closed ? props.room ? 5 : territoryLandmass ? 2.4 : 1.8 : Number(props.size) || (o.type === 'wall' ? 7 : 5)} strokeDasharray={['road','territory'].includes(o.type) && !territoryLandmass ? '7 6' : undefined}/>
+      <path {...pathStyle} fill={closed ? o.type === 'water' ? p.water : o.type === 'territory' ? territoryLandmass ? p.land : p.forest : p.land : 'none'} fillOpacity={o.type === 'territory' && !territoryLandmass ? .2 : 1} stroke={o.type === 'shape' ? p.ink : color} strokeWidth={closed ? props.room ? 5 : territoryLandmass ? 2.4 : 1.8 : Number(props.size) || (o.type === 'wall' ? 7 : 5)} strokeDasharray={dashedRoute || dashedTerritory ? '7 6' : undefined}/>
       {!closed && <path {...pathStyle} fill="none" stroke="transparent" strokeWidth={Math.max(20, (Number(props.size) || 5) + 10)}/>}
       {props.name && <text x={points.reduce((sum,p) => sum+p.x,0)/points.length} y={points.reduce((sum,p) => sum+p.y,0)/points.length} textAnchor="middle" fill={p.ink} stroke={p.paper} strokeWidth="4" paintOrder="stroke" fontFamily="Georgia, serif" fontSize="18">{props.name}</text>}
       {selected && props.drawMode === 'points' && <g data-edit-handles="true" data-point-handles="true">{(o.geometry?.straightPoints || o.geometry?.points || []).map((point,index) => <g key={index} transform={`translate(${point.x} ${point.y})`}><circle className="atlas-point-handle" data-point-handle={index} r="13" fill="transparent" onPointerDown={event => onPointPick?.(event, o, index)}/><circle r="5" fill={p.paper} stroke={p.accent} strokeWidth="2" pointerEvents="none"/></g>)}</g>}
@@ -38,7 +41,7 @@ function MapObject({ object: o, palette: p, selected, onPick, onPointPick, organ
   </g>
 }
 
-export default function AtlasCanvas({ objects, metadata = {}, name, selectedId, onPick, onPointPick, svgRef, children, placementPreview, draftId, ...events }) {
+export default function AtlasCanvas({ objects, metadata = {}, mapType, name, selectedId, onPick, onPointPick, svgRef, children, placementPreview, draftId, ...events }) {
   const id = useId().replace(/:/g, '')
   const p = PALETTES[metadata.palette] || PALETTES.paper
   const grid = metadata.gridSettings || {}
@@ -49,7 +52,7 @@ export default function AtlasCanvas({ objects, metadata = {}, name, selectedId, 
     </defs>
     <rect width={WIDTH} height={HEIGHT} fill={metadata.baseLayer === 'water' ? p.water : p.paper}/>
     {metadata.baseLayer === 'water' && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}water)`}/>}
-    {objects.filter(o => o.visible !== false).map(o => <MapObject key={o.id} object={o} palette={p} selected={o.id === selectedId} onPick={onPick} onPointPick={o.id === selectedId ? onPointPick : undefined} draft={o.id === draftId} organicBorders={metadata.organicBorders !== false} organicStrength={metadata.organicStrength || 12}/>)}
+    {objects.filter(o => o.visible !== false).map(o => <MapObject key={o.id} object={o} palette={p} mapType={mapType} selected={o.id === selectedId} onPick={onPick} onPointPick={o.id === selectedId ? onPointPick : undefined} draft={o.id === draftId} organicBorders={metadata.organicBorders !== false} organicStrength={getOrganicStrength(metadata, o.type)}/>)}
     {grid.enabled && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}grid)`} pointerEvents="none"/>}
     <g pointerEvents="none" stroke={p.ink} fill="none" opacity=".45"><rect x="20" y="20" width="1160" height="760" strokeWidth=".7"/><path d="M1066 100v64m-25-32h50m-25-32-7 29 7-4 7 4Z" fill={p.ink}/></g>
     <g fill={p.ink} pointerEvents="none" fontFamily="Georgia, serif" textAnchor="middle"><text x="1066" y="89" fontSize="12">N</text>{name && <text x="600" y="746" fontSize="22" letterSpacing="4">{name}</text>}{grid.enabled && <text x="600" y="769" fontSize="11">{grid.scale}</text>}</g>
