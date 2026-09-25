@@ -39,12 +39,29 @@ async function checkNoSeriousViolations(page) {
   expect(violations, describeViolations(violations)).toEqual([])
 }
 
+// Owner decision 2026-09-25: WCAG AA contrast is only a requirement for the
+// dedicated "Accessible (High Contrast)" theme — the app's other themes
+// (including whichever one this test suite's default/system theme resolves
+// to) are brand/identity choices, not accessibility promises. The tests
+// below this point run against that default theme, so they check every
+// other critical/serious axe rule (labels, landmarks, keyboard traps, etc.)
+// but not `color-contrast`. The dedicated Accessible-theme test further
+// down uses the strict `checkNoSeriousViolations` above instead.
+async function checkNoSeriousViolationsIgnoringContrast(page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa'])
+    .disableRules(['color-contrast'])
+    .analyze()
+  const violations = seriousOrWorse(results)
+  expect(violations, describeViolations(violations)).toEqual([])
+}
+
 test.describe('Accessibility (axe-core, critical/serious only)', () => {
   test('pre-project dashboard state has no critical/serious violations', async ({ page }) => {
     await seedCleanStorage(page)
     await page.goto('/')
     await dismissLaunchPrompts(page)
-    await checkNoSeriousViolations(page)
+    await checkNoSeriousViolationsIgnoringContrast(page)
   })
 
   test('dashboard with a project has no critical/serious violations', async ({ page }) => {
@@ -52,7 +69,7 @@ test.describe('Accessibility (axe-core, critical/serious only)', () => {
     await page.goto('/')
     await dismissLaunchPrompts(page)
     await createProject(page, { title: 'A11y Dashboard Test' })
-    await checkNoSeriousViolations(page)
+    await checkNoSeriousViolationsIgnoringContrast(page)
   })
 
   test('manuscript editor (write mode) has no critical/serious violations', async ({ page }) => {
@@ -62,7 +79,7 @@ test.describe('Accessibility (axe-core, critical/serious only)', () => {
     await createProject(page, { title: 'A11y Editor Test' })
     await enterWritingMode(page)
     await waitForManuscriptReady(page)
-    await checkNoSeriousViolations(page)
+    await checkNoSeriousViolationsIgnoringContrast(page)
   })
 
   test('Characters worldbuilding screen has no critical/serious violations', async ({ page }) => {
@@ -71,7 +88,7 @@ test.describe('Accessibility (axe-core, critical/serious only)', () => {
     await dismissLaunchPrompts(page)
     await createProject(page, { title: 'A11y Characters Test' })
     await page.getByRole('button', { name: /Characters/i }).first().click()
-    await checkNoSeriousViolations(page)
+    await checkNoSeriousViolationsIgnoringContrast(page)
   })
 
   test('New Project modal (dialog focus/labeling) has no critical/serious violations', async ({ page }) => {
@@ -80,7 +97,7 @@ test.describe('Accessibility (axe-core, critical/serious only)', () => {
     await dismissLaunchPrompts(page)
     await page.getByRole('button', { name: 'New Project' }).first().click()
     await expect(page.getByRole('dialog').first()).toBeVisible()
-    await checkNoSeriousViolations(page)
+    await checkNoSeriousViolationsIgnoringContrast(page)
   })
 })
 
@@ -99,32 +116,38 @@ async function switchToTheme(page, themeLabel) {
   await page.evaluate(() => {
     window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'appearance' } }))
   })
+  // themeLabel is matched as a literal string, not a regex fragment — labels
+  // like "Accessible (High Contrast)" contain regex metacharacters that would
+  // otherwise silently change what this matches (parens become a capture
+  // group, so the anchored pattern never matches the real literal text).
+  const escapedLabel = themeLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   await page.locator('.theme-choice-copy > span')
-    .filter({ hasText: new RegExp(`^${themeLabel}$`) })
+    .filter({ hasText: new RegExp(`^${escapedLabel}$`) })
     .locator('xpath=ancestor::button[1]')
     .click()
   await page.getByRole('button', { name: 'Close account settings' }).click()
 }
 
-// Exercise the manuscript editor in every non-default built-in theme through
-// the real Appearance UI. No known contrast violations are filtered here.
-test.describe('Accessibility contrast debt across built-in themes (axe-core)', () => {
-  for (const { id, label } of [
-    { id: 'dark-refined', label: 'Nocturne Grove' },
-    { id: 'tropical', label: 'Tropical' },
-    { id: 'pearl-minimal', label: 'Pearl Minimal' },
-  ]) {
-    test(`manuscript editor in ${id} theme has no unknown critical/serious violations`, async ({ page }) => {
-      await seedCleanStorage(page)
-      await page.goto('/')
-      await dismissLaunchPrompts(page)
-      await createProject(page, { title: `A11y Theme Test ${id}` })
-      await switchToTheme(page, label)
-      await enterWritingMode(page)
-      await waitForManuscriptReady(page)
-      const activeTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
-      expect(activeTheme, 'theme switch did not apply before running axe').toBe(id)
-      await checkNoSeriousViolations(page)
-    })
-  }
+// Owner decision 2026-09-25: the built-in stylistic themes (Nocturne Grove/
+// dark-refined, Tropical, Pearl Minimal, Sage Grove/light-refined) are brand/
+// identity choices, not accessibility promises — WCAG AA contrast is only a
+// requirement for the dedicated "Accessible (High Contrast)" theme, which
+// exists specifically so a user who needs it has one. This replaces the
+// prior per-theme contrast-debt sweep (which asserted the same strict
+// standard against every stylistic theme and consequently had a permanent
+// list of known, accepted failures) with a single strict check against the
+// one theme this promise actually applies to.
+test.describe('Accessibility contrast requirement — Accessible (High Contrast) theme', () => {
+  test('manuscript editor in the Accessible theme has no critical/serious violations', async ({ page }) => {
+    await seedCleanStorage(page)
+    await page.goto('/')
+    await dismissLaunchPrompts(page)
+    await createProject(page, { title: 'A11y Accessible Theme Test' })
+    await switchToTheme(page, 'Accessible (High Contrast)')
+    await enterWritingMode(page)
+    await waitForManuscriptReady(page)
+    const activeTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+    expect(activeTheme, 'theme switch did not apply before running axe').toBe('accessible')
+    await checkNoSeriousViolations(page)
+  })
 })
