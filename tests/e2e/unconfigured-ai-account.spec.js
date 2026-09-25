@@ -140,6 +140,11 @@ test('manuscript AI suggestions tab shows setup guidance', async ({ page }) => {
   await createProject(page, { title: 'AI No-Key Test' })
 
   await page.getByRole('button', { name: /^(Write|Open manuscript)$/ }).first().click()
+  // The topbar's AI toggle is hidden in Write mode (Manuscript.jsx passes
+  // hideAI={mode !== 'edit'} — the 2026-09-?? Write/Edit/Review/Finalised
+  // mode redesign keeps Write's header/toolbar minimal) — switch to Editing
+  // mode first, where the button renders.
+  await page.getByRole('button', { name: 'Editing' }).click()
   // Opens the manuscript topbar's AI workspace panel (ManuscriptTopbar.jsx).
   // This panel's unconfigured state is a bespoke setup card (AISuggestionPanel.jsx,
   // 2026-09-14 redesign) rather than the shared AiConfigRequiredNotice component
