@@ -64,27 +64,17 @@ function describeViolations(violations) {
     .join('\n')
 }
 
+// Owner decision 2026-09-25: WCAG AA contrast is only a requirement for the
+// dedicated "Accessible (High Contrast)" theme, not for the stylistic
+// built-in themes this file exercises (Nocturne Grove/dark-refined, Sage
+// Grove/light-refined, Tropical, Pearl Minimal) — those are brand/identity
+// choices. `color-contrast` is disabled accordingly; every other
+// critical/serious axe rule (labels, landmarks, keyboard traps, etc.) still
+// applies regardless of theme, since those are real bugs independent of
+// color choice. This replaces the narrower prior `...ExceptKnownAccentTextDebt`
+// workaround for one specific known issue with the general policy that now
+// applies to every theme this file tests.
 async function checkNoSeriousViolations(page) {
-  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
-  const violations = seriousOrWorse(results)
-  expect(violations, describeViolations(violations)).toEqual([])
-}
-
-// Same check, but ignoring `color-contrast` — for screens with the
-// pre-existing, already-documented `--accent`-as-plain-text-color debt
-// (QA_PLAN.md's "Theme contrast audit" note: "`--accent` used as small
-// link/label text ... measures below the 4.5:1 AA text threshold ...
-// needs a product/design decision, not a pure code fix"). This 2026-09-16
-// pass found that debt is broader than previously catalogued — 20+ inline
-// `color: 'var(--accent)'` call sites in `AccountSettings.jsx` alone,
-// confirmed failing on dark-refined too (2.89:1), not just "some light
-// themes" as originally written up — but bulk-recoloring ~20 call sites
-// each against their own background is exactly the kind of broad,
-// design-affecting change this repo's QA convention defers to a product
-// decision rather than a QA session silently absorbing. See ROADMAP.md's
-// Bugs table for the full finding. Still asserts every *other*
-// critical/serious axe rule (labels, landmarks, keyboard traps, etc.).
-async function checkNoSeriousViolationsExceptKnownAccentTextDebt(page) {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
     .disableRules(['color-contrast'])
@@ -177,7 +167,7 @@ test.describe('Account Settings tabs across built-in themes (axe-core)', () => {
       })
       for (const tab of ['Profile', 'Preferences', 'Storage', 'AI', 'Membership']) {
         await page.getByRole('button', { name: tab, exact: true }).click()
-        await checkNoSeriousViolationsExceptKnownAccentTextDebt(page)
+        await checkNoSeriousViolations(page)
       }
     })
   }
