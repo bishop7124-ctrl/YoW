@@ -55,6 +55,36 @@ function useBlockedLatch(usePresence, key, active, onBlocked) {
 }
 
 describe('useTabPresence (real BroadcastChannel, two simulated tabs)', () => {
+  it('blocks from the shared storage lease when BroadcastChannel is unavailable or delayed', async () => {
+    const key = `scene:storage-fallback-${Math.random()}`
+    const originalBroadcastChannel = globalThis.BroadcastChannel
+    vi.stubGlobal('BroadcastChannel', undefined)
+    const { useTabPresence: useTabA } = await loadIsolatedTabModule()
+    const { useTabPresence: useTabB } = await loadIsolatedTabModule()
+    const onBlockedA = vi.fn()
+    const onBlockedB = vi.fn()
+    const tabA = renderHook(
+      ({ active }) => useBlockedLatch(useTabA, key, active, onBlockedA),
+      { initialProps: { active: false } },
+    )
+    const tabB = renderHook(
+      ({ active }) => useBlockedLatch(useTabB, key, active, onBlockedB),
+      { initialProps: { active: false } },
+    )
+
+    act(() => { tabA.rerender({ active: true }) })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+    act(() => { tabB.rerender({ active: true }) })
+    await waitFor(() => expect(onBlockedB).toHaveBeenCalledTimes(1))
+    expect(onBlockedA).not.toHaveBeenCalled()
+
+    act(() => { tabA.rerender({ active: false }) })
+    act(() => { tabB.rerender({ active: false }) })
+    tabA.unmount()
+    tabB.unmount()
+    vi.stubGlobal('BroadcastChannel', originalBroadcastChannel)
+  })
+
   it('blocks a duplicated tab even when Safari clones the original sessionStorage', async () => {
     const key = `scene:duplicated-tab-${Math.random()}`
     // This is the exact condition Safari's Duplicate Tab creates. The old
