@@ -37,6 +37,12 @@ Linked/historical sources:
 - [scripts/create_yow_mvp_matrix.py](../scripts/create_yow_mvp_matrix.py) is the script that generated the initial matrix content.
 - [supabase/migrations/20260521_roadmap.sql](../supabase/migrations/20260521_roadmap.sql) seeds the public-facing app roadmap. It is display data, not the product planning source of truth.
 
+### 2026-10-02 account-switch entitlement isolation
+
+Status: **In progress — live acceptance passed; cleanup repair is in the production release path.** The audit found that account-switch cleanup removed only per-scene keys known to the current tab, so orphaned/not-yet-hydrated prose or tracked-change keys could remain in the shared browser vault. `useStore` now enumerates and purges every `nf_scene_content:*` and `nf_scene_tracked_changes:*` key on sign-out/account change, with regression coverage for loaded and orphaned private keys. Focused coverage passes 243/243, Chromium account isolation passes 3/3, and the clean release candidate passes `npm run qa`: 132/132 files, 1,248/1,248 tests, zero lint errors, production build, load/matrix checks, and all 12 API imports. Every active entitlement creator/checker derives identity from a verified bearer token or signed Stripe event and reads entitlement from server-controlled `app_metadata`; no request-body account selection or client-writable entitlement trust was found. Legacy Supabase billing copies are not referenced by the app and their webhook drift is isolated in `docs/PAYMENT_ROADMAP.md` for the scheduled Stripe review.
+
+The owner completed test2 Beta → test1 Free → test2 Beta in one regular Safari window: identities, project libraries, AI-setting state, and entitlement transitions were correct in both directions, with clean sign-outs and no project, plan, billing, key, import, restore, deletion, download, email, secret, or public change. The named journey has no reproduced auth, data-loss, isolation, save, restore, or export blocker. Final closure waits only for merge, production deployment, and post-deploy evidence; no further owner action is required. Full evidence is in `docs/QA_PLAN.md`, “2026-10-02 two-account/account-switch entitlement isolation.”
+
 ### Final Product Scope Discipline
 
 Status: Active
