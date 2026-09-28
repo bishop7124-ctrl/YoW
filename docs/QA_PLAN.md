@@ -2,7 +2,7 @@
 
 ## 2026-10-02 two-account/account-switch entitlement isolation
 
-Status: **Live acceptance passed; cleanup repair is in the production release path.** The owner used only the designated unbilled `test2@yourownworld.co.uk` Beta fixture and `test1@yourownworld.co.uk` Free fixture. One regular Safari window completed test2 Beta → test1 Free → test2 Beta with correct identities, isolated project libraries, isolated AI-setting state, and correct entitlement restoration. No account was created, no plan was changed, no billing/download/membership-refresh control was used, no project was opened or changed, and no import, restore, delete, email, secret disclosure, or public action occurred.
+Status: **Done 2026-10-02.** The owner used only the designated unbilled `test2@yourownworld.co.uk` Beta fixture and `test1@yourownworld.co.uk` Free fixture. One regular Safari window completed test2 Beta → test1 Free → test2 Beta with correct identities, isolated project libraries, isolated AI-setting state, and correct entitlement restoration. No account was created, no plan was changed, no billing/download/membership-refresh control was used, no project was opened or changed, and no import, restore, delete, email, secret disclosure, or public action occurred.
 
 Engineering evidence:
 
@@ -11,6 +11,8 @@ Engineering evidence:
 - Focused auth/entitlement/storage suite: **243/243 passed** across `useStore`, `membership`, `AuthContext`, AI proxy, desktop device, download-link, customer-portal, and paid-interest tests.
 - Chromium storage-isolation suite from a dedicated worktree: **3/3 passed** (`tests/e2e/account-isolation.spec.js`).
 - Clean release-candidate full gate: `npm run qa` passed — **132/132 files and 1,248/1,248 tests**, zero lint errors (104 existing warnings), production build, 214-file load check, all 50 Playwright specs represented in CI, and all 12 Vercel API routes importing cleanly.
+- PR [#228](https://github.com/bishop7124-ctrl/YoW/pull/228) passed all **53** CI jobs in run `36483179747` and merged as `8a5ba3bd680e9a4cdf0356945a242853ab6ddbfa`. Vercel reported the production deployment successful.
+- `https://www.yourownworld.co.uk/` returned HTTP 200 and served `assets/index-Bh4QrQgI.js`; direct inspection of that public bundle confirmed both complete prefix sweeps (`nf_scene_content:` and `nf_scene_tracked_changes:`) are present.
 
 Server-side inspection found no active route that accepts an account ID or entitlement from the request body. Membership trusts server-controlled `app_metadata`; AI, download, desktop-device, checkout, customer-portal, and paid-interest routes resolve the user from a verified bearer token; the active Stripe webhook requires a valid Stripe signature and durable event-ledger claim. Legacy Supabase billing copies are not referenced by app code; their webhook lacks the active Vercel path's current idempotency/fulfillment behavior, so the scheduled Stripe review must prove no live webhook targets it (tracked only in `docs/PAYMENT_ROADMAP.md`).
 
@@ -22,7 +24,7 @@ Live evidence:
 4. ✅ test1's **AI** tab showed the Free upgrade-required state with no editable/configured credential from test2.
 5. ✅ test1 signed out and test2 signed back in. The test2 identity, Beta plan, and `DELETE SAFE` returned; no test1 project or identity appeared.
 
-Live acceptance result: **Pass.** Neither account showed the other's identity, project, entitlement, editable-project state, or AI configuration. No reproduced auth, data-loss, cross-account UI/data, save, restore, or export blocker remains in the named journey. Production release and post-deploy evidence are appended here before final closure.
+Live acceptance result: **Pass.** Neither account showed the other's identity, project, entitlement, editable-project state, or AI configuration. The cleanup repair is merged and deployed, and no unresolved auth, data-loss, cross-account UI/data, save, restore, or export blocker remains. No further owner action is required for this test.
 
 ## 2026-09-07 launch handoff
 
