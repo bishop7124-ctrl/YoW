@@ -11,16 +11,12 @@ const HEARTBEAT_MS = 4000
 const STALE_MS = 10000
 
 function getTabId() {
-  try {
-    const key = 'yow-tab-presence-id'
-    const existing = sessionStorage.getItem(key)
-    if (existing) return existing
-    const next = Math.random().toString(36).slice(2)
-    sessionStorage.setItem(key, next)
-    return next
-  } catch {
-    return Math.random().toString(36).slice(2)
-  }
+  // This must identify the current *document*, not the browser session.
+  // Safari's Duplicate Tab copies sessionStorage into the new tab, so a
+  // sessionStorage-backed id makes both documents ignore each other's
+  // presence messages as self-messages. A module-scoped random id is unique
+  // to each loaded document, including duplicated tabs.
+  return globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)
 }
 
 const tabId = getTabId()
@@ -98,6 +94,8 @@ export function useTabPresence(key, active) {
     refresh()
 
     channel.postMessage({ type: 'hello', key, id: tabId, startedAt })
+    const announceBye = () => channel.postMessage({ type: 'bye', key, id: tabId })
+    window.addEventListener('pagehide', announceBye)
     const heartbeat = setInterval(() => {
       refresh()
       channel.postMessage({ type: 'heartbeat', key, id: tabId, startedAt })
@@ -105,9 +103,10 @@ export function useTabPresence(key, active) {
 
     return () => {
       clearInterval(heartbeat)
+      window.removeEventListener('pagehide', announceBye)
       openKeys.delete(key)
       listeners.get(key)?.delete(refresh)
-      channel.postMessage({ type: 'bye', key, id: tabId })
+      announceBye()
       // A scene's SceneEditor stays mounted across separate focus/blur
       // "sittings" — only `active` (tied to `focused`) toggles, so `count`
       // is this SAME hook instance's state across every future sitting, not
