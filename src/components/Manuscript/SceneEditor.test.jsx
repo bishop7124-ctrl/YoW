@@ -67,6 +67,29 @@ describe('SceneEditor same-scene lease', () => {
     expect(onUpdate).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Edit anyway' })).toBeNull()
   })
+
+  it('keeps the first-editor lease when Safari blurs the textarea while its tab becomes hidden', async () => {
+    const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+    const { container } = renderScene('Protected prose.')
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+
+    try {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      fireEvent.blur(textarea)
+
+      await waitFor(() => {
+        expect(container.querySelector('textarea.ms-textarea')).toBeTruthy()
+      })
+    } finally {
+      if (originalVisibility) Object.defineProperty(document, 'visibilityState', originalVisibility)
+    }
+  })
 })
 
 describe('SceneEditor content preview — mismatched markdown emphasis', () => {
