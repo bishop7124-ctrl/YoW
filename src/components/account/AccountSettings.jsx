@@ -863,7 +863,7 @@ function ExportAllProjectsCard({ store, novels }) {
       } else if (failed.length) {
         setError(`${failed.length} of ${results.length} project${results.length === 1 ? '' : 's'} failed to export: ${failed.map(f => f.title).join(', ')}`)
       } else {
-        setMessage(`Downloaded a ZIP with all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'category Word documents' : 'backup ZIPs'}.`)
+        setMessage(`Downloaded a ZIP with all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'category Word documents' : 'project folders containing restorable backups'}.`)
       }
     } catch (err) {
       setError(err.message || 'Export failed. Please try again.')
@@ -889,7 +889,7 @@ function ExportAllProjectsCard({ store, novels }) {
           Export all projects
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
-          Download every project you own in one pass — as restorable backup ZIPs, or as readable category Word documents. All projects are bundled into a single ZIP download.
+          Download every project you own in one pass — as project folders containing restorable backup ZIPs, or as readable category Word documents. All projects are bundled into a single ZIP download.
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -2584,19 +2584,12 @@ function DeleteAccountModal({ novels, store, onClose }) {
 
   const downloadBackup = async (novel) => {
     setDownloadingId(novel.id)
+    setError('')
     try {
-      const PROJECT_FIELDS = [
-        'characters', 'factions', 'locations', 'timeline',
-        'worldHistory', 'acts', 'chapters', 'loreEntries',
-        'ideaEntries', 'maps', 'whiteboards', 'storySchedule',
-      ]
-      const projectData = { project: novel }
-      for (const field of PROJECT_FIELDS) {
-        projectData[field] = (store?.[field] ?? []).filter(item => item?.novelId === novel.id)
-      }
-      projectData.scenes = (store?.scenes ?? []).filter(s => s?.novelId === novel.id)
+      const projectData = store?.getProjectExportData?.(novel.id)
+      if (!projectData) throw new Error('Project data unavailable. Do not delete your account yet.')
       const blob = await createProjectZipBlob(projectData)
-      downloadBlob(blob, getProjectExportFilename(novel))
+      await downloadBlob(blob, getProjectExportFilename(projectData.project))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Backup export failed. Please try again.')
     } finally {
@@ -2605,10 +2598,22 @@ function DeleteAccountModal({ novels, store, onClose }) {
   }
 
   const downloadAllBackups = async () => {
-    for (const novel of novels) {
-      await downloadBackup(novel)
+    setDownloadingId('all')
+    setDownloadedAll(false)
+    setError('')
+    try {
+      const results = await exportAllProjects(store, novels, 'zip')
+      const failed = results.filter(result => !result.ok)
+      if (failed.length) {
+        setError(`Backup failed for: ${failed.map(result => result.title).join(', ')}. Do not delete your account yet.`)
+        return
+      }
+      setDownloadedAll(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Account backup failed. Do not delete your account yet.')
+    } finally {
+      setDownloadingId(null)
     }
-    setDownloadedAll(true)
   }
 
   const handleDelete = async () => {
@@ -2671,7 +2676,7 @@ function DeleteAccountModal({ novels, store, onClose }) {
                         <button
                           type="button"
                           onClick={() => downloadBackup(novel)}
-                          disabled={downloadingId === novel.id}
+                          disabled={!!downloadingId}
                           style={{
                             flexShrink: 0, marginLeft: 10,
                             background: 'none', border: '1px solid var(--border)',
@@ -2696,8 +2701,9 @@ function DeleteAccountModal({ novels, store, onClose }) {
                       cursor: 'pointer',
                     }}
                   >
-                    {downloadedAll ? 'All downloaded ✓' : 'Download all backups'}
+                    {downloadingId === 'all' ? 'Preparing account backup…' : downloadedAll ? 'All downloaded ✓' : 'Download all backups'}
                   </button>
+                  {error && <p style={{ margin: '10px 0 0', fontSize: 12, color: '#ef4444' }}>{error}</p>}
                 </div>
               )}
             </div>
