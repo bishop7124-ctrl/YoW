@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './AuthContext'
 import { WEB_IDLE_LOGOUT_MS, WEB_LAST_ACTIVITY_KEY } from '../utils/sessionActivity'
 import { supabase } from '../supabase'
 import { trackEvent } from '../utils/analytics'
+import { deleteAllUserData } from '../utils/firestoreSync'
 
 const mocks = vi.hoisted(() => ({
   desktop: false,
@@ -61,13 +62,14 @@ vi.mock('../utils/analytics', () => ({
 }))
 
 function Probe() {
-  const { user, recoveryMode, signIn, updateProfile, clearRecoveryMode } = useAuth()
+  const { user, recoveryMode, signIn, updateProfile, clearRecoveryMode, deleteAccount } = useAuth()
   return (
     <>
       <div data-testid="user-id">{user?.id || 'signed-out'}</div>
       <div data-testid="recovery-mode">{recoveryMode ? 'recovery' : 'standard'}</div>
       <button type="button" onClick={() => signIn('writer@example.com', 'password')}>Sign in</button>
       <button type="button" onClick={clearRecoveryMode}>Finish recovery</button>
+      <button type="button" onClick={deleteAccount}>Delete account</button>
       <button type="button" onClick={() => updateProfile({
         full_name: 'Writer',
         subscription_plan: 'founder',
@@ -190,5 +192,33 @@ describe('AuthProvider session policy', () => {
     expect(supabase.auth.updateUser).toHaveBeenCalledWith({
       data: { full_name: 'Writer' },
     })
+  })
+
+  it('removes account-scoped local markers after account deletion succeeds', async () => {
+    const user = { id: 'user-delete' }
+    mocks.session = { user, expires_at: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem('sb-test-auth-token', JSON.stringify({
+      user,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+    }))
+    localStorage.setItem('nf_lastActiveProject:user-delete', JSON.stringify({ projectId: 'deleted-project' }))
+    localStorage.setItem('nf_sampleProjectSeeded:the-last-ember-v3:user-delete', '1')
+    localStorage.setItem('nf_sampleProjectMapSeeded:atlas-layout-v4:user-delete', '1')
+    localStorage.setItem('nf_lastActiveProject:other-user', JSON.stringify({ projectId: 'keep-project' }))
+
+    render(<AuthProvider><Probe /></AuthProvider>)
+    await waitFor(() => expect(screen.getByTestId('user-id').textContent).toBe('user-delete'))
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Delete account' }).click()
+    })
+
+    await waitFor(() => expect(deleteAllUserData).toHaveBeenCalledWith('user-delete'))
+    expect(localStorage.getItem('nf_lastActiveProject:user-delete')).toBeNull()
+    expect(localStorage.getItem('nf_sampleProjectSeeded:the-last-ember-v3:user-delete')).toBeNull()
+    expect(localStorage.getItem('nf_sampleProjectMapSeeded:atlas-layout-v4:user-delete')).toBeNull()
+    expect(localStorage.getItem('nf_lastActiveProject:other-user')).not.toBeNull()
+    expect(supabase.auth.signOut).toHaveBeenCalled()
+    expect(screen.getByTestId('user-id').textContent).toBe('signed-out')
   })
 })
