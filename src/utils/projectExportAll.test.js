@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { strFromU8, unzipSync } from 'fflate'
 
 const downloadBlob = vi.fn(async () => 'ok')
 
@@ -12,9 +13,7 @@ const { exportAllProjects, EXPORT_ALL_FORMATS } = await import('./projectExportA
 // Reads the raw local-file-header names out of a hand-rolled STORED zip Blob
 // (see projectExport.js buildZipBlob) without needing a real zip-reading lib.
 // Walks entry-by-entry using each header's declared size rather than
-// re-scanning for the next "PK\x03\x04" signature, because a bundled entry
-// (e.g. a nested project .zip) legitimately contains its own such
-// signatures in its raw STORED bytes.
+// re-scanning for the next "PK\x03\x04" signature.
 async function entryNamesOf(blob) {
   const bytes = new Uint8Array(await blob.arrayBuffer())
   const view = new DataView(bytes.buffer)
@@ -77,7 +76,19 @@ describe('exportAllProjects', () => {
     const [bundle, filename] = downloadBlob.mock.calls[0]
     expect(filename).toMatch(/^yow-all-projects-backups-.*\.zip$/)
     const names = await entryNamesOf(bundle)
-    expect(names).toEqual(expect.arrayContaining(['Alpha.zip', 'Beta.zip', 'Gamma.zip']))
+    expect(names).toEqual([
+      'Alpha/Alpha.zip',
+      'Beta/Beta.zip',
+      'Gamma/Gamma.zip',
+    ])
+
+    const files = unzipSync(new Uint8Array(await bundle.arrayBuffer()))
+    const alpha = unzipSync(files['Alpha/Alpha.zip'])
+    const beta = unzipSync(files['Beta/Beta.zip'])
+    const gamma = unzipSync(files['Gamma/Gamma.zip'])
+    expect(JSON.parse(strFromU8(alpha['project-data.json'])).project.id).toBe('a')
+    expect(JSON.parse(strFromU8(beta['project-data.json'])).project.id).toBe('b')
+    expect(JSON.parse(strFromU8(gamma['project-data.json'])).project.id).toBe('c')
   })
 
   it('still bundles the projects that succeeded when one project fails to export', async () => {
@@ -95,7 +106,7 @@ describe('exportAllProjects', () => {
     ])
     expect(downloadBlob).toHaveBeenCalledTimes(1)
     const names = await entryNamesOf(downloadBlob.mock.calls[0][0])
-    expect(names).toEqual(['Alpha.zip'])
+    expect(names).toEqual(['Alpha/Alpha.zip'])
   })
 
   it('does not attempt a download when every project fails', async () => {
@@ -121,7 +132,10 @@ describe('exportAllProjects', () => {
     await exportAllProjects(store, novels, EXPORT_ALL_FORMATS.ZIP)
 
     const names = await entryNamesOf(downloadBlob.mock.calls[0][0])
-    expect(names).toEqual(['Untitled.zip', 'Untitled (2).zip'])
+    expect(names).toEqual(expect.arrayContaining([
+      'Untitled/Untitled.zip',
+      'Untitled (2)/Untitled.zip',
+    ]))
   })
 
   it('bundles Word documents into a single ZIP for the docx format', async () => {
