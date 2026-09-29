@@ -2,8 +2,8 @@
 // the cloud-hosting pre-expiry warning modal.
 //
 // This bundles every project into its own top-level folder in ONE zip, with
-// the normal restorable project ZIP inside each folder. It triggers a single
-// download, rather than one download per project. Earlier this looped and
+// the normal restorable project ZIP plus readable Word documents inside each
+// folder. It triggers a single download, rather than one download per project. Earlier this looped and
 // called downloadBlob() once per project; browsers silently block automatic
 // downloads past the first in a fast sequence (no error, no rejected
 // promise — the file just never lands), which is why "export all" would
@@ -61,7 +61,11 @@ export async function exportAllProjects(store, novels, format = EXPORT_ALL_FORMA
           const baseName = getProjectExportFilename(projectData.project)
           const blob = await createProjectZipBlob(projectData)
           const bytes = new Uint8Array(await blob.arrayBuffer())
-          entries.push({ name: `${folder}/${baseName}`, bytes })
+          const wordEntries = await createProjectDocxEntries(projectData, `${folder}/Word documents/`)
+          entries.push(
+            { name: `${folder}/${baseName}`, bytes },
+            ...wordEntries,
+          )
         }
         ok = true
       } catch (err) {

@@ -78,8 +78,17 @@ describe('exportAllProjects', () => {
     const names = await entryNamesOf(bundle)
     expect(names).toEqual([
       'Alpha/Alpha.zip',
+      'Alpha/Word documents/Alpha-Overview.docx',
+      'Alpha/Word documents/Alpha-Outline.docx',
+      'Alpha/Word documents/Alpha-Manuscript.docx',
       'Beta/Beta.zip',
+      'Beta/Word documents/Beta-Overview.docx',
+      'Beta/Word documents/Beta-Outline.docx',
+      'Beta/Word documents/Beta-Manuscript.docx',
       'Gamma/Gamma.zip',
+      'Gamma/Word documents/Gamma-Overview.docx',
+      'Gamma/Word documents/Gamma-Outline.docx',
+      'Gamma/Word documents/Gamma-Manuscript.docx',
     ])
 
     const files = unzipSync(new Uint8Array(await bundle.arrayBuffer()))
@@ -89,6 +98,8 @@ describe('exportAllProjects', () => {
     expect(JSON.parse(strFromU8(alpha['project-data.json'])).project.id).toBe('a')
     expect(JSON.parse(strFromU8(beta['project-data.json'])).project.id).toBe('b')
     expect(JSON.parse(strFromU8(gamma['project-data.json'])).project.id).toBe('c')
+    const alphaManuscript = unzipSync(files['Alpha/Word documents/Alpha-Manuscript.docx'])
+    expect(strFromU8(alphaManuscript['word/document.xml'])).toContain('The first line waits.')
   })
 
   it('still bundles the projects that succeeded when one project fails to export', async () => {
@@ -106,7 +117,12 @@ describe('exportAllProjects', () => {
     ])
     expect(downloadBlob).toHaveBeenCalledTimes(1)
     const names = await entryNamesOf(downloadBlob.mock.calls[0][0])
-    expect(names).toEqual(['Alpha/Alpha.zip'])
+    expect(names).toEqual([
+      'Alpha/Alpha.zip',
+      'Alpha/Word documents/Alpha-Overview.docx',
+      'Alpha/Word documents/Alpha-Outline.docx',
+      'Alpha/Word documents/Alpha-Manuscript.docx',
+    ])
   })
 
   it('does not attempt a download when every project fails', async () => {

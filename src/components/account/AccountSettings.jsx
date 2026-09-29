@@ -863,7 +863,7 @@ function ExportAllProjectsCard({ store, novels }) {
       } else if (failed.length) {
         setError(`${failed.length} of ${results.length} project${results.length === 1 ? '' : 's'} failed to export: ${failed.map(f => f.title).join(', ')}`)
       } else {
-        setMessage(`Downloaded a ZIP with all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'category Word documents' : 'project folders containing restorable backups'}.`)
+        setMessage(`Downloaded a ZIP with all ${results.length} project${results.length === 1 ? '' : 's'} as ${format === 'docx' ? 'category Word documents' : 'project folders containing restorable backups and Word documents'}.`)
       }
     } catch (err) {
       setError(err.message || 'Export failed. Please try again.')
@@ -889,7 +889,7 @@ function ExportAllProjectsCard({ store, novels }) {
           Export all projects
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 4 }}>
-          Download every project you own in one pass — as project folders containing restorable backup ZIPs, or as readable category Word documents. All projects are bundled into a single ZIP download.
+          Download every project you own in one pass — as project folders containing restorable backup ZIPs and readable Word documents, or as Word documents only. All projects are bundled into a single ZIP download.
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
