@@ -1,6 +1,6 @@
 import { supabase } from '../supabase'
 import { OFFLINE_MODE } from './offlineMock'
-import { uploadEmbeddedImage } from './uploadUserMedia'
+import { deleteAllUserMedia, uploadEmbeddedImage } from './uploadUserMedia'
 
 // Tables that hold per-novel entity rows
 const NOVEL_TABLES = [
@@ -403,6 +403,7 @@ export async function deleteSceneDoc(userId, sceneId) {
 // Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
   if (OFFLINE_MODE || !userId) return
+  await deleteAllUserMedia(userId)
   const { error } = await supabase.rpc('delete_user')
   throwIfSupabaseError(error, 'atomic account delete error')
 }
