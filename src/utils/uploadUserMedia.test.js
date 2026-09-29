@@ -258,6 +258,21 @@ describe('deleteAllUserMedia', () => {
     ]])
   })
 
+  it('paginates listings and removes more than 1,000 files in bounded batches', async () => {
+    mockState.listEntries = {
+      'user-1': Array.from({ length: 1001 }, (_, index) => ({
+        id: `file-${index}`,
+        name: `${String(index).padStart(4, '0')}.webp`,
+      })),
+    }
+
+    await expect(deleteAllUserMedia('user-1')).resolves.toBe(1001)
+    expect(mockState.listCalls.map(({ options }) => options.offset)).toEqual([0, 1000])
+    expect(mockState.removeCalls).toHaveLength(2)
+    expect(mockState.removeCalls[0]).toHaveLength(1000)
+    expect(mockState.removeCalls[1]).toEqual(['user-1/1000.webp'])
+  })
+
   it('surfaces listing failure without attempting any removal', async () => {
     mockState.listError = { message: 'list denied' }
     await expect(deleteAllUserMedia('user-1')).rejects.toThrow('Could not list account media: list denied')
