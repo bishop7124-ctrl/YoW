@@ -12,6 +12,7 @@ const BUCKET_NAME = 'user-media'
 const PRIVATE_MEDIA_PREFIX = 'yow-media:'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
 const SIGNED_URL_REFRESH_SKEW_MS = 5 * 60 * 1000
+const STORAGE_PAGE_SIZE = 1000
 const signedUrlCache = new Map()
 
 function extensionForMimeType(type) {
@@ -164,10 +165,56 @@ export async function deleteUserMedia(url) {
   if (OFFLINE_MODE || !url || typeof url !== 'string') return
   const path = getUserMediaPath(url)
   if (!path) return
-  try {
-    await supabase.storage.from(BUCKET_NAME).remove([path])
-    signedUrlCache.delete(path)
-  } catch (error) {
-    console.warn('Could not delete previous uploaded image.', error)
+  const { error } = await supabase.storage.from(BUCKET_NAME).remove([path])
+  if (error) throw new Error(`Delete failed: ${error.message}`)
+  signedUrlCache.delete(path)
+}
+
+/**
+ * Removes every uploaded object owned by one user. Supabase refuses to delete
+ * an Auth user while that user still owns Storage objects, and deleting rows
+ * from storage.objects directly would orphan the physical files. Account
+ * deletion therefore uses the Storage API first, with paginated recursive
+ * listing and the API's 1,000-object removal limit.
+ */
+export async function deleteAllUserMedia(userId) {
+  if (OFFLINE_MODE || !userId) return 0
+
+  const paths = []
+  const pendingPrefixes = [userId]
+  const visitedPrefixes = new Set()
+
+  while (pendingPrefixes.length) {
+    const prefix = pendingPrefixes.pop()
+    if (visitedPrefixes.has(prefix)) continue
+    visitedPrefixes.add(prefix)
+
+    let offset = 0
+    while (true) {
+      const { data, error } = await supabase.storage.from(BUCKET_NAME).list(prefix, {
+        limit: STORAGE_PAGE_SIZE,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      })
+      if (error) throw new Error(`Could not list account media: ${error.message}`)
+
+      const entries = data || []
+      for (const entry of entries) {
+        const path = `${prefix}/${entry.name}`
+        if (entry.id == null) pendingPrefixes.push(path)
+        else paths.push(path)
+      }
+      if (entries.length < STORAGE_PAGE_SIZE) break
+      offset += entries.length
+    }
   }
+
+  for (let start = 0; start < paths.length; start += STORAGE_PAGE_SIZE) {
+    const batch = paths.slice(start, start + STORAGE_PAGE_SIZE)
+    const { error } = await supabase.storage.from(BUCKET_NAME).remove(batch)
+    if (error) throw new Error(`Could not delete account media: ${error.message}`)
+    batch.forEach(path => signedUrlCache.delete(path))
+  }
+
+  return paths.length
 }

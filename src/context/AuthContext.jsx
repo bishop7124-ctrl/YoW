@@ -8,6 +8,7 @@ import { trackEvent, identifyUser } from '../utils/analytics'
 import { isDesktopAppRuntime } from '../utils/runtime'
 import { clearLastWebActivity, isWebSessionIdleExpired, writeLastWebActivity } from '../utils/sessionActivity'
 import { sanitizeEditableProfileMetadata } from '../utils/profileMetadata'
+import { clearDeletedAccountMarkers } from '../utils/accountLocalCleanup'
 
 const AuthContext = createContext({ user: null, loading: false, recoveryMode: false, recoveryVerifying: false, recoveryError: '', signUp: () => {}, signIn: () => {}, signInWithGoogle: () => {}, signOut: () => {}, updateProfile: () => {}, refreshUser: () => null, getAccessToken: () => null, resetPassword: () => {}, updatePassword: () => {}, clearRecoveryMode: () => {} })
 
@@ -343,6 +344,7 @@ export function AuthProvider({ children }) {
         const currentUser = user
         if (!currentUser) throw new Error('No user is signed in.')
         await deleteAllUserData(currentUser.id)
+        clearDeletedAccountMarkers(currentUser.id)
         await supabase.auth.signOut()
         setUser(null)
       }
