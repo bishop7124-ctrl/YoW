@@ -311,6 +311,38 @@ describe('ownership guard', () => {
     const { result } = renderHook(() => useStore(null))
     expect(result.current.novels).toEqual(novels)
   })
+
+  it('purges every per-scene prose and tracked-change key when the account changes, including orphaned keys', () => {
+    const backend = createMemoryBackend({
+      nf_localOwner: 'user-a',
+      nf_novels: JSON.stringify([{ id: 'novel-a', title: 'Private A', type: 'novel' }]),
+      nf_scenes: JSON.stringify([{ id: 'loaded-scene', novelId: 'novel-a', title: 'Loaded' }]),
+      'nf_scene_content:loaded-scene': 'Loaded private prose',
+      'nf_scene_content:orphaned-scene': 'Orphaned private prose',
+      'nf_scene_tracked_changes:orphaned-scene': JSON.stringify({
+        baseContent: 'Private before',
+        proposedContent: 'Private after',
+      }),
+    })
+    setStorageBackend(backend)
+
+    const { result, rerender, unmount } = renderHook(
+      ({ userId }) => useStore(userId, { cloudSyncEnabled: false }),
+      { initialProps: { userId: 'user-a' } },
+    )
+    expect(result.current.novels).toEqual([expect.objectContaining({ title: 'Private A' })])
+
+    act(() => rerender({ userId: 'user-b' }))
+
+    expect(result.current.novels).toEqual([])
+    expect(backend.getItem('nf_scene_content:loaded-scene')).toBeNull()
+    expect(backend.getItem('nf_scene_content:orphaned-scene')).toBeNull()
+    expect(backend.getItem('nf_scene_tracked_changes:orphaned-scene')).toBeNull()
+    expect(backend.getItem('nf_localOwner')).toBe('user-b')
+
+    unmount()
+    resetStorageBackend()
+  })
 })
 
 // ─── Local-first sign-out safety ────────────────────────────────────────────

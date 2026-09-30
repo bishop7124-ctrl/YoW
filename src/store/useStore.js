@@ -11,7 +11,7 @@ import { normalizeOutlineItem, outlinePatch, outlineText, sortOutlineItems } fro
 import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/relationshipTypes.js'
 import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
-import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
+import { listKeys, loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersions } from '../utils/sceneVersions'
@@ -101,23 +101,24 @@ const loadLastActiveProject = (ownerId) => {
     return null
   }
 }
-// `sceneIds`: the scene ids known locally right before clearing, so their
-// individual `nf_scene_content:<id>` keys (see src/storage/sceneContentStore.js
-// — scene prose lives outside PROJECT_STORAGE_KEYS' flat per-collection
-// list, one key per scene) get removed too, rather than silently surviving
-// a sign-out and staying on disk for whichever account uses this browser
-// next. Best-effort: a scene whose content key was written in an earlier
-// session and never made it into this session's in-memory scenes (e.g. a
-// prior storage hiccup) won't be enumerated here — an accepted small gap,
-// not a regression versus today's behaviour, which cleans none of these up.
+// Scene prose and tracked-change proposals live outside PROJECT_STORAGE_KEYS,
+// one key per scene. Enumerate the storage backend itself so sign-out/account
+// switch removes every such key, including orphaned or not-yet-hydrated keys
+// that are absent from this tab's in-memory scenes. The explicit sceneIds are
+// retained as a fallback for injected/legacy backends that do not implement
+// key enumeration.
 const clearProjectLocalStorage = (sceneIds = []) => {
   try {
     PROJECT_STORAGE_KEYS.forEach(key => removeItem(key))
+    const contentKeys = new Set(listKeys('nf_scene_content:'))
+    const trackedChangesKeys = new Set(listKeys('nf_scene_tracked_changes:'))
     sceneIds.forEach(id => {
       if (id == null) return
-      removeItem(sceneContentKey(id))
-      removeItem(sceneTrackedChangesKey(id))
+      contentKeys.add(sceneContentKey(id))
+      trackedChangesKeys.add(sceneTrackedChangesKey(id))
     })
+    contentKeys.forEach(key => removeItem(key))
+    trackedChangesKeys.forEach(key => removeItem(key))
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {

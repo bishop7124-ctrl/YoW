@@ -43,6 +43,12 @@ test.describe('Large-scene "Copy scene" clipboard round-trip (real browser clipb
     expect(LARGE_SCENE_CONTENT.length).toBeGreaterThan(LARGE_SCENE_CHAR_THRESHOLD)
     await writeInDefaultScene(page, LARGE_SCENE_CONTENT)
 
+    // The scene header's hover-reveal cluster (status chip, Copy scene,
+    // History) is hidden outright in Write mode by design (index.css's
+    // .ms-scene-header--write rules — "Write's header should read as
+    // inert") — switch to Editing mode, where it renders normally.
+    await page.getByRole('button', { name: 'Editing' }).click()
+
     const copyButton = page.getByRole('button', { name: 'Copy scene' })
     await expect(copyButton).toBeVisible()
     await copyButton.click()
@@ -64,6 +70,9 @@ test.describe('Large-scene "Copy scene" clipboard round-trip (real browser clipb
     await createProject(page, { title: 'Ordinary Scene Copy Test' })
     const ordinaryContent = 'A short scene, well under the large-scene threshold.'
     await writeInDefaultScene(page, ordinaryContent)
+
+    // See the note in the test above — Write mode hides this cluster outright.
+    await page.getByRole('button', { name: 'Editing' }).click()
 
     const copyButton = page.getByRole('button', { name: 'Copy scene' })
     await expect(copyButton).toBeVisible()

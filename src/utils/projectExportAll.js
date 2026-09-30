@@ -1,8 +1,9 @@
 // Bulk "export all projects" action — used by the Storage settings panel and
 // the cloud-hosting pre-expiry warning modal.
 //
-// This bundles every project's export into ONE zip and triggers a single
-// download, rather than one download per project. Earlier this looped and
+// This bundles every project into its own top-level folder in ONE zip, with
+// the normal restorable project ZIP plus readable Word documents inside each
+// folder. It triggers a single download, rather than one download per project. Earlier this looped and
 // called downloadBlob() once per project; browsers silently block automatic
 // downloads past the first in a fast sequence (no error, no rejected
 // promise — the file just never lands), which is why "export all" would
@@ -16,19 +17,16 @@ export const EXPORT_ALL_FORMATS = { ZIP: 'zip', DOCX: 'docx' }
 
 // Keeps entry names collision-free inside the bundle (two projects can
 // legitimately share a title/sanitized filename).
-const uniqueEntryName = (name, used) => {
+const uniqueFolderName = (name, used) => {
   if (!used.has(name)) {
     used.add(name)
     return name
   }
-  const dot = name.lastIndexOf('.')
-  const base = dot === -1 ? name : name.slice(0, dot)
-  const ext = dot === -1 ? '' : name.slice(dot)
   let n = 2
-  let candidate = `${base} (${n})${ext}`
+  let candidate = `${name} (${n})`
   while (used.has(candidate)) {
     n += 1
-    candidate = `${base} (${n})${ext}`
+    candidate = `${name} (${n})`
   }
   used.add(candidate)
   return candidate
@@ -56,13 +54,18 @@ export async function exportAllProjects(store, novels, format = EXPORT_ALL_FORMA
     } else {
       try {
         if (format === EXPORT_ALL_FORMATS.DOCX) {
-          const folder = uniqueEntryName(sanitizeFilename(projectData.project?.title, 'project'), usedNames)
+          const folder = uniqueFolderName(sanitizeFilename(projectData.project?.title, 'project'), usedNames)
           entries.push(...await createProjectDocxEntries(projectData, `${folder}/`))
         } else {
-          const blob = await createProjectZipBlob(projectData)
+          const folder = uniqueFolderName(sanitizeFilename(projectData.project?.title, 'project'), usedNames)
           const baseName = getProjectExportFilename(projectData.project)
+          const blob = await createProjectZipBlob(projectData)
           const bytes = new Uint8Array(await blob.arrayBuffer())
-          entries.push({ name: uniqueEntryName(baseName, usedNames), bytes })
+          const wordEntries = await createProjectDocxEntries(projectData, `${folder}/Word documents/`)
+          entries.push(
+            { name: `${folder}/${baseName}`, bytes },
+            ...wordEntries,
+          )
         }
         ok = true
       } catch (err) {
