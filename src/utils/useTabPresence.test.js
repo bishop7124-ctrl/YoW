@@ -34,13 +34,6 @@ describe('presenceHasPriority', () => {
 // the same mechanism two actual tabs use — rather than a mock.
 async function loadIsolatedTabModule() {
   vi.resetModules()
-  // getTabId() persists its random id in sessionStorage, which (unlike the
-  // module registry) is a real jsdom `window` global shared across dynamic
-  // re-imports within one test — without clearing it first, a second
-  // simulated "tab" would read back the first tab's id and both would agree
-  // they're the same tab, so the real module's own `id === tabId` self-check
-  // would make each ignore the other's messages entirely.
-  sessionStorage.removeItem('yow-tab-presence-id')
   return import('./useTabPresence.js')
 }
 
@@ -62,6 +55,68 @@ function useBlockedLatch(usePresence, key, active, onBlocked) {
 }
 
 describe('useTabPresence (real BroadcastChannel, two simulated tabs)', () => {
+  it('blocks from the shared storage lease when BroadcastChannel is unavailable or delayed', async () => {
+    const key = `scene:storage-fallback-${Math.random()}`
+    const originalBroadcastChannel = globalThis.BroadcastChannel
+    vi.stubGlobal('BroadcastChannel', undefined)
+    const { useTabPresence: useTabA } = await loadIsolatedTabModule()
+    const { useTabPresence: useTabB } = await loadIsolatedTabModule()
+    const onBlockedA = vi.fn()
+    const onBlockedB = vi.fn()
+    const tabA = renderHook(
+      ({ active }) => useBlockedLatch(useTabA, key, active, onBlockedA),
+      { initialProps: { active: false } },
+    )
+    const tabB = renderHook(
+      ({ active }) => useBlockedLatch(useTabB, key, active, onBlockedB),
+      { initialProps: { active: false } },
+    )
+
+    act(() => { tabA.rerender({ active: true }) })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+    act(() => { tabB.rerender({ active: true }) })
+    await waitFor(() => expect(onBlockedB).toHaveBeenCalledTimes(1))
+    expect(onBlockedA).not.toHaveBeenCalled()
+
+    act(() => { tabA.rerender({ active: false }) })
+    act(() => { tabB.rerender({ active: false }) })
+    tabA.unmount()
+    tabB.unmount()
+    vi.stubGlobal('BroadcastChannel', originalBroadcastChannel)
+  })
+
+  it('blocks a duplicated tab even when Safari clones the original sessionStorage', async () => {
+    const key = `scene:duplicated-tab-${Math.random()}`
+    // This is the exact condition Safari's Duplicate Tab creates. The old
+    // implementation read this copied value in both module instances and
+    // therefore discarded every presence message as a self-message.
+    sessionStorage.setItem('yow-tab-presence-id', 'cloned-safari-tab-id')
+    const { useTabPresence: useTabA } = await loadIsolatedTabModule()
+    const { useTabPresence: useTabB } = await loadIsolatedTabModule()
+    const onBlockedA = vi.fn()
+    const onBlockedB = vi.fn()
+    const tabA = renderHook(
+      ({ active }) => useBlockedLatch(useTabA, key, active, onBlockedA),
+      { initialProps: { active: false } },
+    )
+    const tabB = renderHook(
+      ({ active }) => useBlockedLatch(useTabB, key, active, onBlockedB),
+      { initialProps: { active: false } },
+    )
+
+    act(() => { tabA.rerender({ active: true }) })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+    act(() => { tabB.rerender({ active: true }) })
+    await waitFor(() => expect(onBlockedB).toHaveBeenCalledTimes(1))
+    expect(onBlockedA).not.toHaveBeenCalled()
+
+    act(() => { tabA.rerender({ active: false }) })
+    act(() => { tabB.rerender({ active: false }) })
+    tabA.unmount()
+    tabB.unmount()
+    sessionStorage.removeItem('yow-tab-presence-id')
+  })
+
   it('does not re-block a later sitting with a stale count once the other tab has actually released the key', async () => {
     const key = `scene:regression-${Math.random()}`
     const { useTabPresence: useTabA } = await loadIsolatedTabModule()
