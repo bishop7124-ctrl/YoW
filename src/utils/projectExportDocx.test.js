@@ -175,6 +175,65 @@ describe('createProjectDocxBlob', () => {
     expect(xml).toContain('Raise the cost of the rescue.')
   })
 
+  // Regression coverage for the 2026-08-08 ROADMAP bug row's remaining gap:
+  // confirms a chat created via the full AI chat *panel* (AIPanel.jsx's
+  // handleContextConfirm shape — extra session fields like context/agentId/
+  // freedomLevel, and extra transient message fields like streaming/usage/
+  // contextStats left on a completed message) renders identically to a
+  // simple bottom-bar chat: same role/text/order, and its own internal line
+  // breaks preserved via real <w:br/>/<w:p>, not lost or garbled by the
+  // extra fields the export code never reads.
+  it('exports a full-AI-chat-panel-shaped session correctly (role, text, ordering, internal line breaks)', async () => {
+    const data = makeProjectData()
+    data.project.aiChatSessions = [{
+      id: 'panel_chat_1',
+      novelId: 'project-1',
+      title: 'Chat 1',
+      context: { mode: 'manuscript', sceneId: 'scene-1', customInstruction: 'Help me punch up this scene.' },
+      agentId: 'default',
+      freedomLevel: 'balanced',
+      pinned: false,
+      category: '',
+      createdAt: Date.parse('2026-09-20T10:00:00Z'),
+      updatedAt: Date.parse('2026-09-20T10:05:00Z'),
+      messages: [
+        { id: 'm1', role: 'user', content: 'Can you suggest a stronger opening line for this scene?' },
+        {
+          id: 'm2',
+          role: 'assistant',
+          content: 'Try leading with the storm imagery:\nIt sets mood before dialogue.\n\nA separate closing thought.',
+          streaming: false,
+          contextStats: { tokens: 128 },
+          usage: { promptTokens: 400, completionTokens: 40 },
+        },
+      ],
+    }]
+    const xml = await readDocumentXml(await createProjectDocxBlob(data))
+
+    expect(xml).toContain('Chat 1')
+    expect(xml).toContain('Can you suggest a stronger opening line for this scene?')
+    expect(xml).toContain('Try leading with the storm imagery')
+    expect(xml).toContain('A separate closing thought.')
+
+    const idxYou = xml.indexOf('>You<')
+    const idxAI = xml.indexOf('>AI<')
+    const idxUserMsg = xml.indexOf('Can you suggest a stronger opening line')
+    const idxAssistantMsg = xml.indexOf('Try leading with the storm imagery')
+    expect(idxYou).toBeGreaterThanOrEqual(0)
+    expect(idxAI).toBeGreaterThan(idxYou)
+    expect(idxUserMsg).toBeGreaterThan(idxYou)
+    expect(idxAssistantMsg).toBeGreaterThan(idxAI)
+
+    // The assistant message's own single-line break survives as a real
+    // <w:br/> inside one <w:p>, and its blank-line break lands as a genuinely
+    // separate <w:p>, matching the same fidelity guaranteed for manuscript
+    // scene content.
+    const assistantBlockMatch = xml.match(/<w:p[^>]*>(?:(?!<w:p[ >]).)*Try leading with the storm imagery(?:(?!<w:p[ >]).)*<\/w:p>/s)
+    expect(assistantBlockMatch).toBeTruthy()
+    expect((assistantBlockMatch[0].match(/<w:br\s*\/>/g) || []).length).toBe(1)
+    expect(assistantBlockMatch[0]).not.toContain('A separate closing thought.')
+  })
+
   it('exports Schedule chronologically with custom ranges, current prose and live linked names', async () => {
     const data = makeProjectData()
     data.project.enabledSections = ['schedule']
@@ -190,6 +249,30 @@ describe('createProjectDocxBlob', () => {
     expect(xml.indexOf('Early ritual')).toBeLessThan(xml.indexOf('Late ritual'))
     for (const value of ['Current prose', 'Current hero', 'Location gone (unavailable)', 'Ritual', 'Sunrise, Day 2', 'Darkfall, Day 1']) expect(xml).toContain(value)
     for (const value of ['STALE NOTES', 'STALE CONTENT', 'PRIVATE BIOGRAPHY']) expect(xml).not.toContain(value)
+  })
+
+  // Regression coverage for the 2026-08-07 ROADMAP bug row: addDocParagraphs
+  // (used for manuscript scene content, AI chat messages, and every other
+  // free-text section) must emit a real <w:br/> for a single line break the
+  // writer typed on purpose (dialogue one line per beat, poetry, etc.), and a
+  // genuinely separate <w:p> for a blank-line paragraph break — never joining
+  // either into one run-on line with a plain space.
+  it('emits real <w:br/> line breaks and separate <w:p> paragraph breaks for manuscript scene content', async () => {
+    const data = makeProjectData()
+    data.project.enabledSections = ['manuscript']
+    data.scenes[0].content =
+      '"Are you coming?" Mira asked.\n"Not yet," said Tomas.\n"We don\'t have much time."\n\nThe rain had not let up since morning, and the road ahead was a ribbon of mud.'
+    const xml = await readDocumentXml(await createProjectDocxBlob(data))
+
+    const dialogueBlockMatch = xml.match(/<w:p[^>]*>(?:(?!<w:p[ >]).)*Are you coming(?:(?!<w:p[ >]).)*<\/w:p>/s)
+    expect(dialogueBlockMatch).toBeTruthy()
+    expect((dialogueBlockMatch[0].match(/<w:br\s*\/>/g) || []).length).toBe(2)
+    expect(dialogueBlockMatch[0]).toContain('Not yet')
+    expect(xml).not.toMatch(/coming\?" Mira asked\. "Not yet/) // the old, buggy space-joined shape
+
+    expect(dialogueBlockMatch[0]).not.toContain('road ahead was a ribbon of mud')
+    const proseBlockMatch = xml.match(/<w:p[^>]*>(?:(?!<w:p[ >]).)*road ahead was a ribbon of mud(?:(?!<w:p[ >]).)*<\/w:p>/s)
+    expect(proseBlockMatch).toBeTruthy()
   })
 
   it('can create a ZIP containing separate Word documents per export category', async () => {
