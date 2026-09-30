@@ -185,11 +185,13 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 // matching this file's other best-effort local-storage patterns.
 const deleteMediaUrls = (urls) => {
   const seen = new Set()
+  const deletions = []
   urls.forEach(url => {
     if (!url || seen.has(url)) return
     seen.add(url)
-    deleteUserMedia(url).catch(() => {})
+    deletions.push(deleteUserMedia(url))
   })
+  return Promise.allSettled(deletions)
 }
 const countWords = value => {
   if (!value || typeof value !== 'string') return 0
@@ -2565,7 +2567,7 @@ export function useStore(userId = null, options = {}) {
 
   const cleanupUnreferencedMedia = (urls, overrides = {}) => {
     const candidates = urls.filter(Boolean)
-    if (!candidates.length) return
+    if (!candidates.length) return Promise.resolve([])
     const referenced = new Set()
     const mediaKey = value => {
       try { return getUserMediaPath(value) || value } catch { return value }
@@ -2577,7 +2579,12 @@ export function useStore(userId = null, options = {}) {
     // Save/delete update refs synchronously; the render snapshot may still
     // contain the old character. Keep media used by any other saved record.
     collect({ ...getCurrentSnapshot(), characters: charactersRef.current, ...overrides })
-    deleteMediaUrls(candidates.filter(url => !referenced.has(mediaKey(url))))
+    const cleanup = deleteMediaUrls(candidates.filter(url => !referenced.has(mediaKey(url))))
+    // Storage updates its authoritative counter in the same operation as
+    // object deletion. Refresh after cleanup settles so replacement/removal
+    // cannot leave Account Settings showing the pre-cleanup figure.
+    cleanup.then(() => refreshStorageUsedBytes().catch(console.error))
+    return cleanup
   }
   const saveCharacter = (data, id) => {
     if (!id && storageExceededCheck()) { return null }
