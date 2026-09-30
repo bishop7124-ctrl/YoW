@@ -1,5 +1,13 @@
 # YOW Deferred QA Plan
 
+## 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
+
+Status: **In progress — deployment authorized; no repeated owner mutation required.** Production is private and owner-scoped for read/upload/update/delete, the accounting trigger is enabled and protected from direct browser-role execution, anonymous fetch/list is denied, and every active-account media counter exactly matches stored object bytes. Read-only reconciliation found 16 inaccessible historical objects (6,032,950 bytes) under two prefixes whose Auth users/profile rows no longer exist. They expose no media and charge no active account, but were not deleted without separate destructive-production authority.
+
+Engineering added a post-cleanup authoritative counter refresh for replacement/removal and regression coverage that holds the delete promise open and proves the refresh waits. The private-media migration contract locks the private bucket, all four owner-prefix policies, insert/update/delete byte deltas, trigger coverage, and browser-role execute revocation. The isolated `origin/main` candidate passes 134/134 test files and 1,260/1,260 tests, zero lint errors (104 existing warnings), production build, 215-file load check, all 50 Playwright specs represented in CI, and all 12 API routes importing cleanly.
+
+The owner successfully created the requested safety backup, then challenged the need to repeat the media sequence. That challenge was correct: 3 October already supplied real production upload → replace → remove, storage-figure, and reload evidence, while repeating before deployment would not exercise the new code. The prior lifecycle evidence is carried forward. Remaining work is the explicitly authorized isolated web deployment and read-only confirmation that production serves the merged commit; no further owner media change is required.
+
 ## 2026-10-02 two-account/account-switch entitlement isolation
 
 Status: **Done 2026-10-02.** The owner used only the designated unbilled `test2@yourownworld.co.uk` Beta fixture and `test1@yourownworld.co.uk` Free fixture. One regular Safari window completed test2 Beta → test1 Free → test2 Beta with correct identities, isolated project libraries, isolated AI-setting state, and correct entitlement restoration. No account was created, no plan was changed, no billing/download/membership-refresh control was used, no project was opened or changed, and no import, restore, delete, email, secret disclosure, or public action occurred.

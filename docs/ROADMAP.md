@@ -21,6 +21,12 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
+
+Status: **In progress — deployment authorized and release candidate verified.** Production read-only checks found the `user-media` bucket private, all four object operations owner-prefix scoped, the byte-accounting trigger enabled and protected from browser-role execution, anonymous fetch/list denied, and every active account counter equal to its stored object bytes. Sixteen inaccessible historical objects (6,032,950 bytes) remain under two deleted-account prefixes; they expose no media and charge no active account, but were not deleted without separate destructive-production authority.
+
+The replacement/removal path now waits for Storage cleanup to settle before refreshing the authoritative counter, with a regression that proves the second usage read cannot happen early. The clean `origin/main` release candidate passes 134/134 test files and 1,260/1,260 tests, zero lint errors (104 existing warnings), build/load/matrix/API checks, and the private-media migration contract. The 3 October production lifecycle already proved upload → replace → remove and post-reload accounting, so the owner correctly stopped a redundant repeat after creating a harmless backup. Next action: merge the isolated deployment PR, verify Vercel production serves its commit, then close this dated assignment without another media mutation. Historical orphan deletion remains a separately authorized cleanup.
+
 ### Master Roadmap
 
 Status: Active

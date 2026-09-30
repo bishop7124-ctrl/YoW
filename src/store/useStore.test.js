@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData, getUserStorageUsage } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
@@ -2038,6 +2038,24 @@ describe('character CRUD', () => {
     vi.mocked(deleteUserMedia).mockClear()
     act(() => { result.current.deleteCharacter(id) })
     expect(deleteUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('refreshes authoritative storage usage after replacement cleanup settles', async () => {
+    let finishDelete
+    vi.mocked(deleteUserMedia).mockImplementationOnce(() => new Promise(resolve => { finishDelete = resolve }))
+    vi.mocked(getUserStorageUsage).mockClear()
+    const { result } = renderHook(() => useStore('user-1'))
+    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(1))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo', image: 'yow-media:user-1/characters/old.webp' }) })
+    act(() => { result.current.saveCharacter({ image: 'yow-media:user-1/characters/new.webp' }, result.current.characters[0].id) })
+
+    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:user-1/characters/old.webp')
+    expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
+
+    await act(async () => { finishDelete() })
+    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(2))
   })
 
   it('cleans affected references on physical deletion without rewriting unrelated records or missing targets', () => {
