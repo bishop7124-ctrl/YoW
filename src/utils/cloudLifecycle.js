@@ -81,8 +81,9 @@ function noticeFor(phase, { daysUntilExpiry, graceDaysRemaining }) {
  * @param {Date|string} input.now
  * @param {Date|string|null} input.hostingEndsAt     paid_hosting only
  * @param {Date|string|null} input.lastActivityAt    free only (last sign-in/save)
+ * @param {Date|string|null} input.archivedAt        paid_hosting only: app_metadata.cloud_archived_at
  */
-export function computeCloudLifecycle({ kind, now, hostingEndsAt, lastActivityAt } = {}) {
+export function computeCloudLifecycle({ kind, now, hostingEndsAt, lastActivityAt, archivedAt } = {}) {
   const nowDate = toDate(now) || new Date()
   if (kind === 'paid_hosting') {
     const expires = toDate(hostingEndsAt)
@@ -103,8 +104,18 @@ export function computeCloudLifecycle({ kind, now, hostingEndsAt, lastActivityAt
         notice: noticeFor(PHASES.GRACE, { graceDaysRemaining }), action: 'notify',
       })
     }
-    // Paid data is archived, never deleted by default.
-    return result(PHASES.ARCHIVED, { expiresAt: expires, graceEndsAt, graceDaysRemaining: 0, action: 'archive' })
+    // Paid data is archived, never deleted by default. The server stamps `cloud_archived_at`
+    // only after the final notice was sent, so that stamp (newer than this hosting end date)
+    // is what archives the account. Until it is stamped the account stays in grace with
+    // writes on, so nobody is locked out before they have been told.
+    const stamp = toDate(archivedAt)
+    if (stamp && stamp > expires) {
+      return result(PHASES.ARCHIVED, { expiresAt: expires, graceEndsAt, graceDaysRemaining: 0, action: 'archive' })
+    }
+    return result(PHASES.GRACE, {
+      expiresAt: expires, graceEndsAt, graceDaysRemaining: 0,
+      notice: 'grace-final', action: 'notify',
+    })
   }
 
   if (kind === 'free') {

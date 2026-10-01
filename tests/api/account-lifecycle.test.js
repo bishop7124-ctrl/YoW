@@ -246,11 +246,13 @@ describe('account_lifecycle_events migration', () => {
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    auth: { admin: { listUsers: (...a) => listUsers(...a), deleteUser: (...a) => deleteSpy(...a), updateUserById: (...a) => updateSpy(...a) } },
+    auth: { admin: { listUsers: (...a) => listUsers(...a), getUserById: (...a) => getUserById(...a), deleteUser: (...a) => deleteUserSpy(...a), updateUserById: (...a) => updateSpy(...a) } },
+    storage: { from: () => ({ list: (...a) => storageList(...a), remove: (...a) => storageRemove(...a) }) },
     from: () => ({
       select: () => ({ in: () => eventRows() }),
       insert: (...a) => insertSpy(...a),
-      upsert: (...a) => insertSpy(...a),
+      upsert: (...a) => upsertSpy(...a),
+      update: (...a) => { updateRowSpy(...a); return { eq: () => ({ error: null }) } },
       delete: () => {
         const chain = { eq: (...a) => { deleteSpy(...a); return chain } }
         return chain
@@ -259,8 +261,9 @@ vi.mock('@supabase/supabase-js', () => ({
   }),
 }))
 
-const { listUsers, eventRows, insertSpy, deleteSpy, updateSpy } = vi.hoisted(() => ({
+const { listUsers, eventRows, insertSpy, deleteSpy, updateSpy, getUserById, deleteUserSpy, upsertSpy, updateRowSpy, storageList, storageRemove } = vi.hoisted(() => ({
   listUsers: vi.fn(), eventRows: vi.fn(), insertSpy: vi.fn(), deleteSpy: vi.fn(), updateSpy: vi.fn(),
+  getUserById: vi.fn(), deleteUserSpy: vi.fn(), upsertSpy: vi.fn(), updateRowSpy: vi.fn(), storageList: vi.fn(), storageRemove: vi.fn(),
 }))
 
 describe('run-account-lifecycle handler', () => {
@@ -276,6 +279,13 @@ describe('run-account-lifecycle handler', () => {
     insertSpy.mockReset().mockResolvedValue({ error: null })
     deleteSpy.mockReset()
     updateSpy.mockReset().mockResolvedValue({ error: null })
+    getUserById.mockReset()
+    deleteUserSpy.mockReset().mockResolvedValue({ error: null })
+    upsertSpy.mockReset().mockResolvedValue({ error: null })
+    updateRowSpy.mockReset()
+    storageList.mockReset().mockResolvedValue({ data: [], error: null })
+    storageRemove.mockReset().mockResolvedValue({ error: null })
+    delete process.env.ACCOUNT_LIFECYCLE_DELETE_FREE
     delete process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS
     delete process.env.ACCOUNT_LIFECYCLE_ARCHIVE
     delete process.env.RESEND_API_KEY
@@ -357,6 +367,14 @@ describe('run-account-lifecycle send + archive (gated)', () => {
   const makeRes = () => ({ status: vi.fn().mockReturnThis(), json: vi.fn() })
   const ago = (d) => new Date(Date.now() - d * DAY_MS).toISOString()
   const auth = { authorization: 'Bearer s3cret' }
+  const UID1 = '11111111-1111-4111-8111-111111111111'
+  const UID2 = '22222222-2222-4222-8222-222222222222'
+  const UID3 = '33333333-3333-4333-8333-333333333333'
+  // Ledger rows for a Free account that has had its first warning and a final notice 10 days ago.
+  const FREE_READY = (id) => [
+    { user_id: id, track: 'free_inactive', event_key: 'inactive_0', created_at: ago(100), anchor_at: ago(FREE_INACTIVITY_DAYS + 95) },
+    { user_id: id, track: 'free_inactive', event_key: 'inactive_83', created_at: ago(10), anchor_at: ago(FREE_INACTIVITY_DAYS + 95) },
+  ]
   let handler
   let fetchMock
 
@@ -376,6 +394,13 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     insertSpy.mockReset().mockResolvedValue({ error: null })
     deleteSpy.mockReset()
     updateSpy.mockReset().mockResolvedValue({ error: null })
+    getUserById.mockReset()
+    deleteUserSpy.mockReset().mockResolvedValue({ error: null })
+    upsertSpy.mockReset().mockResolvedValue({ error: null })
+    updateRowSpy.mockReset()
+    storageList.mockReset().mockResolvedValue({ data: [], error: null })
+    storageRemove.mockReset().mockResolvedValue({ error: null })
+    delete process.env.ACCOUNT_LIFECYCLE_DELETE_FREE
     fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 })
     vi.stubGlobal('fetch', fetchMock)
     vi.resetModules()
@@ -531,16 +556,131 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     expect(body.archive).toMatchObject({ archived: 20, remaining: 2 })
   })
 
-  it('never deletes Free accounts or users, even with every switch on', async () => {
-    listUsers.mockResolvedValue({ data: { users: [inactive('old', 95)] }, error: null })
-    eventRows.mockResolvedValue({ data: [{ user_id: 'old', track: 'free_inactive', event_key: 'inactive_83', created_at: ago(10) }], error: null })
+  it('does not delete Free accounts unless BOTH the setting and ?delete=1 are present', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95)] }, error: null })
+    eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
     process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
     process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
     process.env.RESEND_API_KEY = 're_test'
-    const body = await run({ send: '1', archive: '1' })
-    expect(body.deleteDecisions.map((r) => r.userId)).toEqual(['old'])
-    expect(deleteSpy).not.toHaveBeenCalled()
+    let body = await run({ send: '1', archive: '1', delete: '1' }) // flag only
+    expect(body.deleteSkipped).toMatch(/ACCOUNT_LIFECYCLE_DELETE_FREE/)
+    process.env.ACCOUNT_LIFECYCLE_DELETE_FREE = 'true'
+    body = await run({ send: '1', archive: '1' }) // setting only
+    expect(body.deleteDecisions.map((r) => r.userId)).toEqual([UID1])
+    expect(deleteUserSpy).not.toHaveBeenCalled()
+    expect(storageRemove).not.toHaveBeenCalled()
     expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('never deletes a Lifetime or other paid account, only archives Lifetime', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed(UID2), { id: UID3, created_at: ago(2000), app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active' }, user_metadata: {} }] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: UID2, track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(8) }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    process.env.ACCOUNT_LIFECYCLE_DELETE_FREE = 'true'
+    const body = await run({ archive: '1', delete: '1' })
+    expect(body.deleteDecisions).toEqual([])
+    expect(deleteUserSpy).not.toHaveBeenCalled()
+    expect(updateSpy).toHaveBeenCalledTimes(1)
+  })
+
+  describe('free-account deletion', () => {
+    const enable = () => { process.env.ACCOUNT_LIFECYCLE_DELETE_FREE = 'true' }
+
+    it('records the audit row, removes stored media, then deletes the account, in that order', async () => {
+      const u = inactive(UID1, 95)
+      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
+      getUserById.mockResolvedValue({ data: { user: u }, error: null })
+      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
+      storageList
+        .mockResolvedValueOnce({ data: [{ name: 'a.png', id: 'f1' }, { name: 'projects', id: null }], error: null })
+        .mockResolvedValueOnce({ data: [{ name: 'b.png', id: 'f2' }], error: null })
+      const order = []
+      upsertSpy.mockImplementation(async () => { order.push('audit'); return { error: null } })
+      storageRemove.mockImplementation(async () => { order.push('media'); return { error: null } })
+      deleteUserSpy.mockImplementation(async () => { order.push('user'); return { error: null } })
+      enable()
+      const body = await run({ delete: '1' })
+      expect(order).toEqual(['audit', 'media', 'user'])
+      expect(body.mode).toBe('delete')
+      expect(body.deletion).toMatchObject({ deleted: 1, failed: 0, skipped: 0, maxPerRun: 10 })
+      expect(storageRemove).toHaveBeenCalledWith([`${UID1}/a.png`, `${UID1}/projects/b.png`])
+      expect(storageList.mock.calls[0][0]).toBe(UID1)
+      expect(deleteUserSpy).toHaveBeenCalledWith(UID1)
+      expect(upsertSpy.mock.calls[0][0]).toMatchObject({ user_id: UID1, track: 'free_inactive' })
+      expect(updateRowSpy.mock.calls[0][0]).toHaveProperty('completed_at')
+      expect(JSON.stringify(body)).not.toMatch(/@x\.test/)
+    })
+
+    it('does not delete without a final notice recorded 7+ days ago', async () => {
+      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95), inactive(UID2, 95)] }, error: null })
+      eventRows.mockResolvedValue({ data: [
+        ...FREE_READY(UID2).map((r) => (r.event_key === 'inactive_83' ? { ...r, created_at: ago(2) } : r)),
+      ], error: null })
+      enable()
+      const body = await run({ delete: '1' })
+      expect(body.deletion).toMatchObject({ deleted: 0 })
+      expect(deleteUserSpy).not.toHaveBeenCalled()
+    })
+
+    it('skips the account if it signed in after the sweep read it (live re-check)', async () => {
+      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95)] }, error: null })
+      getUserById.mockResolvedValue({ data: { user: { ...inactive(UID1, 95), last_sign_in_at: ago(0) } }, error: null })
+      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
+      enable()
+      const body = await run({ delete: '1' })
+      expect(body.deletion).toMatchObject({ deleted: 0, skipped: 1 })
+      expect(deleteUserSpy).not.toHaveBeenCalled()
+      expect(storageRemove).not.toHaveBeenCalled()
+    })
+
+    it('skips the account if it became protected (e.g. upgraded) before deletion', async () => {
+      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95)] }, error: null })
+      getUserById.mockResolvedValue({ data: { user: { ...inactive(UID1, 95), app_metadata: { subscription_plan: 'premium_monthly' } } }, error: null })
+      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
+      enable()
+      const body = await run({ delete: '1' })
+      expect(body.deletion).toMatchObject({ deleted: 0, skipped: 1 })
+      expect(deleteUserSpy).not.toHaveBeenCalled()
+    })
+
+    it('does NOT delete the account if the audit write or media cleanup fails', async () => {
+      const u = inactive(UID1, 95)
+      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
+      getUserById.mockResolvedValue({ data: { user: u }, error: null })
+      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
+      enable()
+      upsertSpy.mockResolvedValueOnce({ error: { message: 'db down' } })
+      let body = await run({ delete: '1' })
+      expect(body.deletion).toMatchObject({ deleted: 0, failed: 1 })
+      storageRemove.mockResolvedValueOnce({ error: { message: 'storage down' } })
+      storageList.mockResolvedValueOnce({ data: [{ name: 'a.png', id: 'f1' }], error: null })
+      body = await run({ delete: '1' })
+      expect(body.deletion).toMatchObject({ deleted: 0, failed: 1 })
+      expect(deleteUserSpy).not.toHaveBeenCalled()
+    })
+
+    it('refuses media cleanup for a non-uuid id (would otherwise list the whole bucket)', async () => {
+      const u = inactive('not-a-uuid', 95)
+      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
+      getUserById.mockResolvedValue({ data: { user: u }, error: null })
+      eventRows.mockResolvedValue({ data: FREE_READY('not-a-uuid'), error: null })
+      enable()
+      const body = await run({ delete: '1' })
+      expect(body.deletion).toMatchObject({ deleted: 0, failed: 1 })
+      expect(storageList).not.toHaveBeenCalled()
+      expect(deleteUserSpy).not.toHaveBeenCalled()
+    })
+
+    it('deletes at most 10 accounts per run', async () => {
+      const users = Array.from({ length: 12 }, (_, i) => inactive(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, 95))
+      listUsers.mockResolvedValue({ data: { users }, error: null })
+      getUserById.mockImplementation(async (id) => ({ data: { user: users.find((x) => x.id === id) }, error: null }))
+      eventRows.mockResolvedValue({ data: users.flatMap((x) => FREE_READY(x.id)), error: null })
+      enable()
+      const body = await run({ delete: '1' })
+      expect(deleteUserSpy).toHaveBeenCalledTimes(10)
+      expect(body.deletion).toMatchObject({ deleted: 10, remaining: 2 })
+    })
   })
 
   it('is reached through send-reengagement-emails (?job=lifecycle) so it is not a 13th Function', async () => {
@@ -556,6 +696,17 @@ describe('run-account-lifecycle send + archive (gated)', () => {
 
   it('is scheduled daily in vercel.json with both flags', async () => {
     const cfg = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'))
-    expect(cfg.crons).toContainEqual({ path: '/api/send-reengagement-emails?job=lifecycle&send=1&archive=1', schedule: '15 9 * * *' })
+    expect(cfg.crons).toContainEqual({ path: '/api/send-reengagement-emails?job=lifecycle&send=1&archive=1&delete=1', schedule: '15 9 * * *' })
+  })
+})
+
+describe('account_lifecycle_deletions migration', () => {
+  it('is service-role only, has no FK to auth.users (so the audit survives deletion) and no policies or email column', async () => {
+    const sql = await readFile(new URL('../../supabase/migrations/20261001130000_account_lifecycle_deletions.sql', import.meta.url), 'utf8')
+    expect(sql).toMatch(/ENABLE ROW LEVEL SECURITY/)
+    expect(sql).toMatch(/REVOKE ALL ON public\.account_lifecycle_deletions FROM anon, authenticated/)
+    expect(sql).not.toMatch(/CREATE POLICY/)
+    expect(sql).not.toMatch(/REFERENCES\s+auth\.users/i)
+    expect(sql).not.toMatch(/\bemail\s+TEXT/i)
   })
 })

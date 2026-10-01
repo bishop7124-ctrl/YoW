@@ -159,6 +159,16 @@ export function classifyLifecycle({ track, anchor, now, sentNoticeKeys = [], arc
   return result(track, stage, dayOffset, dueNotice || held, finalNoticeSent, action)
 }
 
+/**
+ * An archive stamp (app_metadata.cloud_archived_at) only counts if it is newer than the
+ * current hosting end date, so a stamp from an earlier lapse (before a renewal) is ignored.
+ */
+export function isArchiveStampCurrent(stamp, hostingEnd) {
+  const s = toDate(stamp)
+  const h = toDate(hostingEnd)
+  return Boolean(s && h && s > h)
+}
+
 export function finalNoticeKeyFor(track) {
   return NOTICE_SCHEDULE[track].find((n) => n.final).key
 }

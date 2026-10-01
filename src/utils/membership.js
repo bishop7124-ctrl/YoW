@@ -281,7 +281,12 @@ export function getMembership(user) {
     } else {
       // Included period ended, no valid renewal payment
       const lastPaidEnd = paidUntil && paidUntil > includedHostingEnds ? paidUntil : includedHostingEnds
-      cloudLifecycle = computeCloudLifecycle({ kind: 'paid_hosting', now, hostingEndsAt: lastPaidEnd })
+      cloudLifecycle = computeCloudLifecycle({
+        kind: 'paid_hosting',
+        now,
+        hostingEndsAt: lastPaidEnd,
+        archivedAt: user?.app_metadata?.cloud_archived_at,
+      })
       isMaintenanceLapsed = true
       isCloudFreeFallback = true
       cloudHostingStatus = 'lapsed'
