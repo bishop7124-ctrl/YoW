@@ -39,7 +39,8 @@
     { "source": "/((?!assets/).*)", "destination": "/index.html"  }
   ],
   "crons": [
-    { "path": "/api/send-reengagement-emails", "schedule": "0 14 * * *" }
+    { "path": "/api/send-reengagement-emails", "schedule": "0 14 * * *" },
+    { "path": "/api/run-account-lifecycle?send=1&archive=1", "schedule": "15 9 * * *" }
   ],
   "headers": [
     {

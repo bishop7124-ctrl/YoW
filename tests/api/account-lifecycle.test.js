@@ -246,13 +246,21 @@ describe('account_lifecycle_events migration', () => {
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    auth: { admin: { listUsers: (...a) => listUsers(...a), deleteUser: (...a) => deleteSpy(...a), updateUserById: (...a) => deleteSpy(...a) } },
-    from: () => ({ select: () => ({ in: () => eventRows() }), insert: (...a) => insertSpy(...a), upsert: (...a) => insertSpy(...a), delete: (...a) => deleteSpy(...a) }),
+    auth: { admin: { listUsers: (...a) => listUsers(...a), deleteUser: (...a) => deleteSpy(...a), updateUserById: (...a) => updateSpy(...a) } },
+    from: () => ({
+      select: () => ({ in: () => eventRows() }),
+      insert: (...a) => insertSpy(...a),
+      upsert: (...a) => insertSpy(...a),
+      delete: () => {
+        const chain = { eq: (...a) => { deleteSpy(...a); return chain } }
+        return chain
+      },
+    }),
   }),
 }))
 
-const { listUsers, eventRows, insertSpy, deleteSpy } = vi.hoisted(() => ({
-  listUsers: vi.fn(), eventRows: vi.fn(), insertSpy: vi.fn(), deleteSpy: vi.fn(),
+const { listUsers, eventRows, insertSpy, deleteSpy, updateSpy } = vi.hoisted(() => ({
+  listUsers: vi.fn(), eventRows: vi.fn(), insertSpy: vi.fn(), deleteSpy: vi.fn(), updateSpy: vi.fn(),
 }))
 
 describe('run-account-lifecycle handler', () => {
@@ -265,8 +273,14 @@ describe('run-account-lifecycle handler', () => {
     process.env.CRON_SECRET = 's3cret'
     listUsers.mockReset().mockResolvedValue({ data: { users: [] }, error: null })
     eventRows.mockReset().mockResolvedValue({ data: [], error: null })
-    insertSpy.mockClear()
-    deleteSpy.mockClear()
+    insertSpy.mockReset().mockResolvedValue({ error: null })
+    deleteSpy.mockReset()
+    updateSpy.mockReset().mockResolvedValue({ error: null })
+    delete process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS
+    delete process.env.ACCOUNT_LIFECYCLE_ARCHIVE
+    delete process.env.RESEND_API_KEY
+    process.env.ACCOUNT_LIFECYCLE_SEND_SPACING_MS = '0'
+    vi.unstubAllGlobals()
     vi.resetModules()
     handler = (await import('../../api/run-account-lifecycle.js')).default
   })
@@ -314,6 +328,7 @@ describe('run-account-lifecycle handler', () => {
     expect(JSON.stringify(body)).not.toMatch(/@x\.test/)
     expect(insertSpy).not.toHaveBeenCalled()
     expect(deleteSpy).not.toHaveBeenCalled()
+    expect(updateSpy).not.toHaveBeenCalled()
   })
 
   it('surfaces archive/delete decisions only once the final notice is recorded', async () => {
@@ -335,5 +350,191 @@ describe('run-account-lifecycle handler', () => {
     expect(body.archiveDecisions.map((r) => r.userId)).toEqual(['lifetime-lapsed'])
     expect(body.deleteDecisions.map((r) => r.userId)).toEqual(['inactive-old'])
     expect(deleteSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('run-account-lifecycle send + archive (gated)', () => {
+  const makeRes = () => ({ status: vi.fn().mockReturnThis(), json: vi.fn() })
+  const ago = (d) => new Date(Date.now() - d * DAY_MS).toISOString()
+  const auth = { authorization: 'Bearer s3cret' }
+  let handler
+  let fetchMock
+
+  const inactive = (id, daysPast = 5) => ({ id, email: `${id}@x.test`, created_at: ago(900), last_sign_in_at: ago(FREE_INACTIVITY_DAYS + daysPast), app_metadata: {}, user_metadata: {} })
+  const lapsed = (id, extra = {}) => ({ id, email: `${id}@x.test`, created_at: ago(2000), app_metadata: { subscription_plan: 'premium_plus_lifetime', cloud_hosting_expires_at: ago(95), ...extra }, user_metadata: {} })
+
+  beforeEach(async () => {
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'stub'
+    process.env.CRON_SECRET = 's3cret'
+    process.env.ACCOUNT_LIFECYCLE_SEND_SPACING_MS = '0'
+    delete process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS
+    delete process.env.ACCOUNT_LIFECYCLE_ARCHIVE
+    delete process.env.RESEND_API_KEY
+    listUsers.mockReset().mockResolvedValue({ data: { users: [] }, error: null })
+    eventRows.mockReset().mockResolvedValue({ data: [], error: null })
+    insertSpy.mockReset().mockResolvedValue({ error: null })
+    deleteSpy.mockReset()
+    updateSpy.mockReset().mockResolvedValue({ error: null })
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.resetModules()
+    handler = (await import('../../api/run-account-lifecycle.js')).default
+  })
+
+  const run = async (query) => {
+    const res = makeRes()
+    await handler({ method: 'GET', headers: auth, query }, res)
+    return res.json.mock.calls[0][0]
+  }
+
+  it('never sends or archives without BOTH the setting and the request flag', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    process.env.RESEND_API_KEY = 're_test'
+    // flag only
+    let body = await run({ send: '1', archive: '1' })
+    expect(body.mode).toBe('report-only')
+    expect(body.sendSkipped).toMatch(/ACCOUNT_LIFECYCLE_SEND_EMAILS/)
+    expect(body.archiveSkipped).toMatch(/ACCOUNT_LIFECYCLE_ARCHIVE/)
+    // setting only
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    body = await run({})
+    expect(body.mode).toBe('report-only')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(insertSpy).not.toHaveBeenCalled()
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('does nothing and records nothing when sending is on but RESEND_API_KEY is missing', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    const body = await run({ send: '1' })
+    expect(body.mode).toBe('report-only')
+    expect(body.sendSkipped).toMatch(/RESEND_API_KEY/)
+    expect(insertSpy).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('records the ledger row BEFORE sending, then sends the approved notice via Resend', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    const order = []
+    insertSpy.mockImplementation(async () => { order.push('insert'); return { error: null } })
+    fetchMock.mockImplementation(async () => { order.push('send'); return { ok: true, status: 200 } })
+    const body = await run({ send: '1' })
+    expect(order).toEqual(['insert', 'send'])
+    expect(body.mode).toBe('send')
+    expect(body.emails).toMatchObject({ sent: 1, failed: 0, uncertain: 0 })
+    expect(insertSpy.mock.calls[0][0]).toMatchObject({ user_id: 'a', track: 'free_inactive', event_key: 'inactive_0' })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://api.resend.com/emails')
+    expect(init.headers.Authorization).toBe('Bearer re_test')
+    expect(init.headers['Idempotency-Key']).toBe('lifecycle-a-free_inactive-inactive_0')
+    const sent = JSON.parse(init.body)
+    expect(sent.to).toEqual(['a@x.test'])
+    expect(sent.subject).toBeTruthy()
+    expect(JSON.stringify(body)).not.toMatch(/@x\.test/)
+  })
+
+  it('skips a notice whose ledger row already exists (never sent twice)', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    insertSpy.mockResolvedValue({ error: { code: '23505', message: 'duplicate key' } })
+    const body = await run({ send: '1' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(body.emails).toMatchObject({ sent: 0, alreadyRecorded: 1 })
+  })
+
+  it('does not re-send a notice the ledger already shows as sent', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: 'a', track: 'free_inactive', event_key: 'inactive_0', created_at: ago(1) }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    await run({ send: '1' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(insertSpy).not.toHaveBeenCalled()
+  })
+
+  it('frees the ledger row when Resend refuses (retry tomorrow) but keeps it on an unknown network outcome', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a'), inactive('b')] }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 429 })
+      .mockRejectedValueOnce(new Error('socket hang up'))
+    const body = await run({ send: '1' })
+    expect(body.emails).toMatchObject({ sent: 0, failed: 1, uncertain: 1 })
+    // only the refused one (a) was removed from the ledger
+    expect(deleteSpy.mock.calls.map((c) => c[1])).toEqual(['a', 'free_inactive', 'inactive_0'])
+  })
+
+  it('sends at most 20 emails per run', async () => {
+    listUsers.mockResolvedValue({ data: { users: Array.from({ length: 25 }, (_, i) => inactive(`u${i}`)) }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    const body = await run({ send: '1' })
+    expect(fetchMock).toHaveBeenCalledTimes(20)
+    expect(insertSpy).toHaveBeenCalledTimes(20)
+    expect(body.emails).toMatchObject({ sent: 20, remaining: 5, maxPerRun: 20 })
+  })
+
+  it('archives a Lifetime account after grace + a final notice recorded 7+ days ago, by stamping only', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed('lt')] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: 'lt', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(8) }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    const body = await run({ archive: '1' })
+    expect(body.mode).toBe('archive')
+    expect(body.archive).toMatchObject({ archived: 1, failed: 0 })
+    expect(updateSpy).toHaveBeenCalledTimes(1)
+    const [id, attrs] = updateSpy.mock.calls[0]
+    expect(id).toBe('lt')
+    expect(Object.keys(attrs)).toEqual(['app_metadata'])
+    expect(Object.keys(attrs.app_metadata)).toEqual(['cloud_archived_at'])
+    expect(new Date(attrs.app_metadata.cloud_archived_at).getTime()).toBeGreaterThan(Date.now() - 60_000)
+    expect(insertSpy.mock.calls[0][0]).toMatchObject({ user_id: 'lt', event_key: 'archived' })
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not archive when the final notice is missing, too recent, or the account is already archived', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed('none'), lapsed('recent'), lapsed('done', { cloud_archived_at: ago(3) })] }, error: null })
+    eventRows.mockResolvedValue({ data: [
+      { user_id: 'recent', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(2) },
+      { user_id: 'done', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(20) },
+    ], error: null })
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    const body = await run({ archive: '1' })
+    expect(body.archive).toMatchObject({ archived: 0 })
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('caps archives at 20 per run', async () => {
+    const users = Array.from({ length: 22 }, (_, i) => lapsed(`l${i}`))
+    listUsers.mockResolvedValue({ data: { users }, error: null })
+    eventRows.mockResolvedValue({ data: users.map((u) => ({ user_id: u.id, track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(8) })), error: null })
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    const body = await run({ archive: '1' })
+    expect(updateSpy).toHaveBeenCalledTimes(20)
+    expect(body.archive).toMatchObject({ archived: 20, remaining: 2 })
+  })
+
+  it('never deletes Free accounts or users, even with every switch on', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('old', 95)] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: 'old', track: 'free_inactive', event_key: 'inactive_83', created_at: ago(10) }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    const body = await run({ send: '1', archive: '1' })
+    expect(body.deleteDecisions.map((r) => r.userId)).toEqual(['old'])
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('is scheduled daily in vercel.json with both flags', async () => {
+    const cfg = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'))
+    expect(cfg.crons).toContainEqual({ path: '/api/run-account-lifecycle?send=1&archive=1', schedule: '15 9 * * *' })
   })
 })
