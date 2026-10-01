@@ -30,11 +30,11 @@ Local evidence: the new recursive regression identifies exactly the 12 intended 
 
 Deployment evidence: PR #236 passed all 57 required checks (plus the expected skipped Supabase preview), including Static QA, native desktop Rust, every browser-smoke shard, and a successful Vercel preview deployment. It squash-merged to `main` as `ce705cca6ce2c2fc928754fd37bee348fb0fb301`; Vercel then reported the production deployment complete. `https://www.yourownworld.co.uk/` returns HTTP 200 with the required security headers, and a missing-token POST to `/api/ai-proxy` returns the expected HTTP 401 from the deployed Function. The Function-count blocker is closed and no Pro upgrade is required.
 
-## 2026-10-04 Free-account deletion end-to-end (scheduled)
+## 2026-10-03 Free-account deletion end-to-end (scheduled)
 
-Status: **⏳ Scheduled for 2026-10-04 (sprint Data safety day); not yet run.** Proves, on real infrastructure with two designated test accounts, that every notice email fires, the account and its stored media are deleted after the final notice, and that an account which signs in again is NOT deleted. Unit tests already cover the rules (`tests/api/account-lifecycle.test.js`); this is the only live exercise of the Resend email path and of a real deletion.
+Status: **⏳ Scheduled for 2026-10-03 (a weekend day with spare owner time; overflow O17); not yet run.** Proves, on real infrastructure with two designated test accounts, that every notice email fires, the account and its stored media are deleted after the final notice, and that an account which signs in again is NOT deleted. Unit tests already cover the rules (`tests/api/account-lifecycle.test.js`); this is the only live exercise of the Resend email path and of a real deletion.
 
-Setup (owner, by 3 Oct; the AI prepares the exact SQL with the real addresses on 3 Oct):
+Setup (owner, morning of 3 Oct; the AI prepares the exact SQL with the real addresses first):
 - Create two Free test accounts with real inboxes you can read, unbilled, not Beta, no Stripe customer: **A** (will be deleted) and **B** (will sign back in). In A, upload one small image so media cleanup is visible in Storage under `user-media/<A id>/`.
 - Confirm Vercel has `RESEND_API_KEY` and all three switches (`ACCOUNT_LIFECYCLE_SEND_EMAILS`, `_ARCHIVE`, `_DELETE_FREE`) set to `true`.
 - **Safety pre-check:** press Run on the lifecycle cron and read the `[run-account-lifecycle] summary` log line. `noticesDue`, `blockedFinalNotice`, `archiveDecisions` and `deleteDecisions` must all be 0 for real accounts before you backdate anything. If any real account is due, stop: the sweep acts on every account, not only the test ones.
@@ -47,7 +47,7 @@ Steps (Supabase SQL editor to backdate; cron **Run** button after each; one noti
 5. Make A's final notice old enough: set its `inactive_83` ledger row `created_at` to 8 days ago, and A's `last_sign_in_at` to 645 days ago. Run. Expect `deletion.deleted: 1` for A only.
 6. Run once more. Expect nothing further: B is still active and not listed under notices or deletion.
 
-Pass criteria: all 8 emails arrive with correct wording and dates; A's Auth user is gone, its Storage folder is empty, `account_lifecycle_deletions` has an A row with `completed_at` set; B's account, projects and sign-in still work after steps 5 and 6; no real account changed; summary lines show only counts. Never move `last_sign_in_at` earlier than a real sign-in on B: that cannot happen in production and would make B look inactive for longer than it was. Afterwards delete test account B (and A's audit row if desired) and record the evidence on the 5 Oct Data safety gate summary.
+Pass criteria: all 8 emails arrive with correct wording and dates; A's Auth user is gone, its Storage folder is empty, `account_lifecycle_deletions` has an A row with `completed_at` set; B's account, projects and sign-in still work after steps 5 and 6; no real account changed; summary lines show only counts. Never move `last_sign_in_at` earlier than a real sign-in on B: that cannot happen in production and would make B look inactive for longer than it was. Afterwards delete test account B (and A's audit row if desired) and record the evidence for the 4 Oct data-safety matrix and the 5 Oct Data safety gate summary.
 
 ## 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
 
