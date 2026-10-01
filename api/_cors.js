@@ -1,5 +1,9 @@
 // Shared CORS allowlist/header helper for Vercel API routes under api/.
 //
+// The leading underscore is intentional: Vercel ignores utility files in
+// api/ whose filename starts with `_`, so this module is bundled with route
+// handlers without being deployed (and counted) as its own Function.
+//
 // Every route that authenticates a caller via a bearer token (rather than a
 // browser cookie) previously reflected the request's Origin header verbatim
 // (`req.headers.origin || SITE_URL || '*'`) instead of checking it against

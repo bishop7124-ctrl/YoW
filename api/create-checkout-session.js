@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 
 // Maps plan keys to Stripe price IDs and checkout mode.
 // Each price ID must be set as an env var on Vercel.

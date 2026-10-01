@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildOpenAiTokenLimit } from '../src/utils/aiTokenParams.js'
 import { getMembership } from '../src/utils/membership.js'
-import { allowedOrigins, applyCors } from './_lib/cors.js'
+import { allowedOrigins, applyCors } from './_cors.js'
 
 // Re-exported for tests/api/ai-proxy.test.js, which imports this symbol
 // directly from this file. The real definition now lives in
-// api/_lib/cors.js so every other route can share the same allowlist.
+// api/_cors.js so every other route can share the same allowlist.
 export { allowedOrigins }
 
 const PROVIDER_IDS = new Set(['google', 'anthropic', 'openrouter', 'openai'])

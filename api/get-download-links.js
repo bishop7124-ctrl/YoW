@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 import { getMembership } from '../src/utils/membership.js'
 
 // Vercel API route — desktop app download delivery.

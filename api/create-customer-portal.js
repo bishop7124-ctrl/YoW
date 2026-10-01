@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 
 // Vercel API route — replaces supabase/functions/create-customer-portal
 // Called by AccountSettings.jsx when a paid user clicks
