@@ -1,5 +1,19 @@
 # YOW Deferred QA Plan
 
+## 2026-10-01 cloud-expiry / inactive-account lifecycle (sprint day 1)
+
+Status: **In progress — engineering + automated evidence done; owner wording approval and live behaviour checks pending.** Not a gate pass.
+
+Built: `src/utils/cloudLifecycle.js` (pure phase logic shared by the app and the server planner): Lifetime hosting `active -> warning (30 days) -> grace (90 days, read + export + Export All, still writable within Free limits) -> archived (cloud writes/uploads/sync stop; data kept, never deleted by default)`; Free accounts `active -> grace after 18 months inactive (90 days) -> delete_due`. Export is allowed in every phase. `getMembership()` now exposes `cloudLifecyclePhase`, `isCloudGrace`, `isCloudArchived`, `cloudGraceEndsAt`, `cloudGraceDaysRemaining`, and `canSyncCloud` turns false once archived; renewal restores sync immediately. `api/cloud-lifecycle.js` is a read-only, CRON_SECRET-protected dry-run planner (not scheduled in `vercel.json`; sends no email, archives/deletes nothing). Dormant for real users until the first Lifetime hosting ends (earliest Nov 2029) and the first Free account reaches 18 months inactive.
+
+Evidence: `npm run qa` exit 0, 137 test files / 1,283 tests pass (new: `src/utils/cloudLifecycle.test.js`, `tests/api/cloud-lifecycle.test.js`, 2 membership lifecycle tests), lint and build clean, `check-api-esm-resolution.mjs` clean. The full run prints 3 jsdom teardown "window is not defined" errors from `useStore.test.js` timers; the file passes cleanly alone and the run exits 0 (not caused by this change; worth tidying after launch).
+
+Read-only production edge check, `node scripts/check-production-edge.mjs` against `https://www.yourownworld.co.uk` on 2026-10-01: 23/23 PASS (bare domain -> www 308 keeping path + query; CSP, HSTS >= 1 year, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy on `/`, `/pricing`, `/login`). Still needs a real browser: no CSP console violations, GA still firing, cross-tab auth after the redirect.
+
+Web 24h idle logout: unit coverage in `src/utils/sessionActivity.test.js` and `src/context/AuthContext.test.jsx` (stale timestamp -> clean sign-out). The live credentialed check is folded into the 4 Oct real-account block.
+
+Remaining (not done, do not mark Passed): customer-visible notice wording approval (owner), notice emails, real archive/delete execution, Export All button in notice emails, and a decision on whether lapsed-Lifetime web users keep the Free cloud fallback after archive (Decision D11 in the ROADMAP Sprint alignment table, proceeding with PRD default).
+
 ## 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
 
 Status: **Done 2026-10-06 — deployed private-media safety assignment passes without repeating owner work.** Production is private and owner-scoped for read/upload/update/delete, the accounting trigger is enabled and protected from direct browser-role execution, anonymous fetch/list is denied, and every active-account media counter exactly matches stored object bytes. Read-only reconciliation found 16 inaccessible historical objects (6,032,950 bytes) under two prefixes whose Auth users/profile rows no longer exist. They expose no media and charge no active account, so they remain separately disclosed cleanup rather than a blocker for the named active-account assignment and were not deleted without separate destructive-production authority.

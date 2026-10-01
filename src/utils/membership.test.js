@@ -49,6 +49,42 @@ describe('membership plan limits', () => {
     expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.free)
   })
 
+  it('walks a lapsed Lifetime account through grace (writes still on) and then archive (cloud sync off)', () => {
+    const lapsedAt = Date.now() - 10 * 24 * 60 * 60 * 1000
+    const grace = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_plus_lifetime',
+        lifetime_purchased_at: '2020-01-01T00:00:00Z',
+        cloud_hosting_expires_at: new Date(lapsedAt).toISOString(),
+      },
+    }))
+    expect(grace.cloudLifecyclePhase).toBe('grace')
+    expect(grace.isCloudGrace).toBe(true)
+    expect(grace.canSyncCloud).toBe(true)
+    expect(grace.cloudGraceDaysRemaining).toBeGreaterThan(70)
+
+    const archived = getMembership(makeUser({
+      app_metadata: { subscription_plan: 'premium_plus_lifetime', lifetime_purchased_at: '2020-01-01T00:00:00Z' },
+    }))
+    expect(archived.cloudLifecyclePhase).toBe('archived')
+    expect(archived.isCloudArchived).toBe(true)
+    expect(archived.canSyncCloud).toBe(false)
+    expect(archived.isLifetime).toBe(true)
+  })
+
+  it('restores cloud sync immediately when hosting is renewed after archive', () => {
+    const renewed = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_plus_lifetime',
+        lifetime_purchased_at: '2020-01-01T00:00:00Z',
+        cloud_hosting_expires_at: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    }))
+    expect(renewed.cloudLifecyclePhase).toBe('active')
+    expect(renewed.isCloudArchived).toBe(false)
+    expect(renewed.canSyncCloud).toBe(true)
+  })
+
   it('flags accounts with a real Stripe customer id', () => {
     const withCustomer = getMembership(makeUser({
       app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active', stripe_customer_id: 'cus_123' },

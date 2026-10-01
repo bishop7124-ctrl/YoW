@@ -1,4 +1,5 @@
 import { BILLING } from './billingConfig.js'
+import { computeCloudLifecycle } from './cloudLifecycle.js'
 
 export const TRIAL_DAYS = 28
 export const BETA_NOTICE_DAYS = 30
@@ -255,6 +256,7 @@ export function getMembership(user) {
   let maintenanceExpiresAt = null
   let maintenanceDaysRemaining = null
   let maintenanceWarning = false
+  let cloudLifecycle = computeCloudLifecycle({ kind: 'none', now })
   let cloudHostingStatus = isPaid || isTrialActive ? 'active' : 'free'
   let cloudHostingLabel = isPaid || isTrialActive ? 'Cloud Mode' : 'Free Cloud Mode'
 
@@ -278,6 +280,8 @@ export function getMembership(user) {
       maintenanceWarning = maintenanceDaysRemaining <= HOSTING_RENEWAL_WARNING_DAYS
     } else {
       // Included period ended, no valid renewal payment
+      const lastPaidEnd = paidUntil && paidUntil > includedHostingEnds ? paidUntil : includedHostingEnds
+      cloudLifecycle = computeCloudLifecycle({ kind: 'paid_hosting', now, hostingEndsAt: lastPaidEnd })
       isMaintenanceLapsed = true
       isCloudFreeFallback = true
       cloudHostingStatus = 'lapsed'
@@ -291,6 +295,9 @@ export function getMembership(user) {
     cloudHostingLabel = 'Free Cloud Mode'
   }
 
+  // After the 90-day grace the cloud copy is archived: no cloud writes,
+  // uploads or sync. Reads/export and Local Mode are never blocked.
+  const isCloudArchived = cloudLifecycle.phase === 'archived'
   const isCloudMode = cloudHostingStatus !== 'lapsed'
   const isLocalMode = cloudHostingStatus === 'lapsed'
   const usesFreeCloudLimits = isFree || isCloudFreeFallback
@@ -335,7 +342,12 @@ export function getMembership(user) {
     cloudHostingLabel,
     isCloudMode,
     isLocalMode,
-    canSyncCloud: isCloudMode || isCloudFreeFallback,
+    canSyncCloud: (isCloudMode || isCloudFreeFallback) && !isCloudArchived,
+    cloudLifecyclePhase: cloudLifecycle.phase,
+    isCloudGrace: cloudLifecycle.phase === 'grace',
+    isCloudArchived,
+    cloudGraceEndsAt: cloudLifecycle.graceEndsAt,
+    cloudGraceDaysRemaining: cloudLifecycle.graceDaysRemaining,
     maintenanceExpiresAt,
     maintenanceDaysRemaining,
     maintenanceWarning,
