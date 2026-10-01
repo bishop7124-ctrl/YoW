@@ -406,6 +406,16 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     expect(updateSpy).not.toHaveBeenCalled()
   })
 
+  it('logs a counts-only summary (no ids or emails) for the Vercel logs', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('secret-id-1')] }, error: null })
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await run({})
+    const line = log.mock.calls.map((c) => c.join(' ')).find((l) => l.includes('[run-account-lifecycle] summary'))
+    log.mockRestore()
+    expect(line).toContain('"noticesDue":1')
+    expect(line).not.toMatch(/secret-id-1|@x\.test/)
+  })
+
   it('does nothing and records nothing when sending is on but RESEND_API_KEY is missing', async () => {
     listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
     process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
