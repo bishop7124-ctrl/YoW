@@ -22,6 +22,16 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-10-01 cloud-expiry / inactive-account lifecycle
+
+Status: **In progress 2026-10-01 — policy engine, ledger and report-only sweep built and tested; owner wording approved; wiring email sending, the migration and the first dry-run report are pending, so nothing is enabled.** `api/_lib/accountLifecycle.js` encodes the approved policy as pure, unit-tested functions: Lifetime (non-Founder) hosting lapse gets warnings at 30/14/7/1 days before expiry, a 90-day grace (notices at day 0/30/60 and a final export notice at day 83), then **archive, never delete**; Free accounts inactive 18 months get the same 90-day flow (day 0/30/60/83) and are **deleted only if the final notice is recorded and the account has not signed in**. Founder, Monthly, trialing, Beta, any Stripe customer, admin and `lifecycle_hold` accounts can never be swept. Export is allowed at every stage; cloud writes stop only after grace (archive_due/delete_due/archived). Any archive/delete additionally needs `mayExecuteIrreversible` (final notice at least 7 days old, no sign-in after the first warning).
+
+`supabase/migrations/20261001120000_account_lifecycle_events.sql` adds the service-role-only notice ledger (RLS on, no client grants) — **not yet applied to production**. `api/run-account-lifecycle.js` is bearer-`CRON_SECRET` protected (fails closed), **report-only** (returns due notices and archive/delete decision points with opaque user ids; sends no email, writes nothing, archives/deletes nothing) and is **not scheduled in `vercel.json`**. Customer notice wording is in `buildNotice` (same file). Owner decisions 2026-10-01: export is given as plain-text instructions (Account Settings > Storage > Export all projects), not a button or link, so the PRD's "Export all data button" line is satisfied by those instructions; Free notices state the exact date to log in by and the date the account is deleted, and invite upgrading to Lifetime for "lifetime access to the YOW app" (not "forever", so it does not imply free hosting for life); Lifetime notices keep the £6/year renewal offer. **Notice wording approved by the owner 2026-10-01.** Remaining before the Data safety/Export gates can count this item: AI wires email sending behind a switch and the archive executor in a reviewed change → apply migration → first production dry-run report reviewed.
+
+Also closed today: (1) web idle-logout: `AuthContext` tests now prove a stale (>24h) timestamp signs out cleanly with unsaved local writing and project data preserved, and a session just inside 24h is not signed out (live-account run still needs a test login: not performed); (2) canonical-host redirect and (3) deployed security headers verified against production with the new read-only `scripts/check-production-edge.mjs` (22/22 checks: bare domain 308 to `www` preserving path and query on 3 paths, http upgrades, nosniff/X-Frame-Options DENY/Referrer-Policy/HSTS 2y+includeSubDomains/CSP/Permissions-Policy on `/`, `/pricing` and a 404 path). Cross-tab auth after the redirect is not covered by that script and stays open for a signed-in run.
+
+Evidence: `npm run qa` green at 136 test files / 1,300 tests (32 new lifecycle tests plus 2 new idle-logout tests; was 1,260 on main), 104 existing lint warnings unchanged, 0 lint errors, build/load/matrix/API-ESM checks pass; full numbers in `docs/QA_PLAN.md`.
+
 ### 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
 
 Status: **Done 2026-10-06 — private-media ownership, accounting, cleanup, and deployed counter refresh pass.** Production read-only checks found the `user-media` bucket private, all four object operations owner-prefix scoped, the byte-accounting trigger enabled and protected from browser-role execution, anonymous fetch/list denied, and every active account counter equal to its stored object bytes. Sixteen inaccessible historical objects (6,032,950 bytes) remain under two deleted-account prefixes; they expose no media and charge no active account, so they are separately disclosed cleanup rather than a blocker for active-account safety and were not deleted without separate destructive-production authority.
@@ -111,6 +121,7 @@ Rules:
 - A failed hard gate moves the launch date; repair it before moving on (use the buffer days). Cosmetic polish and new ideas wait until after launch.
 - Payments: the 2026-09-18 decision parked Stripe work in [docs/PAYMENT_ROADMAP.md](PAYMENT_ROADMAP.md). This sprint resumes it on 21-25 Oct (decision D8); that document stays the Stripe tracker.
 - Owner-facing spreadsheet export: `docs/sprint/YOW-November-Launch-Sprint.xlsx` (an export of this section, not a second planning source).
+- Daily status (agent-maintained): 1 Oct In progress (lifecycle engine + report-only sweep built; owner wording approval pending; production edge/header/redirect checks passed). See the dated block above.
 - On 1 and 2 Nov the agent verifies and prepares; the owner performs deploy, checkout enablement, Beta closure and publishing.
 
 #### Gate to day map
@@ -169,7 +180,7 @@ Rules:
 
 | Date | Status | Evidence |
 | --- | --- | --- |
-| 2026-10-01 | **In progress** | Lifecycle phase logic, membership integration (cloud writes stop after the 90-day grace) and a read-only server planner built and tested (`npm run qa` 1,283 tests green). Production redirect + header check script passes 23/23 (`scripts/check-production-edge.mjs`). Notice emails, archive/delete execution and owner wording approval are still open, so the day is not Done. See [docs/QA_PLAN.md](QA_PLAN.md) "2026-10-01 cloud-expiry". Owner overflow due within 3 days: O03, O16, O02/O14 follow-ups (see Owner overflow). |
+| 2026-10-01 | **In progress** | Lifecycle policy engine, notice ledger migration (not applied) and report-only sweep `api/run-account-lifecycle.js` built and tested; client `getMembership()` stops cloud sync after archive. Notice wording **owner-approved 1 Oct**. Production redirect + header check 22/22. Open: email sending behind a switch, archive executor, migration apply, first dry-run report, signed-in live checks. See [docs/QA_PLAN.md](QA_PLAN.md) "2026-10-01 cloud-expiry lifecycle". |
 
 #### Owner overflow (scheduled on days with spare owner time)
 

@@ -1,18 +1,21 @@
 # YOW Deferred QA Plan
 
-## 2026-10-01 cloud-expiry / inactive-account lifecycle (sprint day 1)
+## 2026-10-01 cloud-expiry lifecycle, idle logout, canonical redirect and security headers
 
-Status: **In progress — engineering + automated evidence done; owner wording approval and live behaviour checks pending.** Not a gate pass.
+Status: **In progress 2026-10-01 — automated and read-only production checks pass; wording approved; signed-in live checks and email wiring pending.**
 
-Built: `src/utils/cloudLifecycle.js` (pure phase logic shared by the app and the server planner): Lifetime hosting `active -> warning (30 days) -> grace (90 days, read + export + Export All, still writable within Free limits) -> archived (cloud writes/uploads/sync stop; data kept, never deleted by default)`; Free accounts `active -> grace after 18 months inactive (90 days) -> delete_due`. Export is allowed in every phase. `getMembership()` now exposes `cloudLifecyclePhase`, `isCloudGrace`, `isCloudArchived`, `cloudGraceEndsAt`, `cloudGraceDaysRemaining`, and `canSyncCloud` turns false once archived; renewal restores sync immediately. `api/cloud-lifecycle.js` is a read-only, CRON_SECRET-protected dry-run planner (not scheduled in `vercel.json`; sends no email, archives/deletes nothing). Dormant for real users until the first Lifetime hosting ends (earliest Nov 2029) and the first Free account reaches 18 months inactive.
+Required checks (kept until each is evidenced):
+- ✅ Lifecycle policy matrix (`tests/api/account-lifecycle.test.js`, 32 tests): pre-expiry notices at 30/14/7/1, 90-day grace with export and writes allowed, missed-notice catch-up one at a time, final notice day 83, archive only after grace + recorded final notice and never delete for Lifetime, Free deleted only after 18 months + 90 days + final notice, sign-in resets the clock, irreversible-step guard, protected accounts (Founder/Monthly/trialing/Beta/Stripe customer/admin/held) never swept, notice wording never says licence expired or promises deletion of paid data, migration is service-role-only, handler fails closed and is report-only (no insert/update/delete/email calls).
+- ✅ Idle logout (`src/context/AuthContext.test.jsx`): stale >24h signs out and keeps unsaved local writing/project data; just under 24h stays signed in; desktop never idle-logged-out.
+- ✅ Production edge (`node scripts/check-production-edge.mjs`, run 2026-10-01 06:25 UTC from the cloud session, read-only GETs): 22/22 pass. Bare domain returns 308 to `www` with path and query preserved on `/`, `/pricing?plan=lifetime&utm_source=check`, `/features/ai?x=1`; http upgrades to https; nosniff, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, HSTS (2y, includeSubDomains), CSP (default-src 'self', frame-ancestors/object-src none, no unsafe-inline/eval scripts) and Permissions-Policy present on `/`, `/pricing` and a missing path. Note: the apex 308 response carries HSTS without includeSubDomains (Vercel-added); the www response carries the full policy.
+- ⏳ Live idle-logout with a designated test account (force stale timestamp, confirm clean sign-out and projects intact after sign-in): needs a test login; schedule with a credentialed run.
+- ⏳ Cross-tab auth across the www redirect: signed-in run needed.
+- ⏳ Apply the lifecycle migration, run `/api/run-account-lifecycle` against production and review the first report-only output (counts only) before any email or archive/delete step is wired.
+- ✅ Owner approval of notice wording (`buildNotice`), 2026-10-01.
 
-Evidence: `npm run qa` exit 0, 137 test files / 1,283 tests pass (new: `src/utils/cloudLifecycle.test.js`, `tests/api/cloud-lifecycle.test.js`, 2 membership lifecycle tests), lint and build clean, `check-api-esm-resolution.mjs` clean. The full run prints 3 jsdom teardown "window is not defined" errors from `useStore.test.js` timers; the file passes cleanly alone and the run exits 0 (not caused by this change; worth tidying after launch).
+Automated gate: `npm run qa` passed 2026-10-01: 137 test files / 1,319 tests (patch + client companion merged), 0 lint errors, build/load/e2e-matrix/API-ESM checks pass.
+- ℹ️ Client-side companion (added same day, `src/utils/cloudLifecycle.js` + `getMembership()`): exposes `cloudLifecyclePhase`/`isCloudGrace`/`isCloudArchived`/`cloudGraceDaysRemaining` and turns `canSyncCloud` off once archived (renewal restores it); covered by `src/utils/cloudLifecycle.test.js` and two `membership.test.js` cases. The server-side report-only sweep is `api/run-account-lifecycle.js`; an earlier duplicate planner (`api/cloud-lifecycle.js`) was removed.
 
-Read-only production edge check, `node scripts/check-production-edge.mjs` against `https://www.yourownworld.co.uk` on 2026-10-01: 23/23 PASS (bare domain -> www 308 keeping path + query; CSP, HSTS >= 1 year, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy on `/`, `/pricing`, `/login`). Still needs a real browser: no CSP console violations, GA still firing, cross-tab auth after the redirect.
-
-Web 24h idle logout: unit coverage in `src/utils/sessionActivity.test.js` and `src/context/AuthContext.test.jsx` (stale timestamp -> clean sign-out). The live credentialed check is folded into the 4 Oct real-account block.
-
-Remaining (not done, do not mark Passed): customer-visible notice wording approval (owner), notice emails, real archive/delete execution, Export All button in notice emails, and a decision on whether lapsed-Lifetime web users keep the Free cloud fallback after archive (Decision D11 in the ROADMAP Sprint alignment table, proceeding with PRD default).
 
 ## 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
 
