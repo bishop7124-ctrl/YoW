@@ -13,7 +13,7 @@ import {
   NOTICE_SCHEDULE,
   STAGES,
   TRACKS,
-} from '../../api/_lib/accountLifecycle.js'
+} from '../../api/_accountLifecycle.js'
 import { getMembership } from '../../src/utils/membership.js'
 
 const anchor = new Date('2026-01-01T00:00:00Z')
@@ -282,7 +282,7 @@ describe('run-account-lifecycle handler', () => {
     process.env.ACCOUNT_LIFECYCLE_SEND_SPACING_MS = '0'
     vi.unstubAllGlobals()
     vi.resetModules()
-    handler = (await import('../../api/run-account-lifecycle.js')).default
+    handler = (await import('../../api/_runAccountLifecycle.js')).default
   })
 
   it('fails closed without CRON_SECRET and rejects wrong tokens', async () => {
@@ -379,7 +379,7 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 })
     vi.stubGlobal('fetch', fetchMock)
     vi.resetModules()
-    handler = (await import('../../api/run-account-lifecycle.js')).default
+    handler = (await import('../../api/_runAccountLifecycle.js')).default
   })
 
   const run = async (query) => {
@@ -533,8 +533,19 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     expect(updateSpy).not.toHaveBeenCalled()
   })
 
+  it('is reached through send-reengagement-emails (?job=lifecycle) so it is not a 13th Function', async () => {
+    process.env.ACCOUNT_LIFECYCLE_SEND_SPACING_MS = '0'
+    const route = (await import('../../api/send-reengagement-emails.js')).default
+    const res = makeRes()
+    await route({ method: 'GET', headers: auth, query: { job: 'lifecycle' } }, res)
+    expect(res.json.mock.calls[0][0]).toMatchObject({ mode: 'report-only', checked: 0 })
+    const bad = makeRes()
+    await route({ method: 'GET', headers: { authorization: 'Bearer nope' }, query: { job: 'lifecycle' } }, bad)
+    expect(bad.status).toHaveBeenCalledWith(401)
+  })
+
   it('is scheduled daily in vercel.json with both flags', async () => {
     const cfg = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'))
-    expect(cfg.crons).toContainEqual({ path: '/api/run-account-lifecycle?send=1&archive=1', schedule: '15 9 * * *' })
+    expect(cfg.crons).toContainEqual({ path: '/api/send-reengagement-emails?job=lifecycle&send=1&archive=1', schedule: '15 9 * * *' })
   })
 })

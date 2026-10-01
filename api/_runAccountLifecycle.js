@@ -9,9 +9,10 @@ import {
   lastActivityAt,
   lifecycleTrackFor,
   mayExecuteIrreversible,
-} from './_lib/accountLifecycle.js'
+} from './_accountLifecycle.js'
 
-// Cron/manual target for the cloud-expiry + inactive-account lifecycle (vercel.json "crons").
+// Cron target for the cloud-expiry + inactive-account lifecycle. NOT its own Vercel Function (Hobby is capped at 12):
+// api/send-reengagement-emails.js hands off to this when called with ?job=lifecycle (see vercel.json "crons").
 //
 // With no switches on, this route is REPORT-ONLY: it classifies every account and returns
 // which notices are due plus which accounts have reached an archive/delete decision point.

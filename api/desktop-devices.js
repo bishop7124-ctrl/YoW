@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { getMembership } from '../src/utils/membership.js'
 import { createClient } from '@supabase/supabase-js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 
 // Vercel API route — desktop device activation registry (PRD Phase 4).
 // POST   { deviceId, deviceName?, platform? } → activate or re-verify this

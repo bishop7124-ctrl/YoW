@@ -31,7 +31,7 @@ describe('applyCors', () => {
   })
 
   it('echoes back an explicitly allowed origin and sets Vary', async () => {
-    const { applyCors } = await import('../../api/_lib/cors.js')
+    const { applyCors } = await import('../../api/_cors.js')
     const req = { headers: { origin: 'http://localhost:5173' } }
     const res = makeRes()
     applyCors(req, res)
@@ -40,7 +40,7 @@ describe('applyCors', () => {
   })
 
   it('never reflects an arbitrary/unrecognized origin (the audit finding this closes)', async () => {
-    const { applyCors } = await import('../../api/_lib/cors.js')
+    const { applyCors } = await import('../../api/_cors.js')
     const req = { headers: { origin: 'https://evil.example.com' } }
     const res = makeRes()
     applyCors(req, res)
@@ -49,7 +49,7 @@ describe('applyCors', () => {
   })
 
   it('sets no Allow-Origin header when the request has none (non-browser callers)', async () => {
-    const { applyCors } = await import('../../api/_lib/cors.js')
+    const { applyCors } = await import('../../api/_cors.js')
     const req = { headers: {} }
     const res = makeRes()
     applyCors(req, res)
@@ -58,7 +58,7 @@ describe('applyCors', () => {
 
   it('allows the configured SITE_URL', async () => {
     process.env.SITE_URL = 'https://www.yourownworld.co.uk'
-    const { applyCors } = await import('../../api/_lib/cors.js')
+    const { applyCors } = await import('../../api/_cors.js')
     const req = { headers: { origin: 'https://www.yourownworld.co.uk' } }
     const res = makeRes()
     applyCors(req, res)
@@ -66,7 +66,7 @@ describe('applyCors', () => {
   })
 
   it('defaults to GET, OPTIONS / authorization, content-type and accepts overrides', async () => {
-    const { applyCors } = await import('../../api/_lib/cors.js')
+    const { applyCors } = await import('../../api/_cors.js')
     const req = { headers: {} }
     const res = makeRes()
     applyCors(req, res)
@@ -86,7 +86,7 @@ describe('CORS regression guard', () => {
     // setting `Access-Control-Allow-Origin` to the raw incoming Origin
     // header (or SITE_URL/'*' as a fallback) instead of checking it against
     // allowedOrigins() first. Every real route should go through
-    // applyCors()/api/_lib/cors.js instead of open-coding this itself.
+    // applyCors()/api/_cors.js instead of open-coding this itself.
     const files = readdirSync(apiDir).filter(f => f.endsWith('.js'))
     const offenders = []
     for (const file of files) {

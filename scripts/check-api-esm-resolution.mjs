@@ -41,7 +41,9 @@ for (const [key, value] of Object.entries({
 }
 
 const apiDir = new URL('../api/', import.meta.url)
-const files = readdirSync(apiDir).filter(f => f.endsWith('.js'))
+// A leading underscore marks an api/ utility module that Vercel bundles with
+// handlers but does not deploy as its own Function.
+const files = readdirSync(apiDir).filter(f => f.endsWith('.js') && !f.startsWith('_'))
 
 let failed = 0
 for (const file of files) {
