@@ -2,11 +2,11 @@
 
 ## 2026-10-01 Vercel Hobby 12-Function deployment cap
 
-Status: **Code fix verified locally; deployment confirmation pending.** Vercel rejected the deployment because the 12 real API endpoints plus `api/_lib/cors.js` were discovered as 13 Functions. The shared helper now lives at `api/_cors.js`; Vercel documents underscore-prefixed utility filenames as ignored Function entrypoints, while endpoint imports still bundle the helper normally.
+Status: **Done 2026-10-01 — the Hobby deployment succeeds with 12 Functions.** Vercel rejected the earlier deployment because the 12 real API endpoints plus `api/_lib/cors.js` were discovered as 13 Functions. The shared helper now lives at `api/_cors.js`; Vercel documents underscore-prefixed utility filenames as ignored Function entrypoints, while endpoint imports still bundle the helper normally.
 
 Local evidence: the new recursive regression identifies exactly the 12 intended endpoint files using Vercel's filename rule; the focused Function-count and CORS suites pass; the native-ESM checker imports all 12 endpoints successfully. The complete repository gate passes 136/136 test files and 1,267/1,267 tests, zero lint errors (104 existing warnings), production build, 215-file load check, and all 52 Playwright specs represented in CI. No endpoint URL, request handling, CORS policy, cron path, or customer data changed.
 
-Deferred deployment check: deploy the resulting commit through the existing Git/Vercel flow. Pass requires the deployment to clear the Function-count phase on Hobby, complete successfully, and list/serve the same 12 endpoint routes. A Pro upgrade is not required for this correction. If the deployment still reports more than 12, inspect its generated Function list before consolidating unrelated endpoints.
+Deployment evidence: PR #236 passed all 57 required checks (plus the expected skipped Supabase preview), including Static QA, native desktop Rust, every browser-smoke shard, and a successful Vercel preview deployment. It squash-merged to `main` as `ce705cca6ce2c2fc928754fd37bee348fb0fb301`; Vercel then reported the production deployment complete. `https://www.yourownworld.co.uk/` returns HTTP 200 with the required security headers, and a missing-token POST to `/api/ai-proxy` returns the expected HTTP 401 from the deployed Function. The Function-count blocker is closed and no Pro upgrade is required.
 
 ## 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
 
