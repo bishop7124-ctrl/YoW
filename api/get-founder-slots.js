@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 
 /**
  * GET /api/get-founder-slots

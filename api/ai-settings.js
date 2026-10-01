@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 
 const PROVIDER_IDS = new Set(['google', 'anthropic', 'openrouter', 'openai'])
 const MAX_BODY_BYTES = 20_000

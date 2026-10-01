@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 import { checkDurableRateLimit, maybeCleanupRateLimitLog } from '../src/utils/durableRateLimit.js'
-import { applyCors } from './_lib/cors.js'
+import { applyCors } from './_cors.js'
 import { getMembership } from '../src/utils/membership.js'
 
 const MAX_LENGTHS = { name: 120, email: 254, projectType: 160, message: 1200, plan: 80, planLabel: 120, page: 240 }
