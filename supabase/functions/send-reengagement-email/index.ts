@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto'
-import { jsonResponse } from '../_shared/cors.ts'
+import { emailCorsHeaders, emailPreflightResponse, jsonResponse } from '../_shared/cors.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -156,8 +156,9 @@ function reengagementEmailHtml(copy: Copy, unsubscribeUrl: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } })
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
+  const respond = (body: unknown, status = 200) => jsonResponse(body, status, emailCorsHeaders(req))
+  if (req.method === 'OPTIONS') return emailPreflightResponse(req)
+  if (req.method !== 'POST') return respond({ error: 'Method not allowed' }, 405)
 
   // Only the trusted scheduler (api/send-reengagement-emails.js, the Vercel
   // Cron target) may call this — it's the only legitimate caller, and it
@@ -168,21 +169,21 @@ Deno.serve(async (req) => {
   // addresses. Fail closed if the secret itself isn't configured.
   if (!SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[send-reengagement-email] SUPABASE_SERVICE_ROLE_KEY is not configured')
-    return jsonResponse({ error: 'Not configured' }, 500)
+    return respond({ error: 'Not configured' }, 500)
   }
   if (req.headers.get('Authorization') !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) {
-    return jsonResponse({ error: 'Unauthorized' }, 401)
+    return respond({ error: 'Unauthorized' }, 401)
   }
   if (!REENGAGEMENT_UNSUBSCRIBE_SECRET) {
     console.error('[send-reengagement-email] REENGAGEMENT_UNSUBSCRIBE_SECRET is not configured')
-    return jsonResponse({ error: 'Not configured' }, 500)
+    return respond({ error: 'Not configured' }, 500)
   }
 
   let payload: Record<string, unknown>
   try {
     payload = await req.json()
   } catch {
-    return jsonResponse({ error: 'Invalid JSON' }, 400)
+    return respond({ error: 'Invalid JSON' }, 400)
   }
 
   const userId = payload?.user_id as string | undefined
@@ -191,7 +192,7 @@ Deno.serve(async (req) => {
   const hasProject = Boolean(payload?.hasProject)
 
   if (!userId || !email || !stage || !COPY[`${stage}_${hasProject ? 'active' : 'new'}`]) {
-    return jsonResponse({ error: 'Missing or invalid user_id, email, stage, or hasProject', payload }, 400)
+    return respond({ error: 'Missing or invalid user_id, email, stage, or hasProject', payload }, 400)
   }
 
   const copy = COPY[`${stage}_${hasProject ? 'active' : 'new'}`]
@@ -209,14 +210,15 @@ Deno.serve(async (req) => {
       to: [email],
       subject: copy.subject,
       html: reengagementEmailHtml(copy, unsubscribeUrl),
+      text: `${copy.heading}\n\n${copy.body}\n\n${copy.ctaLabel}: ${APP_URL}${copy.secondaryCtaLabel ? `\n${copy.secondaryCtaLabel}: ${APP_URL}` : ''}\n\nStop reminder emails: ${unsubscribeUrl}`,
     }),
   })
 
   if (!res.ok) {
     const body = await res.text()
     console.error('Resend error:', body)
-    return jsonResponse({ error: 'Failed to send email', detail: body }, 500)
+    return respond({ error: 'Failed to send email', detail: body }, 500)
   }
 
-  return jsonResponse({ sent: true, to: email, stage })
+  return respond({ sent: true, to: email, stage })
 })

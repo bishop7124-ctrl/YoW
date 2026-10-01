@@ -98,6 +98,45 @@ function PasswordRequirements({ id, value }) {
   )
 }
 
+function PasswordField({ label = 'password', className = '', ...inputProps }) {
+  const [isVisible, setIsVisible] = useState(false)
+  const normalizedLabel = label.toLowerCase()
+  const accessibleLabel = normalizedLabel.charAt(0).toUpperCase() + normalizedLabel.slice(1)
+
+  return (
+    <div className="password-field">
+      <input
+        {...inputProps}
+        type={isVisible ? 'text' : 'password'}
+        aria-label={accessibleLabel}
+        className={`${className} password-field-input`.trim()}
+      />
+      <button
+        type="button"
+        className="password-visibility-toggle"
+        aria-label={`${isVisible ? 'Hide' : 'Show'} ${normalizedLabel}`}
+        aria-pressed={isVisible}
+        title={`${isVisible ? 'Hide' : 'Show'} ${normalizedLabel}`}
+        onClick={() => setIsVisible(visible => !visible)}
+      >
+        {isVisible ? (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 3l18 18" />
+            <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
+            <path d="M9.9 4.3A10.8 10.8 0 0 1 12 4c5.5 0 9 6 9 6a16.5 16.5 0 0 1-2.1 2.7" />
+            <path d="M6.6 6.6C4.4 8.1 3 10 3 10s3.5 6 9 6c1 0 1.9-.2 2.7-.5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 10s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z" />
+            <circle cx="12" cy="10" r="2.5" />
+          </svg>
+        )}
+      </button>
+    </div>
+  )
+}
+
 export default function LoginPage({
   onOpenLegal,
   onOpenAbout,
@@ -125,6 +164,7 @@ export default function LoginPage({
   const [pwdUpdated, setPwdUpdated] = useState(false)
   const isDesktop = variant === 'desktop'
   const activeScreen = recoveryMode ? 'newPassword' : screen
+  const isPasswordFlow = activeScreen === 'newPassword' || mode === 'reset' || resetSent
 
   // Surface auth errors that Supabase encodes in the URL hash (e.g. expired link)
   useEffect(() => {
@@ -281,7 +321,7 @@ export default function LoginPage({
   }
 
   return (
-    <div className="auth-shell min-h-screen p-6 text-[var(--text-main)]">
+    <div className={`auth-shell${isPasswordFlow ? ' auth-shell--password-flow' : ''} min-h-screen p-6 text-[var(--text-main)]`}>
       <div className={`${isDesktop ? 'mx-auto flex min-h-[calc(100vh-48px)] max-w-md items-center justify-center' : 'auth-frame mx-auto grid min-h-[calc(100vh-48px)] max-w-6xl grid-cols-[minmax(300px,440px)_minmax(0,1fr)] overflow-hidden max-lg:grid-cols-1'}`}>
 
         {/* Left panel */}
@@ -373,8 +413,8 @@ export default function LoginPage({
                     </p>
                   </div>
                   <form onSubmit={handleNewPassword} className="auth-form space-y-3">
-                    <input
-                      type="password"
+                    <PasswordField
+                      label="new password"
                       placeholder="New password"
                       value={newPwd}
                       onChange={e => setNewPwd(e.target.value)}
@@ -384,8 +424,8 @@ export default function LoginPage({
                       className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
                     <PasswordRequirements id="new-password-requirements" value={newPwd} />
-                    <input
-                      type="password"
+                    <PasswordField
+                      label="confirm new password"
                       placeholder="Confirm new password"
                       value={confirmPwd}
                       onChange={e => setConfirmPwd(e.target.value)}
@@ -546,8 +586,8 @@ export default function LoginPage({
                       required
                       className="field w-full px-4 py-3 text-base placeholder:text-[var(--text-muted)]"
                     />
-                    <input
-                      type="password"
+                    <PasswordField
+                      label="password"
                       placeholder="Password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}

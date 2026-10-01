@@ -9,12 +9,24 @@ const sceneMigrationUrl = new URL(
   '../../supabase/migrations/20260912193000_scene_optimistic_concurrency.sql',
   import.meta.url,
 )
+const defaultPrivilegesFixUrl = new URL(
+  '../../supabase/migrations/20260930211500_fix_function_default_privileges.sql',
+  import.meta.url,
+)
 
 describe('security-definer RPC hardening migration', () => {
   it('removes unintended public and signed-in execution grants', async () => {
-    const sql = await readFile(migrationUrl, 'utf8')
+    const [sql, defaultPrivilegesFix] = await Promise.all([
+      readFile(migrationUrl, 'utf8'),
+      readFile(defaultPrivilegesFixUrl, 'utf8'),
+    ])
 
-    expect(sql).toContain('ALTER DEFAULT PRIVILEGES IN SCHEMA public')
+    expect(defaultPrivilegesFix).toMatch(
+      /ALTER DEFAULT PRIVILEGES\s+REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;/,
+    )
+    expect(defaultPrivilegesFix).toMatch(
+      /ALTER DEFAULT PRIVILEGES IN SCHEMA public\s+REVOKE EXECUTE ON FUNCTIONS FROM anon, authenticated;/,
+    )
     expect(sql).toMatch(
       /REVOKE ALL ON FUNCTION public\.claim_founder_slot\(UUID\)\s+FROM PUBLIC, anon, authenticated;/,
     )

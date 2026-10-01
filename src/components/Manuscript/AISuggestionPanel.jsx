@@ -4,6 +4,7 @@ import { getActiveAiConfig } from '../../utils/aiSettings'
 import { getProjectType } from '../../constants/projectTypes'
 import { buildProjectTypePromptContext } from '../../utils/aiToolPrompts'
 import { AI_CONFIG_REQUIRED_TEXT, AiUpgradeRequiredNotice, openAiSettings } from '../ai/AiConfigRequired'
+import { REWRITE_CHUNK_CHAR_LIMIT, REWRITE_MAX_OUTPUT_TOKENS, splitRewriteText } from './aiRewriteChunks.js'
 
 const QUICK_PROMPTS = [
   { label: 'Continue', text: "Continue writing this scene naturally from where it ends. Match the author's existing style, voice, tone, and POV. Write 2-3 paragraphs." },
@@ -45,7 +46,7 @@ function buildRewritePrompt(kind, target, itemLabel, hasSelectedText) {
   ].join(' ')
 }
 
-function buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText = '') {
+function buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText = '', contextOverride) {
   const typeCfg = getProjectType(activeNovel?.type)
   const itemLabel = typeCfg.structure?.level3 || 'Scene'
   const lines = [
@@ -61,26 +62,30 @@ function buildSystemPrompt(activeNovel, activeScene, characters, locations, sele
   if (locations?.length) {
     lines.push('Locations: ' + locations.slice(0, 5).map(l => l.name).join(', '))
   }
-  const highlighted = selectedText.trim()
-  const sceneText = activeScene?.content?.trim() || ''
+  const hasContextOverride = typeof contextOverride === 'string'
+  const highlighted = (hasContextOverride ? contextOverride : selectedText).trim()
+  const sceneText = hasContextOverride ? '' : (activeScene?.content?.trim() || '')
   if (highlighted || sceneText) {
-    lines.push(`\n--- ${highlighted ? 'HIGHLIGHTED TEXT' : `CURRENT ${itemLabel.toUpperCase()}`} ---`)
+    const contextLabel = hasContextOverride ? 'TEXT TO REWRITE' : (highlighted ? 'HIGHLIGHTED TEXT' : `CURRENT ${itemLabel.toUpperCase()}`)
+    lines.push(`\n--- ${contextLabel} ---`)
     if (activeScene?.pov) lines.push(`POV: ${activeScene.pov}`)
     if (activeScene?.locationTag) lines.push(`Location: ${activeScene.locationTag}`)
     lines.push(highlighted || sceneText)
-    lines.push(`--- END ${highlighted ? 'HIGHLIGHTED TEXT' : itemLabel.toUpperCase()} ---`)
+    lines.push(`--- END ${contextLabel} ---`)
   }
   return lines.join('\n')
 }
 
-export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, selectedText = '', onAppendToScene, onReplaceSelection, userId = null, membership = null }) {
+export default function AISuggestionPanel({ activeScene, activeNovel, characters, locations, selectedText = '', onAppendToScene, onReplaceSelection, onReplaceScene, userId = null, membership = null }) {
   const [prompt, setPrompt] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
   const [targetPov, setTargetPov] = useState(POV_OPTIONS[0].value)
   const [targetTense, setTargetTense] = useState(TENSE_OPTIONS[0].value)
+  const [rewriteProgress, setRewriteProgress] = useState(null)
   const abortRef = useRef(false)
+  const suggestionRef = useRef('')
 
   const configured = !!loadAIConfig(userId)
   const activeType = getProjectType(activeNovel?.type)
@@ -91,28 +96,90 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     text: q.text.replaceAll('scene', itemLabel.toLowerCase()).replaceAll('Scene', itemLabel),
   }))
 
-  const generate = useCallback((overridePrompt) => {
+  const generate = useCallback((overridePrompt, options = {}) => {
     const config = loadAIConfig(userId)
     if (!config) { setError(AI_CONFIG_REQUIRED_TEXT); return }
     const userText = (overridePrompt || prompt).trim()
     if (!userText) return
 
     setError('')
-    setSuggestion('')
+    const baseSuggestion = options.append ? suggestionRef.current.trimEnd() : ''
+    if (!options.append) {
+      suggestionRef.current = ''
+      setSuggestion('')
+      if (!options.rewrite) setRewriteProgress(null)
+    }
     setStreaming(true)
     abortRef.current = false
 
     let buf = ''
+    const joiner = options.joiner || ''
     streamMessage({
 	      ...config,
-	      systemPrompt: buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText),
+	      systemPrompt: buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText, options.contextText),
       messages: [{ role: 'user', content: userText }],
-      maxTokens: 800,
-      onChunk: c => { if (!abortRef.current) { buf += c; setSuggestion(buf) } },
-      onDone:  ()  => { if (!abortRef.current) setStreaming(false) },
-      onError: e   => { if (!abortRef.current) { setError(e); setStreaming(false) } },
+      maxTokens: options.rewrite ? REWRITE_MAX_OUTPUT_TOKENS : 800,
+      onChunk: c => {
+        if (abortRef.current) return
+        buf += c
+        const combined = `${baseSuggestion}${baseSuggestion ? joiner : ''}${buf}`
+        suggestionRef.current = combined
+        setSuggestion(combined)
+      },
+      onDone:  ()  => {
+        if (abortRef.current) return
+        setStreaming(false)
+        if (!buf.trim()) {
+          setError('The AI returned no rewritten text. Try this chunk again.')
+          return
+        }
+        if (options.rewrite) {
+          setRewriteProgress(current => current ? { ...current, completedChunks: options.chunkIndex + 1 } : current)
+        }
+      },
+      onError: e   => {
+        if (abortRef.current) return
+        // A provider can fail after streaming part of a later chunk. Roll that
+        // incomplete fragment back so Retry/Continue cannot duplicate it.
+        if (options.rewrite) {
+          suggestionRef.current = baseSuggestion
+          setSuggestion(baseSuggestion)
+        }
+        setError(e)
+        setStreaming(false)
+      },
     })
 	  }, [prompt, activeScene, activeNovel, characters, locations, selectedText, userId])
+
+  const startRewrite = (kind, target) => {
+    if (!activeScene) return
+    const source = selectedText.trim() || activeScene.content?.trim() || ''
+    const chunks = splitRewriteText(source)
+    if (!chunks.length) return
+    const rewrite = { kind, target, chunks, completedChunks: 0, sourceCharacters: source.length }
+    setPrompt('')
+    setRewriteProgress(rewrite)
+    generate(buildRewritePrompt(kind, target, itemLabel, hasSelectedText), {
+      rewrite: true,
+      contextText: chunks[0].text,
+      chunkIndex: 0,
+      joiner: chunks[0].joiner,
+    })
+  }
+
+  const continueRewrite = () => {
+    if (!rewriteProgress || streaming) return
+    const chunkIndex = rewriteProgress.completedChunks
+    const chunk = rewriteProgress.chunks[chunkIndex]
+    if (!chunk) return
+    generate(buildRewritePrompt(rewriteProgress.kind, rewriteProgress.target, itemLabel, hasSelectedText), {
+      rewrite: true,
+      append: true,
+      contextText: chunk.text,
+      chunkIndex,
+      joiner: chunk.joiner,
+    })
+  }
 
   const handleStop = () => { abortRef.current = true; setStreaming(false) }
 
@@ -120,12 +187,17 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     if (!suggestion.trim() || !activeScene) return
     onAppendToScene(activeScene.id, suggestion.trim())
     setSuggestion('')
+    suggestionRef.current = ''
+    setRewriteProgress(null)
   }
 
   const handleReplace = () => {
-    if (!suggestion.trim() || !activeScene || !hasSelectedText) return
-    onReplaceSelection(activeScene.id, suggestion.trim())
+    if (!suggestion.trim() || !activeScene) return
+    if (hasSelectedText) onReplaceSelection(activeScene.id, suggestion.trim())
+    else onReplaceScene?.(activeScene.id, suggestion.trim())
     setSuggestion('')
+    suggestionRef.current = ''
+    setRewriteProgress(null)
   }
 
   const handleCopy = () => {
@@ -226,8 +298,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
                 disabled={streaming || !activeScene}
                 title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
                 onClick={() => {
-                  setPrompt('')
-                  generate(buildRewritePrompt('pov', targetPov, itemLabel, hasSelectedText))
+                  startRewrite('pov', targetPov)
                 }}
               >
                 Change
@@ -253,14 +324,16 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
                 disabled={streaming || !activeScene}
                 title={activeScene ? undefined : `Focus a ${itemLabel.toLowerCase()} first`}
                 onClick={() => {
-                  setPrompt('')
-                  generate(buildRewritePrompt('tense', targetTense, itemLabel, hasSelectedText))
+                  startRewrite('tense', targetTense)
                 }}
               >
                 Change
               </button>
             </div>
           </label>
+          <p className="ai-rewrite-limit">
+            Rewrites use up to {REWRITE_CHUNK_CHAR_LIMIT.toLocaleString()} characters per request. Longer text is split at paragraph or word boundaries.
+          </p>
         </div>
       </details>
 
@@ -270,31 +343,47 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
       {/* Streaming output */}
       {suggestion && (
         <>
-          <div className="ms-panel-section-header" style={{ marginTop: 14 }}>Suggestion</div>
+          <div className="ms-panel-section-header" style={{ marginTop: 14 }}>
+            {rewriteProgress ? 'Rewritten prose' : 'Suggestion'}
+          </div>
+          {rewriteProgress && (
+            <div className="ai-rewrite-progress" role="status" aria-live="polite">
+              {streaming
+                ? `Rewriting chunk ${rewriteProgress.completedChunks + 1} of ${rewriteProgress.chunks.length}…`
+                : rewriteProgress.completedChunks < rewriteProgress.chunks.length
+                  ? `Chunk ${rewriteProgress.completedChunks} of ${rewriteProgress.chunks.length} is ready. Review it, then continue.`
+                  : `All ${rewriteProgress.chunks.length} ${rewriteProgress.chunks.length === 1 ? 'chunk' : 'chunks'} complete.`}
+            </div>
+          )}
           <div className="ai-output">
             {suggestion}
             {streaming && <span className="ai-cursor" />}
           </div>
           {!streaming && (
             <div className="ai-output-actions">
+              {rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length && (
+                <button className="ai-btn ai-btn--primary" onClick={continueRewrite}>
+                  Continue with chunk {rewriteProgress.completedChunks + 1} of {rewriteProgress.chunks.length}
+                </button>
+              )}
               <button
-                className="ai-btn ai-btn--primary"
+                className={`ai-btn${rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length ? '' : ' ai-btn--primary'}`}
                 onClick={handleAppend}
-                disabled={!activeScene}
-                title={activeScene ? undefined : 'Focus a scene first'}
+                disabled={!activeScene || (rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length)}
+                title={rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length ? 'Finish every chunk before inserting the rewrite' : (activeScene ? undefined : 'Focus a scene first')}
               >
 	                Insert at cursor
               </button>
               <button
                 className="ai-btn"
                 onClick={handleReplace}
-                disabled={!activeScene || !hasSelectedText}
-                title={hasSelectedText ? 'Replace the highlighted text' : 'Highlight text in the scene first'}
+                disabled={!activeScene || (!hasSelectedText && !onReplaceScene) || (rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length)}
+                title={rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length ? 'Finish every chunk before replacing text' : (hasSelectedText ? 'Replace the highlighted text' : 'Replace the focused scene')}
               >
-                Replace
+                {hasSelectedText ? 'Replace selection' : 'Replace scene'}
               </button>
               <button className="ai-btn" onClick={handleCopy}>Copy</button>
-              <button className="ai-btn ai-btn--muted" onClick={() => setSuggestion('')}>Discard</button>
+              <button className="ai-btn ai-btn--muted" onClick={() => { setSuggestion(''); suggestionRef.current = ''; setRewriteProgress(null) }}>Discard</button>
             </div>
           )}
         </>

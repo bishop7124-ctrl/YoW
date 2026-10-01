@@ -1,5 +1,19 @@
 # YOW Deferred QA Plan
 
+## 2026-10-02 diverged-main recovery
+
+Status: **Recovery candidate passes locally; production verification pending merge.** GitHub `main` and the shared checkout had diverged after a history rewrite. The only local-only source additions were traced to checkpoint `fe5b98ea` (also preserved at `origin/codex/outstanding-workspace-2026-10-01`) and were replayed onto current `origin/main` with the newer remote-side work kept authoritative.
+
+Recovered scope: Manuscript Discovery plus its local evidence-first extractor/importer; plain-text and unstyled-DOCX manuscript structure detection; long-scene AI rewrite chunking and whole-scene replacement; GPT-6/OpenAI output-token handling and model guidance; login/password-recovery usability; the minimisable support link; email CORS/text fallbacks; default-function privilege hardening; and the two operational inspection scripts. The current AI Import archive/PDF/schema hardening from `origin/main` remains intact. Generated planning exports were not included in the production candidate. Stale static-routing assertions and the deliberately reverted Nocturne Grove border change were also excluded.
+
+Automated evidence:
+
+- Focused recovery run: 13/13 test files, 228/228 tests.
+- Full `npm run qa`: 144/144 test files, 1,402/1,402 tests; lint has zero errors and the existing 104 warnings; production build passes; 225 local files resolve/parse; all 52 Playwright specs are represented in CI; all 12 Vercel API modules import cleanly.
+- `git diff --check` passes.
+
+Post-merge checks: confirm the Vercel production deployment completed from the merge commit; on the live Library Import menu confirm `Manuscript Discovery`, `AI Import`, and `Import ZIP` are present; upload one disposable TXT or DOCX and stop on the review screen after confirming discovered categories/evidence render (do not create a project unless the owner wants a live mutation); confirm Account Settings renders the selected-model guidance without changing the saved provider/key/model; confirm password visibility toggles on sign-in and reset screens.
+
 ## 2026-10-01 cloud-expiry lifecycle, idle logout, canonical redirect and security headers
 
 Status: **In progress 2026-10-01 — automated and read-only production checks pass; wording approved; signed-in live checks and email wiring pending.**
