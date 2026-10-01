@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import runAccountLifecycle from './_runAccountLifecycle.js'
 
 // Vercel Cron target (see vercel.json "crons"), runs once daily.
 // Finds signups who never really came back and sends the appropriate
@@ -37,6 +38,10 @@ export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
+
+  // Vercel Hobby allows only 12 Functions, so the account-lifecycle job rides on this
+  // route instead of having its own file. It does its own CRON_SECRET check.
+  if (req.query?.job === 'lifecycle') return runAccountLifecycle(req, res)
 
   // Vercel Cron sends `Authorization: Bearer $CRON_SECRET` automatically
   // when CRON_SECRET is set as a project env var — reject anything else so

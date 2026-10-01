@@ -1,5 +1,24 @@
 # YOW Deferred QA Plan
 
+## 2026-10-01 cloud-expiry lifecycle, idle logout, canonical redirect and security headers
+
+Status: **In progress 2026-10-01 — automated and read-only production checks pass; wording approved; signed-in live checks and email wiring pending.**
+
+Required checks (kept until each is evidenced):
+- ✅ Lifecycle policy matrix (`tests/api/account-lifecycle.test.js`, 32 tests): pre-expiry notices at 30/14/7/1, 90-day grace with export and writes allowed, missed-notice catch-up one at a time, final notice day 83, archive only after grace + recorded final notice and never delete for Lifetime, Free deleted only after 18 months + 90 days + final notice, sign-in resets the clock, irreversible-step guard, protected accounts (Founder/Monthly/trialing/Beta/Stripe customer/admin/held) never swept, notice wording never says licence expired or promises deletion of paid data, migration is service-role-only, handler fails closed and is report-only (no insert/update/delete/email calls).
+- ✅ Idle logout (`src/context/AuthContext.test.jsx`): stale >24h signs out and keeps unsaved local writing/project data; just under 24h stays signed in; desktop never idle-logged-out.
+- ✅ Production edge (`node scripts/check-production-edge.mjs`, run 2026-10-01 06:25 UTC from the cloud session, read-only GETs): 22/22 pass. Bare domain returns 308 to `www` with path and query preserved on `/`, `/pricing?plan=lifetime&utm_source=check`, `/features/ai?x=1`; http upgrades to https; nosniff, X-Frame-Options DENY, Referrer-Policy strict-origin-when-cross-origin, HSTS (2y, includeSubDomains), CSP (default-src 'self', frame-ancestors/object-src none, no unsafe-inline/eval scripts) and Permissions-Policy present on `/`, `/pricing` and a missing path. Note: the apex 308 response carries HSTS without includeSubDomains (Vercel-added); the www response carries the full policy.
+- ⏳ Live idle-logout with a designated test account (force stale timestamp, confirm clean sign-out and projects intact after sign-in): needs a test login; schedule with a credentialed run.
+- ⏳ Cross-tab auth across the www redirect: signed-in run needed.
+- ✅ Email sending + archive executor (`tests/api/account-lifecycle.test.js`, 48 tests): nothing happens without BOTH the env setting and the `?send=1`/`?archive=1` flag; missing `RESEND_API_KEY` sends and records nothing; ledger row is inserted before the Resend call; an existing ledger row (unique violation or already listed) is never re-sent; Resend refusal frees the row, network error keeps it; max 20 emails and 20 archives per run; archive requires grace over + final notice recorded >=7 days ago, stamps only `app_metadata.cloud_archived_at`, skips already-archived and deletes nothing; Free accounts are never deleted; cron scheduled daily in `vercel.json`.
+- ⏳ Apply the lifecycle migration, set `CRON_SECRET`/`RESEND_API_KEY` in Vercel, and run `/api/send-reengagement-emails?job=lifecycle` against production with both settings OFF; review the first report (counts only). Only then turn `ACCOUNT_LIFECYCLE_SEND_EMAILS` on, confirm one real notice arrives and the ledger row exists, and only after that consider `ACCOUNT_LIFECYCLE_ARCHIVE`.
+- ⏳ Client `getMembership()` does not yet read `cloud_archived_at` (it derives archive by date); decide whether it should.
+- ✅ Owner approval of notice wording (`buildNotice`), 2026-10-01.
+
+Automated gate: `npm run qa` passed 2026-10-02 (after send+archive): 138 test files / 1,333 tests (after merging main, 12 Vercel Functions), 0 lint errors, build/load/e2e-matrix/API-ESM checks pass.
+- ℹ️ Client-side companion (added same day, `src/utils/cloudLifecycle.js` + `getMembership()`): exposes `cloudLifecyclePhase`/`isCloudGrace`/`isCloudArchived`/`cloudGraceDaysRemaining` and turns `canSyncCloud` off once archived (renewal restores it); covered by `src/utils/cloudLifecycle.test.js` and two `membership.test.js` cases. The server-side report-only sweep is `api/_runAccountLifecycle.js` (reached at `/api/send-reengagement-emails?job=lifecycle`, because Vercel Hobby is capped at 12 Functions); an earlier duplicate planner (`api/cloud-lifecycle.js`) was removed.
+
+
 ## 2026-10-01 Vercel Hobby 12-Function deployment cap
 
 Status: **Done 2026-10-01 — the Hobby deployment succeeds with 12 Functions.** Vercel rejected the earlier deployment because the 12 real API endpoints plus `api/_lib/cors.js` were discovered as 13 Functions. The shared helper now lives at `api/_cors.js`; Vercel documents underscore-prefixed utility filenames as ignored Function entrypoints, while endpoint imports still bundle the helper normally.

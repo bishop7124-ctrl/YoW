@@ -142,6 +142,30 @@ describe('AuthProvider session policy', () => {
     expect(trackEvent).toHaveBeenCalledWith('auto_logout_idle', { idle_hours: 24, platform: 'web' })
   })
 
+  it('idle sign-out keeps unsaved local writing and project data on the device', async () => {
+    localStorage.setItem('nf_scene_content_s1', '<p>Chapter one draft that is not yet synced</p>')
+    localStorage.setItem('nf_projects', JSON.stringify([{ id: 'p1', title: 'Keep me' }]))
+    localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(Date.now() - WEB_IDLE_LOGOUT_MS - 1000))
+    mocks.session = { user: { id: 'user-1' }, expires_at: Math.floor(Date.now() / 1000) + 3600 }
+
+    render(<AuthProvider><Probe /></AuthProvider>)
+
+    await waitFor(() => expect(supabase.auth.signOut).toHaveBeenCalled())
+    expect(localStorage.getItem('nf_scene_content_s1')).toBe('<p>Chapter one draft that is not yet synced</p>')
+    expect(JSON.parse(localStorage.getItem('nf_projects'))).toEqual([{ id: 'p1', title: 'Keep me' }])
+    expect(localStorage.getItem(WEB_LAST_ACTIVITY_KEY)).toBeNull()
+  })
+
+  it('does not sign out a session whose last activity is just inside 24 hours', async () => {
+    localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(Date.now() - WEB_IDLE_LOGOUT_MS + 60_000))
+    mocks.session = { user: { id: 'user-1' }, expires_at: Math.floor(Date.now() / 1000) + 3600 }
+
+    render(<AuthProvider><Probe /></AuthProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('user-id').textContent).toBe('user-1'))
+    expect(supabase.auth.signOut).not.toHaveBeenCalled()
+  })
+
   it('does not auto-log out stale desktop sessions', async () => {
     mocks.desktop = true
     localStorage.setItem(WEB_LAST_ACTIVITY_KEY, String(Date.now() - WEB_IDLE_LOGOUT_MS - 1000))
