@@ -122,9 +122,7 @@ export default async function handler(req, res) {
       .filter((entry) => entry.track)
 
     const ids = swept.map((entry) => entry.user.id)
-    const sentByUser = new Map()
-    const sentAtByEvent = new Map()
-    const anchorByEvent = new Map()
+    const rowsByUser = new Map()
     if (ids.length > 0) {
       const { data, error } = await supabase
         .from('account_lifecycle_events')
@@ -133,10 +131,8 @@ export default async function handler(req, res) {
       if (error) throw error
       for (const row of data || []) {
         const key = `${row.user_id}:${row.track}`
-        if (!sentByUser.has(key)) sentByUser.set(key, [])
-        sentByUser.get(key).push(row.event_key)
-        sentAtByEvent.set(`${key}:${row.event_key}`, row.created_at)
-        anchorByEvent.set(`${key}:${row.event_key}`, row.anchor_at)
+        if (!rowsByUser.has(key)) rowsByUser.set(key, [])
+        rowsByUser.get(key).push(row)
       }
     }
 
@@ -148,11 +144,20 @@ export default async function handler(req, res) {
     for (const { user, track } of swept) {
       const anchor = track === 'hosting_lapsed' ? hostingEndsAt(user) : lastActivityAt(user)
       const ledgerKey = `${user.id}:${track}`
+      // A ledger row belongs to the cycle it was written for (its anchor_at). If the account has
+      // since signed in (Free) or renewed (Lifetime) its anchor moved on, so older rows are from a
+      // finished cycle: they must not count as "already sent" for the new one.
+      const anchorTime = anchor ? new Date(anchor).getTime() : null
+      const ledgerRows = rowsByUser.get(ledgerKey) || []
+      const isStale = (r) => anchorTime != null && r.anchor_at != null && new Date(r.anchor_at).getTime() < anchorTime
+      const freshRows = ledgerRows.filter((r) => !isStale(r))
+      const staleKeys = ledgerRows.filter(isStale).map((r) => r.event_key)
+      const freshRow = (eventKey) => freshRows.find((r) => r.event_key === eventKey)
       const classification = classifyLifecycle({
         track,
         anchor,
         now,
-        sentNoticeKeys: sentByUser.get(ledgerKey) || [],
+        sentNoticeKeys: freshRows.map((r) => r.event_key),
         archivedAt: track === 'hosting_lapsed' && isArchiveStampCurrent(user.app_metadata?.cloud_archived_at, anchor)
           ? user.app_metadata.cloud_archived_at
           : null,
@@ -166,7 +171,7 @@ export default async function handler(req, res) {
           daysLeft: GRACE_DAYS - (classification.dayOffset ?? 0),
           deadline: graceEndsAt(track, anchor),
         })
-        sendQueue.push({ user, track, noticeKey, anchor, notice, final: Boolean(notice?.final) })
+        sendQueue.push({ user, track, noticeKey, anchor, notice, final: Boolean(notice?.final), staleKeys })
         return notice
       }
 
@@ -176,7 +181,7 @@ export default async function handler(req, res) {
       } else if (classification.action === 'archive') {
         report.archiveDecisions.push(row)
         if (track === 'hosting_lapsed') {
-          const finalNoticeSentAt = sentAtByEvent.get(`${ledgerKey}:${finalNoticeKeyFor(track)}`)
+          const finalNoticeSentAt = freshRow(finalNoticeKeyFor(track))?.created_at
           if (mayExecuteIrreversible({ classification, finalNoticeSentAt, lastActivity: lastActivityAt(user), now })) {
             archiveQueue.push({ user, track, anchor })
           }
@@ -184,9 +189,9 @@ export default async function handler(req, res) {
       } else if (classification.action === 'delete') {
         report.deleteDecisions.push(row)
         if (track === 'free_inactive') {
-          const finalNoticeSentAt = sentAtByEvent.get(`${ledgerKey}:${finalNoticeKeyFor(track)}`)
+          const finalNoticeSentAt = freshRow(finalNoticeKeyFor(track))?.created_at
           // The activity date the first warning was based on; any later sign-in is a response.
-          const anchorSeenAtNotice = anchorByEvent.get(`${ledgerKey}:inactive_0`) ?? anchorByEvent.get(`${ledgerKey}:${finalNoticeKeyFor(track)}`)
+          const anchorSeenAtNotice = (freshRow('inactive_0') ?? freshRow(finalNoticeKeyFor(track)))?.anchor_at
           const lastActivity = lastActivityAt(user)
           if (mayExecuteIrreversible({ classification, finalNoticeSentAt, lastActivity, anchorSeenAtNotice, now })) {
             deleteQueue.push({ user, track, anchor, finalNoticeSentAt, lastActivity })
@@ -224,6 +229,16 @@ export default async function handler(req, res) {
           track: item.track,
           event_key: item.noticeKey,
           anchor_at: item.anchor ? new Date(item.anchor).toISOString() : null,
+        }
+        // A row for this key left over from an earlier, finished cycle would block this notice
+        // (primary key), so clear just that one first.
+        if (item.staleKeys.includes(item.noticeKey)) {
+          await supabase
+            .from('account_lifecycle_events')
+            .delete()
+            .eq('user_id', item.user.id)
+            .eq('track', item.track)
+            .eq('event_key', item.noticeKey)
         }
         // Record FIRST. If this row already exists the notice was sent (or is being sent).
         const { error: insertError } = await supabase.from('account_lifecycle_events').insert(eventRow)
