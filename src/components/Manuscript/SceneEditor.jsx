@@ -2020,6 +2020,14 @@ const SceneEditorImpl = ({
 	    }
 	    window.setTimeout(() => {
 	      if (wrapperRef.current?.contains(document.activeElement)) return
+	      // Safari blurs the active textarea when the user switches browser tabs.
+	      // Releasing the presence lease here lets the newly-visible tab enter the
+	      // same scene before it can learn that the first tab is still the editor,
+	      // defeating the first-editor safety gate. Keep the editing session (and
+	      // its heartbeat) alive while this document is hidden. A normal visible-
+	      // tab blur still exits editing below, and a closed tab is removed by the
+	      // presence channel's bye/staleness handling.
+	      if (document.visibilityState === 'hidden') return
 	      if (keepEditingOnExternalBlur) return
 	      setFocused(false)
 	      setFloatingNotePos(null)

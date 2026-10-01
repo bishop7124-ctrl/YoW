@@ -92,6 +92,12 @@ function extractParaText(para) {
 // does).
 const ACT_RE = /^(act|part)\s*[\divxlcdm]+/i
 const CHAPTER_RE = /^(chapter|ch\.?\s*\d+|prologue|epilogue|interlude|coda|preface|afterword)/i
+const NUMBER_WORD_RE = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)'
+const UNSTYLED_ACT_RE = new RegExp(`^(?:act|part|book)\\s+(?:\\d+|[ivxlcdm]+|${NUMBER_WORD_RE})\\b(?:\\s*[:—-]\\s*.+)?$`, 'i')
+const UNSTYLED_CHAPTER_RE = new RegExp(`^(?:chapter\\s+(?:\\d+|[ivxlcdm]+|${NUMBER_WORD_RE})\\b(?:\\s*[:—-]\\s*.+)?|ch\\.?\\s*(?:\\d+|[ivxlcdm]+)\\b(?:\\s*[:—-]\\s*.+)?|prologue|epilogue|interlude|coda|preface|afterword)(?:\\s*[:—-]\\s*.+)?$`, 'i')
+const UNSTYLED_SCENE_RE = /^(?:scene)\s+(?:\d+|[ivxlcdm]+)\b(?:\s*[:—-]\s*.+)?$/i
+const NUMBERED_TITLE_RE = /^(?:\d{1,3}[.)]?|[IVXLCDM]{2,8}[.)]?)(?:\s+.{1,100})?$/
+const MIN_INFERRED_CHAPTER_WORDS = 80
 
 // A second, independent guard against a heading style mis-applied to body
 // text: even when every individual paragraph is short enough to pass the
@@ -176,7 +182,82 @@ function detectMode(paragraphs) {
   return 'flat'
 }
 
-function buildStructure(paragraphs) {
+function isShortAllCapsTitle(text) {
+  const value = String(text || '').trim()
+  if (!value || value.length > 120 || /[.!?][”"']?$/.test(value)) return false
+  const words = value.split(/\s+/)
+  if (words.length > 12) return false
+  const letters = value.match(/\p{L}/gu) || []
+  return letters.length >= 2 && letters.every(letter => letter === letter.toLocaleUpperCase())
+}
+
+function wordCountBetween(paragraphs, start, end) {
+  let count = 0
+  for (let index = start; index < end; index += 1) {
+    count += String(paragraphs[index]?.text || '').trim().split(/\s+/).filter(Boolean).length
+  }
+  return count
+}
+
+function stripHeadingDecoration(text) {
+  return String(text || '').trim().replace(/^[—–-]+\s*/, '').replace(/\s*[—–-]+$/, '').trim()
+}
+
+function isStandaloneHeadingSubtitle(text) {
+  const value = String(text || '').trim()
+  if (!value || value.length > 100 || /[.!?][”"']?$/.test(value) || isSceneBreak(value)) return false
+  return value.split(/\s+/).length <= 12
+}
+
+function inferUnstyledStructure(paragraphs) {
+  const structuralText = paragraph => stripHeadingDecoration(paragraph.text)
+  const hasActLabels = paragraphs.some(paragraph => UNSTYLED_ACT_RE.test(structuralText(paragraph)))
+  const consumedSubtitles = new Set()
+  let inferred = paragraphs.map((paragraph, index) => {
+    if (paragraph.level) return paragraph
+    const rawText = String(paragraph.text || '').trim()
+    const text = structuralText(paragraph)
+    if (!text || text.length > MAX_PLAUSIBLE_HEADING_LENGTH) return paragraph
+    if (UNSTYLED_ACT_RE.test(text)) return { ...paragraph, level: 1, sceneBreak: false }
+    if (UNSTYLED_CHAPTER_RE.test(text)) {
+      let title = text
+      const decorated = rawText !== text && /^[—–-]/.test(rawText) && /[—–-]$/.test(rawText)
+      if (decorated) {
+        const subtitleIndex = paragraphs.findIndex((candidate, candidateIndex) => candidateIndex > index && String(candidate.text || '').trim())
+        const subtitle = subtitleIndex >= 0 ? String(paragraphs[subtitleIndex].text || '').trim() : ''
+        if (subtitleIndex >= 0 && isStandaloneHeadingSubtitle(subtitle) && !UNSTYLED_CHAPTER_RE.test(stripHeadingDecoration(subtitle))) {
+          title = `${text} — ${subtitle}`
+          consumedSubtitles.add(subtitleIndex)
+        }
+      }
+      return { ...paragraph, text: title, level: hasActLabels ? 2 : 1, sceneBreak: false }
+    }
+    if (UNSTYLED_SCENE_RE.test(text)) return { ...paragraph, level: hasActLabels ? 3 : 2, sceneBreak: false }
+    return paragraph
+  })
+  if (consumedSubtitles.size) inferred = inferred.map((paragraph, index) => consumedSubtitles.has(index) ? { ...paragraph, text: '', sceneBreak: false } : paragraph)
+
+  // Explicit labels and real heading styles take precedence. Only infer
+  // unlabelled chapter titles when the file otherwise has no structure.
+  if (inferred.some(paragraph => paragraph.level)) return inferred
+
+  const candidates = []
+  inferred.forEach((paragraph, index) => {
+    const text = String(paragraph.text || '').trim()
+    if (NUMBERED_TITLE_RE.test(text) || isShortAllCapsTitle(text)) candidates.push(index)
+  })
+  const plausible = candidates.filter((index, candidateIndex) => {
+    const nextIndex = candidates[candidateIndex + 1] ?? inferred.length
+    return wordCountBetween(inferred, index + 1, nextIndex) >= MIN_INFERRED_CHAPTER_WORDS
+  })
+  if (plausible.length < 2) return inferred
+  const chapterIndexes = new Set(plausible)
+  inferred = inferred.map((paragraph, index) => chapterIndexes.has(index) ? { ...paragraph, level: 1, sceneBreak: false } : paragraph)
+  return inferred
+}
+
+export function buildStructureFromParagraphs(paragraphs) {
+  paragraphs = inferUnstyledStructure(paragraphs)
   const mode = detectMode(paragraphs)
 
   const acts = []
@@ -288,7 +369,7 @@ export async function parseDocxToStructure(file) {
 
   const xmlStr = new TextDecoder().decode(docEntry)
   const paragraphs = parseParagraphs(xmlStr)
-  return buildStructure(paragraphs)
+  return buildStructureFromParagraphs(paragraphs)
 }
 
 export function countImportStats(acts) {

@@ -14,6 +14,8 @@ const mockState = vi.hoisted(() => ({
   errorQueues: {},
   embeddedUploadCalls: [],
   embeddedUploadShouldFail: false,
+  mediaDeleteCalls: [],
+  mediaDeleteShouldFail: false,
 }))
 
 vi.mock('./uploadUserMedia', () => ({
@@ -21,6 +23,11 @@ vi.mock('./uploadUserMedia', () => ({
     mockState.embeddedUploadCalls.push({ dataUrl, userId, category })
     if (mockState.embeddedUploadShouldFail) throw new Error('upload failed')
     return `yow-media:${userId}/${category}/relocated.webp`
+  }),
+  deleteAllUserMedia: vi.fn(async (userId) => {
+    mockState.mediaDeleteCalls.push(userId)
+    if (mockState.mediaDeleteShouldFail) throw new Error('media cleanup failed')
+    return 2
   }),
 }))
 
@@ -345,6 +352,8 @@ describe('atomic destructive deletes', () => {
   beforeEach(() => {
     mockState.rpcCalls = []
     mockState.rpcError = null
+    mockState.mediaDeleteCalls = []
+    mockState.mediaDeleteShouldFail = false
   })
 
   it('deletes a project through one authenticated transaction RPC', async () => {
@@ -365,6 +374,14 @@ describe('atomic destructive deletes', () => {
   it('deletes an account through the single transactional delete_user RPC', async () => {
     const { deleteAllUserData } = await import('./firestoreSync.js')
     await deleteAllUserData('user-1')
+    expect(mockState.mediaDeleteCalls).toEqual(['user-1'])
     expect(mockState.rpcCalls).toEqual([{ name: 'delete_user', args: undefined }])
+  })
+
+  it('does not start the account transaction when Storage cleanup fails', async () => {
+    const { deleteAllUserData } = await import('./firestoreSync.js')
+    mockState.mediaDeleteShouldFail = true
+    await expect(deleteAllUserData('user-1')).rejects.toThrow('media cleanup failed')
+    expect(mockState.rpcCalls).toEqual([])
   })
 })

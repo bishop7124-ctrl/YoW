@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockState = vi.hoisted(() => ({
   uploadResult: { error: null },
+  removeResult: { error: null },
   publicUrl: 'https://project.supabase.co/storage/v1/object/public/user-media/user-1/covers/abc.webp',
   signedUrl: 'https://project.supabase.co/storage/v1/object/sign/user-media/user-1/covers/abc.webp?token=signed',
   removeCalls: [],
   uploadCalls: [],
   signedUrlCalls: [],
+  listCalls: [],
+  listEntries: {},
+  listError: null,
   offlineMode: false,
   // Lets a single test force createSignedUrl to fail (e.g. the real
   // "Object not found" the sign/list endpoints have been observed returning
@@ -33,9 +37,18 @@ vi.mock('../supabase.js', () => ({
           if (mockState.signedUrlError) return Promise.resolve({ data: null, error: mockState.signedUrlError })
           return Promise.resolve({ data: { signedUrl: mockState.signedUrl }, error: null })
         }),
+        list: vi.fn((prefix, options) => {
+          mockState.listCalls.push({ prefix, options })
+          if (mockState.listError) return Promise.resolve({ data: null, error: mockState.listError })
+          const entries = mockState.listEntries[prefix] || []
+          return Promise.resolve({
+            data: entries.slice(options.offset, options.offset + options.limit),
+            error: null,
+          })
+        }),
         remove: vi.fn((paths) => {
           mockState.removeCalls.push(paths)
-          return Promise.resolve({ error: null })
+          return Promise.resolve(mockState.removeResult)
         }),
       })),
     },
@@ -47,7 +60,7 @@ vi.mock('./imageOptimize.js', () => ({
   optimizeImageToDataUrl: vi.fn(async () => 'data:image/webp;base64,ZmFrZQ=='),
 }))
 
-const { uploadUserMedia, uploadEmbeddedImage, deleteUserMedia, getSignedUserMediaUrl, getUserMediaPath } = await import('./uploadUserMedia.js')
+const { uploadUserMedia, uploadEmbeddedImage, deleteUserMedia, deleteAllUserMedia, getSignedUserMediaUrl, getUserMediaPath } = await import('./uploadUserMedia.js')
 const { optimizeImage, optimizeImageToDataUrl } = await import('./imageOptimize.js')
 
 describe('uploadUserMedia', () => {
@@ -175,6 +188,7 @@ describe('uploadEmbeddedImage', () => {
 describe('deleteUserMedia', () => {
   beforeEach(() => {
     mockState.removeCalls = []
+    mockState.removeResult = { error: null }
     mockState.offlineMode = false
     vi.clearAllMocks()
   })
@@ -209,6 +223,54 @@ describe('deleteUserMedia', () => {
   it('removes a private media reference', async () => {
     await deleteUserMedia('yow-media:user-1/covers/abc.webp')
     expect(mockState.removeCalls).toEqual([['user-1/covers/abc.webp']])
+  })
+
+  it('surfaces a resolved Supabase removal error instead of silently treating cleanup as successful', async () => {
+    mockState.removeResult = { error: { message: 'object removal failed' } }
+    await expect(deleteUserMedia('yow-media:user-1/covers/abc.webp'))
+      .rejects.toThrow('Delete failed: object removal failed')
+    expect(mockState.removeCalls).toEqual([['user-1/covers/abc.webp']])
+  })
+})
+
+describe('deleteAllUserMedia', () => {
+  beforeEach(() => {
+    mockState.removeCalls = []
+    mockState.removeResult = { error: null }
+    mockState.listCalls = []
+    mockState.listEntries = {}
+    mockState.listError = null
+    mockState.offlineMode = false
+    vi.clearAllMocks()
+  })
+
+  it('recursively lists the user prefix and removes every file through the Storage API', async () => {
+    mockState.listEntries = {
+      'user-1': [{ id: null, name: 'covers' }, { id: null, name: 'characters' }],
+      'user-1/covers': [{ id: 'cover-id', name: 'cover.webp' }],
+      'user-1/characters': [{ id: 'portrait-id', name: 'portrait.webp' }],
+    }
+
+    await expect(deleteAllUserMedia('user-1')).resolves.toBe(2)
+    expect(mockState.removeCalls).toEqual([[
+      'user-1/characters/portrait.webp',
+      'user-1/covers/cover.webp',
+    ]])
+  })
+
+  it('surfaces listing failure without attempting any removal', async () => {
+    mockState.listError = { message: 'list denied' }
+    await expect(deleteAllUserMedia('user-1')).rejects.toThrow('Could not list account media: list denied')
+    expect(mockState.removeCalls).toEqual([])
+  })
+
+  it('surfaces batch-removal failure', async () => {
+    mockState.listEntries = {
+      'user-1': [{ id: null, name: 'covers' }],
+      'user-1/covers': [{ id: 'cover-id', name: 'cover.webp' }],
+    }
+    mockState.removeResult = { error: { message: 'remove denied' } }
+    await expect(deleteAllUserMedia('user-1')).rejects.toThrow('Could not delete account media: remove denied')
   })
 })
 

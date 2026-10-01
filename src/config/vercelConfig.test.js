@@ -13,16 +13,20 @@ describe('Vercel production routing', () => {
     })
   })
 
-  it('leaves React-owned public routes to the SPA catch-all', () => {
-    const explicitlyStatic = config.rewrites
-      .filter(rewrite => rewrite.destination !== '/index.html')
-      .map(rewrite => rewrite.source)
+  it('serves route-specific SEO HTML before the SPA catch-all', () => {
+    const routeSpecificPages = config.rewrites.filter(rewrite =>
+      rewrite.destination.endsWith('/index.html') && rewrite.destination !== '/index.html'
+    )
 
-    expect(explicitlyStatic).not.toContain('/founders/')
-    expect(explicitlyStatic).not.toContain('/founders/:slug/')
-    expect(explicitlyStatic).not.toContain('/features/')
-    expect(explicitlyStatic).not.toContain('/faq/')
-    expect(config.rewrites).toContainEqual({
+    expect(routeSpecificPages).toEqual(expect.arrayContaining([
+      { source: '/features/', destination: '/features/index.html' },
+      { source: '/pricing/', destination: '/pricing/index.html' },
+      { source: '/faq/', destination: '/faq/index.html' },
+      { source: '/founders/', destination: '/founders/index.html' },
+      { source: '/founders/morgan-bishop/', destination: '/founders/morgan-bishop/index.html' },
+    ]))
+
+    expect(config.rewrites.at(-1)).toEqual({
       source: '/((?!assets/).*)',
       destination: '/index.html',
     })

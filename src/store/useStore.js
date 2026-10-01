@@ -11,7 +11,7 @@ import { normalizeOutlineItem, outlinePatch, outlineText, sortOutlineItems } fro
 import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/relationshipTypes.js'
 import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
 import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
-import { loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
+import { listKeys, loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import {
@@ -99,23 +99,24 @@ const loadLastActiveProject = (ownerId) => {
     return null
   }
 }
-// `sceneIds`: the scene ids known locally right before clearing, so their
-// individual `nf_scene_content:<id>` keys (see src/storage/sceneContentStore.js
-// — scene prose lives outside PROJECT_STORAGE_KEYS' flat per-collection
-// list, one key per scene) get removed too, rather than silently surviving
-// a sign-out and staying on disk for whichever account uses this browser
-// next. Best-effort: a scene whose content key was written in an earlier
-// session and never made it into this session's in-memory scenes (e.g. a
-// prior storage hiccup) won't be enumerated here — an accepted small gap,
-// not a regression versus today's behaviour, which cleans none of these up.
+// Scene prose and tracked-change proposals live outside PROJECT_STORAGE_KEYS,
+// one key per scene. Enumerate the storage backend itself so sign-out/account
+// switch removes every such key, including orphaned or not-yet-hydrated keys
+// that are absent from this tab's in-memory scenes. The explicit sceneIds are
+// retained as a fallback for injected/legacy backends that do not implement
+// key enumeration.
 const clearProjectLocalStorage = (sceneIds = []) => {
   try {
     PROJECT_STORAGE_KEYS.forEach(key => removeItem(key))
+    const contentKeys = new Set(listKeys('nf_scene_content:'))
+    const trackedChangesKeys = new Set(listKeys('nf_scene_tracked_changes:'))
     sceneIds.forEach(id => {
       if (id == null) return
-      removeItem(sceneContentKey(id))
-      removeItem(sceneTrackedChangesKey(id))
+      contentKeys.add(sceneContentKey(id))
+      trackedChangesKeys.add(sceneTrackedChangesKey(id))
     })
+    contentKeys.forEach(key => removeItem(key))
+    trackedChangesKeys.forEach(key => removeItem(key))
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {
@@ -182,11 +183,13 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 // matching this file's other best-effort local-storage patterns.
 const deleteMediaUrls = (urls) => {
   const seen = new Set()
+  const deletions = []
   urls.forEach(url => {
     if (!url || seen.has(url)) return
     seen.add(url)
-    deleteUserMedia(url).catch(() => {})
+    deletions.push(deleteUserMedia(url))
   })
+  return Promise.allSettled(deletions)
 }
 const countWords = value => {
   if (!value || typeof value !== 'string') return 0
@@ -2513,7 +2516,7 @@ export function useStore(userId = null, options = {}) {
 
   const cleanupUnreferencedMedia = (urls, overrides = {}) => {
     const candidates = urls.filter(Boolean)
-    if (!candidates.length) return
+    if (!candidates.length) return Promise.resolve([])
     const referenced = new Set()
     const mediaKey = value => {
       try { return getUserMediaPath(value) || value } catch { return value }
@@ -2525,7 +2528,13 @@ export function useStore(userId = null, options = {}) {
     // Save/delete update refs synchronously; the render snapshot may still
     // contain the old character. Keep media used by any other saved record.
     collect({ ...getCurrentSnapshot(), characters: charactersRef.current, ...overrides })
-    deleteMediaUrls(candidates.filter(url => !referenced.has(mediaKey(url))))
+    const cleanup = deleteMediaUrls(candidates.filter(url => !referenced.has(mediaKey(url))))
+    // Storage updates its authoritative media counter in the same operation as
+    // object deletion. Refresh after that operation settles so replacement and
+    // removal cannot leave Account Settings showing the pre-cleanup total just
+    // because an earlier optimistic refresh won the race.
+    cleanup.then(() => refreshStorageUsedBytes().catch(console.error))
+    return cleanup
   }
   const saveCharacter = (data, id) => {
     if (!id && storageExceededCheck()) { return null }

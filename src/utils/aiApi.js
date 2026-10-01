@@ -273,6 +273,9 @@ export function friendlyErrorMessage(status, rawMessage, options = {}) {
   if (status === 402 || errorType === 'payment_required') {
     return `Your AI provider account or API key is out of credits. Check the provider billing/limits page or choose a free model your key can use. (${message})`
   }
+  if (/max_tokens.+not supported|max_completion_tokens.+instead|unsupported parameter.+max_tokens/i.test(message)) {
+    return `This model needs OpenAI's newer output-token setting, but YOW sent the older format. Update YOW and try again, or choose another model. (${message})`
+  }
   if (status === 400 || status === 413 || /context|token|too (long|large)|maximum|exceeds/i.test(message)) {
     return `The request is too large or malformed for this model. Try a smaller context selection, a shorter excerpt, or a model with a larger context window. (${message})`
   }

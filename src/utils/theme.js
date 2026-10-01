@@ -24,7 +24,7 @@ export const BUILT_IN_THEMES = [
     glowPos: '82% 9%',
     swatches: {
       bgMain: '#0e1a18', bgNav: '#132220', textMain: '#ece6da',
-      textMuted: '#8ea19b', accent: '#9c4935', border: 'rgba(255, 255, 255, 0.09)',
+      textMuted: '#8ea19b', accent: '#9c4935', border: '#34433F',
     },
   },
   {

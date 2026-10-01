@@ -15,6 +15,7 @@ import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, fetchLiveModels } from '../../utils/aiApi'
+import { getAiModelGuidance, getAvailableOpenAiQuickChoices, isOfficialOpenAiEndpoint } from '../../utils/aiModelGuidance'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
   deleteSyncedAiSettings,
@@ -1912,6 +1913,13 @@ function AISettingsPanel({ userId, membership }) {
     const found = catalog?.find(m => m.id === model)
     return found ? found.label : model || 'Not set'
   })()
+  const isOfficialOpenAi = active === 'openai' && isOfficialOpenAiEndpoint(activeBaseUrl)
+  const openAiQuickChoices = isOfficialOpenAi ? getAvailableOpenAiQuickChoices(liveModels) : []
+  const modelGuidance = getAiModelGuidance({
+    provider: active,
+    model: cfg.model || prov?.defaultModel || '',
+    baseUrl: activeBaseUrl,
+  })
 
   if (membership?.isFree) {
     return (
@@ -2080,6 +2088,42 @@ function AISettingsPanel({ userId, membership }) {
                 ? `Enter your API key below to load ${prov?.name}'s live, current model list.`
                 : `Loading the current model list from ${prov?.name}…`}
         </p>
+
+        {isOfficialOpenAi && (
+          <div className="ai-model-guide" aria-label="OpenAI model guide">
+            <div className="ai-model-guide-heading">
+              <div>
+                <p className="ai-model-guide-title">Not sure which OpenAI model to choose?</p>
+                <p className="ai-model-guide-copy">Start with Sol for everyday YOW work. Choose Astra for the most difficult imports or analysis, or Luna when keeping cost down matters most.</p>
+              </div>
+              <a href="https://developers.openai.com/api/docs/models" target="_blank" rel="noreferrer">Full model details</a>
+            </div>
+            {openAiQuickChoices.length > 0 && (
+              <div className="ai-model-guide-options">
+                {openAiQuickChoices.map(choice => {
+                  const selected = (cfg.model || '') === choice.id
+                  return (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      className={`ai-model-choice${selected ? ' is-selected' : ''}`}
+                      aria-pressed={selected}
+                      onClick={() => update('model', choice.id)}
+                    >
+                      <span className="ai-model-choice-topline"><strong>{choice.label}</strong><span>{choice.badge}</span></span>
+                      <small>{choice.description}</small>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className={`ai-selected-model-guidance${modelGuidance.kind === 'warning' ? ' is-warning' : ''}`}>
+          <strong>{modelGuidance.title}</strong>
+          <span>{modelGuidance.description}</span>
+        </div>
       </div>
 
       {active === 'google' && (

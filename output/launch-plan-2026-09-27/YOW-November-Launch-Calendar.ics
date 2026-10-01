@@ -1,0 +1,910 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//YOW//November Launch Sprint//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:YOW November Launch Sprint
+X-WR-TIMEZONE:Europe/London
+BEGIN:VEVENT
+UID:yow-2026-09-28-1-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20260928T073000
+DTEND;TZID=Europe/London:20260928T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-09-28. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRepair the red release baseline: reconcile the Vercel route test\, review the dirty checkout\, run full QA\, and produce a plain-English blocker report.\n\nEVENING OWNER ACTION TO PREPARE\nReview the report\, approve the frozen launch scope\, and make only required product decisions.\n\nTIME LIMIT\n10 min morning + 75 min evening. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-09-28-1-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20260928T203000
+DTEND;TZID=Europe/London:20260928T214500
+SUMMARY:YOW · your task · Review the report\, approve the frozen launch scope\, and make only req...
+DESCRIPTION:OWNER ACTION\nReview the report\, approve the frozen launch scope\, and make only required product decisions.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\n\nTIME CAP\n10 min morning + 75 min evening\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-09-29-2-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20260929T073000
+DTEND;TZID=Europe/London:20260929T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-09-29. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nFinish baseline fixes\, rerun all release checks\, classify remaining warnings by launch risk\, and prepare a safe smoke-test script.\n\nEVENING OWNER ACTION TO PREPARE\nRun sign-in → open/create project → write → refresh → export\; report exactly what appears.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-09-29-2-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20260929T203000
+DTEND;TZID=Europe/London:20260929T220000
+SUMMARY:YOW · your task · Run sign-in → open/create project → write → refresh → export\; report ...
+DESCRIPTION:OWNER ACTION\nRun sign-in → open/create project → write → refresh → export\; report exactly what appears.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-09-30-3-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20260930T073000
+DTEND;TZID=Europe/London:20260930T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-09-30. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nAudit the pending Supabase migrations\, production prerequisites\, rollback steps\, and Security Advisor checks\; prepare one-step owner instructions.\n\nEVENING OWNER ACTION TO PREPARE\nOpen Supabase with Codex guidance\, apply only the verified migrations\, and record the results.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-09-30-3-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20260930T203000
+DTEND;TZID=Europe/London:20260930T220000
+SUMMARY:YOW · your task · Open Supabase with Codex guidance\, apply only the verified migrations...
+DESCRIPTION:OWNER ACTION\nOpen Supabase with Codex guidance\, apply only the verified migrations\, and record the results.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-01-4-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261001T073000
+DTEND;TZID=Europe/London:20261001T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-01. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nPrepare and monitor the real two-tab scene-concurrency acceptance test\; fix any reproducible failure and rerun automated coverage.\n\nEVENING OWNER ACTION TO PREPARE\nPerform the guided same-scene two-tab test and review or discard the conflict copy.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-01-4-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261001T203000
+DTEND;TZID=Europe/London:20261001T220000
+SUMMARY:YOW · your task · Perform the guided same-scene two-tab test and review or discard the ...
+DESCRIPTION:OWNER ACTION\nPerform the guided same-scene two-tab test and review or discard the conflict copy.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-02-5-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261002T073000
+DTEND;TZID=Europe/London:20261002T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-02. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nPrepare the two-account/account-switch entitlement-isolation test and inspect all server-side entitlement paths.\n\nEVENING OWNER ACTION TO PREPARE\nRun the guided two-account test using designated test accounts only.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-02-5-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261002T203000
+DTEND;TZID=Europe/London:20261002T220000
+SUMMARY:YOW · your task · Run the guided two-account test using designated test accounts only.
+DESCRIPTION:OWNER ACTION\nRun the guided two-account test using designated test accounts only.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-03-6-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261003T083000
+DTEND;TZID=Europe/London:20261003T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-03. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nDrive the destructive-action\, rollback\, media\, and quota test suite\; prepare disposable fixtures and one-step instructions.\n\nEVENING OWNER ACTION TO PREPARE\nTest project deletion/restore\, account deletion fixture\, media replace/delete\, and quota accounting in two blocks.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-03-6-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261003T090000
+DTEND;TZID=Europe/London:20261003T110000
+SUMMARY:YOW · owner block 1 · Test project deletion/restore\, account deletion fixture\, media replac...
+DESCRIPTION:FIRST OWNER BLOCK\nTest project deletion/restore\, account deletion fixture\, media replace/delete\, and quota accounting in two blocks.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-03-6-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261003T140000
+DTEND;TZID=Europe/London:20261003T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-04-7-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261004T083000
+DTEND;TZID=Europe/London:20261004T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-04. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun export/import collision and full-account ownership checks\; repair failures and assemble Data Safety Gate evidence.\n\nEVENING OWNER ACTION TO PREPARE\nExport\, inspect\, restore/import\, and complete the Data Safety go/no-go review.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named test passes with saved evidence and no unresolved auth\, data-loss\, isolation\, save\, restore\, or export blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-04-7-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261004T090000
+DTEND;TZID=Europe/London:20261004T110000
+SUMMARY:YOW · owner block 1 · Export\, inspect\, restore/import\, and complete the Data Safety go/no-g...
+DESCRIPTION:FIRST OWNER BLOCK\nExport\, inspect\, restore/import\, and complete the Data Safety go/no-go review.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-04-7-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261004T140000
+DTEND;TZID=Europe/London:20261004T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nUse designated test accounts and disposable projects. Never test deletion or permissions on the owner/admin account.
+CATEGORIES:YOW Launch\,Release & data safety\,Week 1
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-05-8-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261005T073000
+DTEND;TZID=Europe/London:20261005T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-05. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nAudit and live-check AI proxy\, email endpoints\, CORS\, durable rate limits\, token rejection\, and deployed security headers.\n\nEVENING OWNER ACTION TO PREPARE\nFollow the safe browser/dashboard checks and record only pass/fail evidence.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-05-8-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261005T203000
+DTEND;TZID=Europe/London:20261005T220000
+SUMMARY:YOW · your task · Follow the safe browser/dashboard checks and record only pass/fail ev...
+DESCRIPTION:OWNER ACTION\nFollow the safe browser/dashboard checks and record only pass/fail evidence.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-06-9-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261006T073000
+DTEND;TZID=Europe/London:20261006T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-06. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nComplete private-media RLS and storage-accounting verification\, including replacement and deletion cleanup.\n\nEVENING OWNER ACTION TO PREPARE\nUpload\, replace\, delete\, and verify one disposable image and its storage figure.\n\nTIME LIMIT\n10 min + 75 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-06-9-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261006T203000
+DTEND;TZID=Europe/London:20261006T214500
+SUMMARY:YOW · your task · Upload\, replace\, delete\, and verify one disposable image and its stor...
+DESCRIPTION:OWNER ACTION\nUpload\, replace\, delete\, and verify one disposable image and its storage figure.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\n\nTIME CAP\n10 min + 75 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-07-10-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261007T073000
+DTEND;TZID=Europe/London:20261007T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-07. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nFinish the cloud-expiry/inactive-account lifecycle implementation and tests: notices\, Export All\, grace\, archive/delete\, and cloud-write shutdown.\n\nEVENING OWNER ACTION TO PREPARE\nReview the customer-visible sequence and approve the exact wording.\n\nTIME LIMIT\n10 min + 75 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-07-10-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261007T203000
+DTEND;TZID=Europe/London:20261007T214500
+SUMMARY:YOW · your task · Review the customer-visible sequence and approve the exact wording.
+DESCRIPTION:OWNER ACTION\nReview the customer-visible sequence and approve the exact wording.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\n\nTIME CAP\n10 min + 75 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-08-11-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261008T073000
+DTEND;TZID=Europe/London:20261008T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-08. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun complete ZIP/DOCX/PDF/World Bible ownership and privacy checks\, including expiry access and readable output inspection.\n\nEVENING OWNER ACTION TO PREPARE\nOpen the generated files and confirm the expected content is present and private data is absent where promised.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-08-11-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261008T203000
+DTEND;TZID=Europe/London:20261008T220000
+SUMMARY:YOW · your task · Open the generated files and confirm the expected content is present ...
+DESCRIPTION:OWNER ACTION\nOpen the generated files and confirm the expected content is present and private data is absent where promised.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-09-12-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261009T073000
+DTEND;TZID=Europe/London:20261009T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-09. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRetrieve or document the missing production function definitions\, close reproducible database-build gaps\, and rerun database checks.\n\nEVENING OWNER ACTION TO PREPARE\nProvide guided production access only if needed\; review the database continuity result.\n\nTIME LIMIT\n10 min + 60 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-09-12-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261009T203000
+DTEND;TZID=Europe/London:20261009T213000
+SUMMARY:YOW · your task · Provide guided production access only if needed\; review the database ...
+DESCRIPTION:OWNER ACTION\nProvide guided production access only if needed\; review the database continuity result.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\n\nTIME CAP\n10 min + 60 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-10-13-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261010T083000
+DTEND;TZID=Europe/London:20261010T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-10. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun the entire data-safety/auth/export matrix and fix failures in priority order.\n\nEVENING OWNER ACTION TO PREPARE\nPerform the remaining real-account checks in two focused blocks\; stop at four hours.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-10-13-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261010T090000
+DTEND;TZID=Europe/London:20261010T110000
+SUMMARY:YOW · owner block 1 · Perform the remaining real-account checks in two focused blocks\; stop...
+DESCRIPTION:FIRST OWNER BLOCK\nPerform the remaining real-account checks in two focused blocks\; stop at four hours.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-10-13-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261010T140000
+DTEND;TZID=Europe/London:20261010T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-11-14-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261011T083000
+DTEND;TZID=Europe/London:20261011T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-11. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nUse the day as the hard-gate repair buffer\, rerun the whole matrix\, and produce a signed-off evidence summary.\n\nEVENING OWNER ACTION TO PREPARE\nReview the summary. Mark the gate Done only if no data-loss/auth/export blocker remains.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named production or export check passes with saved evidence and no unresolved security\, ownership\, storage\, or lifecycle blocker.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-11-14-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261011T090000
+DTEND;TZID=Europe/London:20261011T110000
+SUMMARY:YOW · owner block 1 · Review the summary. Mark the gate Done only if no data-loss/auth/expo...
+DESCRIPTION:FIRST OWNER BLOCK\nReview the summary. Mark the gate Done only if no data-loss/auth/export blocker remains.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-11-14-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261011T140000
+DTEND;TZID=Europe/London:20261011T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nBack up first. Never paste credentials\, API keys\, recovery codes\, or secret values into chat.
+CATEGORIES:YOW Launch\,Cloud & security\,Week 2
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-12-15-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261012T073000
+DTEND;TZID=Europe/London:20261012T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-12. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nImplement/finish the full signed-in Tauri project workspace and run desktop unit/Rust/build checks.\n\nEVENING OWNER ACTION TO PREPARE\nOpen the Mac test build and verify login\, library\, project navigation\, and writing.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-12-15-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261012T203000
+DTEND;TZID=Europe/London:20261012T221000
+SUMMARY:YOW · your task · Open the Mac test build and verify login\, library\, project navigation...
+DESCRIPTION:OWNER ACTION\nOpen the Mac test build and verify login\, library\, project navigation\, and writing.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-13-16-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261013T073000
+DTEND;TZID=Europe/London:20261013T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-13. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nStress the desktop vault: write-behind durability\, quit/force-quit\, snapshot\, restore\, relocation\, integrity\, and disk-error handling.\n\nEVENING OWNER ACTION TO PREPARE\nRun the guided vault persistence and restore test with an isolated test vault.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-13-16-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261013T203000
+DTEND;TZID=Europe/London:20261013T221000
+SUMMARY:YOW · your task · Run the guided vault persistence and restore test with an isolated te...
+DESCRIPTION:OWNER ACTION\nRun the guided vault persistence and restore test with an isolated test vault.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-14-17-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261014T073000
+DTEND;TZID=Europe/London:20261014T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-14. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nVerify and repair native ZIP/DOCX/PDF/PNG save dialogs and file contents in packaged desktop builds.\n\nEVENING OWNER ACTION TO PREPARE\nSave and open each format from the packaged Mac app.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-14-17-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261014T203000
+DTEND;TZID=Europe/London:20261014T220000
+SUMMARY:YOW · your task · Save and open each format from the packaged Mac app.
+DESCRIPTION:OWNER ACTION\nSave and open each format from the packaged Mac app.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-15-18-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261015T073000
+DTEND;TZID=Europe/London:20261015T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-15. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nFinish Local Mode/lapse/renewal merge logic\, cold-start retry\, conflict surfacing\, and no-cloud-write verification.\n\nEVENING OWNER ACTION TO PREPARE\nRun the guided lapse → web edit → renewal → desktop merge scenario.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-15-18-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261015T203000
+DTEND;TZID=Europe/London:20261015T221000
+SUMMARY:YOW · your task · Run the guided lapse → web edit → renewal → desktop merge scenario.
+DESCRIPTION:OWNER ACTION\nRun the guided lapse → web edit → renewal → desktop merge scenario.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-16-19-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261016T073000
+DTEND;TZID=Europe/London:20261016T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-16. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nFinalise updater manifests\, download entitlement gating\, installer URLs\, hashes\, provenance\, and unsigned-app instructions.\n\nEVENING OWNER ACTION TO PREPARE\nReview the download page and Mac instructions as a customer.\n\nTIME LIMIT\n10 min + 75 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-16-19-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261016T203000
+DTEND;TZID=Europe/London:20261016T214500
+SUMMARY:YOW · your task · Review the download page and Mac instructions as a customer.
+DESCRIPTION:OWNER ACTION\nReview the download page and Mac instructions as a customer.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\n\nTIME CAP\n10 min + 75 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-17-20-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261017T083000
+DTEND;TZID=Europe/London:20261017T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-17. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nProduce and inspect the final Mac candidate\; drive clean-machine install\, workspace\, export\, restore\, updater\, and uninstall acceptance.\n\nEVENING OWNER ACTION TO PREPARE\nComplete the clean/test Mac checklist in two blocks.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-17-20-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261017T090000
+DTEND;TZID=Europe/London:20261017T110000
+SUMMARY:YOW · owner block 1 · Complete the clean/test Mac checklist in two blocks.
+DESCRIPTION:FIRST OWNER BLOCK\nComplete the clean/test Mac checklist in two blocks.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-17-20-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261017T140000
+DTEND;TZID=Europe/London:20261017T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-18-21-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261018T083000
+DTEND;TZID=Europe/London:20261018T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-18. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nProduce the Windows candidate in CI and drive Windows clean-machine/WebView2/install/export/updater/uninstall acceptance\; close the Desktop Gate.\n\nEVENING OWNER ACTION TO PREPARE\nComplete or coordinate the Windows checklist\, then review the combined desktop evidence.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named packaged-app journey passes on the required real machine\, and the evidence is saved.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-18-21-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261018T090000
+DTEND;TZID=Europe/London:20261018T110000
+SUMMARY:YOW · owner block 1 · Complete or coordinate the Windows checklist\, then review the combine...
+DESCRIPTION:FIRST OWNER BLOCK\nComplete or coordinate the Windows checklist\, then review the combined desktop evidence.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-18-21-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261018T140000
+DTEND;TZID=Europe/London:20261018T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nUse a test build and isolated test vault\, never the only copy of real writing.
+CATEGORIES:YOW Launch\,Desktop\,Week 3
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-19-22-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261019T073000
+DTEND;TZID=Europe/London:20261019T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-19. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun and repair complete Novella and Short Story workflow\, defaults\, persistence\, and export acceptance.\n\nEVENING OWNER ACTION TO PREPARE\nPerform the two guided create → write → export journeys.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-19-22-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261019T203000
+DTEND;TZID=Europe/London:20261019T221000
+SUMMARY:YOW · your task · Perform the two guided create → write → export journeys.
+DESCRIPTION:OWNER ACTION\nPerform the two guided create → write → export journeys.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-20-23-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261020T073000
+DTEND;TZID=Europe/London:20261020T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-20. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun and repair complete D&D and TTRPG prep/recap\, Character Builder\, map/default\, AI-context\, and export acceptance.\n\nEVENING OWNER ACTION TO PREPARE\nPerform the two guided campaign journeys using disposable campaigns.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-20-23-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261020T203000
+DTEND;TZID=Europe/London:20261020T221000
+SUMMARY:YOW · your task · Perform the two guided campaign journeys using disposable campaigns.
+DESCRIPTION:OWNER ACTION\nPerform the two guided campaign journeys using disposable campaigns.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-21-24-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261021T073000
+DTEND;TZID=Europe/London:20261021T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-21. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun and repair Novel and Comic live-cloud\, large-project\, and complete export acceptance.\n\nEVENING OWNER ACTION TO PREPARE\nPerform the guided Novel and Comic journeys.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-21-24-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261021T203000
+DTEND;TZID=Europe/London:20261021T221000
+SUMMARY:YOW · your task · Perform the guided Novel and Comic journeys.
+DESCRIPTION:OWNER ACTION\nPerform the guided Novel and Comic journeys.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-22-25-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261022T073000
+DTEND;TZID=Europe/London:20261022T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-22. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun the full Map Builder owner checklist and repair interaction\, layer\, persistence\, responsive\, and export defects.\n\nEVENING OWNER ACTION TO PREPARE\nComplete the guided map workflow and inspect its exports.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-22-25-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261022T203000
+DTEND;TZID=Europe/London:20261022T221000
+SUMMARY:YOW · your task · Complete the guided map workflow and inspect its exports.
+DESCRIPTION:OWNER ACTION\nComplete the guided map workflow and inspect its exports.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-23-26-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261023T073000
+DTEND;TZID=Europe/London:20261023T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-23. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nConsolidate remaining Characters\, Locations\, Lore\, Timeline/History\, Family/Factions\, Series\, Schedule\, Focused Writing\, and AI Import checks.\n\nEVENING OWNER ACTION TO PREPARE\nWork through the short owner verification packet\; flag only reproducible failures.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-23-26-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261023T203000
+DTEND;TZID=Europe/London:20261023T221000
+SUMMARY:YOW · your task · Work through the short owner verification packet\; flag only reproduci...
+DESCRIPTION:OWNER ACTION\nWork through the short owner verification packet\; flag only reproducible failures.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-24-27-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261024T083000
+DTEND;TZID=Europe/London:20261024T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-24. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRun realistic large-project performance plus 375/768/desktop\, keyboard\, focus\, contrast\, real-iPhone\, and theme acceptance\; fix blockers.\n\nEVENING OWNER ACTION TO PREPARE\nComplete device/accessibility tests in two focused blocks.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-24-27-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261024T090000
+DTEND;TZID=Europe/London:20261024T110000
+SUMMARY:YOW · owner block 1 · Complete device/accessibility tests in two focused blocks.
+DESCRIPTION:FIRST OWNER BLOCK\nComplete device/accessibility tests in two focused blocks.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-24-27-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261024T140000
+DTEND;TZID=Europe/London:20261024T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-25-28-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261025T083000
+DTEND;TZID=Europe/London:20261025T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-25. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nTest every advertised AI provider\, context grounding\, errors/retry\, secret isolation\, chat persistence/export\, then rerun all six project-type exports.\n\nEVENING OWNER ACTION TO PREPARE\nSupply provider access without sharing secrets\; complete the Product Gate review.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named customer journey works as advertised\, and any reproducible launch-blocking failure is fixed and retested.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-25-28-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261025T090000
+DTEND;TZID=Europe/London:20261025T110000
+SUMMARY:YOW · owner block 1 · Supply provider access without sharing secrets\; complete the Product ...
+DESCRIPTION:FIRST OWNER BLOCK\nSupply provider access without sharing secrets\; complete the Product Gate review.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-25-28-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261025T140000
+DTEND;TZID=Europe/London:20261025T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nUse disposable data and stop instead of guessing if the screen differs from the instructions.
+CATEGORIES:YOW Launch\,Product acceptance\,Week 4
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-26-29-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261026T073000
+DTEND;TZID=Europe/London:20261026T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-26. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nReconcile Pricing\, FAQ\, Terms\, Privacy\, cancellation\, storage\, Local Mode\, expiry\, Founder\, AI\, export\, SEO\, and marketing promises.\n\nEVENING OWNER ACTION TO PREPARE\nRead the plain-English change packet and approve or correct the final customer promises.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-26-29-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261026T203000
+DTEND;TZID=Europe/London:20261026T221000
+SUMMARY:YOW · your task · Read the plain-English change packet and approve or correct the final...
+DESCRIPTION:OWNER ACTION\nRead the plain-English change packet and approve or correct the final customer promises.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nStay in Stripe test mode\; publish\, email\, or enable nothing before its dated instruction.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-27-30-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261027T073000
+DTEND;TZID=Europe/London:20261027T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-27. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nAudit Stripe configuration\, webhook idempotency\, entitlement fulfilment\, refunds/disputes\, Founder allocation\, and the test-mode runbook.\n\nEVENING OWNER ACTION TO PREPARE\nOpen Stripe/Supabase only when guided and confirm the displayed test configuration.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-27-30-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261027T203000
+DTEND;TZID=Europe/London:20261027T220000
+SUMMARY:YOW · your task · Open Stripe/Supabase only when guided and confirm the displayed test ...
+DESCRIPTION:OWNER ACTION\nOpen Stripe/Supabase only when guided and confirm the displayed test configuration.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nStay in Stripe test mode\; publish\, email\, or enable nothing before its dated instruction.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-28-31-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261028T073000
+DTEND;TZID=Europe/London:20261028T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-28. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nDrive the full Stripe test-mode journey one step at a time: Monthly\, Lifetime\, Founder\, renewal\, cancel/failure\, replay\, refund\, and dispute.\n\nEVENING OWNER ACTION TO PREPARE\nComplete guided test payments and verify app access after each event.\n\nTIME LIMIT\n10 min + 110 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-28-31-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261028T203000
+DTEND;TZID=Europe/London:20261028T222000
+SUMMARY:YOW · your task · Complete guided test payments and verify app access after each event.
+DESCRIPTION:OWNER ACTION\nComplete guided test payments and verify app access after each event.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\n\nTIME CAP\n10 min + 110 min\n\nSAFETY\nStay in Stripe test mode\; publish\, email\, or enable nothing before its dated instruction.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-29-32-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261029T073000
+DTEND;TZID=Europe/London:20261029T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-29. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nPrepare the reversible Beta-closure/migration operation\, final website copy\, screenshots\, launch post\, ads\, support replies\, and analytics checks without publishing.\n\nEVENING OWNER ACTION TO PREPARE\nApprove the prepared launch assets and Beta transition wording\; publish nothing.\n\nTIME LIMIT\n10 min + 90 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-29-32-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261029T203000
+DTEND;TZID=Europe/London:20261029T220000
+SUMMARY:YOW · your task · Approve the prepared launch assets and Beta transition wording\; publi...
+DESCRIPTION:OWNER ACTION\nApprove the prepared launch assets and Beta transition wording\; publish nothing.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\n\nTIME CAP\n10 min + 90 min\n\nSAFETY\nStay in Stripe test mode\; publish\, email\, or enable nothing before its dated instruction.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-30-33-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261030T073000
+DTEND;TZID=Europe/London:20261030T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-30. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nFreeze Release Candidate 1\; run full automated/browser/Rust/build/security/marketing checks and produce the final go/no-go packet.\n\nEVENING OWNER ACTION TO PREPARE\nPerform one 60-minute customer smoke test and make the formal go/no-go decision.\n\nTIME LIMIT\n10 min + 105 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-30-33-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261030T203000
+DTEND;TZID=Europe/London:20261030T221500
+SUMMARY:YOW · your task · Perform one 60-minute customer smoke test and make the formal go/no-g...
+DESCRIPTION:OWNER ACTION\nPerform one 60-minute customer smoke test and make the formal go/no-go decision.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\n\nTIME CAP\n10 min + 105 min\n\nSAFETY\nStay in Stripe test mode\; publish\, email\, or enable nothing before its dated instruction.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-31-34-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261031T083000
+DTEND;TZID=Europe/London:20261031T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-10-31. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRepair only launch blockers\, rerun the full gate\, take backups\, verify rollback/checkout-disable/support procedures\, and rehearse the exact production release.\n\nEVENING OWNER ACTION TO PREPARE\nComplete the full launch rehearsal in two blocks\; checkout remains off.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nThe named legal\, payment\, Beta\, or release check passes\, evidence is saved\, and no promise conflicts with behaviour.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-31-34-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261031T090000
+DTEND;TZID=Europe/London:20261031T110000
+SUMMARY:YOW · owner block 1 · Complete the full launch rehearsal in two blocks\; checkout remains off.
+DESCRIPTION:FIRST OWNER BLOCK\nComplete the full launch rehearsal in two blocks\; checkout remains off.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-10-31-34-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261031T140000
+DTEND;TZID=Europe/London:20261031T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nStay in Stripe test mode\; publish\, email\, or enable nothing before its dated instruction.
+CATEGORIES:YOW Launch\,Payments & release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-11-01-35-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261101T083000
+DTEND;TZID=Europe/London:20261101T084500
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-11-01. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nIf every hard gate is green: take final backups\, deploy the approved release\, close public Beta enrollment\, preserve existing testers\, enable checkout quietly\, and monitor.\n\nEVENING OWNER ACTION TO PREPARE\nComplete one real purchase\, verify entitlement/save/export/refund-support paths\, and keep rollback ready. No advertising today.\n\nTIME LIMIT\n15 min + up to 3 h 45 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nOne real purchase grants the correct access\; save and export work\; Beta is no longer public\; existing testers stay safe\; rollback is ready.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Quiet release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-11-01-35-owner1@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261101T090000
+DTEND;TZID=Europe/London:20261101T110000
+SUMMARY:YOW · owner block 1 · Complete one real purchase\, verify entitlement/save/export/refund-sup...
+DESCRIPTION:FIRST OWNER BLOCK\nComplete one real purchase\, verify entitlement/save/export/refund-support paths\, and keep rollback ready. No advertising today.\n\nStop after two hours and take a real break.
+CATEGORIES:YOW Launch\,Quiet release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-11-01-35-owner2@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261101T140000
+DTEND;TZID=Europe/London:20261101T154500
+SUMMARY:YOW · owner block 2 · finish and record evidence
+DESCRIPTION:Continue from the last safe step. Review evidence and set Done\, In progress\, or Blocked.\n\nTOTAL CAP\n15 min + up to 3 h 45 min\n\nSAFETY\nBack up first. Stop and roll back if auth\, payment\, entitlement\, save\, or export differs from rehearsal. No ads today.
+CATEGORIES:YOW Launch\,Quiet release\,Week 5
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-11-02-36-ai@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261102T073000
+DTEND;TZID=Europe/London:20261102T074000
+SUMMARY:YOW · send today's AI task
+DESCRIPTION:COPY THIS WHOLE PROMPT INTO CODEX\n\nToday is 2026-11-02. Work on YOW in /Users/bishop/Desktop/Claude/yow. Read AGENTS.md and docs/ROADMAP.md first. I am a complete beginner\, so own all code changes\, terminal work\, automated tests\, documentation\, evidence collection\, and safe troubleshooting yourself.\n\nMORNING TECHNICAL ASSIGNMENT\nRecheck overnight errors\, payments\, entitlements\, email\, analytics\, and support\; fix only launch blockers\, then publish approved marketing.\n\nEVENING OWNER ACTION TO PREPARE\nReview the morning evidence\, approve the public announcement/ads\, and monitor the first responses that evening.\n\nTIME LIMIT\n10 min + 100 min. Do not create extra owner work beyond this cap.\n\nHOW TO WORK\nWork autonomously as far as safely possible. Preserve unrelated user changes. Update docs/ROADMAP.md and docs/QA_PLAN.md when evidence or behaviour changes. Then give me one beginner-friendly step at a time for the owner action. Before each owner step\, say which app or website to open\, exactly what to click or type\, what I should expect to see\, and what I must not touch. Do not ask me to edit code or run terminal commands. Never request passwords\, API keys\, recovery codes\, or secret values. Stop before destructive production\, live billing\, email\, or public actions unless this dated task explicitly authorises that exact action.\n\nDONE MEANS\nOvernight health is clean\, approved marketing is live\, and payment\, entitlement\, analytics\, and support monitoring are active.\nAt the end\, state Done\, In progress\, or Blocked\; list the evidence\; and name the single next action if unfinished.
+CATEGORIES:YOW Launch\,Public launch\,Week 6
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:yow-2026-11-02-36-owner@yourownworld.co.uk
+DTSTAMP:20260927T120000Z
+DTSTART;TZID=Europe/London:20261102T203000
+DTEND;TZID=Europe/London:20261102T221000
+SUMMARY:YOW · your task · Review the morning evidence\, approve the public announcement/ads\, and...
+DESCRIPTION:OWNER ACTION\nReview the morning evidence\, approve the public announcement/ads\, and monitor the first responses that evening.\n\nDONE MEANS\nOvernight health is clean\, approved marketing is live\, and payment\, entitlement\, analytics\, and support monitoring are active.\n\nTIME CAP\n10 min + 100 min\n\nSAFETY\nDo not publish until overnight evidence is healthy. Keep rollback and checkout-disable instructions open.
+CATEGORIES:YOW Launch\,Public launch\,Week 6
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

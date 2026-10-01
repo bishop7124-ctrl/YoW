@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
-import { jsonResponse } from '../_shared/cors.ts'
+import { emailCorsHeaders, emailPreflightResponse, jsonResponse } from '../_shared/cors.ts'
 import { escapeHtml } from '../_shared/html.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
@@ -144,21 +144,22 @@ function welcomeEmailHtml(email: string, confirmUrl: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } })
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
+  const respond = (body: unknown, status = 200) => jsonResponse(body, status, emailCorsHeaders(req))
+  if (req.method === 'OPTIONS') return emailPreflightResponse(req)
+  if (req.method !== 'POST') return respond({ error: 'Method not allowed' }, 405)
 
   let payload: Record<string, unknown>
   try {
     payload = await req.json()
   } catch {
-    return jsonResponse({ error: 'Invalid JSON' }, 400)
+    return respond({ error: 'Invalid JSON' }, 400)
   }
 
   // Supabase database webhooks nest the row under `record`
   // Direct invocations may also pass { record: { user_id } }
   const record = (payload?.record ?? payload) as Record<string, unknown>
   const userId = record?.user_id as string | undefined
-  if (!userId) return jsonResponse({ error: 'No user_id in payload', payload }, 400)
+  if (!userId) return respond({ error: 'No user_id in payload', payload }, 400)
 
   // Two legitimate callers, both trusted differently — audit finding P0-03:
   // this previously trusted a caller-supplied `email` outright (with no
@@ -183,17 +184,17 @@ Deno.serve(async (req) => {
     const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)
     if (error || !data?.user?.email) {
       console.error('getUserById error:', error?.message, 'userId:', userId)
-      return jsonResponse({ error: 'User not found' }, 404)
+      return respond({ error: 'User not found' }, 404)
     }
     email = data.user.email
   } else if (bearer) {
     const { data, error } = await supabaseAdmin.auth.getUser(bearer)
     if (error || !data?.user || data.user.id !== userId || !data.user.email) {
-      return jsonResponse({ error: 'Unauthorized' }, 401)
+      return respond({ error: 'Unauthorized' }, 401)
     }
     email = data.user.email
   } else {
-    return jsonResponse({ error: 'Unauthorized' }, 401)
+    return respond({ error: 'Unauthorized' }, 401)
   }
 
   // Generate a confirmation link so our email can verify the account
@@ -219,14 +220,15 @@ Deno.serve(async (req) => {
       to: [email],
       subject: 'Welcome to Your Own World ✍️',
       html: welcomeEmailHtml(email, confirmUrl),
+      text: `Welcome to Your Own World\n\nYour world is ready. Confirm your account and start writing: ${confirmUrl}\n\nYour Own World brings your manuscript, characters, lore, maps, and planning together in one workspace.`,
     }),
   })
 
   if (!res.ok) {
     const body = await res.text()
     console.error('Resend error:', body)
-    return jsonResponse({ error: 'Failed to send email', detail: body }, 500)
+    return respond({ error: 'Failed to send email', detail: body }, 500)
   }
 
-  return jsonResponse({ sent: true, to: email })
+  return respond({ sent: true, to: email })
 })

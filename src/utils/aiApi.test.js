@@ -62,6 +62,12 @@ describe('friendlyErrorMessage', () => {
     expect(msg).not.toContain('API key looks invalid')
   })
 
+  it('does not mislabel an unsupported OpenAI token parameter as an oversized request', () => {
+    const msg = friendlyErrorMessage(400, "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.")
+    expect(msg).toContain('newer output-token setting')
+    expect(msg).not.toContain('request is too large')
+  })
+
   it('redacts API-looking secrets from provider messages', () => {
     const msg = friendlyErrorMessage(401, 'Incorrect API key AIza123456789012345678901234567890 in request URL')
     expect(msg).toContain('[redacted API key]')

@@ -1,6 +1,33 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { parseDocxToStructure } from './docxImport.js'
+import { buildStructureFromParagraphs, parseDocxToStructure } from './docxImport.js'
+
+describe('unstyled manuscript chapter detection', () => {
+  it('treats plain body-text chapter labels as chapters', () => {
+    const paragraphs = [
+      { text: 'CHAPTER ONE', level: 0 },
+      { text: 'The first chapter prose.', level: 0 },
+      { text: 'CHAPTER TWO — THE RETURN', level: 0 },
+      { text: 'The second chapter prose.', level: 0 },
+    ]
+    const acts = buildStructureFromParagraphs(paragraphs)
+    expect(acts[0].chapters.map(chapter => chapter.title)).toEqual(['CHAPTER ONE', 'CHAPTER TWO — THE RETURN'])
+    expect(acts[0].chapters.map(chapter => chapter.scenes[0].content)).toEqual(['The first chapter prose.', 'The second chapter prose.'])
+  })
+
+  it('conservatively infers repeated all-caps chapter titles in an otherwise flat manuscript', () => {
+    const prose = word => Array.from({ length: 90 }, () => word).join(' ')
+    const paragraphs = [
+      { text: 'THE BOY WHO LIVED', level: 0 },
+      { text: prose('first'), level: 0 },
+      { text: 'THE VANISHING GLASS', level: 0 },
+      { text: prose('second'), level: 0 },
+    ]
+    const acts = buildStructureFromParagraphs(paragraphs)
+    expect(acts[0].chapters.map(chapter => chapter.title)).toEqual(['THE BOY WHO LIVED', 'THE VANISHING GLASS'])
+    expect(acts[0].chapters.every(chapter => chapter.scenes.length === 1)).toBe(true)
+  })
+})
 
 // Builds a docx paragraph the same way exportToDocx (Manuscript/FinalizedReader.jsx)
 // and addDocParagraphs (projectExportDocx.js) do: one <w:p> per `\n{2,}`-separated

@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData } from '../utils/firestoreSync.js'
+import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData, getUserStorageUsage } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
@@ -310,6 +310,38 @@ describe('ownership guard', () => {
 
     const { result } = renderHook(() => useStore(null))
     expect(result.current.novels).toEqual(novels)
+  })
+
+  it('purges every per-scene prose and tracked-change key when the account changes, including orphaned keys', () => {
+    const backend = createMemoryBackend({
+      nf_localOwner: 'user-a',
+      nf_novels: JSON.stringify([{ id: 'novel-a', title: 'Private A', type: 'novel' }]),
+      nf_scenes: JSON.stringify([{ id: 'loaded-scene', novelId: 'novel-a', title: 'Loaded' }]),
+      'nf_scene_content:loaded-scene': 'Loaded private prose',
+      'nf_scene_content:orphaned-scene': 'Orphaned private prose',
+      'nf_scene_tracked_changes:orphaned-scene': JSON.stringify({
+        baseContent: 'Private before',
+        proposedContent: 'Private after',
+      }),
+    })
+    setStorageBackend(backend)
+
+    const { result, rerender, unmount } = renderHook(
+      ({ userId }) => useStore(userId, { cloudSyncEnabled: false }),
+      { initialProps: { userId: 'user-a' } },
+    )
+    expect(result.current.novels).toEqual([expect.objectContaining({ title: 'Private A' })])
+
+    act(() => rerender({ userId: 'user-b' }))
+
+    expect(result.current.novels).toEqual([])
+    expect(backend.getItem('nf_scene_content:loaded-scene')).toBeNull()
+    expect(backend.getItem('nf_scene_content:orphaned-scene')).toBeNull()
+    expect(backend.getItem('nf_scene_tracked_changes:orphaned-scene')).toBeNull()
+    expect(backend.getItem('nf_localOwner')).toBe('user-b')
+
+    unmount()
+    resetStorageBackend()
   })
 })
 
@@ -2057,6 +2089,24 @@ describe('character CRUD', () => {
     act(() => { result.current.deleteCharacter(frodoId) })
 
     expect(deleteUserMedia).toHaveBeenCalledWith('https://x/storage/v1/object/public/user-media/u1/characters/frodo.webp')
+  })
+
+  it('refreshes authoritative storage usage after replacement cleanup settles', async () => {
+    let finishDelete
+    vi.mocked(deleteUserMedia).mockImplementationOnce(() => new Promise(resolve => { finishDelete = resolve }))
+    vi.mocked(getUserStorageUsage).mockClear()
+    const { result } = renderHook(() => useStore('user-1'))
+    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(1))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo', image: 'yow-media:user-1/characters/old.webp' }) })
+    act(() => { result.current.saveCharacter({ image: 'yow-media:user-1/characters/new.webp' }, result.current.characters[0].id) })
+
+    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:user-1/characters/old.webp')
+    expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
+
+    await act(async () => { finishDelete() })
+    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(2))
   })
 })
 

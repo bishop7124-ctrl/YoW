@@ -66,18 +66,13 @@ supabase secrets set SITE_URL=http://localhost:5173
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Deploy the functions:
-
-```bash
-supabase functions deploy create-checkout-session
-supabase functions deploy create-customer-portal
-supabase functions deploy stripe-webhook
-```
-
-Configure the Stripe webhook endpoint to point at:
+Billing is served by the Vercel API routes in `api/`; the similarly named
+Supabase Edge Functions are legacy copies and must not be deployed or wired
+to Stripe. Configure the Stripe webhook endpoint to point at the production
+Vercel route:
 
 ```text
-https://your-project.supabase.co/functions/v1/stripe-webhook
+https://www.yourownworld.co.uk/api/stripe-webhook
 ```
 
 Subscribe it to `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, and `customer.subscription.*` events. Configure the Stripe customer portal in the Stripe Dashboard so members can update payment methods and manage cancellation.

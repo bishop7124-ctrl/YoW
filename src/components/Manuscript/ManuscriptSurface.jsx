@@ -111,6 +111,7 @@ export default function ManuscriptSurface({
             selectedText={selectedText}
             onAppendToScene={onAppendToScene}
             onReplaceSelection={onReplaceSelection}
+            onReplaceScene={onReplaceInScene}
             userId={userId}
             membership={membership}
           />

@@ -5,8 +5,11 @@ describe('AI token parameter selection', () => {
   it('uses max_completion_tokens for newer OpenAI model families', () => {
     expect(buildOpenAiTokenLimit('openai', 'gpt-5', 2048)).toEqual({ max_completion_tokens: 2048 })
     expect(buildOpenAiTokenLimit('openai', 'gpt-5-mini', 2048)).toEqual({ max_completion_tokens: 2048 })
+    expect(buildOpenAiTokenLimit('openai', 'gpt-5.5', 2048)).toEqual({ max_completion_tokens: 2048 })
+    expect(buildOpenAiTokenLimit('openai', 'gpt-6-astra', 2048)).toEqual({ max_completion_tokens: 2048 })
     expect(buildOpenAiTokenLimit('openai', 'o3-mini', 2048)).toEqual({ max_completion_tokens: 2048 })
     expect(buildOpenAiTokenLimit('openai', 'o4-mini', 2048)).toEqual({ max_completion_tokens: 2048 })
+    expect(buildOpenAiTokenLimit('openai', 'o5', 2048)).toEqual({ max_completion_tokens: 2048 })
   })
 
   it('uses max_completion_tokens for OpenRouter OpenAI model aliases', () => {
