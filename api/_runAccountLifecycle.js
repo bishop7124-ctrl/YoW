@@ -243,6 +243,20 @@ export default async function handler(req, res) {
       body.archive = { ...result, maxPerRun: MAX_ARCHIVES_PER_RUN }
     }
 
+    // Counts only (no ids, no emails) so the run result is visible in Vercel's logs.
+    console.log('[run-account-lifecycle] summary', JSON.stringify({
+      mode: body.mode,
+      checked: body.checked,
+      swept: body.swept,
+      noticesDue: body.noticesDue.length,
+      blockedFinalNotice: body.blockedFinalNotice.length,
+      archiveDecisions: body.archiveDecisions.length,
+      deleteDecisions: body.deleteDecisions.length,
+      emails: body.emails,
+      archive: body.archive,
+      sendSkipped: body.sendSkipped,
+      archiveSkipped: body.archiveSkipped,
+    }))
     return res.status(200).json(body)
   } catch (err) {
     console.error('[run-account-lifecycle]', err)
