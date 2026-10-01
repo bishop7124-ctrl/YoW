@@ -5,6 +5,7 @@ import {
   GRACE_DAYS,
   graceEndsAt,
   hostingEndsAt,
+  isArchiveStampCurrent,
   finalNoticeKeyFor,
   lastActivityAt,
   lifecycleTrackFor,
@@ -25,10 +26,17 @@ import {
 //   archive — ACCOUNT_LIFECYCLE_ARCHIVE=true      and ?archive=1
 //             Stamps app_metadata.cloud_archived_at on Lifetime accounts whose 90-day grace has
 //             ended AND whose final notice was recorded at least 7 days ago. Nothing is deleted.
-// Deleting Free accounts is deliberately NOT implemented: those only ever appear in the report.
+//   delete  — ACCOUNT_LIFECYCLE_DELETE_FREE=true   and ?delete=1
+//             Permanently deletes INACTIVE FREE accounts only (never Lifetime/paid), after the 18-month
+//             inactivity mark + 90-day grace, with the final notice recorded >= 7 days ago and no
+//             sign-in since. Writes account_lifecycle_deletions first, re-checks the account live,
+//             removes the user's stored media, then deletes the account. At most MAX_DELETES_PER_RUN.
 
 const MAX_EMAILS_PER_RUN = 20
 const MAX_ARCHIVES_PER_RUN = 20
+const MAX_DELETES_PER_RUN = 10
+const MEDIA_BUCKET = 'user-media'
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RESEND_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS = 'Your Own World <hello@yourownworld.co.uk>'
 const UNIQUE_VIOLATION = '23505'
@@ -48,6 +56,33 @@ async function listAllUsers(supabase) {
     if (data.users.length < PAGE_SIZE) break
   }
   return users
+}
+
+// Removes every stored object under `<userId>/` in the private media bucket. The uuid check
+// is a hard guard: an empty or malformed prefix would otherwise list the whole bucket.
+async function removeUserMedia(supabase, userId) {
+  if (!UUID_RE.test(String(userId))) throw new Error('refusing media cleanup for a non-uuid id')
+  const bucket = supabase.storage.from(MEDIA_BUCKET)
+  const paths = []
+  const walk = async (prefix, depth) => {
+    if (depth > 8) throw new Error('media folder tree too deep')
+    for (let offset = 0; ; offset += 100) {
+      const { data, error } = await bucket.list(prefix, { limit: 100, offset })
+      if (error) throw error
+      for (const entry of data || []) {
+        const path = `${prefix}/${entry.name}`
+        if (entry.id) paths.push(path)
+        else await walk(path, depth + 1)
+      }
+      if (!data || data.length < 100) break
+    }
+  }
+  await walk(userId, 0)
+  for (let i = 0; i < paths.length; i += 100) {
+    const { error } = await bucket.remove(paths.slice(i, i + 100))
+    if (error) throw error
+  }
+  return paths.length
 }
 
 export default async function handler(req, res) {
@@ -70,6 +105,8 @@ export default async function handler(req, res) {
   const archiveRequested = query.archive === '1'
   const sendEnabled = sendRequested && settingOn('ACCOUNT_LIFECYCLE_SEND_EMAILS')
   const archiveEnabled = archiveRequested && settingOn('ACCOUNT_LIFECYCLE_ARCHIVE')
+  const deleteRequested = query.delete === '1'
+  const deleteEnabled = deleteRequested && settingOn('ACCOUNT_LIFECYCLE_DELETE_FREE')
   // Fail closed: an email run without a Resend key does nothing (and records nothing).
   const resendKey = process.env.RESEND_API_KEY
   const canSend = sendEnabled && Boolean(resendKey)
@@ -87,10 +124,11 @@ export default async function handler(req, res) {
     const ids = swept.map((entry) => entry.user.id)
     const sentByUser = new Map()
     const sentAtByEvent = new Map()
+    const anchorByEvent = new Map()
     if (ids.length > 0) {
       const { data, error } = await supabase
         .from('account_lifecycle_events')
-        .select('user_id, track, event_key, created_at')
+        .select('user_id, track, event_key, created_at, anchor_at')
         .in('user_id', ids)
       if (error) throw error
       for (const row of data || []) {
@@ -98,12 +136,14 @@ export default async function handler(req, res) {
         if (!sentByUser.has(key)) sentByUser.set(key, [])
         sentByUser.get(key).push(row.event_key)
         sentAtByEvent.set(`${key}:${row.event_key}`, row.created_at)
+        anchorByEvent.set(`${key}:${row.event_key}`, row.anchor_at)
       }
     }
 
     const report = { checked: users.length, swept: swept.length, noticesDue: [], archiveDecisions: [], deleteDecisions: [], blockedFinalNotice: [] }
     const sendQueue = []
     const archiveQueue = []
+    const deleteQueue = []
 
     for (const { user, track } of swept) {
       const anchor = track === 'hosting_lapsed' ? hostingEndsAt(user) : lastActivityAt(user)
@@ -113,7 +153,9 @@ export default async function handler(req, res) {
         anchor,
         now,
         sentNoticeKeys: sentByUser.get(ledgerKey) || [],
-        archivedAt: user.app_metadata?.cloud_archived_at || null,
+        archivedAt: track === 'hosting_lapsed' && isArchiveStampCurrent(user.app_metadata?.cloud_archived_at, anchor)
+          ? user.app_metadata.cloud_archived_at
+          : null,
       })
       // Opaque id only: the report must stay safe to paste into a chat or ticket.
       const row = { userId: user.id, track, stage: classification.stage, dayOffset: classification.dayOffset }
@@ -140,8 +182,16 @@ export default async function handler(req, res) {
           }
         }
       } else if (classification.action === 'delete') {
-        // Report only. Deleting Free accounts is intentionally not built.
         report.deleteDecisions.push(row)
+        if (track === 'free_inactive') {
+          const finalNoticeSentAt = sentAtByEvent.get(`${ledgerKey}:${finalNoticeKeyFor(track)}`)
+          // The activity date the first warning was based on; any later sign-in is a response.
+          const anchorSeenAtNotice = anchorByEvent.get(`${ledgerKey}:inactive_0`) ?? anchorByEvent.get(`${ledgerKey}:${finalNoticeKeyFor(track)}`)
+          const lastActivity = lastActivityAt(user)
+          if (mayExecuteIrreversible({ classification, finalNoticeSentAt, lastActivity, anchorSeenAtNotice, now })) {
+            deleteQueue.push({ user, track, anchor, finalNoticeSentAt, lastActivity })
+          }
+        }
       } else if (classification.dueNotice) {
         const notice = queueNotice(classification.dueNotice)
         report.noticesDue.push({ ...row, notice: classification.dueNotice, subject: notice?.subject })
@@ -156,6 +206,9 @@ export default async function handler(req, res) {
     if (sendRequested && !sendEnabled) body.sendSkipped = 'ACCOUNT_LIFECYCLE_SEND_EMAILS is not on'
     else if (sendEnabled && !resendKey) body.sendSkipped = 'RESEND_API_KEY is not configured'
     if (archiveRequested && !archiveEnabled) body.archiveSkipped = 'ACCOUNT_LIFECYCLE_ARCHIVE is not on'
+    if (deleteRequested && !deleteEnabled) body.deleteSkipped = 'ACCOUNT_LIFECYCLE_DELETE_FREE is not on'
+    if (deleteEnabled) actions.push('delete')
+    body.mode = actions.length ? actions.join('+') : 'report-only'
 
     if (canSend) {
       // Final notices first: they are what unlocks archiving.
@@ -243,6 +296,50 @@ export default async function handler(req, res) {
       body.archive = { ...result, maxPerRun: MAX_ARCHIVES_PER_RUN }
     }
 
+    if (deleteEnabled) {
+      const result = { deleted: 0, failed: 0, skipped: 0, remaining: 0 }
+      let attempts = 0
+      for (const item of deleteQueue) {
+        if (attempts >= MAX_DELETES_PER_RUN) { result.remaining += 1; continue }
+        attempts += 1
+        const id = item.user.id
+        try {
+          // Live re-check: the account must still be an inactive Free account and must not
+          // have signed in since the sweep read it. Anything else is skipped, not deleted.
+          const { data: fresh, error: freshError } = await supabase.auth.admin.getUserById(id)
+          if (freshError || !fresh?.user) throw freshError || new Error('user not found')
+          const stillFree = lifecycleTrackFor(fresh.user) === 'free_inactive'
+          const sameActivity = lastActivityAt(fresh.user)?.getTime() === item.lastActivity?.getTime()
+          if (!stillFree || !sameActivity) { result.skipped += 1; continue }
+
+          // Record FIRST (service-role-only audit table; no FK, survives the deletion).
+          const { error: auditError } = await supabase.from('account_lifecycle_deletions').upsert({
+            user_id: id,
+            track: item.track,
+            anchor_at: item.anchor ? new Date(item.anchor).toISOString() : null,
+            final_notice_sent_at: item.finalNoticeSentAt ? new Date(item.finalNoticeSentAt).toISOString() : null,
+          }, { onConflict: 'user_id' })
+          if (auditError) throw auditError
+
+          await removeUserMedia(supabase, id)
+          const { error: deleteError } = await supabase.auth.admin.deleteUser(id)
+          if (deleteError) throw deleteError
+          result.deleted += 1
+          const { error: doneError } = await supabase
+            .from('account_lifecycle_deletions')
+            .update({ completed_at: new Date().toISOString() })
+            .eq('user_id', id)
+          if (doneError) console.error('[run-account-lifecycle] deletion audit completion failed', doneError.message)
+        } catch (deleteErr) {
+          // Nothing is half-done in a way that loses data: media removal happens just before the
+          // account delete, and the next run retries from the audit row.
+          console.error('[run-account-lifecycle] deletion failed', id, deleteErr?.message)
+          result.failed += 1
+        }
+      }
+      body.deletion = { ...result, maxPerRun: MAX_DELETES_PER_RUN }
+    }
+
     // Counts only (no ids, no emails) so the run result is visible in Vercel's logs.
     console.log('[run-account-lifecycle] summary', JSON.stringify({
       mode: body.mode,
@@ -254,6 +351,8 @@ export default async function handler(req, res) {
       deleteDecisions: body.deleteDecisions.length,
       emails: body.emails,
       archive: body.archive,
+      deletion: body.deletion,
+      deleteSkipped: body.deleteSkipped,
       sendSkipped: body.sendSkipped,
       archiveSkipped: body.archiveSkipped,
     }))

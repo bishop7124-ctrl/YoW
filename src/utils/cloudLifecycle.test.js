@@ -32,8 +32,18 @@ describe('paid hosting lifecycle', () => {
     expect(r.phase).toBe(PHASES.GRACE)
     expect(r.notice).toBe('grace-final')
   })
-  it('archives (never deletes) after grace', () => {
+  it('stays in grace with writes on after day 90 until the server stamps the archive', () => {
     const r = run(days(-91))
+    expect(r.phase).toBe(PHASES.GRACE)
+    expect(r.graceDaysRemaining).toBe(0)
+    expect(r.cloudWritesAllowed).toBe(true)
+  })
+  it('ignores an archive stamp that predates the current hosting end (old lapse)', () => {
+    const r = computeCloudLifecycle({ kind: 'paid_hosting', now: NOW, hostingEndsAt: days(-91), archivedAt: days(-400) })
+    expect(r.phase).toBe(PHASES.GRACE)
+  })
+  it('archives (never deletes) after grace once the archive stamp exists', () => {
+    const r = computeCloudLifecycle({ kind: 'paid_hosting', now: NOW, hostingEndsAt: days(-91), archivedAt: days(-1) })
     expect(r.phase).toBe(PHASES.ARCHIVED)
     expect(r.action).toBe('archive')
     expect(r.exportAllowed).toBe(true)
