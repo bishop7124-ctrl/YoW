@@ -11,6 +11,7 @@ Automated evidence:
 - Focused recovery run: 13/13 test files, 228/228 tests.
 - Full `npm run qa`: 144/144 test files, 1,402/1,402 tests; lint has zero errors and the existing 104 warnings; production build passes; 225 local files resolve/parse; all 52 Playwright specs are represented in CI; all 12 Vercel API modules import cleanly.
 - `git diff --check` passes.
+- First PR browser run found a genuine mobile overlap: the fixed support link intercepted `Open full entry` in the manuscript reference dialog. CSS now hides the support control whenever a semantic dialog is open. The complete `tests/e2e/manuscript-reference-panel.spec.js` passes 4/4 locally, including mobile and tablet; require the rerun full CI matrix to pass before merge.
 
 Post-merge checks: confirm the Vercel production deployment completed from the merge commit; on the live Library Import menu confirm `Manuscript Discovery`, `AI Import`, and `Import ZIP` are present; upload one disposable TXT or DOCX and stop on the review screen after confirming discovered categories/evidence render (do not create a project unless the owner wants a live mutation); confirm Account Settings renders the selected-model guidance without changing the saved provider/key/model; confirm password visibility toggles on sign-in and reset screens.
 
