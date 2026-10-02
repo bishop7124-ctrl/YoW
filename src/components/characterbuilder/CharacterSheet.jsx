@@ -820,7 +820,7 @@ function TabNotes({ character, onChange }) {
 
 // ─── Tab: Campaign ────────────────────────────────────────────────────────────
 
-function TabCampaign({ character, onChange, store }) {
+export function TabCampaign({ character, onChange, store }) {
   const [newRel, setNewRel] = useState({ characterId: '', type: 'Friend', notes: '' })
   const relationships = character.npcRelationships || []
   const factionIds = character.factionIds || []

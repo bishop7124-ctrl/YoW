@@ -126,13 +126,13 @@ const FEATURE_MATRIX = [
         note: null,
       },
       {
-        label: 'RPG character sheet builder',
+        label: 'Character sheet builder',
         prose: false,
         comic: false,
-        ttrpg: true,
+        ttrpg: 'System-neutral custom sheet',
         dnd: '5E classes, stats, spells, and inventory',
         unique: 'ttrpg',
-        note: 'Exclusive to tabletop project types. Full character sheet with ability scores, class, level, equipment, and spell slots.',
+        note: 'Exclusive to tabletop project types. Tabletop Campaign gets a system-neutral sheet with your own stats, trackers, and traits; 5E Campaign gets a full 5E sheet with ability scores, class, level, equipment, and spell slots.',
       },
     ],
   },
@@ -422,7 +422,7 @@ const UNIQUE_CALLOUTS = [
     type: 'Tabletop Campaign',
     color: COLS.find(c => c.id === 'ttrpg').color,
     items: [
-      'RPG character sheet builder — ability scores, class, level, gear, and spells',
+      'System-neutral character sheets — your own stats, trackers, traits, and gear',
       'Session → Encounter structure with campaign arc planning',
       'System-neutral: works for any genre, game system, or ruleset',
       'Maps, factions, and world history all on by default',
@@ -436,7 +436,7 @@ const UNIQUE_CALLOUTS = [
       '5E character builder with classes, stats, spell slots, and inventory',
       'Story events use fantasy-adventure language: Quest hook, Dungeon reveal, Boss battle, Arc climax',
       'Fantasy-first lore language: gods, dungeons, monsters, and high-fantasy world codex',
-      'Full NPC database with secrets, faction loyalties, and DM-only notes',
+      'Full NPC database with secrets, faction loyalties, and GM-only notes',
     ],
   },
 ]
@@ -445,7 +445,7 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
   usePageMeta({
     path: '/features/',
     title: 'Features — Your Own World | Worldbuilding & Writing Software',
-    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and D&D dungeon masters.',
+    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and tabletop game masters.',
   })
 
   return (

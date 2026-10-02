@@ -53,7 +53,7 @@ describe('Manuscript campaign workflow', () => {
     render(<Manuscript store={store} userId={null} />)
 
     expect(screen.getByText('Session prep & recap')).toBeTruthy()
-    expect(screen.getByText(/DM planning fields/)).toBeTruthy()
+    expect(screen.getByText(/GM planning fields/)).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Hooks'), { target: { value: 'Missing caravan at the old bridge' } })
     fireEvent.change(screen.getByLabelText('Recap'), { target: { value: 'The party tracked wagon marks north.' } })

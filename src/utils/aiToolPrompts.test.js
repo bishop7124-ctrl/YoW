@@ -17,7 +17,7 @@ describe('buildProjectTypePromptContext', () => {
       ['novel', ['Project type: Novel', 'Act > Chapter > Scene', 'long-form prose fiction', 'novel-scale arcs']],
       ['novella', ['Project type: Novella', 'Part > Chapter > Scene', 'tighter scope than a full novel', 'smaller promise than a novel-scale']],
       ['short_story', ['Project type: Short Story', 'Part > Section > Scene', 'short story with a compact cast', 'one dominant dramatic movement']],
-      ['dnd_campaign', ['Project type: 5E Campaign', 'Story Arc > Session > Encounter', 'DM-side 5E campaign planning', 'Do not imply live play']],
+      ['dnd_campaign', ['Project type: 5E Campaign', 'Story Arc > Session > Encounter', 'GM-side 5E campaign planning', 'Do not imply live play']],
       ['tabletop_rpg', ['Project type: Tabletop Campaign', 'Campaign Arc > Session > Encounter', 'system-neutral tabletop campaign planning', 'Stay system-neutral']],
       ['comic', ['Project type: Comic / Graphic Novel', 'Volume > Issue > Page', 'page/panel beats', 'SFX']],
     ]

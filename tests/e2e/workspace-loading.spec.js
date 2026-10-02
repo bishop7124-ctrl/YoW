@@ -25,3 +25,19 @@ test('deferred workspace tools load when opened and preserve navigation', async 
   }
   expect(errors).toEqual([])
 })
+
+test('Tabletop Campaign Party tab creates a system-neutral character sheet', async ({ page }) => {
+  await seedCleanStorage(page)
+  await page.goto('/')
+  await dismissLaunchPrompts(page)
+  await createProject(page, { title: 'Neutral sheet', type: 'tabletop_rpg' })
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.getByLabel('Studio navigation').getByRole('button', { name: 'Open Party', exact: true }).click()
+  await page.getByRole('button', { name: /Create First Character|\+ New Character/ }).first().click()
+  await page.getByPlaceholder('Character name').fill('Vex')
+  await page.getByRole('button', { name: 'Create Character' }).click()
+  await expect(page.getByLabel('Role or concept')).toBeVisible()
+  await expect(page.getByText('Level Up', { exact: false })).toHaveCount(0)
+  expect(errors).toEqual([])
+})

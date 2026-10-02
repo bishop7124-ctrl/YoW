@@ -21,8 +21,8 @@ const WORKSPACE_HIGHLIGHTS = {
   novel:        ['Manuscript editor with acts, chapters & scenes', 'Characters, locations & lore encyclopedia', 'Timeline, world history & ideas board'],
   novella:      ['Manuscript editor with parts & chapters', 'Characters, locations & lore', 'Ideas board & writing schedule'],
   short_story:  ['Streamlined manuscript editor', 'Characters & locations', 'Compact planning tools'],
-  dnd_campaign: ['Session planner with encounter tracking', 'Character builder with dice roller', 'Maps, factions, lore & world history'],
-  tabletop_rpg: ['Session planner for any ruleset', 'Character builder with dice roller', 'Maps, factions, lore & world history'],
+  dnd_campaign: ['Session planner with encounter tracking', '5E character builder with dice roller', 'Maps, factions, lore & world history'],
+  tabletop_rpg: ['Session planner for any ruleset', 'Custom character sheets for any system', 'Maps, factions, lore & world history'],
   comic:        ['Volume & issue structure planner', 'Page & panel scripting tools', 'Characters, locations & ideas board'],
 }
 
