@@ -9,6 +9,7 @@ import {
 } from './rpgData'
 import { cantripsForClass, spellsForClassAtLevel, findSpellByName } from './spellData'
 import { UserMediaImage } from '../shared/UserMedia'
+import { downloadCharacterSheetPdf } from '../../utils/characterSheetPdf'
 
 const toSpellEntry = (spell) => ({
   id: `spell-${spell.name.replace(/\s+/g, '-').toLowerCase()}`,
@@ -1112,6 +1113,17 @@ function LevelUpModal({ character, onConfirm, onClose }) {
 export default function CharacterSheet({ character, onUpdate, onBack, store }) {
   const [tab, setTab] = useState('overview')
   const [levelUpOpen, setLevelUpOpen] = useState(false)
+  const [pdfState, setPdfState] = useState('idle')
+  const exportPdf = async () => {
+    setPdfState('working')
+    try {
+      await downloadCharacterSheetPdf(character)
+      setPdfState('idle')
+    } catch (error) {
+      console.error('[export] Character sheet PDF failed', error)
+      setPdfState('error')
+    }
+  }
 
   const race = RACES.find(r => r.id === character.race)
   const cls = CLASSES.find(c => c.id === character.class)
@@ -1238,6 +1250,20 @@ export default function CharacterSheet({ character, onUpdate, onBack, store }) {
               }}
             >Level Up ↑</button>
           )}
+
+          {/* Printable sheet */}
+          <button
+            onClick={exportPdf}
+            disabled={pdfState === 'working'}
+            title="Download a printable character sheet (PDF)"
+            style={{
+              padding: '7px 14px', borderRadius: 9, flexShrink: 0,
+              border: '1px solid color-mix(in srgb, var(--border) 70%, transparent)',
+              background: 'transparent',
+              color: pdfState === 'error' ? '#ef4444' : 'var(--text-main)', fontSize: 12, fontWeight: 700,
+              cursor: pdfState === 'working' ? 'wait' : 'pointer',
+            }}
+          >{pdfState === 'working' ? 'Preparing…' : pdfState === 'error' ? 'PDF failed — retry' : 'Download PDF'}</button>
         </div>
       </div>
 

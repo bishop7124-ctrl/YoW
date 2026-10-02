@@ -3,7 +3,7 @@ import { getProjectType } from '../constants/projectTypes.js'
 import { normalizeFactionLogo } from '../components/Factions/logoData.js'
 import {
   cleanText, escapeHtml, sortByTitle, valueList,
-  asArray, isCampaignProject, sessionExportRows, sessionExportSummary, outlineStoryEventLabel,
+  asArray, isCampaignProject, isComicProject, sortByOrder, sessionExportRows, sessionExportSummary, outlineStoryEventLabel,
   getRelationshipLinks, getEnabled, buildOutline, wordCount, buildSummaryStats,
   getProjectExportLabel, getProjectWorkspaceLabel, getProjectPdfFilename, downloadBlob,
 } from './projectExportHelpers.js'
@@ -416,7 +416,7 @@ const jpegResourceFromDataUrl = (value) => {
   return size ? { bytes, ...size } : null
 }
 
-const convertImageToJpegResource = async (src, options = {}) => {
+export const convertImageToJpegResource = async (src, options = {}) => {
   let resolvedSrc = src
   if (isUserMediaReference(src)) {
     try {
@@ -468,7 +468,15 @@ const prepareProjectPdfData = async (projectData) => {
     const pdfImage = await convertImageToJpegResource(image)
     return pdfImage ? { ...faction, _pdfImage: pdfImage, _exportLogoImage: image } : { ...faction, _exportLogoImage: image }
   }))
-  const mapProjectData = { ...projectData, characters, factions }
+  const toPdfImage = async (item) => {
+    const image = item?.referenceImage
+    if (!image) return item
+    const pdfImage = await convertImageToJpegResource(image, { maxSize: 1400, quality: 0.86 })
+    return pdfImage ? { ...item, _pdfImage: pdfImage } : item
+  }
+  const comicPages = await Promise.all(asArray(projectData.comicPages).map(toPdfImage))
+  const comicPanels = await Promise.all(asArray(projectData.comicPanels).map(toPdfImage))
+  const mapProjectData = { ...projectData, characters, factions, comicPages, comicPanels }
   const maps = await Promise.all((projectData.maps ?? []).map(async map => {
     const image = getMapPreviewImage(map, mapProjectData)
     if (!image) return map
@@ -711,7 +719,7 @@ const pdfText = (value = '') =>
     })
     .replace(/[\\()]/g, '\\$&')
 
-const measureText = (text, size, tracking = 0) => {
+export const measureText = (text, size, tracking = 0) => {
   const value = String(text || '')
   return value.length * size * 0.6 + Math.max(0, value.length - 1) * tracking
 }
@@ -727,7 +735,7 @@ const fitPdfText = (text, maxWidth, size, tracking = 0) => {
   return `${output.trimEnd()}${ellipsis}`
 }
 
-const wrapPdfText = (text, maxWidth, size, maxLines = 99) => {
+export const wrapPdfText = (text, maxWidth, size, maxLines = 99) => {
   const paragraphs = cleanText(text).split(/\n{2,}/).map(block => block.replace(/\n/g, ' ').trim()).filter(Boolean)
   const lines = []
   paragraphs.forEach((paragraph, paragraphIndex) => {
@@ -752,7 +760,7 @@ const wrapPdfText = (text, maxWidth, size, maxLines = 99) => {
   return lines
 }
 
-const makePdfCanvas = (theme) => {
+export const makePdfCanvas = (theme) => {
   const commands = []
   const images = []
   const draw = (cmd) => commands.push(cmd)
@@ -1284,7 +1292,59 @@ const createOutlinePages = (projectData, theme) => {
   return pages
 }
 
-const createPdfBytes = (pageContents, title) => {
+const comicPanelText = (panel, panelNumber) => [
+  `Panel ${panelNumber}${[panel.shotType, panel.layoutHint].filter(Boolean).length ? ` (${[panel.shotType, panel.layoutHint].filter(Boolean).join(', ')})` : ''}`,
+  panel.description,
+  panel.artNotes ? `Art notes: ${panel.artNotes}` : '',
+  ...asArray(panel.captions).map(cap => `${cap.type ? `Caption (${cap.type})` : 'Caption'}: ${cap.text}`),
+  ...asArray(panel.dialogue).map(line => `${line.speaker || 'Balloon'}: ${line.text}`),
+  ...asArray(panel.sfx).map(fx => `SFX: ${fx.text}`),
+  panel.continuityNotes ? `Continuity: ${panel.continuityNotes}` : '',
+].filter(value => value && String(value).trim()).join('\n')
+
+const createComicPages = (projectData, theme) => {
+  const pages = []
+  const { acts = [], chapters = [], comicPages = [], comicPanels = [] } = projectData
+  sortByOrder(acts).forEach(volume => {
+    sortByOrder(chapters.filter(chapter => chapter.actId === volume.id)).forEach((issue, issueIndex) => {
+      const issueTitle = issue.title || `Issue ${issueIndex + 1}`
+      sortByOrder(comicPages.filter(page => page.issueId === issue.id)).forEach((page, pageIndex) => {
+        const pageLabel = page.title ? `Page ${pageIndex + 1} — ${page.title}` : `Page ${pageIndex + 1}`
+        const panels = sortByOrder(comicPanels.filter(panel => panel.pageId === page.id))
+        const body = [
+          page.summary,
+          page.visualDirection ? `Visual direction: ${page.visualDirection}` : '',
+          page.productionNotes ? `Production notes: ${page.productionNotes}` : '',
+          ...(panels.length ? panels.map((panel, index) => comicPanelText(panel, index + 1)) : ['(no panels)']),
+        ].filter(Boolean).join('\n\n')
+        pages.push(...createArticlePages({
+          section: 'Comic Script',
+          eyebrow: `${volume.title || 'Volume'} · ${issueTitle}`,
+          title: pageLabel,
+          subtitle: [page.pageType, page.status].filter(Boolean).join(' · '),
+          body,
+          artLabel: 'Page art',
+          initial: String(pageIndex + 1),
+          image: page._pdfImage,
+          imageFit: 'contain',
+        }, theme))
+        panels.forEach((panel, index) => {
+          if (!panel._pdfImage) return
+          const pdf = makePdfCanvas(theme)
+          const contentStartY = pdf.pageBase(`${issueTitle} · ${pageLabel}`, `Panel ${index + 1}`, panel.description || 'Panel art')
+          const panelBottom = 58
+          const panelTop = Math.min(464, contentStartY - 18)
+          pdf.rect(50, panelBottom, 742, panelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
+          drawImageFrame(pdf, `Panel ${index + 1}`, panel._pdfImage, 72, panelTop - 26, 698, panelTop - panelBottom - 52, theme, String(index + 1), '50% 50%', 'contain')
+          pages.push(pdfPage('Comic Script', `${pageLabel} — Panel ${index + 1}`, pdfContent(pdf)))
+        })
+      })
+    })
+  })
+  return pages
+}
+
+export const createPdfBytes = (pageContents, title) => {
   const pageDescriptors = pageContents.map(page => typeof page === 'string' ? { content: page, links: [] } : { links: [], ...page })
   const chunks = []
   const offsets = [0]
@@ -1363,7 +1423,7 @@ const createPdfBytes = (pageContents, title) => {
     const xObjects = (page.images ?? []).length
       ? ` /XObject << ${page.images.map(image => `/${image.name} ${image.objectId} 0 R`).join(' ')} >>`
       : ''
-    addObject(page.pageId, `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${A4_LANDSCAPE.width} ${A4_LANDSCAPE.height}] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >>${xObjects} >> /Contents ${page.contentId} 0 R${annots} >>`)
+    addObject(page.pageId, `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${page.size?.width ?? A4_LANDSCAPE.width} ${page.size?.height ?? A4_LANDSCAPE.height}] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >>${xObjects} >> /Contents ${page.contentId} 0 R${annots} >>`)
   })
   addObject(pagesId, `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`)
 
@@ -1530,6 +1590,7 @@ const createProjectPdfPages = (projectData, theme) => {
     const outlinePages = createOutlinePages(projectData, theme)
     const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
     records.push(...(outlinePages.length ? outlinePages : emptySectionPages(`${workspaceLabel} Structure`, workspaceLabel, `${workspaceLabel} Structure`, 'Outline structure, draft counts, project notes, and loose ideas', `No ${(getProjectType(projectData.project?.type).structure?.level1 || 'Act').toLowerCase()} sections yet.`, theme)))
+    if (isComicProject(projectData.project)) records.push(...createComicPages(projectData, theme))
   }
   if (enabled.has('ideas')) {
     const entities = buildIdeaEntityIndex(projectData)
