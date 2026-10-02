@@ -250,12 +250,14 @@ export default async function handler(req, res) {
         attempts += 1
         if (attempts > 1) await sleep(spacing)
         try {
+          // No Resend Idempotency-Key on purpose: Resend remembers a key for 24h and answers 409 if the
+          // same key comes back with a different body (e.g. a retry after we freed the ledger row, or
+          // after the email template changed). The ledger row above is the duplicate guard.
           const emailRes = await fetch(RESEND_URL, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${resendKey}`,
-              'Idempotency-Key': `lifecycle-${item.user.id}-${item.track}-${item.noticeKey}`,
             },
             body: JSON.stringify({ from: FROM_ADDRESS, to: [item.user.email], subject: item.notice.subject, html: item.notice.html, text: item.notice.text }),
           })

@@ -505,7 +505,8 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('https://api.resend.com/emails')
     expect(init.headers.Authorization).toBe('Bearer re_test')
-    expect(init.headers['Idempotency-Key']).toBe('lifecycle-a-free_inactive-inactive_0')
+    // the ledger row, not a Resend idempotency key, is the duplicate guard (a reused key 409s for 24h)
+    expect(init.headers['Idempotency-Key']).toBeUndefined()
     const sent = JSON.parse(init.body)
     expect(sent.to).toEqual(['a@x.test'])
     expect(sent.subject).toBeTruthy()
