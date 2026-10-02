@@ -234,6 +234,44 @@ describe('account lifecycle: client entitlement agrees with the policy', () => {
   })
 })
 
+describe('notice HTML email', () => {
+  const deadline = new Date('2027-03-01T12:00:00Z')
+  const every = []
+  for (const [track, entries] of Object.entries(NOTICE_SCHEDULE)) {
+    for (const entry of entries) every.push({ track, key: entry.key })
+  }
+
+  it.each(every)('renders $track / $key in the YOW email style with the same wording as the text part', ({ track, key }) => {
+    const n = buildNotice({ track, noticeKey: key, daysLeft: 40, deadline })
+    expect(n.html).toMatch(/^<!DOCTYPE html>/)
+    // house style shared with the other YOW emails
+    expect(n.html).toContain('#133840')
+    expect(n.html).toContain('#0d282e')
+    expect(n.html).toContain('#e8724e')
+    expect(n.html).toContain('Your Own World')
+    expect(n.html).toContain(n.exportUrl)
+    expect(n.html).toContain('Export all projects')
+    expect(n.html).toContain('support@yourownworld.co.uk')
+    // every sentence of the approved text appears in the HTML (HTML-escaped)
+    const esc = (v) => v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+    for (const line of n.text.split('\n').filter(Boolean)) {
+      if (line.startsWith('How to export all your data: ')) {
+        expect(n.html).toContain(esc(line.replace('How to export all your data: ', '')))
+      } else {
+        expect(n.html).toContain(esc(line))
+      }
+    }
+    expect(n.html).toContain(esc(n.subject))
+    expect(n.html).toContain(n.final ? 'Final notice' : 'Account notice')
+  })
+
+  it('never emits unescaped markup from dynamic values', () => {
+    const n = buildNotice({ track: 'free_inactive', noticeKey: 'inactive_0', siteUrl: 'https://x.test/"><script>alert(1)</script>' })
+    expect(n.html).not.toContain('<script>')
+    expect(n.html).not.toMatch(/href="[^"]*"><script/)
+  })
+})
+
 describe('account_lifecycle_events migration', () => {
   it('is service-role only with RLS on and no client grants', async () => {
     const sql = await readFile(new URL('../../supabase/migrations/20261001120000_account_lifecycle_events.sql', import.meta.url), 'utf8')
@@ -471,6 +509,9 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     const sent = JSON.parse(init.body)
     expect(sent.to).toEqual(['a@x.test'])
     expect(sent.subject).toBeTruthy()
+    expect(sent.html).toMatch(/^<!DOCTYPE html>/)
+    expect(sent.html).toContain('#e8724e')
+    expect(sent.text).toContain('How to export all your data')
     expect(JSON.stringify(body)).not.toMatch(/@x\.test/)
   })
 
