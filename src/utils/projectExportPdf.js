@@ -3,7 +3,7 @@ import { getProjectType } from '../constants/projectTypes.js'
 import { normalizeFactionLogo } from '../components/Factions/logoData.js'
 import {
   cleanText, escapeHtml, sortByTitle, valueList,
-  asArray, isCampaignProject, sessionExportRows, sessionExportSummary, outlineStoryEventLabel,
+  asArray, isCampaignProject, isComicProject, sortByOrder, sessionExportRows, sessionExportSummary, outlineStoryEventLabel,
   getRelationshipLinks, getEnabled, buildOutline, wordCount, buildSummaryStats,
   getProjectExportLabel, getProjectWorkspaceLabel, getProjectPdfFilename, downloadBlob,
 } from './projectExportHelpers.js'
@@ -468,7 +468,15 @@ const prepareProjectPdfData = async (projectData) => {
     const pdfImage = await convertImageToJpegResource(image)
     return pdfImage ? { ...faction, _pdfImage: pdfImage, _exportLogoImage: image } : { ...faction, _exportLogoImage: image }
   }))
-  const mapProjectData = { ...projectData, characters, factions }
+  const toPdfImage = async (item) => {
+    const image = item?.referenceImage
+    if (!image) return item
+    const pdfImage = await convertImageToJpegResource(image, { maxSize: 1400, quality: 0.86 })
+    return pdfImage ? { ...item, _pdfImage: pdfImage } : item
+  }
+  const comicPages = await Promise.all(asArray(projectData.comicPages).map(toPdfImage))
+  const comicPanels = await Promise.all(asArray(projectData.comicPanels).map(toPdfImage))
+  const mapProjectData = { ...projectData, characters, factions, comicPages, comicPanels }
   const maps = await Promise.all((projectData.maps ?? []).map(async map => {
     const image = getMapPreviewImage(map, mapProjectData)
     if (!image) return map
@@ -1284,6 +1292,58 @@ const createOutlinePages = (projectData, theme) => {
   return pages
 }
 
+const comicPanelText = (panel, panelNumber) => [
+  `Panel ${panelNumber}${[panel.shotType, panel.layoutHint].filter(Boolean).length ? ` (${[panel.shotType, panel.layoutHint].filter(Boolean).join(', ')})` : ''}`,
+  panel.description,
+  panel.artNotes ? `Art notes: ${panel.artNotes}` : '',
+  ...asArray(panel.captions).map(cap => `${cap.type ? `Caption (${cap.type})` : 'Caption'}: ${cap.text}`),
+  ...asArray(panel.dialogue).map(line => `${line.speaker || 'Balloon'}: ${line.text}`),
+  ...asArray(panel.sfx).map(fx => `SFX: ${fx.text}`),
+  panel.continuityNotes ? `Continuity: ${panel.continuityNotes}` : '',
+].filter(value => value && String(value).trim()).join('\n')
+
+const createComicPages = (projectData, theme) => {
+  const pages = []
+  const { acts = [], chapters = [], comicPages = [], comicPanels = [] } = projectData
+  sortByOrder(acts).forEach(volume => {
+    sortByOrder(chapters.filter(chapter => chapter.actId === volume.id)).forEach((issue, issueIndex) => {
+      const issueTitle = issue.title || `Issue ${issueIndex + 1}`
+      sortByOrder(comicPages.filter(page => page.issueId === issue.id)).forEach((page, pageIndex) => {
+        const pageLabel = page.title ? `Page ${pageIndex + 1} — ${page.title}` : `Page ${pageIndex + 1}`
+        const panels = sortByOrder(comicPanels.filter(panel => panel.pageId === page.id))
+        const body = [
+          page.summary,
+          page.visualDirection ? `Visual direction: ${page.visualDirection}` : '',
+          page.productionNotes ? `Production notes: ${page.productionNotes}` : '',
+          ...(panels.length ? panels.map((panel, index) => comicPanelText(panel, index + 1)) : ['(no panels)']),
+        ].filter(Boolean).join('\n\n')
+        pages.push(...createArticlePages({
+          section: 'Comic Script',
+          eyebrow: `${volume.title || 'Volume'} · ${issueTitle}`,
+          title: pageLabel,
+          subtitle: [page.pageType, page.status].filter(Boolean).join(' · '),
+          body,
+          artLabel: 'Page art',
+          initial: String(pageIndex + 1),
+          image: page._pdfImage,
+          imageFit: 'contain',
+        }, theme))
+        panels.forEach((panel, index) => {
+          if (!panel._pdfImage) return
+          const pdf = makePdfCanvas(theme)
+          const contentStartY = pdf.pageBase(`${issueTitle} · ${pageLabel}`, `Panel ${index + 1}`, panel.description || 'Panel art')
+          const panelBottom = 58
+          const panelTop = Math.min(464, contentStartY - 18)
+          pdf.rect(50, panelBottom, 742, panelTop - panelBottom, theme.palette.panel, theme.palette.accent, 1)
+          drawImageFrame(pdf, `Panel ${index + 1}`, panel._pdfImage, 72, panelTop - 26, 698, panelTop - panelBottom - 52, theme, String(index + 1), '50% 50%', 'contain')
+          pages.push(pdfPage('Comic Script', `${pageLabel} — Panel ${index + 1}`, pdfContent(pdf)))
+        })
+      })
+    })
+  })
+  return pages
+}
+
 const createPdfBytes = (pageContents, title) => {
   const pageDescriptors = pageContents.map(page => typeof page === 'string' ? { content: page, links: [] } : { links: [], ...page })
   const chunks = []
@@ -1530,6 +1590,7 @@ const createProjectPdfPages = (projectData, theme) => {
     const outlinePages = createOutlinePages(projectData, theme)
     const workspaceLabel = getProjectWorkspaceLabel(projectData.project)
     records.push(...(outlinePages.length ? outlinePages : emptySectionPages(`${workspaceLabel} Structure`, workspaceLabel, `${workspaceLabel} Structure`, 'Outline structure, draft counts, project notes, and loose ideas', `No ${(getProjectType(projectData.project?.type).structure?.level1 || 'Act').toLowerCase()} sections yet.`, theme)))
+    if (isComicProject(projectData.project)) records.push(...createComicPages(projectData, theme))
   }
   if (enabled.has('ideas')) {
     const entities = buildIdeaEntityIndex(projectData)

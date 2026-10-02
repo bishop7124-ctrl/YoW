@@ -332,4 +332,16 @@ describe('createProjectDocxBlob', () => {
     expect(familyXml).toContain('Adoptive Parent')
     expect(familyXml).not.toContain('Rain hits the glass.')
   })
+
+  it('keeps full D&D encounter text with its session in the Campaign Sessions document', async () => {
+    const data = makeProjectData()
+    data.project = { ...data.project, type: 'dnd_campaign' }
+    data.chapters = [{ ...data.chapters[0], title: 'Session 1', sessionPlan: { encounters: 'Goblins, then an ogre' } }]
+    data.scenes = [{ ...data.scenes[0], title: 'Encounter 1', content: 'The goblins ambush the party at the ford.' }]
+    const zip = unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(data)).arrayBuffer()))
+    const sessionsXml = strFromU8(unzipSync(zip['Stormrider-Campaign-Sessions.docx'])['word/document.xml'])
+    expect(sessionsXml).toContain('Goblins, then an ogre')
+    expect(sessionsXml).toContain('The goblins ambush the party at the ford.')
+    expect(zip['Stormrider-Session-Drafts.docx']).toBeUndefined()
+  })
 })
