@@ -1,5 +1,14 @@
 # YOW Deferred QA Plan
 
+## 2026-10-02 export ownership and privacy matrix (sprint day 2)
+
+Status: **In progress 2026-10-02 — automated matrix passes for all six project types; owner readable-output inspection (real Word / Google Docs) pending.**
+
+- ✅ New `src/utils/projectExportOwnershipMatrix.test.js` (18 tests = 6 types x 3): novel, novella, short_story, dnd_campaign, ttrpg, comic each drive the real ZIP, Word (full and per-category ZIP), World Bible PDF and visual HTML export paths. Proves: ZIP `project-data.json` restores the full content incl. disabled sections (comic adds comic-pages/panels); Word contains characters, locations, lore and the AI chat (user + assistant) and omits disabled sections; PDF and visual HTML contain world content but no manuscript prose, private notes, disabled-section content or legacy `%%YOW-DATA-BEGIN%%` payload.
+- ✅ Existing coverage re-run and green: AI chat to Word incl. full-panel-shaped session and internal line breaks (`projectExportDocx.test.js`), DOCX single line-break `<w:br/>` vs blank-line `<w:p>` (same file), PDF privacy (`projectExportPdf.test.js`), Playwright `export-formats.spec.js` and `atlas-project-zip-restore.spec.js` 2/2 (cloud session, Chromium).
+- ✅ `npm run qa` passed: lint 0 errors, 139 files / 1,367 tests, production build, load check (216 files), e2e matrix (52 specs), 12 API imports.
+- ⬜ Not provable from the cloud session: opening the DOCX in real Word and Google Docs (line-break fidelity) and eyeballing the World Bible PDF/HTML for each type. Owner step is in the 2 Oct handoff; expiry-access export is covered 4-5 Oct.
+
 ## 2026-10-01 cloud-expiry lifecycle, idle logout, canonical redirect and security headers
 
 Status: **In progress 2026-10-01 — automated and read-only production checks pass; wording approved; signed-in live checks and email wiring pending.**

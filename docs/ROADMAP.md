@@ -125,7 +125,7 @@ Rules:
 - A failed hard gate moves the launch date; repair it before moving on (use the buffer days). Cosmetic polish and new ideas wait until after launch.
 - Payments: the 2026-09-18 decision parked Stripe work in [docs/PAYMENT_ROADMAP.md](PAYMENT_ROADMAP.md). This sprint resumes it on 21-25 Oct (decision D8); that document stays the Stripe tracker.
 - Owner-facing spreadsheet export: `docs/sprint/YOW-November-Launch-Sprint.xlsx` (an export of this section, not a second planning source).
-- Daily status (agent-maintained): 1 Oct Done (lifecycle engine, gated notice emails, archive and Free-account deletion built and tested; migrations applied; first production report clean; owner wording approved; production edge/header/redirect checks passed; owner-reported live idle-logout and cross-tab auth checks passed). The one carried item is the live end-to-end deletion test, scheduled 3 Oct. See the dated block above.
+- Daily status (agent-maintained): 2 Oct In progress (export ownership matrix automated and green; owner Word/Google Docs inspection pending); 1 Oct Done (lifecycle engine, gated notice emails, archive and Free-account deletion built and tested; migrations applied; first production report clean; owner wording approved; production edge/header/redirect checks passed; owner-reported live idle-logout and cross-tab auth checks passed). The one carried item is the live end-to-end deletion test, scheduled 3 Oct. See the dated block above.
 - On 1 and 2 Nov the agent verifies and prepares; the owner performs deploy, checkout enablement, Beta closure and publishing.
 
 #### Gate to day map
@@ -185,6 +185,7 @@ Rules:
 | Date | Status | Evidence |
 | --- | --- | --- |
 | 2026-10-01 | **Done 2026-10-01** (carried: live end-to-end deletion test on 3 Oct) | Lifecycle policy engine, notice ledger migration (not applied) and report-only sweep `api/_runAccountLifecycle.js` (reached at `/api/send-reengagement-emails?job=lifecycle`, because Vercel Hobby is capped at 12 Functions) built and tested; client `getMembership()` stops cloud sync after archive. Notice wording **owner-approved 1 Oct**. Production redirect + header check 22/22. Email sending and the archive executor are now built behind switches (2 Oct, see the section below); migrations applied, Vercel env vars set, first production dry-run report reviewed (160 accounts, 157 swept, 0 due), and the owner reported the signed-in live idle-logout and cross-tab auth checks passed (1 Oct). Not yet exercised live: a real notice email and a real deletion; the 3 Oct end-to-end test covers both. See [docs/QA_PLAN.md](QA_PLAN.md) "2026-10-01 cloud-expiry lifecycle". |
+| 2026-10-02 | **In progress** | Export ownership matrix test added (6 project types x ZIP/Word/PDF/visual HTML, 18 tests); `npm run qa` 139 files / 1,367 tests green; Playwright export + ZIP restore 2/2. Pending: owner opens generated files in real Word/Google Docs. Evidence: `docs/QA_PLAN.md` "2026-10-02 export ownership and privacy matrix". Export ownership gate stays open until 5 Oct. |
 
 #### Owner overflow (scheduled on days with spare owner time)
 
