@@ -80,7 +80,7 @@ async function openManuscript(page) {
 // "+ Chapter", confirm it lands under the first act (not the last); select
 // the second act header and repeat; add a third act and immediately click
 // "+ Chapter" — it must land in the act just created. Tooltip must name the
-// destination act throughout. Repeated once with D&D Campaign labels
+// destination act throughout. Repeated once with 5E Campaign labels
 // (Story Arc/Session) per the same QA_PLAN line.
 test.describe('+ Chapter targets the currently-active act (2026-09-12 fix)', () => {
   test('novel project: active-scene act, selected-act header, and newly-created act', async ({ page }) => {
@@ -144,7 +144,7 @@ test.describe('+ Chapter targets the currently-active act (2026-09-12 fix)', () 
     expect(chapters.filter(c => c.actId === act2.id)).toHaveLength(1)
   })
 
-  test('D&D Campaign project: same behavior with Story Arc/Session labels', async ({ page }) => {
+  test('5E Campaign project: same behavior with Story Arc/Session labels', async ({ page }) => {
     test.setTimeout(60_000)
     await createProject(page, { title: `Chapter Target Campaign ${Date.now()}`, type: 'dnd_campaign' })
     await enterWritingMode(page)
@@ -153,7 +153,7 @@ test.describe('+ Chapter targets the currently-active act (2026-09-12 fix)', () 
     const addSessionBtn = page.locator('.ms-rail-f-btn', { hasText: '+ Session' })
     const addArcBtn = page.locator('.ms-rail-f-btn', { hasText: '+ Story Arc' })
 
-    // The D&D Campaign starter outline's first act is titled "Opening Arc"
+    // The 5E Campaign starter outline's first act is titled "Opening Arc"
     // (projectTypes.js's own starterOutline), not "Story Arc 1" — new acts
     // added via "+ Story Arc" below do follow the generic "Story Arc N"
     // naming (ManuscriptRail's own `${labels.level1} ${acts.length + 1}`).

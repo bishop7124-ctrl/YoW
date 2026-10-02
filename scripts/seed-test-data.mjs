@@ -1105,7 +1105,7 @@ async function main() {
   const PROJECT_TYPES = ['novel','novella','short_story','dnd_campaign','tabletop_rpg','comic']
   const typeLabels = {
     novel:'Novel', novella:'Novella', short_story:'Short Story',
-    dnd_campaign:'D&D Campaign', tabletop_rpg:'TTRPG Campaign',
+    dnd_campaign:'5E Campaign', tabletop_rpg:'TTRPG Campaign',
     comic:'Comic / Graphic Novel',
   }
 

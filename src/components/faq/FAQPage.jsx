@@ -102,11 +102,11 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'What project types does YOW support?',
-        a: 'YOW supports novels, novellas, short stories, comic/graphic novels, D&D campaigns, and system-neutral tabletop campaigns. Each project type has its own structure, terminology, and default workspace tailored to that format.',
+        a: 'YOW supports novels, novellas, short stories, comic/graphic novels, 5E campaigns, and system-neutral tabletop campaigns. Each project type has its own structure, terminology, and default workspace tailored to that format.',
       },
       {
-        q: 'Can I use YOW for a D&D campaign?',
-        a: "Yes — the D&D Campaign type gives you an NPC database, session and encounter structure, faction and location tracking, interactive maps, and a world codex with D&D-flavoured language. For other systems, the Tabletop Campaign type is fully system-neutral and works for any TTRPG ruleset.",
+        q: 'Can I use YOW for a fifth-edition (5E) campaign?',
+        a: "Yes — the 5E Campaign type is fifth-edition compatible and gives you 5E character tools, an NPC database, session and encounter structure, faction and location tracking, interactive maps, and a fantasy-first world codex. For any other game system, the Tabletop Campaign type is fully system-neutral and works for any ruleset.",
       },
     ],
   },

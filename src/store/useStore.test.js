@@ -2881,7 +2881,7 @@ describe('immediate data-safety persistence', () => {
     expect(localStorage.getItem('nf_localOwner')).toBe('user-local')
   })
 
-  it('restores the same active D&D project after sign-out cleanup when cloud settings are stale', () => {
+  it('restores the same active 5E project after sign-out cleanup when cloud settings are stale', () => {
     const { result } = renderHook(() => useStore('user-local', { cloudSyncEnabled: false }))
 
     act(() => { result.current.addNovel({ title: 'Novel Project', type: 'novel' }) })

@@ -50,9 +50,9 @@ const PROJECT_TYPES = [
   },
   {
     id: 'dnd',
-    label: 'D&D Campaign',
+    label: '5E Campaign',
     tagline: 'Build worlds. Prepare sessions.',
-    description: 'A campaign workspace for dungeon masters — NPCs, locations, lore, factions, maps, and session-shaped structure connected in one place.',
+    description: 'A fifth-edition compatible campaign workspace — 5E character tools, NPCs, locations, lore, factions, maps, and session-shaped structure connected in one place.',
     features: [
       'Campaign and adventure arc management',
       'NPC tracker with motivations and secrets',
@@ -68,7 +68,7 @@ const PROJECT_TYPES = [
     id: 'tabletop',
     label: 'Tabletop Campaign',
     tagline: 'Any system. Any world. Any table.',
-    description: 'A system-neutral campaign bible for any ruleset — fantasy, horror, sci-fi, or homebrew. No D&D assumptions. Just the tools to build your world and run your sessions.',
+    description: 'Build and manage a campaign using any game system — fantasy, horror, sci-fi, or homebrew. System-neutral tools to build your world and run your sessions.',
     features: [
       'Campaign arc, session, and encounter structure',
       'NPC and character roster',
@@ -97,7 +97,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Track daily word count targets, see which chapters are drafted vs. revised, and monitor overall manuscript progress at a glance.' },
       { type: 'Novella', text: 'Keep a tighter manuscript target visible while working with a lighter project structure.' },
-      { type: 'D&D Campaign', text: 'See campaign structure, recently updated NPCs, maps, factions, and unresolved plot threads in one screen.' },
+      { type: '5E Campaign', text: 'See campaign structure, recently updated NPCs, maps, factions, and unresolved plot threads in one screen.' },
     ],
     capabilities: [
       'Word count tracking and daily goals',
@@ -123,7 +123,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Draft chapters with nested scenes, add notes and chapter summaries, and track revision status so you always know what\'s done.' },
       { type: 'Short Story', text: 'Draft a focused story with compact sections and a short-form word target.' },
-      { type: 'D&D Campaign', text: 'Organize campaign writing by story arc, session, and encounter.' },
+      { type: '5E Campaign', text: 'Organize campaign writing by story arc, session, and encounter.' },
     ],
     capabilities: [
       'Rich text editing with dedicated Write and Edit modes',
@@ -148,7 +148,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Build full protagonist profiles, track character arc milestones, and see exactly which scenes each character appears in.' },
       { type: 'Short Story', text: 'Keep only the essential character details close at hand for a tighter cast.' },
-      { type: 'D&D Campaign', text: 'Create private NPC profiles with goals, secrets, faction loyalties, and GM notes for campaign preparation.' },
+      { type: '5E Campaign', text: 'Create private NPC profiles with goals, secrets, faction loyalties, and GM notes for campaign preparation.' },
     ],
     capabilities: [
       'Rich character profiles with custom fields',
@@ -174,7 +174,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Document your magic system rules, historical events, and cultural traditions so every scene stays internally consistent.' },
       { type: 'Novella', text: 'Keep the world rules and backstory that matter without carrying a full epic-scale bible.' },
-      { type: 'D&D Campaign', text: 'Build a private world codex for gods, histories, languages, laws, and campaign discoveries.' },
+      { type: '5E Campaign', text: 'Build a private world codex for gods, histories, languages, laws, and campaign discoveries.' },
     ],
     capabilities: [
       'Tagged and categorized lore entries',
@@ -200,7 +200,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Track which chapters are set where, link key plot events to their locations, and maintain consistent atmospheric descriptions.' },
       { type: 'Short Story', text: 'Track the few places that matter and keep atmosphere notes consistent.' },
-      { type: 'D&D Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, keeping every secret in your own private prep.' },
+      { type: '5E Campaign', text: 'Build a navigable location hierarchy from continents to dungeon rooms, keeping every secret in your own private prep.' },
     ],
     capabilities: [
       'Nested location hierarchy (continent → city → building → room)',
@@ -226,7 +226,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Pin every city, keep, and landmark your characters visit, with plot relevance and visit notes attached to each place.' },
       { type: 'TTRPG Campaign', text: 'Upload campaign maps and connect important places to your location database.' },
-      { type: 'D&D Campaign', text: 'Prepare world maps, regional maps, and dungeon floor plans with linked locations and GM notes.' },
+      { type: '5E Campaign', text: 'Prepare world maps, regional maps, and dungeon floor plans with linked locations and GM notes.' },
     ],
     capabilities: [
       'Upload any image as a map canvas',
@@ -252,8 +252,8 @@ const FEATURE_TABS = [
     why: 'Chronology errors are among the most common story problems. A visual timeline lets you see the full shape of your story\'s time and catch contradictions before readers do.',
     useCases: [
       { type: 'Novel', text: 'Track the exact in-story date of every chapter event, see flashback vs. present-day threads, and verify timeline consistency.' },
-      { type: 'D&D Campaign', text: 'Track campaign events, world history, and in-world timing as the party changes the setting.' },
-      { type: 'D&D Campaign', text: 'Track in-game calendar dates, world history events, and session-by-session plot developments on a single view.' },
+      { type: '5E Campaign', text: 'Track campaign events, world history, and in-world timing as the party changes the setting.' },
+      { type: '5E Campaign', text: 'Track in-game calendar dates, world history events, and session-by-session plot developments on a single view.' },
     ],
     capabilities: [
       'Visual timeline with event markers',
@@ -282,7 +282,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Map royal succession lines, track which characters share blood, and keep dynastic histories accurate across a long series.' },
       { type: 'Novel', text: 'Build extended family trees for dynasties, inherited secrets, and complicated casts.' },
-      { type: 'D&D Campaign', text: 'Track noble house genealogies, NPC family connections, and hereditary titles for political intrigue campaigns.' },
+      { type: '5E Campaign', text: 'Track noble house genealogies, NPC family connections, and hereditary titles for political intrigue campaigns.' },
     ],
     capabilities: [
       'Drag-and-drop tree builder',
@@ -309,7 +309,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Map competing guilds, political parties, or cults — track their agendas, leadership, and how they evolve across the story.' },
       { type: 'TTRPG Campaign', text: 'Track guilds, factions, governments, and rivals as their power shifts between sessions.' },
-      { type: 'D&D Campaign', text: 'Build a living political web — document faction standing, NPC allegiances, and how player choices shift the balance of power in your own private prep.' },
+      { type: '5E Campaign', text: 'Build a living political web — document faction standing, NPC allegiances, and how player choices shift the balance of power in your own private prep.' },
     ],
     capabilities: [
       'Faction profiles with a logo and description',
@@ -336,7 +336,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Capture chapter ideas before they\'re ready, park alternative plot threads, and collect dialogue that might appear later.' },
       { type: 'Short Story', text: 'Keep spare endings, alternate openings, and title ideas in one accessible place.' },
-      { type: 'D&D Campaign', text: 'Park random encounter ideas, half-formed villain backstories, and future adventure hooks for exactly the right moment.' },
+      { type: '5E Campaign', text: 'Park random encounter ideas, half-formed villain backstories, and future adventure hooks for exactly the right moment.' },
     ],
     capabilities: [
       'Freeform idea cards with rich text',
@@ -361,8 +361,8 @@ const FEATURE_TABS = [
     why: 'Generic AI has no idea who your characters are. YOW\'s AI is briefed on your specific world so it gives help that actually fits your story — not suggestions for someone else\'s.',
     useCases: [
       { type: 'Novel', text: 'Ask "how would Elena react to this betrayal?" and get an answer grounded in her established personality, history, and motivations.' },
-      { type: 'D&D Campaign', text: 'Check if a session beat contradicts established NPC motivation, lore, or timeline context.' },
-      { type: 'D&D Campaign', text: 'Generate NPC dialogue that reflects their faction loyalty and secrets, fully consistent with your campaign\'s established lore.' },
+      { type: '5E Campaign', text: 'Check if a session beat contradicts established NPC motivation, lore, or timeline context.' },
+      { type: '5E Campaign', text: 'Generate NPC dialogue that reflects their faction loyalty and secrets, fully consistent with your campaign\'s established lore.' },
     ],
     capabilities: [
       'Plot hole detection across the manuscript',
@@ -389,7 +389,7 @@ const FEATURE_TABS = [
     useCases: [
       { type: 'Novel', text: 'Export your manuscript as a clean, professionally formatted DOCX or PDF ready for agent submission or beta readers.' },
       { type: 'Novella', text: 'Export your manuscript as a clean DOCX or PDF for readers and editors.' },
-      { type: 'D&D Campaign', text: 'Export your project archive or reference material for backup and sharing.' },
+      { type: '5E Campaign', text: 'Export your project archive or reference material for backup and sharing.' },
     ],
     capabilities: [
       'DOCX manuscript export',
@@ -509,7 +509,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
               YOW is the all-in-one creative workspace for writers, worldbuilders, and dungeon masters — manuscript, characters, lore, maps, and timelines, all connected in one focused studio.
             </p>
             <p className="yow-hero-sub">
-              Built for prose writers and tabletop storytellers — novels, short stories, graphic novels, D&D campaigns, and system-neutral TTRPGs.
+              Built for prose writers and tabletop storytellers — novels, short stories, graphic novels, 5E campaigns, and system-neutral tabletop campaigns.
             </p>
             <div className="yow-home-actions">
               <a href="/signup" className="btn btn-primary btn-lg">
