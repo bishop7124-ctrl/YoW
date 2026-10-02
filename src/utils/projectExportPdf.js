@@ -416,7 +416,7 @@ const jpegResourceFromDataUrl = (value) => {
   return size ? { bytes, ...size } : null
 }
 
-const convertImageToJpegResource = async (src, options = {}) => {
+export const convertImageToJpegResource = async (src, options = {}) => {
   let resolvedSrc = src
   if (isUserMediaReference(src)) {
     try {
@@ -719,7 +719,7 @@ const pdfText = (value = '') =>
     })
     .replace(/[\\()]/g, '\\$&')
 
-const measureText = (text, size, tracking = 0) => {
+export const measureText = (text, size, tracking = 0) => {
   const value = String(text || '')
   return value.length * size * 0.6 + Math.max(0, value.length - 1) * tracking
 }
@@ -735,7 +735,7 @@ const fitPdfText = (text, maxWidth, size, tracking = 0) => {
   return `${output.trimEnd()}${ellipsis}`
 }
 
-const wrapPdfText = (text, maxWidth, size, maxLines = 99) => {
+export const wrapPdfText = (text, maxWidth, size, maxLines = 99) => {
   const paragraphs = cleanText(text).split(/\n{2,}/).map(block => block.replace(/\n/g, ' ').trim()).filter(Boolean)
   const lines = []
   paragraphs.forEach((paragraph, paragraphIndex) => {
@@ -760,7 +760,7 @@ const wrapPdfText = (text, maxWidth, size, maxLines = 99) => {
   return lines
 }
 
-const makePdfCanvas = (theme) => {
+export const makePdfCanvas = (theme) => {
   const commands = []
   const images = []
   const draw = (cmd) => commands.push(cmd)
@@ -1344,7 +1344,7 @@ const createComicPages = (projectData, theme) => {
   return pages
 }
 
-const createPdfBytes = (pageContents, title) => {
+export const createPdfBytes = (pageContents, title) => {
   const pageDescriptors = pageContents.map(page => typeof page === 'string' ? { content: page, links: [] } : { links: [], ...page })
   const chunks = []
   const offsets = [0]
@@ -1423,7 +1423,7 @@ const createPdfBytes = (pageContents, title) => {
     const xObjects = (page.images ?? []).length
       ? ` /XObject << ${page.images.map(image => `/${image.name} ${image.objectId} 0 R`).join(' ')} >>`
       : ''
-    addObject(page.pageId, `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${A4_LANDSCAPE.width} ${A4_LANDSCAPE.height}] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >>${xObjects} >> /Contents ${page.contentId} 0 R${annots} >>`)
+    addObject(page.pageId, `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${page.size?.width ?? A4_LANDSCAPE.width} ${page.size?.height ?? A4_LANDSCAPE.height}] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >>${xObjects} >> /Contents ${page.contentId} 0 R${annots} >>`)
   })
   addObject(pagesId, `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`)
 
