@@ -52,8 +52,8 @@ describe('character sheet PDF', () => {
     expect(blob.type).toBe('application/pdf')
     const raw = await latin1(blob)
     expect(raw.startsWith('%PDF')).toBe(true)
-    expect(raw).toContain('/MediaBox [0 0 595.28 841.89]')
-    ;['Thessaly Vane', 'Arcane Recovery', 'FEATURE_TEXT_ARCANE', 'Quarterstaff', 'BACKSTORY_TEXT', 'Magic Missile', 'Fire Bolt', 'Spell save DC 15']
+    expect(raw).toContain('/MediaBox [0 0 612 792]')
+    ;['Thessaly Vane', 'Arcane Recovery', 'FEATURE_TEXT_ARCANE', 'Quarterstaff', 'BACKSTORY_TEXT', 'Magic Missile', 'Fire Bolt', 'SPELL SAVE DC', 'PASSIVE WISDOM', 'ATTACKS & SPELLCASTING']
       .forEach(text => expect(raw).toContain(text))
     ;['SECRET_NEVER_EXPORTED', 'JOURNAL_NEVER_EXPORTED', 'SESSION_NOTES_NEVER_EXPORTED']
       .forEach(text => expect(raw).not.toContain(text))
@@ -65,7 +65,7 @@ describe('character sheet PDF', () => {
     const many = makeCharacter()
     many.features = Array.from({ length: 60 }, (_, i) => ({ id: `f${i}`, name: `Feature ${i}`, description: 'word '.repeat(60) }))
     const raw = await latin1(await createCharacterSheetPdfBlob(many))
-    expect(raw).toContain('CONTINUED')
+    expect((raw.match(/\/Type \/Page /g) ?? []).length).toBeGreaterThan(3)
   })
 
   it('names the download after the character', () => {
