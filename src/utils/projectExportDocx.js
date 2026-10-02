@@ -193,6 +193,9 @@ export const createProjectDocxBlob = async (projectData) => {
           }))
           addDocFields(children, docx, [['Story event', outlineStoryEventLabel(scene, project)]])
           addDocParagraphs(children, docx, outlineSynopsis(scene), { indent: { left: 360 } })
+          if (isCampaignProject(project)) {
+            addDocParagraphs(children, docx, scene.content, { indent: { left: 360 } })
+          }
         })
       })
     })
@@ -444,7 +447,12 @@ const getProjectDocxCategoryData = (projectData) => {
       data: withProjectSections(projectData, ['outline'], {
         acts: projectData.acts ?? [],
         chapters: projectData.chapters ?? [],
-        scenes: (projectData.scenes ?? []).map(scene => ({ ...scene, content: '', summary: scene.summary || scene.synopsis || '' })),
+        // Campaign encounters are the scenes, so their full text stays with their session.
+        scenes: (projectData.scenes ?? []).map(scene => ({
+          ...scene,
+          content: isCampaignProject(project) ? scene.content : '',
+          summary: scene.summary || scene.synopsis || '',
+        })),
         comicPages: projectData.comicPages ?? [],
         comicPanels: projectData.comicPanels ?? [],
       }),
@@ -457,7 +465,7 @@ const getProjectDocxCategoryData = (projectData) => {
         chapters: projectData.chapters ?? [],
         scenes: projectData.scenes ?? [],
       }),
-      include: hasManuscriptText,
+      include: hasManuscriptText && !isCampaignProject(project),
     },
     {
       label: 'Characters',
