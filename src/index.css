@@ -2,6 +2,182 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Persistent support link: kept clear of the project AI bar and reducible to
+   a compact, keyboard-reachable control during long writing sessions. */
+.floating-support-link {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 45;
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border));
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg-raise) 94%, transparent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(10px);
+}
+
+/* Manuscript Discovery — local, evidence-first import wizard. */
+.md-modal { width: min(1040px, calc(100vw - 32px)); max-width: 1040px; max-height: min(90vh, 900px); overflow: hidden; display: flex; flex-direction: column; }
+.md-privacy { margin: 0 24px 16px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: 10px; background: var(--accent-fade); color: var(--text-main); font-size: 13px; }
+.md-privacy strong { display: block; margin-bottom: 2px; }
+.md-upload, .md-summary, .md-done { padding: 8px 24px 24px; overflow: auto; }
+.md-upload .ms-import-dropzone { width: 100%; min-height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.md-error { color: var(--danger, #d86b70); font-size: 13px; margin-top: 12px; }
+.md-progress { min-height: 260px; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--text-main); }
+.md-progress p { color: var(--text-muted); font-size: 13px; }
+.md-spinner { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: md-spin .8s linear infinite; }
+@keyframes md-spin { to { transform: rotate(360deg); } }
+.md-summary h2, .md-done h2 { font: 700 22px/1.2 var(--font-serif, Georgia, serif); color: var(--text-main); margin: 8px 0 16px; }
+.md-project-setup { display: grid; grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr); gap: 12px; margin-bottom: 20px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
+.md-project-setup label { display: grid; gap: 6px; color: var(--text-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.md-project-setup .field { width: 100%; padding: 8px 10px; color: var(--text-main); font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.md-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.md-summary-grid > div { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-main); display: grid; gap: 2px; }
+.md-summary-grid strong { font-size: 22px; color: var(--text-main); }
+.md-summary-grid span { font-size: 13px; font-weight: 700; color: var(--text-main); }
+.md-summary-grid small { color: var(--text-muted); font-size: 11px; }
+.md-summary > p { margin: 18px 0 0; color: var(--text-muted); font-size: 13px; }
+.md-footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 13px; }
+.md-review { min-width: 0; max-width: 100%; min-height: 0; display: grid; grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+.md-tabs { padding: 4px 12px 16px 24px; overflow: auto; border-right: 1px solid var(--border); }
+.md-tabs button { width: 100%; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); padding: 9px 10px; display: flex; justify-content: space-between; text-align: left; font-weight: 700; cursor: pointer; }
+.md-tabs button:hover, .md-tabs button.is-active { background: var(--accent-fade); color: var(--accent-text); }
+.md-tabs button span { opacity: .7; font-variant-numeric: tabular-nums; }
+.md-list { padding: 4px 24px 18px 16px; overflow-y: auto; overflow-x: hidden; min-width: 0; max-width: 100%; }
+.md-review > .md-footer { grid-column: 1 / -1; padding: 12px 24px 16px; margin: 0; }
+.md-candidate { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 10px; background: var(--bg-main); transition: opacity .15s; }
+.md-candidate.is-muted { opacity: .58; }
+.md-candidate-head { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.md-candidate-head > input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--accent); }
+.md-name { min-width: 0; max-width: 100%; flex: 1; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--text-main); }
+.md-confidence { flex: 0 0 auto; border-radius: 999px; padding: 3px 7px; font-size: 10px; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
+.md-confidence.is-high { background: color-mix(in srgb, #4ade80 18%, transparent); color: #38a860; }
+.md-confidence.is-medium { background: color-mix(in srgb, #e3a84f 18%, transparent); color: #b37a25; }
+.md-confidence.is-low { background: var(--bg-soft); color: var(--text-muted); }
+.md-meta, .md-pov { margin: 7px 0 0 26px; color: var(--text-muted); font-size: 12px; }
+.md-aliases { margin: 10px 0 0 26px; border: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.md-aliases legend { width: 100%; color: var(--text-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.md-aliases label, .md-card-actions label, .md-existing label { color: var(--text-muted); font-size: 12px; }
+.md-card-actions { min-width: 0; max-width: calc(100% - 26px); margin: 12px 0 0 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px 16px; }
+.md-card-actions label { min-width: 0; max-width: 100%; display: grid; gap: 5px; }
+.md-card-actions select, .md-existing select { display: block; width: 100%; min-width: 0; max-width: 100%; margin-left: 0; padding: 5px 7px; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-main); color: var(--text-main); }
+.md-existing { margin: 12px 0 0 26px; padding: 9px 10px; display: flex; gap: 12px; align-items: center; justify-content: space-between; border-radius: 8px; background: var(--accent-fade); color: var(--text-main); font-size: 12px; }
+.md-evidence { margin: 12px 0 0 26px; font-size: 12px; }
+.md-evidence summary { color: var(--accent-text); cursor: pointer; font-weight: 700; }
+.md-why { color: var(--text-muted); margin: 8px 0; }
+.md-evidence blockquote { margin: 8px 0; padding: 8px 10px; border-left: 2px solid var(--accent); background: var(--bg-soft); color: var(--text-muted); }
+.md-evidence blockquote strong, .md-evidence blockquote span { display: block; }
+.md-evidence blockquote strong { color: var(--text-main); margin-bottom: 3px; }
+.md-empty { padding: 40px 20px; text-align: center; color: var(--text-muted); }
+.md-done { text-align: center; }
+.md-done-mark { margin: 8px auto; width: 42px; height: 42px; display: grid; place-content: center; border-radius: 50%; background: color-mix(in srgb, #4ade80 18%, transparent); color: #38a860; font-size: 24px; }
+.md-done section { display: inline-block; min-width: 180px; vertical-align: top; text-align: left; margin: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.md-done h3 { font-size: 12px; text-transform: uppercase; color: var(--text-muted); }
+.md-done section p { margin: 4px 0; color: var(--text-main); }
+.md-done > .btn { margin-top: 18px; }
+@media (max-width: 700px) {
+  .md-modal { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .md-privacy { margin-inline: 14px; }
+  .md-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .md-project-setup { grid-template-columns: 1fr; }
+  .md-review { display: flex; flex-direction: column; }
+  .md-tabs { display: flex; flex: 0 0 auto; padding: 4px 14px 10px; overflow-x: auto; border: 0; border-bottom: 1px solid var(--border); }
+  .md-tabs button { width: auto; gap: 7px; white-space: nowrap; }
+  .md-list { padding: 10px 14px; }
+  .md-candidate-head { align-items: flex-start; flex-wrap: wrap; }
+  .md-name { flex-basis: calc(100% - 28px); }
+  .md-confidence { margin-left: 26px; }
+  .md-card-actions { max-width: calc(100% - 26px); }
+  .md-existing { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .md-spinner { animation-duration: 1.8s; } }
+
+body:has(.studio-workspace-footer) .floating-support-link {
+  bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+/* Dialog actions must remain the top interaction layer, especially on phone
+   viewports where the fixed support pill can otherwise cover footer buttons. */
+body:has([role="dialog"]) .floating-support-link {
+  display: none;
+}
+
+.floating-support-link a,
+.floating-support-link > button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.floating-support-link a {
+  gap: 7px;
+  padding: 0 12px 0 14px;
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.floating-support-link > button {
+  width: 38px;
+  padding: 0;
+  border-left: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  cursor: pointer;
+}
+
+.floating-support-link a:hover,
+.floating-support-link > button:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.floating-support-link a:focus-visible,
+.floating-support-link > button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.floating-support-link.is-minimized {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  padding: 0;
+  place-items: center;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border));
+  cursor: pointer;
+}
+
+.floating-support-coffee-icon {
+  display: block;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 640px) {
+  .floating-support-link {
+    right: max(10px, env(safe-area-inset-right));
+  }
+
+  body:has(.studio-workspace-footer) .floating-support-link {
+    bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+}
+
 /* ── Global design tokens — apply to all themes ─────────────────────────── */
 :root {
   /* ── Semantic palette (overridden per theme) ────────────────────────────── */
@@ -4494,6 +4670,52 @@ textarea:focus {
   background: color-mix(in srgb, var(--bg-nav) 48%, transparent);
 }
 
+.password-field {
+  position: relative;
+  width: 100%;
+}
+
+.password-field .password-field-input {
+  padding-right: 52px;
+}
+
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.password-visibility-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.password-visibility-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.password-visibility-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .password-requirements {
   position: relative;
   width: max-content;
@@ -8434,6 +8656,33 @@ body {
     overscroll-behavior-y: contain;
   }
 
+  /* Password recovery is a short, urgent task. On narrow screens the full
+   * marketing panel pushed the actual form more than a viewport below the
+   * top, making the nested auth scroller feel broken (and letting the fixed
+   * support control cover the submit area). Keep the ordinary sign-in and
+   * sign-up presentation intact, but take recovery straight to the form. */
+  .auth-shell--password-flow .auth-aside {
+    display: none;
+  }
+
+  .auth-shell--password-flow {
+    padding: 12px;
+  }
+
+  .auth-shell--password-flow .auth-frame {
+    min-height: calc(100dvh - 24px);
+  }
+
+  .auth-shell--password-flow .auth-main {
+    min-height: calc(100dvh - 26px);
+    align-items: flex-start;
+    padding: 24px 16px;
+  }
+
+  body:has(.auth-shell--password-flow) .floating-support-link {
+    display: none;
+  }
+
   /* Public marketing pages (Home, Features, FAQ, Founders, Download use
    * .yow-home; Pricing uses .marketing-shell) render straight into #root
    * with no app shell around them, so they need the same scroll opt-in as
@@ -10328,6 +10577,136 @@ body {
 .account-appearance-input:focus {
   border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
   box-shadow: 0 0 0 3px var(--accent-fade);
+}
+
+.ai-model-guide {
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent-fade) 58%, var(--bg-main));
+  padding: 13px;
+}
+
+.ai-model-guide-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ai-model-guide-title,
+.ai-model-guide-copy {
+  margin: 0;
+}
+
+.ai-model-guide-title {
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ai-model-guide-copy {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ai-model-guide-heading a {
+  flex: none;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ai-model-guide-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.ai-model-choice {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-main);
+  color: var(--text-main);
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+}
+
+.ai-model-choice:hover,
+.ai-model-choice:focus-visible,
+.ai-model-choice.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-fade);
+  outline: none;
+}
+
+.ai-model-choice.is-selected {
+  background: var(--accent-fade);
+}
+
+.ai-model-choice-topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.ai-model-choice-topline strong {
+  font-size: 12px;
+}
+
+.ai-model-choice-topline span {
+  color: var(--accent-text);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.ai-model-choice small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ai-selected-model-guidance {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 9px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ai-selected-model-guidance strong {
+  flex: none;
+  color: var(--text-main);
+}
+
+.ai-selected-model-guidance.is-warning {
+  border-left: 3px solid #f59e0b;
+  padding-left: 9px;
+}
+
+@media (max-width: 700px) {
+  .ai-model-guide-heading,
+  .ai-selected-model-guidance {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ai-model-guide-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 .account-mini-button {
@@ -17945,6 +18324,19 @@ body {
 
 .ai-rewrite-btn {
   border-radius: var(--r-sm);
+}
+
+.ai-rewrite-limit,
+.ai-rewrite-progress {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.ai-rewrite-progress {
+  padding: 0 14px 6px;
+  color: var(--text-main);
 }
 
 .ai-context-scope {

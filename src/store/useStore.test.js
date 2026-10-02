@@ -2165,6 +2165,24 @@ describe('character CRUD', () => {
 
     expect(deleteUserMedia).toHaveBeenCalledWith('https://x/storage/v1/object/public/user-media/u1/characters/frodo.webp')
   })
+
+  it('refreshes authoritative storage usage after replacement cleanup settles', async () => {
+    let finishDelete
+    vi.mocked(deleteUserMedia).mockImplementationOnce(() => new Promise(resolve => { finishDelete = resolve }))
+    vi.mocked(getUserStorageUsage).mockClear()
+    const { result } = renderHook(() => useStore('user-1'))
+    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(1))
+
+    act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { result.current.saveCharacter({ name: 'Frodo', image: 'yow-media:user-1/characters/old.webp' }) })
+    act(() => { result.current.saveCharacter({ image: 'yow-media:user-1/characters/new.webp' }, result.current.characters[0].id) })
+
+    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:user-1/characters/old.webp')
+    expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
+
+    await act(async () => { finishDelete() })
+    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(2))
+  })
 })
 
 // Manuscript.jsx derives entityMap/characterNames/locationNames from `characters`/

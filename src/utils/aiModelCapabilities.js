@@ -75,6 +75,9 @@ export const MODEL_CAPABILITIES = {
     cacheBehavior: AI_CACHE_BEHAVIOR.automaticPrefix,
     cacheMinTokens: 1024,
     models: {
+      'gpt-6-astra': { displayName: 'GPT-6 Astra', contextWindow: 1050000, maxOutputTokens: 128000, labels: ['Best quality', 'Large context'], pricing: { input: 10, cachedInput: 1, output: 50 } },
+      'gpt-6-sol': { displayName: 'GPT-6 Sol', contextWindow: 1050000, maxOutputTokens: 128000, labels: ['Recommended', 'Large context'], pricing: { input: 2, cachedInput: 0.2, output: 10 } },
+      'gpt-6-luna': { displayName: 'GPT-6 Luna', contextWindow: 1050000, maxOutputTokens: 128000, labels: ['Best value', 'Large context'], pricing: { input: 0.1, cachedInput: 0.01, output: 0.5 } },
       'gpt-4o': { displayName: 'GPT-4o', contextWindow: 128000, maxOutputTokens: 4096, labels: ['Premium'], pricing: { input: 2.5, cachedInput: 1.25, output: 10 } },
       'gpt-4o-mini': { displayName: 'GPT-4o mini', contextWindow: 128000, maxOutputTokens: 4096, labels: ['Best value'], pricing: { input: 0.15, cachedInput: 0.075, output: 0.6 } },
       'mistral-large-latest': { displayName: 'Mistral Large', contextWindow: 131072, maxOutputTokens: 4096 },

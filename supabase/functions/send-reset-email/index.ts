@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
-import { jsonResponse } from '../_shared/cors.ts'
+import { emailCorsHeaders, emailPreflightResponse, jsonResponse } from '../_shared/cors.ts'
 import { escapeHtml } from '../_shared/html.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
@@ -152,25 +152,26 @@ function resetEmailHtml(email: string, resetUrl: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } })
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
+  const respond = (body: unknown, status = 200) => jsonResponse(body, status, emailCorsHeaders(req))
+  if (req.method === 'OPTIONS') return emailPreflightResponse(req)
+  if (req.method !== 'POST') return respond({ error: 'Method not allowed' }, 405)
 
   let payload: Record<string, unknown>
   try {
     payload = await req.json()
   } catch {
-    return jsonResponse({ error: 'Invalid JSON' }, 400)
+    return respond({ error: 'Invalid JSON' }, 400)
   }
 
   const email = payload?.email as string | undefined
-  if (!email) return jsonResponse({ error: 'No email in payload' }, 400)
+  if (!email) return respond({ error: 'No email in payload' }, 400)
 
   // Generic response from here on regardless of what actually happened
   // (rate-limited, account doesn't exist, provider failure) — never confirm
   // or deny whether an email has an account, a standard password-reset-flow
   // practice this route didn't previously follow. The client already treats
   // any 200 as "check your email".
-  const genericOk = () => jsonResponse({ sent: true })
+  const genericOk = () => respond({ sent: true })
 
   if (await isRateLimited(email)) return genericOk()
 
@@ -209,6 +210,7 @@ Deno.serve(async (req) => {
       to: [email],
       subject: 'Reset your Your Own World password',
       html: resetEmailHtml(email, resetUrl.toString()),
+      text: `Reset your Your Own World password\n\nWe received a request to reset the password for ${email}.\n\nChoose a new password: ${resetUrl.toString()}\n\nThis link expires in 1 hour. If you did not request this, you can safely ignore this email.`,
     }),
   })
 

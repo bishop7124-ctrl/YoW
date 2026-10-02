@@ -5,6 +5,7 @@ import { LIBRARY_TOUR } from './onboarding/tourDefinitions'
 import UserMenu from './auth/UserMenu'
 import YOWLogo from './brand/YOWLogo'
 import AIImportModal from './AIImportModal'
+import ManuscriptDiscoveryModal from './Manuscript/ManuscriptDiscoveryModal.jsx'
 import AIStar from './ai/AIStar'
 import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../constants/projectTypes'
 import {
@@ -244,7 +245,7 @@ function ActiveProjectHero({ stats, allStats, series, userName, onOpen, onSetSta
                 New Project
               </button>
               <button type="button" className="first-run-secondary" onClick={(e) => { e.stopPropagation(); onImportProject?.() }}>
-                Import with AI
+                Import Project
               </button>
             </div>
           ) : (
@@ -1237,6 +1238,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
   const [checklistOpen, setChecklistOpen] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showAIImport, setShowAIImport] = useState(false)
+  const [showDiscoveryImport, setShowDiscoveryImport] = useState(false)
   const [showImportMenu, setShowImportMenu] = useState(false)
   const importMenuRef = useRef(null)
   const [form, setForm] = useState({ title: '', description: '', type: DEFAULT_TYPE, seriesId: '' })
@@ -1469,6 +1471,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
                 {showImportMenu && (
                   <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200, background: 'var(--bg-nav)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.35)', minWidth: 196, maxWidth: 'calc(100vw - 32px)', overflow: 'hidden' }}>
                     {[
+                      { label: 'Manuscript Discovery', sublabel: 'Create a complete project using local, non-AI manuscript analysis', onClick: () => { setShowImportMenu(false); setShowDiscoveryImport(true) } },
                       { label: 'AI Import', sublabel: 'Analyse notes or drafts and populate connected records to review', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
                       { label: 'Import ZIP', sublabel: 'YOW backup or compatible project archive', onClick: () => { setShowImportMenu(false); setShowAIImport(true) } },
                     ].map(({ label, sublabel, onClick }, i, arr) => (
@@ -1543,7 +1546,7 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
               onEditProject={() => focusStats && setEditingProject(focusStats.project)}
               onExportProject={handleExportProject}
               onCreateProject={() => setShowForm(true)}
-              onImportProject={() => setShowAIImport(true)}
+              onImportProject={() => setShowDiscoveryImport(true)}
               checklistSnippet={milestones && (
                 <GettingStartedSnippet milestones={milestones} onOpen={() => setChecklistOpen(true)} />
               )}
@@ -1775,6 +1778,14 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
           onImportDone={(novelId) => { onOpenProject?.(novelId) }}
           userId={user?.id || user?.uid || null}
           membership={membership}
+        />
+      )}
+
+      {showDiscoveryImport && (
+        <ManuscriptDiscoveryModal
+          store={store}
+          onClose={() => setShowDiscoveryImport(false)}
+          onImportDone={(novelId) => { setShowDiscoveryImport(false); onOpenProject?.(novelId) }}
         />
       )}
 
