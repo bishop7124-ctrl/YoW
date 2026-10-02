@@ -257,7 +257,7 @@ export default async function handler(req, res) {
               Authorization: `Bearer ${resendKey}`,
               'Idempotency-Key': `lifecycle-${item.user.id}-${item.track}-${item.noticeKey}`,
             },
-            body: JSON.stringify({ from: FROM_ADDRESS, to: [item.user.email], subject: item.notice.subject, text: item.notice.text }),
+            body: JSON.stringify({ from: FROM_ADDRESS, to: [item.user.email], subject: item.notice.subject, html: item.notice.html, text: item.notice.text }),
           })
           if (emailRes.ok) {
             result.sent += 1

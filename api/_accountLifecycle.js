@@ -217,6 +217,104 @@ export function graceEndsAt(track, anchor) {
 
 const formatDate = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' })
 
+const escapeHtml = (value) => String(value)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;')
+
+// Same look as the other YOW emails (supabase/functions/send-reengagement-email): dark teal card,
+// "Your Own World" header, eyebrow, serif heading, orange button, footer. Every dynamic value is
+// escaped. The plain-text part (buildNotice().text) stays as the fallback.
+function renderNoticeHtml({ subject, eyebrow, lines, exportLine, supportLine, ctaLabel, siteUrl }) {
+  const paragraphs = lines
+    .map((line) => `<p style="margin:0 0 16px;font-size:15px;line-height:1.75;color:#7ab8b4;">${escapeHtml(line)}</p>`)
+    .join('\n              ')
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:transparent;font-family:'Georgia',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:transparent;padding:48px 16px;">
+    <tr>
+      <td align="center">
+        <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
+
+          <tr>
+            <td style="background:#133840;border-radius:12px 12px 0 0;padding:24px 40px;border-bottom:1px solid #1e4a50;text-align:center;">
+              <span style="font-family:'Georgia',serif;font-size:12px;letter-spacing:0.22em;text-transform:uppercase;color:#7ab8b4;">
+                Your Own World
+              </span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background:#0d282e;padding:40px 40px 32px;border-left:1px solid #1e4a50;border-right:1px solid #1e4a50;">
+
+              <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#e8724e;">
+                ${escapeHtml(eyebrow)}
+              </p>
+              <h1 style="margin:0 0 20px;font-size:26px;line-height:1.3;color:#e2f0ee;font-weight:400;">
+                ${escapeHtml(subject)}
+              </h1>
+
+              ${paragraphs}
+
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 28px;">
+                <tr>
+                  <td style="background:#133840;border:1px solid #1e4a50;border-radius:8px;padding:16px 20px;">
+                    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#e8724e;">
+                      How to export all your data
+                    </p>
+                    <p style="margin:0;font-size:14px;line-height:1.7;color:#e2f0ee;">
+                      ${escapeHtml(exportLine)}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#e8724e;border-radius:8px;">
+                    <a href="${escapeHtml(siteUrl)}"
+                       style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:600;
+                              color:#ffffff;text-decoration:none;letter-spacing:0.04em;font-family:'Georgia',serif;">
+                      ${escapeHtml(ctaLabel)} &#8594;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#5d9490;">
+                ${escapeHtml(supportLine)}
+              </p>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background:#133840;border-radius:0 0 12px 12px;padding:18px 40px 24px;border:1px solid #1e4a50;border-top:none;text-align:center;">
+              <p style="margin:0 0 4px;font-size:12px;color:#7ab8b4;">
+                Your Own World &middot; <a href="${escapeHtml(siteUrl)}" style="color:#7ab8b4;text-decoration:none;">yourownworld.co.uk</a>
+              </p>
+              <p style="margin:0;font-size:11px;color:#4a8a86;">
+                This is an important notice about your account.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
 export function buildNotice({ track, noticeKey, daysLeft, deadline = null, siteUrl = 'https://www.yourownworld.co.uk' }) {
   const entry = NOTICE_SCHEDULE[track]?.find((n) => n.key === noticeKey)
   if (!entry) return null
@@ -251,6 +349,17 @@ export function buildNotice({ track, noticeKey, daysLeft, deadline = null, siteU
       : 'You can also export all your projects at any time so you have your own copy, using the instructions below.')
     lines.push('Want to keep YOW for good? Upgrade to Lifetime for lifetime access to the YOW app.')
   }
-  const text = [...lines, '', `How to export all your data: sign in at ${exportUrl} then open Account Settings > Storage > Export all projects`, '', `Questions? Reply to this email or write to ${SUPPORT}.`].join('\n')
-  return { subject, text, exportUrl, final: entry.final }
+  const exportLine = `Sign in at ${exportUrl} then open Account Settings > Storage > Export all projects`
+  const supportLine = `Questions? Reply to this email or write to ${SUPPORT}.`
+  const text = [...lines, '', `How to export all your data: ${exportLine}`, '', supportLine].join('\n')
+  const html = renderNoticeHtml({
+    subject,
+    eyebrow: entry.final ? 'Final notice' : 'Account notice',
+    lines,
+    exportLine,
+    supportLine,
+    ctaLabel: isHosting ? 'Open Your Own World' : 'Log in to keep your account',
+    siteUrl: exportUrl,
+  })
+  return { subject, text, html, exportUrl, final: entry.final }
 }
