@@ -47,6 +47,36 @@ Steps (Supabase SQL editor to backdate; cron **Run** button after each; one noti
 5. Make A's final notice old enough: set its `inactive_83` ledger row `created_at` to 8 days ago, and A's `last_sign_in_at` to 645 days ago. Run. Expect `deletion.deleted: 1` for A only.
 6. Run once more. Expect nothing further: B is still active and not listed under notices or deletion.
 
+SQL for the steps (Supabase SQL editor; replace `<A>` and `<B>` with the two test addresses; A is deleted, B returns). Each backdating step only ever moves `last_sign_in_at` OLDER, which is what keeps the notice ledger valid:
+
+```sql
+-- 0. Check both are plain Free accounts (no plan, beta flag or Stripe id in raw_app_meta_data) and note A's id for the Storage check
+select id, email, created_at, last_sign_in_at, raw_app_meta_data from auth.users where email in ('<A>', '<B>');
+
+-- 1. first notice due (run the cron after each step)
+update auth.users set created_at = now() - interval '800 days', last_sign_in_at = now() - interval '549 days' where email in ('<A>', '<B>');
+-- 2. day-30 notice
+update auth.users set last_sign_in_at = now() - interval '579 days' where email in ('<A>', '<B>');
+-- 3. day-60 notice
+update auth.users set last_sign_in_at = now() - interval '609 days' where email in ('<A>', '<B>');
+-- 4. final notice (day 83+)
+update auth.users set last_sign_in_at = now() - interval '632 days' where email in ('<A>', '<B>');
+
+-- (now sign in as B in the real app: this sets a fresh last_sign_in_at)
+
+-- 5. make both final notices old enough, and A inactive long enough; then run the cron
+update public.account_lifecycle_events set created_at = now() - interval '8 days'
+  where event_key = 'inactive_83' and user_id in (select id from auth.users where email in ('<A>', '<B>'));
+update auth.users set last_sign_in_at = now() - interval '645 days' where email = '<A>';
+
+-- Evidence
+select u.email, e.event_key, e.created_at from public.account_lifecycle_events e join auth.users u on u.id = e.user_id where u.email in ('<A>', '<B>') order by u.email, e.created_at;
+select * from public.account_lifecycle_deletions order by started_at desc limit 5;
+select email, last_sign_in_at from auth.users where email in ('<A>', '<B>');  -- expect only B
+```
+
+If the daily 09:15 UTC cron fires mid-test it simply performs the next step (one notice per account per run), so nothing breaks, but do the test in one sitting. Gmail "+" addresses all land in one inbox: tell A and B apart by the To: line.
+
 Pass criteria: all 8 emails arrive with correct wording and dates; A's Auth user is gone, its Storage folder is empty, `account_lifecycle_deletions` has an A row with `completed_at` set; B's account, projects and sign-in still work after steps 5 and 6; no real account changed; summary lines show only counts. Never move `last_sign_in_at` earlier than a real sign-in on B: that cannot happen in production and would make B look inactive for longer than it was. Afterwards delete test account B (and A's audit row if desired) and record the evidence for the 4 Oct data-safety matrix and the 5 Oct Data safety gate summary.
 
 ## 2026-10-06 private-media RLS, accounting, replacement, and deletion cleanup
