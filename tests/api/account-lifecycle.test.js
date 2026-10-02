@@ -365,7 +365,8 @@ describe('run-account-lifecycle handler', () => {
 
 describe('run-account-lifecycle send + archive (gated)', () => {
   const makeRes = () => ({ status: vi.fn().mockReturnThis(), json: vi.fn() })
-  const ago = (d) => new Date(Date.now() - d * DAY_MS).toISOString()
+  const T0 = Date.now() // fixed base so ledger anchors equal the users' dates exactly
+  const ago = (d) => new Date(T0 - d * DAY_MS).toISOString()
   const auth = { authorization: 'Bearer s3cret' }
   const UID1 = '11111111-1111-4111-8111-111111111111'
   const UID2 = '22222222-2222-4222-8222-222222222222'
@@ -581,6 +582,52 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     expect(body.deleteDecisions).toEqual([])
     expect(deleteUserSpy).not.toHaveBeenCalled()
     expect(updateSpy).toHaveBeenCalledTimes(1)
+  })
+
+  describe('returning accounts start a fresh cycle', () => {
+    // An account that was warned, signed in again, and has gone quiet for 18 months once more.
+    const OLD_ANCHOR = () => ago(FREE_INACTIVITY_DAYS + 400)
+    const oldCycleRows = (id) => [
+      { user_id: id, track: 'free_inactive', event_key: 'inactive_0', created_at: ago(380), anchor_at: OLD_ANCHOR() },
+      { user_id: id, track: 'free_inactive', event_key: 'inactive_83', created_at: ago(300), anchor_at: OLD_ANCHOR() },
+    ]
+
+    it('ignores the old cycle, clears the stale row, and sends the first notice again', async () => {
+      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 5)] }, error: null })
+      eventRows.mockResolvedValue({ data: oldCycleRows(UID1), error: null })
+      process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+      process.env.RESEND_API_KEY = 're_test'
+      const order = []
+      deleteSpy.mockImplementation((col, val) => { if (col === 'event_key') order.push(`delete:${val}`) })
+      insertSpy.mockImplementation(async (row) => { order.push(`insert:${row.event_key}`); return { error: null } })
+      const body = await run({ send: '1' })
+      expect(body.noticesDue.map((r) => r.notice)).toEqual(['inactive_0'])
+      expect(order).toEqual(['delete:inactive_0', 'insert:inactive_0'])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(body.emails).toMatchObject({ sent: 1 })
+    })
+
+    it('never deletes an account that came back, even though a final notice from the old cycle exists', async () => {
+      listUsers.mockResolvedValue({ data: { users: [{ ...inactive(UID1, 5), last_sign_in_at: ago(2) }] }, error: null })
+      eventRows.mockResolvedValue({ data: oldCycleRows(UID1), error: null })
+      process.env.ACCOUNT_LIFECYCLE_DELETE_FREE = 'true'
+      const body = await run({ delete: '1' })
+      expect(body.deleteDecisions).toEqual([])
+      expect(body.noticesDue).toEqual([])
+      expect(deleteUserSpy).not.toHaveBeenCalled()
+    })
+
+    it('a Lifetime renewal followed by a new lapse also starts a fresh cycle', async () => {
+      const u = lapsed(UID2) // hosting ended 95 days ago (the new anchor)
+      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
+      eventRows.mockResolvedValue({ data: [
+        { user_id: UID2, track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(500), anchor_at: ago(600) },
+      ], error: null })
+      process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+      const body = await run({ archive: '1' })
+      expect(body.archive).toMatchObject({ archived: 0 }) // old final notice does not unlock archiving
+      expect(updateSpy).not.toHaveBeenCalled()
+    })
   })
 
   describe('free-account deletion', () => {
