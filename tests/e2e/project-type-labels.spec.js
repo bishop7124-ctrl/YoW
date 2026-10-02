@@ -3,7 +3,7 @@
  * the correct level1/level2/level3 labels in the manuscript structure sidebar
  * and that the default word target is stored on the project at creation.
  *
- * Roadmap QA_PLAN Priority 6: Novella, Short Story, D&D Campaign, TTRPG Campaign.
+ * Roadmap QA_PLAN Priority 6: Novella, Short Story, 5E Campaign (dnd_campaign), Tabletop Campaign.
  */
 import { expect, test } from '@playwright/test'
 import { PROJECT_TYPES } from '../../src/constants/projectTypes.js'

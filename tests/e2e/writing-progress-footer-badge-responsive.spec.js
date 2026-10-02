@@ -129,7 +129,7 @@ for (const width of widths) {
       await assertFooterBadgesContained(page, cardSelector)
     })
 
-    // Campaign project types (D&D Campaign / Tabletop Campaign) render a
+    // Campaign project types (5E Campaign / Tabletop Campaign) render a
     // parallel CampaignProgressCard with the same `.writing-progress-footer`
     // markup/CSS but session/prep-recap framing instead of word counts —
     // and its status pill ("<noun> · Arc -> Session -> Encounter") is

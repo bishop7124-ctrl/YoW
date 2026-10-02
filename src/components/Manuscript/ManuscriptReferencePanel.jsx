@@ -151,7 +151,7 @@ function buildEntries({
       raw: item,
       type: 'rpg',
       title: item.name || 'Unnamed adventurer',
-      kicker: summarize([item.class, item.race, item.level ? `Level ${item.level}` : '']),
+      kicker: item.sheetType === 'neutral' ? summarize([item.neutral?.concept, item.neutral?.system]) : summarize([item.class, item.race, item.level ? `Level ${item.level}` : '']),
       body: summarize([item.background, item.notes, item.personalityTraits, item.ideals, item.bonds, item.flaws]),
       tags: item.tags || [],
       section: 'characterbuilder',

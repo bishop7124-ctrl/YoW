@@ -86,11 +86,12 @@ export const PROJECT_TYPES = {
     // heavy sections (factions, worldhistory) available but not default
   },
   dnd_campaign: {
-    label: 'D&D Campaign',
-    description: 'D&D-flavoured fantasy campaign bible with arcs, sessions, encounters, maps, factions, and lore',
-    workflowSummary: 'D&D fantasy campaign bible for sessions, encounters, maps, factions, and lore.',
-    hint: 'Designed for D&D — classes, gods, dungeons, monsters, and high-fantasy lore.',
-    launchPositioning: 'D&D-flavoured campaign bible with fantasy-first language, NPCs, factions, maps, sessions, and encounters.',
+    // Internal id stays 'dnd_campaign' (stored in saved projects / cloud rows); only the label is 5E.
+    label: '5E Campaign',
+    description: 'Fifth-edition compatible fantasy campaign with 5E character tools, arcs, sessions, encounters, maps, factions, and lore',
+    workflowSummary: 'Fifth-edition fantasy campaign bible with 5E character tools for sessions, encounters, maps, factions, and lore.',
+    hint: 'Fifth-edition compatible — 5E character and rules tools, plus classes, gods, dungeons, monsters, and high-fantasy lore.',
+    launchPositioning: 'Fifth-edition compatible campaign bible with 5E character tools, fantasy-first language, NPCs, factions, maps, sessions, and encounters.',
     structure: { level1: 'Story Arc', level2: 'Session', level3: 'Encounter' },
     storyEventIndicators: [
       { id: 'quest_hook', label: 'Quest hook', color: '#38bdf8' },
@@ -116,9 +117,9 @@ export const PROJECT_TYPES = {
   },
   tabletop_rpg: {
     label: 'Tabletop Campaign',
-    description: 'System-neutral campaign bible — works for any ruleset, genre, or homebrew system',
+    description: 'Build and manage a tabletop campaign using any game system — system-neutral campaign and worldbuilding tools',
     workflowSummary: 'System-neutral campaign bible. Works for any ruleset, tone, or genre — fantasy, horror, sci-fi, or homebrew.',
-    hint: 'System-neutral — no D&D assumptions. Works for any ruleset or homebrew system.',
+    hint: 'Any tabletop system — system-neutral campaign and worldbuilding tools for any ruleset or homebrew.',
     launchPositioning: 'System-neutral campaign bible for any tabletop ruleset — sessions, encounters, factions, locations, and world lore.',
     structure: { level1: 'Campaign Arc', level2: 'Session', level3: 'Encounter' },
     storyEventIndicators: [
@@ -282,7 +283,7 @@ export const PROJECT_TYPE_STAGE = {
   dnd_campaign: {
     stage: 'live',
     label: 'Live',
-    note: 'D&D-flavoured campaign bible workflow.',
+    note: 'Fifth-edition compatible campaign bible workflow.',
   },
   tabletop_rpg: {
     stage: 'live',

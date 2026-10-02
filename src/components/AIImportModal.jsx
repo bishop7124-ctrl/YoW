@@ -209,7 +209,7 @@ Return ONLY a valid JSON object (no markdown fences, no explanation) with this s
 }
 
 Rules:
-- Set project.type to the best fit for the source material: "novel" (long-form prose fiction), "novella" (medium-length prose, roughly 15k-50k words), "short_story" (short prose), "dnd_campaign" (D&D campaign prep — sessions, encounters, monsters, DM/party notes), "tabletop_rpg" (system-neutral/non-D&D tabletop campaign material), "comic" (comic or graphic novel script — issues, pages, panels). When unsure, use "novel".
+- Set project.type to the best fit for the source material: "novel" (long-form prose fiction), "novella" (medium-length prose, roughly 15k-50k words), "short_story" (short prose), "dnd_campaign" (fifth-edition / 5E campaign prep — sessions, encounters, monsters, GM/party notes), "tabletop_rpg" (system-neutral tabletop campaign material for any other or unspecified game system), "comic" (comic or graphic novel script — issues, pages, panels). When unsure, use "novel".
 - The "acts" hierarchy is a generic three-level structure. For campaign types treat level 1 as story arcs, level 2 as sessions, and level 3 as encounters. For comic treat level 1 as volumes, level 2 as issues, and level 3 as pages. For prose use acts/parts, chapters/sections, and scenes.
 - Only include arrays that have actual content — omit empty ones entirely
 - ALWAYS extract characters, locations, lore, and world-building elements regardless of content type
@@ -1667,7 +1667,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               ) : !aiConfigured && <AiConfigRequiredNotice />}
 
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                AI reads your files, suggests the best project type — novel, novella, short story, D&D or tabletop campaign, or comic — and extracts characters, locations, lore, and structure. You can change the type before the project is created.
+                AI reads your files, suggests the best project type — novel, novella, short story, 5E or tabletop campaign, or comic — and extracts characters, locations, lore, and structure. You can change the type before the project is created.
               </p>
               <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55 }}>
                 This is the AI's best attempt at reading your files — quality and results vary by model and provider, and it won't always be perfect. Review everything on the next screen before creating the project.

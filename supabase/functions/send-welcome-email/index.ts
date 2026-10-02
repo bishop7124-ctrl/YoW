@@ -69,7 +69,7 @@ function welcomeEmailHtml(email: string, confirmUrl: string) {
                   </td>
                   <td width="4%"></td>
                   <td width="48%" style="background:#133840;border:1px solid #1e4a50;border-radius:8px;padding:14px 16px;vertical-align:top;">
-                    <p style="margin:0 0 3px;font-size:13px;color:#e2f0ee;">D&amp;D Campaign</p>
+                    <p style="margin:0 0 3px;font-size:13px;color:#e2f0ee;">5E Campaign</p>
                     <p style="margin:0;font-size:12px;color:#7ab8b4;line-height:1.4;">Sessions, encounters, factions &amp; lore</p>
                   </td>
                 </tr>

@@ -755,7 +755,7 @@ const CampaignProgressCard = ({ stats }) => {
     ? `${formatCompletion(campaign.sessionProgress)} of ${formatNumber(campaign.sessionTarget)}-${sessionLabel.toLowerCase()} target`
     : 'Add a session target in settings'
   const meterValue = hasSessionTarget ? Math.min(100, Math.max(0, campaign.sessionProgress || 0)) : 0
-  const projectNoun = stats.project.type === 'dnd_campaign' ? 'DM campaign plan' : 'GM campaign plan'
+  const projectNoun = 'GM campaign plan'
   const context = hasSessionTarget
     ? `${formatNumber(campaign.plannedSessions)} ${sessionLabel.toLowerCase()}${campaign.plannedSessions === 1 ? '' : 's'} planned against a ${formatNumber(campaign.sessionTarget)} session target.`
     : `${formatNumber(campaign.plannedSessions)} ${sessionLabel.toLowerCase()}${campaign.plannedSessions === 1 ? '' : 's'} and ${formatNumber(campaign.encounterCount)} ${encounterLabel.toLowerCase()}${campaign.encounterCount === 1 ? '' : 's'} planned.`

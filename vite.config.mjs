@@ -18,7 +18,7 @@ const SPA_SEO_PAGES = {
   'features/index.html': {
     path: '/features/',
     title: 'Features — Your Own World | Worldbuilding & Writing Software',
-    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and D&D dungeon masters.',
+    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and tabletop game masters.',
   },
   'pricing/index.html': {
     path: '/pricing/',

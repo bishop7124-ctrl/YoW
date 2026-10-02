@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import CharacterSheet from './CharacterSheet'
+import NeutralCharacterSheet, { NeutralCharacterCreate } from './NeutralCharacterSheet'
 import CharacterWizard from './CharacterWizard'
 import DiceRoller from './DiceRoller'
-import { RACES, CLASSES, CHARACTER_STATUSES, getProficiencyBonus, getModifier, formatMod } from './rpgData'
+import { RACES, CLASSES, CHARACTER_STATUSES, getProficiencyBonus, getModifier, formatMod, isNeutralSheet, getRpgCharacterSummary } from './rpgData'
 import { UserMediaImage } from '../shared/UserMedia'
 
 // ─── Party Card ───────────────────────────────────────────────────────────────
@@ -114,6 +115,71 @@ function PartyCard({ character, onClick }) {
   )
 }
 
+// Card for system-neutral sheets: no level/HP/AC, shows the first trackers and tags.
+function NeutralPartyCard({ character, onClick }) {
+  const status = CHARACTER_STATUSES.find(s => s.id === character.status) || CHARACTER_STATUSES[0]
+  const resources = (character.neutral?.resources || []).slice(0, 3)
+  const tags = character.neutral?.tags || []
+  const summary = getRpgCharacterSummary(character)
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Open ${character.name || 'character'} sheet`}
+      style={{
+        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
+        border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
+        background: 'color-mix(in srgb, var(--bg-nav) 70%, transparent)',
+        display: 'flex', flexDirection: 'column', gap: 10,
+        width: '100%', textAlign: 'left', fontFamily: 'inherit', color: 'inherit',
+      }}
+    >
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{
+          width: 52, height: 64, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
+          background: 'color-mix(in srgb, var(--accent) 10%, var(--bg-main))',
+          border: `1.5px solid color-mix(in srgb, ${status.color} 40%, transparent)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {character.portrait
+            ? <UserMediaImage src={character.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" opacity=".5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{character.name}</p>
+          <p style={{ fontSize: 11, color: 'var(--accent)', margin: '2px 0', fontWeight: 600 }}>{summary || 'Custom sheet'}</p>
+        </div>
+      </div>
+      {resources.map(res => {
+        const pct = res.max > 0 ? Math.max(0, Math.min(100, (res.current / res.max) * 100)) : 0
+        return (
+          <div key={res.id}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>{res.name}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-main)' }}>{res.current}/{res.max}</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--border) 50%, transparent)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2 }} />
+            </div>
+          </div>
+        )
+      })}
+      {tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {tags.slice(0, 4).map(tag => (
+            <span key={tag} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, #f97316 15%, transparent)', color: '#f97316', fontWeight: 600 }}>{tag}</span>
+          ))}
+          {tags.length > 4 && <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>+{tags.length - 4}</span>}
+        </div>
+      )}
+      {character.status !== 'active' && (
+        <div style={{ fontSize: 10, fontWeight: 700, color: status.color, textTransform: 'uppercase', letterSpacing: '.06em' }}>{status.label}</div>
+      )}
+    </button>
+  )
+}
+
 // ─── Character List Index ─────────────────────────────────────────────────────
 
 function CharacterIndex({ characters, onSelect, onNew, onDice }) {
@@ -130,7 +196,8 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
       list = list.filter(c =>
         c.name?.toLowerCase().includes(q) ||
         c.class?.toLowerCase().includes(q) ||
-        c.race?.toLowerCase().includes(q)
+        c.race?.toLowerCase().includes(q) ||
+        getRpgCharacterSummary(c).toLowerCase().includes(q)
       )
     }
     return list
@@ -193,7 +260,7 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
                   fontSize: 11, fontWeight: 600, cursor: 'pointer',
                 }}
               >
-                {c.name} <span style={{ opacity: 0.7, fontSize: 10 }}>Lvl {c.level}</span>
+                {c.name} {!isNeutralSheet(c) && <span style={{ opacity: 0.7, fontSize: 10 }}>Lvl {c.level}</span>}
               </button>
             ))}
           </div>
@@ -222,7 +289,9 @@ function CharacterIndex({ characters, onSelect, onNew, onDice }) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
             {filtered.map(c => (
-              <PartyCard key={c.id} character={c} onClick={() => onSelect(c.id)} />
+              isNeutralSheet(c)
+                ? <NeutralPartyCard key={c.id} character={c} onClick={() => onSelect(c.id)} />
+                : <PartyCard key={c.id} character={c} onClick={() => onSelect(c.id)} />
             ))}
           </div>
         )}
@@ -240,6 +309,9 @@ export default function CharacterBuilder({ store, initialEntryId = null }) {
   const [diceOpen, setDiceOpen] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
 
+  // Tabletop Campaign projects get the system-neutral sheet; 5E Campaign (dnd_campaign)
+  // keeps the 5E wizard. Existing characters always open with the sheet they were made with.
+  const useNeutralSheets = store.activeNovel?.type === 'tabletop_rpg'
   const characters = store.rpgCharacters || []
   const selected = characters.find(c => c.id === selectedId) || null
 
@@ -253,6 +325,8 @@ export default function CharacterBuilder({ store, initialEntryId = null }) {
     setSelectedId(id)
     setView('detail')
   }
+
+  const handleNeutralSave = (charData) => handleWizardSave(charData)
 
   const handleSelect = (id) => {
     setSelectedId(id)
@@ -322,16 +396,20 @@ export default function CharacterBuilder({ store, initialEntryId = null }) {
       )}
 
       {view === 'detail' && selected && (
-        <CharacterSheet
-          character={selected}
-          onUpdate={handleUpdate}
-          onBack={handleBack}
-          store={store}
-        />
+        isNeutralSheet(selected)
+          ? <NeutralCharacterSheet character={selected} onUpdate={handleUpdate} onBack={handleBack} store={store} />
+          : <CharacterSheet character={selected} onUpdate={handleUpdate} onBack={handleBack} store={store} />
       )}
 
       {/* Wizard */}
-      {wizardOpen && (
+      {wizardOpen && useNeutralSheets && (
+        <NeutralCharacterCreate
+          novelId={store.activeNovelId}
+          onSave={handleNeutralSave}
+          onCancel={() => setWizardOpen(false)}
+        />
+      )}
+      {wizardOpen && !useNeutralSheets && (
         <CharacterWizard
           novelId={store.activeNovelId}
           onSave={handleWizardSave}

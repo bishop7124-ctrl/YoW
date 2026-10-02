@@ -442,6 +442,49 @@ export const makeNewCharacter = (novelId, overrides = {}) => ({
   ...overrides,
 })
 
+// ─── System-neutral character sheet ──────────────────────────────────────────
+// Tabletop Campaign projects use a rules-free sheet: user-named stats, resource
+// trackers and traits. Stored in the same rpgCharacters collection, flagged by
+// sheetType === 'neutral' (absent = the original 5E sheet), so no schema change.
+export const SHEET_TYPE_NEUTRAL = 'neutral'
+export const isNeutralSheet = (character) => character?.sheetType === SHEET_TYPE_NEUTRAL
+
+export const NEUTRAL_PRESETS = [
+  { id: 'blank', label: 'Blank sheet', description: 'Start empty and add your own stats, trackers, and traits.', stats: [], resources: [] },
+  {
+    id: 'simple', label: 'Simple starter', description: 'Three generic stats and a health tracker to rename or replace.',
+    stats: ['Body', 'Mind', 'Spirit'], resources: [{ name: 'Health', max: 10 }],
+  },
+]
+
+export const makeNeutralDetails = (overrides = {}) => ({
+  system: '', concept: '', stats: [], resources: [], traits: [], tags: [], ...overrides,
+})
+
+export const makeNeutralCharacter = (novelId, { name = 'New Character', concept = '', system = '', preset = 'blank' } = {}) => {
+  const p = NEUTRAL_PRESETS.find(x => x.id === preset) || NEUTRAL_PRESETS[0]
+  const stamp = Date.now()
+  return makeNewCharacter(novelId, {
+    name: name.trim() || 'New Character',
+    sheetType: SHEET_TYPE_NEUTRAL,
+    class: 'custom', race: 'custom',
+    neutral: makeNeutralDetails({
+      concept: concept.trim(), system: system.trim(),
+      stats: p.stats.map((n, i) => ({ id: `stat-${stamp}-${i}`, name: n, value: '' })),
+      resources: p.resources.map((r, i) => ({ id: `res-${stamp}-${i}`, name: r.name, current: r.max, max: r.max })),
+    }),
+  })
+}
+
+// One-line description for lists and reference panels, valid for both sheet types.
+export const getRpgCharacterSummary = (character) => {
+  if (isNeutralSheet(character)) {
+    return [character.neutral?.concept, character.neutral?.system].filter(Boolean).join(' · ')
+  }
+  const cls = character.class === 'custom' ? character.customClass : CLASSES.find(c => c.id === character.class)?.label
+  return [character.level ? `Lvl ${character.level}` : '', cls].filter(Boolean).join(' ')
+}
+
 // Backfills nested objects (hp, abilityScores, currency, spells) that older
 // records — from a previous app version, an incomplete AI import, or a save
 // that landed mid-wizard — may be missing entirely. The sheet UI reads e.g.
@@ -456,5 +499,6 @@ export const normalizeRpgCharacter = (character) => {
     abilityScores: { ...defaults.abilityScores, ...(character.abilityScores || {}) },
     currency: { ...defaults.currency, ...(character.currency || {}) },
     spells: { ...defaults.spells, ...(character.spells || {}) },
+    ...(isNeutralSheet(character) ? { neutral: makeNeutralDetails(character.neutral || {}) } : {}),
   }
 }

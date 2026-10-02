@@ -137,7 +137,7 @@ function CampaignSessionWorkflow({ chapter, encounters, labels, projectType, onU
   const filledPlan = filledFields(plan, SESSION_PLAN_FIELDS)
   const filledRecap = filledFields(recap, SESSION_RECAP_FIELDS)
   const detailCount = filledPlan + filledRecap
-  const roleLabel = projectType === 'dnd_campaign' ? 'DM' : 'GM'
+  const roleLabel = 'GM'
   const groupLabel = projectType === 'dnd_campaign' ? 'party' : 'group'
 
   const updatePlan = (key, value) => onUpdateChapter(chapter.id, {

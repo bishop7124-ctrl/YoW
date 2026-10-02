@@ -945,14 +945,14 @@ export const MANUSCRIPT_TEMPLATES = [
     ],
   },
 
-  // ─── D&D Campaign templates ──────────────────────────────────────────────────
+  // ─── 5E Campaign templates (internal id: dnd_campaign) ──────────────────────────────────────────────────
 
   {
     id: 'dnd-blank',
-    name: 'Blank D&D Campaign',
-    genre: 'D&D Campaign',
+    name: 'Blank 5E Campaign',
+    genre: '5E Campaign',
     projectTypes: ['dnd_campaign'],
-    description: 'A clean D&D campaign starter with one story arc and one session. Add encounters, prep notes, maps, NPCs, and rewards as you plan.',
+    description: 'A clean 5E campaign starter with one story arc and one session. Add encounters, prep notes, maps, NPCs, and rewards as you plan.',
     targetWords: 0,
     acts: [
       {
@@ -968,9 +968,9 @@ export const MANUSCRIPT_TEMPLATES = [
   {
     id: 'dnd-three-arc',
     name: 'Three-Arc Campaign',
-    genre: 'D&D Campaign',
+    genre: '5E Campaign',
     projectTypes: ['dnd_campaign'],
-    description: 'A full D&D campaign in three escalating story arcs — local threat, regional stakes, world-ending crisis. Each arc has its own villain, dungeon, and resolution.',
+    description: 'A full 5E campaign in three escalating story arcs — local threat, regional stakes, world-ending crisis. Each arc has its own villain, dungeon, and resolution.',
     targetWords: 0,
     acts: [
       {
@@ -1009,7 +1009,7 @@ export const MANUSCRIPT_TEMPLATES = [
   {
     id: 'dnd-oneshot',
     name: 'One-Shot Adventure',
-    genre: 'D&D Campaign',
+    genre: '5E Campaign',
     projectTypes: ['dnd_campaign'],
     description: 'A self-contained adventure for a single session (3–5 hours). One clear objective, one dungeon or location, one satisfying resolution. No session zero required.',
     targetWords: 0,

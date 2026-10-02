@@ -44,7 +44,7 @@ const FEATURE_MATRIX = [
         comic: true,
         ttrpg: true,
         dnd: true,
-        note: 'Labels adapt to each format: Hook / Inciting incident / Climax for novels; Quest hook / Boss battle / Arc climax for D&D; Splash / Page turn / Issue climax for comics.',
+        note: 'Labels adapt to each format: Hook / Inciting incident / Climax for novels; Quest hook / Boss battle / Arc climax for 5E campaigns; Splash / Page turn / Issue climax for comics.',
       },
       {
         label: 'Dedicated Write/Edit modes',
@@ -126,13 +126,13 @@ const FEATURE_MATRIX = [
         note: null,
       },
       {
-        label: 'RPG character sheet builder',
+        label: 'Character sheet builder',
         prose: false,
         comic: false,
-        ttrpg: true,
-        dnd: 'D&D-flavoured with classes, stats, spells, and inventory',
+        ttrpg: 'System-neutral custom sheet',
+        dnd: '5E classes, stats, spells, and inventory',
         unique: 'ttrpg',
-        note: 'Exclusive to tabletop project types. Full character sheet with ability scores, class, level, equipment, and spell slots.',
+        note: 'Exclusive to tabletop project types. Tabletop Campaign gets a system-neutral sheet with your own stats, trackers, and traits; 5E Campaign gets a full 5E sheet with ability scores, class, level, equipment, and spell slots.',
       },
     ],
   },
@@ -163,7 +163,7 @@ const FEATURE_MATRIX = [
         comic: true,
         ttrpg: true,
         dnd: true,
-        note: 'Maps are on by default for TTRPG, D&D, and Comic projects. Novel/novella/short story projects can enable them in project settings.',
+        note: 'Maps are on by default for Tabletop, 5E, and Comic projects. Novel/novella/short story projects can enable them in project settings.',
       },
       {
         label: 'Factions & organisations',
@@ -334,7 +334,7 @@ const COLS = [
   { id: 'prose',  label: 'Prose Fiction',        sub: 'Novel · Novella · Short Story', color: '#C87855' }, // muted terracotta
   { id: 'comic',  label: 'Comic / Graphic Novel', sub: 'Beta',                          color: '#B96762', badge: 'Beta' }, // dusty rose
   { id: 'ttrpg',  label: 'Tabletop Campaign',     sub: 'System-neutral',               color: '#7FA47C' }, // muted sage
-  { id: 'dnd',    label: 'D&D Campaign',           sub: 'D&D-flavoured',                color: '#C29A52' }, // antique ochre
+  { id: 'dnd',    label: '5E Campaign',            sub: 'Fifth-edition compatible',               color: '#C29A52' }, // antique ochre
 ]
 
 function CellVal({ val, colId, uniqueCol }) {
@@ -422,21 +422,21 @@ const UNIQUE_CALLOUTS = [
     type: 'Tabletop Campaign',
     color: COLS.find(c => c.id === 'ttrpg').color,
     items: [
-      'RPG character sheet builder — ability scores, class, level, gear, and spells',
+      'System-neutral character sheets — your own stats, trackers, traits, and gear',
       'Session → Encounter structure with campaign arc planning',
-      'System-neutral: no D&D assumptions, works for any genre or ruleset',
+      'System-neutral: works for any genre, game system, or ruleset',
       'Maps, factions, and world history all on by default',
       'NPC interview mode — interrogate any character in-voice',
     ],
   },
   {
-    type: 'D&D Campaign',
+    type: '5E Campaign',
     color: COLS.find(c => c.id === 'dnd').color,
     items: [
-      'D&D-flavoured character builder with classes, stats, spell slots, and inventory',
-      'Story events use D&D language: Quest hook, Dungeon reveal, Boss battle, Arc climax',
+      '5E character builder with classes, stats, spell slots, and inventory',
+      'Story events use fantasy-adventure language: Quest hook, Dungeon reveal, Boss battle, Arc climax',
       'Fantasy-first lore language: gods, dungeons, monsters, and high-fantasy world codex',
-      'Full NPC database with secrets, faction loyalties, and DM-only notes',
+      'Full NPC database with secrets, faction loyalties, and GM-only notes',
     ],
   },
 ]
@@ -445,7 +445,7 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
   usePageMeta({
     path: '/features/',
     title: 'Features — Your Own World | Worldbuilding & Writing Software',
-    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and D&D dungeon masters.',
+    description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and tabletop game masters.',
   })
 
   return (

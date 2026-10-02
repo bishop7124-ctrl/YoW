@@ -51,8 +51,8 @@ export function projectTypeGuidance(novel) {
 
   if (type === 'dnd_campaign') {
     return `Project-type guidance:
-- Treat this as DM-side D&D campaign planning, not only a prose manuscript.
-- Use D&D-flavoured language where helpful: party, DM, quest hooks, NPCs, factions, locations, sessions, encounters, dungeons, rewards, and fallout.
+- Treat this as GM-side 5E campaign planning, not only a prose manuscript.
+- Use fifth-edition fantasy language where helpful: party, GM, quest hooks, NPCs, factions, locations, sessions, encounters, dungeons, rewards, and fallout.
 - Prefer structure references like ${structure.level1}, ${structure.level2}, and ${structure.level3} instead of generic acts, chapters, and scenes.
 - When drafting or advising sessions, think in prep and recap terms: hooks, encounter flow, NPCs, rewards, consequences, player choices, fallout, and next hooks.
 - Do not imply live play, a shared player portal, collaboration, or virtual tabletop features.`

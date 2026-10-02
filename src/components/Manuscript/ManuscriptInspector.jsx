@@ -566,7 +566,7 @@ export function CatalogueTab({ characters = [], locations = [], factions = [], c
     { id: 'timeline', label: 'Timeline', items: timeline, getTitle: item => item.title, getPreview: item => item.description || item.date },
     { id: 'ideas', label: 'Ideas', items: ideaEntries, getTitle: item => item.title, getPreview: item => item.content || item.description },
     { id: 'schedule', label: 'Schedule', items: storySchedule, getTitle: item => item.title, getPreview: item => item.description },
-    { id: 'characterbuilder', label: 'Party', items: rpgCharacters, getTitle: item => item.name, getPreview: item => item.backstory || item.notes || item.class },
+    { id: 'characterbuilder', label: 'Party', items: rpgCharacters, getTitle: item => item.name, getPreview: item => item.backstory || item.notes || (item.sheetType === 'neutral' ? item.neutral?.concept : item.class) },
     { id: 'worldhistory', label: 'History', items: worldHistory, getTitle: item => item.title, getPreview: item => item.content || item.summary || item.dateRange || item.era },
   ]
   const [activeSectionId, setActiveSectionId] = useState(selectedEntity?.section || sections.find(section => section.items?.length)?.id || sections[0].id)
