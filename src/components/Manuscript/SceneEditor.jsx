@@ -39,7 +39,31 @@ const InlineInput = ({ value, onSave, className, placeholder }) => {
 // `baseOffset` is this text's start position within the scene's raw content, so every
 // rendered piece can carry a data-raw-start/end pair. Clicking the preview uses those
 // attributes to map a pixel position back to a raw content offset (see resolveRawOffsetFromRange).
-function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
+function renderSelectionText(text, keyPrefix, baseOffset, selection) {
+  const textEnd = baseOffset + text.length
+  if (!selection || selection.end <= baseOffset || selection.start >= textEnd) return text
+  const selectionStart = Math.max(baseOffset, selection.start)
+  const selectionEnd = Math.min(textEnd, selection.end)
+  const boundaries = [baseOffset, selectionStart, selectionEnd, textEnd]
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .sort((a, b) => a - b)
+  return boundaries.slice(0, -1).map((start, index) => {
+    const end = boundaries[index + 1]
+    const selected = start < selectionEnd && end > selectionStart
+    return (
+      <span
+        key={`${keyPrefix}-${selected ? 'selection' : 'plain'}-${index}`}
+        className={selected ? 'ms-tracked-selection' : undefined}
+        data-raw-start={start}
+        data-raw-end={end}
+      >
+        {text.slice(start - baseOffset, end - baseOffset)}
+      </span>
+    )
+  })
+}
+
+function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0, selection = null) {
   if (!text) return []
   const parts = []
   const re = /(\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_)/g
@@ -48,7 +72,7 @@ function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
     if (m.index > last) {
       parts.push(
         <span key={`${keyPrefix}-t${idx}`} data-raw-start={baseOffset + last} data-raw-end={baseOffset + m.index}>
-          {text.slice(last, m.index)}
+          {renderSelectionText(text.slice(last, m.index), `${keyPrefix}-t${idx}`, baseOffset + last, selection)}
         </span>
       )
     }
@@ -60,13 +84,13 @@ function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
     // m[2].length.
     if (m[2] !== undefined) {
       const innerStart = baseOffset + m.index + 2
-      parts.push(<strong key={`${keyPrefix}-b${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[2].length}>{m[2]}</strong>)
+      parts.push(<strong key={`${keyPrefix}-b${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[2].length}>{renderSelectionText(m[2], `${keyPrefix}-b${idx}`, innerStart, selection)}</strong>)
     } else if (m[3] !== undefined) {
       const innerStart = baseOffset + m.index + 1
-      parts.push(<em key={`${keyPrefix}-i${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[3].length}>{m[3]}</em>)
+      parts.push(<em key={`${keyPrefix}-i${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[3].length}>{renderSelectionText(m[3], `${keyPrefix}-i${idx}`, innerStart, selection)}</em>)
     } else {
       const innerStart = baseOffset + m.index + 1
-      parts.push(<u key={`${keyPrefix}-u${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[4].length}>{m[4]}</u>)
+      parts.push(<u key={`${keyPrefix}-u${idx}`} data-raw-start={innerStart} data-raw-end={innerStart + m[4].length}>{renderSelectionText(m[4], `${keyPrefix}-u${idx}`, innerStart, selection)}</u>)
     }
     last = m.index + m[0].length
     idx++
@@ -74,7 +98,7 @@ function renderInlineMarkdown(text, keyPrefix = '', baseOffset = 0) {
   if (last < text.length) {
     parts.push(
       <span key={`${keyPrefix}-t${idx}`} data-raw-start={baseOffset + last} data-raw-end={baseOffset + text.length}>
-        {text.slice(last)}
+        {renderSelectionText(text.slice(last), `${keyPrefix}-t${idx}`, baseOffset + last, selection)}
       </span>
     )
   }
@@ -107,26 +131,7 @@ const overlapsTrackedRange = (start, end, trackedRanges = []) => trackedRanges.s
 )
 
 function renderTrackedSelection(text, keyPrefix, baseOffset, selection) {
-  const textEnd = baseOffset + text.length
-  if (!selection || selection.end <= baseOffset || selection.start >= textEnd) {
-    return renderInlineMarkdown(text, keyPrefix, baseOffset)
-  }
-  const selectionStart = Math.max(baseOffset, selection.start)
-  const selectionEnd = Math.min(textEnd, selection.end)
-  const boundaries = [baseOffset, selectionStart, selectionEnd, textEnd]
-    .filter((value, index, values) => values.indexOf(value) === index)
-    .sort((a, b) => a - b)
-  return boundaries.slice(0, -1).map((start, index) => {
-    const end = boundaries[index + 1]
-    const content = renderInlineMarkdown(
-      text.slice(start - baseOffset, end - baseOffset),
-      `${keyPrefix}-${index}`,
-      start,
-    )
-    return start < selectionEnd && end > selectionStart
-      ? <span key={`${keyPrefix}-selection-${index}`} className="ms-tracked-selection">{content}</span>
-      : <span key={`${keyPrefix}-plain-${index}`}>{content}</span>
-  })
+  return renderInlineMarkdown(text, keyPrefix, baseOffset, selection)
 }
 
 function TrackedContentPreview({ segments, indentParagraphs, selection = null }) {
@@ -527,7 +532,7 @@ const ScriptPreview = ({ content, blocks, elementType, projectType, entityNames,
   )
 }
 
-function EntityLink({ seg, onOpen }) {
+function EntityLink({ seg, onOpen, selection = null }) {
   const entity = seg.entity
   const label = entity?.name || seg.value
   const preview = entity?.preview || 'No preview yet.'
@@ -547,7 +552,7 @@ function EntityLink({ seg, onOpen }) {
         tabIndex={0}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') openEntity(event) }}
       >
-        {seg.value}
+        {renderSelectionText(seg.value, `entity-${seg.start}`, seg.start, selection)}
       </span>
       <span className="ms-entity-popover font-sans">
         <b>{label}</b>
@@ -567,6 +572,7 @@ const ContentPreview = ({
   indentParagraphs = false,
   baseOffset = 0,
   trackedRanges = [],
+  selection = null,
 }) => {
   const entityNames = useMemo(
     () => Object.keys(entityMap).sort((a, b) => b.length - a.length),
@@ -605,7 +611,13 @@ const ContentPreview = ({
     if (!lineInfos.length) return <span className="ms-placeholder">One item per line…</span>
     return (
       <ul className="ms-bullets">
-        {lineInfos.map((info, i) => <li key={i}>{renderTrackedMarkdown(info.line, `bl${i}`, baseOffset + info.start, trackedRanges)}</li>)}
+        {lineInfos.map((info, i) => (
+          <li key={i}>
+            {selection
+              ? renderTrackedSelection(info.line, `bl${i}`, baseOffset + info.start, selection)
+              : renderTrackedMarkdown(info.line, `bl${i}`, baseOffset + info.start, trackedRanges)}
+          </li>
+        ))}
       </ul>
     )
   }
@@ -669,6 +681,7 @@ const ContentPreview = ({
                   indentParagraphs={false}
                   baseOffset={baseOffset + paragraph.start}
                   trackedRanges={trackedRanges}
+                  selection={selection}
                 />
               ) : (
                 <span data-raw-start={baseOffset + paragraph.start} data-raw-end={baseOffset + paragraph.end}>{'\u00a0'}</span>
@@ -685,10 +698,10 @@ const ContentPreview = ({
     <>
       {segs.map((seg, i) => {
         if (seg.type === 'entity') {
-          const entity = <EntityLink seg={{ ...seg, start: baseOffset + seg.start, end: baseOffset + seg.end }} onOpen={onEntityClick} />
-          return overlapsTrackedRange(baseOffset + seg.start, baseOffset + seg.end, trackedRanges)
-            ? <mark key={i} className="ms-tracked-proposed">{entity}</mark>
-            : <span key={i}>{entity}</span>
+          const entity = <EntityLink seg={{ ...seg, start: baseOffset + seg.start, end: baseOffset + seg.end }} onOpen={onEntityClick} selection={selection} />
+          const tracked = overlapsTrackedRange(baseOffset + seg.start, baseOffset + seg.end, trackedRanges)
+          const rendered = tracked ? <mark className="ms-tracked-proposed">{entity}</mark> : entity
+          return <span key={i}>{rendered}</span>
         }
         if (seg.type === 'note') {
           // Write mode: notes exist only as this inline box. Edit mode: notes
@@ -719,11 +732,19 @@ const ContentPreview = ({
               data-raw-end={baseOffset + seg.end}
               title={`Note ${seg.note.seq}`}
             >
-              {renderInlineMarkdown(content.slice(seg.start, seg.end), `nr${i}`, baseOffset + seg.start)}
+              {selection
+                ? renderTrackedSelection(content.slice(seg.start, seg.end), `nr${i}`, baseOffset + seg.start, selection)
+                : renderInlineMarkdown(content.slice(seg.start, seg.end), `nr${i}`, baseOffset + seg.start)}
             </span>
           )
         }
-        return <span key={i}>{renderTrackedMarkdown(seg.value, `s${i}`, baseOffset + seg.start, trackedRanges)}</span>
+        return (
+          <span key={i}>
+            {selection
+              ? renderTrackedSelection(seg.value, `s${i}`, baseOffset + seg.start, selection)
+              : renderTrackedMarkdown(seg.value, `s${i}`, baseOffset + seg.start, trackedRanges)}
+          </span>
+        )
       })}
     </>
   )
@@ -974,7 +995,7 @@ const SceneEditorImpl = ({
     : buildScriptBlocks(stripNoteMarkers(scene.content || ''), scene.scriptElement || 'action'))
   const [activeScriptBlockIndex, setActiveScriptBlockIndex] = useState(0)
   const [focused, setFocused] = useState(false)
-  const [trackedSelection, setTrackedSelection] = useState(null)
+  const [visualSelection, setVisualSelection] = useState(null)
   const [localTrackedSegments, setLocalTrackedSegments] = useState(() => trackingChanges
     ? buildTrackedDiff(trackingBaseContent, stripNoteMarkers(scene.content || ''), trackingSegments).segments
       .map(({ type, text }) => ({ type, text }))
@@ -1297,16 +1318,14 @@ const SceneEditorImpl = ({
       end: base + (ta.selectionEnd ?? ta.selectionStart ?? localContentRef.current.length),
     }
     lastSelectionRef.current = selection
-    if (trackingChanges) {
-      setTrackedSelection(selection.start === selection.end ? null : selection)
-    }
+    if (!isScript) setVisualSelection(selection.start === selection.end ? null : selection)
     const start = Math.max(0, Math.min(selection.start, localContentRef.current.length))
     const end = Math.max(start, Math.min(selection.end, localContentRef.current.length))
     onSelectionContextChange(start === end ? '' : localContentRef.current.slice(start, end))
-  }, [onSelectionContextChange, trackingChanges])
+  }, [isScript, onSelectionContextChange])
 
-  // hasSelection here (not a separate measurement pass) is what switches the
-  // floating "+" note button into the selection bar (Note/Ask AI/B/I) below —
+  // hasSelection here (not a separate measurement pass) is what reveals the
+  // contextual selection bar (Note/Ask AI/B/I) below —
   // reusing this already-debounced position sync instead of adding a second,
   // parallel `selectionchange`-driven measurement path.
   const syncFloatingNoteButton = useCallback(() => {
@@ -1364,7 +1383,7 @@ const SceneEditorImpl = ({
       const base = Number(ta.dataset.msStart) || 0
       ta.setSelectionRange(Math.max(0, start - base), Math.max(0, end - base))
       lastSelectionRef.current = { start, end }
-      if (trackingChanges) setTrackedSelection(start === end ? null : { start, end })
+      if (!isScript) setVisualSelection(start === end ? null : { start, end })
       syncFloatingNoteButton()
       scheduleVisualCaret()
       // `preventScroll` only governs `.focus()` — it does nothing for the
@@ -1384,7 +1403,7 @@ const SceneEditorImpl = ({
       // centered while typing" feature `caretFollowEnabled` toggles.
       scheduleCaretFollow({ immediate: true })
     }, 0)
-  }, [scheduleCaretFollow, scheduleVisualCaret, syncFloatingNoteButton, trackingChanges])
+  }, [isScript, scheduleCaretFollow, scheduleVisualCaret, syncFloatingNoteButton])
 
   // ─── Undo / redo ─────────────────────────────────────────────────────────
   // Snapshots cover raw content (+ script blocks, for script projects) and the caret
@@ -1668,7 +1687,7 @@ const SceneEditorImpl = ({
 	      start: base + e.target.selectionStart,
 	      end: base + e.target.selectionEnd,
 	    }
-	    if (trackingChanges) setTrackedSelection(null)
+	    if (!isScript) setVisualSelection(null)
 	    localContentRef.current = nextContent
 	    onPersistDraft(scene, nextContent)
 	    onLiveContentChange(scene.id, nextContent)
@@ -1982,7 +2001,7 @@ const SceneEditorImpl = ({
     const boundedAnchor = Math.max(0, Math.min(anchor, localContentRef.current.length))
     textarea.setSelectionRange(boundedAnchor, boundedAnchor)
     lastSelectionRef.current = { start: boundedAnchor, end: boundedAnchor }
-    setTrackedSelection(null)
+    setVisualSelection(null)
     scheduleVisualCaret()
 
     const move = event => {
@@ -1994,7 +2013,7 @@ const SceneEditorImpl = ({
       const end = Math.max(boundedAnchor, bounded)
       textarea.setSelectionRange(start, end, bounded < boundedAnchor ? 'backward' : 'forward')
       lastSelectionRef.current = { start, end }
-      setTrackedSelection(start === end ? null : { start, end })
+      setVisualSelection(start === end ? null : { start, end })
       scheduleVisualCaret()
     }
     const finish = () => {
@@ -2022,7 +2041,7 @@ const SceneEditorImpl = ({
     const target = Math.max(0, Math.min(resolved, localContentRef.current.length))
     e.currentTarget.setSelectionRange(target, target)
     lastSelectionRef.current = { start: target, end: target }
-    setTrackedSelection(null)
+    setVisualSelection(null)
     scheduleVisualCaret()
   }
 
@@ -2088,7 +2107,17 @@ const SceneEditorImpl = ({
 	  // (useSceneWindow.js), and Manuscript.jsx's/StructureSidebar.jsx's
 	  // scrollIntoView-by-id callers need a target that's always present.
 	  return (
-	    <div ref={wrapperRef} className={`relative group/scene${focused ? ' is-editing' : ''}`}>
+	    <div ref={wrapperRef} className={`relative group/scene ms-scene-editor${focused ? ' is-editing' : ''}${!trackingChanges ? ' has-note-action' : ''}`}>
+	      {!trackingChanges && (
+	        <button
+	          type="button"
+	          className="ms-meta-chip ms-scene-note-btn"
+	          onMouseDown={e => e.preventDefault()}
+	          onClick={handleAddNote}
+	          title="Add note at the current cursor position"
+	          aria-label="Add note"
+	        >+ Note</button>
+	      )}
 	      {/* Scene header — one quiet line (number · title · status) above a
 	          hairline; word count, POV, and the secondary format/history/undo
 	          controls reveal on hover or focus rather than sitting in a second
@@ -2126,17 +2155,6 @@ const SceneEditorImpl = ({
             <span className="ms-meta-dot" />
             {statusCfg.label}
           </button>
-
-          {!trackingChanges && (
-            <button
-              type="button"
-              className="ms-meta-chip ms-mobile-note-btn"
-              onMouseDown={e => e.preventDefault()}
-              onClick={handleAddNote}
-              title="Add note at cursor"
-              aria-label="Add note"
-            >+ Note</button>
-          )}
 
           {trackingChanges && (
             <span className="ms-tracking-chip">
@@ -2251,7 +2269,7 @@ const SceneEditorImpl = ({
 	                )
 	              }
 	                return (
-	                  <div key={block.key} className="ms-rich-edit">
+	                  <div key={block.key} className={`ms-rich-edit${visualSelection ? ' has-visual-selection' : ''}`}>
 	                    <div className="ms-rich-preview ms-preview" aria-hidden="true" style={textStyle}>
 	                      <ContentPreview
 	                        content={localContent.slice(block.start, block.end)}
@@ -2300,6 +2318,7 @@ const SceneEditorImpl = ({
 	                        indentParagraphs={autoIndentEnabled}
 	                        baseOffset={block.start}
 	                        trackedRanges={trackedRanges}
+	                        selection={focused ? visualSelection : null}
 	                      />
 	                    </div>
 	                    <span className="ms-editor-caret" aria-hidden="true" />
@@ -2328,13 +2347,13 @@ const SceneEditorImpl = ({
 	            })}
 	          </div>
 	        ) : (
-	          <div className={`ms-rich-edit${trackingChanges ? ' is-tracking' : ''}`}>
+	          <div className={`ms-rich-edit${trackingChanges ? ' is-tracking' : ''}${visualSelection ? ' has-visual-selection' : ''}`}>
 	            <div className={`ms-rich-preview ms-preview${isScript ? ' ms-script-mode' : ''}`} aria-hidden="true" onPointerDown={trackingChanges ? handleTrackedPointerDown : undefined} style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}>
 	              {trackingChanges ? (
 	                <TrackedContentPreview
 	                  segments={trackedDiff?.segments || []}
 	                  indentParagraphs={autoIndentEnabled}
-	                  selection={focused ? trackedSelection : null}
+	                  selection={focused ? visualSelection : null}
 	                />
 	              ) : <ContentPreview
 	                content={localContent}
@@ -2354,6 +2373,7 @@ const SceneEditorImpl = ({
 	                mode={mode}
 	                indentParagraphs={autoIndentEnabled}
 	                trackedRanges={trackedRanges}
+	                selection={focused ? visualSelection : null}
 	              />}
 	            </div>
 	            <span className="ms-editor-caret" aria-hidden="true" />
@@ -2419,9 +2439,9 @@ const SceneEditorImpl = ({
         )}
       </div>
 
-	      {/* Selecting prose expands the same floating anchor (already positioned
-	          off `measureCaret`, already debounced — see syncFloatingNoteButton
-	          above) into a small bar instead of just the "+" button: Note anchors
+	      {/* Selecting prose uses the caret-measured floating anchor (already
+	          debounced — see syncFloatingNoteButton above) for a compact tool bar:
+	          Note anchors
 	          at the selection per spec §5.3, Ask AI opens the AI surface with the
 	          selection already tracked via onSelectionContextChange, B/I reuse
 	          the exact same wrapSelection the header's B/I buttons call. */}
@@ -2444,21 +2464,6 @@ const SceneEditorImpl = ({
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('**') }} title="Bold (Ctrl+B)"><b>B</b></button>
 	            <button type="button" onMouseDown={e => { e.preventDefault(); wrapSelection('*') }} title="Italic (Ctrl+I)"><em>I</em></button>
 	          </div>
-	        ) : !trackingChanges ? (
-	          <button
-	            type="button"
-	            className="ms-floating-note-btn font-sans"
-	            style={{
-	              top: floatingNotePos.top,
-	              [floatingNotePos.side]: -36,
-	            }}
-	            onMouseDown={e => e.preventDefault()}
-	            onClick={handleAddNote}
-	            title="Add note at cursor"
-	            aria-label="Add note at cursor"
-	          >
-	            +
-	          </button>
 	        ) : null
 	      )}
 

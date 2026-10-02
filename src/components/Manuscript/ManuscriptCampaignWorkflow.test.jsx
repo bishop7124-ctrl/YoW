@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import Manuscript from './Manuscript.jsx'
 
 const noop = vi.fn()
@@ -33,6 +33,8 @@ const baseStore = (overrides = {}) => ({
   moveScene: noop,
   setSelectedCharacterId: noop,
   setSelectedLocationId: noop,
+  writingSceneId: null,
+  setWritingSceneId: vi.fn(),
   updateNovel: noop,
   sceneConflicts: [],
   restoreSceneConflict: noop,
@@ -105,5 +107,84 @@ describe('Manuscript campaign workflow', () => {
     // Re-selecting the current mode must not act like a panel-close command.
     fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Writing' }))
     expect(screen.getByRole('complementary', { name: 'Scene inspector' })).toBeTruthy()
+  })
+
+  it('jumps directly to a selected chapter and activates its first scene', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    const store = baseStore({
+      chapters: [
+        { id: 'session-1', novelId: 'campaign-1', actId: 'arc-1', title: 'Session 1', order: 0 },
+        { id: 'session-2', novelId: 'campaign-1', actId: 'arc-1', title: 'The Deep Road', order: 1 },
+      ],
+      scenes: [
+        { id: 'encounter-1', novelId: 'campaign-1', chapterId: 'session-1', title: 'Road Ambush', content: '', order: 0 },
+        { id: 'encounter-3', novelId: 'campaign-1', chapterId: 'session-2', title: 'The Gate', content: '', order: 1 },
+        { id: 'encounter-2', novelId: 'campaign-1', chapterId: 'session-2', title: 'The Descent', content: '', order: 0 },
+      ],
+    })
+    render(<Manuscript store={store} userId={null} />)
+
+    const target = document.getElementById('ms-chap-session-2')
+    target.scrollIntoView = vi.fn()
+    const chapterButtons = document.querySelectorAll('.ms-rail-chapter-btn')
+    fireEvent.click(chapterButtons[1])
+
+    expect(store.setWritingSceneId).toHaveBeenCalledWith('encounter-2')
+    await waitFor(() => {
+      expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' })
+    })
+  })
+
+  it('keeps the active scene when moving through Writing, Editing, and Finalised', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+    const targetSceneId = 'scene-4'
+    const store = baseStore({
+      activeNovel: { id: 'novel-1', title: 'The Ember Road', type: 'novel', writingGoals: {} },
+      acts: [{ id: 'act-1', novelId: 'novel-1', title: 'Act 1', order: 0 }],
+      chapters: [
+        { id: 'chapter-1', novelId: 'novel-1', actId: 'act-1', title: 'Chapter 1', order: 0 },
+        { id: 'chapter-3', novelId: 'novel-1', actId: 'act-1', title: 'Chapter 3', order: 1 },
+      ],
+      scenes: [
+        { id: 'scene-1', novelId: 'novel-1', chapterId: 'chapter-1', title: 'Opening', content: 'Opening prose.', order: 0 },
+        { id: targetSceneId, novelId: 'novel-1', chapterId: 'chapter-3', title: 'Scene 4', content: 'The retained scene.', order: 0 },
+      ],
+      writingSceneId: targetSceneId,
+    })
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+    const scrollCalls = []
+    HTMLElement.prototype.scrollIntoView = function scrollIntoView(options) {
+      scrollCalls.push({ node: this, options })
+    }
+
+    try {
+      render(<Manuscript store={store} userId={null} />)
+      await waitFor(() => {
+        expect(scrollCalls.some(call => call.node.id === `ms-scene-${targetSceneId}`)).toBe(true)
+      })
+      scrollCalls.length = 0
+
+      let modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
+      fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Editing' }))
+      await waitFor(() => {
+        expect(scrollCalls.some(call => call.node.id === `ms-scene-${targetSceneId}` && call.options.block === 'nearest')).toBe(true)
+      })
+      scrollCalls.length = 0
+
+      modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
+      fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Finalised' }))
+      await waitFor(() => {
+        expect(scrollCalls.some(call => call.node.dataset.finalizedSceneId === targetSceneId && call.options.block === 'center')).toBe(true)
+      })
+      scrollCalls.length = 0
+
+      modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
+      fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Writing' }))
+      await waitFor(() => {
+        expect(scrollCalls.some(call => call.node.id === `ms-scene-${targetSceneId}` && call.options.block === 'center')).toBe(true)
+      })
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView
+    }
   })
 })

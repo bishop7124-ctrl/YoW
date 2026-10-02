@@ -13,16 +13,6 @@ export function getCaretScrollDelta({
   return 0
 }
 
-// Used whenever `enabled` (the Focused Writing "keep caret centered" preference)
-// is off but the scene is still `focused` (see the hook's own params below) —
-// i.e. the regular editor. A tight 35/65 band there reintroduced the
-// 2026-08-07 pass-4 regression ("way, way worse... re-centering on every
-// keystroke during completely normal typing"): the regular editor isn't
-// asking to be kept centered, just to never lose the caret off the visible
-// edge, so this band only steps in once the caret is genuinely near/at the
-// edge — most normal typing never crosses it at all.
-const GENTLE_ZONE = { topFraction: 0.08, bottomFraction: 0.92 }
-
 // measureCaret (useTextareaCaretRect.js) mirrors every character before the
 // caret into a hidden div and reads its layout back — the same full-document
 // reflow that made typing laggy before it was debounced in this file's sibling
@@ -62,10 +52,6 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
       caretHeight: caret.height,
       containerTop: containerRect.top,
       containerHeight: container.clientHeight,
-      // Only the Focused Writing caret-follow preference (`enabled`) gets the
-      // tight, actively-centering 35/65 band — see GENTLE_ZONE above for why
-      // the regular editor uses a much wider one instead.
-      ...(enabled ? null : GENTLE_ZONE),
     })
 
     if (Math.abs(delta) > 1) {
@@ -83,7 +69,7 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
       // one piece actually making it visible.
       container.scrollTo({ top: Math.max(0, container.scrollTop + delta), behavior: 'instant' })
     }
-  }, [measureCaret, scrollContainerRef, textareaRef, enabled])
+  }, [measureCaret, scrollContainerRef, textareaRef])
 
   const runDeferred = useCallback(() => {
     if (frameRef.current) cancelAnimationFrame(frameRef.current)
@@ -111,9 +97,9 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
   //
   // `immediate` deliberately bypasses `enabled`/`focused` (unlike the
   // throttled path below). `enabled` gates the *continuous, tightly-banded*
-  // centering, which is a Focused Writing-only feature — turning the tight
+  // centering, which is an explicit caret-follow behavior — turning the tight
   // band on for the regular editor made typing there constantly re-center
-  // and feel far worse, not better (2026-08-07 pass 4). This one-shot
+  // and feel far worse, not better. This one-shot
   // correction after a discrete, already-infrequent action (a click, Enter,
   // undo/redo, a note insert) isn't that feature; it's a fix for a real
   // browser glitch, so it needs to run in every mode regardless of preference
@@ -121,7 +107,9 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
   // editing).
   const schedule = useCallback((options) => {
     if (composingRef.current || selectingRef.current) return
-    if (!options?.immediate && !focused) return
+    // Continuous correction belongs to the explicit caret-follow mode. Normal
+    // typing must leave the manuscript viewport anchored while text reflows.
+    if (!options?.immediate && (!enabled || !focused)) return
     clearTimeout(trailingTimerRef.current)
     if (options?.immediate) {
       if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = null }
@@ -134,21 +122,13 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
     } else {
       trailingTimerRef.current = setTimeout(runDeferred, THROTTLE_MS - elapsed)
     }
-  }, [focused, runDeferred, applyCorrection])
+  }, [enabled, focused, runDeferred, applyCorrection])
 
-  // `focused` (in addition to `enabled`) also gates this effect: the regular
-  // editor gets the same throttled per-keystroke/selection correction as
-  // Focused Writing, just via GENTLE_ZONE above instead of the tight 35/65
-  // band — see that constant's comment for why a wide band, not "no
-  // correction at all," is what's safe outside Focused Writing (2026-08-07,
-  // pass 6 gap: the regular editor previously had zero comfort correction of
-  // any kind, since this whole effect was gated on `enabled` alone).
-  //
-  // The container-scroll settle-timer below is deliberately *not* included
-  // in that widening — see its own comment for why it stays scoped to
-  // `enabled` specifically, not `focused`.
+  // Only caret-follow mode installs continuous input/selection/resize
+  // listeners. One-shot immediate corrections remain available outside this
+  // effect for deliberate programmatic caret moves.
   useEffect(() => {
-    if (!focused) return undefined
+    if (!enabled || !focused) return undefined
     const textarea = textareaRef.current
     if (!textarea) return undefined
     const container = scrollContainerRef.current || textarea.closest('.ms-scroll-container')
@@ -178,25 +158,18 @@ export function useCaretComfortScroll({ textareaRef, scrollContainerRef, enabled
     // caret. Once that native scroll settles, re-run the comfort-zone check
     // once to correct for it, rather than fighting it mid-animation.
     //
-    // Scoped to `enabled` specifically (not the wider `focused` gate the rest
-    // of this effect uses) — this listener can't tell a native "scroll the
+    // This listener can't tell a native "scroll the
     // selection into view" apart from the user just scrolling the manuscript
     // with the mouse wheel to reread earlier text while the textarea stays
-    // focused. Under Focused Writing's tight 35/65 band that ambiguity is
-    // fine to resolve in favor of re-centering. Under the regular editor's
-    // GENTLE_ZONE it isn't: a reread scroll of more than about half a
-    // container-height would land outside 8–92% and get yanked back to the
-    // caret 180ms after the user stops scrolling — snapping the view away
-    // from the very text they just scrolled to read. That's the exact
-    // interaction pass 6 deliberately avoided widening this to (see its
-    // note in the 2026-08-07 ROADMAP row); still true here.
+    // focused. In caret-follow mode that ambiguity is deliberately resolved
+    // in favor of re-centering.
     let settleTimer = null
     const onContainerScroll = () => {
       if (selectingRef.current) return
       clearTimeout(settleTimer)
       settleTimer = setTimeout(schedule, 180)
     }
-    if (enabled) container?.addEventListener('scroll', onContainerScroll)
+    container?.addEventListener('scroll', onContainerScroll)
 
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current)

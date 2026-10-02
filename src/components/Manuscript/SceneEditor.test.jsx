@@ -144,6 +144,29 @@ describe('SceneEditor manuscript references', () => {
   })
 })
 
+describe('SceneEditor note action', () => {
+  it('keeps Add note available before the prose is focused and anchors it at the scene end', () => {
+    const content = 'A scene awaiting a note.'
+    const onUpdateScene = vi.fn()
+    const { container } = renderScene(content, { onUpdateScene })
+
+    expect(container.querySelector('textarea.ms-textarea')).toBeNull()
+    const noteButton = container.querySelector('.ms-scene-note-btn')
+    expect(noteButton?.getAttribute('aria-label')).toBe('Add note')
+    noteButton.focus()
+    expect(document.activeElement).toBe(noteButton)
+    fireEvent.click(noteButton)
+
+    expect(onUpdateScene).toHaveBeenCalledWith('s1', {
+      notes: [expect.objectContaining({
+        anchorOffset: content.length,
+        anchorEndOffset: content.length,
+        selectedText: '',
+      })],
+    })
+  })
+})
+
 describe('SceneEditor tracked editing presentation', () => {
   it('renders proposed prose inline in the tracked-change colour', () => {
     const scene = { ...makeScene('The winding road.'), trackedChanges: { baseContent: 'The old road.', proposedContent: 'The winding road.' } }
@@ -220,6 +243,30 @@ describe('SceneEditor tracked editing presentation', () => {
 })
 
 describe('SceneEditor semantic paragraph indentation', () => {
+  it('paints an ordinary textarea selection on the matching visible paragraph', async () => {
+    const content = 'First paragraph.\nSecond **bright** paragraph sits here.'
+    const { container } = renderScene(content)
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea')
+      expect(node).toBeTruthy()
+      return node
+    })
+    const rawSelection = 'Second **bright** paragraph'
+    const start = content.indexOf(rawSelection)
+    textarea.setSelectionRange(start, start + rawSelection.length)
+    fireEvent.select(textarea)
+
+    await waitFor(() => {
+      const editor = textarea.closest('.ms-rich-edit')
+      const highlighted = [...container.querySelectorAll('.ms-rich-preview .ms-tracked-selection')]
+      expect(editor?.classList.contains('has-visual-selection')).toBe(true)
+      expect(highlighted.map(node => node.textContent).join('')).toBe('Second bright paragraph')
+      expect(container.querySelector('.ms-rich-preview strong')?.textContent).toBe('bright')
+    })
+  })
+
   it('renders every explicit line without adding paragraph spacing', () => {
     const { container } = renderScene('First paragraph.\n\nSecond paragraph.')
     const paragraphs = [...container.querySelectorAll('.ms-prose-paragraph')]

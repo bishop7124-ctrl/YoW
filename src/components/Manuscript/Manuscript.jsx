@@ -328,6 +328,7 @@ export default function Manuscript({ store, userId, membership = null }) {
       setLiveSceneContent({})
       return
     }
+    if (next === 'final') setFinalisedSubView('manuscript')
     setMode(next)
     // Surfaces close in both Write and Finalised per the mode table — only
     // Edit leaves the active surface as the user had it.
@@ -387,6 +388,33 @@ export default function Manuscript({ store, userId, membership = null }) {
       })
     }, duration)
   }, [])
+
+  // Writing and tracked Editing share scene wrappers, while Finalised mounts a
+  // separate reader. Restore the active scene whenever a mode transition brings
+  // an editable manuscript back; ordinary scene focus changes must not invoke
+  // this effect or the page would re-center during normal writing.
+  const previousModeRef = useRef(mode)
+  useEffect(() => {
+    const previousMode = previousModeRef.current
+    previousModeRef.current = mode
+    if (previousMode === mode || (mode !== 'write' && mode !== 'edit')) return undefined
+    if (!activeSceneId || !scenes.some(scene => scene.id === activeSceneId)) return undefined
+
+    let secondFrame = 0
+    const firstFrame = window.requestAnimationFrame(() => {
+      pinScene(activeSceneId, 1200)
+      secondFrame = window.requestAnimationFrame(() => {
+        document.getElementById(`ms-scene-${activeSceneId}`)?.scrollIntoView({
+          behavior: 'auto',
+          block: previousMode === 'final' || previousMode === 'review' ? 'center' : 'nearest',
+        })
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (secondFrame) window.cancelAnimationFrame(secondFrame)
+    }
+  }, [activeSceneId, mode, pinScene, scenes])
 
   // Entity clicks (handleEntityClick below) open the inspector's Catalogue
   // tab pointed at one entity already linked in the current scene; the
@@ -1020,11 +1048,30 @@ export default function Manuscript({ store, userId, membership = null }) {
   }, [pinScene, setActiveSceneId])
 
   const handleSelectChapter = useCallback((chapId) => {
-    requestAnimationFrame(() => {
+    const firstScene = scenes
+      .filter(scene => scene.chapterId === chapId)
+      .sort((a, b) => a.order - b.order)[0]
+
+    // Make the destination scene real before jumping. Otherwise a smooth scroll can
+    // cross virtualized placeholders whose measured heights change mid-animation,
+    // leaving the requested chapter above or below the final viewport position.
+    if (firstScene) {
+      pinScene(firstScene.id, 1200)
+      setActiveSceneId(firstScene.id)
+    }
+    if (isMobileBand) setRailSheetOpen(false)
+
+    const scrollToChapter = () => {
       document.getElementById(`ms-chap-${chapId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        ?.scrollIntoView({ behavior: 'auto', block: 'start' })
+    }
+    requestAnimationFrame(() => {
+      scrollToChapter()
+      // Re-anchor after React mounts the pinned editor and the browser has completed
+      // the first layout pass around the newly visible chapter.
+      requestAnimationFrame(scrollToChapter)
     })
-  }, [])
+  }, [isMobileBand, pinScene, scenes, setActiveSceneId])
 
   // Breadcrumb: act · chapter · scene for whichever scene last took focus
   // (onFocus on every SceneEditor already keeps activeSceneId current — see
@@ -1292,7 +1339,13 @@ export default function Manuscript({ store, userId, membership = null }) {
           ) : finalisedSubView === 'book' ? (
             <ManuscriptBookView draft={liveFinalizedDraft} projectTitle={activeNovel?.title} />
           ) : (
-            <FinalizedReader draft={liveFinalizedDraft} viewMode="scroll" pageIndex={0} onPageIndexChange={() => {}} />
+            <FinalizedReader
+              draft={liveFinalizedDraft}
+              viewMode="scroll"
+              pageIndex={0}
+              onPageIndexChange={() => {}}
+              targetSceneId={activeSceneId}
+            />
           )}
         </div>
       ) : (
