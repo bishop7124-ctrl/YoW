@@ -339,6 +339,11 @@ export default async function handler(req, res) {
           if (auditError) throw auditError
 
           await removeUserMedia(supabase, id)
+          // public.scenes.user_id is TEXT with no foreign key to auth.users, so deleting the
+          // Auth user does not cascade to it (every other user table does): remove the
+          // manuscript text explicitly or it would outlive the account.
+          const { error: scenesError } = await supabase.from('scenes').delete().eq('user_id', id)
+          if (scenesError) throw scenesError
           const { error: deleteError } = await supabase.auth.admin.deleteUser(id)
           if (deleteError) throw deleteError
           result.deleted += 1

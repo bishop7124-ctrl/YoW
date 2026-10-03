@@ -695,6 +695,7 @@ describe('run-account-lifecycle send + archive (gated)', () => {
       expect(storageRemove).toHaveBeenCalledWith([`${UID1}/a.png`, `${UID1}/projects/b.png`])
       expect(storageList.mock.calls[0][0]).toBe(UID1)
       expect(deleteUserSpy).toHaveBeenCalledWith(UID1)
+      expect(deleteSpy).toHaveBeenCalledWith('user_id', UID1) // scenes have no FK cascade
       expect(upsertSpy.mock.calls[0][0]).toMatchObject({ user_id: UID1, track: 'free_inactive' })
       expect(updateRowSpy.mock.calls[0][0]).toHaveProperty('completed_at')
       expect(JSON.stringify(body)).not.toMatch(/@x\.test/)
