@@ -23,14 +23,6 @@ project_id = "cwifaklpjqutlcwvkxpp"
 # not a weakening, since the in-function check is the real boundary in
 # every case. Confirmed for each below via its own source, not assumed.
 
-[functions.stripe-webhook]
-# Called by Stripe directly — verifies the `stripe-signature` header
-# against STRIPE_WEBHOOK_SECRET itself (api/stripe-webhook.js's Vercel
-# equivalent is the one actually wired up in production; this Edge
-# Function predates it). Stripe never sends a Supabase JWT, so
-# verify_jwt = true would make this endpoint permanently unreachable.
-verify_jwt = false
-
 [functions.send-reset-email]
 # Called by an unauthenticated visitor on the "forgot password" screen —
 # by definition, before they have any session. Protects itself with a
@@ -54,21 +46,8 @@ verify_jwt = false
 # comparison in code. Never called by an end-user browser.
 verify_jwt = false
 
-# The three functions below are superseded by Vercel api/*.js routes —
-# create-checkout-session and create-customer-portal by their same-named
-# api/*.js file, downgrade-to-free by downgradeToFreeLocally() folded into
-# api/create-customer-portal.js — and nothing in src/ calls any of the three
-# Edge Functions anymore (confirmed via grep). Left deployable rather than
-# deleted here since removing a live Edge Function is a separate decision
-# from documenting its config; verify_jwt = true matches their original
-# design (each also calls supabase.auth.getUser() on the token itself, so
-# this is defense-in-depth, not the only check).
-
-[functions.create-checkout-session]
-verify_jwt = true
-
-[functions.create-customer-portal]
-verify_jwt = true
-
-[functions.downgrade-to-free]
-verify_jwt = true
+# stripe-webhook, create-checkout-session, create-customer-portal and
+# downgrade-to-free are retired: the Vercel api/*.js routes are the only billing
+# stack. Their source is quarantined under functions/_retired/ (skipped by
+# `supabase functions deploy`); see the README there. Any copy still deployed on
+# the hosted project must be deleted in the dashboard, not re-deployed.

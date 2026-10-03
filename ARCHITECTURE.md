@@ -146,11 +146,10 @@ All variables live in `.env.local` for local dev and in the
 | `VITE_SUPABASE_ANON_KEY` | Supabase public anon key | Supabase → Settings → API |
 | `VITE_CREATE_CHECKOUT_SESSION_URL` | Path to the checkout API route | Always `/api/create-checkout-session` |
 | `VITE_CUSTOMER_PORTAL_URL` | Path to the portal API route | Always `/api/create-customer-portal` |
-| `VITE_OPENROUTER_API_KEY` | OpenRouter key for AI | openrouter.ai → Keys |
-| `VITE_GOOGLE_AI_API_KEY` | Google AI Studio key (optional) | aistudio.google.com |
-| `VITE_ANTHROPIC_API_KEY` | Anthropic key (optional) | console.anthropic.com |
 | `VITE_DEV_EMAIL` | Auto-fills login form in dev | Anything — only active when `import.meta.env.DEV` is true |
 | `VITE_DEV_PASSWORD` | Auto-fills login form in dev | Anything |
+
+AI provider keys are not environment variables at all: each user enters their own in the app, and they are stored encrypted server-side.
 
 **Important:** Any variable with `VITE_` is bundled into the JavaScript that
 users download. Never put a Stripe secret key or Supabase service role key

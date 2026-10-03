@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
-import { corsHeaders, jsonResponse } from '../_shared/cors.ts'
+import { corsHeaders, jsonResponse } from '../../_shared/cors.ts'
 
 // Edge-function counterpart of create-customer-portal's downgrade_to_free action.
 // Kept for direct Supabase deployments that already reference this function.
