@@ -1,6 +1,6 @@
 import Stripe from 'npm:stripe@22.1.1'
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
-import { corsHeaders, jsonResponse } from '../_shared/cors.ts'
+import { corsHeaders, jsonResponse } from '../../_shared/cors.ts'
 
 // Legacy edge function — superseded by api/create-customer-portal.js (the
 // Vercel route VITE_CUSTOMER_PORTAL_URL actually points to). Kept in sync so

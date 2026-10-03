@@ -1,6 +1,6 @@
 import Stripe from 'npm:stripe@22.1.1'
 import { createClient } from 'npm:@supabase/supabase-js@2.39.7'
-import { corsHeaders, jsonResponse } from '../_shared/cors.ts'
+import { corsHeaders, jsonResponse } from '../../_shared/cors.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', { apiVersion: '2026-04-22.dahlia' })
 const supabaseAdmin = createClient(
