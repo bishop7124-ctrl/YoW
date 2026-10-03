@@ -2,7 +2,7 @@
 
 ## 2026-10-03 database continuity and billing-stack consolidation
 
-Status: **In progress 2026-10-03 — every automated part passes; the production read-only check and one dashboard look are waiting on the owner.** Hard gate: Data safety (closes 5 Oct).
+Status: **Done 2026-10-03 (owner declared passed).** Production read-only check run, dedupe migration applied, password minimum raised to 8, orphan scene rows approved for deletion and removed by the owner (the delete count and final re-check were not sent back: owner-attested). Hard gate: Data safety (closes 5 Oct).
 
 Required checks (kept until each is evidenced):
 - ✅ Clean replay: `scripts/db-replay/replay.sh` builds an EMPTY Postgres 16, installs stand-ins for the hosted-only pieces (Supabase roles, `auth`/`storage` schemas, `auth.uid()`, `pg_net`; see `bootstrap.sql`), and replays all 34 committed migrations in order with **no manual SQL**: 34/34 apply, including the new dedupe migration. The `scenes` table and the production-only functions are all reproducible from the repository. Runs in CI as the new `Database replay (empty Postgres)` job.
