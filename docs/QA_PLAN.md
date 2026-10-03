@@ -2,7 +2,7 @@
 
 ## 2026-10-03 cross-browser record clobber (owner live test FAIL, fixed same evening)
 
-Status: **Fixed in code and tested 2026-10-03; needs the migration applied in production, then a live re-test (owner, about 10 minutes).** Overflow O04 (hard gate), Data safety gate.
+Status: **Done 2026-10-03: fixed, migration applied in production, deployed (PR #255), and the owner's live two-browser re-test PASSED (owner-reported).** Overflow O04 (hard gate), Data safety gate.
 
 Finding (owner, live, two browsers on one test account): the manuscript editor passed (scenes have a revision guard), but the **character editor failed**. A conflict copy appeared briefly; refreshing cleared it and the other browser's change was silently erased.
 
