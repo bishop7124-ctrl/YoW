@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
-import { upsertItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData, getUserStorageUsage } from '../utils/firestoreSync.js'
+import { upsertItems, mergeItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData, getUserStorageUsage } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
 import { estimateStoreSize } from '../utils/storageQuota.js'
@@ -12,8 +12,14 @@ import { markLocalWriteFailed } from '../storage/writeDurability.js'
 import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
 
 // Mock Supabase-backed modules so tests run without network
-vi.mock('../utils/firestoreSync', () => ({
-  upsertItems:        vi.fn().mockResolvedValue({}),
+vi.mock('../utils/firestoreSync', () => {
+  const upsertItems = vi.fn().mockResolvedValue({})
+  return {
+  upsertItems,
+  // Record saves go through mergeItems (cross-browser safe merge). By default the mock behaves like the
+  // old plain push (delegating to upsertItems, no server-side changes); tests that exercise the merge
+  // override it with mockResolvedValueOnce.
+  mergeItems:         vi.fn(async (table, ownerId, items) => { await upsertItems(table, ownerId, items); return { results: [], fallback: false } }),
   deleteItem:         vi.fn().mockResolvedValue({}),
   saveUserSettings:   vi.fn().mockResolvedValue({}),
   saveSceneDoc:       vi.fn().mockResolvedValue({}),
@@ -21,7 +27,8 @@ vi.mock('../utils/firestoreSync', () => ({
   deleteProjectData:  vi.fn().mockResolvedValue({}),
   replaceUserData:    vi.fn().mockResolvedValue({}),
   getUserStorageUsage: vi.fn().mockResolvedValue(0),
-}))
+  }
+})
 vi.mock('../utils/projectStats', () => ({
   buildProjectStats: vi.fn().mockReturnValue({}),
 }))
@@ -2674,6 +2681,101 @@ describe('multi-tab structured record sync', () => {
     act(() => { tabB.result.current.discardRecordConflict(tabB.result.current.recordConflicts[0].id) })
     expect(tabB.result.current.recordConflicts).toHaveLength(0)
     expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab B')
+  })
+})
+
+
+// Cross-BROWSER safety (found by the owner's live two-tab test, 3 Oct 2026): record saves used to be a
+// plain whole-record upsert, so the last browser to save silently erased the other's fields. They now
+// go through mergeItems (a per-field three-way merge in the database) and the store applies what comes back.
+describe('cross-browser record merge', () => {
+  const setup = async owner => {
+    const hook = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    act(() => { hook.result.current.finishRemoteLoad(true) })
+    act(() => { hook.result.current.addNovel({ title: 'World', type: 'novel' }) })
+    act(() => { hook.result.current.saveCharacter({ name: 'Ann', notes: 'original' }) })
+    await waitFor(() => expect(mergeItems).toHaveBeenCalledWith('characters', owner, expect.any(Array), expect.any(Map)), { timeout: 3000 })
+    return hook
+  }
+
+  beforeEach(() => {
+    vi.mocked(upsertItems).mockClear()
+    vi.mocked(mergeItems).mockClear()
+  })
+
+  it('sends the version this tab last synced as the base of the merge', async () => {
+    const hook = await setup('user-merge-base')
+    const ann = hook.result.current.characters.find(c => c.name === 'Ann')
+    vi.mocked(mergeItems).mockClear()
+    act(() => { hook.result.current.saveCharacter({ name: 'Ann', notes: 'edited here' }, ann.id) })
+    await waitFor(() => expect(mergeItems).toHaveBeenCalled(), { timeout: 3000 })
+    const [, , items, baseById] = vi.mocked(mergeItems).mock.calls.at(-1)
+    expect(items[0].notes).toBe('edited here')
+    expect(baseById.get(ann.id).notes).toBe('original')
+  })
+
+  it('applies a field another browser changed to this tab, keeping this tab\'s own edit', async () => {
+    const hook = await setup('user-merge-apply')
+    const ann = hook.result.current.characters.find(c => c.name === 'Ann')
+    vi.mocked(mergeItems).mockImplementationOnce(async (table, owner, items) => ({
+      fallback: false,
+      results: items.map(item => ({
+        id: item.id, original: item, mine: item, conflicts: [], theirs: null,
+        merged: { ...item, bio: 'written in the other browser' },
+      })),
+    }))
+    act(() => { hook.result.current.saveCharacter({ name: 'Ann renamed', notes: 'original' }, ann.id) })
+    await waitFor(() => {
+      const merged = hook.result.current.characters.find(c => c.id === ann.id)
+      expect(merged.bio).toBe('written in the other browser')
+      expect(merged.name).toBe('Ann renamed')
+    }, { timeout: 4000 })
+    expect(hook.result.current.recordConflicts).toEqual([])
+  })
+
+  it('keeps the other browser\'s version of a field both sides changed, and it survives a refresh', async () => {
+    const hook = await setup('user-merge-conflict')
+    const ann = hook.result.current.characters.find(c => c.name === 'Ann')
+    vi.mocked(mergeItems).mockImplementationOnce(async (table, owner, items) => ({
+      fallback: false,
+      results: items.map(item => ({
+        id: item.id, original: item, mine: item, merged: item,
+        conflicts: [{ field: 'notes', mine: item.notes, theirs: 'other browser notes' }],
+        theirs: { ...item, notes: 'other browser notes' },
+      })),
+    }))
+    act(() => { hook.result.current.saveCharacter({ name: 'Ann', notes: 'my notes' }, ann.id) })
+    await waitFor(() => expect(hook.result.current.recordConflicts).toHaveLength(1), { timeout: 4000 })
+    const conflict = hook.result.current.recordConflicts[0]
+    expect(conflict).toMatchObject({ table: 'characters', recordId: ann.id })
+    expect(conflict.mine.notes).toBe('my notes')
+    expect(conflict.theirs.notes).toBe('other browser notes')
+
+    // A cloud load carries no conflicts; the warning and the other side's value must not vanish.
+    act(() => { hook.result.current.importData({ novels: hook.result.current.novels, characters: hook.result.current.characters, _savedAt: Date.now() + 1000 }, { preferLocal: false }) })
+    expect(hook.result.current.recordConflicts).toHaveLength(1)
+    expect(hook.result.current.recordConflicts[0].theirs.notes).toBe('other browser notes')
+  })
+
+  it('does not overwrite an edit made while the save was still in flight', async () => {
+    const hook = await setup('user-merge-inflight')
+    const ann = hook.result.current.characters.find(c => c.name === 'Ann')
+    let release
+    vi.mocked(mergeItems).mockImplementationOnce((table, owner, items) => new Promise(resolve => {
+      release = () => resolve({
+        fallback: false,
+        results: items.map(item => ({
+          id: item.id, original: item, mine: item, conflicts: [], theirs: null,
+          merged: { ...item, bio: 'from other browser' },
+        })),
+      })
+    }))
+    act(() => { hook.result.current.saveCharacter({ name: 'Ann', notes: 'first edit' }, ann.id) })
+    await waitFor(() => expect(release).toBeTypeOf('function'), { timeout: 4000 })
+    act(() => { hook.result.current.saveCharacter({ name: 'Ann', notes: 'second edit typed meanwhile' }, ann.id) })
+    await act(async () => { release() })
+    const current = hook.result.current.characters.find(c => c.id === ann.id)
+    expect(current.notes).toBe('second edit typed meanwhile')
   })
 })
 

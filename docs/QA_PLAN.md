@@ -1,5 +1,19 @@
 # YOW Deferred QA Plan
 
+## 2026-10-03 cross-browser record clobber (owner live test FAIL, fixed same evening)
+
+Status: **Fixed in code and tested 2026-10-03; needs the migration applied in production, then a live re-test (owner, about 10 minutes).** Overflow O04 (hard gate), Data safety gate.
+
+Finding (owner, live, two browsers on one test account): the manuscript editor passed (scenes have a revision guard), but the **character editor failed**. A conflict copy appeared briefly; refreshing cleared it and the other browser's change was silently erased.
+
+Root cause (two defects): (1) every non-scene record (characters, locations, lore, timeline, comic, RPG, ...) was saved to the cloud as a plain whole-record `upsert`, so the last browser to save overwrote the other browser's fields; the existing per-field merge (`commitLocal`) only protects tabs sharing one browser's local storage. (2) a cloud load reset `recordConflicts` to empty, so the review warning, and the other side's version with it, vanished on refresh.
+
+Fix: migration `supabase/migrations/20261003140000_merge_records_rpc.sql` adds `merge_records(table, records)` and `merge_record_json`: under a row lock it does a per-field three-way merge of base (what this browser last loaded/saved), mine and theirs (stored now): fields only one side changed are both kept; a field both changed keeps this browser's value and returns the other side's whole record; removed fields stay removed; a missing row is inserted (a user's edit is never dropped as "deleted elsewhere"); SECURITY INVOKER so owner-only RLS decides access; 18 tables whitelisted (scenes keep their own guard). Client: `mergeItems` in `src/utils/firestoreSync.js` (records with a known base go through the RPC in chunks of 100, new records plain-upsert, falls back to the old upsert with a console warning if the function is not deployed yet), `applyMergedRecords` in `src/store/useStore.js` (applies the other browser's fields to this tab unless the record was edited again meanwhile, stores unresolved field conflicts in `recordConflicts`), and `importData` now keeps this account's unresolved conflicts across a cloud load.
+
+Evidence: `scripts/db-replay/replay.sh` 35/35 migrations and 8/8 assertions; new CHECK 8 reproduces the owner's scenario (browser 1 edits `name`, stale browser 2 edits `bio`: both survive and the stored row equals the merge), a same-field conflict returns the other side, a removed field stays removed, account B cannot merge into account A's row, arbitrary tables and `scenes` are refused, all 18 tables accept a first save and a merge. Unit tests: `mergeItems` 6 tests (`firestoreSync.test.js`), store 4 tests ("cross-browser record merge"; negative control: disabling the apply step fails 2), existing 152 store tests unchanged and passing.
+
+Owner steps: (1) apply the migration in the Supabase SQL editor BEFORE the code is deployed (until then saves still work, using the old overwrite path); (2) after deploy, repeat the two-browser character test: change DIFFERENT fields in each browser, wait, reload both: both changes survive; change the SAME field in each: one value is kept and the other appears in the sync-conflict review and is still there after a reload.
+
 ## 2026-10-03 red browser CI: floating support pill covered workspace controls
 
 Status: **Fixed 2026-10-03 — pending CI confirmation on the PR.** Five Playwright jobs were red on `main` from the 2 Oct recovery merge (#245): `responsive`, `manuscript-writing-mode-side-panel`, `timeline-history-corrective-audit`, `qa-sweep-2026-09-16-batch2`, `qa-sweep-2026-09-24-priority4-priority8`. They are one product bug, not flakes: the fixed "Buy me a coffee" pill intercepted pointer events over workspace controls: the manuscript tab bar (AI/Inspector/Outline) at phone width, and the History/Timeline inspector's Edit/Delete buttons on a 1280x720 desktop (Playwright reported `floating-support-link subtree intercepts pointer events`; screenshot confirmed). A real user could not tap those controls without minimising the pill first, and a minimised pill still covers 44px.
@@ -8,7 +22,7 @@ Fix (`src/index.css`): the pill is hidden whenever the project workspace footer 
 
 ## 2026-10-03 database continuity and billing-stack consolidation
 
-Status: **Done 2026-10-03 (owner declared passed).** Production read-only check run, dedupe migration applied, password minimum raised to 8, orphan scene rows approved for deletion and removed by the owner (the delete count and final re-check were not sent back: owner-attested). Hard gate: Data safety (closes 5 Oct).
+Status: **Done 2026-10-03 (owner declared passed).** Production read-only check run, dedupe migration applied, password minimum raised to 8, and all 536 orphaned scene rows deleted by the owner; owner then re-ran the read-only check and reported rows 7 and 8 (orphaned and ownerless scene rows) both OK (owner-reported, 3 Oct evening; rows 1-2 reported OK earlier). Hard gate: Data safety (closes 5 Oct).
 
 Required checks (kept until each is evidenced):
 - ✅ Clean replay: `scripts/db-replay/replay.sh` builds an EMPTY Postgres 16, installs stand-ins for the hosted-only pieces (Supabase roles, `auth`/`storage` schemas, `auth.uid()`, `pg_net`; see `bootstrap.sql`), and replays all 34 committed migrations in order with **no manual SQL**: 34/34 apply, including the new dedupe migration. The `scenes` table and the production-only functions are all reproducible from the repository. Runs in CI as the new `Database replay (empty Postgres)` job.
