@@ -1,5 +1,11 @@
 # YOW Deferred QA Plan
 
+## 2026-10-03 red browser CI: floating support pill covered workspace controls
+
+Status: **Fixed 2026-10-03 — pending CI confirmation on the PR.** Five Playwright jobs were red on `main` from the 2 Oct recovery merge (#245): `responsive`, `manuscript-writing-mode-side-panel`, `timeline-history-corrective-audit`, `qa-sweep-2026-09-16-batch2`, `qa-sweep-2026-09-24-priority4-priority8`. They are one product bug, not flakes: the fixed "Buy me a coffee" pill intercepted pointer events over workspace controls: the manuscript tab bar (AI/Inspector/Outline) at phone width, and the History/Timeline inspector's Edit/Delete buttons on a 1280x720 desktop (Playwright reported `floating-support-link subtree intercepts pointer events`; screenshot confirmed). A real user could not tap those controls without minimising the pill first, and a minimised pill still covers 44px.
+
+Fix (`src/index.css`): the pill is hidden whenever the project workspace footer is present (`body:has(.studio-workspace-footer)`); it remains on the home page, marketing pages and Account Settings, and still hides behind open dialogs. **Product note for the owner:** this removes the floating coffee link while working in a project; say so if you would rather it sit elsewhere. Evidence: reproduced all five locally, then 51/51 pass across the five specs (`PLAYWRIGHT_CHROMIUM_EXECUTABLE` override), `src/components/marketing/floatingSupportPlacement.test.js` (3 tests) guards it, and `npm run qa` passes (152 files / 1,443 tests, 0 lint errors). The full 52-spec Playwright matrix is confirmed by CI on the PR.
+
 ## 2026-10-03 database continuity and billing-stack consolidation
 
 Status: **Done 2026-10-03 (owner declared passed).** Production read-only check run, dedupe migration applied, password minimum raised to 8, orphan scene rows approved for deletion and removed by the owner (the delete count and final re-check were not sent back: owner-attested). Hard gate: Data safety (closes 5 Oct).
