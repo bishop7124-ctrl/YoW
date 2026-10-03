@@ -7,7 +7,8 @@ expected_rpcs(fn, role) as (values
   ('claim_founder_slot','service_role'),('release_founder_slot','service_role'),
   ('get_founder_slot_info','authenticated'),('delete_user','authenticated'),
   ('delete_project_data_atomic','authenticated'),('replace_user_data_atomic','authenticated'),
-  ('save_scene_if_current','authenticated')),
+  ('save_scene_if_current','authenticated'),
+  ('merge_records','authenticated'),('merge_record_json','authenticated')),
 rpc_problems as (
   select e.fn from expected_rpcs e
   where not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -17,6 +18,7 @@ rpc_problems as (
 known_fns(fn) as (values
   ('claim_founder_slot'),('release_founder_slot'),('get_founder_slot_info'),('delete_user'),
   ('delete_project_data_atomic'),('replace_user_data_atomic'),('save_scene_if_current'),
+  ('merge_records'),('merge_record_json'),
   ('handle_new_user'),('handle_user_media_storage_change'),('set_updated_at'),('trigger_welcome_email')),
 unknown_fns as (
   -- functions that exist in production but are NOT created by any committed migration

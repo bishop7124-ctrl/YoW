@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
+import { upsertItems, mergeItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -605,6 +605,8 @@ export function useStore(userId = null, options = {}) {
   // table -> Map(id -> item reference) as of the last successful (attempted)
   // cloud push, used by debouncedSaveItems to diff out unchanged records.
   const lastSyncedByTableRef = useRef({})
+  // Set once restore/merge helpers exist (they are declared after debouncedSaveItems).
+  const applyMergedRecordsRef = useRef(null)
 
   const novelsRef = useRef(novels)
   const charactersRef = useRef(characters)
@@ -1219,7 +1221,16 @@ export function useStore(userId = null, options = {}) {
       const changed = items.filter(item => prevMap.get(item.id) !== item)
       lastSyncedByTableRef.current[table] = new Map(items.map(item => [item.id, item]))
       if (!changed.length) return
-      trackSync(upsertItems(table, ownerId, changed)).catch(() => {})
+      // The version this tab last loaded or saved is the base for a per-field three-way merge in the
+      // database, so a record another browser edited meanwhile keeps that browser's changes instead
+      // of being overwritten by this tab's whole record (see mergeItems in utils/firestoreSync.js).
+      const baseById = new Map()
+      changed.forEach(item => { if (prevMap.has(item.id)) baseById.set(item.id, prevMap.get(item.id)) })
+      trackSync(
+        mergeItems(table, ownerId, changed, baseById).then(({ results }) => {
+          if (results.length) applyMergedRecordsRef.current?.(table, results)
+        })
+      ).catch(() => {})
     }, 2000),
     [trackSync]
   )
@@ -1250,6 +1261,53 @@ export function useStore(userId = null, options = {}) {
     scenes: { setter: setScenes, ref: scenesRef, storageKey: 'nf_scenes' },
     eras: { setter: setEras, ref: erasRef, storageKey: 'nf_eras' },
   }), [])
+
+  // Brings back what the database merged when this tab saved (see mergeItems): fields another browser
+  // changed are applied to this tab's copy, and any field both sides changed is kept for review in
+  // recordConflicts instead of being lost. A record this tab has edited again since the save started
+  // is left alone; its next save merges again with a fresh base.
+  const applyMergedRecords = useCallback((table, results = []) => {
+    const entry = RECORD_STATE_SETTERS[table]
+    const mergedChanges = results.filter(result => result.merged && !jsonEq(result.merged, result.mine))
+    if (entry && mergedChanges.length) {
+      const byId = new Map(mergedChanges.map(result => [result.id, result]))
+      let nextItems = null
+      entry.setter(prevItems => {
+        nextItems = prevItems.map(item => {
+          const result = byId.get(item?.id)
+          if (!result || (item !== result.original && !jsonEq(item, result.original))) return item
+          // Re-read the map here: the debounced save may have replaced it since this callback began.
+          if (!lastSyncedByTableRef.current[table]) lastSyncedByTableRef.current[table] = new Map()
+          lastSyncedByTableRef.current[table].set(item.id, result.merged)
+          return result.merged
+        })
+        save(entry.storageKey, nextItems)
+        if (entry.ref) entry.ref.current = nextItems
+        return nextItems
+      })
+      markLocalWrite(userId)
+    }
+    const detectedAt = Date.now()
+    const conflicts = results
+      .filter(result => result.conflicts.length > 0 && result.theirs)
+      .map(result => ({
+        id: uid(),
+        table,
+        recordId: result.id,
+        label: CLOUD_TABLE_CONFIG[table]?.label || table,
+        name: recordConflictLabel(result.merged),
+        mine: result.merged,
+        theirs: result.theirs,
+        detectedAt,
+      }))
+    if (conflicts.length) {
+      setRecordConflicts(prev => [
+        ...prev,
+        ...conflicts.filter(next => !prev.some(c => c.table === next.table && c.recordId === next.recordId && jsonEq(c.theirs, next.theirs))),
+      ])
+    }
+  }, [RECORD_STATE_SETTERS, userId])
+  useEffect(() => { applyMergedRecordsRef.current = applyMergedRecords }, [applyMergedRecords])
 
   // Applies the OTHER tab's version of a conflicted record on top of the
   // current (this tab's) version, and re-syncs it so the restored value
@@ -1541,7 +1599,10 @@ export function useStore(userId = null, options = {}) {
     setComicPages(sourceData.comicPages ?? [])
     setComicPanels(sourceData.comicPanels ?? [])
     setEras(sourceData.eras ?? [])
-    setRecordConflicts(sourceData.recordConflicts ?? [])
+    // A cloud load carries no recordConflicts, and wiping them here is what made a "changed in another
+    // tab" warning vanish on refresh and take the other side's version with it. Keep this browser's own
+    // unresolved conflicts when they belong to this account.
+    setRecordConflicts(sourceData.recordConflicts ?? (ownerMatchesCurrentUser ? load('nf_recordConflicts', []) : []))
     if (!shouldPreferLocal && canSyncCloud && resolvedActiveNovelId !== (data.activeNovelId ?? null)) {
       trackSync(saveUserSettings(userId, {
         activeNovelId: resolvedActiveNovelId,

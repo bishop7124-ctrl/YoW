@@ -281,6 +281,83 @@ export async function upsertItems(table, userId, items) {
   throwIfSupabaseError(error, `upsert error for ${table}`)
 }
 
+// True when the merge_records RPC is not in the database yet (migration 20261003140000 not applied).
+function isMissingMergeRpcError(error) {
+  const message = String(error?.message || error?.details || '')
+  return error?.code === 'PGRST202' || error?.code === '42883' || /could not find the function|merge_records.*(does not exist|not found)/i.test(message)
+}
+
+const MERGE_CHUNK_SIZE = 100
+const MERGEABLE_TABLES = new Set(APP_DATA_TABLES.filter(table => table !== 'scenes'))
+
+// Saves edited records WITHOUT overwriting what another browser/tab saved meanwhile.
+//
+// A plain upsert replaces the whole record, so when two browsers edit the same record the last save
+// silently erased the other's fields (found by the owner's live two-tab test, 3 Oct 2026). Records
+// that this browser already knew about (`baseById` holds the version it last loaded or saved) go
+// through the database's merge_records RPC, a per-field three-way merge done under a row lock:
+// fields only one side changed are both kept; a field both sides changed keeps this browser's value
+// and the other side's whole record is handed back so the app can show it for review, not lose it.
+// Records with no base (brand new) are plain-upserted as before. If the RPC is not deployed yet this
+// falls back to the old upsert and reports `fallback: true` rather than breaking saves.
+//
+// Resolves to { results, fallback }, each result { id, original, mine, merged, conflicts, theirs }.
+export async function mergeItems(table, userId, items, baseById = new Map()) {
+  if (OFFLINE_MODE || !items?.length) return { results: [], fallback: false }
+  if (!MERGEABLE_TABLES.has(table)) {
+    await upsertItems(table, userId, items)
+    return { results: [], fallback: false }
+  }
+
+  const cleanItems = await stripEmbeddedImages(table, userId, items)
+  const entries = items.map((original, i) => ({ original, mine: cleanItems[i] }))
+  const fresh = entries.filter(entry => !baseById.has(entry.original.id))
+  const known = entries.filter(entry => baseById.has(entry.original.id))
+
+  const upsertEntries = async (list) => {
+    if (!list.length) return
+    const { error } = await supabase.from(table).upsert(getTableRows(table, userId, list.map(entry => entry.mine)))
+    throwIfSupabaseError(error, `upsert error for ${table}`)
+  }
+
+  await upsertEntries(fresh)
+
+  const results = []
+  for (let start = 0; start < known.length; start += MERGE_CHUNK_SIZE) {
+    const chunk = known.slice(start, start + MERGE_CHUNK_SIZE)
+    const { data, error } = await supabase.rpc('merge_records', {
+      p_table: table,
+      p_records: chunk.map(({ original, mine }) => ({
+        id: original.id,
+        novel_id: original.novelId ?? null,
+        base: baseById.get(original.id),
+        mine,
+      })),
+    })
+    if (error) {
+      if (isMissingMergeRpcError(error)) {
+        console.warn('[sync] merge_records is not deployed yet; saving without cross-browser merge until the migration is applied')
+        await upsertEntries(known.slice(start))
+        return { results, fallback: true }
+      }
+      throwIfSupabaseError(error, `merge error for ${table}`)
+    }
+    const byId = new Map((Array.isArray(data) ? data : []).map(row => [row.id, row]))
+    chunk.forEach(({ original, mine }) => {
+      const row = byId.get(original.id)
+      results.push({
+        id: original.id,
+        original,
+        mine,
+        merged: row?.merged ?? mine,
+        conflicts: Array.isArray(row?.conflicts) ? row.conflicts : [],
+        theirs: row?.theirs ?? null,
+      })
+    })
+  }
+  return { results, fallback: false }
+}
+
 // Delete a single item row by id
 export async function deleteItem(table, userId, itemId) {
   if (OFFLINE_MODE || !itemId) return

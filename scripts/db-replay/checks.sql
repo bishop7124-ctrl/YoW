@@ -10,7 +10,8 @@ begin
     ('claim_founder_slot','service_role'),('release_founder_slot','service_role'),
     ('get_founder_slot_info','authenticated'),('delete_user','authenticated'),
     ('delete_project_data_atomic','authenticated'),('replace_user_data_atomic','authenticated'),
-    ('save_scene_if_current','authenticated')) v(fn, role)
+    ('save_scene_if_current','authenticated'),
+    ('merge_records','authenticated'),('merge_record_json','authenticated')) v(fn, role)
   loop
     if not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                    where n.nspname='public' and p.proname=r.fn
@@ -19,7 +20,7 @@ begin
     end if;
   end loop;
   if missing <> '' then raise exception 'CHECK 1 FAILED: missing/ungranted RPCs: %', missing; end if;
-  raise notice 'CHECK 1 ok: all 7 app RPCs exist and are granted to the intended role';
+  raise notice 'CHECK 1 ok: all 9 app RPCs exist and are granted to the intended role';
 end $$;
 
 -- 2. Every table the app/api read or write exists, and every public table has RLS on.
@@ -173,6 +174,7 @@ begin
   select count(*) into n from public.scenes where novel_id='nv-keep';
   if n <> 1 then raise exception 'CHECK 6 FAILED: another project''s scene was removed'; end if;
   raise notice 'CHECK 6 ok: project delete leaves zero scene rows for it and keeps the other project';
+  delete from public.scenes where user_id = a::text; -- scenes have no FK to auth.users: clean up the fixture
   delete from auth.users where id = a;
 end $$;
 
@@ -197,4 +199,75 @@ begin
   if (select data->>'v' from public.scenes where scene_id='rev-1') <> '2' then raise exception 'CHECK 7 FAILED: A scene altered'; end if;
   raise notice 'CHECK 7 ok: revision guard refuses stale writes and foreign-id overwrite';
   delete from public.scenes where scene_id='rev-1'; delete from auth.users where id in (a,b);
+end $$;
+
+-- 8. Conflict-safe record saves (merge_records): the two-browser scenario found by the owner's live test.
+do $$
+declare
+  a uuid := gen_random_uuid(); b uuid := gen_random_uuid();
+  base jsonb := '{"id":"c1","name":"Ann","bio":"old","notes":"keep","novelId":"n1"}';
+  r jsonb; got jsonb; t text; n int := 0;
+begin
+  insert into auth.users(id,email) values (a,'m1@example.test'),(b,'m2@example.test');
+  perform set_config('request.jwt.claim.sub', a::text, true); set local role authenticated;
+
+  -- browser 1 creates the record
+  r := public.merge_records('characters', jsonb_build_array(jsonb_build_object('id','c1','novel_id','n1','base',null,'mine',base)));
+  if r->0->'merged' is distinct from base then raise exception 'CHECK 8 FAILED: insert %', r; end if;
+
+  -- browser 1 changes only "name"; browser 2 (stale, base = original) changes only "bio" afterwards.
+  r := public.merge_records('characters', jsonb_build_array(jsonb_build_object('id','c1','novel_id','n1','base',base,
+        'mine', base || '{"name":"Ann B1"}')));
+  r := public.merge_records('characters', jsonb_build_array(jsonb_build_object('id','c1','novel_id','n1','base',base,
+        'mine', base || '{"bio":"new bio B2"}')));
+  got := r->0->'merged';
+  if got->>'name' <> 'Ann B1' or got->>'bio' <> 'new bio B2' or got->>'notes' <> 'keep' then
+    raise exception 'CHECK 8 FAILED: different-field edits from two browsers were not both kept: %', got;
+  end if;
+  if jsonb_array_length(r->0->'conflicts') <> 0 then raise exception 'CHECK 8 FAILED: false conflict %', r; end if;
+  if (select data from public.characters where id='c1') is distinct from got then
+    raise exception 'CHECK 8 FAILED: stored row is not the merged row'; end if;
+
+  -- same field edited by both: caller's value wins, the other side is returned for review, not lost
+  r := public.merge_records('characters', jsonb_build_array(jsonb_build_object('id','c1','novel_id','n1','base',base,
+        'mine', base || '{"name":"Ann B2"}')));
+  if r->0->'merged'->>'name' <> 'Ann B2' then raise exception 'CHECK 8 FAILED: conflict winner %', r; end if;
+  if r->0->'conflicts'->0->>'field' <> 'name' or r->0->'conflicts'->0->>'theirs' <> 'Ann B1'
+     or r->0->'theirs'->>'name' <> 'Ann B1' then
+    raise exception 'CHECK 8 FAILED: the other browser''s value was not returned: %', r; end if;
+
+  -- a field removed by one browser stays removed, and an unrelated edit by the other is kept
+  r := public.merge_records('characters', jsonb_build_array(jsonb_build_object('id','c1','novel_id','n1',
+        'base', (select data from public.characters where id='c1'),
+        'mine', (select data - 'notes' from public.characters where id='c1'))));
+  if r->0->'merged' ? 'notes' then raise exception 'CHECK 8 FAILED: removed field reappeared'; end if;
+
+  -- another account cannot merge into, overwrite or read this record
+  reset role; perform set_config('request.jwt.claim.sub', b::text, true); set local role authenticated;
+  begin
+    perform public.merge_records('characters', jsonb_build_array(jsonb_build_object('id','c1','novel_id','n1','base',base,'mine','{"name":"B steals"}'::jsonb)));
+    raise exception 'CHECK 8 FAILED: account B merged into account A record';
+  exception when unique_violation then null; end;
+  reset role;
+  if (select data->>'name' from public.characters where id='c1') = 'B steals' then raise exception 'CHECK 8 FAILED: A record altered by B'; end if;
+
+  -- guard rails
+  set local role authenticated; perform set_config('request.jwt.claim.sub', a::text, true);
+  begin perform public.merge_records('auth.users', '[]'); raise exception 'CHECK 8 FAILED: arbitrary table accepted';
+  exception when raise_exception then if sqlerrm like 'CHECK 8%' then raise; end if; end;
+  begin perform public.merge_records('scenes', '[]'); raise exception 'CHECK 8 FAILED: scenes (own guard) accepted';
+  exception when raise_exception then if sqlerrm like 'CHECK 8%' then raise; end if; end;
+
+  -- every supported table accepts a first save and a merge through the same function
+  foreach t in array array['novels','series_items','characters','factions','locations','timeline_events',
+    'world_history','acts','chapters','lore_entries','idea_entries','maps_data','whiteboards_data',
+    'story_schedule','rpg_characters','comic_pages','comic_panels','eras'] loop
+    r := public.merge_records(t, jsonb_build_array(jsonb_build_object('id','m-'||t,'novel_id','n1','base',null,'mine','{"name":"x"}'::jsonb)));
+    r := public.merge_records(t, jsonb_build_array(jsonb_build_object('id','m-'||t,'novel_id','n1','base','{"name":"x"}'::jsonb,'mine','{"name":"y"}'::jsonb)));
+    if r->0->'merged'->>'name' <> 'y' then raise exception 'CHECK 8 FAILED: % merge %', t, r; end if;
+    n := n + 1;
+  end loop;
+  reset role;
+  raise notice 'CHECK 8 ok: two-browser edits to different fields both survive; same-field conflict returns the other side; removal, ownership, table guard and all % tables verified', n;
+  delete from auth.users where id in (a,b);
 end $$;

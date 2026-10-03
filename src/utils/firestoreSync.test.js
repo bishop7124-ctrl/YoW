@@ -385,3 +385,76 @@ describe('atomic destructive deletes', () => {
     expect(mockState.rpcCalls).toEqual([])
   })
 })
+
+describe('mergeItems (cross-browser safe record saves)', () => {
+  beforeEach(() => {
+    mockState.upserts = []
+    mockState.rpcCalls = []
+    mockState.rpcError = null
+    mockState.rpcData = null
+  })
+
+  const base = { id: 'c1', name: 'Ann', bio: 'old', novelId: 'n1' }
+
+  it('sends records this browser already knew about through merge_records with their base', async () => {
+    const { mergeItems } = await import('./firestoreSync.js')
+    const mine = { ...base, name: 'Ann B1' }
+    mockState.rpcData = [{ id: 'c1', merged: { ...mine, bio: 'new from other browser' }, conflicts: [] }]
+    const { results, fallback } = await mergeItems('characters', 'user-1', [mine], new Map([['c1', base]]))
+    expect(fallback).toBe(false)
+    expect(mockState.rpcCalls).toEqual([{
+      name: 'merge_records',
+      args: { p_table: 'characters', p_records: [{ id: 'c1', novel_id: 'n1', base, mine }] },
+    }])
+    expect(mockState.upserts).toEqual([])
+    // the other browser's change comes back so the caller can apply it instead of overwriting it
+    expect(results).toEqual([expect.objectContaining({
+      id: 'c1', original: mine, merged: { ...mine, bio: 'new from other browser' }, conflicts: [], theirs: null,
+    })])
+  })
+
+  it('plain-upserts brand new records (no base) and merges only the known ones', async () => {
+    const { mergeItems } = await import('./firestoreSync.js')
+    const fresh = { id: 'c2', name: 'New', novelId: 'n1' }
+    const edited = { ...base, name: 'Ann 2' }
+    mockState.rpcData = [{ id: 'c1', merged: edited, conflicts: [] }]
+    await mergeItems('characters', 'user-1', [fresh, edited], new Map([['c1', base]]))
+    expect(mockState.upserts).toHaveLength(1)
+    expect(mockState.upserts[0].rows.map(row => row.id)).toEqual(['c2'])
+    expect(mockState.rpcCalls[0].args.p_records.map(r => r.id)).toEqual(['c1'])
+  })
+
+  it('returns a same-field conflict together with the other browser\'s whole record', async () => {
+    const { mergeItems } = await import('./firestoreSync.js')
+    const mine = { ...base, name: 'Ann B2' }
+    const theirs = { ...base, name: 'Ann B1' }
+    mockState.rpcData = [{ id: 'c1', merged: mine, conflicts: [{ field: 'name', mine: 'Ann B2', theirs: 'Ann B1' }], theirs }]
+    const { results } = await mergeItems('characters', 'user-1', [mine], new Map([['c1', base]]))
+    expect(results[0].conflicts).toHaveLength(1)
+    expect(results[0].theirs).toEqual(theirs)
+  })
+
+  it('falls back to the old upsert, and says so, when the merge function is not deployed yet', async () => {
+    const { mergeItems } = await import('./firestoreSync.js')
+    mockState.rpcError = { code: 'PGRST202', message: 'Could not find the function public.merge_records' }
+    const mine = { ...base, name: 'Ann B1' }
+    const { results, fallback } = await mergeItems('characters', 'user-1', [mine], new Map([['c1', base]]))
+    expect(fallback).toBe(true)
+    expect(results).toEqual([])
+    expect(mockState.upserts.map(u => u.rows.map(r => r.id))).toEqual([['c1']])
+  })
+
+  it('surfaces any other merge failure so the save is not reported as synced', async () => {
+    const { mergeItems } = await import('./firestoreSync.js')
+    mockState.rpcError = { code: '57014', message: 'statement timeout' }
+    await expect(mergeItems('characters', 'user-1', [{ ...base, name: 'x' }], new Map([['c1', base]])))
+      .rejects.toThrow(/merge error for characters: statement timeout/)
+  })
+
+  it('keeps scenes on their own revision-guarded path', async () => {
+    const { mergeItems } = await import('./firestoreSync.js')
+    await mergeItems('scenes', 'user-1', [{ id: 's1', novelId: 'n1' }], new Map([['s1', { id: 's1' }]]))
+    expect(mockState.rpcCalls).toEqual([])
+    expect(mockState.upserts[0].table).toBe('scenes')
+  })
+})
