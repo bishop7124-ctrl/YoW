@@ -142,6 +142,7 @@ Rules:
 - Payments: the 2026-09-18 decision parked Stripe work in [docs/PAYMENT_ROADMAP.md](PAYMENT_ROADMAP.md). This sprint resumes it on 21-25 Oct (decision D8); that document stays the Stripe tracker.
 - Owner-facing spreadsheet export: `docs/sprint/YOW-November-Launch-Sprint.xlsx` (an export of this section, not a second planning source).
 - Daily status (agent-maintained): 1 Oct Done (lifecycle engine, gated notice emails, archive and Free-account deletion built and tested; migrations applied; first production report clean; owner wording approved; production edge/header/redirect checks passed; owner-reported live idle-logout and cross-tab auth checks passed). The live end-to-end deletion test was run early and passed on 2 Oct. See the dated block above. 3 Oct In progress (AI work done, owner step pending): see the progress log.
+- **Owner rule (2026-10-03): every sprint day is closed out on that day.** A day does not end as "In progress": the agent gives the owner every real-world step for that day in one pass, in the order that lets the day close the same evening, and marks it Done (or Blocked with the single blocker named) as soon as the evidence is in. Items that cannot honestly pass are recorded as Blocked/deferred with an owner-approved fallback, never left open-ended.
 - On 1 and 2 Nov the agent verifies and prepares; the owner performs deploy, checkout enablement, Beta closure and publishing.
 
 #### Gate to day map
