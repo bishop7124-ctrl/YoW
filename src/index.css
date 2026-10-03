@@ -96,8 +96,12 @@
 }
 @media (prefers-reduced-motion: reduce) { .md-spinner { animation-duration: 1.8s; } }
 
+/* Inside a project workspace the floating pill has no safe corner: it lands on the
+   inspector's Edit/Delete buttons on desktop and on the manuscript tab bar on phones, and
+   a minimised pill still covers 44px. The workspace is where people are working, so the pill
+   stays off it. It remains on the home page, marketing pages and Account Settings. */
 body:has(.studio-workspace-footer) .floating-support-link {
-  bottom: calc(64px + env(safe-area-inset-bottom));
+  display: none;
 }
 
 /* Dialog actions must remain the top interaction layer, especially on phone
@@ -171,10 +175,6 @@ body:has([role="dialog"]) .floating-support-link {
 @media (max-width: 640px) {
   .floating-support-link {
     right: max(10px, env(safe-area-inset-right));
-  }
-
-  body:has(.studio-workspace-footer) .floating-support-link {
-    bottom: calc(70px + env(safe-area-inset-bottom));
   }
 }
 
