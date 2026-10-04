@@ -1481,6 +1481,11 @@ const SceneEditorImpl = ({
   useEffect(() => {
     if (!innerRef) return
     innerRef({
+      flushDraft: () => {
+        if (presenceBlockedRef.current) return
+        onPersistDraft(sceneRef.current, localContentRef.current, { immediate: true })
+        debouncedUpdate.flush()
+      },
       focus: ({ placeCursor = 'end' } = {}) => {
         // Invalidate any still-running reapply loop from an earlier object
         // placeCursor call — this new focus() call (even a plain 'end' one)

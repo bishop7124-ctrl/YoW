@@ -11,6 +11,7 @@ import ManuscriptReview from './ManuscriptReview.jsx'
 import { useToast } from './Toast.jsx'
 import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
+import { mergeImportedManuscript } from './manuscriptImport.js'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
 import { getPendingLocalWrites, subscribePendingLocalWrites } from '../../storage/writeDurability.js'
@@ -213,6 +214,8 @@ export default function Manuscript({ store, userId, membership = null }) {
     syncStatus,
     recordLocalWrite,
     localStorageWarning,
+    beginProjectImport,
+    endProjectImport,
   } = store
 
   const projectTypeConfig = getProjectType(activeNovel?.type)
@@ -293,6 +296,7 @@ export default function Manuscript({ store, userId, membership = null }) {
   // proposed version, Review resolves its redline, and Finalised is read-only.
   // Uses a new preference key because the old Edit value represented the
   // ordinary editor; every project should enter the new workflow in Writing.
+  const editorRefs = useRef({})
   const [mode, setMode] = useState(() => {
     try {
       // v2 deliberately ignores the old Write/Edit preference because Edit
@@ -318,6 +322,13 @@ export default function Manuscript({ store, userId, membership = null }) {
     // Mode tabs are selections, not commands. Re-selecting Writing must not
     // close an Inspector the writer opened to consult a manuscript reference.
     if (next === mode) return
+    // A SceneEditor keeps keystrokes in a live buffer and commits them on a
+    // short debounce. Changing mode remounts every mounted editor (`key`
+    // includes mode), so force the outgoing buffers into the store before we
+    // clear the live overlay. Otherwise the replacement editor can briefly
+    // initialize from stale/empty props until a refresh reloads the durable
+    // draft — the alarming "all my text vanished" flash.
+    Object.values(editorRefs.current).forEach(editor => editor?.flushDraft?.())
     // Do not let an unresolved proposal be bypassed by returning to ordinary
     // writing or final output. Review is the deliberate hand-off between the
     // two modes, and keeps unapproved prose out of exports/finalised copies.
@@ -371,7 +382,6 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const containerRef = useRef(null)
   const scrollContainerRef = useRef(null)
-  const editorRefs = useRef({})
   const { inView: scenesInView, registerElement: registerSceneElement, supported: virtualizationSupported } = useSceneWindow(scrollContainerRef)
   const sceneHeightCacheRef = useRef(new Map())
   const handleHeightMeasured = useCallback((sceneId, height) => {
@@ -963,27 +973,39 @@ export default function Manuscript({ store, userId, membership = null }) {
     }
   }, [addAct, addChapter, addScene, updateAct, updateChapter, labels.level3, writingGoals, handleUpdateGoals, isCampaignProject])
 
-  const handleDocxImport = useCallback(async (importedActs) => {
-    for (const tAct of importedActs) {
-      const newAct = addAct(tAct.title)
-      if (!newAct) continue
-      for (const tChap of tAct.chapters) {
-        const newChap = addChapter(newAct.id, tChap.title)
-        if (!newChap) continue
-        for (const tScene of tChap.scenes) {
-          const newScene = addScene(newChap.id, tScene.title || labels.level3)
-          if (!newScene) continue
-          if (tScene.content?.trim()) {
-            updateSceneContent(newScene.id, tScene.content)
+  const handleDocxImport = useCallback(async (importedActs, { mode: importMode = 'merge' } = {}) => {
+    beginProjectImport?.()
+    try {
+      if (importMode === 'merge') {
+        mergeImportedManuscript({
+          importedActs, acts, chapters, scenes, labels,
+          addAct, addChapter, addScene, updateScene, updateSceneContent,
+        })
+      } else {
+        for (const tAct of importedActs) {
+          const newAct = addAct(tAct.title)
+          if (!newAct) throw new Error(`Could not create ${labels.level1.toLowerCase()} “${tAct.title}”.`)
+          for (const tChap of tAct.chapters) {
+            const newChap = addChapter(newAct.id, tChap.title)
+            if (!newChap) throw new Error(`Could not create ${labels.level2.toLowerCase()} “${tChap.title}”.`)
+            for (const tScene of tChap.scenes) {
+              const newScene = addScene(newChap.id, tScene.title || labels.level3)
+              if (!newScene) throw new Error(`Could not create an imported ${labels.level3.toLowerCase()}.`)
+              if (tScene.content?.trim()) updateSceneContent(newScene.id, tScene.content)
+            }
+            if (tChap.scenes.length === 0 && !addScene(newChap.id, labels.level3)) {
+              throw new Error(`Could not create an empty ${labels.level3.toLowerCase()}.`)
+            }
           }
         }
-        // Ensure at least one empty scene per chapter
-        if (tChap.scenes.length === 0) {
-          addScene(newChap.id, labels.level3)
-        }
       }
+    } finally {
+      // The store actions are durable one by one. If quota/read-only state
+      // interrupts a later item, commit the earlier successful items to cloud
+      // as well; ending with `false` would strand a partial import locally.
+      endProjectImport?.(true)
     }
-  }, [addAct, addChapter, addScene, updateSceneContent, labels.level3])
+  }, [acts, chapters, scenes, labels, addAct, addChapter, addScene, updateScene, updateSceneContent, beginProjectImport, endProjectImport])
 
   // useCallback (this wasn't memoized before the redesign) so
   // handleOverflowAction below — which now needs to call the current

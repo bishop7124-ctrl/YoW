@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import Manuscript from './Manuscript.jsx'
 
 const noop = vi.fn()
 const defaultInnerWidth = window.innerWidth
+if (!HTMLElement.prototype.scrollTo) HTMLElement.prototype.scrollTo = vi.fn()
 
 const baseStore = (overrides = {}) => ({
   activeNovel: {
@@ -37,6 +38,8 @@ const baseStore = (overrides = {}) => ({
   sceneConflicts: [],
   restoreSceneConflict: noop,
   discardSceneConflict: noop,
+  writingSceneId: null,
+  setWritingSceneId: noop,
   ...overrides,
 })
 
@@ -48,6 +51,24 @@ afterEach(() => {
 })
 
 describe('Manuscript campaign workflow', () => {
+  it('flushes live prose before a mode change remounts the editor', async () => {
+    const updateSceneContent = vi.fn()
+    const store = baseStore({
+      scenes: [{ id: 'encounter-1', novelId: 'campaign-1', chapterId: 'session-1', title: 'Road Ambush', content: 'Original text.', order: 0 }],
+      updateSceneContent,
+    })
+    const { container } = render(<Manuscript store={store} userId={null} />)
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => container.querySelector('textarea.ms-textarea'))
+    fireEvent.change(textarea, { target: { value: 'Text typed just before switching.', selectionStart: 33, selectionEnd: 33 } })
+
+    const modeSwitcher = screen.getByRole('group', { name: 'Editor mode' })
+    fireEvent.click(within(modeSwitcher).getByRole('button', { name: 'Editing' }))
+
+    expect(updateSceneContent).toHaveBeenCalledWith('encounter-1', 'Text typed just before switching.')
+  })
+
   it('surfaces campaign session prep and recap fields on session headings', () => {
     const store = baseStore()
     render(<Manuscript store={store} userId={null} />)

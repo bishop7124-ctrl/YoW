@@ -57,6 +57,7 @@ export default function DocxImportModal({ onClose, onImport, hasExistingContent 
   const [error, setError] = useState('')
   const [fileName, setFileName] = useState('')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [importMode, setImportMode] = useState('merge')
   const fileInputRef = useRef(null)
 
   const processFile = useCallback(async (file) => {
@@ -98,7 +99,7 @@ export default function DocxImportModal({ onClose, onImport, hasExistingContent 
     if (!parsedActs) return
     setStage('importing')
     try {
-      await onImport(parsedActs)
+      await onImport(parsedActs, { mode: importMode })
       onClose()
     } catch (err) {
       setError(err.message || 'Import failed.')
@@ -233,11 +234,19 @@ export default function DocxImportModal({ onClose, onImport, hasExistingContent 
                 <StructurePreview acts={parsedActs} />
               </div>
 
-              {/* Append notice */}
+              {/* Existing-manuscript strategy */}
               {hasExistingContent && (
-                <div className="ms-import-notice">
-                  Your manuscript already has content. The imported structure will be appended after your existing acts.
-                </div>
+                <fieldset className="ms-import-strategy">
+                  <legend>Where should the imported text go?</legend>
+                  <label>
+                    <input type="radio" name="import-mode" value="merge" checked={importMode === 'merge'} onChange={() => setImportMode('merge')} />
+                    <span><strong>Merge into matching chapters</strong><small>Recommended. Fills empty scenes in matching acts and chapters, then adds any remaining scenes. Existing prose is never overwritten.</small></span>
+                  </label>
+                  <label>
+                    <input type="radio" name="import-mode" value="append" checked={importMode === 'append'} onChange={() => setImportMode('append')} />
+                    <span><strong>Add as a separate structure</strong><small>Creates new acts, chapters, and scenes after the current manuscript.</small></span>
+                  </label>
+                </fieldset>
               )}
 
               {/* Import button */}

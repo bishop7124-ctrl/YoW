@@ -17901,16 +17901,28 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Append notice */
-.ms-import-notice {
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-card, var(--bg-main));
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
+.ms-import-strategy {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 0;
   font-family: var(--font-sans, system-ui, sans-serif);
 }
+.ms-import-strategy legend { margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--text-main); }
+.ms-import-strategy label { display: flex; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-card, var(--bg-main)); cursor: pointer; }
+.ms-import-strategy label:has(input:checked) { border-color: var(--accent); background: var(--accent-fade); }
+.ms-import-strategy input { margin-top: 3px; accent-color: var(--accent); }
+.ms-import-strategy span { display: grid; gap: 3px; }
+.ms-import-strategy strong { font-size: 12px; color: var(--text-main); }
+.ms-import-strategy small { font-size: 11px; line-height: 1.4; color: var(--text-muted); }
+
+.ms-rail-delete-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 52%); }
+.ms-rail-delete-dialog { width: min(440px, 100%); display: grid; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); box-shadow: var(--shadow-lg); font-family: var(--font-sans, system-ui, sans-serif); }
+.ms-rail-delete-dialog h3 { margin: 0; color: var(--text-main); font-size: 17px; }
+.ms-rail-delete-dialog p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.ms-rail-delete-dialog .ms-rail-delete-warning, .ms-rail-delete-dialog .ms-rail-delete-error { color: var(--danger, #ef4444); font-weight: 700; }
+.ms-rail-delete-note { font-size: 12px !important; }
+.ms-rail-delete-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
 
 /* ─── Manuscript catalogue ───────────────────────────────────────────────── */
 

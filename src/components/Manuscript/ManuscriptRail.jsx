@@ -195,7 +195,11 @@ function SceneRow({
           <button
             type="button"
             className="ms-rail-icon-btn ms-rail-delete-btn"
-            onClick={() => { if (window.confirm(`Delete "${displayTitle.title || displayTitle.number}"? This cannot be undone.`)) onDeleteScene(scene.id) }}
+            onClick={() => onDeleteScene({
+              type: 'scene', id: scene.id,
+              title: displayTitle.title || displayTitle.number,
+              words, sceneCount: 1,
+            })}
             title="Delete scene"
             aria-label="Delete scene"
           >
@@ -301,7 +305,10 @@ function ChapterRow({
           <button
             type="button"
             className="ms-rail-icon-btn ms-rail-delete-btn"
-            onClick={() => { if (window.confirm(`Delete "${displayTitle}" and all its scenes?`)) onDeleteChapter(chap.id) }}
+            onClick={() => onDeleteChapter({
+              type: 'chapter', id: chap.id, title: displayTitle,
+              words: totalWords, sceneCount: chapScenes.length,
+            })}
             title={`Delete ${labels.level2}`}
             aria-label={`Delete ${labels.level2}`}
           >
@@ -399,6 +406,8 @@ export default function ManuscriptRail({
 }) {
   const [renamingActId, setRenamingActId] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
   const dragRef = useRef(null)
   const sortedActs = useMemo(() => sortOutlineItems(acts), [acts])
   const activeSceneActId = useMemo(() => {
@@ -476,6 +485,18 @@ export default function ManuscriptRail({
     const actChapIds = new Set(chapters.filter(c => c.actId === act.id).map(c => c.id))
     return scenes.filter(s => actChapIds.has(s.chapterId)).reduce((acc, s) => acc + countWords(s.content), 0)
   }, [chapters, scenes])
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteTarget) return
+    const action = deleteTarget.type === 'act' ? deleteAct : deleteTarget.type === 'chapter' ? deleteChapter : deleteScene
+    const deleted = action(deleteTarget.id)
+    if (!deleted) {
+      setDeleteError(`This ${deleteTarget.type} could not be deleted. It may have changed or no longer be editable.`)
+      return
+    }
+    setDeleteTarget(null)
+    setDeleteError('')
+  }, [deleteTarget, deleteAct, deleteChapter, deleteScene])
 
   // Flat, document-ordered scene list — only needed for the collapsed spine view.
   const flatScenes = useMemo(() => {
@@ -581,7 +602,14 @@ export default function ManuscriptRail({
                       <button
                         type="button"
                         className="ms-rail-icon-btn ms-rail-delete-btn"
-                        onClick={() => { if (window.confirm(`Delete "${act.title}" and all its chapters and scenes?`)) deleteAct(act.id) }}
+                        onClick={() => {
+                          const chapterIds = new Set(actChapters.map(chapter => chapter.id))
+                          setDeleteError('')
+                          setDeleteTarget({
+                            type: 'act', id: act.id, title: act.title,
+                            words, sceneCount: scenes.filter(scene => chapterIds.has(scene.chapterId)).length,
+                          })
+                        }}
                         title={`Delete ${labels.level1}`}
                         aria-label={`Delete ${labels.level1}`}
                       >
@@ -619,14 +647,14 @@ export default function ManuscriptRail({
                           onSelectChapter(chapterId)
                         }}
                         onUpdateChapter={updateChapter}
-                        onDeleteChapter={deleteChapter}
+                        onDeleteChapter={target => { setDeleteError(''); setDeleteTarget(target) }}
                         activeSceneId={activeSceneId}
                         onSelectScene={sceneId => {
                           setCurrentActId(act.id)
                           onSelectScene(sceneId)
                         }}
                         onUpdateScene={updateScene}
-                        onDeleteScene={deleteScene}
+                        onDeleteScene={target => { setDeleteError(''); setDeleteTarget(target) }}
                         labels={labels}
                         onMoveScene={handleMoveSceneToChapter}
                         dragRef={dragRef}
@@ -673,6 +701,34 @@ export default function ManuscriptRail({
             </button>
           </div>
         </>
+      )}
+      {deleteTarget && (
+        <div className="ms-rail-delete-backdrop" onMouseDown={event => {
+          if (event.target === event.currentTarget) { setDeleteTarget(null); setDeleteError('') }
+        }}>
+          <div className="ms-rail-delete-dialog" role="alertdialog" aria-modal="true" aria-label={`Confirm ${deleteTarget.type} deletion`}>
+            <h3>Delete “{deleteTarget.title}”?</h3>
+            <p>
+              {deleteTarget.type === 'act'
+                ? `This removes the act, all of its ${labels.level2.toLowerCase()}s, and ${deleteTarget.sceneCount} ${labels.level3.toLowerCase()}${deleteTarget.sceneCount === 1 ? '' : 's'}.`
+                : deleteTarget.type === 'chapter'
+                  ? `This removes the ${labels.level2.toLowerCase()} and its ${deleteTarget.sceneCount} ${labels.level3.toLowerCase()}${deleteTarget.sceneCount === 1 ? '' : 's'}.`
+                  : `This removes the ${labels.level3.toLowerCase()} from the manuscript.`}
+            </p>
+            {deleteTarget.words > 0 ? (
+              <p className="ms-rail-delete-warning">
+                Warning: this permanently deletes {deleteTarget.words.toLocaleString()} words of manuscript text. This cannot be undone.
+              </p>
+            ) : (
+              <p className="ms-rail-delete-note">No manuscript words are stored in this selection.</p>
+            )}
+            {deleteError && <p role="alert" className="ms-rail-delete-error">{deleteError}</p>}
+            <div className="ms-rail-delete-actions">
+              <button type="button" className="btn btn-secondary" autoFocus onClick={() => { setDeleteTarget(null); setDeleteError('') }}>Keep it</button>
+              <button type="button" className="btn btn-primary" onClick={confirmDelete}>Delete {deleteTarget.type}</button>
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   )

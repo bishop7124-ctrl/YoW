@@ -51,6 +51,25 @@ afterEach(() => {
 })
 
 describe('SceneEditor same-scene lease', () => {
+  it('exposes a synchronous flush so mode changes cannot remount from stale prose', async () => {
+    let editorApi
+    const onUpdate = vi.fn()
+    const onPersistDraft = vi.fn()
+    const { container } = renderScene('Original text.', {
+      innerRef: value => { editorApi = value },
+      onUpdate,
+      onPersistDraft,
+    })
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => container.querySelector('textarea.ms-textarea'))
+    fireEvent.change(textarea, { target: { value: 'Unsaved but visible text.', selectionStart: 24, selectionEnd: 24 } })
+    editorApi.flushDraft()
+
+    expect(onPersistDraft).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }), 'Unsaved but visible text.', { immediate: true })
+    expect(onUpdate).toHaveBeenCalledWith('s1', 'Unsaved but visible text.', null)
+  })
+
   it('returns a later tab to read-only without flushing its draft', async () => {
     presenceState.count = 1
     const onPersistDraft = vi.fn()

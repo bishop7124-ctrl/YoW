@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import ManuscriptRail from './ManuscriptRail.jsx'
 
 const noop = vi.fn()
@@ -162,5 +162,24 @@ describe('ManuscriptRail outline parity', () => {
     fireEvent.drop(sceneRows[1])
 
     expect(moveScene).toHaveBeenCalledWith('scene-1', 'chapter-2', expect.any(Number))
+  })
+
+  it('requires an explicit in-app confirmation and shows the words at risk', () => {
+    const deleteScene = vi.fn(() => true)
+    renderRail({
+      deleteScene,
+      scenes: [
+        { id: 'scene-1', chapterId: 'chapter-1', title: 'Into the Rain', content: 'three precious words', order: 0 },
+        { id: 'scene-2', chapterId: 'chapter-2', title: 'At the Gate', content: '', order: 0 },
+      ],
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete scene' })[0])
+    const dialog = screen.getByRole('alertdialog', { name: 'Confirm scene deletion' })
+    expect(dialog.textContent).toContain('permanently deletes 3 words of manuscript text')
+    expect(deleteScene).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete scene' }))
+    expect(deleteScene).toHaveBeenCalledWith('scene-1')
   })
 })
