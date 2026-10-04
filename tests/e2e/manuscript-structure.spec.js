@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx'
 import {
   createProject, dismissLaunchPrompts, enterWritingMode, readScenesWithContent, readStorage,
   seedCleanStorage, waitForManuscriptReady, waitForStorage,
@@ -80,6 +81,82 @@ test('word count updates when content is added', async ({ page }) => {
   const scenes = await readScenesWithContent(page)
   const scene = scenes.find(s => (s.content || '').includes('One two three'))
   expect(scene).toBeTruthy()
+})
+
+test('switching editor modes immediately preserves the live scene text', async ({ page }) => {
+  const placeholder = page.getByText('Begin writing here…')
+  if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
+  const editor = page.getByPlaceholder('Begin writing here…')
+  await editor.fill('Text entered immediately before the mode switch.')
+
+  // Deliberately do not wait for the 400 ms editor debounce. The mode action
+  // must synchronously flush this live buffer before its keyed SceneEditor
+  // remounts, or the replacement can initialize from stale/empty props.
+  await page.getByRole('group', { name: 'Editor mode' }).getByRole('button', { name: 'Editing' }).click()
+  await expect(page.getByText('Text entered immediately before the mode switch.').first()).toBeVisible()
+
+  await page.evaluate(() => window.__yowStorageBridge?.flush())
+  await page.reload()
+  await waitForManuscriptReady(page)
+  const scenes = await readScenesWithContent(page)
+  expect(scenes.some(scene => scene.content === 'Text entered immediately before the mode switch.')).toBe(true)
+})
+
+test('scene deletion requires a word-count confirmation and can be cancelled safely', async ({ page }) => {
+  const placeholder = page.getByText('Begin writing here…')
+  if (await placeholder.isVisible().catch(() => false)) await placeholder.click()
+  await page.getByPlaceholder('Begin writing here…').fill('three irreplaceable words')
+
+  // Blurring through the rail flushes the draft before the destructive prompt.
+  await page.locator('.ms-rail-scene').first().hover()
+  await page.getByLabel('Delete scene').first().click()
+  const dialog = page.getByRole('alertdialog', { name: 'Confirm scene deletion' })
+  await expect(dialog).toContainText('permanently deletes 3 words of manuscript text')
+  await dialog.getByRole('button', { name: 'Keep it' }).click()
+  await expect(dialog).toBeHidden()
+
+  const scenes = await readScenesWithContent(page)
+  expect(scenes.some(scene => scene.content === 'three irreplaceable words')).toBe(true)
+})
+
+test('Word import merges matching chapters and preserves visible italics', async ({ page }) => {
+  const buffer = await Packer.toBuffer(new Document({
+    sections: [{ children: [
+      new Paragraph({ text: 'Act 1', heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: 'Chapter 1', heading: HeadingLevel.HEADING_2 }),
+      new Paragraph({ children: [new TextRun('Plain words and '), new TextRun({ text: 'italic words', italics: true })] }),
+    ] }],
+  }))
+
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menu').getByRole('button', { name: 'Import a document' }).click()
+  await page.locator('input[type="file"][accept=".docx"]').setInputFiles({
+    name: 'matching-chapter.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer,
+  })
+
+  await expect(page.getByRole('radio', { name: /Merge into matching chapters/i })).toBeChecked()
+  await page.getByRole('button', { name: /Import \d+ words/ }).click()
+
+  await waitForStorage(page, () => {
+    const get = key => window.__yowStorageBridge?.getItem(key) ?? localStorage.getItem(key)
+    const scenes = JSON.parse(get('nf_scenes') || '[]')
+    return scenes.some(scene => (get(`nf_scene_content:${scene.id}`) || scene.content || '').includes('*italic words*'))
+  })
+  const [acts, chapters, scenes] = await Promise.all([
+    readStorage(page, 'nf_acts'),
+    readStorage(page, 'nf_chapters'),
+    readScenesWithContent(page),
+  ])
+  expect(acts).toHaveLength(1)
+  expect(chapters).toHaveLength(1)
+  expect(scenes).toHaveLength(1)
+  expect(scenes[0].content).toContain('*italic words*')
+
+  await page.locator('.ms-preview').first().click()
+  await expect(page.locator('.ms-rich-preview em', { hasText: 'italic words' })).toBeVisible()
+  await expect(page.locator('.ms-rich-preview')).not.toContainText('*italic words*')
 })
 
 // ─── Chapter CRUD ─────────────────────────────────────────────────────────────

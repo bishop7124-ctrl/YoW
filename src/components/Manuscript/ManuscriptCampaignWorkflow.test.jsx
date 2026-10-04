@@ -40,8 +40,6 @@ const baseStore = (overrides = {}) => ({
   sceneConflicts: [],
   restoreSceneConflict: noop,
   discardSceneConflict: noop,
-  writingSceneId: null,
-  setWritingSceneId: noop,
   ...overrides,
 })
 
