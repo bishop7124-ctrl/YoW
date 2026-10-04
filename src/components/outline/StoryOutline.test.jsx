@@ -138,6 +138,22 @@ describe('StoryOutline', () => {
     expect(updateAct).toHaveBeenCalledWith('act-1', { title: 'My draft' }, { expected: { title: 'Act 1' } })
   })
 
+  it('warns how many manuscript words a scene deletion destroys', () => {
+    renderOutline()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit scene' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('permanently deletes 2 words of manuscript text')
+  })
+
+  it('shows the outline position, not a stale stored number, when editing a chapter', () => {
+    const chapters = [{ id: 'chapter-1', actId: 'act-1', title: 'Chapter 7', synopsis: '', order: 0 }, ...baseStore.chapters.slice(1)]
+    renderOutline({ chapters })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit chapter' })[0])
+    const title = screen.getByLabelText('Title')
+    expect(title).toHaveValue('')
+    expect(title).toHaveAttribute('placeholder', 'Chapter 1')
+  })
+
   it('uses explicit deletion confirmation and retains the editor on failure', () => {
     const deleteScene = vi.fn(() => false)
     renderOutline({ deleteScene })

@@ -151,7 +151,7 @@ function ChapterCard({ entry, chapterNumber, actOptions, chapterOptions, isFirst
               <StoryEventBadge value={outlineText(chapter.storyEvent)} indicators={indicators} />
               <ParentSelect value={outlineText(chapter.actId)} options={actOptions} label={`Move ${labels.level2.toLowerCase()} to ${labels.level1.toLowerCase()}`} disabled={disabled || !actOptions.length} onChange={moveParent} />
               <WordCountBadge words={words} />
-              <EditButton label={labels.level2.toLowerCase()} readOnly={disabled} onClick={() => onEdit('chapter', chapter)} />
+              <EditButton label={labels.level2.toLowerCase()} readOnly={disabled} onClick={() => onEdit('chapter', chapter, chapterNumber)} />
             </div>
           </div>
           <Synopsis item={chapter} />
@@ -315,20 +315,20 @@ function OutlineProject({ store }) {
         <main className="outline-tree-panel">
           <DropZone active={dragItem?.type === 'act'} label={`Drop ${labels.level1.toLowerCase()} at start of outline`} onDrop={() => dropAct(0)} />
           {model.acts.map((entry, index) => <div key={entry.act.id}>
-            <ActCard entry={entry} index={index} actOptions={actOptions} chapterOptions={chapterOptions} chapterNumbers={chapterNumbers} store={store} labels={labels} indicators={indicators} disabled={disabled} dragItem={dragItem} onEdit={(type, item) => setEditing({ type, item })} onDragStart={setDragItem} onDropChapter={dropChapter} onDropScene={dropScene} onActionError={fail} />
+            <ActCard entry={entry} index={index} actOptions={actOptions} chapterOptions={chapterOptions} chapterNumbers={chapterNumbers} store={store} labels={labels} indicators={indicators} disabled={disabled} dragItem={dragItem} onEdit={(type, item, number) => setEditing({ type, item, number })} onDragStart={setDragItem} onDropChapter={dropChapter} onDropScene={dropScene} onActionError={fail} />
             <DropZone active={dragItem?.type === 'act'} label={`Drop ${labels.level1.toLowerCase()} after ${outlineText(entry.act.title) || labels.level1}`} onDrop={() => dropAct(index + 1)} />
           </div>)}
 
           {hasRecovery && <section className="mt-5 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5 p-3" aria-labelledby="outline-unplaced-title">
             <h2 id="outline-unplaced-title" className="font-semibold text-amber-300">Unplaced outline items</h2>
             <p className="mb-3 text-xs text-[var(--text-muted)]">These imported or legacy records point to a parent that is unavailable. They remain editable and can be moved into the outline.</p>
-            {model.unplacedChapters.map((entry, index) => <ChapterCard key={entry.chapter.id} entry={entry} chapterNumber={chapterNumbers.get(entry.chapter.id)} actOptions={actOptions} chapterOptions={chapterOptions} isFirst={index === 0} isLast={index === model.unplacedChapters.length - 1} store={store} labels={labels} indicators={indicators} disabled={disabled} dragItem={dragItem} onEdit={(type, item) => setEditing({ type, item })} onDragStart={setDragItem} onDropScene={dropScene} onActionError={fail} unplaced />)}
-            {model.unplacedScenes.map((scene, index) => <SceneRow key={scene.id} scene={scene} sceneIndex={index} chapterOptions={chapterOptions} isFirst={index === 0} isLast={index === model.unplacedScenes.length - 1} store={store} labels={labels} indicators={indicators} disabled={disabled} onEdit={(type, item) => setEditing({ type, item })} onDragStart={setDragItem} onActionError={fail} />)}
+            {model.unplacedChapters.map((entry, index) => <ChapterCard key={entry.chapter.id} entry={entry} chapterNumber={chapterNumbers.get(entry.chapter.id)} actOptions={actOptions} chapterOptions={chapterOptions} isFirst={index === 0} isLast={index === model.unplacedChapters.length - 1} store={store} labels={labels} indicators={indicators} disabled={disabled} dragItem={dragItem} onEdit={(type, item, number) => setEditing({ type, item, number })} onDragStart={setDragItem} onDropScene={dropScene} onActionError={fail} unplaced />)}
+            {model.unplacedScenes.map((scene, index) => <SceneRow key={scene.id} scene={scene} sceneIndex={index} chapterOptions={chapterOptions} isFirst={index === 0} isLast={index === model.unplacedScenes.length - 1} store={store} labels={labels} indicators={indicators} disabled={disabled} onEdit={(type, item, number) => setEditing({ type, item, number })} onDragStart={setDragItem} onActionError={fail} />)}
           </section>}
         </main>
       </div>}
     </div>
 
-    {editing && <OutlineItemEditor type={editing.type} item={editing.item} store={store} labels={labels} indicators={indicators} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />}
+    {editing && <OutlineItemEditor type={editing.type} item={editing.item} number={editing.number} store={store} labels={labels} indicators={indicators} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />}
   </div>
 }

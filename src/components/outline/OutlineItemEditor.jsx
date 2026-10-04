@@ -4,6 +4,7 @@ import {
   SESSION_PLAN_FIELDS,
   SESSION_RECAP_FIELDS,
   normalizeOutlineItem,
+  outlineWordCount,
 } from '../../utils/outlineDisplay.js'
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
@@ -15,12 +16,24 @@ const itemLabel = (type, labels) => ({
   scene: labels.level3,
 })[type]
 
-export default function OutlineItemEditor({ type, item, store, labels, indicators, onClose, onSaved }) {
+// Default titles ("Chapter", "Chapter 5") are stored placeholders; the outline shows the live
+// position instead, so the editor must not surface a stale stored number.
+const isDefaultTitle = (title, label) => !title.trim() || new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s+\\d+)?$`, 'i').test(title.trim())
+
+export default function OutlineItemEditor({ type, item, number, store, labels, indicators, onClose, onSaved }) {
   const [initial] = useState(() => normalizeOutlineItem(item, type))
-  const [form, setForm] = useState(initial)
+  const shownTitle = isDefaultTitle(initial.title, itemLabel(type, labels)) ? '' : initial.title
+  const [form, setForm] = useState({ ...initial, title: shownTitle })
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const label = itemLabel(type, labels)
+  const titlePlaceholder = number ? `${label} ${number}` : label
+  const lostWords = (() => {
+    const scenes = store.scenes || []
+    const chapterIds = new Set(type === 'act' ? (store.chapters || []).filter(c => c.actId === item.id).map(c => c.id) : type === 'chapter' ? [item.id] : [])
+    const affected = type === 'scene' ? scenes.filter(s => s.id === item.id) : scenes.filter(s => chapterIds.has(s.chapterId))
+    return { scenes: affected.length, words: affected.reduce((sum, s) => sum + outlineWordCount(s.content), 0) }
+  })()
   const isCampaignChapter = type === 'chapter' && CAMPAIGN_TYPES.has(store.activeNovel?.type)
   const fields = ['title', 'synopsis', 'storyEvent', ...(isCampaignChapter ? ['sessionPlan', 'sessionRecap'] : [])]
   const change = field => event => setForm(current => ({ ...current, [field]: event.target.value }))
@@ -34,7 +47,7 @@ export default function OutlineItemEditor({ type, item, store, labels, indicator
     setError('')
     const prepared = {
       ...form,
-      title: form.title.trim() || label,
+      title: form.title.trim() === shownTitle.trim() ? initial.title : (form.title.trim() || label),
       synopsis: form.synopsis,
       storyEvent: form.storyEvent || '',
     }
@@ -67,7 +80,7 @@ export default function OutlineItemEditor({ type, item, store, labels, indicator
         {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         <label className="block text-sm">
           Title
-          <input autoFocus={!store.readOnly} className="field w-full text-base" value={form.title} onChange={change('title')} readOnly={store.readOnly} />
+          <input autoFocus={!store.readOnly} className="field w-full text-base" value={form.title} placeholder={titlePlaceholder} onChange={change('title')} readOnly={store.readOnly} />
         </label>
         <label className="block text-sm">
           Story event
@@ -89,6 +102,9 @@ export default function OutlineItemEditor({ type, item, store, labels, indicator
           <div role="alertdialog" aria-label={`Confirm ${label.toLowerCase()} deletion`} className="panel-soft space-y-3 p-4">
             <p>Delete “{initial.title || label}”{type === 'act' ? ` and all of its ${labels.level2.toLowerCase()}s and ${labels.level3.toLowerCase()}s` : type === 'chapter' ? ` and all of its ${labels.level3.toLowerCase()}s` : ''}?</p>
             <p className="text-xs text-[var(--text-muted)]">This removes the same record from the manuscript structure and clears affected journey links.</p>
+            {lostWords.words > 0
+              ? <p className="text-sm font-semibold text-red-400">Warning: this permanently deletes {lostWords.words.toLocaleString()} words of manuscript text{type === 'scene' ? '' : ` across ${lostWords.scenes} ${labels.level3.toLowerCase()}${lostWords.scenes === 1 ? '' : 's'}`}. This cannot be undone.</p>
+              : lostWords.scenes > 0 && <p className="text-xs text-[var(--text-muted)]">{lostWords.scenes} empty {labels.level3.toLowerCase()}{lostWords.scenes === 1 ? '' : 's'} will be removed.</p>}
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-secondary" onClick={() => setConfirmDelete(false)}>Cancel deletion</button>
               <button type="button" className="btn btn-primary" onClick={remove}>Delete {label.toLowerCase()}</button>
