@@ -61,6 +61,24 @@ export const readCorruptKeys = () => readKeySet(LOCAL_READ_CORRUPT_KEY)
 export const markLocalReadCorrupt = (key) => addToKeySet(LOCAL_READ_CORRUPT_KEY, key)
 export const hasCorruptLocalData = () => readCorruptKeys().size > 0
 
+// Count of local writes still queued or retrying in the IndexedDB / desktop-vault
+// backends. The UI reads this so a save indicator never says "Saved" while an edit
+// is only in the in-memory mirror and has not reached disk yet (4 Oct fault-injection
+// matrix). Backends adjust it in pairs: +1 when a write is queued, -1 when it settles.
+let pendingLocalWrites = 0
+const pendingLocalWriteListeners = new Set()
+export function adjustPendingLocalWrites(delta) {
+  const next = Math.max(0, pendingLocalWrites + delta)
+  if (next === pendingLocalWrites) return
+  pendingLocalWrites = next
+  pendingLocalWriteListeners.forEach(listener => { try { listener() } catch { /* a listener must never break a write */ } })
+}
+export const getPendingLocalWrites = () => pendingLocalWrites
+export function subscribePendingLocalWrites(listener) {
+  pendingLocalWriteListeners.add(listener)
+  return () => { pendingLocalWriteListeners.delete(listener) }
+}
+
 // Retries a failing async write with exponential backoff before giving up —
 // most real IndexedDB/vault failures this needs to survive are transient
 // (a version-change upgrade blocking a moment, a momentary quota spike from

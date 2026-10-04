@@ -271,3 +271,151 @@ begin
   raise notice 'CHECK 8 ok: two-browser edits to different fields both survive; same-field conflict returns the other side; removal, ownership, table guard and all % tables verified', n;
   delete from auth.users where id in (a,b);
 end $$;
+
+-- 9. Entitlement negative matrix (database paths): a signed-in Free user cannot write plan/status/
+--    Founder/Lifetime/Stripe/lifecycle/billing state through the API roles. Entitlements live in
+--    server-controlled auth app metadata and the service-only tables below; the browser role must
+--    have no write policy on any of them and no write must land when attempted.
+do $$
+declare
+  a uuid := gen_random_uuid(); b uuid := gen_random_uuid();
+  t text; bad text := ''; n int := 0; rows int;
+begin
+  insert into auth.users(id,email) values (a,'e1@example.test'),(b,'e2@example.test');
+  insert into public.user_profiles(user_id,is_founder,storage_add_on_bytes) values (a,false,0),(b,false,0) on conflict (user_id) do nothing;
+
+  -- (a) no INSERT/UPDATE/DELETE/ALL policy for anon/authenticated/public on any service-only table
+  foreach t in array array['user_profiles','app_config','stripe_processed_events','account_lifecycle_events',
+      'account_lifecycle_deletions','reengagement_emails','email_action_rate_limits','ai_proxy_requests']
+  loop
+    perform 1 from pg_policies p where p.schemaname='public' and p.tablename=t
+      and p.cmd in ('INSERT','UPDATE','DELETE','ALL')
+      and (p.roles && array['anon','authenticated','public']::name[]);
+    if found then bad := bad || 'writable-policy:'||t||' '; end if;
+    n := n + 1;
+  end loop;
+  if bad <> '' then raise exception 'CHECK 9 FAILED: %', bad; end if;
+
+  -- (b) behavioural: as Free user A, every write path must be refused or touch zero rows
+  perform set_config('request.jwt.claim.sub', a::text, true); set local role authenticated;
+  update public.user_profiles set is_founder = true, storage_add_on_bytes = 99999999999 where user_id = a;
+  get diagnostics rows = row_count;
+  if rows <> 0 then raise exception 'CHECK 9 FAILED: Free user updated own user_profiles (is_founder/add-on)'; end if;
+  update public.user_profiles set is_founder = true where user_id = b;
+  get diagnostics rows = row_count;
+  if rows <> 0 then raise exception 'CHECK 9 FAILED: user updated ANOTHER user''s profile'; end if;
+  begin
+    insert into public.user_profiles(user_id,is_founder) values (gen_random_uuid(),true);
+    raise exception 'CHECK 9 FAILED: user inserted a Founder profile row';
+  exception when insufficient_privilege or others then
+    if sqlerrm like 'CHECK 9 FAILED%' then raise; end if;
+  end;
+  delete from public.user_profiles where user_id = a;
+  get diagnostics rows = row_count;
+  if rows <> 0 then raise exception 'CHECK 9 FAILED: user deleted own profile row'; end if;
+  update public.app_config set value = '{"total":100000}'::jsonb;
+  get diagnostics rows = row_count;
+  if rows <> 0 then raise exception 'CHECK 9 FAILED: user changed app_config (Founder slot limit)'; end if;
+  reset role;
+  if (select is_founder or storage_add_on_bytes <> 0 from public.user_profiles where user_id = a) then
+    raise exception 'CHECK 9 FAILED: profile changed by the browser role'; end if;
+  -- anon (signed-out, no JWT subject) cannot read or write them either
+  perform set_config('request.jwt.claim.sub', '', true); set local role anon;
+  update public.user_profiles set is_founder = true; get diagnostics rows = row_count;
+  if rows <> 0 then raise exception 'CHECK 9 FAILED: anon updated user_profiles'; end if;
+  if (select count(*) from public.user_profiles) <> 0 then raise exception 'CHECK 9 FAILED: anon can read profiles'; end if;
+  reset role;
+  raise notice 'CHECK 9 ok: Free/anon users cannot write plan, Founder, add-on, Stripe, lifecycle, billing or rate-limit state (% service-only tables, no write policies)', n;
+  delete from auth.users where id in (a,b);
+end $$;
+
+-- 10. Server-side media limits that do not depend on the UI: MIME allow-list, per-file size,
+--     plan quota (Free 250 MB, paid 8 GB, Beta 15 GB, expired Beta back to 250 MB), the
+--     per-user serialisation lock, shrinking/deleting always allowed, other users unaffected.
+do $$
+declare
+  free_u uuid := gen_random_uuid(); lt uuid := gen_random_uuid(); bt uuid := gen_random_uuid();
+  bx uuid := gen_random_uuid(); other uuid := gen_random_uuid();
+  mb constant bigint := 1024*1024; gb constant bigint := 1024*1024*1024;
+begin
+  insert into auth.users(id,email,created_at,raw_app_meta_data) values
+    (free_u,'q1@example.test', now() - interval '90 days', '{}'),
+    (lt,'q2@example.test', now() - interval '90 days', '{"subscription_plan":"premium_plus_lifetime","subscription_status":"active"}'),
+    (bt,'q3@example.test', now() - interval '90 days', '{"subscription_plan":"beta_tester"}'),
+    (bx,'q4@example.test', now() - interval '90 days', jsonb_build_object('subscription_plan','beta_tester','beta_notice_started_at',(now() - interval '31 days')::text)),
+    (other,'q5@example.test', now() - interval '90 days', '{}');
+
+  if public.user_media_plan_cap_bytes(free_u) <> 250*mb then raise exception 'CHECK 10 FAILED: free cap %', public.user_media_plan_cap_bytes(free_u); end if;
+  if public.user_media_plan_cap_bytes(lt) <> 8*gb then raise exception 'CHECK 10 FAILED: lifetime cap'; end if;
+  if public.user_media_plan_cap_bytes(bt) <> 15*gb then raise exception 'CHECK 10 FAILED: beta cap'; end if;
+  if public.user_media_plan_cap_bytes(bx) <> 250*mb then raise exception 'CHECK 10 FAILED: expired beta must fall back to Free'; end if;
+  -- a browser-editable user_metadata value must never raise the cap
+  update auth.users set raw_user_meta_data = '{"subscription_plan":"founder","beta_tester":true}' where id = free_u;
+  if public.user_media_plan_cap_bytes(free_u) <> 250*mb then raise exception 'CHECK 10 FAILED: user_metadata raised the cap'; end if;
+
+  perform set_config('request.jwt.claim.sub', free_u::text, true); set local role authenticated;
+
+  -- allowed: small webp
+  insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/ok1.webp', free_u, jsonb_build_object('size', 14*mb, 'mimetype','image/webp'));
+  -- MIME bypass
+  begin
+    insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/x.html', free_u, jsonb_build_object('size',100,'mimetype','text/html'));
+    raise exception 'CHECK 10 FAILED: html upload accepted';
+  exception when others then if sqlerrm like 'CHECK 10 FAILED%' then raise; end if; end;
+  -- oversize single file
+  begin
+    insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/big.png', free_u, jsonb_build_object('size',16*mb,'mimetype','image/png'));
+    raise exception 'CHECK 10 FAILED: 16 MB file accepted';
+  exception when others then if sqlerrm like 'CHECK 10 FAILED%' then raise; end if; end;
+  -- fill Free to 245 MB, then a 10 MB file must be refused, a 4 MB one accepted
+  for i in 1..16 loop
+    insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/f'||i||'.png', free_u, jsonb_build_object('size',14*mb,'mimetype','image/png'));
+  end loop;                                                            
+  begin
+    insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/over.png', free_u, jsonb_build_object('size',14*mb,'mimetype','image/png'));
+    raise exception 'CHECK 10 FAILED: Free user exceeded 250 MB';
+  exception when others then if sqlerrm like 'CHECK 10 FAILED%' then raise; end if; end;
+  insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/fits.png', free_u, jsonb_build_object('size',4*mb,'mimetype','image/png'));
+  -- UPDATE path (grow an existing object past the cap) is checked too
+  begin
+    update storage.objects set metadata = jsonb_build_object('size',15*mb,'mimetype','image/png') where name = free_u||'/c/fits.png';
+    raise exception 'CHECK 10 FAILED: growing an object past the cap via UPDATE was accepted';
+  exception when others then if sqlerrm like 'CHECK 10 FAILED%' then raise; end if; end;
+  -- deleting frees space again
+  delete from storage.objects where name = free_u||'/c/f1.png';
+  insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', free_u||'/c/after-delete.png', free_u, jsonb_build_object('size',10*mb,'mimetype','image/png'));
+  -- a different user's prefix is refused by RLS (not by quota)
+  begin
+    insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', other||'/c/steal.png', free_u, jsonb_build_object('size',1000,'mimetype','image/png'));
+    raise exception 'CHECK 10 FAILED: wrote into another user''s prefix';
+  exception when others then if sqlerrm like 'CHECK 10 FAILED%' then raise; end if; end;
+  reset role;
+
+  -- accounting still matches the stored bytes for the Free user
+  if (select storage_used_bytes from public.user_profiles where user_id = free_u)
+     <> (select sum((metadata->>'size')::bigint) from storage.objects where name like free_u||'/%') then
+    raise exception 'CHECK 10 FAILED: storage_used_bytes does not match stored object bytes';
+  end if;
+
+  -- paid and Beta users get their larger cap; the other user's usage is independent
+  perform set_config('request.jwt.claim.sub', lt::text, true); set local role authenticated;
+  insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', lt||'/c/a.png', lt, jsonb_build_object('size',10*mb,'mimetype','image/png'));
+  reset role;
+  update public.user_profiles set storage_used_bytes = 8*gb - 5*mb where user_id = lt;
+  perform set_config('request.jwt.claim.sub', lt::text, true); set local role authenticated;
+  begin
+    insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', lt||'/c/b.png', lt, jsonb_build_object('size',10*mb,'mimetype','image/png'));
+    raise exception 'CHECK 10 FAILED: Lifetime user exceeded 8 GB';
+  exception when others then if sqlerrm like 'CHECK 10 FAILED%' then raise; end if; end;
+  reset role;
+  perform set_config('request.jwt.claim.sub', other::text, true); set local role authenticated;
+  insert into storage.objects(bucket_id,name,owner,metadata) values ('user-media', other||'/c/a.png', other, jsonb_build_object('size',10*mb,'mimetype','image/png'));
+  reset role;
+  if (select file_size_limit from storage.buckets where id='user-media') <> 15*mb
+     or not ((select allowed_mime_types from storage.buckets where id='user-media') @> array['image/png']) then
+    raise exception 'CHECK 10 FAILED: bucket-level limits missing';
+  end if;
+  raise notice 'CHECK 10 ok: server refuses non-image MIME, >15 MB files, over-quota inserts and UPDATE growth; caps Free 250 MB / paid 8 GB / Beta 15 GB / expired Beta 250 MB; user_metadata cannot raise a cap; accounting matches';
+  delete from storage.objects where name like any (array[free_u||'/%', lt||'/%', other||'/%']);
+  delete from auth.users where id in (free_u,lt,bt,bx,other);
+end $$;
