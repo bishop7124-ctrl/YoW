@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import {
   formatFinalizedDate, paginateFinalizedDraft,
@@ -97,7 +97,20 @@ function FinalizedPageReader({ draft, pageIndex, onPageIndexChange }) {
   )
 }
 
-export default function FinalizedReader({ draft, viewMode, pageIndex, onPageIndexChange }) {
+export default function FinalizedReader({ draft, viewMode, pageIndex, onPageIndexChange, targetSceneId = null }) {
+  const scrollReaderRef = useRef(null)
+
+  useLayoutEffect(() => {
+    if (!draft || viewMode === 'pages' || !targetSceneId) return undefined
+    const target = [...(scrollReaderRef.current?.querySelectorAll('[data-finalized-scene-id]') || [])]
+      .find(node => node.dataset.finalizedSceneId === targetSceneId)
+    if (!target) return undefined
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'auto', block: 'center' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [draft, targetSceneId, viewMode])
+
   if (!draft) return null
 
   if (viewMode === 'pages') {
@@ -115,7 +128,7 @@ export default function FinalizedReader({ draft, viewMode, pageIndex, onPageInde
   )
 
   return (
-    <main className="manuscript-page ms-final-reader workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
+    <main ref={scrollReaderRef} className="manuscript-page ms-final-reader workspace-page flex-1 overflow-y-auto scroll-smooth min-w-0">
       <article className="ms-final-book" aria-label="Finalized manuscript">
         <header className="ms-final-title-page">
           <p className="ms-final-kicker">Finalized draft</p>
@@ -138,7 +151,11 @@ export default function FinalizedReader({ draft, viewMode, pageIndex, onPageInde
                 <section key={chapter.id || chapterIndex} className="ms-final-chapter">
                   <h3>{decodeHtmlEntities(chapter.title)}</h3>
                   {scenesWithText.map((scene, sceneIndex) => (
-                    <div key={scene.id || sceneIndex} className="ms-final-scene">
+                    <div
+                      key={scene.id || sceneIndex}
+                      className="ms-final-scene"
+                      data-finalized-scene-id={scene.id || undefined}
+                    >
                       {sceneIndex > 0 && <div className="ms-final-break" aria-hidden="true">* * *</div>}
                       {decodeHtmlEntities(scene.content).trim().split(/\n{2,}/).map((block, blockIndex) => {
                         const text = block.split('\n').map(line => line.trim()).filter(Boolean).join(' ')

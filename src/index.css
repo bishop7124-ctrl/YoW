@@ -2213,10 +2213,11 @@ textarea:focus {
   cursor: text;
 }
 
-/* The clean proposal textarea and the visible redline wrap differently because
-   the redline also contains deleted prose. Suppress the textarea's misplaced
-   native selection; SceneEditor paints the same range on the visible text. */
-.ms-rich-edit.is-tracking .ms-textarea--rich::selection {
+/* The transparent textarea and visible rich preview can wrap or indent the same
+   raw text differently. Suppress the textarea's misplaced native selection while
+   SceneEditor paints that raw-offset range on the prose users actually see. */
+.ms-rich-edit.is-tracking .ms-textarea--rich::selection,
+.ms-rich-edit.has-visual-selection .ms-textarea--rich::selection {
   background: transparent;
   color: transparent;
   -webkit-text-fill-color: transparent;
@@ -2307,31 +2308,8 @@ textarea:focus {
   cursor: pointer;
 }
 
-.ms-floating-note-btn {
-  position: absolute;
-  z-index: 8;
-  width: 44px;
-  height: 44px;
-  border: 1px solid color-mix(in srgb, var(--accent) 56%, var(--border));
-  border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--bg-nav) 86%, var(--bg-main));
-  color: var(--accent);
-  box-shadow: 0 8px 22px rgba(0,0,0,.22);
-  font-size: 18px;
-  line-height: 1;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform .12s, border-color .12s, background .12s;
-}
-
-.ms-floating-note-btn:hover {
-  transform: translateY(-1px);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent-fade) 52%, var(--bg-nav));
-}
-
-/* Selection bar (redesign) — replaces the floating "+" note button while a
-   real (non-collapsed) selection is active. See SceneEditor.jsx. */
+/* Selection bar (redesign) — appears beside a real (non-collapsed)
+   selection while the stable scene-level Note action stays available. */
 .ms-selbar {
   position: absolute;
   z-index: 9;
@@ -16921,6 +16899,24 @@ body {
   opacity: 0;
   transition: opacity 0.15s;
 }
+.ms-scene-editor.has-note-action .ms-scene-header {
+  min-height: 40px;
+}
+.ms-scene-editor.has-note-action .ms-scene-header-line {
+  padding-right: 78px;
+}
+.ms-meta-chip.ms-scene-note-btn {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 6px 10px;
+  opacity: 1;
+}
 .ms-scene-header.is-visible,
 .group\/scene:hover .ms-scene-header,
 .group\/scene:focus-within .ms-scene-header {
@@ -17176,8 +17172,6 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
-
-.ms-mobile-note-btn { display: none; }
 
 .ms-meta-status {
   --dot-color: var(--text-muted);
@@ -18150,11 +18144,6 @@ body {
       min-width: 0;
       flex-wrap: wrap;
     }
-
-    /* Mobile uses a stable scene-header action instead of a large square that
-       follows the caret and covers whichever line the writer is editing. */
-    .ms-mobile-note-btn { display: inline-flex; }
-    .ms-floating-note-btn { display: none; }
 
     /* The desktop default is four characters—too dramatic on a phone, where
        it consumes a large part of the usable line before prose even begins. */

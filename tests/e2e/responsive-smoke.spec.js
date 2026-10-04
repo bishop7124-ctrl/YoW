@@ -49,10 +49,10 @@ for (const viewport of viewports) {
       }).toBeLessThanOrEqual(1)
     }
 
+    const noteButton = page.getByRole('button', { name: 'Add note', exact: true })
+    await expect(noteButton).toBeVisible()
+
     if (viewport.width <= 640) {
-      const noteButton = page.getByRole('button', { name: 'Add note', exact: true })
-      await expect(noteButton).toBeVisible()
-      await expect(page.getByRole('button', { name: 'Add note at cursor' })).toBeHidden()
       await expect.poll(() => editor.evaluate(node => {
         const style = getComputedStyle(node)
         return Number.parseFloat(style.textIndent) / Number.parseFloat(style.fontSize)
