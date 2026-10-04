@@ -1,6 +1,7 @@
 import { createIndexedDbBackend } from './indexedDbBackend.js'
 import { setStorageBackend } from './projectStorage.js'
 import { isDesktopAppRuntime } from '../utils/runtime.js'
+import { LEGACY_MIGRATION_MARKER_KEY, planLegacyLocalMigration } from './legacyLocalMigration.js'
 import { markLocalWriteFailed, clearLocalWriteFailed, hasLocalWriteFailed } from './writeDurability.js'
 
 // Exported so anything that needs to talk to this database directly (e.g.
@@ -157,6 +158,20 @@ function installFlushHandlers(backend) {
   })
 }
 
+// One-time copy of pre-IndexedDB localStorage project data into an empty vault
+// (rules and rationale in legacyLocalMigration.js). Atomic: the data and the
+// "already ran" marker land in one transaction. Never blocks startup.
+async function migrateLegacyLocalStorage(db, entries) {
+  try {
+    const plan = planLegacyLocalMigration(entries, typeof window !== 'undefined' ? window.localStorage : null)
+    if (plan.skipped === 'already-ran' || plan.skipped === 'localstorage-unreadable' || plan.skipped === 'no-localstorage') return
+    const toWrite = new Map(plan.entries)
+    toWrite.set(LEGACY_MIGRATION_MARKER_KEY, new Date().toISOString())
+    await replaceEntries(db, toWrite, [])
+    toWrite.forEach((value, key) => entries.set(key, value))
+  } catch { /* a failed recovery attempt must never stop the vault starting; localStorage is untouched */ }
+}
+
 // Only takes over when running as a regular browser session — the desktop app
 // has its own vault backend (tauriVaultAdapter.js) and must never be overridden.
 // Any failure here (indexedDB missing, blocked in a locked-down/private context,
@@ -169,6 +184,7 @@ export async function initializeIndexedDbStorage({ onWriteError = console.error,
   try {
     const db = await openDatabase()
     const entries = await readAllEntries(db)
+    await migrateLegacyLocalStorage(db, entries)
     const backend = wireCrossTabSync(createIndexedDbBackend({
       entries,
       persistItem: (key, value) => putEntry(db, key, value),

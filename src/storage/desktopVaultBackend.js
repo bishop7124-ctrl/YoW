@@ -15,7 +15,7 @@
 // what actually makes a failure visible to the user instead of only reaching
 // `console.error`.
 
-import { withRetry } from './writeDurability.js'
+import { withRetry, adjustPendingLocalWrites } from './writeDurability.js'
 
 function normalizeEntries(entries = {}) {
   if (entries instanceof Map) return new Map(entries)
@@ -33,6 +33,10 @@ export function createDesktopVaultBackend({
   onWriteError = noop,
   onWriteSuccess = noop,
   retry,
+  // Write-time privacy guard (6 Oct vault audit): keys this returns false for are never
+  // stored or persisted (the vault and its snapshots are plain SQLite on disk).
+  isKeyAllowed = () => true,
+  onKeyRejected = noop,
 } = {}) {
   const mirror = normalizeEntries(entries)
   const persist = typeof persistItem === 'function' ? persistItem : async () => {}
@@ -46,15 +50,18 @@ export function createDesktopVaultBackend({
 
   const enqueue = (key, task) => {
     pendingCount += 1
+    adjustPendingLocalWrites(1)
     queue = queue
       .then(() => withRetry(task, retry))
       .then(() => {
         pendingCount = Math.max(0, pendingCount - 1)
+        adjustPendingLocalWrites(-1)
         lastError = null
         onWriteSuccess(key)
       })
       .catch(error => {
         pendingCount = Math.max(0, pendingCount - 1)
+        adjustPendingLocalWrites(-1)
         lastError = error
         onWriteError(error, key)
       })
@@ -65,6 +72,7 @@ export function createDesktopVaultBackend({
     name: 'desktop-vault',
     getItem: key => (mirror.has(key) ? mirror.get(key) : null),
     setItem: (key, value) => {
+      if (!isKeyAllowed(key)) { onKeyRejected(key); return Promise.resolve() }
       const stringValue = String(value)
       mirror.set(key, stringValue)
       return enqueue(key, () => persist(key, stringValue))
@@ -75,19 +83,25 @@ export function createDesktopVaultBackend({
     },
     replaceItems: (entriesToSet = {}, keysToRemove = []) => {
       const nextEntries = normalizeEntries(entriesToSet)
+      for (const key of Array.from(nextEntries.keys())) {
+        if (!isKeyAllowed(key)) { nextEntries.delete(key); onKeyRejected(key) }
+      }
       const removeKeys = Array.from(new Set(keysToRemove)).filter(key => !nextEntries.has(key))
       pendingCount += 1
+      adjustPendingLocalWrites(1)
       const operation = queue
         .then(() => withRetry(() => replacePersisted(nextEntries, removeKeys), retry))
         .then(() => {
           removeKeys.forEach(key => mirror.delete(key))
           nextEntries.forEach((value, key) => mirror.set(key, String(value)))
           pendingCount = Math.max(0, pendingCount - 1)
+          adjustPendingLocalWrites(-1)
           lastError = null
           onWriteSuccess(REPLACEMENT_WRITE_KEY)
         })
         .catch(error => {
           pendingCount = Math.max(0, pendingCount - 1)
+          adjustPendingLocalWrites(-1)
           lastError = error
           onWriteError(error, REPLACEMENT_WRITE_KEY)
           throw error

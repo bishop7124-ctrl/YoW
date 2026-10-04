@@ -18,7 +18,7 @@
 // actually makes a failure visible to the user instead of only reaching
 // `console.error`.
 
-import { withRetry } from './writeDurability.js'
+import { withRetry, adjustPendingLocalWrites } from './writeDurability.js'
 
 function normalizeEntries(entries = {}) {
   if (entries instanceof Map) return new Map(entries)
@@ -49,15 +49,18 @@ export function createIndexedDbBackend({
 
   const enqueue = (key, task) => {
     pendingCount += 1
+    adjustPendingLocalWrites(1)
     queue = queue
       .then(() => withRetry(task, retry))
       .then(() => {
         pendingCount = Math.max(0, pendingCount - 1)
+        adjustPendingLocalWrites(-1)
         lastError = null
         onWriteSuccess(key)
       })
       .catch(error => {
         pendingCount = Math.max(0, pendingCount - 1)
+        adjustPendingLocalWrites(-1)
         lastError = error
         onWriteError(error, key)
       })
@@ -80,17 +83,20 @@ export function createIndexedDbBackend({
       const nextEntries = normalizeEntries(entriesToSet)
       const removeKeys = Array.from(new Set(keysToRemove)).filter(key => !nextEntries.has(key))
       pendingCount += 1
+      adjustPendingLocalWrites(1)
       const operation = queue
         .then(() => withRetry(() => replacePersisted(nextEntries, removeKeys), retry))
         .then(() => {
           removeKeys.forEach(key => mirror.delete(key))
           nextEntries.forEach((value, key) => mirror.set(key, String(value)))
           pendingCount = Math.max(0, pendingCount - 1)
+          adjustPendingLocalWrites(-1)
           lastError = null
           onWriteSuccess(REPLACEMENT_WRITE_KEY)
         })
         .catch(error => {
           pendingCount = Math.max(0, pendingCount - 1)
+          adjustPendingLocalWrites(-1)
           lastError = error
           onWriteError(error, REPLACEMENT_WRITE_KEY)
           throw error

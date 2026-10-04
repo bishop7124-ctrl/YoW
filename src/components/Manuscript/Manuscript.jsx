@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
@@ -13,6 +13,7 @@ import TemplateModal from './TemplateModal'
 import DocxImportModal from './DocxImportModal'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
+import { getPendingLocalWrites, subscribePendingLocalWrites } from '../../storage/writeDurability.js'
 import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
 import FinalizedReader, { exportToDocx } from './FinalizedReader.jsx'
@@ -577,11 +578,18 @@ export default function Manuscript({ store, userId, membership = null }) {
   // cloud sync here: the point of "Saved" is that this device won't lose the
   // edit, and a stale local write can still be true even while cloud sync
   // reports success from an earlier value.
+  // A write still queued/retrying in the local backend is not durable yet, so it
+  // reads "Saving" even when cloud sync is idle (4 Oct fault-injection matrix).
+  const wasLocalWritePendingRef = useRef(false)
+  const pendingLocalWrites = useSyncExternalStore(subscribePendingLocalWrites, getPendingLocalWrites, () => 0)
   useEffect(() => {
     if (localStorageWarning) { setSaveState('error'); return }
-    if (!syncStatus) return
+    if (pendingLocalWrites > 0) { wasLocalWritePendingRef.current = true; setSaveState('saving'); return }
+    const settledLocalWrite = wasLocalWritePendingRef.current
+    wasLocalWritePendingRef.current = false
+    if (!syncStatus) { if (settledLocalWrite) setSaveState('saved'); return }
     setSaveState(syncStatus.state === 'syncing' ? 'saving' : 'saved')
-  }, [syncStatus, localStorageWarning])
+  }, [syncStatus, localStorageWarning, pendingLocalWrites])
 
   const handleReplaceInScene = useCallback((sceneId, newContent) => {
     handleContentUpdate(sceneId, newContent)

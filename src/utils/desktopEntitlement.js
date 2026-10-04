@@ -62,7 +62,26 @@ export function clearCachedDesktopEntitlement() {
 
 // Pure evaluation used by the app shell. `membership` reflects the live (or
 // session-cached) account; `cached` is the stored activation record.
-export function evaluateDesktopEntitlement({ membership, cached, now = new Date() } = {}) {
+// The cached record lives in webview localStorage, so anyone can edit it. It can
+// never be proven genuine on the client (the HMAC secret is server-only); it can
+// only be rejected when it is malformed or not issued to this account and device.
+// A forged cache therefore grants nothing a signed-out local vault does not already
+// have: editing, export and the local vault stay available, while cloud sync,
+// downloads and device activation are decided server-side from app_metadata.
+const CACHEABLE_DESKTOP_PLANS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
+
+export function isCachedEntitlementTrusted(cached, { userId, deviceId, now = new Date() } = {}) {
+  const record = cached?.record
+  if (!record || typeof record !== 'object') return false
+  if (!CACHEABLE_DESKTOP_PLANS.has(record.plan)) return false
+  if (userId !== undefined && record.userId !== userId) return false
+  if (deviceId !== undefined && record.deviceId !== deviceId) return false
+  const verified = cached?.verifiedAt ? new Date(cached.verifiedAt).getTime() : NaN
+  if (!Number.isFinite(verified) || verified > now.getTime() + DAY_MS) return false   // missing or future-dated
+  return true
+}
+
+export function evaluateDesktopEntitlement({ membership, cached, userId, deviceId, now = new Date() } = {}) {
   const verifiedAt = cached?.verifiedAt ? new Date(cached.verifiedAt) : null
   const daysSinceVerified = verifiedAt && !Number.isNaN(verifiedAt.getTime())
     ? Math.floor((now.getTime() - verifiedAt.getTime()) / DAY_MS)
@@ -72,7 +91,11 @@ export function evaluateDesktopEntitlement({ membership, cached, now = new Date(
   if (membership?.isDesktopEntitled) {
     return { entitled: true, source: 'account', stale, daysSinceVerified }
   }
-  if (cached?.record?.plan) {
+  const checkIdentity = userId !== undefined || deviceId !== undefined
+  const trusted = checkIdentity
+    ? isCachedEntitlementTrusted(cached, { userId, deviceId, now })
+    : Boolean(cached?.record?.plan)
+  if (trusted) {
     return { entitled: true, source: 'cache', stale, daysSinceVerified }
   }
   return { entitled: false, source: null, stale: false, daysSinceVerified }

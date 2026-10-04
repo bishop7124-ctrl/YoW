@@ -44,7 +44,7 @@ import {
 } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
-import { evaluateDesktopEntitlement, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
+import { clearCachedDesktopEntitlement, evaluateDesktopEntitlement, getOrCreateDesktopDeviceId, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
@@ -584,10 +584,13 @@ function AppInner() {
           return
         }
         if (result.status === 409) {
+          // Over the device cap: this device was refused a signed record, so a record
+          // cached by an earlier activation must not keep vouching for it.
+          clearCachedDesktopEntitlement()
           setDesktopDeviceLimit(true)
           return
         }
-        const evaluation = evaluateDesktopEntitlement({ membership, cached: loadCachedDesktopEntitlement() })
+        const evaluation = evaluateDesktopEntitlement({ membership, cached: loadCachedDesktopEntitlement(), userId, deviceId: getOrCreateDesktopDeviceId() })
         setDesktopLicenceStale(evaluation.stale)
       })
       .catch(() => {})
