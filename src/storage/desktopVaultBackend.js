@@ -33,6 +33,10 @@ export function createDesktopVaultBackend({
   onWriteError = noop,
   onWriteSuccess = noop,
   retry,
+  // Write-time privacy guard (6 Oct vault audit): keys this returns false for are never
+  // stored or persisted (the vault and its snapshots are plain SQLite on disk).
+  isKeyAllowed = () => true,
+  onKeyRejected = noop,
 } = {}) {
   const mirror = normalizeEntries(entries)
   const persist = typeof persistItem === 'function' ? persistItem : async () => {}
@@ -68,6 +72,7 @@ export function createDesktopVaultBackend({
     name: 'desktop-vault',
     getItem: key => (mirror.has(key) ? mirror.get(key) : null),
     setItem: (key, value) => {
+      if (!isKeyAllowed(key)) { onKeyRejected(key); return Promise.resolve() }
       const stringValue = String(value)
       mirror.set(key, stringValue)
       return enqueue(key, () => persist(key, stringValue))
@@ -78,6 +83,9 @@ export function createDesktopVaultBackend({
     },
     replaceItems: (entriesToSet = {}, keysToRemove = []) => {
       const nextEntries = normalizeEntries(entriesToSet)
+      for (const key of Array.from(nextEntries.keys())) {
+        if (!isKeyAllowed(key)) { nextEntries.delete(key); onKeyRejected(key) }
+      }
       const removeKeys = Array.from(new Set(keysToRemove)).filter(key => !nextEntries.has(key))
       pendingCount += 1
       adjustPendingLocalWrites(1)

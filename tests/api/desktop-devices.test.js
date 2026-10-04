@@ -18,8 +18,10 @@ const makeBuilder = () => {
 
 const getUser = vi.fn()
 const from = vi.fn(() => makeBuilder())
+// Default: the atomic activation function is not deployed yet, so the handler falls back.
+const rpc = vi.fn()
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({ auth: { getUser }, from }),
+  createClient: () => ({ auth: { getUser }, from, rpc }),
 }))
 
 const makeRes = () => ({
@@ -48,6 +50,8 @@ describe('desktop-devices handler', () => {
     delete process.env.DESKTOP_DEVICE_CAP
     getUser.mockReset()
     from.mockClear()
+    rpc.mockReset()
+    rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'function not found' } })
     tableResults.length = 0
     vi.resetModules()
     const mod = await import('../../api/desktop-devices.js')
@@ -177,5 +181,45 @@ describe('desktop-devices handler', () => {
     expect(signEntitlementRecord(record, 'secret-a')).toBe(signEntitlementRecord(record, 'secret-a'))
     expect(signEntitlementRecord(record, 'secret-a')).not.toBe(signEntitlementRecord(record, 'secret-b'))
     expect(signEntitlementRecord(record, undefined)).toBeNull()
+  })
+
+  describe('atomic activation (migration 20261004130000)', () => {
+    it('activates through the transactional function and signs a record', async () => {
+      getUser.mockResolvedValue({ data: { user: lifetimeUser }, error: null })
+      rpc.mockResolvedValue({ data: { ok: true, cap: 3 }, error: null })
+      const res = makeRes()
+      await handler(makeReq(), res)
+      expect(rpc).toHaveBeenCalledWith('activate_desktop_device', expect.objectContaining({ p_user: 'user-1', p_device: 'device-aaaa-1111', p_cap: 3 }))
+      expect(res.status).toHaveBeenCalledWith(200)
+      expect(res.json.mock.calls[0][0].signature).toMatch(/^[0-9a-f]{64}$/)
+      expect(from).not.toHaveBeenCalled()      // no separate count/upsert round trips to race
+    })
+
+    it('refuses a new device beyond the cap with the device list (409)', async () => {
+      getUser.mockResolvedValue({ data: { user: lifetimeUser }, error: null })
+      rpc.mockResolvedValue({ data: { ok: false, reason: 'cap', cap: 3, devices: [{ device_id: 'a' }, { device_id: 'b' }, { device_id: 'c' }] }, error: null })
+      const res = makeRes()
+      await handler(makeReq(), res)
+      expect(res.status).toHaveBeenCalledWith(409)
+      expect(res.json.mock.calls[0][0].devices).toHaveLength(3)
+      expect(res.json.mock.calls[0][0].signature).toBeUndefined()
+    })
+
+    it('a real database error is a 500, never a silent fallback that skips the cap', async () => {
+      getUser.mockResolvedValue({ data: { user: lifetimeUser }, error: null })
+      rpc.mockResolvedValue({ data: null, error: { code: '57014', message: 'statement timeout' } })
+      const res = makeRes()
+      await handler(makeReq(), res)
+      expect(res.status).toHaveBeenCalledWith(500)
+      expect(from).not.toHaveBeenCalled()
+    })
+
+    it('a Free account never reaches the activation function', async () => {
+      getUser.mockResolvedValue({ data: { user: { id: 'u2', app_metadata: {} } }, error: null })
+      const res = makeRes()
+      await handler(makeReq(), res)
+      expect(res.status).toHaveBeenCalledWith(403)
+      expect(rpc).not.toHaveBeenCalled()
+    })
   })
 })

@@ -419,3 +419,44 @@ begin
   delete from storage.objects where name like any (array[free_u||'/%', lt||'/%', other||'/%']);
   delete from auth.users where id in (free_u,lt,bt,bx,other);
 end $$;
+
+-- 11. Desktop device cap (activate_desktop_device): atomic check-and-write, cap enforced,
+--     re-verifying an active device never counts twice, deactivation frees a slot, a
+--     deactivated device re-activates only if there is room, and the browser roles cannot call it.
+do $$
+declare
+  u uuid := gen_random_uuid(); other uuid := gen_random_uuid(); r jsonb;
+begin
+  insert into auth.users(id,email) values (u,'d1@example.test'),(other,'d2@example.test');
+  r := public.activate_desktop_device(u,'device-aaaa-0001','Mac','macos',2);
+  if (r->>'ok')::boolean is not true then raise exception 'CHECK 11 FAILED: first device %', r; end if;
+  r := public.activate_desktop_device(u,'device-aaaa-0002','PC','windows',2);
+  if (r->>'ok')::boolean is not true then raise exception 'CHECK 11 FAILED: second device %', r; end if;
+  r := public.activate_desktop_device(u,'device-aaaa-0003','Third','macos',2);
+  if (r->>'ok')::boolean is not false or r->>'reason' <> 'cap' or jsonb_array_length(r->'devices') <> 2 then
+    raise exception 'CHECK 11 FAILED: third device must be refused with the two active ones listed: %', r; end if;
+  r := public.activate_desktop_device(u,'device-aaaa-0001','Mac renamed','macos',2);
+  if (r->>'ok')::boolean is not true then raise exception 'CHECK 11 FAILED: re-verify at the cap %', r; end if;
+  if (select count(*) from public.desktop_devices where user_id = u and deactivated_at is null) <> 2 then
+    raise exception 'CHECK 11 FAILED: re-verify created a duplicate'; end if;
+  update public.desktop_devices set deactivated_at = now() where user_id = u and device_id = 'device-aaaa-0002';
+  r := public.activate_desktop_device(u,'device-aaaa-0003','Third','macos',2);
+  if (r->>'ok')::boolean is not true then raise exception 'CHECK 11 FAILED: freed slot not usable %', r; end if;
+  r := public.activate_desktop_device(u,'device-aaaa-0002','PC','windows',2);
+  if (r->>'ok')::boolean is not false then raise exception 'CHECK 11 FAILED: deactivated device re-activated beyond the cap'; end if;
+  r := public.activate_desktop_device(other,'device-aaaa-0001','Other Mac','macos',2);   -- same device id, another account
+  if (r->>'ok')::boolean is not true then raise exception 'CHECK 11 FAILED: other account affected %', r; end if;
+  begin
+    perform public.activate_desktop_device(u,'x','x','x',0);
+    raise exception 'CHECK 11 FAILED: cap of 0 accepted';
+  exception when others then if sqlerrm like 'CHECK 11 FAILED%' then raise; end if; end;
+  -- browser roles cannot call it
+  perform set_config('request.jwt.claim.sub', u::text, true); set local role authenticated;
+  begin
+    perform public.activate_desktop_device(u,'device-aaaa-0009','x','x',99);
+    raise exception 'CHECK 11 FAILED: authenticated role can call activate_desktop_device';
+  exception when insufficient_privilege then null; end;
+  reset role;
+  raise notice 'CHECK 11 ok: device cap enforced atomically (refuse 3rd, re-verify free, deactivate frees a slot, accounts independent, service-role only)';
+  delete from auth.users where id in (u, other);
+end $$;

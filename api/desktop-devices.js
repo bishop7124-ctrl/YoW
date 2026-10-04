@@ -89,6 +89,33 @@ export default async function handler(req, res) {
     }
 
     // POST — activate or re-verify
+    // Preferred path: one transaction checks the cap and writes the row, serialised per
+    // user, so simultaneous activations cannot exceed the cap. Falls back to the older
+    // two-step path only while migration 20261004130000 is not applied.
+    if (typeof supabase.rpc === 'function') {
+      const { data: activation, error: rpcError } = await supabase.rpc('activate_desktop_device', {
+        p_user: user.id,
+        p_device: deviceId,
+        p_name: String(req.body?.deviceName || '').slice(0, 120),
+        p_platform: String(req.body?.platform || '').slice(0, 40),
+        p_cap: deviceCap(),
+      })
+      const missingFunction = rpcError && (rpcError.code === 'PGRST202' || rpcError.code === '42883')
+      if (rpcError && !missingFunction) throw rpcError
+      if (!rpcError) {
+        if (activation?.ok === false) {
+          return res.status(409).json({
+            error: `Device limit reached (${deviceCap()} active devices). Deactivate one to activate this device.`,
+            devices: activation.devices || [],
+            cap: deviceCap(),
+          })
+        }
+        const record = buildEntitlementRecord(user.id, deviceId, plan)
+        const signature = signEntitlementRecord(record, process.env.ENTITLEMENT_SIGNING_SECRET)
+        return res.status(200).json({ record, signature, cap: deviceCap() })
+      }
+    }
+
     const { data: existing, error: existingError } = await supabase
       .from('desktop_devices')
       .select('device_id, device_name, platform, activated_at, last_seen_at, deactivated_at')

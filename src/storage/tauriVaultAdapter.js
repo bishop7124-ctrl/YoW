@@ -1,44 +1,12 @@
 import { createDesktopVaultBackend } from './desktopVaultBackend.js'
 import { getStorageBackend, setStorageBackend } from './projectStorage.js'
 import { isDesktopAppRuntime } from '../utils/runtime.js'
+import { isSensitiveStorageKey } from './legacyLocalMigration.js'
 import { LOCAL_WRITE_FAILED_KEY, markLocalWriteFailed, clearLocalWriteFailed, hasLocalWriteFailed } from './writeDurability.js'
 
-// src/utils/aiSettings.js's key names — duplicated here for the same reason
-// as LOCAL_WRITE_FAILED_KEY above. These hold the user's AI provider API key
-// (and, for the legacy key, the same secret under an older name) and are
-// deliberately kept out of the shared storage-backend abstraction entirely
-// (aiSettings.js reads/writes them via raw `localStorage` directly, never
-// through readItem/writeItem), so nothing in the app ever depends on them
-// living in the desktop vault.
-const AI_SETTINGS_KEY = 'nf_aiSettings'
-const LEGACY_AI_SETTINGS_KEY = 'nf-ai-settings'
-const AI_SETTINGS_OWNER_KEY = 'nf_aiSettingsOwner'
-
-// Substrings (case-insensitive) that mark a key as sensitive by convention
-// even if it isn't one of the specific names above — a defense-in-depth net
-// for a *future* localStorage-based secret this file's author forgets to
-// add to the exact-name list below. Deliberately narrow: no `nf_` storage
-// key in this codebase currently contains any of these (checked via a full
-// repo grep for both literal and templated key names), so this can't
-// silently exclude real project data today, and each term is specific
-// enough that it's unlikely to collide with a future legitimate one either
-// (unlike, say, "auth", which "nf_authorNotes" could plausibly become).
-const SENSITIVE_KEY_SUBSTRINGS = ['token', 'secret', 'password', 'credential', 'apikey', 'api_key']
-
-// Keys that must never be copied into the desktop vault (audit finding
-// P0-10): the vault and its snapshot/backup files are plain SQLite on disk,
-// not a browser's protected per-origin localStorage sandbox, so anything
-// written here is later readable by anyone with filesystem access to this
-// device. `nf_aiSettings`/its legacy name hold a provider API key in
-// plaintext; Supabase's own auth-session key (`sb-<project-ref>-auth-token`,
-// the same convention AuthContext.jsx's readCachedUser()/signOut() already
-// key off of) holds a live session token.
-function isSensitiveStorageKey(key) {
-  if (key === AI_SETTINGS_KEY || key === LEGACY_AI_SETTINGS_KEY || key === AI_SETTINGS_OWNER_KEY) return true
-  if (key.startsWith('sb-') && key.endsWith('-auth-token')) return true
-  const lower = key.toLowerCase()
-  return SENSITIVE_KEY_SUBSTRINGS.some(substring => lower.includes(substring))
-}
+// The shared credential/secret key predicate (AI provider keys, Supabase auth
+// sessions, secret-looking names) lives in legacyLocalMigration.js so the browser
+// vault and the desktop vault can never drift apart (audit finding P0-10).
 
 // Removes any sensitive keys a pre-fix build may already have copied into
 // this vault's live database, so an existing installation self-heals on its
@@ -176,6 +144,8 @@ async function connectVaultBackend({ onWriteError, retry }) {
   const rows = await invoke('vault_read_all')
   return createDesktopVaultBackend({
     entries: entriesFromRows(rows),
+    isKeyAllowed: key => !isSensitiveStorageKey(key),
+    onKeyRejected: key => console.error(`[YOW] Refused to store a credential-like key in the desktop vault: ${key}`),
     persistItem: (key, value) => invoke('vault_set_item', { key, value }),
     removePersistedItem: key => invoke('vault_remove_item', { key }),
     replacePersistedItems: (entriesToSet, keysToRemove) => invoke('vault_replace_items', {
