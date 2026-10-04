@@ -2,7 +2,7 @@
 
 ## 2026-10-04 data-safety/auth/export matrix (Cloud & security day 4)
 
-Status: **In progress 2026-10-04: all automated work done and green; five owner live checks pending tonight.** Data safety gate stays Blocked until the live checks below are recorded (5 Oct buffer day). Overflow O04 and O05 (hard-gate / data-safety).
+Status: **Done 2026-10-04: all automated work green and all five owner live checks reported passed (owner-reported).** Data safety gate summary is written on 5 Oct. Overflow O04 and O05 (hard-gate / data-safety).
 
 Findings and fixes (all found by running the matrix, none by assumption):
 
@@ -20,7 +20,7 @@ Evidence:
 - Rate limits (`tests/api/rate-limit-matrix.test.js`, 6 tests): feedback and paid-interest allow 5 per hour per connection, the 6th is refused, other connections are unaffected, the block clears after 60 minutes, fails open on a database error, falls back to the in-memory limiter. The AI proxy limit is **30 requests per 10 minutes per user** (not 6; env-tunable) and is covered by `tests/api/ai-proxy.test.js`. Password-reset email limiting lives in the Supabase edge function and was not live-tested.
 - `npm run qa`: 156 test files / **1,492 tests** passing (was 152 / 1,453), 0 lint errors (104 existing warnings), production build, 230-file load check, all 52 Playwright specs represented in CI, all 12 API routes import. Playwright (Chromium) 46/46 on autosave, data-safety, new-account-onboarding, account-isolation, two-tab clobber, manuscript-structure, project-delete cross-tab, export-formats and unconfigured-AI specs.
 
-Owner live checks. **Owner-reported 4 Oct evening: item 3 (O04 two-tab) PASSED, item 4 (O05 rate limit) PASSED, item 5 (fresh-profile tours do not reappear) PASSED; items 1-2 (apply `20261004120000`, upload sanity) still pending.** Original list:
+Owner live checks. **Owner-reported 4 Oct evening: item 3 (O04 two-tab) PASSED, item 4 (O05 rate limit) PASSED, item 5 (fresh-profile tours do not reappear) PASSED; items 1-2 (apply `20261004120000` in production, upload sanity) PASSED too.** Original list:
 
 1. Check whether `20261003140000_merge_records_rpc.sql` is applied; apply it if not. Then apply `20261004120000_user_media_server_limits.sql` (Supabase SQL editor, paste the file, Run; both are idempotent).
 2. Upload sanity on a designated test account (test2): upload one normal image to a disposable project, reload, confirm the image shows and the storage figure rose. If uploads now fail, run the rollback and tell the agent: `drop trigger if exists user_media_enforce_limits on storage.objects;` (and optionally `update storage.buckets set file_size_limit = null, allowed_mime_types = null where id = 'user-media';`).
