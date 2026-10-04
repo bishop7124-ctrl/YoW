@@ -2038,6 +2038,17 @@ const SceneEditorImpl = ({
     textAlign: formatSettings.textAlign,
     '--ms-paragraph-indent': `${formatSettings.indentSize}ch`,
   }
+  // The textarea is an input/caret layer only. Visible prose is painted by
+  // ContentPreview above it so inline formatting can stay WYSIWYG while the
+  // persisted scene remains plain text. Keep transparency in the component's
+  // inline style as well as the stylesheet: textStyle is itself inline, and a
+  // later/caller-specific colour must never make Markdown delimiters visible
+  // when the editor opens.
+  const richInputStyle = {
+    ...textStyle,
+    color: 'transparent',
+    WebkitTextFillColor: 'transparent',
+  }
 
 	  // Replaces the `autoFocus` attribute the real textarea(s) used to have.
 	  // `autoFocus` calls the browser's native, uncontrollable focus() under the
@@ -2321,7 +2332,7 @@ const SceneEditorImpl = ({
 	                      spellCheck
 	                      rows={1}
 	                      className={`ms-textarea ms-textarea-block ms-textarea--rich${autoIndentEnabled ? ' ms-prose-auto-indent' : ''}`}
-	                      style={textStyle}
+	                      style={richInputStyle}
 	                    />
 	                  </div>
 	              )
@@ -2373,7 +2384,9 @@ const SceneEditorImpl = ({
 	              spellCheck
 	              rows={1}
 	              className={`ms-textarea ms-textarea--rich${autoIndentEnabled ? ' ms-prose-auto-indent' : ''}`}
-	              style={isScript ? { ...textStyle, fontFamily: 'Courier New, Courier, monospace' } : textStyle}
+	              style={isScript
+	                ? { ...richInputStyle, fontFamily: 'Courier New, Courier, monospace' }
+	                : richInputStyle}
 	            />
 	          </div>
 	        )

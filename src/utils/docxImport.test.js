@@ -132,6 +132,46 @@ describe('docx export/import line-break round trip — via the real production e
   })
 })
 
+describe('docx inline formatting import', () => {
+  async function buildFormattedDocx(children) {
+    const { Document, Packer, Paragraph, HeadingLevel } = await import('docx')
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({ text: 'Chapter 1', heading: HeadingLevel.HEADING_1 }),
+          new Paragraph({ children }),
+        ],
+      }],
+    })
+    const blob = await Packer.toBlob(doc)
+    return { arrayBuffer: () => blob.arrayBuffer() }
+  }
+
+  it('preserves italic Word runs as the editor native italic markup', async () => {
+    const { TextRun } = await import('docx')
+    const file = await buildFormattedDocx([
+      new TextRun('The '),
+      new TextRun({ text: 'quiet warning', italics: true }),
+      new TextRun(' stayed with her.'),
+    ])
+
+    const acts = await parseDocxToStructure(file)
+    expect(acts[0].chapters[0].scenes[0].content).toBe('The *quiet warning* stayed with her.')
+  })
+
+  it('keeps adjacent italic runs inside one marker pair', async () => {
+    const { TextRun } = await import('docx')
+    const file = await buildFormattedDocx([
+      new TextRun({ text: 'two ', italics: true }),
+      new TextRun({ text: 'runs', italics: true }),
+    ])
+
+    const acts = await parseDocxToStructure(file)
+    expect(acts[0].chapters[0].scenes[0].content).toBe('*two runs*')
+  })
+})
+
 // Regression test for a real user report (2026-08-09, see docs/ROADMAP.md):
 // a manuscript exported from this app, then re-saved by a different word
 // processor (Apple Pages, confirmed by comparing the reported file's OOXML

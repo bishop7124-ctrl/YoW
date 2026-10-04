@@ -57,29 +57,60 @@ function getWAttr(el, localName) {
     || ''
 }
 
-function extractParaText(para) {
-  let text = ''
+function isRunItalic(run) {
+  const runProperties = Array.from(run.childNodes).find(node => node.localName === 'rPr')
+  if (!runProperties) return false
+  const italicProperty = Array.from(runProperties.childNodes).find(node => node.localName === 'i' || node.localName === 'iCs')
+  if (!italicProperty) return false
+  const value = getWAttr(italicProperty, 'val').toLowerCase()
+  return value !== '0' && value !== 'false' && value !== 'off' && value !== 'no'
+}
 
-  function walk(node) {
+function extractParaContent(para) {
+  const segments = []
+
+  function append(value, italic = false) {
+    if (!value) return
+    const previous = segments.at(-1)
+    if (previous?.italic === italic) previous.text += value
+    else segments.push({ text: value, italic })
+  }
+
+  function walk(node, italic = false) {
     const name = node.localName
     // Skip tracked deletions
     if (name === 'del') return
+    // Direct run formatting is the source of truth for imported inline
+    // manuscript formatting. The editor stores italics as Markdown-style
+    // asterisks, so retain the run boundary here and serialize it below.
+    if (name === 'r') italic = isRunItalic(node)
     // Text run content
-    if (name === 't') { text += node.textContent; return }
+    if (name === 't') { append(node.textContent, italic); return }
     // Tab character
-    if (name === 'tab') { text += '\t'; return }
+    if (name === 'tab') { append('\t', italic); return }
     // Line break (but not page/column breaks)
     if (name === 'br') {
       const t = getWAttr(node, 'type')
-      if (!t || t === 'textWrapping') text += '\n'
+      if (!t || t === 'textWrapping') append('\n', false)
       return
     }
     // Recurse into children (handles hyperlinks, bookmarks, ins, etc.)
-    for (const child of node.childNodes) walk(child)
+    for (const child of node.childNodes) walk(child, italic)
   }
 
   walk(para)
-  return text.trim()
+  const text = segments.map(segment => segment.text).join('').trim()
+  const content = segments
+    .map(segment => segment.italic
+      // A Word run may span a soft line break, but the editor's inline
+      // renderer intentionally formats one line at a time. Close and reopen
+      // the marker so both sides of the imported break remain italic.
+      ? segment.text.split('\n').map(part => part ? `*${part}*` : '').join('\n')
+      : segment.text)
+    .join('')
+    .trim()
+
+  return { text, content }
 }
 
 // Patterns for recognizing a genuine structural heading by its own text —
@@ -166,11 +197,11 @@ function parseParagraphs(xmlStr) {
     const pStyle = pPr ? pPr.getElementsByTagNameNS(W_NS, 'pStyle')[0] : null
     const styleId = pStyle ? getWAttr(pStyle, 'val') : ''
 
-    const text = extractParaText(para)
+    const { text, content } = extractParaContent(para)
     const rawLevel = getHeadingLevel(styleId)
     const level = rawLevel && text.length > MAX_PLAUSIBLE_HEADING_LENGTH ? 0 : rawLevel
 
-    return { styleId, text, level }
+    return { styleId, text, content, level }
   })
 
   return sanitizeHeadingLevels(withRawLevels).map(p => (
@@ -326,21 +357,21 @@ export function buildStructureFromParagraphs(paragraphs) {
       else if (p.level === 2) newChapter(p.text)
       else if (p.level >= 3) newScene(p.text)
       else if (p.sceneBreak) newScene()
-      else if (p.text) contentBuf.push(p.text)
+      else if (p.text) contentBuf.push(p.content ?? p.text)
     } else if (mode === 'chapter-scene') {
       if (p.level === 1) newChapter(p.text)
       else if (p.level === 2 || p.level === 3) newScene(p.text)
       else if (p.sceneBreak) newScene()
-      else if (p.text) contentBuf.push(p.text)
+      else if (p.text) contentBuf.push(p.content ?? p.text)
     } else if (mode === 'h2chapter-scene') {
       if (p.level === 2) newChapter(p.text)
       else if (p.level === 3 || p.level === 4) newScene(p.text)
       else if (p.sceneBreak) newScene()
-      else if (p.text) contentBuf.push(p.text)
+      else if (p.text) contentBuf.push(p.content ?? p.text)
     } else {
       // flat — split only on scene breaks
       if (p.sceneBreak) newScene()
-      else if (p.text) contentBuf.push(p.text)
+      else if (p.text) contentBuf.push(p.content ?? p.text)
     }
   }
 

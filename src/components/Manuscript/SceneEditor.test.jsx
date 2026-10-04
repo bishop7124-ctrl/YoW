@@ -111,6 +111,24 @@ describe('SceneEditor content preview — mismatched markdown emphasis', () => {
     expect(container.querySelector('em')?.textContent).toBe('italic')
   })
 
+  it('keeps imported italic markup hidden when the text editor is open', async () => {
+    const { container } = renderScene('This is *imported italic* text.')
+
+    fireEvent.click(container.querySelector('.ms-preview'))
+    const textarea = await waitFor(() => {
+      const node = container.querySelector('textarea.ms-textarea--rich')
+      expect(node).toBeTruthy()
+      return node
+    })
+
+    const visibleProse = container.querySelector('.ms-rich-preview')
+    expect(visibleProse.querySelector('em')?.textContent).toBe('imported italic')
+    expect(visibleProse.textContent).toBe('This is imported italic text.')
+    expect(visibleProse.textContent).not.toContain('*')
+    expect(textarea.style.color).toBe('transparent')
+    expect(textarea.style.webkitTextFillColor).toBe('transparent')
+  })
+
   it('still renders proper underline text correctly', () => {
     const { container } = renderScene('This is _underlined_ text.')
     expect(container.querySelector('u')?.textContent).toBe('underlined')

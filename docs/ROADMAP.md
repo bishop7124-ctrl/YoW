@@ -22,6 +22,10 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-10-04 DOCX import italic formatting
+
+Status: **Fixed in code; focused automated verification passed.** DOCX manuscript import previously flattened every Word run to plain text, so direct italic formatting was silently lost even though the manuscript editor supports italics through its native asterisk markup. The importer now reads OOXML italic run properties, merges adjacent italic runs, and converts them to editor-native markup while keeping a separate plain-text value for heading detection. The active editor follow-up also makes the raw input layer explicitly transparent at the component boundary and the visible preview's emphasis styling explicit, so opening a scene continues to show italic prose rather than its stored asterisk delimiters. Regression coverage proves mixed plain/italic prose and adjacent italic Word runs survive import, and that an open editor exposes no asterisks in its visible prose. Next action: include one real Word/Pages/Google Docs-authored DOCX with italics in the next routine browser import pass; no owner action is required for this code fix.
+
 ### 2026-10-02 diverged-main recovery and missing production features
 
 Status: **Done 2026-10-02 — recovered, merged, and deployed to production.** The shared checkout was still on the pre-rewrite `main` lineage at `fe5b98ea`, while GitHub/production followed the rewritten `origin/main` lineage. The October checkpoint remains preserved at `origin/codex/outstanding-workspace-2026-10-01`; no work was lost, and its genuinely unique product changes are now on authoritative `main`.

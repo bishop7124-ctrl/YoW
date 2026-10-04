@@ -2201,6 +2201,13 @@ textarea:focus {
   z-index: 2;
 }
 
+/* Do not rely on the browser's default <em> stylesheet for manuscript prose.
+   The rich preview is the visible editing surface, so its formatting must be
+   explicit and stable across resets, themes, and embedded desktop webviews. */
+.ms-rich-preview em {
+  font-style: italic;
+}
+
 .ms-rich-edit.is-tracking .ms-rich-preview {
   pointer-events: auto;
   cursor: text;
