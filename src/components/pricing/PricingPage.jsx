@@ -104,7 +104,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   // consuming or depending on the live Founder inventory.
   const foundingAvailable = billingTest || (Number.isInteger(availability?.remaining) && availability.remaining > 0)
 
-  usePageMeta({ path: '/pricing/', title: 'YOW Pricing — Free, Monthly or Lifetime', description: 'Own your writing software. The first 100 YOW Lifetime customers pay £49.99 once; standard Lifetime is £74.99, Monthly is £9.99, and Free includes one editable project.' })
+  usePageMeta({ path: '/pricing/', title: 'YOW Pricing — Free, Monthly or Lifetime', description: 'Own your writing software. The first 100 YOW Lifetime customers pay £50 once; standard Lifetime is £75, Monthly is £10, and Free includes one editable project.' })
 
   useEffect(() => {
     let active = true

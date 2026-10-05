@@ -27,7 +27,7 @@ Do not reopen these unless product direction changes:
 
 - The exposed test credentials are no longer active: one account was deleted and the remaining password was rotated.
 - The production security/rate-limit/idempotency migrations and re-engagement signing secret were applied.
-- Paid prices are Monthly £9.99/month, Founding Lifetime £49.99 once for successful purchases #1–100, Standard Lifetime £74.99 once thereafter, and optional Cloud renewal £6/year.
+- Paid prices are Monthly £10/month, Founding Lifetime £50 once for successful purchases #1–100, Standard Lifetime £75 once thereafter, and optional Cloud renewal £6/year.
 - Storage allowances are Free 250 MB, Monthly/Lifetime 8 GB, and Beta 15 GB. Retained legacy Founder-plan accounts keep their historical allowance.
 - Free includes Map Builder for its editable project; AI remains paid-only.
 - Monthly while active and Lifetime permanently include the full downloadable desktop workspace. The desktop promise will not be narrowed to an account-management shell.
@@ -172,7 +172,7 @@ Exit condition: a customer cannot buy based on a material promise the product, s
 
 Keep beta-interest active and real checkout disabled until this milestone.
 
-- [ ] Confirm Stripe Prices match £9.99 Monthly, £49.99 Founding Lifetime, £74.99 Standard Lifetime, and £6/year Cloud in the correct environment; deactivate the old Founder checkout Price.
+- [ ] Confirm Stripe Prices match £10 Monthly, £50 Founding Lifetime, £75 Standard Lifetime, and £6/year Cloud in the correct environment; deactivate the old Founder checkout Price.
 - [ ] Verify success, cancel, failed payment, delayed payment, duplicate webhook replay, refund, subscription cancellation, downgrade, portal access, and hosting renewal.
 - [ ] Verify Founding Price checkout reservations and successful Founder numbering are atomic at positions 99/100/101, abandoned holds expire, and test mode consumes no live places.
 - [ ] Reconcile existing Stripe customers/metadata with server-controlled Supabase entitlement before enabling checkout.

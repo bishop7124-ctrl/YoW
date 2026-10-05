@@ -12,7 +12,7 @@ In progress as of 2026-10-05. Stripe test products, production-environment test 
 
 ### 1. Stripe Dashboard price alignment (reopened 2026-10-05)
 
-The approved model is now Monthly £9.99, Founding Lifetime £49.99 (first 100 successful live purchases), Standard Lifetime £74.99, and optional Cloud renewal £6/year. The purchasable Founder plan is retired. Create new immutable test/live Stripe Prices and do not reuse the old amounts. The repository is prepared, but paid buttons remain on the interest flow until these Price IDs, migration and webhooks are configured and verified.
+The approved model is now Monthly £10, Founding Lifetime £50 (first 100 successful live purchases), Standard Lifetime £75, and optional Cloud renewal £6/year. The purchasable Founder plan is retired. The owner confirmed these rounded test Prices and their environment variables are already configured. The repository is aligned to those amounts, while public paid buttons remain on the interest flow until checkout QA is complete.
 
 ### 2. Formal Stripe test-mode QA checklist (currently accepted on a lighter basis)
 
@@ -26,10 +26,10 @@ Status: the earlier live-flow acceptance no longer covers the pricing model appr
 4. **Redeploy the Vercel application** so `/api/create-checkout-session`, `/api/stripe-webhook`, and `/api/create-customer-portal` pick up the test secrets. Do not deploy the legacy Supabase Edge Function copies.
 5. **Use a throwaway YOW account** for billing tests — never the owner/admin account, since even fake Stripe purchases update real Supabase auth metadata.
 6. **Test card**: `4242 4242 4242 4242`, any future expiry, any CVC, any postcode. Confirm no real payment is taken.
-7. **Monthly checkout (£9.99/month)**: verify activation, Cloud and desktop access while active, then cancellation/fallback without data deletion.
-8. **Founding Lifetime test-mode checkout (£49.99)**: verify the two-year entitlement shape while proving test mode creates no production Founder reservation/status.
+7. **Monthly checkout (£10/month)**: verify activation, Cloud and desktop access while active, then cancellation/fallback without data deletion.
+8. **Founding Lifetime test-mode checkout (£50)**: verify the two-year entitlement shape while proving test mode creates no production Founder reservation/status.
 9. **Live-mode reservation rehearsal without completing payment**: verify active holds reduce availability, repeated attempts reuse the bound session, expiration releases the hold, and positions 99/100/101 select Founding/Founding/Standard without overselling.
-10. **Standard Lifetime (£74.99)**: verify one included Cloud year and no Founder status.
+10. **Standard Lifetime (£75)**: verify one included Cloud year and no Founder status.
 11. **Hosting renewal checkout**: complete a £6 test purchase, verify webhook delivery and expiry extension, Cloud restoration, and correct account messaging.
 12. **Failure/cancel checks**: checkout cancellation, expiration, a failed payment where feasible, and Monthly cancellation/expiry — confirm the app never grants paid access unless webhook metadata confirms entitlement.
 13. **Live-account QA for the 2026-09-02 downgrade fix** (code/unit-level verified only so far — see `docs/ROADMAP.md`'s Bugs table "2026-09-02" row for the fix itself):

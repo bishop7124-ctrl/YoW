@@ -38,7 +38,7 @@ describe('create-checkout-session Founding Price selection', () => {
     getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'writer@example.test', app_metadata: {} } }, error: null })
     pricesRetrieve.mockImplementation(async id => ({
       id, active: true, currency: 'gbp', livemode: true,
-      unit_amount: id === 'price_founding' ? 4999 : id === 'price_standard' ? 7499 : 999,
+      unit_amount: id === 'price_founding' ? 5000 : id === 'price_standard' ? 7500 : 1000,
       recurring: null,
     }))
     sessionsCreate.mockResolvedValue({ id: 'cs_1', url: 'https://checkout.test/cs_1' })
@@ -49,7 +49,7 @@ describe('create-checkout-session Founding Price selection', () => {
     })
   })
 
-  it('uses £49.99 and a bound reservation while a live Founder place exists', async () => {
+  it('uses £50 and a bound reservation while a live Founder place exists', async () => {
     const { default: handler } = await import('../../api/create-checkout-session.js')
     const response = res()
     await handler(req(), response)
@@ -65,7 +65,7 @@ describe('create-checkout-session Founding Price selection', () => {
     expect(response.status).toHaveBeenCalledWith(200)
   })
 
-  it('automatically uses £74.99 with one Cloud year when all positions are held or claimed', async () => {
+  it('automatically uses £75 with one Cloud year when all positions are held or claimed', async () => {
     rpc.mockResolvedValueOnce({ data: { eligible: false, reason: 'sold_out' }, error: null })
     const { default: handler } = await import('../../api/create-checkout-session.js')
     await handler(req(), res())
@@ -76,7 +76,7 @@ describe('create-checkout-session Founding Price selection', () => {
   })
 
   it('uses the test Founding Price without reserving a production place', async () => {
-    pricesRetrieve.mockImplementation(async id => ({ id, active: true, currency: 'gbp', livemode: false, unit_amount: id === 'price_founding' ? 4999 : 7499, recurring: null }))
+    pricesRetrieve.mockImplementation(async id => ({ id, active: true, currency: 'gbp', livemode: false, unit_amount: id === 'price_founding' ? 5000 : 7500, recurring: null }))
     const { default: handler } = await import('../../api/create-checkout-session.js')
     await handler(req(), res())
     expect(rpc).not.toHaveBeenCalledWith('reserve_founder_checkout', expect.anything())

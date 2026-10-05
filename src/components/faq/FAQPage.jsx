@@ -54,7 +54,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What does Lifetime actually cover?',
-        a: 'Lifetime means permanent YOW app access, unlimited projects, exports, and desktop/offline use. The first 100 successful Lifetime purchases are £49.99 and include two Cloud years plus permanent Founder status; later purchases are £74.99 and include one Cloud year. Cloud is then optional at £6/year.',
+        a: 'Lifetime means permanent YOW app access, unlimited projects, exports, and desktop/offline use. The first 100 successful Lifetime purchases are £50 and include two Cloud years plus permanent Founder status; later purchases are £75 and include one Cloud year. Cloud is then optional at £6/year.',
       },
       {
         q: 'What is the cloud hosting renewal?',
@@ -66,11 +66,11 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Do monthly subscribers pay a cloud hosting renewal?',
-        a: 'No. Monthly is £9.99/month and includes Cloud while subscribed. The optional annual renewal applies only to Lifetime after its included Cloud period.',
+        a: 'No. Monthly is £10/month and includes Cloud while subscribed. The optional annual renewal applies only to Lifetime after its included Cloud period.',
       },
       {
         q: 'How does Founder status work?',
-        a: 'Founder is permanent recognition for the first 100 genuine Lifetime purchasers, not a separate plan. Founders pay £49.99, receive a number from #001–#100 and two included Cloud years. Their Lifetime licence and Founder status remain even if Cloud is not renewed.',
+        a: 'Founder is permanent recognition for the first 100 genuine Lifetime purchasers, not a separate plan. Founders pay £50, receive a number from #001–#100 and two included Cloud years. Their Lifetime licence and Founder status remain even if Cloud is not renewed.',
       },
       {
         q: 'What happens to my data if I downgrade to Free?',

@@ -24,8 +24,8 @@ test('three plan cards render and real backend availability activates the Foundi
   await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37 } }))
   await gotoPricing(page)
   await expect(page.getByRole('article', { name: 'Free plan — Free' })).toBeVisible()
-  await expect(page.getByRole('article', { name: 'Monthly plan — £9.99' })).toBeVisible()
-  await expect(page.getByRole('article', { name: /Lifetime plan — £49.99/ })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Monthly plan — £10' })).toBeVisible()
+  await expect(page.getByRole('article', { name: /Lifetime plan — £50/ })).toBeVisible()
   await expect(page.getByText('37 of 100 Founder spots currently available')).toBeVisible()
 })
 
@@ -54,7 +54,7 @@ test('Register interest pins the selected plan, requires a valid email, and clos
 
   await gotoPricing(page)
 
-  const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £9.99' })
+  const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
   await monthlyCard.getByRole('button', { name: 'Choose Monthly' }).click()
 
   const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
@@ -88,7 +88,7 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await gotoPricing(page)
 
-    for (const label of ['Free plan — Free', 'Monthly plan — £9.99', /Lifetime plan — £74.99/]) {
+    for (const label of ['Free plan — Free', 'Monthly plan — £10', /Lifetime plan — £75/]) {
       const card = page.getByRole('article', { name: label })
       await card.scrollIntoViewIfNeeded()
       await expect(card).toBeVisible()
@@ -98,7 +98,7 @@ for (const viewport of [
     await table.scrollIntoViewIfNeeded()
     await expect(table).toBeVisible()
 
-    const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £74.99/ })
+    const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £75/ })
     await lifetimeCard.getByRole('button', { name: 'Choose Lifetime' }).click()
     const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
     await expect(modal).toBeVisible()

@@ -457,7 +457,7 @@
             'Confirm what the next development slice should implement once the decision is made.'
           ], 'The product has one explicit owner-approved path for moving from beta-interest to real paid checkout.', 'Decision, date, current checkout state, and any migration notes.', ['decision', 'payment', 'blocker']),
           item('stripe-price-alignment', 'Update Stripe prices to match the live site', 'Stripe Dashboard and Vercel production env', [
-            'Confirm the site-displayed prices: Monthly £9.99, Founding Lifetime £49.99 for purchases #1–#100, Standard Lifetime £74.99, and Cloud renewal £6/year.',
+            'Confirm the site-displayed prices: Monthly £10, Founding Lifetime £50 for purchases #1–#100, Standard Lifetime £75, and Cloud renewal £6/year.',
             'Create new Stripe Price objects so real checkout charges those exact amounts; Founder remains a status, not a purchasable plan.',
             'Point the production `STRIPE_PRICE_ID_*` variables at the correct live Price IDs.',
             'Redeploy/refresh the production functions that read those env vars.'
@@ -567,21 +567,21 @@
             'Refresh and confirm unlimited projects, AI tools, desktop entitlement label, and Beta Tester membership state.',
             'Submit signed out and confirm it emails interest without claiming account access.'
           ], 'Temporary access grants are intentional, traceable, and cannot accidentally grant an account from signed-out interest.', 'Inbox evidence, account metadata, plan label, signed-out result.', ['payment', 'beta', 'qa']),
-          item('checkout-monthly', 'Run Monthly checkout QA at £9.99', 'Stripe Checkout and Billing Portal', [
+          item('checkout-monthly', 'Run Monthly checkout QA at £10', 'Stripe Checkout and Billing Portal', [
             'Complete checkout using the owner-approved live or test-mode route.',
             'Verify Stripe session/subscription, webhook delivery, Supabase metadata, and app access.',
             'Open customer portal, cancel where safe, and verify expiry/cancel behavior.',
             'Confirm checkout cannot charge the old £12 amount.'
-          ], 'Monthly users are charged the displayed £9.99 price and receive the correct entitlement only after webhook-confirmed metadata.', 'Stripe session, webhook result, account metadata, portal result.', ['payment', 'stripe', 'blocker']),
+          ], 'Monthly users are charged the displayed £10 price and receive the correct entitlement only after webhook-confirmed metadata.', 'Stripe session, webhook result, account metadata, portal result.', ['payment', 'stripe', 'blocker']),
           item('checkout-lifetime', 'Run Founding and Standard Lifetime checkout QA', 'Stripe Checkout and YOW entitlement state', [
-            'Complete the £49.99 Founding path and £74.99 Standard path using the owner-approved live or test-mode route.',
+            'Complete the £50 Founding path and £75 Standard path using the owner-approved live or test-mode route.',
             'Verify one-time payment, webhook delivery, permanent Lifetime entitlement, desktop entitlement, the correct two-year/one-year included Cloud period, and export access.',
             'Confirm test mode does not consume or award a production Founder position.',
             'Do not sell Lifetime on desktop/local-vault promises until desktop scope below passes.'
           ], 'Lifetime access matches the displayed Founding/Standard offers without tying permanent ownership to Cloud renewal.', 'Stripe payment, metadata, plan label, cloud-hosting expiry, desktop copy note.', ['payment', 'lifetime', 'blocker']),
           item('checkout-founder', 'Run Founder allocation QA around positions 99–101', 'Stripe Checkout, Founder reservation ledger, Founder surfaces', [
             'Start concurrent live-mode checkout rehearsals with only two Founder positions remaining.',
-            'Verify only two £49.99 sessions can reserve positions and the next session automatically uses £74.99.',
+            'Verify only two £50 sessions can reserve positions and the next session automatically uses £75.',
             'Complete/fail/expire the rehearsals and verify permanent numbered status is awarded only after successful live payment.',
             'Verify genuine backend remaining counts and the automatic sold-out pricing-page state.'
           ], 'No more than 100 permanent Founder statuses or Founding Price purchases can be issued, including under concurrency.', 'Stripe sessions, reservation rows, metadata, slot count, badge screenshot.', ['payment', 'founder', 'blocker']),
@@ -610,7 +610,7 @@
           ], 'The legal/promise gate cannot fail because essential terms are absent, stale, or misleading.', 'Approved pages, date, reviewer, open edits.', ['legal', 'blocker']),
           item('pricing-copy-current', 'Approve current pricing and entitlement copy line by line', 'Pricing, FAQ, Features, Account Settings, Upgrade walls', [
             'Confirm Free £0 / 250 MB / one active cloud project / Map Builder unlocked / AI locked.',
-            'Confirm Monthly £9.99 and Lifetime £49.99/£74.99 copy matches current product decisions.',
+            'Confirm Monthly £10 and Lifetime £50/£75 copy matches current product decisions.',
             'Confirm Founder is permanent status for the first 100 successful live Lifetime purchases—not a plan—and Cloud renewal is £6/year.',
             'Confirm beta_tester temporary access is either hidden from public copy or intentionally explained where needed.'
           ], 'Users see one coherent pricing promise across public pages and in-app account surfaces.', 'Pages checked, screenshots, stale-copy issues.', ['copy', 'pricing', 'entitlement']),
@@ -715,7 +715,7 @@
             'Check mobile, tablet, and desktop layouts.'
           ], 'Homepage accurately sells the current product and routes users cleanly.', 'Date, viewport notes, screenshots, issues found.', ['page-review', 'homepage']),
           item('page-pricing', 'Review Pricing `/pricing/`', 'https://www.yourownworld.co.uk/pricing/', [
-            'Verify Free £0/250 MB, Monthly £9.99, Founding Lifetime £49.99, Standard Lifetime £74.99, and £6/year Cloud renewal copy.',
+            'Verify Free £0/250 MB, Monthly £10, Founding Lifetime £50, Standard Lifetime £75, and £6/year Cloud renewal copy.',
             'Verify beta-interest or checkout behavior matches the current owner decision.',
             'Check comparison table, FAQs, CTA buttons, selected-card styling, mobile/tablet/desktop layout, and metadata.'
           ], 'Pricing is current, non-misleading, and usable at every launch viewport.', 'Screenshots, checkout/interest result, stale-copy notes.', ['page-review', 'pricing', 'payment']),

@@ -6,8 +6,8 @@ import { applyCors } from './_cors.js'
 // Each price ID must be set as an env var on Vercel.
 // STRIPE_PRICE_ID is kept as the legacy fallback for premium_monthly.
 const PLAN_CONFIG = {
-  premium_monthly:       { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_MONTHLY',       mode: 'subscription', amount: 999, interval: 'month' },
-  premium_plus_lifetime: { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME', mode: 'payment', amount: 7499 },
+  premium_monthly:       { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_MONTHLY',       mode: 'subscription', amount: 1000, interval: 'month' },
+  premium_plus_lifetime: { priceEnv: 'STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME', mode: 'payment', amount: 7500 },
   maintenance:           { priceEnv: 'STRIPE_PRICE_ID_MAINTENANCE',           mode: 'subscription', amount: 600, interval: 'year' },
   // The Account Settings "Renew Cloud Mode" button (and the pre-expiry
   // popup) send `hosting_renewal` — kept as an alias for `maintenance` so
@@ -110,7 +110,7 @@ export default async function handler(req, res) {
     validatePrice(
       selectedPrice,
       plan === 'premium_plus_lifetime' && lifetimeOffer?.startsWith('founding')
-        ? { amount: 4999 }
+        ? { amount: 5000 }
         : planConfig,
       plan
     )

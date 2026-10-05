@@ -7,10 +7,10 @@
 
 export const BILLING = {
   // Displayed prices (GBP, display only — Stripe is the authoritative amount)
-  // NOTE (2026-08-31 live pricing alignment): these match the live Stripe Prices.
-  monthlyPrice:        9.99,  // £/month
-  foundingLifetimePrice: 49.99, // first 100 successful live purchases
-  lifetimePrice:       74.99, // £ one-time
+  // NOTE: checkout validates the matching Stripe Price amount server-side.
+  monthlyPrice:        10,  // £/month
+  foundingLifetimePrice: 50, // first 100 successful live purchases
+  lifetimePrice:       75, // £ one-time
   hostingRenewalPrice: 6,    // £/year after included period
 
   // Lifetime hosting rules

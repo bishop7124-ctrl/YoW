@@ -5,9 +5,9 @@ Current pricing:
 | Offer | Price | App access | YOW Cloud |
 | --- | ---: | --- | --- |
 | Free | £0 | One editable project | Free limits |
-| Monthly | £9.99/month | Full web, desktop and offline access while active | Included while active |
-| Founding Lifetime (successful purchases #1–100) | £49.99 once | Permanent Lifetime access; numbered Founder status | Two years included, then £6/year optional |
-| Standard Lifetime (#101 onward) | £74.99 once | Permanent Lifetime access | One year included, then £6/year optional |
+| Monthly | £10/month | Full web, desktop and offline access while active | Included while active |
+| Founding Lifetime (successful purchases #1–100) | £50 once | Permanent Lifetime access; numbered Founder status | Two years included, then £6/year optional |
+| Standard Lifetime (#101 onward) | £75 once | Permanent Lifetime access | One year included, then £6/year optional |
 
 Founder is a status, not a plan. New purchases always store `subscription_plan: premium_plus_lifetime`. Historical `subscription_plan: founder` records remain supported so existing customers keep the terms they bought, but that plan has no checkout path.
 
@@ -17,9 +17,9 @@ Create separate GBP Stripe Prices and set their IDs only in the deployment secre
 
 | Environment variable | Stripe Price |
 | --- | --- |
-| `STRIPE_PRICE_ID_PREMIUM_MONTHLY` | £9.99 recurring monthly |
-| `STRIPE_PRICE_ID_FOUNDING_LIFETIME` | £49.99 one-time |
-| `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME` | £74.99 one-time |
+| `STRIPE_PRICE_ID_PREMIUM_MONTHLY` | £10 recurring monthly |
+| `STRIPE_PRICE_ID_FOUNDING_LIFETIME` | £50 one-time |
+| `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME` | £75 one-time |
 | `STRIPE_PRICE_ID_MAINTENANCE` | £6 recurring yearly |
 
 `STRIPE_PRICE_ID` remains a legacy Monthly fallback. `STRIPE_PRICE_ID_FOUNDER` is retired and must not be used for new purchases. Do not reuse an old Price at a new amount: create new immutable Price objects and archive/deactivate the retired prices after deployment verification.
@@ -34,9 +34,9 @@ The checkout API retrieves the selected Stripe Price and fails closed unless its
 - Delayed payment: `checkout.session.completed` marks the reservation pending for up to 30 days; async success finalizes it and async failure releases it.
 - Abandoned/expired checkout: Stripe's expiry webhook releases the hold immediately. A 24-hour post-Checkout safety buffer covers delayed webhooks before an orphaned hold is automatically ignored/released.
 - Repeated checkout by the same user: the existing active session URL is reused.
-- Stripe test mode: the £49.99 path can be exercised, but no production reservation or Founder status is created.
+- Stripe test mode: the £50 path can be exercised, but no production reservation or Founder status is created.
 
-The public counter returns only totals (`taken`, `held`, `remaining`) and is `no-store`; it never exposes customer data. The server remains authoritative even if the browser has stale or manipulated state. When no reservable Founding position remains, the server automatically chooses the £74.99 Standard Lifetime Price—no deployment or code switch is required.
+The public counter returns only totals (`taken`, `held`, `remaining`) and is `no-store`; it never exposes customer data. The server remains authoritative even if the browser has stale or manipulated state. When no reservable Founding position remains, the server automatically chooses the £75 Standard Lifetime Price—no deployment or code switch is required.
 
 ## Authoritative data model
 
