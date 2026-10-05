@@ -36,6 +36,8 @@ Status: **Prepared 2026-10-04; awaiting owner sign-off.** Per the sprint rule a 
 
 Owner action on 5 Oct: read this section and say "sign off" or name the blocker.
 
+**5 Oct rerun (agent, cloud session), evidence:** `npm run qa` green on the current branch: 160 test files / **1,545 tests** passing (4 Oct: 156 / 1,492), 0 lint errors (102 warnings), production build, 231-file load check, all 52 Playwright specs represented in CI, all 12 API routes import. Live production re-check from the cloud session: `www.yourownworld.co.uk` returns 200 with CSP, HSTS (2 years, includeSubDomains, preload), `nosniff`, `X-Frame-Options: DENY`, referrer and permissions policies; `https://yourownworld.co.uk/pricing?x=1` 308-redirects to `https://www.yourownworld.co.uk/pricing?x=1` (path and query kept); `/api/ai-proxy` rejects GET with 405 and answers CORS pre-flight for `http://localhost:5173` and `tauri://localhost` but refuses `https://evil.example`. Observation (not a blocker): the proxy also sends no allow-origin header for the site's own `https://www.yourownworld.co.uk` / apex origins, which suggests `SITE_URL` in Vercel is unset or differs (name/value check only, no secret). The web app calls `/api` same-origin so it is unaffected; recorded for the 25 Oct Vercel config review (O12). No new blocker found, so the 4 Oct summaries above stand unchanged. Not re-runnable from the cloud: the owner's live account checks (owner-reported 1-4 Oct).
+
 ## 2026-10-04 data-safety/auth/export matrix (Cloud & security day 4)
 
 Status: **Done 2026-10-04: all automated work green and all five owner live checks reported passed (owner-reported).** Data safety gate summary is written on 5 Oct. Overflow O04 and O05 (hard-gate / data-safety).
