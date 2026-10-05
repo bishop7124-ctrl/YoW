@@ -622,8 +622,8 @@
           item('desktop-promise-gate', 'Gate desktop/Lifetime claims until the desktop app scope is truly ready', 'Pricing, FAQ, download/account pages', [
             'Confirm whether current launch should advertise desktop/local vault at all.',
             'If desktop is account-only at this stage, make sure no page promises desktop editing/local vault yet.',
-            'If desktop vault/editor launch is in scope, require the desktop QA section before selling Monthly or Lifetime on that promise.'
-          ], 'Monthly/Lifetime copy does not sell a desktop capability before it exists and passes QA.', 'Owner decision, pages checked, desktop scope note.', ['copy', 'desktop', 'lifetime'])
+            'If desktop vault/editor launch is in scope, require the desktop QA section before selling Lifetime on that promise.'
+          ], 'Monthly stays browser-only and Lifetime copy does not sell a desktop capability before it exists and passes QA.', 'Owner decision, pages checked, desktop scope note.', ['copy', 'desktop', 'lifetime'])
         ]
       },
       {
@@ -633,7 +633,7 @@
           item('desktop-scope-decision', 'Decide whether desktop is account-only or full local-vault/editor for the next launch step', 'Desktop app PRD and current build', [
             'Confirm the current build’s desktop scope with engineering.',
             'If the app is account-only, mark full vault/editor tests N/A for this pass and run account-only checks instead.',
-            'If full desktop vault/editor is in scope, keep all data-safety desktop vault tests as blockers before selling Monthly or Lifetime on the desktop promise.'
+            'If full desktop vault/editor is in scope, keep all data-safety desktop vault tests as blockers before selling Lifetime on the desktop promise.'
           ], 'Desktop QA expectations match what the build actually contains.', 'Decision, build/version, tests marked N/A or required.', ['desktop', 'decision']),
           item('desktop-account-only-check', 'Run desktop account-only surface QA if that is the current build scope', 'Packaged desktop app', [
             'Launch signed out and verify only the compact login/auth screen appears.',

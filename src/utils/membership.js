@@ -93,12 +93,11 @@ export const PLANS = [
     priceLabel: `£${BILLING.monthlyPrice}`,
     priceSuffix: '/month',
     storageLabelShort: '8 GB',
-    description: 'Full YOW access on web and desktop, with cloud sync while subscribed. Cancel any time.',
+    description: 'Full YOW access on the web, with cloud sync while subscribed. Cancel any time.',
     features: [
       'Unlimited projects',
       'Every writing & worldbuilding tool, unlocked',
       'Cloud sync across all your devices',
-      'Desktop and offline access while subscribed',
       '8 GB cloud storage',
       'Connect your own AI provider with an API key',
       'Cancel any time — no long-term contract',
@@ -187,9 +186,14 @@ export function getMembership(user) {
   const subscriptionCurrentPeriodEnd = typeof rawSubscriptionPeriodEnd === 'number'
     ? dateFrom(rawSubscriptionPeriodEnd * 1000)
     : dateFrom(rawSubscriptionPeriodEnd)
+  const rawSubscriptionCancelAt = serverMetadata.subscription_cancel_at
+  const subscriptionCancelAt = typeof rawSubscriptionCancelAt === 'number'
+    ? dateFrom(rawSubscriptionCancelAt * 1000)
+    : dateFrom(rawSubscriptionCancelAt)
   const isSubscriptionEnding = subscriptionPlan === 'premium_monthly'
-    && subscriptionCancelAtPeriodEnd
+    && (subscriptionCancelAtPeriodEnd || !!subscriptionCancelAt)
     && PAID_STATUSES.has(subscriptionStatus)
+  const subscriptionAccessEndsAt = subscriptionCancelAt || subscriptionCurrentPeriodEnd
   // Whether this account has a real Stripe customer record. An account whose
   // plan was set directly via SQL (support/manual comps) is paid locally but
   // has no real Stripe subscription — the billing portal has nothing to act
@@ -319,6 +323,7 @@ export function getMembership(user) {
     subscriptionStatus,
     subscriptionCancelAtPeriodEnd,
     subscriptionCurrentPeriodEnd,
+    subscriptionAccessEndsAt,
     isSubscriptionEnding,
     isPaid,
     isBetaTester,
@@ -327,7 +332,7 @@ export function getMembership(user) {
     betaNoticeStartedAt,
     betaNoticeEndsAt,
     betaDaysRemaining,
-    canDownloadDesktop: isLifetime || (subscriptionPlan === 'premium_monthly' && PAID_STATUSES.has(subscriptionStatus)) || (isBetaTester && !isBetaNoticeActive),
+    canDownloadDesktop: isLifetime || (isBetaTester && !isBetaNoticeActive),
     isLifetime,
     isFounder,
     isLegacyFounderPlan,
@@ -335,7 +340,7 @@ export function getMembership(user) {
     hasStripeCustomer,
     // Desktop app access is a Lifetime/Founder entitlement (PRD Phase 4).
     // Browser plan behavior is unchanged — this only gates the desktop shell.
-    isDesktopEntitled: isLifetime || (subscriptionPlan === 'premium_monthly' && PAID_STATUSES.has(subscriptionStatus)) || isBetaTester,
+    isDesktopEntitled: isLifetime || isBetaTester,
     isTrialActive,
     isFree,
     isReadOnly: false,

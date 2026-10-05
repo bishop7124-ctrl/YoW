@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_cors.js'
+import { buildSubscriptionAppMetadata } from './stripe-webhook.js'
 
 // Vercel API route — replaces supabase/functions/create-customer-portal
 // Called by AccountSettings.jsx when a paid user clicks
@@ -81,6 +82,32 @@ export default async function handler(req, res) {
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
     const customerId = user.app_metadata?.stripe_customer_id
+    if (req.body?.action === 'sync_status') {
+      const subscriptionId = user.app_metadata?.stripe_subscription_id
+      if (!customerId || !subscriptionId) {
+        return res.status(409).json({ error: 'No Stripe subscription is linked to this account.' })
+      }
+
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const subscriptionCustomerId = typeof subscription.customer === 'string'
+        ? subscription.customer
+        : subscription.customer?.id
+      if (subscriptionCustomerId && subscriptionCustomerId !== customerId) {
+        return res.status(409).json({ error: 'The linked Stripe subscription does not belong to this billing account.' })
+      }
+
+      const plan = subscription.metadata?.plan || user.app_metadata?.subscription_plan || 'premium_monthly'
+      const appMetadata = buildSubscriptionAppMetadata(user.app_metadata || {}, subscription, customerId, plan)
+      const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, { app_metadata: appMetadata })
+      if (updateError) throw updateError
+      return res.status(200).json({
+        synced: true,
+        cancelAtPeriodEnd: appMetadata.subscription_cancel_at_period_end === true,
+        currentPeriodEnd: appMetadata.subscription_current_period_end || null,
+        status: appMetadata.subscription_status,
+      })
+    }
+
     if (!customerId) {
       // No real Stripe record for this account (e.g. plan set directly via
       // SQL) — downgrade locally rather than failing.

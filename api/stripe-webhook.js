@@ -32,7 +32,8 @@ export function buildSubscriptionAppMetadata(existing, subscription, customerId,
     beta_tester: false,
     access_revoked_at: ['active', 'trialing'].includes(subscription.status) ? null : new Date().toISOString(),
     subscription_current_period_end: getCurrentPeriodEnd(subscription),
-    subscription_cancel_at_period_end: subscription.cancel_at_period_end,
+    subscription_cancel_at_period_end: subscription.cancel_at_period_end === true,
+    subscription_cancel_at: subscription.cancel_at || null,
     ...(subscription.status === 'canceled' ? { was_monthly: true } : {}),
   }
 }

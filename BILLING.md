@@ -5,7 +5,7 @@ Current pricing:
 | Offer | Price | App access | YOW Cloud |
 | --- | ---: | --- | --- |
 | Free | £0 | One editable project | Free limits |
-| Monthly | £10/month | Full web, desktop and offline access while active | Included while active |
+| Monthly | £10/month | Full browser access; no desktop licence | Included while active |
 | Founding Lifetime (successful purchases #1–100) | £50 once | Permanent Lifetime access; numbered Founder status | Two years included, then £6/year optional |
 | Standard Lifetime (#101 onward) | £75 once | Permanent Lifetime access | One year included, then £6/year optional |
 

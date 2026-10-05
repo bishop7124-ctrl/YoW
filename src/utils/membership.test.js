@@ -174,6 +174,16 @@ describe('membership plan limits', () => {
     expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.beta_tester)
   })
 
+  it('keeps active Monthly browser access without granting desktop access', () => {
+    const membership = getMembership(makeUser({
+      app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active' },
+    }))
+
+    expect(membership.isPaid).toBe(true)
+    expect(membership.canDownloadDesktop).toBe(false)
+    expect(membership.isDesktopEntitled).toBe(false)
+  })
+
   it('ignores paid, beta, and trial claims in browser-editable user metadata', () => {
     const membership = getMembership(makeUser({
       user_metadata: {
@@ -275,6 +285,22 @@ describe('membership entitlement negative matrix (user_metadata is untrusted)', 
     expect(membership.isPaid).toBe(true)
     expect(membership.isSubscriptionEnding).toBe(true)
     expect(membership.subscriptionCurrentPeriodEnd.toISOString()).toBe('2026-10-06T00:00:00.000Z')
+    expect(membership.subscriptionAccessEndsAt.toISOString()).toBe('2026-10-06T00:00:00.000Z')
+  })
+
+  it('recognises a Stripe scheduled cancellation date even without the period-end flag', () => {
+    const membership = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_monthly',
+        subscription_status: 'active',
+        subscription_cancel_at_period_end: false,
+        subscription_cancel_at: 1791244800,
+        subscription_current_period_end: 1791331200,
+      },
+    }))
+
+    expect(membership.isSubscriptionEnding).toBe(true)
+    expect(membership.subscriptionAccessEndsAt.toISOString()).toBe('2026-10-06T00:00:00.000Z')
   })
 
   it('cannot extend the trial by writing trial_started_at into user_metadata', () => {

@@ -47,9 +47,11 @@ vi.mock('@supabase/supabase-js', () => ({
 }))
 
 const billingPortalSessionsCreate = vi.fn()
+const subscriptionsRetrieve = vi.fn()
 vi.mock('stripe', () => ({
   default: class StripeMock {
     billingPortal = { sessions: { create: billingPortalSessionsCreate } }
+    subscriptions = { retrieve: subscriptionsRetrieve }
   },
 }))
 
@@ -79,6 +81,7 @@ describe('create-customer-portal handler', () => {
     updateUserById.mockReset()
     updateUserById.mockResolvedValue({ data: {}, error: null })
     billingPortalSessionsCreate.mockReset()
+    subscriptionsRetrieve.mockReset()
 
     vi.resetModules()
     const mod = await import('../../api/create-customer-portal.js')
@@ -109,6 +112,35 @@ describe('create-customer-portal handler', () => {
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith({ url: 'https://billing.stripe.com/session/abc' })
     expect(updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('refreshes a scheduled cancellation directly from Stripe', async () => {
+    getUser.mockResolvedValue({
+      data: { user: { id: 'user-sync', app_metadata: {
+        stripe_customer_id: 'cus_sync', stripe_subscription_id: 'sub_sync',
+        subscription_plan: 'premium_monthly', subscription_status: 'active',
+      } } },
+      error: null,
+    })
+    subscriptionsRetrieve.mockResolvedValue({
+      id: 'sub_sync', customer: 'cus_sync', status: 'active', cancel_at_period_end: true,
+      metadata: { plan: 'premium_monthly' },
+      items: { data: [{ current_period_end: 1791244800 }] },
+    })
+
+    const res = makeRes()
+    await handler(makeReq({ body: { action: 'sync_status' } }), res)
+
+    expect(updateUserById).toHaveBeenCalledWith('user-sync', {
+      app_metadata: expect.objectContaining({
+        subscription_cancel_at_period_end: true,
+        subscription_current_period_end: 1791244800,
+      }),
+    })
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      synced: true, cancelAtPeriodEnd: true, currentPeriodEnd: 1791244800,
+    }))
+    expect(billingPortalSessionsCreate).not.toHaveBeenCalled()
   })
 
   it('(b) no Stripe customer record (manual SQL upgrade): downgrades locally instead of failing', async () => {

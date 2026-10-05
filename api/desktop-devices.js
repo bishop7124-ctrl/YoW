@@ -32,14 +32,6 @@ export const buildEntitlementRecord = (userId, deviceId, plan, expiresAt = null)
   ...(expiresAt ? { expiresAt } : {}),
 })
 
-const monthlyDesktopExpiry = (metadata, plan) => {
-  if (plan !== 'premium_monthly') return null
-  const value = metadata.subscription_current_period_end
-  if (typeof value === 'number') return new Date(value * 1000).toISOString()
-  const parsed = value ? new Date(value) : null
-  return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null
-}
-
 export const signEntitlementRecord = (record, secret) => {
   if (!secret) return null
   return crypto.createHmac('sha256', secret).update(JSON.stringify(record)).digest('hex')
@@ -119,7 +111,7 @@ export default async function handler(req, res) {
             cap: deviceCap(),
           })
         }
-        const record = buildEntitlementRecord(user.id, deviceId, plan, monthlyDesktopExpiry(serverMetadata, plan))
+        const record = buildEntitlementRecord(user.id, deviceId, plan)
         const signature = signEntitlementRecord(record, process.env.ENTITLEMENT_SIGNING_SECRET)
         return res.status(200).json({ record, signature, cap: deviceCap() })
       }
@@ -155,7 +147,7 @@ export default async function handler(req, res) {
       }, { onConflict: 'user_id,device_id' })
     if (upsertError) throw upsertError
 
-    const record = buildEntitlementRecord(user.id, deviceId, plan, monthlyDesktopExpiry(serverMetadata, plan))
+    const record = buildEntitlementRecord(user.id, deviceId, plan)
     const signature = signEntitlementRecord(record, process.env.ENTITLEMENT_SIGNING_SECRET)
     return res.status(200).json({ record, signature, cap: deviceCap() })
   } catch (err) {

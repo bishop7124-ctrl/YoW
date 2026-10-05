@@ -26,7 +26,7 @@ const FEATURES = [
   { label: 'Writing & worldbuilding toolkit', free: 'Included', monthly: 'Included', lifetime: 'Included' },
   { label: 'Cloud storage', free: freePlan?.storageLabelShort, monthly: monthlyPlan?.storageLabelShort, lifetime: lifetimePlan?.storageLabelShort },
   { label: 'Cloud sync', free: 'Free limits', monthly: 'While subscribed', lifetime: `Included, then £${HOSTING_RENEWAL_FEE_GBP}/year optional` },
-  { label: 'Desktop & offline access', free: '—', monthly: 'While subscribed', lifetime: 'Permanent' },
+  { label: 'Desktop & offline access', free: '—', monthly: '—', lifetime: 'Permanent' },
   { label: 'Connect your own AI provider', free: '—', monthly: 'Included', lifetime: 'Included' },
   { label: 'Payment', free: 'No card required', monthly: 'Cancel any time', lifetime: 'One payment' },
 ]
@@ -36,7 +36,7 @@ const FAQ = [
   { q: 'What is the Founding Price?', a: `The first 100 genuine Lifetime customers pay £${BILLING.foundingLifetimePrice} once, receive permanent Founder status and two included years of YOW Cloud. After those 100 successful purchases, Lifetime is £${BILLING.lifetimePrice} once with one included Cloud year.` },
   { q: 'What happens after my included Cloud period?', a: `You can renew YOW Cloud for £${HOSTING_RENEWAL_FEE_GBP} per year. If you decline, your Lifetime licence and Founder status remain active and you can keep working locally and offline. Cloud sync and hosted storage fall back to the applicable Free limits until you renew.` },
   { q: 'What happens if I cancel Monthly?', a: 'Your account falls back to Free limits after the paid period ends. Your work is not deleted: you choose one project to keep editable and can continue to view and export retained projects.' },
-  { q: 'Can I use the desktop app on Monthly?', a: 'Yes. Monthly includes desktop and offline access while the subscription is active. Lifetime keeps desktop and offline access permanently.' },
+  { q: 'Can I use the desktop app on Monthly?', a: 'No. Monthly is the complete browser-based plan with Cloud sync. Desktop and offline access are included with Lifetime.' },
   { q: 'Does Lifetime guarantee future updates?', a: 'Buy YOW for what it is today. Enjoy what we add tomorrow. Lifetime is permanent product access, not a promise of a particular roadmap or an indefinite schedule of new features.' },
 ]
 
@@ -178,7 +178,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           <p className="eyebrow">Simple, honest pricing</p>
           <h1>Own your writing software.</h1>
           <p className="pricing-hero-lead">Lifetime access. One payment.</p>
-          <p className="pricing-hero-copy">Choose Free to begin, Monthly for a smaller upfront cost, or Lifetime for permanent desktop and offline access. Cloud stays a separate, optional service after the included period.</p>
+          <p className="pricing-hero-copy">Choose Free to begin, Monthly for complete browser access and Cloud sync, or Lifetime for permanent desktop and offline access. Cloud stays a separate, optional service after the included period.</p>
           <div className="pricing-trust-row"><span className="pricing-trust-chip"><CheckIcon /> One editable project free</span><span className="pricing-trust-chip"><CheckIcon /> Cancel Monthly any time</span><span className="pricing-trust-chip"><CheckIcon /> Lifetime works without Cloud</span></div>
           {billingTest ? (
             <aside className="pricing-test-panel" aria-label="Private Stripe test checkout">

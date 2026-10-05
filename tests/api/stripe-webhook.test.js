@@ -173,6 +173,7 @@ describe('buildSubscriptionAppMetadata', () => {
       stripe_customer_id: 'cus_123',
       subscription_status: 'canceled',
       subscription_plan: 'premium_monthly',
+      subscription_cancel_at: 1234,
       was_monthly: true,
     })
   })

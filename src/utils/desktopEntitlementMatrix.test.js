@@ -18,7 +18,7 @@ const iso = (days) => new Date(NOW.getTime() + days * 86400000).toISOString()
 const CASES = [
   ['Free (trial over)', user({}), { entitled: false, download: false }],
   ['Free in 28-day trial', user({}, {}), null],
-  ['Monthly active', user({ subscription_plan: 'premium_monthly', subscription_status: 'active' }), { entitled: true, download: true }],
+  ['Monthly active (browser only)', user({ subscription_plan: 'premium_monthly', subscription_status: 'active' }), { entitled: false, download: false }],
   ['Monthly cancelled', user({ subscription_plan: 'premium_monthly', subscription_status: 'canceled' }), { entitled: false, download: false }],
   ['Lifetime', user({ subscription_plan: 'premium_plus_lifetime', subscription_status: 'active', lifetime_purchased_at: '2026-09-01T00:00:00Z' }), { entitled: true, download: true }],
   ['Legacy Lifetime key', user({ subscription_plan: 'premium_lifetime', subscription_status: 'active', lifetime_purchased_at: '2026-09-01T00:00:00Z' }), { entitled: true, download: true }],
@@ -73,7 +73,7 @@ describe('cached desktop licence cannot be forged or replayed', () => {
     ['another account', mk({ record: { userId: 'someone-else' } })],
     ['another device (copied from a different machine)', mk({ record: { deviceId: 'device-bbbb-2222' } })],
     ['an invented plan', mk({ record: { plan: 'god_mode' } })],
-    ['a Monthly record without its required subscription expiry', mk({ record: { plan: 'premium_monthly' } })],
+    ['a legacy Monthly desktop record', mk({ record: { plan: 'premium_monthly', expiresAt: iso(20) } })],
     ['no verified date', mk({ top: { verifiedAt: undefined } })],
     ['a future-dated verification (stops the 30-day clock ever expiring)', mk({ top: { verifiedAt: new Date(NOW.getTime() + 400 * 86400000).toISOString() } })],
     ['a record with no plan', mk({ record: { plan: undefined } })],

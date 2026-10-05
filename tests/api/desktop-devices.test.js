@@ -68,7 +68,7 @@ describe('desktop-devices handler', () => {
   })
 
   it('rejects non-lifetime plans with 403', async () => {
-    getUser.mockResolvedValue({ data: { user: { id: 'u', app_metadata: { subscription_plan: 'premium_monthly' } } }, error: null })
+    getUser.mockResolvedValue({ data: { user: { id: 'u', app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active' } } }, error: null })
     const res = makeRes()
     await handler(makeReq(), res)
     expect(res.status).toHaveBeenCalledWith(403)

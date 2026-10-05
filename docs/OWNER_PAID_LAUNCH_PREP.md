@@ -19,7 +19,7 @@ The critical path is:
 3. Complete owner-led live-account, provider, device, legal, and payment sign-off.
 4. Remove or migrate beta entitlements and enable real checkout only as the final switch.
 
-The desktop application is the longest pole because both active Monthly and Lifetime now include it.
+The desktop application is the longest pole because Lifetime includes it permanently; Monthly is browser-only.
 
 ## Decisions and setup already complete
 
@@ -30,7 +30,7 @@ Do not reopen these unless product direction changes:
 - Paid prices are Monthly £10/month, Founding Lifetime £50 once for successful purchases #1–100, Standard Lifetime £75 once thereafter, and optional Cloud renewal £6/year.
 - Storage allowances are Free 250 MB, Monthly/Lifetime 8 GB, and Beta 15 GB. Retained legacy Founder-plan accounts keep their historical allowance.
 - Free includes Map Builder for its editable project; AI remains paid-only.
-- Monthly while active and Lifetime permanently include the full downloadable desktop workspace. The desktop promise will not be narrowed to an account-management shell.
+- Monthly includes full browser access and Cloud while subscribed, but no desktop access. Lifetime permanently includes the full downloadable desktop workspace. The Lifetime desktop promise will not be narrowed to an account-management shell.
 - The desktop app will remain unsigned at paid launch. Apple notarisation and Windows publisher signing are deferred until an owner-defined revenue threshold can cover their costs.
 - External solicitor/legal review is optional and may happen after launch. Accurate, complete, owner-approved Terms, Privacy, cancellation, data, AI, and payment copy is still required.
 - Paid checkout remains disabled until the other gates pass.

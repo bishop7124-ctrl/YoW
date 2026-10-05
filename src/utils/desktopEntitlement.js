@@ -68,16 +68,12 @@ export function clearCachedDesktopEntitlement() {
 // A forged cache therefore grants nothing a signed-out local vault does not already
 // have: editing, export and the local vault stay available, while cloud sync,
 // downloads and device activation are decided server-side from app_metadata.
-const CACHEABLE_DESKTOP_PLANS = new Set(['premium_monthly', 'premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
+const CACHEABLE_DESKTOP_PLANS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder', 'beta_tester'])
 
 export function isCachedEntitlementTrusted(cached, { userId, deviceId, now = new Date() } = {}) {
   const record = cached?.record
   if (!record || typeof record !== 'object') return false
   if (!CACHEABLE_DESKTOP_PLANS.has(record.plan)) return false
-  if (record.plan === 'premium_monthly') {
-    const expiresAt = record.expiresAt ? new Date(record.expiresAt).getTime() : NaN
-    if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) return false
-  }
   if (userId !== undefined && record.userId !== userId) return false
   if (deviceId !== undefined && record.deviceId !== deviceId) return false
   const verified = cached?.verifiedAt ? new Date(cached.verifiedAt).getTime() : NaN

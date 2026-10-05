@@ -2245,7 +2245,7 @@ const formatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'sho
 
 const billingEndpoints = {
   checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL,
-  portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL,
+  portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL || '/api/create-customer-portal',
 }
 
 async function requestBillingResult(endpoint, accessToken, body) {
@@ -2266,7 +2266,7 @@ async function requestBillingResult(endpoint, accessToken, body) {
   // Either a Stripe portal redirect (`url`), or — when the account has no
   // real Stripe subscription to act on (e.g. plan set directly via SQL) —
   // a direct local downgrade to Free (`downgraded`). See api/create-customer-portal.js.
-  if (!data?.url && !data?.downgraded) throw new Error('Billing did not return a destination URL.')
+  if (!data?.url && !data?.downgraded && !data?.synced) throw new Error('Billing did not return a destination URL.')
   return data
 }
 
@@ -2871,9 +2871,32 @@ export default function AccountSettings({
   const [betaInterestPlan, setBetaInterestPlan] = useState(null)
   const [fallbackTab, setFallbackTab] = useState('profile')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const billingStatusSyncRef = useRef('')
   const selectedTab = onTabChange ? activeTab : fallbackTab
   const setActiveTab = onTabChange || setFallbackTab
   const novels = store?.novels ?? []
+
+  useEffect(() => {
+    const subscriptionId = user?.app_metadata?.stripe_subscription_id
+    if (!open || selectedTab !== 'membership' || membership.subscriptionPlan !== 'premium_monthly' || !subscriptionId) return
+    const syncKey = `${user.id}:${subscriptionId}`
+    if (billingStatusSyncRef.current === syncKey) return
+    billingStatusSyncRef.current = syncKey
+    let active = true
+
+    getAccessToken()
+      .then(accessToken => requestBillingResult(billingEndpoints.portal, accessToken, { action: 'sync_status' }))
+      .then(() => refreshUser())
+      .catch(() => {
+        if (active) setBillingError('YOW could not refresh your latest Stripe cancellation status. Please close Account Settings and try again.')
+      })
+
+    return () => { active = false }
+  }, [open, selectedTab, user?.id, user?.app_metadata?.stripe_subscription_id])
+
+  useEffect(() => {
+    if (!open) billingStatusSyncRef.current = ''
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -3073,9 +3096,9 @@ export default function AccountSettings({
               <div className="account-cancellation-notice" role="status" aria-live="polite">
                 <strong>Monthly cancelled</strong>
                 <p>
-                  You keep full YOW, Cloud sync and desktop access until{' '}
-                  {membership.subscriptionCurrentPeriodEnd
-                    ? formatter.format(membership.subscriptionCurrentPeriodEnd)
+                  You keep full browser access and Cloud sync until{' '}
+                  {membership.subscriptionAccessEndsAt
+                    ? formatter.format(membership.subscriptionAccessEndsAt)
                     : 'the end of your current billing period'}.
                   {' '}After that, your account returns to Free. Your work is not deleted: one project remains editable, and you can still view and export your other projects.
                 </p>
@@ -3107,7 +3130,7 @@ export default function AccountSettings({
                     <strong>{membership.isBetaTester
                       ? 'Beta tester — temporary full access'
                       : membership.isSubscriptionEnding
-                        ? `Monthly — access ends ${membership.subscriptionCurrentPeriodEnd ? formatter.format(membership.subscriptionCurrentPeriodEnd) : 'after this billing period'}`
+                        ? `Monthly — access ends ${membership.subscriptionAccessEndsAt ? formatter.format(membership.subscriptionAccessEndsAt) : 'after this billing period'}`
                         : 'Monthly — cancel any time'}</strong>
                   </div>
                   <div>
@@ -3115,9 +3138,15 @@ export default function AccountSettings({
                     <strong>{membership.isBetaTester
                       ? 'Cloud Mode during beta'
                       : membership.isSubscriptionEnding
-                        ? `Included until ${membership.subscriptionCurrentPeriodEnd ? formatter.format(membership.subscriptionCurrentPeriodEnd) : 'the billing period ends'}`
+                        ? `Included until ${membership.subscriptionAccessEndsAt ? formatter.format(membership.subscriptionAccessEndsAt) : 'the billing period ends'}`
                         : 'Cloud Mode while subscribed'}</strong>
                   </div>
+                  {!membership.isBetaTester && membership.subscriptionCurrentPeriodEnd && (
+                    <div>
+                      <span>{membership.isSubscriptionEnding ? 'Access ends' : 'Next billing date'}</span>
+                      <strong>{formatter.format(membership.subscriptionAccessEndsAt || membership.subscriptionCurrentPeriodEnd)}</strong>
+                    </div>
+                  )}
                   {membership.isBetaTester && (
                     <div>
                       <span>Beta notice</span>
@@ -3166,8 +3195,8 @@ export default function AccountSettings({
                     : membership.isBetaTester
                     ? 'Full access (beta tester)'
                     : membership.isPaid
-                    ? membership.isSubscriptionEnding && membership.subscriptionCurrentPeriodEnd
-                      ? `Full access until ${formatter.format(membership.subscriptionCurrentPeriodEnd)}`
+                    ? membership.isSubscriptionEnding && membership.subscriptionAccessEndsAt
+                      ? `Full access until ${formatter.format(membership.subscriptionAccessEndsAt)}`
                       : 'Full access'
                     : membership.isTrialActive
                       ? 'Full access (trial)'
@@ -3178,7 +3207,7 @@ export default function AccountSettings({
 
             {desktopApp && membership.isLifetime && <DesktopDevicesPanel />}
 
-            {/* Desktop app download for active Monthly and permanent Lifetime. */}
+            {/* Desktop app download for permanent Lifetime access. */}
             {membership.canDownloadDesktop && !desktopApp && (
               <div style={{
                 marginBottom: 18,
@@ -3194,7 +3223,7 @@ export default function AccountSettings({
                   Desktop app included
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Your plan includes the YOW desktop app with a local project vault, so your writing lives on your own device.{!membership.isLifetime && ' Desktop access continues while Monthly is active.'}
+                  Your Lifetime plan includes the YOW desktop app with a local project vault, so your writing lives on your own device.
                 </div>
                 <a
                   href="/download"
