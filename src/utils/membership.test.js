@@ -262,6 +262,21 @@ describe('membership entitlement negative matrix (user_metadata is untrusted)', 
     expect(membership.wasMonthly).toBe(true)
   })
 
+  it('exposes a scheduled Monthly cancellation and its access end date', () => {
+    const membership = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_monthly',
+        subscription_status: 'active',
+        subscription_cancel_at_period_end: true,
+        subscription_current_period_end: 1791244800,
+      },
+    }))
+
+    expect(membership.isPaid).toBe(true)
+    expect(membership.isSubscriptionEnding).toBe(true)
+    expect(membership.subscriptionCurrentPeriodEnd.toISOString()).toBe('2026-10-06T00:00:00.000Z')
+  })
+
   it('cannot extend the trial by writing trial_started_at into user_metadata', () => {
     const freshMembership = getMembership(makeUser())
     const spoofedMembership = getMembership(makeUser({

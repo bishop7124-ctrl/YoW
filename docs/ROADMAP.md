@@ -22,6 +22,10 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-10-05 Monthly cancellation visibility
+
+Status: **Fixed in code; production test-mode verification pending deployment.** A Stripe Portal cancellation scheduled for period end now remains correctly entitled through that date while Account Settings displays a prominent “Monthly cancelled” notice, the exact access-end date, and the subsequent Free-plan effects. Stripe checkout/portal returns also refresh server-controlled account metadata automatically so customers do not need to sign out and back in to see payment or cancellation changes. Focused membership tests, lint and build must pass before deployment; the remaining live Stripe cancellation/expiry checks stay in `docs/PAYMENT_ROADMAP.md`.
+
 ### 2026-10-05 simplified pricing and numbered Founder status
 
 Status: **Implemented in code; automated repository verification passed; external payment activation remains tracked only in `docs/PAYMENT_ROADMAP.md`.** YOW now presents three plans only: Free, Monthly (£10/month), and Lifetime. The first 100 successful live Lifetime purchases use the Founding Price (£50), receive two included Cloud years and permanent numbered Founder recognition; subsequent Lifetime purchases use £75 with one included Cloud year. Both convert to the same `premium_plus_lifetime` product entitlement, and Founder status does not extend Cloud or alter storage. Historical `subscription_plan: founder` accounts remain supported with their purchased legacy entitlements, but the Founder checkout path and new-plan UI were removed.

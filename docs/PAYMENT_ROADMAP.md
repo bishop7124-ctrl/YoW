@@ -31,7 +31,7 @@ Status: the earlier live-flow acceptance no longer covers the pricing model appr
 9. **Live-mode reservation rehearsal without completing payment**: verify active holds reduce availability, repeated attempts reuse the bound session, expiration releases the hold, and positions 99/100/101 select Founding/Founding/Standard without overselling.
 10. **Standard Lifetime (£75)**: verify one included Cloud year and no Founder status.
 11. **Hosting renewal checkout**: complete a £6 test purchase, verify webhook delivery and expiry extension, Cloud restoration, and correct account messaging.
-12. **Failure/cancel checks**: checkout cancellation, expiration, a failed payment where feasible, and Monthly cancellation/expiry — confirm the app never grants paid access unless webhook metadata confirms entitlement.
+12. **Failure/cancel checks**: checkout cancellation, expiration, a failed payment where feasible, and Monthly cancellation/expiry — confirm the app never grants paid access unless webhook metadata confirms entitlement. A scheduled Monthly cancellation must immediately show “Monthly cancelled,” the exact access-end date, and the Free fallback consequences while retaining paid access through that date.
 13. **Live-account QA for the 2026-09-02 downgrade fix** (code/unit-level verified only so far — see `docs/ROADMAP.md`'s Bugs table "2026-09-02" row for the fix itself):
     - Manually set a real test account's `subscription_plan`/`subscription_status` via SQL with no `stripe_customer_id`, click "Downgrade to Free" in Account Settings, confirm it actually drops to Free.
     - Do the same for real Monthly and Lifetime test-mode purchases; confirm "Manage subscription & billing" still opens the Stripe portal unaffected.

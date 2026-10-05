@@ -11251,6 +11251,28 @@ body {
   margin: 14px 0;
 }
 
+.account-cancellation-notice {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, #f59e0b 10%, var(--bg-main));
+  color: var(--text-main);
+}
+
+.account-cancellation-notice strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.account-cancellation-notice p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .account-status-list div {
   border: 1px solid var(--border);
   border-radius: var(--r-md);

@@ -203,6 +203,28 @@ class ErrorBoundary extends Component {
 function AppInner() {
   const desktopApp = isDesktopAppRuntime()
   const { user, loading: authLoading, updateProfile, recoveryMode, refreshUser } = useAuth()
+
+  // Stripe can redirect back before its webhook-updated app metadata is in the
+  // browser's existing session. Refresh a few times after checkout/portal
+  // returns so purchases and scheduled cancellations appear without requiring
+  // a manual sign-out and sign-in.
+  useEffect(() => {
+    if (!user?.id) return undefined
+    const billingReturn = new URLSearchParams(window.location.search).get('billing')
+    if (!['success', 'portal'].includes(billingReturn)) return undefined
+
+    let active = true
+    const timers = []
+    const refresh = () => refreshUser().catch(() => {})
+    refresh()
+    for (const delay of [1500, 4000]) {
+      timers.push(window.setTimeout(() => { if (active) refresh() }, delay))
+    }
+    return () => {
+      active = false
+      timers.forEach(timer => window.clearTimeout(timer))
+    }
+  }, [user?.id])
   useEffect(() => {
     document.body.classList.toggle('desktop-app-shell', desktopApp)
     return () => document.body.classList.remove('desktop-app-shell')

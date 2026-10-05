@@ -104,7 +104,7 @@ describe('create-customer-portal handler', () => {
 
     expect(billingPortalSessionsCreate).toHaveBeenCalledWith({
       customer: 'cus_real123',
-      return_url: 'https://app.example.com/',
+      return_url: 'https://app.example.com/?billing=portal',
     })
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith({ url: 'https://billing.stripe.com/session/abc' })

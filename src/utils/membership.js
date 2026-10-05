@@ -182,6 +182,14 @@ export function getMembership(user) {
   // by the signed-in browser client and must never grant paid or beta access.
   const subscriptionStatus = serverMetadata.subscription_status || 'none'
   const subscriptionPlan = serverMetadata.subscription_plan || null
+  const subscriptionCancelAtPeriodEnd = serverMetadata.subscription_cancel_at_period_end === true
+  const rawSubscriptionPeriodEnd = serverMetadata.subscription_current_period_end
+  const subscriptionCurrentPeriodEnd = typeof rawSubscriptionPeriodEnd === 'number'
+    ? dateFrom(rawSubscriptionPeriodEnd * 1000)
+    : dateFrom(rawSubscriptionPeriodEnd)
+  const isSubscriptionEnding = subscriptionPlan === 'premium_monthly'
+    && subscriptionCancelAtPeriodEnd
+    && PAID_STATUSES.has(subscriptionStatus)
   // Whether this account has a real Stripe customer record. An account whose
   // plan was set directly via SQL (support/manual comps) is paid locally but
   // has no real Stripe subscription — the billing portal has nothing to act
@@ -309,6 +317,9 @@ export function getMembership(user) {
     activePlanKey,
     activePlanDef,
     subscriptionStatus,
+    subscriptionCancelAtPeriodEnd,
+    subscriptionCurrentPeriodEnd,
+    isSubscriptionEnding,
     isPaid,
     isBetaTester,
     isBetaExpired,

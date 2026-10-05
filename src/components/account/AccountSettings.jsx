@@ -2275,6 +2275,7 @@ function PlanBadge({ membership }) {
   if (membership.isTrialActive) label = 'Trial'
   else if (membership.isBetaTester) label = 'Beta Tester'
   else if (membership.isPaid) label = membership.activePlanDef?.label || 'Premium'
+  if (membership.isSubscriptionEnding) label = 'Monthly · ending'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <span className={`account-plan-badge account-plan-${membership.plan}`}>
@@ -2341,7 +2342,11 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
       <div style={{ flexShrink: 0, minWidth: 110, textAlign: 'right' }}>
         {isCurrent ? (
           <span style={{ fontSize: 12, fontWeight: 800, color: membership.isTrialActive ? '#fbbf24' : 'var(--accent-text)' }}>
-            {membership.isTrialActive ? 'Your trial' : 'Current plan'}
+            {membership.isTrialActive
+              ? 'Your trial'
+              : membership.isSubscriptionEnding && membership.subscriptionCurrentPeriodEnd
+                ? `Ends ${formatter.format(membership.subscriptionCurrentPeriodEnd)}`
+                : 'Current plan'}
           </span>
         ) : isDowngrade ? null
           : plan.key === 'free' ? (
@@ -3064,6 +3069,19 @@ export default function AccountSettings({
               <PlanBadge membership={membership} />
             </div>
 
+            {membership.isSubscriptionEnding && (
+              <div className="account-cancellation-notice" role="status" aria-live="polite">
+                <strong>Monthly cancelled</strong>
+                <p>
+                  You keep full YOW, Cloud sync and desktop access until{' '}
+                  {membership.subscriptionCurrentPeriodEnd
+                    ? formatter.format(membership.subscriptionCurrentPeriodEnd)
+                    : 'the end of your current billing period'}.
+                  {' '}After that, your account returns to Free. Your work is not deleted: one project remains editable, and you can still view and export your other projects.
+                </p>
+              </div>
+            )}
+
             {/* Status strip */}
             <div className="account-status-list" style={{ marginBottom: 18 }}>
               {membership.isTrialActive && (
@@ -3086,11 +3104,19 @@ export default function AccountSettings({
                 <>
                   <div>
                     <span>App licence</span>
-                    <strong>{membership.isBetaTester ? 'Beta tester — temporary full access' : 'Monthly — cancel any time'}</strong>
+                    <strong>{membership.isBetaTester
+                      ? 'Beta tester — temporary full access'
+                      : membership.isSubscriptionEnding
+                        ? `Monthly — access ends ${membership.subscriptionCurrentPeriodEnd ? formatter.format(membership.subscriptionCurrentPeriodEnd) : 'after this billing period'}`
+                        : 'Monthly — cancel any time'}</strong>
                   </div>
                   <div>
                     <span>Cloud hosting</span>
-                    <strong>{membership.isBetaTester ? 'Cloud Mode during beta' : 'Cloud Mode while subscribed'}</strong>
+                    <strong>{membership.isBetaTester
+                      ? 'Cloud Mode during beta'
+                      : membership.isSubscriptionEnding
+                        ? `Included until ${membership.subscriptionCurrentPeriodEnd ? formatter.format(membership.subscriptionCurrentPeriodEnd) : 'the billing period ends'}`
+                        : 'Cloud Mode while subscribed'}</strong>
                   </div>
                   {membership.isBetaTester && (
                     <div>
@@ -3140,7 +3166,9 @@ export default function AccountSettings({
                     : membership.isBetaTester
                     ? 'Full access (beta tester)'
                     : membership.isPaid
-                    ? 'Full access'
+                    ? membership.isSubscriptionEnding && membership.subscriptionCurrentPeriodEnd
+                      ? `Full access until ${formatter.format(membership.subscriptionCurrentPeriodEnd)}`
+                      : 'Full access'
                     : membership.isTrialActive
                       ? 'Full access (trial)'
                       : 'Free plan'}
