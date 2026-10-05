@@ -17,7 +17,7 @@ Owner steps (pending): apply migration `20261004130000` in Supabase; on the Mac 
 
 ## 2026-10-05 gate evidence summaries (pulled forward to 4 Oct at the owner's request)
 
-Status: **Prepared 2026-10-04; awaiting owner sign-off.** Per the sprint rule a gate moves to Passed only on the owner's confirmation. Evidence is mostly automated plus owner-reported live checks (no screenshots for the 3-4 Oct live checks).
+Status: **Signed off by the owner 2026-10-05 — Data safety gate and Export ownership gate Passed.** Per the sprint rule a gate moves to Passed only on the owner's confirmation. Evidence is mostly automated plus owner-reported live checks (no screenshots for the 3-4 Oct live checks).
 
 **Data safety gate: no known data-loss, auth, isolation, save, restore or storage blocker remains.**
 - Auth/session: idle logout and cross-tab auth (owner live 1 Oct); canonical redirect and headers 22/22 (1 Oct); account switch isolation test2/test1 (2 Oct); password minimum length 8 (3 Oct).
@@ -34,7 +34,7 @@ Status: **Prepared 2026-10-04; awaiting owner sign-off.** Per the sprint rule a 
 - Expiry access: lifecycle keeps Export All and archived-account export available (1 Oct); account backup folders/Word docs shipped 3 Oct.
 - Residuals, none blocking: packaged desktop save dialogs (8 Oct); World Bible output for all six types was inspected by tests, owner-inspected 2 Oct.
 
-Owner action on 5 Oct: read this section and say "sign off" or name the blocker.
+Owner action on 5 Oct: read this section and say "sign off" or name the blocker. **Owner replied "sign off" on 5 Oct (both gates).**
 
 **5 Oct rerun (agent, cloud session), evidence:** `npm run qa` green on the current branch: 160 test files / **1,545 tests** passing (4 Oct: 156 / 1,492), 0 lint errors (102 warnings), production build, 231-file load check, all 52 Playwright specs represented in CI, all 12 API routes import. Live production re-check from the cloud session: `www.yourownworld.co.uk` returns 200 with CSP, HSTS (2 years, includeSubDomains, preload), `nosniff`, `X-Frame-Options: DENY`, referrer and permissions policies; `https://yourownworld.co.uk/pricing?x=1` 308-redirects to `https://www.yourownworld.co.uk/pricing?x=1` (path and query kept); `/api/ai-proxy` rejects GET with 405 and answers CORS pre-flight for `http://localhost:5173` and `tauri://localhost` but refuses `https://evil.example`. Observation (not a blocker): the proxy also sends no allow-origin header for the site's own `https://www.yourownworld.co.uk` / apex origins, which suggests `SITE_URL` in Vercel is unset or differs (name/value check only, no secret). The web app calls `/api` same-origin so it is unaffected; recorded for the 25 Oct Vercel config review (O12). No new blocker found, so the 4 Oct summaries above stand unchanged. Not re-runnable from the cloud: the owner's live account checks (owner-reported 1-4 Oct).
 
