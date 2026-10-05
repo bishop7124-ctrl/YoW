@@ -448,3 +448,7 @@ p  { color: var(--muted); font-size: 0.975rem; line-height: 1.75; }
 .flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
 .justify-center { justify-content: center; }
+@media (max-width: 560px) {
+  .about-maker-grid { grid-template-columns: 1fr !important; text-align: center; }
+  .about-maker-grid > img { margin: 0 auto; }
+}

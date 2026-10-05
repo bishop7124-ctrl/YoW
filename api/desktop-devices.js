@@ -23,13 +23,22 @@ const deviceCap = () => {
 // Entitlement records are HMAC-signed so the server can recognise its own
 // issued records later. Field order is fixed — the signature covers the exact
 // serialized string.
-export const buildEntitlementRecord = (userId, deviceId, plan) => ({
+export const buildEntitlementRecord = (userId, deviceId, plan, expiresAt = null) => ({
   version: 1,
   userId,
   deviceId,
   plan,
   issuedAt: new Date().toISOString(),
+  ...(expiresAt ? { expiresAt } : {}),
 })
+
+const monthlyDesktopExpiry = (metadata, plan) => {
+  if (plan !== 'premium_monthly') return null
+  const value = metadata.subscription_current_period_end
+  if (typeof value === 'number') return new Date(value * 1000).toISOString()
+  const parsed = value ? new Date(value) : null
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null
+}
 
 export const signEntitlementRecord = (record, secret) => {
   if (!secret) return null
@@ -110,7 +119,7 @@ export default async function handler(req, res) {
             cap: deviceCap(),
           })
         }
-        const record = buildEntitlementRecord(user.id, deviceId, plan)
+        const record = buildEntitlementRecord(user.id, deviceId, plan, monthlyDesktopExpiry(serverMetadata, plan))
         const signature = signEntitlementRecord(record, process.env.ENTITLEMENT_SIGNING_SECRET)
         return res.status(200).json({ record, signature, cap: deviceCap() })
       }
@@ -146,7 +155,7 @@ export default async function handler(req, res) {
       }, { onConflict: 'user_id,device_id' })
     if (upsertError) throw upsertError
 
-    const record = buildEntitlementRecord(user.id, deviceId, plan)
+    const record = buildEntitlementRecord(user.id, deviceId, plan, monthlyDesktopExpiry(serverMetadata, plan))
     const signature = signEntitlementRecord(record, process.env.ENTITLEMENT_SIGNING_SECRET)
     return res.status(200).json({ record, signature, cap: deviceCap() })
   } catch (err) {

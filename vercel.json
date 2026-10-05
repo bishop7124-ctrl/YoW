@@ -12,6 +12,8 @@
       "permanent": true
     },
     { "source": "/about", "destination": "/about/", "permanent": true },
+    { "source": "/founders", "destination": "/about/", "permanent": true },
+    { "source": "/founders/:path*", "destination": "/about/", "permanent": true },
     { "source": "/ai-overview", "destination": "/ai-overview/", "permanent": true },
     { "source": "/worldbuilding-software", "destination": "/worldbuilding-software/", "permanent": true },
     { "source": "/novel-writing-software", "destination": "/novel-writing-software/", "permanent": true },

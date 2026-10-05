@@ -92,19 +92,19 @@ const CONTENT = {
         <Section title="Subscriptions and billing">
           <Ul>
             <Li>New accounts receive a free trial period to explore the platform.</Li>
-            <Li>Free, Monthly, Lifetime, and Founder plans have different app access, cloud hosting, storage, and support limits. Current plan details are shown before checkout.</Li>
+            <Li>Free, Monthly, and Lifetime plans have different app access and Cloud limits. Founder is a permanent recognition status for the first 100 successful Lifetime customers, not a separate plan.</Li>
             <Li>Lifetime app access means permanent access to the YOW desktop app and Local Mode. It does not mean indefinite hosted cloud storage above the Free allowance unless your Cloud Mode entitlement is active.</Li>
             <Li>If Lifetime cloud hosting lapses, your lifetime licence remains active and you can continue in desktop Local Mode, import backups, and export your work. Web cloud access falls back to the Free one-project, 250 MB allowance unless Cloud Mode is renewed.</Li>
-            <Li>Founder includes Cloud Mode for the life of the YOW service, without a renewal fee, within the published storage and fair-use cap.</Li>
+            <Li>The first 100 successful Lifetime purchases include two years of Cloud and permanent Founder status. Later Lifetime purchases include one Cloud year. After the included period, Cloud is optional at the price shown before renewal; Lifetime app access continues without it.</Li>
             <Li>A failed Monthly payment moves the account to Free access. Download all project backups and choose the project to keep editable; if stored data exceeds 250 MB, reduce cloud storage or restore a paid plan. Selecting an editable project does not delete other projects.</Li>
             <Li>If optional Cloud Mode renewal is not paid, download your backups or renew Cloud Mode. Lifetime desktop Local Mode remains available.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>
             <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. Sales are final, including partial billing periods, except where mandatory consumer rights require a refund or another remedy.</Li>
           </Ul>
         </Section>
-        <Section title="Support and Founder profiles">
+        <Section title="Support and Founder status">
           <P>Contact support@yourownworld.co.uk for support or privacy requests. We aim to reply within one week.</P>
-          <P>YOW manages Founder profiles and features submitted work there with permission. Contact founders@yourownworld.co.uk for questions, updates, or removal requests. Founder membership does not promise priority influence over development. A full refund or lost chargeback removes Founder access and returns its slot to availability.</P>
+          <P>Founder status is permanent recognition for the first 100 genuine Lifetime customers. It is separate from the Lifetime licence and Cloud entitlement, and does not promise priority influence over development or future features.</P>
         </Section>
         <Section title="Beta access at launch">
           <P>At launch, beta testers enter a 30-day notice period with full web access. Desktop downloads are not included during that period. At its end the account moves to Free unless upgraded. Download project backups before reducing stored projects to Free limits.</P>

@@ -99,12 +99,10 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
 
 // --------------------------------------------------------------------------
 // Write lifetime plan data to app_metadata after a one-time payment.
-// Idempotent by construction: every field either short-circuits on an
-// existing value (lifetime_purchased_at, hosting_included_until) or is set
-// to the same fixed value on every call, so replaying this for the same
-// event is a harmless no-op. Founder allocation is the one non-idempotent
-// exception, which is why it goes through the atomic claim_founder_slot RPC
-// rather than an unconditional upsert (audit P0-05 — see docs/YOW_CODE_AUDIT_2026-09-01.md).
+// Founder recognition for the first 100 live Lifetime purchases is allocated
+// by an advisory-locked database RPC. Stripe test-mode sessions never call the
+// allocator, and Founder status never changes the purchased plan or Cloud
+// entitlement.
 // --------------------------------------------------------------------------
 async function activateLifetimePlan(supabaseAdmin, session) {
   const userId = session.metadata?.user_id || session.client_reference_id
@@ -115,23 +113,35 @@ async function activateLifetimePlan(supabaseAdmin, session) {
     return
   }
 
-  let founderOverflow = false
-  if (plan === 'founder') {
+  const isLegacyFounderPurchase = plan === 'founder'
+  const reservationId = session.metadata?.founder_reservation_id || null
+  const shouldAwardFounder = isLegacyFounderPurchase || (reservationId && session.livemode === true)
+  let founderAward = null
+  let legacyFounderOverflow = false
+  if (reservationId && session.livemode === true) {
+    const { data: claimed, error: claimError } = await supabaseAdmin.rpc('finalize_founder_purchase', {
+      p_reservation_id: reservationId,
+      p_user_id: userId,
+      p_checkout_session_id: session.id,
+    })
+    if (claimError) throw new Error(`finalize_founder_purchase failed: ${claimError.message}`)
+    founderAward = claimed
+  } else if (isLegacyFounderPurchase) {
     const { data: claimed, error: claimError } = await supabaseAdmin.rpc('claim_founder_slot', { p_user_id: userId })
     if (claimError) {
       // Fail the handler (not silently downgrade) so this event is retried
       // rather than a payment going unfulfilled because of a transient DB error.
       throw new Error(`claim_founder_slot failed: ${claimError.message}`)
     }
-    if (!claimed) {
-      // Lost the atomic race for the last slot(s) after already being
-      // charged — never leave a paying customer with nothing. Grant
-      // Lifetime (a real, valid entitlement they paid at least as much
-      // for) and flag the account for the owner to manually resolve the
-      // Founder/Lifetime price difference or comp a slot.
-      console.error('[stripe-webhook] Founder slots exhausted at fulfillment time for', userId, '— granting Lifetime instead, needs manual review')
+    // Current RPC returns a structured result. Accept the older boolean shape
+    // during a safe code/migration rollout; it still preserves the status in
+    // user_profiles, though the numbered badge appears after the migration.
+    founderAward = typeof claimed === 'object' && claimed !== null
+      ? claimed
+      : { awarded: claimed === true, founder_number: null, founder_awarded_at: null }
+    if (!founderAward.awarded) {
       plan = 'premium_plus_lifetime'
-      founderOverflow = true
+      legacyFounderOverflow = true
     }
   }
 
@@ -143,10 +153,13 @@ async function activateLifetimePlan(supabaseAdmin, session) {
   const existing = data?.user?.app_metadata || {}
 
   const purchasedAt = existing.lifetime_purchased_at || new Date().toISOString()
-  // hosting_included_years mirrors the client-side HOSTING_INCLUDED_YEARS constant.
-  // Founders get null (lifetime hosting — no expiry date needed).
-  const HOSTING_INCLUDED_YEARS = 3
-  const hostingIncludedUntil = plan === 'founder'
+  // New Lifetime purchases include one year of Cloud. Historical Founder-plan
+  // purchases keep their original no-expiry hosting promise.
+  const requestedCloudYears = Number(session.metadata?.lifetime_cloud_years)
+  const HOSTING_INCLUDED_YEARS = legacyFounderOverflow
+    ? 3
+    : requestedCloudYears === 2 && (founderAward?.awarded || session.livemode === false) ? 2 : 1
+  const hostingIncludedUntil = isLegacyFounderPurchase && !legacyFounderOverflow
     ? null
     : new Date(new Date(purchasedAt).getTime() + HOSTING_INCLUDED_YEARS * 365 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -160,18 +173,44 @@ async function activateLifetimePlan(supabaseAdmin, session) {
       lifetime_payment_intent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id || existing.lifetime_payment_intent || null,
       lifetime_purchased_at:   purchasedAt,
       hosting_included_until:  existing.hosting_included_until || hostingIncludedUntil,
+      ...(founderAward?.awarded ? {
+        is_founder: true,
+        founder_number: founderAward.founder_number || existing.founder_number || null,
+        founder_awarded_at: founderAward.founder_awarded_at || existing.founder_awarded_at || new Date().toISOString(),
+      } : {}),
     },
   })
 
-  // is_founder itself was already set (or not) by claim_founder_slot above;
-  // this only records the overflow flag for the non-founder-plan case.
-  if (founderOverflow) {
+  if (legacyFounderOverflow) {
     await upsertUserProfile(supabaseAdmin, userId, { founder_overflow_at: new Date().toISOString() })
-  } else if (plan !== 'founder') {
-    // Ordinary (non-Founder, non-overflow) Lifetime purchase — ensure the
-    // profile row exists for storage tracking, same as the subscription path.
+  } else if (!shouldAwardFounder) {
+    // Test-mode or post-cap Lifetime purchase — ensure the profile row exists
+    // for storage tracking without consuming a Founder number.
     await upsertUserProfile(supabaseAdmin, userId, {})
   }
+}
+
+async function holdFounderReservation(supabaseAdmin, session) {
+  const reservationId = session.metadata?.founder_reservation_id
+  const userId = session.metadata?.user_id || session.client_reference_id
+  if (!reservationId || !userId || session.livemode !== true) return
+  const { data, error } = await supabaseAdmin.rpc('hold_founder_checkout', {
+    p_reservation_id: reservationId,
+    p_user_id: userId,
+    p_checkout_session_id: session.id,
+  })
+  if (error || !data) throw new Error(`hold_founder_checkout failed: ${error?.message || 'reservation not found'}`)
+}
+
+async function releaseFounderReservation(supabaseAdmin, session) {
+  const reservationId = session.metadata?.founder_reservation_id
+  const userId = session.metadata?.user_id || session.client_reference_id
+  if (!reservationId || !userId || session.livemode !== true) return
+  const { error } = await supabaseAdmin.rpc('release_founder_checkout', {
+    p_reservation_id: reservationId,
+    p_user_id: userId,
+  })
+  if (error) throw new Error(`release_founder_checkout failed: ${error.message}`)
 }
 
 // --------------------------------------------------------------------------
@@ -305,6 +344,10 @@ export default async function handler(req, res) {
           // events below cover the delayed-clearing case.
           if (session.payment_status === 'paid') {
             await activateLifetimePlan(supabaseAdmin, session)
+          } else {
+            // Delayed payment began before Checkout expired. Keep its one
+            // reserved Founding Price place until async success/failure.
+            await holdFounderReservation(supabaseAdmin, session)
           }
         } else if (session.subscription) {
           // Recurring subscription — retrieve full subscription object to get status.
@@ -336,9 +379,14 @@ export default async function handler(req, res) {
 
       case 'checkout.session.async_payment_failed': {
         const session = event.data.object
+        await releaseFounderReservation(supabaseAdmin, session)
         console.warn('[stripe-webhook] Delayed payment failed for session', session.id, session.metadata)
         break
       }
+
+      case 'checkout.session.expired':
+        await releaseFounderReservation(supabaseAdmin, event.data.object)
+        break
 
       case 'invoice.paid':
       case 'invoice.payment_failed': {

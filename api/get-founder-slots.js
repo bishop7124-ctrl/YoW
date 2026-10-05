@@ -5,16 +5,16 @@ import { applyCors } from './_cors.js'
  * GET /api/get-founder-slots
  *
  * Public endpoint — no auth required.
- * Returns the current founder slot availability derived from app_config
- * and the count of rows in user_profiles where is_founder = true.
+ * Returns current Founder availability. Active Founding Price checkouts are
+ * included as temporary holds so the public offer cannot oversell the cap.
  *
  * Response shape:
  *   { total: number, taken: number, remaining: number }
  */
 export default async function handler(req, res) {
   applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'content-type' })
-  // Short cache — stale by up to 60 s is acceptable for a slot counter.
-  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120')
+  // Availability controls a real price, so never serve a stale positive count.
+  res.setHeader('Cache-Control', 'no-store')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET')  return res.status(405).json({ error: 'Method not allowed' })

@@ -457,8 +457,8 @@
             'Confirm what the next development slice should implement once the decision is made.'
           ], 'The product has one explicit owner-approved path for moving from beta-interest to real paid checkout.', 'Decision, date, current checkout state, and any migration notes.', ['decision', 'payment', 'blocker']),
           item('stripe-price-alignment', 'Update Stripe prices to match the live site', 'Stripe Dashboard and Vercel production env', [
-            'Confirm the site-displayed prices: Monthly £10, Lifetime £150, Founder £300, hosting renewal £6/year.',
-            'Create or update Stripe Price objects so real checkout charges those exact amounts.',
+            'Confirm the site-displayed prices: Monthly £9.99, Founding Lifetime £49.99 for purchases #1–#100, Standard Lifetime £74.99, and Cloud renewal £6/year.',
+            'Create new Stripe Price objects so real checkout charges those exact amounts; Founder remains a status, not a purchasable plan.',
             'Point the production `STRIPE_PRICE_ID_*` variables at the correct live Price IDs.',
             'Redeploy/refresh the production functions that read those env vars.'
           ], 'No user can be charged an old price while the site displays a new one.', 'Stripe Price IDs, Vercel env screenshot/check, deployment timestamp.', ['stripe', 'payment', 'blocker']),
@@ -468,7 +468,7 @@
             'Record the deployment/redeploy needed after any env change.'
           ], 'Production configuration is complete enough for payment, interest form, auth, AI settings sync, and support email routes.', 'Environment checklist, deployment ID, and any redacted screenshots.', ['credentials', 'vercel', 'supabase']),
           item('test-account-matrix', 'Create the live QA account matrix', 'Production YOW accounts', [
-            'Create or identify Account A, Account B, a fresh new account, a Free account, Monthly-like account, Lifetime-like account, Founder-like account, beta_tester account, and desktop-entitled account where available.',
+            'Create or identify Account A, Account B, a fresh new account, a Free account, Monthly-like account, Lifetime-like account, Lifetime-with-Founder-status account, beta_tester account, and desktop-entitled account where available.',
             'Do not use the owner/admin account for destructive tests.',
             'Record account aliases, entitlement state, AI sync state, and baseline project names.'
           ], 'Manual QA can be run without risking real owner data or mixing account states.', 'Account matrix, entitlement notes, baseline screenshots.', ['qa', 'accounts', 'blocker']),
@@ -567,24 +567,24 @@
             'Refresh and confirm unlimited projects, AI tools, desktop entitlement label, and Beta Tester membership state.',
             'Submit signed out and confirm it emails interest without claiming account access.'
           ], 'Temporary access grants are intentional, traceable, and cannot accidentally grant an account from signed-out interest.', 'Inbox evidence, account metadata, plan label, signed-out result.', ['payment', 'beta', 'qa']),
-          item('checkout-monthly', 'Run Monthly checkout QA at £10', 'Stripe Checkout and Billing Portal', [
+          item('checkout-monthly', 'Run Monthly checkout QA at £9.99', 'Stripe Checkout and Billing Portal', [
             'Complete checkout using the owner-approved live or test-mode route.',
             'Verify Stripe session/subscription, webhook delivery, Supabase metadata, and app access.',
             'Open customer portal, cancel where safe, and verify expiry/cancel behavior.',
             'Confirm checkout cannot charge the old £12 amount.'
-          ], 'Monthly users are charged the displayed £10 price and receive the correct entitlement only after webhook-confirmed metadata.', 'Stripe session, webhook result, account metadata, portal result.', ['payment', 'stripe', 'blocker']),
-          item('checkout-lifetime', 'Run Lifetime checkout QA at £150', 'Stripe Checkout and YOW entitlement state', [
-            'Complete checkout using the owner-approved live or test-mode route.',
-            'Verify one-time payment, webhook delivery, lifetime entitlement, desktop entitlement, included cloud-hosting period, and export access.',
-            'Confirm checkout cannot charge old £179 pricing.',
+          ], 'Monthly users are charged the displayed £9.99 price and receive the correct entitlement only after webhook-confirmed metadata.', 'Stripe session, webhook result, account metadata, portal result.', ['payment', 'stripe', 'blocker']),
+          item('checkout-lifetime', 'Run Founding and Standard Lifetime checkout QA', 'Stripe Checkout and YOW entitlement state', [
+            'Complete the £49.99 Founding path and £74.99 Standard path using the owner-approved live or test-mode route.',
+            'Verify one-time payment, webhook delivery, permanent Lifetime entitlement, desktop entitlement, the correct two-year/one-year included Cloud period, and export access.',
+            'Confirm test mode does not consume or award a production Founder position.',
             'Do not sell Lifetime on desktop/local-vault promises until desktop scope below passes.'
-          ], 'Lifetime access matches the displayed £150 offer and does not overpromise unfinished desktop/local-vault behavior.', 'Stripe payment, metadata, plan label, cloud-hosting expiry, desktop copy note.', ['payment', 'lifetime', 'blocker']),
-          item('checkout-founder', 'Run Founder checkout QA at £300', 'Stripe Checkout, Founder slots, Founder surfaces', [
-            'Complete checkout using the owner-approved live or test-mode route.',
-            'Verify Founder status, Founder slot count, badge, fair-use storage cap, lifetime cloud promise, and public recognition copy.',
-            'Confirm checkout cannot charge old £399 pricing.',
-            'Verify sold-out/reserved-slot behavior if configured.'
-          ], 'Founder buyers are charged the displayed £300 price and receive exactly the promised recognition and entitlement.', 'Stripe payment, metadata, slot count, badge screenshot, public page note.', ['payment', 'founder', 'blocker']),
+          ], 'Lifetime access matches the displayed Founding/Standard offers without tying permanent ownership to Cloud renewal.', 'Stripe payment, metadata, plan label, cloud-hosting expiry, desktop copy note.', ['payment', 'lifetime', 'blocker']),
+          item('checkout-founder', 'Run Founder allocation QA around positions 99–101', 'Stripe Checkout, Founder reservation ledger, Founder surfaces', [
+            'Start concurrent live-mode checkout rehearsals with only two Founder positions remaining.',
+            'Verify only two £49.99 sessions can reserve positions and the next session automatically uses £74.99.',
+            'Complete/fail/expire the rehearsals and verify permanent numbered status is awarded only after successful live payment.',
+            'Verify genuine backend remaining counts and the automatic sold-out pricing-page state.'
+          ], 'No more than 100 permanent Founder statuses or Founding Price purchases can be issued, including under concurrency.', 'Stripe sessions, reservation rows, metadata, slot count, badge screenshot.', ['payment', 'founder', 'blocker']),
           item('hosting-renewal', 'Retest £6/year cloud-hosting renewal', 'Cloud Mode renewal CTA and webhook', [
             'Use a lapsed or simulated-lapsed hosting account.',
             'Click renewal and confirm the plan alias fix reaches Stripe correctly.',
@@ -610,8 +610,8 @@
           ], 'The legal/promise gate cannot fail because essential terms are absent, stale, or misleading.', 'Approved pages, date, reviewer, open edits.', ['legal', 'blocker']),
           item('pricing-copy-current', 'Approve current pricing and entitlement copy line by line', 'Pricing, FAQ, Features, Account Settings, Upgrade walls', [
             'Confirm Free £0 / 250 MB / one active cloud project / Map Builder unlocked / AI locked.',
-            'Confirm Monthly £10 / 8 GB and Lifetime £150 / 8 GB copy matches current product decisions.',
-            'Confirm Founder £300 and cloud renewal £6/year are stated consistently.',
+            'Confirm Monthly £9.99 and Lifetime £49.99/£74.99 copy matches current product decisions.',
+            'Confirm Founder is permanent status for the first 100 successful live Lifetime purchases—not a plan—and Cloud renewal is £6/year.',
             'Confirm beta_tester temporary access is either hidden from public copy or intentionally explained where needed.'
           ], 'Users see one coherent pricing promise across public pages and in-app account surfaces.', 'Pages checked, screenshots, stale-copy issues.', ['copy', 'pricing', 'entitlement']),
           item('excluded-feature-copy', 'Confirm excluded-feature wording is honest everywhere', 'Homepage, Features, FAQ, Pricing, SEO/static pages', [
@@ -622,8 +622,8 @@
           item('desktop-promise-gate', 'Gate desktop/Lifetime claims until the desktop app scope is truly ready', 'Pricing, FAQ, download/account pages', [
             'Confirm whether current launch should advertise desktop/local vault at all.',
             'If desktop is account-only at this stage, make sure no page promises desktop editing/local vault yet.',
-            'If desktop vault/editor launch is in scope, require the desktop QA section before selling Lifetime/Founder on that promise.'
-          ], 'Lifetime/Founder copy does not sell a desktop capability before it exists and passes QA.', 'Owner decision, pages checked, desktop scope note.', ['copy', 'desktop', 'lifetime'])
+            'If desktop vault/editor launch is in scope, require the desktop QA section before selling Monthly or Lifetime on that promise.'
+          ], 'Monthly/Lifetime copy does not sell a desktop capability before it exists and passes QA.', 'Owner decision, pages checked, desktop scope note.', ['copy', 'desktop', 'lifetime'])
         ]
       },
       {
@@ -633,7 +633,7 @@
           item('desktop-scope-decision', 'Decide whether desktop is account-only or full local-vault/editor for the next launch step', 'Desktop app PRD and current build', [
             'Confirm the current build’s desktop scope with engineering.',
             'If the app is account-only, mark full vault/editor tests N/A for this pass and run account-only checks instead.',
-            'If full desktop vault/editor is in scope, keep all data-safety desktop vault tests as blockers before selling Lifetime/Founder on the desktop promise.'
+            'If full desktop vault/editor is in scope, keep all data-safety desktop vault tests as blockers before selling Monthly or Lifetime on the desktop promise.'
           ], 'Desktop QA expectations match what the build actually contains.', 'Decision, build/version, tests marked N/A or required.', ['desktop', 'decision']),
           item('desktop-account-only-check', 'Run desktop account-only surface QA if that is the current build scope', 'Packaged desktop app', [
             'Launch signed out and verify only the compact login/auth screen appears.',
@@ -694,7 +694,7 @@
             'Include guidance that AI suggestions should be reviewed and never treated as guaranteed canon.'
           ], 'Users can configure AI deliberately and understand privacy/account-scope expectations.', 'Guide URL/file, provider screenshots, privacy note.', ['guide', 'ai', 'security']),
           item('guide-billing-storage-export', 'Create billing, storage, Local Mode, and export ownership guide', 'Billing/help docs', [
-            'Explain Free/Monthly/Lifetime/Founder prices, storage caps, cloud hosting renewal, cancellation, receipts, Founder recognition, and beta-interest if still active.',
+            'Explain Free/Monthly/Lifetime prices, storage caps, Cloud renewal, cancellation, receipts, Founder recognition, and beta-interest if still active.',
             'Explain ZIP backup, readable DOCX bundle, PDF/World Bible secondary export, and export-before-delete guidance.',
             'Explain what happens when cloud hosting lapses and what data users can still export.'
           ], 'Users understand what they own, what they pay for, and how to leave with their work.', 'Guide URL/file, legal alignment note, pricing checked.', ['guide', 'billing', 'export']),
@@ -715,7 +715,7 @@
             'Check mobile, tablet, and desktop layouts.'
           ], 'Homepage accurately sells the current product and routes users cleanly.', 'Date, viewport notes, screenshots, issues found.', ['page-review', 'homepage']),
           item('page-pricing', 'Review Pricing `/pricing/`', 'https://www.yourownworld.co.uk/pricing/', [
-            'Verify Free £0/250 MB, Monthly £10/8 GB, Lifetime £150/8 GB, Founder £300, and £6/year cloud renewal copy.',
+            'Verify Free £0/250 MB, Monthly £9.99, Founding Lifetime £49.99, Standard Lifetime £74.99, and £6/year Cloud renewal copy.',
             'Verify beta-interest or checkout behavior matches the current owner decision.',
             'Check comparison table, FAQs, CTA buttons, selected-card styling, mobile/tablet/desktop layout, and metadata.'
           ], 'Pricing is current, non-misleading, and usable at every launch viewport.', 'Screenshots, checkout/interest result, stale-copy notes.', ['page-review', 'pricing', 'payment']),

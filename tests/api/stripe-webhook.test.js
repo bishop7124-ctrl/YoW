@@ -432,6 +432,58 @@ describe('handler — Founder slot allocation', () => {
     expect(writes[0].subscription_plan).toBe('founder')
   })
 
+  it('finalizes a bound live Founding Lifetime reservation and grants two Cloud years', async () => {
+    rpc.mockImplementation(async name => name === 'finalize_founder_purchase'
+      ? { data: { awarded: true, founder_number: 100, founder_awarded_at: '2026-10-05T12:00:00.000Z' }, error: null }
+      : { data: true, error: null })
+    constructEvent.mockReturnValue({
+      id: 'evt_founding_100', type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_founding_100', mode: 'payment', payment_status: 'paid', livemode: true,
+        metadata: { user_id: 'user-100', plan: 'premium_plus_lifetime', founder_reservation_id: '00000000-0000-4000-8000-000000000100', lifetime_cloud_years: '2' },
+        client_reference_id: 'user-100', customer: 'cus_100',
+      } },
+    })
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(rpc).toHaveBeenCalledWith('finalize_founder_purchase', {
+      p_reservation_id: '00000000-0000-4000-8000-000000000100',
+      p_user_id: 'user-100',
+      p_checkout_session_id: 'cs_founding_100',
+    })
+    const metadata = metadataWritesFor('user-100')[0]
+    expect(metadata).toMatchObject({
+      subscription_plan: 'premium_plus_lifetime',
+      is_founder: true,
+      founder_number: 100,
+    })
+    expect(new Date(metadata.hosting_included_until).getUTCFullYear()).toBe(new Date(metadata.lifetime_purchased_at).getUTCFullYear() + 2)
+  })
+
+  it('never awards Founder status for a test-mode Founding Price purchase', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_founding_test', type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_founding_test', mode: 'payment', payment_status: 'paid', livemode: false,
+        metadata: { user_id: 'test-user', plan: 'premium_plus_lifetime', lifetime_offer: 'founding_test', lifetime_cloud_years: '2' },
+        client_reference_id: 'test-user', customer: 'cus_test',
+      } },
+    })
+    queueResult({ data: null, error: null })
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(rpc).not.toHaveBeenCalledWith('finalize_founder_purchase', expect.anything())
+    expect(metadataWritesFor('test-user')[0].is_founder).toBeUndefined()
+  })
+
   it('falls back to Lifetime and flags the account when the atomic claim loses the race', async () => {
     rpc.mockResolvedValue({ data: false, error: null }) // cap already reached
     constructEvent.mockReturnValue({

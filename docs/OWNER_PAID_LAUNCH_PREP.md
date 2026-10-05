@@ -19,7 +19,7 @@ The critical path is:
 3. Complete owner-led live-account, provider, device, legal, and payment sign-off.
 4. Remove or migrate beta entitlements and enable real checkout only as the final switch.
 
-The desktop application is the longest pole because Lifetime and Founder explicitly promise it. A Monthly-only web launch would be a product-scope change and is not assumed here.
+The desktop application is the longest pole because both active Monthly and Lifetime now include it.
 
 ## Decisions and setup already complete
 
@@ -27,10 +27,10 @@ Do not reopen these unless product direction changes:
 
 - The exposed test credentials are no longer active: one account was deleted and the remaining password was rotated.
 - The production security/rate-limit/idempotency migrations and re-engagement signing secret were applied.
-- Paid prices are Monthly £10/month, Lifetime £99 once, Founder £299 once, and Cloud Mode renewal £6/year.
-- Storage allowances are Free 250 MB, Monthly/Lifetime 8 GB, and Founder/Beta 15 GB.
+- Paid prices are Monthly £9.99/month, Founding Lifetime £49.99 once for successful purchases #1–100, Standard Lifetime £74.99 once thereafter, and optional Cloud renewal £6/year.
+- Storage allowances are Free 250 MB, Monthly/Lifetime 8 GB, and Beta 15 GB. Retained legacy Founder-plan accounts keep their historical allowance.
 - Free includes Map Builder for its editable project; AI remains paid-only.
-- Lifetime and Founder will include the full downloadable desktop workspace. The desktop promise will not be narrowed to an account-management shell.
+- Monthly while active and Lifetime permanently include the full downloadable desktop workspace. The desktop promise will not be narrowed to an account-management shell.
 - The desktop app will remain unsigned at paid launch. Apple notarisation and Windows publisher signing are deferred until an owner-defined revenue threshold can cover their costs.
 - External solicitor/legal review is optional and may happen after launch. Accurate, complete, owner-approved Terms, Privacy, cancellation, data, AI, and payment copy is still required.
 - Paid checkout remains disabled until the other gates pass.
@@ -55,9 +55,8 @@ Exit condition: required devices and accounts are available, unsigned-install gu
 Engineering should not guess these decisions. Record each answer in `docs/ROADMAP.md` before implementation or final copy approval.
 
 - [ ] Confirm Lifetime browser access during the included Cloud Mode period. Current recommendation: yes while cloud hosting is entitled.
-- [ ] Confirm Founder browser access for life within the published fair-use cap. Current recommendation: yes.
 - [ ] Confirm the implemented desktop policy of three active devices and a 30-day offline re-verification interval. The interval must never block editing or export.
-- [ ] Define the Founder operating policy: what “permanent recognition,” “feature your debut work,” and “priority influence” mean; consent and removal rules; what happens to a slot after refund/chargeback; and what support level is promised.
+- [x] Founder is permanent numbered recognition only, separate from the Lifetime licence and Cloud entitlement; it promises no profile, priority influence, special support, or lifetime hosted service.
 - [ ] Decide the launch treatment for Beta Tester accounts: retain manually, convert to a defined complimentary period/plan, or expire. Do not let the final checkout switch silently leave temporary beta entitlements in an undefined state.
 - [ ] Decide whether a visual PDF is a shareable document or a restorable archive. Recommended: make the normal PDF share-safe and keep full restorable project data in the clearly labelled ZIP backup. If embedded JSON remains, require an explicit warning before export.
 - [ ] Decide whether arbitrary custom OpenAI-compatible endpoints remain enabled at paid launch. They bypass YOW's normal allowlisted proxy and have different key/privacy/CORS risks.
@@ -74,7 +73,7 @@ Create disposable or clearly labelled accounts before the final QA week. Do not 
 - [ ] Monthly test account.
 - [ ] Lifetime test account with active included Cloud Mode.
 - [ ] Lifetime test account in warning, grace, and lapsed states, or a documented way to move one fixture through those dates safely.
-- [ ] Founder test account.
+- [ ] Numbered Founder-status Lifetime fixture with a two-year included Cloud date.
 - [ ] Beta Tester account to exercise the migration/expiry decision.
 - [ ] Second ordinary account for cross-account isolation.
 - [ ] Disposable deletion account for full account/data deletion verification.
@@ -148,7 +147,7 @@ Owner/release tasks:
 - [ ] Verify Local-first pauses all automatic cloud writes; manual upload/download and conflict review do exactly what their confirmation screens promise.
 - [ ] Verify a web → desktop → web round trip on one account without losing or duplicating records.
 - [ ] Verify offline use beyond the re-verification interval never blocks editing or export.
-- [ ] Verify active, warning, grace, lapsed, renewed, and Founder cloud states with clear separate App Licence and Cloud Hosting status.
+- [ ] Verify active, warning, grace, lapsed, renewed, and numbered-Founder states with clear separate App Licence, Founder recognition, and Cloud status.
 - [ ] Verify the signed updater from one released version to the next on macOS and Windows.
 - [ ] Set and verify the production desktop download URLs/version only after the final unsigned artifacts are approved.
 
@@ -166,7 +165,6 @@ Exit condition: the Desktop/Local Mode promise is independently QA-passed on mac
 - [ ] Confirm accessibility statement/contact route and a practical process for handling accessibility reports.
 - [ ] Prepare support macros for failed login, lost device, cloud lapse, restore, billing cancellation/refund, and AI provider-key problems.
 - [ ] Replace temporary/beta screenshots with final product assets and ensure the unsigned-install instructions are accurate, prominent, and platform-specific.
-- [ ] Collect testimonials, project screenshots, or Founder profiles only with explicit written consent and agreed removal/usage terms.
 
 Exit condition: a customer cannot buy based on a material promise the product, support process, or legal terms do not fulfil.
 
@@ -174,9 +172,9 @@ Exit condition: a customer cannot buy based on a material promise the product, s
 
 Keep beta-interest active and real checkout disabled until this milestone.
 
-- [ ] Confirm the authoritative Stripe products/Price IDs match £10 Monthly, £99 Lifetime, £299 Founder, and £6/year renewal in the correct environment.
+- [ ] Confirm Stripe Prices match £9.99 Monthly, £49.99 Founding Lifetime, £74.99 Standard Lifetime, and £6/year Cloud in the correct environment; deactivate the old Founder checkout Price.
 - [ ] Verify success, cancel, failed payment, delayed payment, duplicate webhook replay, refund, subscription cancellation, downgrade, portal access, and hosting renewal.
-- [ ] Verify Founder allocation is atomic at the cap and that refunds/chargebacks follow the approved slot policy.
+- [ ] Verify Founding Price checkout reservations and successful Founder numbering are atomic at positions 99/100/101, abandoned holds expire, and test mode consumes no live places.
 - [ ] Reconcile existing Stripe customers/metadata with server-controlled Supabase entitlement before enabling checkout.
 - [ ] Execute the approved Beta Tester migration/retention plan.
 - [ ] Confirm checkout, portal, webhook, Resend, download, and support monitoring/alerts have named owners.

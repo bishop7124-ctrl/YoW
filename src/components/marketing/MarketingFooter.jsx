@@ -4,9 +4,8 @@ import SupportDevelopmentLink from './SupportDevelopmentLink'
 const PRODUCT_LINKS = [
   { href: '/features/', label: 'Features' },
   { href: '/pricing/', label: 'Pricing' },
-  { href: '/founders/', label: 'Founders' },
   { href: '/ai-overview/', label: 'AI Assistant' },
-  { href: '/about/', label: 'About' },
+  { href: '/about/', label: 'About Us' },
 ]
 
 const USE_CASE_LINKS = [

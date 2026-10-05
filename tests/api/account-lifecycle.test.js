@@ -159,10 +159,11 @@ describe('account lifecycle: who can ever be swept', () => {
     expect(lifecycleTrackFor(null)).toBeNull()
   })
 
-  it('derives the hosting end from the renewal date, else purchase + 3 years', () => {
+  it('derives the hosting end from renewal, explicit inclusion, or purchase + 1 year', () => {
     expect(hostingEndsAt({ app_metadata: { cloud_hosting_expires_at: '2027-05-01T00:00:00Z' } }).toISOString()).toBe('2027-05-01T00:00:00.000Z')
+    expect(hostingEndsAt({ app_metadata: { hosting_included_until: '2028-01-01T00:00:00Z' } }).toISOString()).toBe('2028-01-01T00:00:00.000Z')
     const end = hostingEndsAt({ app_metadata: { lifetime_purchased_at: '2026-01-01T00:00:00Z' } })
-    expect(Math.round((end - new Date('2026-01-01T00:00:00Z')) / DAY_MS)).toBe(3 * 365)
+    expect(Math.round((end - new Date('2026-01-01T00:00:00Z')) / DAY_MS)).toBe(365)
   })
 
   it('returns a harmless result for invalid input instead of throwing', () => {

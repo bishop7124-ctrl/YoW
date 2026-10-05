@@ -47,14 +47,14 @@ describe('get-download-links handler', () => {
     expect(res.status).toHaveBeenCalledWith(401)
   })
 
-  it('returns 403 for users without a lifetime plan', async () => {
+  it('returns download links for an active Monthly subscriber', async () => {
     getUser.mockResolvedValue({
       data: { user: { app_metadata: { subscription_plan: 'premium_monthly', subscription_status: 'active' } } },
       error: null,
     })
     const res = makeRes()
     await handler(makeReq(), res)
-    expect(res.status).toHaveBeenCalledWith(403)
+    expect(res.status).toHaveBeenCalledWith(200)
   })
 
   it('returns 403 for free users with no plan', async () => {

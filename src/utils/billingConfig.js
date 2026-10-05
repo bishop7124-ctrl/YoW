@@ -8,13 +8,14 @@
 export const BILLING = {
   // Displayed prices (GBP, display only — Stripe is the authoritative amount)
   // NOTE (2026-08-31 live pricing alignment): these match the live Stripe Prices.
-  monthlyPrice:        10,   // £/month
-  lifetimePrice:       99,   // £ one-time
-  founderPrice:        299,  // £ one-time
+  monthlyPrice:        9.99,  // £/month
+  foundingLifetimePrice: 49.99, // first 100 successful live purchases
+  lifetimePrice:       74.99, // £ one-time
   hostingRenewalPrice: 6,    // £/year after included period
 
   // Lifetime hosting rules
-  hostingIncludedYears:   3,   // years of cloud hosting included with Lifetime purchase
+  hostingIncludedYears:   1,   // years of cloud hosting included with Lifetime purchase
+  foundingHostingIncludedYears: 2,
   hostingRenewalWarningDays: 30, // warn this many days before renewal is due
 
   // Founder slot limit (server-side enforced via app_config, this is the client fallback)
@@ -23,8 +24,8 @@ export const BILLING = {
   // Stripe env var names (server-side — never exposed to the client)
   stripeEnvKeys: {
     premiumMonthly:      'STRIPE_PRICE_ID_PREMIUM_MONTHLY',
+    foundingLifetime:    'STRIPE_PRICE_ID_FOUNDING_LIFETIME',
     premiumLifetime:     'STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME',
-    founder:             'STRIPE_PRICE_ID_FOUNDER',
     hostingRenewal:      'STRIPE_PRICE_ID_MAINTENANCE',  // existing env var name kept for compatibility
   },
 }

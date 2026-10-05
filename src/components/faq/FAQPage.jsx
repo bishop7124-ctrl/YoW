@@ -50,15 +50,15 @@ const FAQ_SECTIONS = [
     id: 'plans-pricing',
     heading: 'Plans & Pricing',
     icon: 'pricing',
-    summary: 'Costs, renewals, Founders, downgrades, and billing basics.',
+    summary: 'Costs, optional Cloud renewal, Founder status, downgrades, and billing basics.',
     items: [
       {
         q: 'What does Lifetime actually cover?',
-        a: "The planned Lifetime terms include a permanent licence for the purchased desktop version, unlimited local projects, exports, and the features included with that version. They also include 3 years of Cloud Mode for hosted sync, storage, and cloud backups. After that, the desktop app can continue in Local Mode, while web access falls back to Free limits unless you renew Cloud Mode for £6/year. The desktop workspace is still being completed and paid plans are not yet on sale.",
+        a: 'Lifetime means permanent YOW app access, unlimited projects, exports, and desktop/offline use. The first 100 successful Lifetime purchases are £49.99 and include two Cloud years plus permanent Founder status; later purchases are £74.99 and include one Cloud year. Cloud is then optional at £6/year.',
       },
       {
         q: 'What is the cloud hosting renewal?',
-        a: "The cloud hosting renewal is £6/year, due only after the included 3-year Cloud Mode period ends for Lifetime users. It covers hosted sync, storage, and backups above the Free allowance. If you choose not to renew, your lifetime desktop app licence remains active and web cloud access falls back to Free limits.",
+        a: 'Cloud renewal is £6/year after the included period (two years for Founding purchases, one year for Standard Lifetime). It covers hosted sync, storage, and backups above the Free allowance. Declining it never removes the Lifetime licence or Founder status.',
       },
       {
         q: 'What happens if I don\'t renew cloud hosting?',
@@ -66,11 +66,11 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Do monthly subscribers pay a cloud hosting renewal?',
-        a: 'No. Monthly subscribers pay £10/month, which includes Cloud Mode while subscribed. The annual renewal only applies to Lifetime plan holders after their included hosting period.',
+        a: 'No. Monthly is £9.99/month and includes Cloud while subscribed. The optional annual renewal applies only to Lifetime after its included Cloud period.',
       },
       {
-        q: 'How many Founder slots are there?',
-        a: "Founder membership is planned to be capped at 100 completed purchases, with availability confirmed at checkout. Founders receive Cloud Mode for the life of the YOW service without a renewal fee, within the published storage and fair-use limits.",
+        q: 'How does Founder status work?',
+        a: 'Founder is permanent recognition for the first 100 genuine Lifetime purchasers, not a separate plan. Founders pay £49.99, receive a number from #001–#100 and two included Cloud years. Their Lifetime licence and Founder status remain even if Cloud is not renewed.',
       },
       {
         q: 'What happens to my data if I downgrade to Free?',

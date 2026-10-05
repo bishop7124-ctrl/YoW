@@ -99,18 +99,4 @@
     <priority>0.5</priority>
   </url>
 
-  <url>
-    <loc>https://www.yourownworld.co.uk/founders/</loc>
-    <lastmod>2026-09-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <url>
-    <loc>https://www.yourownworld.co.uk/founders/morgan-bishop/</loc>
-    <lastmod>2026-08-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-
 </urlset>

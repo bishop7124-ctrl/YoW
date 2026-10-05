@@ -87,7 +87,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
       return (
         <StatusPanel
           title="Sign in to access downloads"
-          body="The YOW desktop app is available to Lifetime and Founder members. Sign in to your account to download it."
+          body="The YOW desktop app is available with active Monthly and permanent Lifetime access. Sign in to your account to download it."
         >
           <button type="button" className="btn btn-primary" onClick={onLogin}>
             Log in
@@ -99,8 +99,8 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
     if (!entitled) {
       return (
         <StatusPanel
-          title="Planned for Lifetime and Founder"
-          body={membership?.isBetaNoticeActive ? "Your 30-day beta notice retains full web access. Desktop downloads require Lifetime or Founder membership during this period." : "The desktop workspace and its local project vault are still being completed for paid launch. Register interest in Lifetime or Founder for availability updates."}
+          title="Desktop access is not active"
+          body={membership?.isBetaNoticeActive ? "Your beta notice retains full web access, but desktop downloads require active Monthly or Lifetime access." : "Choose Monthly for desktop access while subscribed, or Lifetime for permanent desktop and offline access."}
         >
           <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>
             View plans

@@ -49,6 +49,39 @@ describe('membership plan limits', () => {
     expect(membership.storageQuotaBytes).toBe(PLAN_STORAGE_BYTES.free)
   })
 
+  it('keeps Founder status separate from Lifetime and honours the explicit two-year Cloud date', () => {
+    const membership = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_plus_lifetime',
+        subscription_status: 'active',
+        lifetime_purchased_at: '2026-01-01T00:00:00Z',
+        hosting_included_until: '2028-01-01T00:00:00Z',
+        is_founder: true,
+        founder_number: 42,
+      },
+    }))
+    expect(membership.isLifetime).toBe(true)
+    expect(membership.isFounder).toBe(true)
+    expect(membership.isLegacyFounderPlan).toBe(false)
+    expect(membership.founderNumber).toBe(42)
+    expect(membership.maintenanceExpiresAt.toISOString()).toBe('2028-01-01T00:00:00.000Z')
+  })
+
+  it('does not let Founder recognition bypass Cloud expiry', () => {
+    const membership = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_plus_lifetime',
+        lifetime_purchased_at: '2020-01-01T00:00:00Z',
+        hosting_included_until: '2022-01-01T00:00:00Z',
+        is_founder: true,
+        founder_number: 1,
+      },
+    }))
+    expect(membership.isFounder).toBe(true)
+    expect(membership.isMaintenanceLapsed).toBe(true)
+    expect(membership.isLifetime).toBe(true)
+  })
+
   it('walks a lapsed Lifetime account through grace (writes still on) and then archive (cloud sync off)', () => {
     const lapsedAt = Date.now() - 10 * 24 * 60 * 60 * 1000
     const grace = getMembership(makeUser({

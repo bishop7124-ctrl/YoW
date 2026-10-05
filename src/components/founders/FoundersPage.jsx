@@ -2,125 +2,52 @@ import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { usePageMeta } from '../../utils/usePageMeta'
 
-const FOUNDERS = [
-  {
-    slug: 'morgan-bishop',
-    name: 'Morgan Bishop',
-    genre: 'Fantasy · World-builder',
-    bio: 'American writer based in England. Degree in English Literature, background in tech. Currently building a three-part fantasy series with a world big enough to get lost in — which is exactly why she made this tool. Wife, mum, dog owner. Writes late.',
-    works: 'Trilogy in progress',
-    avatar: '/founders/morgan-bishop/pencil-sketch.png',
-    emoji: '🌍',
-  },
-]
-
-function FounderCard({ founder }) {
-  return (
-    <a
-      href={`/founders/${founder.slug}/`}
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        padding: '28px 24px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: 12,
-        textDecoration: 'none',
-        color: 'inherit',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.12)' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none' }}
-    >
-      {founder.avatar
-        ? <img src={founder.avatar} alt="" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', flexShrink: 0 }} />
-        : <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--bg-card2)', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>{founder.emoji}</div>
-      }
-      <p style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {founder.name}
-        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 4, padding: '2px 6px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>✦ Founder</span>
-      </p>
-      <p style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 500, margin: 0 }}>{founder.genre}</p>
-      <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{founder.bio}</p>
-      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{founder.works}</p>
-      <span style={{ fontSize: '0.825rem', color: 'var(--accent)', fontWeight: 500, marginTop: 'auto', paddingTop: 4 }}>View profile →</span>
-    </a>
-  )
-}
-
-export default function FoundersPage({ user, onGetStarted, onLogin }) {
+export default function FoundersPage({ user, onGetStarted }) {
   usePageMeta({
-    path: '/founders/',
-    title: 'Founders — Your Own World | Worldbuilding & Writing Software',
-    description: 'Meet the Founder members of Your Own World and review the planned Founder terms, including a badge and an optional YOW-managed profile.',
+    path: '/about/',
+    title: 'About Us — Your Own World',
+    description: 'Meet Morgan Bishop and learn why she built Your Own World: one independent writing and worldbuilding workspace for the manuscript and everything around it.',
   })
 
   return (
     <div className="yow-home min-h-screen" style={{ color: 'var(--text-main)' }}>
-      <MarketingNav activePath="/founders/" user={user} onGetStarted={onGetStarted} onLogin={onLogin} />
-
-      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 96px' }}>
-
-        {/* Hero */}
-        <section style={{ padding: '80px 0 48px' }}>
-          <p className="eyebrow" style={{ marginBottom: 12 }}>YOW Founders</p>
-          <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', fontWeight: 800, lineHeight: 1.1, margin: '0 0 20px', maxWidth: 640 }}>
-            The writers who believed first.
-          </h1>
-          <p style={{ fontSize: 17, color: 'var(--text-muted)', maxWidth: 580, lineHeight: 1.7, margin: 0 }}>
-            Founder membership is planned to be capped at 100 completed purchases. Full refunds and lost chargebacks return a slot to availability. These profiles showcase submitted work with each member's permission.
-          </p>
+      <MarketingNav activePath="/about/" user={user} onGetStarted={onGetStarted} />
+      <main style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px 104px' }}>
+        <section style={{ padding: 'clamp(64px, 10vw, 112px) 0 56px', maxWidth: 760 }}>
+          <p className="eyebrow" style={{ marginBottom: 12 }}>About us</p>
+          <h1 style={{ fontSize: 'clamp(2.2rem, 6vw, 4.75rem)', fontWeight: 900, letterSpacing: '-.04em', lineHeight: 1.02, margin: '0 0 24px' }}>One home for the story and the world around it.</h1>
+          <p style={{ fontSize: 18, color: 'var(--text-muted)', lineHeight: 1.75, margin: 0 }}>YOW exists because writing a big story can become ridiculously complicated—and the useful bits always seem to end up in six different places.</p>
         </section>
 
-        <p style={{ color: 'var(--text-muted)', lineHeight: 1.7 }}>
-          YOW manages Founder profiles and displays submitted work on those profiles with your permission.
-          For profile updates, removal requests, or Founder questions, contact{' '}
-          <a href="mailto:founders@yourownworld.co.uk">founders@yourownworld.co.uk</a>.
-        </p>
-        {/* Founders grid */}
-        <section style={{ paddingBottom: 80 }}>
-          {FOUNDERS.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 24 }}>
-              {FOUNDERS.map(f => <FounderCard key={f.slug} founder={f} />)}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--text-muted)' }}>
-              <p style={{ maxWidth: 440, margin: '0 auto 24px' }}>No Founders yet — be the first.</p>
-              <a href="/pricing/" className="btn btn-primary">See Founder pricing</a>
-            </div>
-          )}
-        </section>
+        <section style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)', gap: 'clamp(32px, 7vw, 72px)', alignItems: 'start', marginBottom: 72 }}>
+          <aside style={{ padding: 24, border: '1px solid var(--border)', borderRadius: 18, background: 'var(--bg-card)', textAlign: 'center' }}>
+            <img src="/founders/morgan-bishop/pencil-sketch.png" alt="Portrait of Morgan Bishop" style={{ width: 148, height: 148, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', marginBottom: 18 }} />
+            <h2 style={{ fontSize: 20, margin: '0 0 5px' }}>Morgan Bishop</h2>
+            <p style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 800, margin: '0 0 12px' }}>Writer · worldbuilder · independent maker</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.65, margin: 0 }}>American writer in England. English Literature graduate, tech background, fantasy trilogy in progress. Wife, mum and dog owner. Writes late.</p>
+          </aside>
 
-        {/* Become a Founder */}
-        <section style={{ marginBottom: 80 }}>
-          <div style={{
-            maxWidth: 640, margin: '0 auto', textAlign: 'center',
-            padding: '40px 32px',
-            border: '1px solid var(--border)', borderRadius: 16,
-            background: 'var(--bg-card)',
-          }}>
-            <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>Become a Founder</h3>
-            <p style={{ color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24, fontSize: 15 }}>
-              Founder is a planned one-time purchase capped at 100 completed sales. The planned terms include the Lifetime app licence, Cloud Mode for the life of the YOW service within published storage and fair-use limits, a Founder badge, and an optional YOW-managed profile featuring submitted work. Availability will be confirmed at checkout. A full refund or lost chargeback removes Founder access and returns the slot.
-            </p>
-            <a href="/pricing/" className="btn btn-primary" style={{ textDecoration: 'none' }}>See Founder pricing</a>
+          <div style={{ color: 'var(--text-muted)', fontSize: 16, lineHeight: 1.82 }}>
+            <h2 style={{ color: 'var(--text-main)', fontSize: 'clamp(1.5rem, 3vw, 2.25rem)', margin: '0 0 20px' }}>I built the tool I wanted to write in.</h2>
+            <p>I was trying to keep a manuscript, character histories, lore, timelines, locations, maps, relationships and all the half-formed notes around them in sync. The manuscript lived in one app. Worldbuilding lived across documents and spreadsheets. Important details were forever hiding in whichever tab I had closed.</p>
+            <p>That mess is where Your Own World came from. I wanted the manuscript at the centre, with the world around it close enough to consult without losing my place. Not a blank page on one side and an enormous wiki project on the other—one connected workspace that could hold the whole thing.</p>
+            <p>YOW is built by an actual writer and worldbuilder because it solves problems I have in my own work. It is independently made, not a huge software company dressed up in friendly copy. If something feels personal here, that is because it is.</p>
+            <p>The aim is straightforward: useful writing software people can own. Cloud sync is available when it helps, but a Lifetime licence does not disappear because someone decides they no longer need hosted storage.</p>
           </div>
         </section>
 
-        {/* CTA */}
-        <section style={{ textAlign: 'center' }}>
-          <p className="eyebrow" style={{ marginBottom: 12 }}>Free to start</p>
-          <h2 style={{ fontSize: 'clamp(1.5rem, 3.5vw, 2.5rem)', fontWeight: 800, marginBottom: 16 }}>Your stories. Your lore. Your world.</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 28, fontSize: 16 }}>
-            Start your first project free — no credit card, no time limit. Build the world your story needs.
-          </p>
-          <a href="/signup" className="btn btn-primary btn-lg" style={{ textDecoration: 'none' }}>Get started free</a>
+        <section style={{ maxWidth: 760, margin: '0 auto 72px', padding: 'clamp(30px, 6vw, 52px)', border: '1px solid var(--border)', borderRadius: 18, background: 'var(--bg-nav)', textAlign: 'center' }}>
+          <p className="eyebrow">The philosophy</p>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)', margin: '10px 0 16px' }}>Buy YOW for what it is today. Enjoy what we add tomorrow.</h2>
+          <p style={{ color: 'var(--text-muted)', lineHeight: 1.75, margin: 0 }}>YOW should earn a place in your process because it is useful now—not because of a countdown, a locked-in subscription or promises about a distant roadmap.</p>
         </section>
 
+        <section style={{ textAlign: 'center' }}>
+          <h2 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.6rem)', marginBottom: 14 }}>Your stories. Your lore. Your world.</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 26 }}>Start one project free. No card and no time limit.</p>
+          <a href="/signup" className="btn btn-primary btn-lg" style={{ textDecoration: 'none' }}>Get started free</a>
+        </section>
       </main>
-
       <MarketingFooter />
     </div>
   )

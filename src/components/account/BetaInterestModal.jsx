@@ -5,7 +5,6 @@ import { PLANS } from '../../utils/membership'
 const DEFAULT_PLAN_LABELS = {
   premium_monthly: 'Monthly',
   premium_plus_lifetime: 'Lifetime',
-  founder: 'Founder',
   hosting_renewal: 'Cloud Mode renewal',
 }
 

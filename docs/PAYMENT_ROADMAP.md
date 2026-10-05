@@ -10,32 +10,33 @@ Not started / awaiting the user's availability. No action needed from any agent 
 
 ## What's parked here
 
-### 1. Stripe Dashboard price alignment (resolved)
+### 1. Stripe Dashboard price alignment (reopened 2026-10-05)
 
-The user confirmed on 2026-08-31 that the live Stripe Price objects match the approved client prices: Monthly £10, Lifetime £99, Founder £299, and hosting renewal £6/year. Reconfirm this alignment during the final return-to-live pass if any price object or environment variable changes.
+The approved model is now Monthly £9.99, Founding Lifetime £49.99 (first 100 successful live purchases), Standard Lifetime £74.99, and optional Cloud renewal £6/year. The purchasable Founder plan is retired. Create new immutable test/live Stripe Prices and do not reuse the old amounts. The repository is prepared, but paid buttons remain on the interest flow until these Price IDs, migration and webhooks are configured and verified.
 
 ### 2. Formal Stripe test-mode QA checklist (currently accepted on a lighter basis)
 
-Status: the user judged the formal checklist too complex to set up on 2026-07-28 and instead accepted Monthly/Lifetime/Founder/hosting-renewal as passed based on real/live usage. That's a lighter bar than a true test-mode run and hasn't exercised failure/cancel paths or webhook edge cases. If/when the user wants the formal pass:
+Status: the earlier live-flow acceptance no longer covers the pricing model approved on 2026-10-05. The new Monthly/Founding Lifetime/Standard Lifetime/Cloud paths need a fresh test-mode and controlled live-mode pass before checkout opens.
 
 **2026-10-02 server-path audit note:** the application and current architecture documentation use the Vercel `/api/create-checkout-session`, `/api/create-customer-portal`, and `/api/stripe-webhook` implementations. The repository still contains legacy Supabase Edge Function copies. Their caller-facing routes authenticate and bind mutations to the verified current user, but the legacy Stripe webhook has materially drifted from the active Vercel webhook: it lacks the durable `stripe_processed_events` claim/release ledger and retains older payment/renewal fulfillment rules. Before enabling checkout, the configuration review must prove the Stripe Dashboard endpoint targets the active Vercel `/api/stripe-webhook` route and that no enabled endpoint targets the legacy Supabase function. Do not deploy or reconnect the legacy copies as a shortcut; either retire them after confirming they are unused or replace them with one shared implementation in a separately reviewed payment change. This is part of the already-scheduled Stripe review, not additional 2 October owner work.
 
-1. **Stripe test-mode setup**: temporarily swap the active Vercel deployment's Stripe secrets to test-mode values only — `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_PREMIUM_MONTHLY`, `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME`, `STRIPE_PRICE_ID_FOUNDER`, `STRIPE_PRICE_ID_MAINTENANCE`, `STRIPE_WEBHOOK_SECRET`. Leave `SITE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` alone.
+1. **Stripe test-mode setup**: set test-mode values for `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_PREMIUM_MONTHLY`, `STRIPE_PRICE_ID_FOUNDING_LIFETIME`, `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME`, `STRIPE_PRICE_ID_MAINTENANCE`, and `STRIPE_WEBHOOK_SECRET`. Leave Supabase and site variables unchanged.
 2. **Secret consistency check**: confirm every Stripe value belongs to the same mode (no mixing live secret keys with test price IDs, etc).
-3. **Webhook setup**: in Stripe test mode, create/verify the webhook endpoint for the deployed Vercel `/api/stripe-webhook` route, subscribed to every event handled by `api/stripe-webhook.js` (including checkout completion/async completion, invoices, subscription changes, Founder refunds, and lost disputes).
+3. **Webhook setup**: subscribe the deployed Vercel `/api/stripe-webhook` route to checkout completion, async success/failure, checkout expiration, invoice and subscription events, plus retained legacy refund/dispute events. Do not reconnect retired Supabase copies.
 4. **Redeploy the Vercel application** so `/api/create-checkout-session`, `/api/stripe-webhook`, and `/api/create-customer-portal` pick up the test secrets. Do not deploy the legacy Supabase Edge Function copies.
 5. **Use a throwaway YOW account** for billing tests — never the owner/admin account, since even fake Stripe purchases update real Supabase auth metadata.
 6. **Test card**: `4242 4242 4242 4242`, any future expiry, any CVC, any postcode. Confirm no real payment is taken.
-7. **Monthly checkout (£10/month)**: complete a test purchase, verify Stripe session/subscription success, webhook delivery, Supabase metadata (`subscription_status`, `subscription_plan`, customer/subscription IDs), and Monthly access in the app.
-8. **Lifetime checkout (£99 one-time)**: complete a test purchase, verify session success, webhook delivery, metadata (`subscription_plan: premium_plus_lifetime`, `lifetime_purchased_at`, cloud hosting status/expiry), Lifetime access with included Cloud Mode.
-9. **Founder checkout (£299 one-time)**: same shape, `subscription_plan: founder`, Founder status, lifetime Cloud Mode/fair-use cap.
-10. **Hosting renewal checkout**: complete a £6 test purchase, verify webhook delivery and `cloud_hosting_expires_at`/`maintenance_expires_at` extension, Cloud Mode restoration, correct account messaging.
-11. **Failure/cancel checks** (never verified): checkout cancellation, a failed payment where feasible, monthly cancellation/expiry behavior — confirm the app never grants paid access unless webhook metadata confirms entitlement.
-12. **Live-account QA for the 2026-09-02 downgrade fix** (code/unit-level verified only so far — see `docs/ROADMAP.md`'s Bugs table "2026-09-02" row for the fix itself):
+7. **Monthly checkout (£9.99/month)**: verify activation, Cloud and desktop access while active, then cancellation/fallback without data deletion.
+8. **Founding Lifetime test-mode checkout (£49.99)**: verify the two-year entitlement shape while proving test mode creates no production Founder reservation/status.
+9. **Live-mode reservation rehearsal without completing payment**: verify active holds reduce availability, repeated attempts reuse the bound session, expiration releases the hold, and positions 99/100/101 select Founding/Founding/Standard without overselling.
+10. **Standard Lifetime (£74.99)**: verify one included Cloud year and no Founder status.
+11. **Hosting renewal checkout**: complete a £6 test purchase, verify webhook delivery and expiry extension, Cloud restoration, and correct account messaging.
+12. **Failure/cancel checks**: checkout cancellation, expiration, a failed payment where feasible, and Monthly cancellation/expiry — confirm the app never grants paid access unless webhook metadata confirms entitlement.
+13. **Live-account QA for the 2026-09-02 downgrade fix** (code/unit-level verified only so far — see `docs/ROADMAP.md`'s Bugs table "2026-09-02" row for the fix itself):
     - Manually set a real test account's `subscription_plan`/`subscription_status` via SQL with no `stripe_customer_id`, click "Downgrade to Free" in Account Settings, confirm it actually drops to Free.
-    - Do the same for a real Monthly/Lifetime/Founder Stripe test-mode purchase, confirm "Manage subscription & billing" still opens the real Stripe portal unaffected.
+    - Do the same for real Monthly and Lifetime test-mode purchases; confirm "Manage subscription & billing" still opens the Stripe portal unaffected.
     - If feasible, delete a test Stripe customer in the dashboard while its id is still stored, click the button, confirm a 409 "contact support" response rather than a silent downgrade.
-13. **Return-to-live checklist**: once test QA passes, restore live Stripe secrets/price IDs/webhook secret before accepting real payments, and do one final live-mode configuration review without making a real purchase.
+14. **Return-to-live checklist**: once test QA passes, restore live Stripe secrets/price IDs/webhook secret before accepting real payments, and do one final live-mode configuration review without making a real purchase.
 
 ### 3. Temporary beta-interest flow (currently standing in for real checkout)
 
@@ -45,4 +46,4 @@ Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid pl
 
 | Gate | Required Outcome | Status |
 | --- | --- | --- |
-| Payment gate | Stripe test-mode QA passes for Monthly, Lifetime, Founder, and £6 hosting renewal; live keys/prices/webhooks are reviewed before real checkout is enabled. | Accepted on a real-flow basis (2026-07-28), with live price alignment confirmed 2026-08-31; the formal test-mode checklist remains parked. See sections 1–3 above. |
+| Payment gate | Test/live QA passes for Monthly, Founding Lifetime reservation/finalization, Standard Lifetime, and £6 Cloud renewal; live keys/prices/webhooks are reviewed before checkout is enabled. | Reopened 2026-10-05 for the new pricing model; code is prepared, Dashboard configuration and live/test rehearsal remain parked here. |

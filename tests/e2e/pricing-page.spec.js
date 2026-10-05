@@ -20,15 +20,16 @@ async function gotoPricing(page) {
   await dismissLaunchPrompts(page)
 }
 
-test('all four plan cards render with the current displayed prices', async ({ page }) => {
+test('three plan cards render and real backend availability activates the Founding Price', async ({ page }) => {
+  await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37 } }))
   await gotoPricing(page)
   await expect(page.getByRole('article', { name: 'Free plan — Free' })).toBeVisible()
-  await expect(page.getByRole('article', { name: 'Monthly plan — £10' })).toBeVisible()
-  await expect(page.getByRole('article', { name: /Lifetime plan — £99/ })).toBeVisible()
-  await expect(page.getByRole('article', { name: /Founder plan — £299/ })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Monthly plan — £9.99' })).toBeVisible()
+  await expect(page.getByRole('article', { name: /Lifetime plan — £49.99/ })).toBeVisible()
+  await expect(page.getByText('37 of 100 Founder spots currently available')).toBeVisible()
 })
 
-test('comparison table lists all four plans', async ({ page }) => {
+test('comparison table lists Free, Monthly and Lifetime only', async ({ page }) => {
   await gotoPricing(page)
   const table = page.getByRole('table')
   await table.scrollIntoViewIfNeeded()
@@ -36,7 +37,7 @@ test('comparison table lists all four plans', async ({ page }) => {
   await expect(table.getByRole('columnheader', { name: 'Free' })).toBeVisible()
   await expect(table.getByRole('columnheader', { name: 'Monthly' })).toBeVisible()
   await expect(table.getByRole('columnheader', { name: 'Lifetime' })).toBeVisible()
-  await expect(table.getByRole('columnheader', { name: 'Founder' })).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: 'Founder' })).toHaveCount(0)
 })
 
 test('Register interest pins the selected plan, requires a valid email, and closes cleanly', async ({ page }) => {
@@ -53,8 +54,8 @@ test('Register interest pins the selected plan, requires a valid email, and clos
 
   await gotoPricing(page)
 
-  const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
-  await monthlyCard.getByRole('button', { name: 'Register interest' }).click()
+  const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £9.99' })
+  await monthlyCard.getByRole('button', { name: 'Choose Monthly' }).click()
 
   const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
   await expect(modal).toBeVisible()
@@ -87,7 +88,7 @@ for (const viewport of [
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await gotoPricing(page)
 
-    for (const label of ['Free plan — Free', 'Monthly plan — £10', /Lifetime plan — £99/, /Founder plan — £299/]) {
+    for (const label of ['Free plan — Free', 'Monthly plan — £9.99', /Lifetime plan — £74.99/]) {
       const card = page.getByRole('article', { name: label })
       await card.scrollIntoViewIfNeeded()
       await expect(card).toBeVisible()
@@ -97,8 +98,8 @@ for (const viewport of [
     await table.scrollIntoViewIfNeeded()
     await expect(table).toBeVisible()
 
-    const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £99/ })
-    await lifetimeCard.getByRole('button', { name: 'Register interest' }).click()
+    const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £74.99/ })
+    await lifetimeCard.getByRole('button', { name: 'Choose Lifetime' }).click()
     const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
     await expect(modal).toBeVisible()
     await modal.getByRole('button', { name: 'Close beta access modal' }).click()

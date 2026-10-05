@@ -47,6 +47,8 @@ export const PLAN_STORAGE_BYTES = {
   beta_tester:           15   * 1024 * 1024 * 1024,  //  15 GB during beta
   premium_monthly:        8   * 1024 * 1024 * 1024,  //   8 GB
   premium_plus_lifetime:  8   * 1024 * 1024 * 1024,  //   8 GB
+  // Legacy purchased Founder plan. Kept only so historical accounts retain
+  // their original quota and entitlement; it is not offered for sale.
   founder:               15   * 1024 * 1024 * 1024,  //  15 GB
 }
 
@@ -91,16 +93,17 @@ export const PLANS = [
     priceLabel: `£${BILLING.monthlyPrice}`,
     priceSuffix: '/month',
     storageLabelShort: '8 GB',
-    description: 'Unlimited projects and the full web app, with cloud sync included. Cancel any time.',
+    description: 'Full YOW access on web and desktop, with cloud sync while subscribed. Cancel any time.',
     features: [
       'Unlimited projects',
       'Every writing & worldbuilding tool, unlocked',
       'Cloud sync across all your devices',
+      'Desktop and offline access while subscribed',
       '8 GB cloud storage',
       'Connect your own AI provider with an API key',
       'Cancel any time — no long-term contract',
     ],
-    disclaimer: 'Desktop is not included on Monthly. It is planned for Lifetime and Founder at paid launch.',
+    disclaimer: 'If Monthly ends, your account falls back to Free limits without deleting your work.',
     badge: null,
     highlight: false,
   },
@@ -112,42 +115,19 @@ export const PLANS = [
     priceLabel: `£${BILLING.lifetimePrice}`,
     priceSuffix: 'once',
     storageLabelShort: '8 GB',
-    description: 'Planned for paid launch: everything in Monthly, plus a permanent desktop licence for Mac and Windows.',
-    longDescription: `The planned Lifetime terms include everything in Monthly, a permanent licence for the purchased desktop version, and app updates released for that version at no extra charge. It also includes ${HOSTING_INCLUDED_YEARS} years of cloud sync; after that, renew sync for £${HOSTING_RENEWAL_FEE_GBP}/year or keep working in desktop Local Mode without a hosting fee.`,
-    keyBenefit: { icon: '🖥️', label: 'Desktop app planned for paid launch' },
-    valueNote: `The one-time app price equals about ${Math.round(BILLING.lifetimePrice / BILLING.monthlyPrice)} months of Monthly; optional cloud renewal starts after year ${HOSTING_INCLUDED_YEARS}.`,
+    description: 'Own your writing software: permanent YOW access, including desktop and offline use.',
+    longDescription: `£${BILLING.lifetimePrice}. Once. YOW is yours. Lifetime includes one year of YOW Cloud; after that, renew Cloud for £${HOSTING_RENEWAL_FEE_GBP}/year or keep using YOW locally without a hosting fee.`,
+    keyBenefit: { icon: '🖥️', label: 'Permanent desktop and offline access' },
+    valueNote: 'One payment for the app. Cloud renewal is always optional.',
     features: [
       'Everything in Monthly — unlimited projects, full toolkit, 8 GB storage',
-      'Desktop app for Mac & Windows at paid launch',
-      'Updates released for the purchased desktop version',
-      `${HOSTING_INCLUDED_YEARS} years of cloud sync included`,
+      'Permanent desktop and offline access for Mac & Windows',
+      'One year of YOW Cloud included',
       `Then £${HOSTING_RENEWAL_FEE_GBP}/year to keep syncing — or use Local Mode without a hosting fee`,
       'One payment for the app licence',
     ],
-    badge: 'Most Popular',
+    badge: 'Recommended',
     highlight: true,
-  },
-  {
-    key: 'founder',
-    label: 'Founder',
-    price: BILLING.founderPrice,
-    interval: 'one_time',
-    priceLabel: `£${BILLING.founderPrice}`,
-    priceSuffix: 'once',
-    storageLabelShort: '15 GB',
-    description: 'Planned Founder terms add recognition, more storage, and no Cloud Mode renewal fee.',
-    longDescription: `The planned Founder terms include everything in Lifetime, plus more storage and cloud sync for the life of the YOW service with no renewal fee. Founder membership is capped at ${FOUNDER_SLOTS_TOTAL} completed purchases; availability is confirmed at checkout. Full refunds or lost chargebacks remove access and return the slot.`,
-    keyBenefit: { icon: '✦', label: `Limited to ${FOUNDER_SLOTS_TOTAL} Founder slots` },
-    features: [
-      'Everything in Lifetime, plus:',
-      '15 GB cloud storage',
-      'Cloud sync for the life of the YOW service — no renewal fee',
-      'Permanent Founder badge',
-      'Your work featured on a YOW-managed Founder profile',
-    ],
-    badge: 'Exclusive',
-    highlight: false,
-    isFounder: true,
   },
 ]
 
@@ -208,7 +188,15 @@ export function getMembership(user) {
   // on for it (see api/create-customer-portal.js).
   const hasStripeCustomer = !!serverMetadata.stripe_customer_id
   const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
-  const isFounder = subscriptionPlan === 'founder'
+  // Founder is a recognition status, not a purchasable plan. New awards are
+  // mirrored into server-controlled app_metadata after the database atomically
+  // allocates them. The old `founder` plan remains recognised for historical
+  // accounts, but no new checkout can create it.
+  const isLegacyFounderPlan = subscriptionPlan === 'founder'
+  const isFounder = isLegacyFounderPlan || serverMetadata.is_founder === true
+  const founderNumber = Number.isInteger(serverMetadata.founder_number)
+    ? serverMetadata.founder_number
+    : null
   // A paid purchase takes precedence over a stale beta flag.
   const hasPaidSubscription = subscriptionPlan !== BETA_TESTER_PLAN_KEY && PAID_STATUSES.has(subscriptionStatus)
     && serverMetadata.beta_tester !== true
@@ -247,7 +235,8 @@ export function getMembership(user) {
   // ── Cloud hosting renewal logic (lifetime non-founder users only) ──
   // Lifetime purchase includes HOSTING_INCLUDED_YEARS years of cloud hosting.
   // After that, users can renew Cloud Mode or continue in Local Mode.
-  // Founders have cloud hosting included for life — no renewal ever.
+  // Only historical purchasers of the old Founder plan retain its original
+  // lifetime-cloud promise. New Founder status grants recognition only.
   // app_metadata fields set by the webhook:
   //   lifetime_purchased_at  — ISO date of original lifetime purchase
   //   maintenance_expires_at — ISO date cloud hosting is paid until (null = within included period)
@@ -260,9 +249,12 @@ export function getMembership(user) {
   let cloudHostingStatus = isPaid || isTrialActive ? 'active' : 'free'
   let cloudHostingLabel = isPaid || isTrialActive ? 'Cloud Mode' : 'Free Cloud Mode'
 
-  if (isLifetime && !isFounder) {
+  if (isLifetime && !isLegacyFounderPlan) {
     const purchasedAt = dateFrom(user?.app_metadata?.lifetime_purchased_at) || createdAt || now
-    const includedHostingEnds = new Date(purchasedAt.getTime() + HOSTING_INCLUDED_YEARS * 365 * DAY_MS)
+    // The explicit server date preserves older purchases that included a
+    // different Cloud period; only new/unmigrated records use today's rule.
+    const includedHostingEnds = dateFrom(serverMetadata.hosting_included_until)
+      || new Date(purchasedAt.getTime() + HOSTING_INCLUDED_YEARS * 365 * DAY_MS)
     const paidUntil = dateFrom(user?.app_metadata?.cloud_hosting_expires_at)
       || dateFrom(user?.app_metadata?.maintenance_expires_at)
 
@@ -292,7 +284,7 @@ export function getMembership(user) {
       cloudHostingStatus = 'lapsed'
       cloudHostingLabel = 'Local Mode + Free Cloud'
     }
-  } else if (isFounder) {
+  } else if (isLegacyFounderPlan) {
     cloudHostingStatus = 'founder'
     cloudHostingLabel = 'Cloud Mode'
   } else if (!isPaid && !isTrialActive) {
@@ -324,13 +316,15 @@ export function getMembership(user) {
     betaNoticeStartedAt,
     betaNoticeEndsAt,
     betaDaysRemaining,
-    canDownloadDesktop: isLifetime || (isBetaTester && !isBetaNoticeActive),
+    canDownloadDesktop: isLifetime || (subscriptionPlan === 'premium_monthly' && PAID_STATUSES.has(subscriptionStatus)) || (isBetaTester && !isBetaNoticeActive),
     isLifetime,
     isFounder,
+    isLegacyFounderPlan,
+    founderNumber,
     hasStripeCustomer,
     // Desktop app access is a Lifetime/Founder entitlement (PRD Phase 4).
     // Browser plan behavior is unchanged — this only gates the desktop shell.
-    isDesktopEntitled: isLifetime || isBetaTester,
+    isDesktopEntitled: isLifetime || (subscriptionPlan === 'premium_monthly' && PAID_STATUSES.has(subscriptionStatus)) || isBetaTester,
     isTrialActive,
     isFree,
     isReadOnly: false,

@@ -2289,7 +2289,7 @@ function PlanBadge({ membership }) {
           border: '1px solid rgba(245,158,11,.35)',
           borderRadius: 4, padding: '2px 8px',
         }}>
-          Founder
+          Founder{membership.founderNumber ? ` #${String(membership.founderNumber).padStart(3, '0')}` : ''}
         </span>
       )}
     </div>
@@ -3108,12 +3108,12 @@ export default function AccountSettings({
                   </div>
                   <div>
                     <span>Cloud hosting</span>
-                    <strong>{membership.isFounder ? 'Cloud Mode included' : membership.isLocalMode ? 'Free cloud fallback' : 'Cloud Mode included'}</strong>
+                    <strong>{membership.isLegacyFounderPlan ? 'Cloud Mode included (legacy plan)' : membership.isLocalMode ? 'Free cloud fallback' : 'Cloud Mode included'}</strong>
                   </div>
                   {membership.isFounder && (
                     <div>
                       <span>Status</span>
-                      <strong style={{ color: '#f59e0b' }}>Founder ✦</strong>
+                      <strong style={{ color: '#f59e0b' }}>Founder{membership.founderNumber ? ` #${String(membership.founderNumber).padStart(3, '0')}` : ''} ✦</strong>
                     </div>
                   )}
                 </>
@@ -3150,8 +3150,8 @@ export default function AccountSettings({
 
             {desktopApp && membership.isLifetime && <DesktopDevicesPanel />}
 
-            {/* Desktop app download (Lifetime/Founder entitlement, web only) */}
-            {membership.isLifetime && !desktopApp && (
+            {/* Desktop app download for active Monthly and permanent Lifetime. */}
+            {membership.canDownloadDesktop && !desktopApp && (
               <div style={{
                 marginBottom: 18,
                 padding: '14px 16px',
@@ -3166,7 +3166,7 @@ export default function AccountSettings({
                   Desktop app included
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Your plan includes the YOW desktop app with a local project vault, so your writing lives on your own device.
+                  Your plan includes the YOW desktop app with a local project vault, so your writing lives on your own device.{!membership.isLifetime && ' Desktop access continues while Monthly is active.'}
                 </div>
                 <a
                   href="/download"
@@ -3179,7 +3179,7 @@ export default function AccountSettings({
             )}
 
             {/* Maintenance fee warning */}
-            {membership.isLifetime && !membership.isFounder && membership.maintenanceWarning && (
+            {membership.isLifetime && !membership.isLegacyFounderPlan && membership.maintenanceWarning && (
               <div style={{
                 marginBottom: 18,
                 padding: '14px 16px',
@@ -3234,7 +3234,6 @@ export default function AccountSettings({
                 PLANS.find(plan => plan.key === 'free'),
                 PLANS.find(plan => plan.key === 'premium_monthly'),
                 PLANS.find(plan => plan.key === 'premium_plus_lifetime'),
-                PLANS.find(plan => plan.key === 'founder'),
               ].filter(Boolean).map(plan => (
                 <PlanCard
                   key={plan.key}
@@ -3262,10 +3261,10 @@ export default function AccountSettings({
                 border: '1px solid rgba(245,158,11,.3)',
               }}>
                 <p style={{ margin: 0, fontSize: 13, color: '#f59e0b', fontWeight: 700, lineHeight: 1.5 }}>
-                  ✦ You are a Founder of Your Own World.
+                  ✦ You are YOW Founder{membership.founderNumber ? ` #${String(membership.founderNumber).padStart(3, '0')}` : ''}.
                 </p>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  You can choose whether YOW displays submitted work on a managed Founder profile. Contact founders@yourownworld.co.uk for profile changes or removal.
+                  Founder is permanent recognition for supporting YOW from the beginning. It is separate from your Lifetime licence and optional Cloud renewal.
                 </p>
               </div>
             )}

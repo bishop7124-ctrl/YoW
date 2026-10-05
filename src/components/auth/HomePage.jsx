@@ -939,7 +939,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
           {onOpenAbout && (
             <button type="button" onClick={onOpenAbout} className="yow-footer-link">About</button>
           )}
-          <a href="/founders/" className="yow-footer-link">Founders</a>
+          <a href="/about/" className="yow-footer-link">About Us</a>
           {onOpenLegal && (
             <>
               <button type="button" onClick={() => onOpenLegal('privacy')}  className="yow-footer-link">Privacy</button>

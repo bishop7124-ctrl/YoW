@@ -86,10 +86,12 @@ export function lifecycleTrackFor(user) {
 }
 
 /** The date the hosting track counts from: end of paid/included hosting. */
-export function hostingEndsAt(user, { includedYears = 3 } = {}) {
+export function hostingEndsAt(user, { includedYears = 1 } = {}) {
   const app = user?.app_metadata || {}
   const paidUntil = toDate(app.cloud_hosting_expires_at) || toDate(app.maintenance_expires_at)
   if (paidUntil) return paidUntil
+  const explicitlyIncludedUntil = toDate(app.hosting_included_until)
+  if (explicitlyIncludedUntil) return explicitlyIncludedUntil
   const purchased = toDate(app.lifetime_purchased_at) || toDate(user?.created_at)
   if (!purchased) return null
   return new Date(purchased.getTime() + includedYears * 365 * DAY_MS)
