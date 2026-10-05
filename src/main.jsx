@@ -4,6 +4,9 @@ import './index.css'
 import App from './App.jsx'
 import { createDesktopVaultAutoSnapshot, initializeDesktopVaultStorage } from './storage/tauriVaultAdapter.js'
 import { initializeIndexedDbStorage } from './storage/browserVaultAdapter.js'
+import { installDesktopExternalLinkHandler } from './utils/externalLinks.js'
+
+installDesktopExternalLinkHandler()
 
 async function boot() {
   try {

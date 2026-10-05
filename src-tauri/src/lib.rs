@@ -696,10 +696,17 @@ fn copy_backup_files(source_dir: &PathBuf, target_dir: &PathBuf) -> Result<(), S
 // links open in the user's default browser instead. https-only by design.
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
-  if !url.starts_with("https://") {
-    return Err("Only https links can be opened.".to_string());
+  if !is_allowed_external_url(&url) {
+    return Err("Only https and mailto links can be opened.".to_string());
   }
   spawn_opener(&url)
+}
+
+// https links and mailto links only, and never anything with whitespace or
+// control characters (the URL is passed as a process argument).
+fn is_allowed_external_url(url: &str) -> bool {
+  (url.starts_with("https://") || url.starts_with("mailto:"))
+    && !url.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
 #[tauri::command]
@@ -1225,6 +1232,20 @@ pub fn run() {
 mod tests {
   use super::*;
   use std::fs::File;
+
+  #[test]
+  fn external_urls_allow_only_https_and_mailto_without_whitespace() {
+    assert!(is_allowed_external_url(
+      "https://www.yourownworld.co.uk/pricing"
+    ));
+    assert!(is_allowed_external_url("mailto:support@yourownworld.co.uk"));
+    assert!(!is_allowed_external_url("http://example.com"));
+    assert!(!is_allowed_external_url("file:///etc/passwd"));
+    assert!(!is_allowed_external_url("javascript:alert(1)"));
+    assert!(!is_allowed_external_url("https://example.com/a b"));
+    assert!(!is_allowed_external_url("https://example.com/\n--flag"));
+    assert!(!is_allowed_external_url(""));
+  }
 
   // --- snapshot name/path safety ---
 

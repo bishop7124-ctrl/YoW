@@ -26,6 +26,7 @@ import {
 import AIStar from '../ai/AIStar'
 import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 import { isDesktopAppRuntime } from '../../utils/runtime'
+import { navigateToExternalUrl } from '../../utils/externalLinks'
 import { loadValue, writeItem } from '../../storage/projectStorage'
 import {
   createDesktopVaultSnapshot,
@@ -2962,7 +2963,12 @@ export default function AccountSettings({
         setBillingMessage('This account had no billing record on file, so it has been downgraded to the Free plan.')
         await refreshUser()
       } else {
-        window.location.assign(result.url)
+        const outcome = await navigateToExternalUrl(result.url)
+        if (outcome === 'external') {
+          setBillingMessage('Opened in your browser. When you are finished, come back here and reopen Membership to refresh your account.')
+        } else if (outcome === 'failed') {
+          setBillingError('Your browser could not be opened. Please try again, or sign in at www.yourownworld.co.uk to manage billing.')
+        }
       }
     } catch (error) {
       setBillingError(error.message || 'Billing could not be opened right now.')
