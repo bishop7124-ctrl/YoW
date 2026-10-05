@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BILLING } from '../../utils/billingConfig'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS } from '../../utils/membership'
+import { supabase } from '../../supabase'
 import BetaInterestModal from '../account/BetaInterestModal'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
@@ -12,6 +13,13 @@ const freePlan = PLANS.find(plan => plan.key === 'free')
 const monthlyPlan = PLANS.find(plan => plan.key === 'premium_monthly')
 const lifetimePlan = PLANS.find(plan => plan.key === 'premium_plus_lifetime')
 const DISPLAY_PLANS = [freePlan, monthlyPlan, lifetimePlan].filter(Boolean)
+const PRIVATE_BILLING_TEST_KEY = 'aa89da09f1e82b6c1645732759eef068409979cec453eefe'
+const CHECKOUT_ENDPOINT = import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL || '/api/create-checkout-session'
+
+function isPrivateBillingTestLink() {
+  if (typeof window === 'undefined') return false
+  return new URLSearchParams(window.location.search).get('billing_test') === PRIVATE_BILLING_TEST_KEY
+}
 
 const FEATURES = [
   { label: 'Editable projects', free: '1', monthly: 'Unlimited', lifetime: 'Unlimited' },
@@ -47,7 +55,7 @@ function CheckIcon() {
   return <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="var(--accent)" fillOpacity=".15" /><path d="M4 7l2 2 4-4" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
-function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart }) {
+function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutBusy = false }) {
   const free = plan.key === 'free'
   const lifetime = plan.key === 'premium_plus_lifetime'
   const founding = lifetime && foundingAvailable
@@ -73,8 +81,8 @@ function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart }) {
         ] : plan.features).map(feature => <li key={feature}><CheckIcon /><span>{feature}</span></li>)}
       </ul>
       {plan.disclaimer && !founding && <p className="pricing-card-disclaimer">{plan.disclaimer}</p>}
-      <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
-        {free ? 'Start for free' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
+      <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && checkoutBusy} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
+        {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
       </button>
       {free && <p className="pricing-card-caption">No card required</p>}
     </article>
@@ -85,10 +93,13 @@ function FaqItem({ item, open, onToggle }) {
   return <div className="pricing-faq-item"><button type="button" onClick={onToggle} aria-expanded={open}><span>{item.q}</span><span aria-hidden="true">{open ? '−' : '+'}</span></button>{open && <p>{item.a}</p>}</div>
 }
 
-export default function PricingPage({ onGetStarted, user }) {
+export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const [interestPlan, setInterestPlan] = useState(null)
   const [openFaq, setOpenFaq] = useState(null)
   const [availability, setAvailability] = useState(null)
+  const [checkoutPlan, setCheckoutPlan] = useState(null)
+  const [checkoutError, setCheckoutError] = useState('')
+  const billingTest = isPrivateBillingTestLink()
   const foundingAvailable = Number.isInteger(availability?.remaining) && availability.remaining > 0
 
   usePageMeta({ path: '/pricing/', title: 'YOW Pricing — Free, Monthly or Lifetime', description: 'Own your writing software. The first 100 YOW Lifetime customers pay £49.99 once; standard Lifetime is £74.99, Monthly is £9.99, and Free includes one editable project.' })
@@ -101,6 +112,55 @@ export default function PricingPage({ onGetStarted, user }) {
       .catch(() => {})
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (!billingTest) return undefined
+    const existing = document.querySelector('meta[name="robots"]')
+    const previous = existing?.getAttribute('content')
+    const robots = existing || document.createElement('meta')
+    robots.setAttribute('name', 'robots')
+    robots.setAttribute('content', 'noindex, nofollow, noarchive')
+    if (!existing) document.head.appendChild(robots)
+    return () => {
+      if (!existing) robots.remove()
+      else if (previous == null) robots.removeAttribute('content')
+      else robots.setAttribute('content', previous)
+    }
+  }, [billingTest])
+
+  const startTestCheckout = async plan => {
+    if (!user) {
+      setCheckoutError('Sign in to a disposable YOW test account first, then open this private link again.')
+      onSignIn?.()
+      return
+    }
+
+    setCheckoutPlan(plan)
+    setCheckoutError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Your sign-in has expired. Please sign in again, then reopen this link.')
+      const response = await fetch(CHECKOUT_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ plan }),
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok || !body.url) throw new Error(body.error || `Checkout could not be opened. (${response.status})`)
+      window.location.assign(body.url)
+    } catch (error) {
+      setCheckoutError(error.message || 'Checkout could not be opened.')
+      setCheckoutPlan(null)
+    }
+  }
+
+  const selectPaidPlan = key => {
+    if (billingTest) startTestCheckout(key)
+    else setInterestPlan(PLANS.find(item => item.key === key))
+  }
 
   useEffect(() => {
     injectSchema('ld-pricing-page', { '@context': 'https://schema.org', '@type': 'Product', name: 'Your Own World writing software', offers: DISPLAY_PLANS.map(plan => ({ '@type': 'Offer', name: plan.label, price: plan.price, priceCurrency: 'GBP', availability: plan.key === 'free' ? 'https://schema.org/InStock' : 'https://schema.org/PreOrder', url: 'https://www.yourownworld.co.uk/pricing/' })) })
@@ -118,11 +178,22 @@ export default function PricingPage({ onGetStarted, user }) {
           <p className="pricing-hero-lead">Lifetime access. One payment.</p>
           <p className="pricing-hero-copy">Choose Free to begin, Monthly for a smaller upfront cost, or Lifetime for permanent desktop and offline access. Cloud stays a separate, optional service after the included period.</p>
           <div className="pricing-trust-row"><span className="pricing-trust-chip"><CheckIcon /> One editable project free</span><span className="pricing-trust-chip"><CheckIcon /> Cancel Monthly any time</span><span className="pricing-trust-chip"><CheckIcon /> Lifetime works without Cloud</span></div>
-          <p className="pricing-availability-note">Free is available now. Paid checkout remains closed until the new Stripe prices are configured; paid buttons register interest and never create a charge.</p>
+          {billingTest ? (
+            <aside className="pricing-test-panel" aria-label="Private Stripe test checkout">
+              <strong>Private Stripe test checkout</strong>
+              <p>This page uses Stripe test mode. No real money can be taken. Sign in with a disposable YOW account, choose Monthly or Lifetime below, then use Stripe card <code>4242 4242 4242 4242</code> with any future expiry and any CVC.</p>
+              <button type="button" disabled={!!checkoutPlan} onClick={() => startTestCheckout('hosting_renewal')}>
+                {checkoutPlan === 'hosting_renewal' ? 'Opening Stripe…' : 'Test £6/year Cloud renewal'}
+              </button>
+              {checkoutError && <p className="pricing-test-error" role="alert">{checkoutError}</p>}
+            </aside>
+          ) : (
+            <p className="pricing-availability-note">Free is available now. Paid checkout remains closed while billing is being tested; paid buttons register interest and never create a charge.</p>
+          )}
         </section>
 
         <section className="pricing-cards" aria-label="Pricing plans">
-          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} onSelect={key => setInterestPlan(PLANS.find(item => item.key === key))} onFreeStart={onGetStarted} />)}
+          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
         </section>
 
         <aside className="pricing-first-100" aria-labelledby="first-100-heading">

@@ -6,7 +6,7 @@ This is the dedicated planning/tracking document for everything gated on real St
 
 ## Status
 
-Not started / awaiting the user's availability. No action needed from any agent unless the user asks to resume this work.
+In progress as of 2026-10-05. Stripe test products, production-environment test credentials and the production test webhook have been configured by the owner. An unlisted, no-index direct-link pricing page now exposes the real Stripe test Checkout to signed-in disposable YOW accounts while the normal public pricing page continues to use the interest flow.
 
 ## What's parked here
 
