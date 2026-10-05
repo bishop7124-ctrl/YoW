@@ -38,6 +38,14 @@ Status: the earlier live-flow acceptance no longer covers the pricing model appr
     - If feasible, delete a test Stripe customer in the dashboard while its id is still stored, click the button, confirm a 409 "contact support" response rather than a silent downgrade.
 14. **Return-to-live checklist**: once test QA passes, restore live Stripe secrets/price IDs/webhook secret before accepting real payments, and do one final live-mode configuration review without making a real purchase.
 
+#### Test-mode QA results log
+
+**2026-10-05 (owner-confirmed in Stripe test mode via the private billing test page, disposable YOW account, test card; no screenshot evidence).**
+
+- Passed: checklist steps 1-4 (test products/prices, test environment variables, deployed test webhook and redeploy configured by owner); step 7 Monthly GBP 10 checkout with browser and Cloud entitlement and no desktop entitlement; step 8 Founding Lifetime GBP 50 checkout (test-only request must select the Founding Price or fail); step 10 Standard Lifetime GBP 75 checkout; Monthly cancellation scheduled for period end now shows the "Monthly cancelled" notice and access-end date, and Membership reconciles directly with Stripe.
+- Automated support: 162 test files / 1,563 tests, zero lint errors, production build, 231-file load check, all 12 API imports.
+- Still open: step 9 live-mode reservation rehearsal (positions 99/100/101), step 11 GBP 6 Cloud renewal, step 12 failure/cancel/expiry checks, three-times event replay, refund and dispute handling, step 13 downgrade-fix live QA, step 14 return-to-live review. Scheduled 22-24 Oct on the sprint sheet.
+
 ### 3. Temporary beta-interest flow (currently standing in for real checkout)
 
 Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid plans are coming soon" interest form (added 2026-08-08). Deferred QA, whenever the user wants it: on production with a signed-in Free account, click each paid-plan CTA from Pricing and Account Settings, submit the form, confirm `yourownworld.admin@gmail.com` receives it, confirm Supabase metadata updates to `subscription_plan: beta_tester`, confirm unlimited projects/AI tools/desktop entitlement unlock. Also submit from signed-out Pricing and confirm it emails interest without claiming account access. Requires `FEEDBACK_EMAIL`, `FEEDBACK_EMAIL_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_URL`/`VITE_SUPABASE_URL` set in Vercel. Before real paid launch: either remove this flow or migrate its beta testers into whichever paid/manual entitlement process is chosen.

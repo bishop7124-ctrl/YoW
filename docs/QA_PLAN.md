@@ -17,7 +17,7 @@ Owner steps (pending): apply migration `20261004130000` in Supabase; on the Mac 
 
 ## 2026-10-05 gate evidence summaries (pulled forward to 4 Oct at the owner's request)
 
-Status: **Prepared 2026-10-04; awaiting owner sign-off.** Per the sprint rule a gate moves to Passed only on the owner's confirmation. Evidence is mostly automated plus owner-reported live checks (no screenshots for the 3-4 Oct live checks).
+Status: **Signed off by the owner 2026-10-05; Data safety and Export ownership gates Passed.** Per the sprint rule a gate moves to Passed only on the owner's confirmation. Evidence is mostly automated plus owner-reported live checks (no screenshots for the 3-4 Oct live checks).
 
 **Data safety gate: no known data-loss, auth, isolation, save, restore or storage blocker remains.**
 - Auth/session: idle logout and cross-tab auth (owner live 1 Oct); canonical redirect and headers 22/22 (1 Oct); account switch isolation test2/test1 (2 Oct); password minimum length 8 (3 Oct).
