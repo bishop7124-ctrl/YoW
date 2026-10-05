@@ -27,7 +27,7 @@ Status: the earlier live-flow acceptance no longer covers the pricing model appr
 5. **Use a throwaway YOW account** for billing tests — never the owner/admin account, since even fake Stripe purchases update real Supabase auth metadata.
 6. **Test card**: `4242 4242 4242 4242`, any future expiry, any CVC, any postcode. Confirm no real payment is taken.
 7. **Monthly checkout (£10/month)**: verify activation, Cloud and desktop access while active, then cancellation/fallback without data deletion.
-8. **Founding Lifetime test-mode checkout (£50)**: verify the two-year entitlement shape while proving test mode creates no production Founder reservation/status.
+8. **Founding Lifetime test-mode checkout (£50)**: the unlisted billing QA page uses a dedicated test-only request that must select the configured £50 Founding Price or fail; it cannot silently fall back to £75. Verify the two-year entitlement shape while proving test mode creates no production Founder reservation/status.
 9. **Live-mode reservation rehearsal without completing payment**: verify active holds reduce availability, repeated attempts reuse the bound session, expiration releases the hold, and positions 99/100/101 select Founding/Founding/Standard without overselling.
 10. **Standard Lifetime (£75)**: verify one included Cloud year and no Founder status.
 11. **Hosting renewal checkout**: complete a £6 test purchase, verify webhook delivery and expiry extension, Cloud restoration, and correct account messaging.

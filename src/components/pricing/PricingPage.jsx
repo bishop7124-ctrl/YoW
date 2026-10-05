@@ -160,7 +160,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   }
 
   const selectPaidPlan = key => {
-    if (billingTest) startTestCheckout(key)
+    if (billingTest) startTestCheckout(key === 'premium_plus_lifetime' ? 'founding_lifetime_test' : key)
     else setInterestPlan(PLANS.find(item => item.key === key))
   }
 

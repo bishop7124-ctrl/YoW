@@ -86,6 +86,30 @@ describe('create-checkout-session Founding Price selection', () => {
     }))
   })
 
+  it('makes the private Founding test request use £50 without a Standard fallback', async () => {
+    pricesRetrieve.mockImplementation(async id => ({ id, active: true, currency: 'gbp', livemode: false, unit_amount: id === 'price_founding' ? 5000 : 7500, recurring: null }))
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    const response = res()
+    await handler(req('founding_lifetime_test'), response)
+
+    expect(sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      line_items: [{ price: 'price_founding', quantity: 1 }],
+      metadata: expect.objectContaining({
+        plan: 'premium_plus_lifetime', lifetime_offer: 'founding_test', lifetime_cloud_years: '2',
+      }),
+    }))
+    expect(response.status).toHaveBeenCalledWith(200)
+  })
+
+  it('rejects the private Founding test request if the configured Price is live', async () => {
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    const response = res()
+    await handler(req('founding_lifetime_test'), response)
+
+    expect(response.status).toHaveBeenCalledWith(400)
+    expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+
   it('rejects the retired Founder plan', async () => {
     const { default: handler } = await import('../../api/create-checkout-session.js')
     const response = res()

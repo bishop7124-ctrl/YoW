@@ -44,7 +44,13 @@ export default async function handler(req, res) {
     const { data: { user }, error } = await supabase.auth.getUser(token)
     if (error || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-    const { plan = 'premium_monthly' } = req.body || {}
+    const { plan: requestedPlan = 'premium_monthly' } = req.body || {}
+    // The unlisted billing QA page uses a dedicated test-only request so a
+    // Founding checkout can never silently become the Standard £75 offer.
+    // It is accepted only when Stripe confirms the configured Founding Price
+    // belongs to test mode; metadata still records the real Lifetime plan.
+    const forceFoundingTest = requestedPlan === 'founding_lifetime_test'
+    const plan = forceFoundingTest ? 'premium_plus_lifetime' : requestedPlan
     const planConfig = PLAN_CONFIG[plan]
     if (!planConfig) return res.status(400).json({ error: `Unknown plan: ${plan}` })
 
@@ -72,7 +78,14 @@ export default async function handler(req, res) {
       if (!foundingPriceId) return res.status(500).json({ error: 'Founding Lifetime price is not configured.' })
       const foundingPrice = await stripe.prices.retrieve(foundingPriceId)
 
-      if (foundingPrice.livemode) {
+      if (forceFoundingTest) {
+        if (foundingPrice.livemode) {
+          return res.status(400).json({ error: 'The private Founding test checkout is available only with Stripe test-mode prices.' })
+        }
+        priceId = foundingPriceId
+        lifetimeOffer = 'founding_test'
+        lifetimeCloudYears = 2
+      } else if (foundingPrice.livemode) {
         // Keep the inventory hold beyond Stripe's own Checkout expiry. Stripe's
         // expired event normally releases it immediately, while this 24-hour
         // buffer prevents a delayed webhook from reallocating a place after a
