@@ -3333,7 +3333,8 @@ export default function AccountSettings({
             )}
 
             {/* Stripe customer portal: cancellation for subscribers, billing history/receipts for one-time purchasers */}
-            {membership.isPaid && (
+            {/* Lifetime plans with no Stripe record (manual grants) have nothing to manage and must never offer "Downgrade to Free". */}
+            {membership.isPaid && !(membership.isLifetime && !membership.hasStripeCustomer) && (
               <div className="account-actions">
                 <button
                   type="button"
