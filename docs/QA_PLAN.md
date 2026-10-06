@@ -15,6 +15,8 @@ Findings and fixes:
 
 Evidence: `npm run qa` 163 files / 1,569 tests, 0 lint errors; Rust `cargo test` 30/30 and `cargo fmt --check` clean (6 external-link tests in `src/utils/externalLinks.test.js`). Earlier run: `npm run qa` 158 files / 1,527 tests, 0 lint errors, build and load check pass; Rust `cargo test` 29/29 (system libraries installed with apt in this session, so the desktop Rust tests CAN run here); replay 37 migrations, 11/11 assertions; Playwright desktop-workspace and autosave 8/8.
 
+6 Oct re-run: `npm run qa` 163/1,569 green, Rust 30/30, Playwright desktop-workspace + autosave 8/8 (needs `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` in this cloud image). Day 6 Oct is In progress until the owner's Mac run is reported.
+
 Owner steps (pending): apply migration `20261004130000` in Supabase; on the Mac build, 6 Oct (login, library, project navigation, writing) and 7 Oct (vault persistence, restore, relocation and a look at `vault.db` for secrets) as scheduled. On the Mac build also click "Get an API key" (Account Settings > AI) and "Manage subscription" on a test account and confirm each opens your default browser; on Windows, confirm Reveal vault selects vault.db in Explorer. Not done and not claimable from the cloud: packaged-app journey, Finder reveal, WKWebView auth, force-quit durability.
 
 ## 2026-10-05 gate evidence summaries (pulled forward to 4 Oct at the owner's request)
