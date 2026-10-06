@@ -65,4 +65,12 @@ describe('AtlasCanvas shared borders', () => {
     expect(outline?.getAttribute('fill-opacity')).toBe('1')
     expect(outline?.hasAttribute('stroke-dasharray')).toBe(false)
   })
+
+  it('draws an uploaded backdrop image beneath map objects', () => {
+    const src = 'data:image/png;base64,AAAA'
+    const { container } = render(<AtlasCanvas objects={[]} metadata={{ backdrop: { src, opacity: .5 } }} mapType="region" />)
+    const image = container.querySelector('image[data-backdrop]')
+    expect(image?.getAttribute('href')).toBe(src)
+    expect(image?.getAttribute('opacity')).toBe('0.5')
+  })
 })

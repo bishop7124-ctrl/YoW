@@ -2,6 +2,16 @@ import { useId, useMemo } from 'react'
 import { PALETTES, WIDTH, HEIGHT, getOrganicStrength, inkPath, organicOutline } from './atlasModel.js'
 
 import { INK_ARTWORK } from './atlasInkArtwork.js'
+import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
+
+// Uploaded reference image drawn beneath every map object. `src` is a private
+// yow-media: reference (or a data URL in offline mode), resolved to a signed URL.
+function Backdrop({ backdrop }) {
+  const url = useUserMediaUrl(backdrop?.src)
+  if (!url) return null
+  const opacity = Number.isFinite(backdrop.opacity) ? Math.max(.1, Math.min(1, backdrop.opacity)) : 1
+  return <image data-backdrop="true" href={url} x="0" y="0" width={WIDTH} height={HEIGHT} preserveAspectRatio="xMidYMid meet" opacity={opacity} pointerEvents="none"/>
+}
 
 export function InkSymbol({ kind, ink = '#292923', fill = '#f4eedf' }) {
   const layers = INK_ARTWORK[kind] || INK_ARTWORK.ruin
@@ -51,7 +61,8 @@ export default function AtlasCanvas({ objects, metadata = {}, mapType, name, sel
       <pattern id={`${id}water`} width="50" height="42" patternUnits="userSpaceOnUse"><path d="M8 22q4-2 8 0t8 0" fill="none" stroke={p.ink} strokeWidth=".6" opacity=".13"/></pattern>
     </defs>
     <rect width={WIDTH} height={HEIGHT} fill={metadata.baseLayer === 'water' ? p.water : p.paper}/>
-    {metadata.baseLayer === 'water' && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}water)`}/>}
+    {metadata.backdrop?.src && <Backdrop backdrop={metadata.backdrop}/>}
+    {metadata.baseLayer === 'water' && !metadata.backdrop?.src && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}water)`}/>}
     {objects.filter(o => o.visible !== false).map(o => <MapObject key={o.id} object={o} palette={p} mapType={mapType} selected={o.id === selectedId} onPick={onPick} onPointPick={o.id === selectedId ? onPointPick : undefined} draft={o.id === draftId} organicBorders={metadata.organicBorders !== false} organicStrength={getOrganicStrength(metadata, o.type)}/>)}
     {grid.enabled && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}grid)`} pointerEvents="none"/>}
     <g pointerEvents="none" stroke={p.ink} fill="none" opacity=".45"><rect x="20" y="20" width="1160" height="760" strokeWidth=".7"/><path d="M1066 100v64m-25-32h50m-25-32-7 29 7-4 7 4Z" fill={p.ink}/></g>

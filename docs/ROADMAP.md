@@ -22,6 +22,10 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-10-06 map image upload
+
+Status: **Implemented in code; focused tests pass; live browser check deferred to the 2026-10-15 Map Builder acceptance pass (see `docs/QA_PLAN.md`).** Atlas library's "Import map or image" now also accepts PNG/JPEG/WebP: the image is uploaded to private `user-media` storage (category `maps`, quota-checked, resized to 2400 px) and becomes the backdrop of a new blank Region map (`metadata.backdrop`), with an opacity slider in the sidebar. Backdrops are included in PNG/SVG exports. Next action: verify upload, reopen, opacity and PNG export in the browser.
+
 ### 2026-10-05 Monthly cancellation visibility
 
 Status: **Fixed, deployed and owner-verified in Stripe test mode.** A Stripe Portal cancellation scheduled for period end remains correctly entitled through that date while Account Settings displays a prominent “Monthly cancelled” notice, the exact access-end date, and the subsequent Free-plan effects. Opening Membership now also reconciles the linked subscription directly with Stripe before refreshing the account, so a delayed or missed webhook cannot silently hide a scheduled cancellation. Active Monthly accounts show their next billing date. Monthly remains browser-and-Cloud only; desktop download, activation, cached entitlement and device APIs now reject Monthly consistently. Verification passed: owner reports every guided test performed so far passed; focused billing/membership/desktop tests (128/128), complete Vitest (162 files / 1,563 tests), zero lint errors, production build, 231-file load check and all 12 API imports. `docs/sprint/YOW-November-Launch-Sprint.xlsx` now records the completed £10 Monthly, £50 Founding Lifetime, £75 Standard Lifetime, scheduled-cancellation and Monthly-no-desktop checks as partial evidence while correctly leaving renewal, failure/async, replay, refund/dispute and live final-Founder concurrency checks open. Remaining Stripe checks stay in `docs/PAYMENT_ROADMAP.md`.

@@ -829,3 +829,10 @@ Status: Deferred
 - Performance gate: verify a realistic large project remains usable across dashboard, writing, search, worldbuilding, map builder, and exports.
 - Marketing truth gate: verify homepage, features, FAQ, pricing, SEO schema, and public pages do not imply excluded features: collaboration, public sharing, mobile apps, marketplace/community, publishing integrations, advanced AI agents, EPUB export, native desktop app, or live VTT play.
 - Real checkout gate: verify real paid checkout remains disabled/test-only until all gates above pass.
+
+### Deferred: map image upload (2026-10-06)
+
+1. Atlas > Import map or image > choose a PNG/JPEG/WebP; a new Region map opens with the image behind the canvas.
+2. Draw a pin/route over it; adjust "Uploaded image opacity"; reload and confirm the image persists.
+3. Export PNG and SVG; confirm the image appears in both.
+4. Try a >15 MB image and a non-image/non-JSON file; confirm a clear error and no map created.

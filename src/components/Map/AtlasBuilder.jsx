@@ -7,6 +7,7 @@ import { downloadBlob } from '../../utils/projectExportHelpers.js'
 import { getSymbolGroups } from './atlasSymbols.js'
 import SymbolsToolIcon from './SymbolsToolIcon.jsx'
 import './atlas.css'
+import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { useIsPhone } from '../../utils/useMediaQuery'
 import { useDialogFocus } from '../../utils/useDialogFocus'
 
@@ -19,6 +20,8 @@ function modalKeys(event, close) {
   if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
 }
 
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024
 const titleCase = value => value[0].toUpperCase() + value.slice(1)
 const TOOL_INFO = {
   select: ['Select', 'Click an item to edit it. Drag it to move.'],
@@ -61,11 +64,23 @@ export default function AtlasBuilder({ store }) {
     store.selectMap(id)
     setCreating(false); setLibrary(false); setError('')
   }
+  async function importImage(file) {
+    if (!IMAGE_TYPES.includes(file.type)) throw new Error('Choose a PNG, JPEG or WebP image.')
+    if (file.size > MAX_IMAGE_BYTES) throw new Error('Choose an image smaller than 15 MB.')
+    const src = await uploadUserMedia(file, { userId: store.userId, category: 'maps', currentUsedBytes: store.storageUsedBytes, quotaBytes: store.storageQuotaBytes, maxDimension: 2400, maxOutputBytes: 5 * 1024 * 1024 })
+    const data = newMapData('region', true, 'paper')
+    data.metadata = { ...data.metadata, backdrop: { src, opacity: 1 } }
+    const name = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 100) || 'Uploaded map'
+    const id = store.addMap(name, 'region', { metadata: data.metadata })
+    if (!id) { deleteUserMedia(src).catch(() => {}); throw new Error('The map could not be created. Check your available storage.') }
+    store.updateMapData(id, () => data); store.selectMap(id); setLibrary(false); setError('')
+  }
   async function importMap(event) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
     try {
+      if (file.type.startsWith('image/')) { await importImage(file); return }
       if (file.size > 10000000) throw new Error('Choose a map smaller than 10 MB.')
       const map = parseAtlas(await file.text())
       const locationIds = new Set(project.locations.map(l => l.id))
@@ -76,11 +91,11 @@ export default function AtlasBuilder({ store }) {
     } catch (e) { setError(e.message || 'The map could not be imported.') }
   }
   return <section className="atlas" aria-label="Map builder">
-    <input ref={inputRef} type="file" accept=".json,application/json" hidden onChange={importMap}/>
+    <input ref={inputRef} type="file" accept=".json,application/json,image/png,image/jpeg,image/webp" hidden onChange={importMap}/>
     {error && <div className="atlas-error" role="alert">{error}<button onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
     {library || !activeMap ? <div className="atlas-library">
       <header><div><span className="atlas-eyebrow">YOUR WORLD, ON PAPER</span><h1>Every story has a place.</h1><p>Make a map worth getting lost in. Start with a little inspiration, then make it yours.</p></div><button className="atlas-primary" onClick={() => setCreating(true)}>+ New map</button></header>
-      <div className="atlas-library-label"><h2>{project.maps.length ? 'Your atlas' : 'Where will your story begin?'}</h2><button onClick={() => inputRef.current.click()}>Import map</button></div>
+      <div className="atlas-library-label"><h2>{project.maps.length ? 'Your atlas' : 'Where will your story begin?'}</h2><button onClick={() => inputRef.current.click()}>Import map or image</button></div>
       {!project.maps.length ? <div className="atlas-start-grid">{SCALES.map(s => <button className="atlas-start-card" key={s.id} onClick={() => setCreating(s.id)}><AtlasCanvas objects={newMapData(s.id, false, 'paper').mapObjects} metadata={newMapData(s.id, false, 'paper').metadata} mapType={s.id}/><strong>{s.name}</strong><span>{s.detail}</span></button>)}</div> : <div className="atlas-start-grid">{project.maps.map(m => <button className="atlas-start-card" key={m.id} onClick={() => { store.selectMap(m.id); setLibrary(false) }}>
         {m.metadata?.builder === ATLAS_VERSION ? <AtlasCanvas objects={m.mapObjects || []} metadata={m.metadata} mapType={m.mapType}/> : <div className="atlas-legacy-preview">⌖<span>Original map</span></div>}
         <strong>{m.name}</strong><span>{titleCase(m.mapType || 'region')} · {m.mapObjects?.length || 0} elements</span></button>)}</div>}
@@ -393,6 +408,10 @@ function Editor({ map, store, onLibrary }) {
       const clone = svgRef.current.cloneNode(true)
       clone.removeAttribute('style'); clone.setAttribute('width','2400'); clone.setAttribute('height','1600')
       clone.querySelectorAll('[data-selection], [data-edit-handles], [data-preview], [data-draft]').forEach(el => el.remove())
+      for (const img of clone.querySelectorAll('image[data-backdrop]')) {
+        const href = img.getAttribute('href')
+        if (href && !href.startsWith('data:')) img.setAttribute('href', await new Promise((resolve, reject) => { fetch(href).then(r => r.blob()).then(b => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(b) }, reject) }))
+      }
       const xml = new XMLSerializer().serializeToString(clone)
       const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' })
       if (kind === 'svg') { downloadBlob(blob, `${map.name}.svg`); return }
@@ -446,7 +465,7 @@ function Editor({ map, store, onLibrary }) {
           <div className="atlas-options"><button onClick={duplicate}>Duplicate</button><button onClick={remove}>Delete item</button></div>
           <div className="atlas-options"><button onClick={() => commit({ ...current, mapObjects: [selected,...objects.filter(o => o.id !== selectedId)] })}>Send back</button><button onClick={() => commit({ ...current, mapObjects: [...objects.filter(o => o.id !== selectedId),selected] })}>Bring forward</button></div>
           <button onClick={() => setSelectedId(null)}>Done</button>
-        </> : <><span className="atlas-eyebrow">THE LOOK OF YOUR WORLD</span><h2>Paper & ink.</h2><p>Keep it simple. A coastline, a few landmarks, and a name can tell a whole story.</p><label>Map style<select value={metadata.palette || 'paper'} onChange={e => commit({ ...current, metadata: { ...metadata, palette: e.target.value } })}>{Object.entries(PALETTES).map(([id,p]) => <option value={id} key={id}>{p.name}</option>)}</select></label><label className="atlas-checkbox"><input type="checkbox" checked={Boolean(metadata.gridSettings?.enabled)} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, enabled: e.target.checked } } })}/> Show a square grid</label>{metadata.gridSettings?.enabled && <label>Distance per square<input value={metadata.gridSettings.scale || ''} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, scale: e.target.value } } })}/></label>}
+        </> : <><span className="atlas-eyebrow">THE LOOK OF YOUR WORLD</span><h2>Paper & ink.</h2><p>Keep it simple. A coastline, a few landmarks, and a name can tell a whole story.</p><label>Map style<select value={metadata.palette || 'paper'} onChange={e => commit({ ...current, metadata: { ...metadata, palette: e.target.value } })}>{Object.entries(PALETTES).map(([id,p]) => <option value={id} key={id}>{p.name}</option>)}</select></label>{metadata.backdrop?.src && <label>Uploaded image opacity<input aria-label="Uploaded image opacity" type="range" min="10" max="100" value={Math.round((metadata.backdrop.opacity ?? 1) * 100)} onChange={e => commit({ ...current, metadata: { ...metadata, backdrop: { ...metadata.backdrop, opacity: Number(e.target.value) / 100 } } })}/></label>}<label className="atlas-checkbox"><input type="checkbox" checked={Boolean(metadata.gridSettings?.enabled)} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, enabled: e.target.checked } } })}/> Show a square grid</label>{metadata.gridSettings?.enabled && <label>Distance per square<input value={metadata.gridSettings.scale || ''} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, scale: e.target.value } } })}/></label>}
           <div className="atlas-places"><h3>Places on this map</h3>{objects.filter(o => o.properties?.name).length ? objects.filter(o => o.properties?.name).map(o => <button key={o.id} onClick={() => { setSelectedId(o.id); setTool('select') }}><span>⌖ {o.properties.name}</span><small>{o.linkedEntity ? 'Linked' : 'Edit →'}</small></button>) : <p>Choose Place to mark somewhere that matters.</p>}</div>
           <button className="atlas-delete-map" onClick={() => setShowDelete(true)}>Delete map…</button>
         </>}
