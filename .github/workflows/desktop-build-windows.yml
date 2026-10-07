@@ -49,6 +49,14 @@ jobs:
             echo "::error::Add repository secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (Settings > Secrets and variables > Actions). The desktop app cannot sign in without them."
             exit 1
           fi
+          if ! printf '%s' "$VITE_SUPABASE_URL" | grep -Eq '^https://[a-z0-9]+\.supabase\.co$'; then
+            echo "::error::VITE_SUPABASE_URL must look like https://<project-ref>.supabase.co (no trailing slash, no path, no spaces)."
+            exit 1
+          fi
+          if ! printf '%s' "$VITE_SUPABASE_ANON_KEY" | grep -Eq '^(eyJ[A-Za-z0-9_.-]+|sb_publishable_[A-Za-z0-9_-]+)$'; then
+            echo "::error::VITE_SUPABASE_ANON_KEY must be the anon public key (starts with eyJ or sb_publishable_), with no spaces or line breaks."
+            exit 1
+          fi
 
       - name: Build Windows installer
         env:

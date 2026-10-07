@@ -263,6 +263,7 @@ function AppInner() {
   const [dataLoading, setDataLoading] = useState(false)
   const [dataLoadError, setDataLoadError] = useState(false)
   const [dataLoadRetryToken, setDataLoadRetryToken] = useState(0)
+  const [dataLoadErrorDetail, setDataLoadErrorDetail] = useState('')
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
   const [section, setSection] = useState(() => initialRouteSnapshot.section)
@@ -1068,6 +1069,7 @@ function AppInner() {
         // run again for the same user on retry.
         loadedUid.current = null
         finishRemoteLoad(false)
+        setDataLoadErrorDetail(String(error?.message || error || 'unknown error').slice(0, 200))
         setDataLoadError(true)
       })
       .finally(() => setDataLoading(false))
@@ -1218,6 +1220,9 @@ function AppInner() {
         <span className="w-12 h-12 text-[var(--accent)]"><YOWLogo /></span>
         <p className="text-[var(--text-main)] font-medium max-w-sm">
           We couldn't load your projects. Nothing has been deleted — this is just a connection hiccup.
+        </p>
+        <p className="text-[var(--text-muted)] text-xs max-w-sm break-words">
+          Details: {dataLoadErrorDetail || 'unknown error'} · server: {supabaseHostForDiagnostics()}
         </p>
         <button
           type="button"
@@ -1697,6 +1702,12 @@ function AppInner() {
       {globalOverlays}
     </>
   )
+}
+
+// Public host only (never the key): lets a support screenshot show whether a
+// build was baked with the right Supabase project.
+function supabaseHostForDiagnostics() {
+  try { return new URL(import.meta.env.VITE_SUPABASE_URL).host || 'not configured' } catch { return 'not configured' }
 }
 
 export default function App() {
