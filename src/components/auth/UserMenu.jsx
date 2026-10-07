@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../../context/AuthContext'
 import { UserMediaImage } from '../shared/UserMedia'
+import { HELP_CENTRE_URL } from '../../config/helpCentre'
+import { openExternalUrl } from '../../utils/externalLinks'
 
 function MenuIcon({ name }) {
   const common = {
@@ -17,6 +19,7 @@ function MenuIcon({ name }) {
   }
   const paths = {
     account: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    book: <><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19V5" /><path d="M9 7h6" /></>,
     help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.8 2.8 0 0 1 5.1 1.6c0 2.1-2.6 2.3-2.6 4" /><path d="M12 18h.01" /></>,
     about: <><circle cx="12" cy="12" r="9" /><path d="M12 10v6" /><path d="M12 7h.01" /></>,
     legal: <><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 12h6" /><path d="M9 16h4" /></>,
@@ -177,6 +180,10 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
                     <span>Help and support</span>
                   </button>
                 )}
+                <button type="button" role="menuitem" onClick={() => { setOpen(false); openExternalUrl(HELP_CENTRE_URL) }} className="user-menu-item">
+                  <MenuIcon name="book" />
+                  <span>Help Centre</span>
+                </button>
                 {onOpenAbout && (
                   <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpenAbout() }} className="user-menu-item">
                     <MenuIcon name="about" />
