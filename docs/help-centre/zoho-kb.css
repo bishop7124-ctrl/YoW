@@ -258,6 +258,56 @@ body { line-height: 1.65; }
 }
 .ArticleDetail_description td:first-child { color: var(--yow-text) !important; font-weight: 600; }
 
+/* ── Section / article list page ── */
+.KBListContainer__title {
+  font-family: var(--yow-serif) !important;
+  font-weight: 700;
+  color: var(--yow-text) !important;
+  border-bottom: 1px solid var(--yow-border) !important;
+  padding-bottom: 12px;
+}
+.ArticleListitem__listItem {
+  display: block;
+  background: var(--yow-card) !important;
+  border: 1px solid var(--yow-border) !important;
+  border-radius: var(--yow-radius);
+  padding: 18px 22px;
+  margin-bottom: 12px;
+  text-decoration: none !important;
+  transition: border-color .15s, background .15s;
+}
+.ArticleListitem__listItem:hover {
+  background: var(--yow-card2) !important;
+  border-color: var(--yow-accent) !important;
+}
+.ArticleListitem__title, .ArticleListitem__titleLink {
+  font-family: var(--yow-serif) !important;
+  font-weight: 700;
+  color: var(--yow-text) !important;
+  margin-bottom: 6px;
+}
+.ArticleListitem__listItem:hover .ArticleListitem__title,
+.ArticleListitem__listItem:hover .ArticleListitem__titleLink { color: var(--yow-accent-h) !important; }
+.ArticleListitem__description { color: var(--yow-muted) !important; font-size: .9rem; line-height: 1.7; }
+
+/* Sidebar info + tree on list pages */
+.KBListContainer__info { border-color: var(--yow-border) !important; }
+.KBListContainer__articleCount { color: var(--yow-text) !important; font-family: var(--yow-serif) !important; }
+.KBListContainer__smallLegend { color: var(--yow-faint) !important; }
+.KBListContainer__tree { border-color: var(--yow-border) !important; }
+
+/* Pagination */
+.Pagination__paginationItem {
+  background: var(--yow-card) !important;
+  border: 1px solid var(--yow-border-l) !important;
+  border-radius: var(--yow-radius-sm);
+  color: var(--yow-muted) !important;
+}
+.Pagination__paginationItem, .Pagination__paginationItem * { color: var(--yow-muted) !important; }
+.Pagination__paginationItemActive { background: var(--yow-accent) !important; border-color: var(--yow-accent) !important; }
+.Pagination__paginationItemActive, .Pagination__paginationItemActive * { color: var(--yow-contrast) !important; }
+.Pagination__paginationItemDisabled { opacity: .45; }
+
 /* ── Forms (feedback, search, tickets) ── */
 .Input__input, .Textarea__textarea, input, textarea, select {
   background: var(--yow-card) !important;
