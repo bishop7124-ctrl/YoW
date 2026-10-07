@@ -31,6 +31,10 @@ Evidence: `npm run qa` 164 files / 1,574 tests, 0 lint errors; Playwright export
 
 Owner Mac steps (packaged app): export one project as ZIP, Word and PDF and save each to Documents; open each (ZIP unzips, Word opens in Pages/Word, PDF in Preview) and confirm the text matches. Export a map as PNG and open it. Cancel one save and confirm no error and no file. Save into a read-only place (for example a locked folder) and confirm the red "was not saved" alert appears. Account Settings > Storage > Download all backups: cancel the save panel and confirm it does NOT say "All downloaded ✓".
 
+## 2026-10-07 CI desktop build could not sign in (fixed in workflow; needs two repo secrets)
+
+The 7 Oct CI-built Mac app failed sign-in with "fetch is aborting". Cause: `.github/workflows/desktop-build-{macos,windows}.yml` never passed `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so the app was built against the placeholder `offline.supabase.local` host and every request hit the 20 s timeout in `src/supabase.js`. Earlier test builds worked because they were built locally with `.env.local`. Fix: both workflows now read the two values from repository secrets and fail early with a clear message if either is missing. Owner step: add the secrets (Supabase Project URL and anon public key; both are public-by-design values), then re-run the build. Check after install: sign-in works, then run the two save-error checks.
+
 ## 2026-10-07 desktop vault stress (done; real-Mac steps owner-reported passed)
 
 Status: **Done 2026-10-07.** Code and automated checks done; the owner reported the real-Mac vault steps (force-quit, snapshot restore, Move vault, Reveal vault/privacy look) all passed (owner-reported, no screenshots). The overall desktop gate still needs the packaged-app journey on the required machines (9-16 Oct). No product defect found; no app code changed, only tests added.

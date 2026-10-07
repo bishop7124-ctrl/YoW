@@ -37,6 +37,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Require Supabase build settings
+        # Without these the app is built pointing at a placeholder server and
+        # every sign-in fails with "fetch is aborted" after 20 seconds.
+        shell: bash
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Add repository secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (Settings > Secrets and variables > Actions). The desktop app cannot sign in without them."
+            exit 1
+          fi
+
       - name: Build Windows installer
         env:
           # Optional: if TAURI_UPDATER_PRIVATE_KEY[/_PASSWORD] repo secrets are
@@ -44,6 +57,8 @@ jobs:
           # minisign signature, unrelated to and free regardless of OS-level
           # code signing). Unset secrets leave these blank and the build
           # proceeds unsigned, same as before.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
         run: npm run desktop:build:nsis
