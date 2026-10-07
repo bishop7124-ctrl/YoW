@@ -19,9 +19,9 @@ Evidence: `npm run qa` 163 files / 1,569 tests, 0 lint errors; Rust `cargo test`
 
 Owner steps (pending): apply migration `20261004130000` in Supabase; on the Mac build, 6 Oct (login, library, project navigation, writing) and 7 Oct (vault persistence, restore, relocation and a look at `vault.db` for secrets) as scheduled. On the Mac build also click "Get an API key" (Account Settings > AI) and "Manage subscription" on a test account and confirm each opens your default browser; on Windows, confirm Reveal vault selects vault.db in Explorer. Not done and not claimable from the cloud: packaged-app journey, Finder reveal, WKWebView auth, force-quit durability.
 
-## 2026-10-07 native export save dialogs (AI half done 7 Oct; Mac save-and-open pending)
+## 2026-10-07 native export save dialogs (done; real-Mac checks owner-reported passed)
 
-Status: **Code and automated checks done 2026-10-07; real-Mac save-and-open pending.** Not Passed.
+Status: **Done 2026-10-07.** Code and automated checks done; the owner reported on the rebuilt Mac app that ZIP/Word/PDF save and open, map PNG, cancelled save, unwritable-folder alert and Download all backups (cancel) all pass (owner-reported, no screenshots). Large-export IPC risk below not exercised.
 
 Finding fixed: `downloadBlob` on desktop resolved `null` for both "user cancelled" and "native write failed", the `yow-export-save-error` event had no listener, and `exportAllProjects` ignored the result. So Account Settings could show "All downloaded ✓" and the account-deletion backup flow could imply a safe backup when nothing was saved. Now: Export All marks every project not-backed-up when the save returns null (all four callers already treat `!ok` as failure with "Do not delete your account yet"), and App shows a dismissible alert naming the unsaved file. Tests: `src/utils/projectExportHelpers.desktop.test.js` (bytes and file name reach `export_save_file`; cancel = null, no event; failure = null plus event) and a cancelled-save case in `projectExportAll.test.js`.
 
