@@ -355,6 +355,15 @@ export default function FAQPage({ onGetStarted, onLogin, user }) {
               Drop us a line — we're happy to help.
             </p>
             <a
+              href="https://yourownworld.zohodesk.eu/portal/en/kb/your-own-world"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+              style={{ textDecoration: 'none', marginRight: 10 }}
+            >
+              Browse the Help Centre
+            </a>
+            <a
               href="mailto:support@yourownworld.co.uk"
               className="btn btn-primary"
               style={{ textDecoration: 'none' }}

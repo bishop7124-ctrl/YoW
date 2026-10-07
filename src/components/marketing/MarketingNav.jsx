@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import YOWLogo from '../brand/YOWLogo'
+import { HELP_CENTRE_URL } from '../../config/helpCentre'
 
 const NAV_LINKS = [
   { href: '/features/', label: 'Features', match: '/features' },
   { href: '/pricing/', label: 'Pricing', match: '/pricing' },
   { href: '/faq/', label: 'FAQ', match: '/faq' },
+  { href: HELP_CENTRE_URL, label: 'Help Centre', match: HELP_CENTRE_URL, external: true },
   { href: '/about/', label: 'About Us', match: '/about' },
 ]
 
@@ -14,7 +16,7 @@ export default function MarketingNav({
   user,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const isActive = (link) => activePath === link.href || activePath.startsWith(link.match)
+  const isActive = (link) => !link.external && (activePath === link.href || activePath.startsWith(link.match))
 
   return (
     <header className="marketing-nav" role="banner">
@@ -32,6 +34,7 @@ export default function MarketingNav({
             <a
               key={link.href}
               href={link.href}
+              {...(link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               aria-current={isActive(link) ? 'page' : undefined}
               onClick={() => setMenuOpen(false)}
             >

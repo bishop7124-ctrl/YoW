@@ -83,6 +83,7 @@ export default function MarketingFooter() {
           <span>© {new Date().getFullYear()} Your Own World. All rights reserved.</span>
           <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <a href="/faq/" style={linkStyle}>FAQ</a>
+            <a href="https://yourownworld.zohodesk.eu/portal/en/kb/your-own-world" target="_blank" rel="noopener noreferrer" style={linkStyle}>Help Centre</a>
             <a href="/beta-disclaimer/" style={linkStyle}>Beta Disclaimer</a>
             <a href="mailto:support@yourownworld.co.uk" style={linkStyle}>Contact</a>
             <SupportDevelopmentLink />
