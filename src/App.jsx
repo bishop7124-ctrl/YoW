@@ -593,6 +593,14 @@ function AppInner() {
   // startup. Failures never gate the app — staleness past the grace window and
   // the device cap only drive dismissible toasts.
   const [desktopLicenceStale, setDesktopLicenceStale] = useState(false)
+  // Desktop native save failures (projectExportHelpers dispatches this event);
+  // without a listener a failed export looked identical to a cancelled one.
+  const [exportSaveError, setExportSaveError] = useState(null)
+  useEffect(() => {
+    const onSaveError = event => setExportSaveError(event.detail || { message: 'unknown error' })
+    window.addEventListener('yow-export-save-error', onSaveError)
+    return () => window.removeEventListener('yow-export-save-error', onSaveError)
+  }, [])
   const [desktopDeviceLimit, setDesktopDeviceLimit] = useState(false)
   useEffect(() => {
     if (OFFLINE_MODE || !desktopApp || !userId || !membership.isDesktopEntitled) return
@@ -1353,6 +1361,17 @@ function AppInner() {
             Storage settings
           </button>
           <button type="button" className="membership-toast-link" onClick={() => setLocalStorageWarningDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {exportSaveError && (
+        <div role="alert" className="membership-toast">
+          <span>
+            {exportSaveError.filename ? `"${exportSaveError.filename}" was not saved.` : 'The file was not saved.'}
+            {' '}Nothing was written to your computer. Pick a folder you can write to (for example Documents) and try the export again.
+          </span>
+          <button type="button" className="membership-toast-link" onClick={() => setExportSaveError(null)}>
             Dismiss
           </button>
         </div>

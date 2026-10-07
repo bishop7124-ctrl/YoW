@@ -19,6 +19,18 @@ Evidence: `npm run qa` 163 files / 1,569 tests, 0 lint errors; Rust `cargo test`
 
 Owner steps (pending): apply migration `20261004130000` in Supabase; on the Mac build, 6 Oct (login, library, project navigation, writing) and 7 Oct (vault persistence, restore, relocation and a look at `vault.db` for secrets) as scheduled. On the Mac build also click "Get an API key" (Account Settings > AI) and "Manage subscription" on a test account and confirm each opens your default browser; on Windows, confirm Reveal vault selects vault.db in Explorer. Not done and not claimable from the cloud: packaged-app journey, Finder reveal, WKWebView auth, force-quit durability.
 
+## 2026-10-08 native export save dialogs (AI half done 7 Oct; Mac save-and-open pending)
+
+Status: **Code and automated checks done 2026-10-07; real-Mac save-and-open pending.** Not Passed.
+
+Finding fixed: `downloadBlob` on desktop resolved `null` for both "user cancelled" and "native write failed", the `yow-export-save-error` event had no listener, and `exportAllProjects` ignored the result. So Account Settings could show "All downloaded ✓" and the account-deletion backup flow could imply a safe backup when nothing was saved. Now: Export All marks every project not-backed-up when the save returns null (all four callers already treat `!ok` as failure with "Do not delete your account yet"), and App shows a dismissible alert naming the unsaved file. Tests: `src/utils/projectExportHelpers.desktop.test.js` (bytes and file name reach `export_save_file`; cancel = null, no event; failure = null plus event) and a cancelled-save case in `projectExportAll.test.js`.
+
+Known risk (owner check below): bytes go over IPC as a JSON number array, about 3.5x the file size (measured 50 MB -> 178 MB, 7 s in Node). Typical exports are far smaller. If the Mac check shows Export All hanging on a big account, switch `export_save_file` to Tauri's raw binary request body.
+
+Evidence: `npm run qa` 164 files / 1,574 tests, 0 lint errors; Playwright export-formats and desktop-workspace pass.
+
+Owner Mac steps (packaged app): export one project as ZIP, Word and PDF and save each to Documents; open each (ZIP unzips, Word opens in Pages/Word, PDF in Preview) and confirm the text matches. Export a map as PNG and open it. Cancel one save and confirm no error and no file. Save into a read-only place (for example a locked folder) and confirm the red "was not saved" alert appears. Account Settings > Storage > Download all backups: cancel the save panel and confirm it does NOT say "All downloaded ✓".
+
 ## 2026-10-07 desktop vault stress (done; real-Mac steps owner-reported passed)
 
 Status: **Done 2026-10-07.** Code and automated checks done; the owner reported the real-Mac vault steps (force-quit, snapshot restore, Move vault, Reveal vault/privacy look) all passed (owner-reported, no screenshots). The overall desktop gate still needs the packaged-app journey on the required machines (10-17 Oct). No product defect found; no app code changed, only tests added.
