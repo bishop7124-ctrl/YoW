@@ -45,23 +45,29 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+          # Pasted secrets often carry a trailing newline/space; strip it and
+          # hand the cleaned values to the build step.
+          URL="$(printf '%s' "$VITE_SUPABASE_URL" | tr -d '[:space:]')"
+          KEY="$(printf '%s' "$VITE_SUPABASE_ANON_KEY" | tr -d '[:space:]')"
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
             echo "::error::Add repository secrets VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (Settings > Secrets and variables > Actions). The desktop app cannot sign in without them."
             exit 1
           fi
-          if ! printf '%s' "$VITE_SUPABASE_URL" | grep -Eq '^https://[a-z0-9]+\.supabase\.co$'; then
-            echo "::error::VITE_SUPABASE_URL must look like https://<project-ref>.supabase.co (no trailing slash, no path, no spaces)."
+          if ! printf '%s' "$URL" | grep -Eq '^https://[a-z0-9]+\.supabase\.co$'; then
+            # Shape facts only (never the value itself).
+            echo "::error::VITE_SUPABASE_URL must look like https://<project-ref>.supabase.co. Seen: length=${#URL}, starts_with_https=$(case "$URL" in https://*) echo yes;; *) echo no;; esac), ends_with_supabase_co=$(case "$URL" in *.supabase.co) echo yes;; *) echo no;; esac), has_path_or_slash_after_host=$(printf '%s' "${URL#https://}" | grep -q '/' && echo yes || echo no), has_uppercase=$(printf '%s' "$URL" | grep -q '[A-Z]' && echo yes || echo no)"
             exit 1
           fi
-          if ! printf '%s' "$VITE_SUPABASE_ANON_KEY" | grep -Eq '^(eyJ[A-Za-z0-9_.-]+|sb_publishable_[A-Za-z0-9_-]+)$'; then
-            echo "::error::VITE_SUPABASE_ANON_KEY must be the anon public key (starts with eyJ or sb_publishable_), with no spaces or line breaks."
+          if ! printf '%s' "$KEY" | grep -Eq '^(eyJ[A-Za-z0-9_.-]+|sb_publishable_[A-Za-z0-9_-]+)$'; then
+            echo "::error::VITE_SUPABASE_ANON_KEY must be the anon public key (starts with eyJ or sb_publishable_)."
             exit 1
           fi
+          echo "VITE_SUPABASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_ANON_KEY=$KEY" >> "$GITHUB_ENV"
 
       - name: Build app and signed updater archive
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # VITE_SUPABASE_* come from the guard step above (trimmed, via GITHUB_ENV).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
         run: npm run desktop:build:app
