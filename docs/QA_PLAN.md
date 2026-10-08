@@ -836,3 +836,9 @@ Status: Deferred
 2. Draw a pin/route over it; adjust "Uploaded image opacity"; reload and confirm the image persists.
 3. Export PNG and SVG; confirm the image appears in both.
 4. Try a >15 MB image and a non-image/non-JSON file; confirm a clear error and no map created.
+
+
+### 2026-10-08 packaged desktop save dialogs
+
+- Automated: `src/utils/desktopExportSave.test.js` (6 tests) pins ZIP/DOCX/PDF/PNG -> `export_save_file` with filename and bytes, cancel -> null, and a visible error notice (`exportSaveNotice.js`) when the native save fails. `npm run qa` 164 files / 1,576 tests, 0 lint errors.
+- Owner (packaged Mac build): from a disposable project export ZIP, DOCX, PDF, World Bible and a map PNG; confirm a Save dialog appears each time, the file opens (Pages/Word/Preview), content is readable; cancel once and confirm nothing is saved and no error. Status: pending owner report.
