@@ -3519,3 +3519,25 @@ describe('flushPendingSync', () => {
     expect(upsertItems).not.toHaveBeenCalled()
   })
 })
+
+// ─── lapsed hosting: no cloud writes ─────────────────────────────────────────
+
+describe('lapsed hosting (Local Mode) makes no cloud writes', () => {
+  it('create, edit, settings and delete stay local with cloudSyncEnabled=false', async () => {
+    const { saveUserSettings, saveSceneDoc: saveScene, deleteSceneDoc: delScene, deleteProjectData: delProject } = await import('../utils/firestoreSync.js')
+    const cloudWrites = [upsertItems, mergeItems, deleteItem, saveUserSettings, saveScene, delScene, delProject, replaceUserData]
+    cloudWrites.forEach(fn => vi.mocked(fn).mockClear())
+    vi.useFakeTimers()
+    try {
+      const { result } = renderHook(() => useStore('lapsed-user', { cloudSyncEnabled: false }))
+      let novel
+      act(() => { novel = result.current.addNovel({ title: 'Written while lapsed', type: 'novel' }) })
+      act(() => { result.current.updateNovel(novel.id, { title: 'Edited while lapsed' }) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+      expect(result.current.novels.find(n => n.id === novel.id)?.title).toBe('Edited while lapsed')
+      for (const fn of cloudWrites) expect(fn).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

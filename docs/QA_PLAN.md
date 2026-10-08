@@ -871,3 +871,8 @@ Status: Deferred
 2. Draw a pin/route over it; adjust "Uploaded image opacity"; reload and confirm the image persists.
 3. Export PNG and SVG; confirm the image appears in both.
 4. Try a >15 MB image and a non-image/non-JSON file; confirm a clear error and no map created.
+
+### 2026-10-08 Local Mode, lapse and renewal
+
+- Automated: no-cloud-write test (`src/store/useStore.test.js`), hosting-renewal checkout tests (`tests/api/create-checkout-session.test.js`), plus existing lapse-resume/reconcile/status-line suites (376 related tests pass).
+- Owner scenario (pending): on a disposable Lifetime test account with hosting lapsed, edit on the desktop app, edit a different field on the web, renew via the Stripe test checkout, reopen the desktop app and confirm both edits survive and a same-field clash is shown rather than silently dropped. The AI will give exact click-by-click steps once the owner confirms which test account to use; never use the owner/admin account.
