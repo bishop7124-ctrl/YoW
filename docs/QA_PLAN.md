@@ -876,3 +876,16 @@ Status: Deferred
 
 - Automated: no-cloud-write test (`src/store/useStore.test.js`), hosting-renewal checkout tests (`tests/api/create-checkout-session.test.js`), plus existing lapse-resume/reconcile/status-line suites (376 related tests pass).
 - Owner scenario (pending): on a disposable Lifetime test account with hosting lapsed, edit on the desktop app, edit a different field on the web, renew via the Stripe test checkout, reopen the desktop app and confirm both edits survive and a same-field clash is shown rather than silently dropped. The AI will give exact click-by-click steps once the owner confirms which test account to use; never use the owner/admin account.
+
+#### 2026-10-08 owner lapse -> web edit -> renewal -> desktop merge (designated account test2 only)
+
+Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook path is covered by `tests/api`), so nothing is billed. Supabase SQL editor, project YOW. Never run this on the owner/admin account.
+
+0. Backup: `select raw_app_meta_data from auth.users where email = 'test2@yourownworld.co.uk';` copy the result into Notes (used by step 7).
+1. Make test2 a Lifetime account with hosting active: `update auth.users set raw_app_meta_data = raw_app_meta_data || jsonb_build_object('subscription_plan','premium_plus_lifetime','subscription_status','active','beta_tester',false,'lifetime_purchased_at',to_char(now() - interval '1 year','YYYY-MM-DD"T"HH24:MI:SS"Z"'),'hosting_included_until',to_char(now() + interval '30 days','YYYY-MM-DD"T"HH24:MI:SS"Z"')) where email = 'test2@yourownworld.co.uk';`
+2. Desktop: sign out and in as test2; create project "Lapse test", add a character "Mara" with notes "original", write one line in a scene; wait for "Synced".
+3. Lapse: same update but `'hosting_included_until', now() - interval '3 days'`. Desktop: sign out/in; Settings -> Storage shows only "Cloud sync unavailable" and a renew button. Edit the scene text (e.g. add "desktop edit while lapsed").
+4. Web (www.yourownworld.co.uk, signed in as test2): open "Lapse test", change Mara's notes to "web edit while lapsed".
+5. Renew (simulated): set `'cloud_hosting_expires_at', now() + interval '1 year'`. Desktop: sign out/in, wait for Synced.
+6. Expect: scene shows the desktop edit AND Mara's notes show the web edit; nothing lost; a conflict prompt only if the same field was edited on both.
+7. Restore: `update auth.users set raw_app_meta_data = $$<pasted step 0 result>$$::jsonb where email = 'test2@yourownworld.co.uk';` then delete the "Lapse test" project.
