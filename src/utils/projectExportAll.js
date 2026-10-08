@@ -81,7 +81,16 @@ export async function exportAllProjects(store, novels, format = EXPORT_ALL_FORMA
     const bundle = buildZipBlob(entries)
     const stamp = new Date().toISOString().slice(0, 10)
     const label = format === EXPORT_ALL_FORMATS.DOCX ? 'word-docs' : 'backups'
-    await downloadBlob(bundle, sanitizeFilename(`yow-all-projects-${label}-${stamp}`, 'yow-all-projects') + '.zip')
+    const saved = await downloadBlob(bundle, sanitizeFilename(`yow-all-projects-${label}-${stamp}`, 'yow-all-projects') + '.zip')
+    // The desktop save dialog resolves null when it was cancelled or the write
+    // failed. Nothing reached the disk, so callers that gate "safe to delete"
+    // messaging on these results must not see success.
+    if (saved === null || saved === undefined) {
+      const error = new Error('The backup file was not saved (save cancelled or failed).')
+      for (const result of results) {
+        if (result.ok) Object.assign(result, { ok: false, error })
+      }
+    }
   }
 
   return results

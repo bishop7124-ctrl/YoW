@@ -263,6 +263,7 @@ function AppInner() {
   const [dataLoading, setDataLoading] = useState(false)
   const [dataLoadError, setDataLoadError] = useState(false)
   const [dataLoadRetryToken, setDataLoadRetryToken] = useState(0)
+  const [dataLoadErrorDetail, setDataLoadErrorDetail] = useState('')
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
   const [section, setSection] = useState(() => initialRouteSnapshot.section)
@@ -593,6 +594,14 @@ function AppInner() {
   // startup. Failures never gate the app — staleness past the grace window and
   // the device cap only drive dismissible toasts.
   const [desktopLicenceStale, setDesktopLicenceStale] = useState(false)
+  // Desktop native save failures (projectExportHelpers dispatches this event);
+  // without a listener a failed export looked identical to a cancelled one.
+  const [exportSaveError, setExportSaveError] = useState(null)
+  useEffect(() => {
+    const onSaveError = event => setExportSaveError(event.detail || { message: 'unknown error' })
+    window.addEventListener('yow-export-save-error', onSaveError)
+    return () => window.removeEventListener('yow-export-save-error', onSaveError)
+  }, [])
   const [desktopDeviceLimit, setDesktopDeviceLimit] = useState(false)
   useEffect(() => {
     if (OFFLINE_MODE || !desktopApp || !userId || !membership.isDesktopEntitled) return
@@ -1060,6 +1069,7 @@ function AppInner() {
         // run again for the same user on retry.
         loadedUid.current = null
         finishRemoteLoad(false)
+        setDataLoadErrorDetail(String(error?.message || error || 'unknown error').slice(0, 200))
         setDataLoadError(true)
       })
       .finally(() => setDataLoading(false))
@@ -1211,6 +1221,9 @@ function AppInner() {
         <p className="text-[var(--text-main)] font-medium max-w-sm">
           We couldn't load your projects. Nothing has been deleted — this is just a connection hiccup.
         </p>
+        <p className="text-[var(--text-muted)] text-xs max-w-sm break-words">
+          Details: {dataLoadErrorDetail || 'unknown error'} · server: {supabaseHostForDiagnostics()}
+        </p>
         <button
           type="button"
           onClick={() => { setDataLoadError(false); setDataLoadRetryToken(t => t + 1) }}
@@ -1353,6 +1366,17 @@ function AppInner() {
             Storage settings
           </button>
           <button type="button" className="membership-toast-link" onClick={() => setLocalStorageWarningDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {exportSaveError && (
+        <div role="alert" className="membership-toast">
+          <span>
+            {exportSaveError.filename ? `"${exportSaveError.filename}" was not saved.` : 'The file was not saved.'}
+            {' '}Nothing was written to your computer. Pick a folder you can write to (for example Documents) and try the export again.
+          </span>
+          <button type="button" className="membership-toast-link" onClick={() => setExportSaveError(null)}>
             Dismiss
           </button>
         </div>
@@ -1678,6 +1702,12 @@ function AppInner() {
       {globalOverlays}
     </>
   )
+}
+
+// Public host only (never the key): lets a support screenshot show whether a
+// build was baked with the right Supabase project.
+function supabaseHostForDiagnostics() {
+  try { return new URL(import.meta.env.VITE_SUPABASE_URL).host || 'not configured' } catch { return 'not configured' }
 }
 
 export default function App() {
