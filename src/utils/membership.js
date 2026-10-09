@@ -369,3 +369,8 @@ export function getMembership(user) {
     priceLabel: `£${BILLING.monthlyPrice}/pm`, // legacy compat
   }
 }
+
+// A saved free-project choice that points at a deleted project is no choice at all.
+export function isFreeProjectChoiceValid(freeProjectId, novels = []) {
+  return Boolean(freeProjectId) && novels.some(novel => novel?.id === freeProjectId)
+}

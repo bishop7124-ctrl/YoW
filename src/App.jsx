@@ -48,6 +48,7 @@ import {
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
 import { clearCachedDesktopEntitlement, evaluateDesktopEntitlement, getOrCreateDesktopDeviceId, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
+import { isFreeProjectChoiceValid } from './utils/membership'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
@@ -1300,7 +1301,10 @@ function AppInner() {
     )
   }
 
-  const showFreeSelector = !desktopApp && membership.usesFreeCloudLimits && !membership.freeProjectId && store.novels.length >= 1
+  // A saved choice that points at a deleted project counts as no choice, otherwise every
+  // remaining project stays view-only with no way to pick one.
+  const freeProjectChoiceIsValid = isFreeProjectChoiceValid(membership.freeProjectId, store.novels)
+  const showFreeSelector = !desktopApp && membership.usesFreeCloudLimits && !freeProjectChoiceIsValid && store.novels.length >= 1
 
   const handleFreeProjectConfirm = async (projectId) => {
     try {
