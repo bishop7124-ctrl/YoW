@@ -55,7 +55,7 @@ function CheckIcon() {
   return <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="var(--accent)" fillOpacity=".15" /><path d="M4 7l2 2 4-4" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
-function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutBusy = false }) {
+function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutBusy = false, checkoutOpen = false }) {
   const free = plan.key === 'free'
   const lifetime = plan.key === 'premium_plus_lifetime'
   const founding = lifetime && foundingAvailable
@@ -82,7 +82,9 @@ function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutB
       </ul>
       {plan.disclaimer && !founding && <p className="pricing-card-disclaimer">{plan.disclaimer}</p>}
       <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && checkoutBusy} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
-        {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
+        {/* Paid buttons only register interest until checkout opens (private test link today;
+            launch day switches the behaviour in selectPaidPlan and this label together). */}
+        {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : !checkoutOpen ? 'Register interest' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
       </button>
       {free && <p className="pricing-card-caption">No card required</p>}
     </article>
@@ -195,7 +197,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         </section>
 
         <section className="pricing-cards" aria-label="Pricing plans">
-          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
+          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} checkoutOpen={billingTest} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
         </section>
 
         <aside className="pricing-first-100" aria-labelledby="first-100-heading">

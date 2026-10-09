@@ -55,7 +55,7 @@ test('Register interest pins the selected plan, requires a valid email, and clos
   await gotoPricing(page)
 
   const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
-  await monthlyCard.getByRole('button', { name: 'Choose Monthly' }).click()
+  await monthlyCard.getByRole('button', { name: 'Register interest' }).click()
 
   const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
   await expect(modal).toBeVisible()
@@ -99,7 +99,7 @@ for (const viewport of [
     await expect(table).toBeVisible()
 
     const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £75/ })
-    await lifetimeCard.getByRole('button', { name: 'Choose Lifetime' }).click()
+    await lifetimeCard.getByRole('button', { name: 'Register interest' }).click()
     const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
     await expect(modal).toBeVisible()
     await modal.getByRole('button', { name: 'Close beta access modal' }).click()

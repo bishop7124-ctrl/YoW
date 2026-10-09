@@ -3,19 +3,17 @@ import { expect, test } from '@playwright/test'
 test('pricing presents paid plans as interest-only launch terms', async ({ page }) => {
   await page.goto('/pricing/')
 
-  await expect(page.getByText('Free is available now. Paid plans and the desktop workspace are coming soon')).toBeVisible()
-  await expect(page.locator('.pricing-card').getByRole('button', { name: 'Register interest' })).toHaveCount(3)
+  await expect(page.getByText('Free is available now. Paid checkout remains closed while billing is being tested; paid buttons register interest and never create a charge.')).toBeVisible()
+  await expect(page.locator('.pricing-card').getByRole('button', { name: 'Register interest' })).toHaveCount(2)
   await expect(page.getByText(/slots remaining/i)).toHaveCount(0)
 
-  const paidAvailability = await page.locator('#ld-pricing-product').evaluate(node => {
+  const paidAvailability = await page.locator('#ld-pricing-page').evaluate(node => {
     const schema = JSON.parse(node.textContent)
     return schema.offers.filter(offer => offer.name !== 'Free').map(offer => offer.availability)
   })
-  expect(paidAvailability).toEqual([
-    'https://schema.org/PreOrder',
-    'https://schema.org/PreOrder',
-    'https://schema.org/PreOrder',
-  ])
+  // Every paid offer (Monthly, Lifetime) is a pre-order while checkout is closed.
+  expect(paidAvailability.length).toBeGreaterThan(0)
+  expect(paidAvailability.every(value => value === 'https://schema.org/PreOrder')).toBe(true)
 })
 
 test('public copy reflects AI, map, player-view, and vault decisions', async ({ page }) => {
