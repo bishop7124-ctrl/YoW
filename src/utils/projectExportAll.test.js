@@ -171,4 +171,15 @@ describe('exportAllProjects', () => {
       'Alpha/Alpha-Manuscript.docx',
     ])
   })
+
+  it('reports every project as not backed up when the desktop save is cancelled or fails (null), so "safe to delete" messaging never fires', async () => {
+    const store = makeStore({ a: makeProjectData('a', 'Alpha') })
+    downloadBlob.mockResolvedValueOnce(null)
+
+    const results = await exportAllProjects(store, [{ id: 'a', title: 'Alpha' }], EXPORT_ALL_FORMATS.ZIP)
+
+    expect(results).toHaveLength(1)
+    expect(results[0].ok).toBe(false)
+    expect(results[0].error.message).toMatch(/not saved/i)
+  })
 })

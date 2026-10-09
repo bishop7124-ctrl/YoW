@@ -1910,4 +1910,230 @@ mod tests {
 
     exec(reader.raw, "COMMIT;").unwrap(); // release it so the tempdir cleans up without a lingering lock
   }
+  // --- 7 Oct vault stress: force-quit durability, corruption, relocation, disk-full, restore ---
+
+  fn wal_path_of(path: &Path) -> PathBuf {
+    PathBuf::from(format!("{}-wal", path.to_string_lossy()))
+  }
+
+  // Simulates kill -9 / power loss: the connection is never closed (so no
+  // checkpoint-on-close), and the on-disk files are copied exactly as they
+  // sit at that instant, then opened as a fresh launch would.
+  fn crash_copy(live: &Path, destination_dir: &Path) -> PathBuf {
+    fs::create_dir_all(destination_dir).unwrap();
+    let copy = destination_dir.join("vault.db");
+    fs::copy(live, &copy).unwrap();
+    let wal = wal_path_of(live);
+    if wal.exists() {
+      fs::copy(&wal, wal_path_of(&copy)).unwrap();
+    }
+    copy
+  }
+
+  #[test]
+  fn committed_writes_survive_a_simulated_force_quit_without_a_checkpoint() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let live = root.path().join("live").join("vault.db");
+    fs::create_dir_all(live.parent().unwrap()).unwrap();
+    let db = open_db(&live).unwrap();
+    for index in 0..50 {
+      set_item(&db, &format!("scene-{index}"), &format!("prose {index}")).unwrap();
+    }
+    assert!(
+      file_size(&wal_path_of(&live)) > 0,
+      "writes should still be in the WAL, not yet checkpointed"
+    );
+
+    let crashed = crash_copy(&live, &root.path().join("after-crash"));
+    std::mem::forget(db); // never closed, as in a force-quit
+
+    let reopened = open_db(&crashed).unwrap();
+    assert_eq!(entry_count(reopened.raw).unwrap(), 50);
+    assert_eq!(
+      get_item(&reopened, "scene-49").unwrap(),
+      Some("prose 49".to_string())
+    );
+    assert_eq!(integrity_message(reopened.raw).unwrap(), "ok");
+  }
+
+  #[test]
+  fn an_uncommitted_transaction_is_lost_cleanly_on_force_quit_and_earlier_data_is_intact() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let live = root.path().join("live").join("vault.db");
+    fs::create_dir_all(live.parent().unwrap()).unwrap();
+    let db = open_db(&live).unwrap();
+    set_item(&db, "kept", "committed before the crash").unwrap();
+    exec(db.raw, "BEGIN;").unwrap();
+    set_item(&db, "half-written", "never committed").unwrap();
+    set_item(&db, "kept", "overwritten but never committed").unwrap();
+
+    let crashed = crash_copy(&live, &root.path().join("after-crash"));
+    std::mem::forget(db);
+
+    let reopened = open_db(&crashed).unwrap();
+    assert_eq!(get_item(&reopened, "half-written").unwrap(), None);
+    assert_eq!(
+      get_item(&reopened, "kept").unwrap(),
+      Some("committed before the crash".to_string())
+    );
+    assert_eq!(integrity_message(reopened.raw).unwrap(), "ok");
+  }
+
+  #[test]
+  fn a_vault_file_that_is_not_a_database_is_reported_and_left_untouched() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    let garbage = b"this is not a sqlite database, it is a damaged vault file".repeat(50);
+    fs::write(&path, &garbage).unwrap();
+
+    assert!(
+      open_db(&path).is_err(),
+      "damaged file must be an error, not a silent empty vault"
+    );
+    assert_eq!(
+      fs::read(&path).unwrap(),
+      garbage,
+      "a failed open must never overwrite or truncate the damaged file"
+    );
+  }
+
+  #[test]
+  fn a_corrupted_page_is_flagged_by_the_integrity_check_and_a_snapshot_restores_a_healthy_vault() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let live = root.path().join("vault.db");
+    let snapshot = root.path().join("vault-snapshot-1700000000.db");
+    {
+      let db = open_db(&live).unwrap();
+      for index in 0..200 {
+        set_item(&db, &format!("scene-{index}"), &"x".repeat(2000)).unwrap();
+      }
+      exec(db.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    }
+    fs::copy(&live, &snapshot).unwrap();
+
+    // Damage a data page well past the header, as a failing disk might.
+    let mut bytes = fs::read(&live).unwrap();
+    assert!(bytes.len() > 40_000);
+    for byte in bytes[20_000..24_000].iter_mut() {
+      *byte = 0xA5;
+    }
+    fs::write(&live, &bytes).unwrap();
+
+    // Refusing to open is also an honest report; only a healthy "ok" is wrong.
+    if let Ok(db) = open_db(&live) {
+      assert_ne!(
+        integrity_message(db.raw).unwrap_or_else(|error| error),
+        "ok",
+        "corruption must never report a healthy vault"
+      );
+    }
+
+    restore_vault_file(&snapshot, &live).unwrap();
+    let restored = open_db(&live).unwrap();
+    assert_eq!(entry_count(restored.raw).unwrap(), 200);
+    assert_eq!(integrity_message(restored.raw).unwrap(), "ok");
+  }
+
+  #[test]
+  fn relocation_copies_vault_and_snapshots_keeps_the_old_copy_and_the_new_vault_is_complete() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let old_dir = root.path().join("old");
+    let new_dir = root.path().join("new");
+    fs::create_dir_all(old_dir.join("Backups")).unwrap();
+    let old_vault = old_dir.join("vault.db");
+    let db = open_db(&old_vault).unwrap();
+    set_item(&db, "nf_novels", "[{\"title\":\"Moved\"}]").unwrap();
+    // Left un-checkpointed on purpose: vault_relocate checkpoints first.
+    fs::write(
+      old_dir.join("Backups").join("vault-snapshot-1700000000.db"),
+      b"snap-a",
+    )
+    .unwrap();
+    fs::write(
+      old_dir.join("Backups").join("vault-auto-1700000001.db"),
+      b"snap-b",
+    )
+    .unwrap();
+
+    // Same steps as vault_relocate's "moved" branch.
+    fs::create_dir_all(&new_dir).unwrap();
+    exec(db.raw, "PRAGMA wal_checkpoint(FULL);").unwrap();
+    let new_vault = new_dir.join("vault.db");
+    fs::copy(&old_vault, &new_vault).unwrap();
+    copy_backup_files(&old_dir.join("Backups"), &new_dir.join("Backups")).unwrap();
+    drop(db);
+
+    let moved = open_db(&new_vault).unwrap();
+    assert_eq!(
+      get_item(&moved, "nf_novels").unwrap(),
+      Some("[{\"title\":\"Moved\"}]".to_string())
+    );
+    assert_eq!(integrity_message(moved.raw).unwrap(), "ok");
+    assert_eq!(
+      fs::read(new_dir.join("Backups").join("vault-snapshot-1700000000.db")).unwrap(),
+      b"snap-a"
+    );
+    assert_eq!(
+      fs::read(new_dir.join("Backups").join("vault-auto-1700000001.db")).unwrap(),
+      b"snap-b"
+    );
+    assert!(
+      old_vault.exists(),
+      "the old copy must remain as a safety copy"
+    );
+    assert!(old_dir
+      .join("Backups")
+      .join("vault-snapshot-1700000000.db")
+      .exists());
+
+    // Writing to the new vault must not touch the old one.
+    set_item(&moved, "after-move", "new only").unwrap();
+    let old = open_db(&old_vault).unwrap();
+    assert_eq!(get_item(&old, "after-move").unwrap(), None);
+  }
+
+  #[test]
+  fn opening_a_vault_in_a_missing_folder_or_at_a_directory_path_is_an_error_not_a_panic() {
+    let root = tempfile::tempdir().expect("tempdir");
+    assert!(open_db(&root.path().join("gone").join("vault.db")).is_err());
+    let directory_as_file = root.path().join("vault.db");
+    fs::create_dir_all(&directory_as_file).unwrap();
+    assert!(open_db(&directory_as_file).is_err());
+  }
+
+  #[test]
+  fn a_full_disk_is_reported_with_the_write_rejected_and_existing_data_intact() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let path = root.path().join("vault.db");
+    let db = open_db(&path).unwrap();
+    set_item(&db, "precious", "chapter one").unwrap();
+    // SQLITE_FULL is the same error a real full disk produces.
+    exec(db.raw, "PRAGMA max_page_count = 8;").unwrap();
+
+    let mut failure = None;
+    for index in 0..200 {
+      if let Err(error) = set_item(&db, &format!("big-{index}"), &"y".repeat(4000)) {
+        failure = Some(error);
+        break;
+      }
+    }
+    let message = failure.expect("writes must start failing once the file cannot grow");
+    assert!(
+      message.to_lowercase().contains("full"),
+      "error should say the disk/database is full, got: {message}"
+    );
+    assert_eq!(
+      get_item(&db, "precious").unwrap(),
+      Some("chapter one".to_string())
+    );
+    assert_eq!(integrity_message(db.raw).unwrap(), "ok");
+
+    // Freeing space lets saving resume; nothing is wedged.
+    exec(db.raw, "PRAGMA max_page_count = 1000000;").unwrap();
+    set_item(&db, "after-recovery", "saved").unwrap();
+    assert_eq!(
+      get_item(&db, "after-recovery").unwrap(),
+      Some("saved".to_string())
+    );
+  }
 }
