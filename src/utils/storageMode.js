@@ -159,3 +159,11 @@ export function loadPendingDesktopLapseResumeBase(userId, { desktopApp, isLocalM
   if (isLocalMode || userLocalFirstMode) return null
   return loadDesktopLapseSnapshot(userId)
 }
+
+// Which user (if any) sign-out should keep a lapsed local copy for. Signing out
+// makes userId null, and that same render must not clear the marker before the
+// sign-out handler reads it, so a null userId leaves the previous value alone.
+export function nextLapsedDesktopUser(previous, { desktopApp, userId, isLocalMode }) {
+  if (!userId) return previous ?? null
+  return desktopApp && isLocalMode ? userId : null
+}

@@ -42,6 +42,7 @@ import {
   saveDesktopLapseLocalCopy,
   loadDesktopLapseLocalCopy,
   chooseLapseLocalData,
+  nextLapsedDesktopUser,
   saveLocalFirstSnapshot,
   saveStorageMode,
 } from './utils/storageMode'
@@ -478,7 +479,7 @@ function AppInner() {
   }, [desktopApp, userId, membership.isLocalMode])
 
   useEffect(() => {
-    lapsedDesktopUserRef.current = desktopApp && userId && membership.isLocalMode ? userId : null
+    lapsedDesktopUserRef.current = nextLapsedDesktopUser(lapsedDesktopUserRef.current, { desktopApp, userId, isLocalMode: membership.isLocalMode })
   }, [desktopApp, userId, membership.isLocalMode])
 
   useEffect(() => {

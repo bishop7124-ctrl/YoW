@@ -198,4 +198,17 @@ describe('lapsed sign-out keeps local-only edits', () => {
     expect(conflicts).toHaveLength(1)
     expect(reviewedData.scenes[0].content).toContain('desktop test')
   })
+
+  it('remembers the lapsed user across the render where sign-out makes userId null (the 9 Oct bug)', async () => {
+    const { nextLapsedDesktopUser } = await import('./storageMode')
+    const lapsed = { desktopApp: true, userId: 'user-1', isLocalMode: true }
+    let marker = nextLapsedDesktopUser(null, lapsed)
+    expect(marker).toBe('user-1')
+    // Sign-out render: userId is null; the sign-out handler must still see the marker.
+    marker = nextLapsedDesktopUser(marker, { desktopApp: true, userId: null, isLocalMode: false })
+    expect(marker).toBe('user-1')
+    // A signed-in, non-lapsed user clears it; web never sets it.
+    expect(nextLapsedDesktopUser('user-1', { desktopApp: true, userId: 'user-1', isLocalMode: false })).toBeNull()
+    expect(nextLapsedDesktopUser(null, { desktopApp: false, userId: 'user-1', isLocalMode: true })).toBeNull()
+  })
 })
