@@ -152,3 +152,23 @@ describe('automatic cloud-sync resume-on-renewal reconcile', () => {
     expect(saveDesktopLapseSnapshot('user-1', { novels: [{ id: 'project-1', title: 'Next lapse' }] })).toBe(true)
   })
 })
+
+describe('resume retry backoff (cold start right after renewal)', () => {
+  it('retries a few times with growing delays, then stops until the next launch', async () => {
+    const { getLapseResumeRetryDelayMs } = await import('./cloudSyncResume')
+    expect(getLapseResumeRetryDelayMs(0)).toBe(15_000)
+    expect(getLapseResumeRetryDelayMs(1)).toBe(60_000)
+    expect(getLapseResumeRetryDelayMs(2)).toBe(180_000)
+    expect(getLapseResumeRetryDelayMs(3)).toBeNull()
+  })
+
+  it('keeps the lapse snapshot when the cloud write fails so a retry can still merge', async () => {
+    saveDesktopLapseSnapshot('user-1', { novels: [{ id: 'n1', title: 'A' }] })
+    await expect(persistReviewedCloudSyncResume('user-1', { novels: [{ id: 'n1', title: 'A' }] }, {
+      replaceUserData: () => Promise.reject(new Error('offline')),
+      loadUserData: () => Promise.resolve({}),
+      trackSync: promise => promise,
+    })).rejects.toThrow('offline')
+    expect(loadDesktopLapseSnapshot('user-1')).toBeTruthy()
+  })
+})

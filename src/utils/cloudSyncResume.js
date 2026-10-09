@@ -61,3 +61,14 @@ export async function persistReviewedCloudSyncResume(userId, mergedData, options
   saveLocalFirstSnapshot(userId, reviewedData)
   return reviewedData
 }
+
+// Backoff for retrying the automatic resume-on-renewal reconcile after a
+// failed attempt (offline cold start, network not up yet). `attempt` is the
+// number of retries already made; returns null once the budget is spent, after
+// which the pending snapshot is kept and the next app launch tries again.
+const LAPSE_RESUME_RETRY_DELAYS_MS = [15_000, 60_000, 180_000]
+
+export function getLapseResumeRetryDelayMs(attempt) {
+  const delay = LAPSE_RESUME_RETRY_DELAYS_MS[attempt]
+  return delay === undefined ? null : delay
+}

@@ -7,6 +7,7 @@ import { supabase } from '../supabase.js'
 import { optimizeImage, optimizeImageToDataUrl } from './imageOptimize.js'
 import { checkUploadAllowed } from './storageQuota.js'
 import { OFFLINE_MODE } from './offlineMock.js'
+import { areCloudWritesAllowed, assertCloudWritesAllowed } from './cloudWritePolicy.js'
 
 const BUCKET_NAME = 'user-media'
 const PRIVATE_MEDIA_PREFIX = 'yow-media:'
@@ -42,7 +43,10 @@ export async function uploadUserMedia(file, options = {}) {
   // exists) — fall back to the old local-only data URL so images still work
   // for local testing, matching every other Supabase-backed function in this
   // codebase (see the OFFLINE_MODE guards in utils/firestoreSync.js).
-  if (OFFLINE_MODE) return optimizeImageToDataUrl(file, optimizeOptions)
+  // Local Mode (hosting lapsed), Local-first and archived accounts keep the
+  // image on this device as a data URL; it is relocated to Storage by the
+  // embedded-image safety net once cloud sync is allowed again.
+  if (OFFLINE_MODE || !areCloudWritesAllowed()) return optimizeImageToDataUrl(file, optimizeOptions)
 
   if (!userId) throw new Error('Sign in to upload images.')
 
@@ -85,6 +89,7 @@ export async function uploadEmbeddedImage(dataUrl, options = {}) {
   const { userId, category } = options
   if (!category) throw new Error('uploadEmbeddedImage requires a category.')
   if (!userId) throw new Error('uploadEmbeddedImage requires a userId.')
+  assertCloudWritesAllowed('Uploading an image')
 
   const match = /^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/.exec(dataUrl)
   if (!match) throw new Error('Not a base64 image data URL.')
@@ -162,7 +167,9 @@ export async function getSignedUserMediaUrl(value, options = {}) {
  * can call this unconditionally when replacing/removing an image field.
  */
 export async function deleteUserMedia(url) {
-  if (OFFLINE_MODE || !url || typeof url !== 'string') return
+  // While cloud writes are off the remote object is left alone (no cloud
+  // write); the reference is still dropped locally by the caller.
+  if (OFFLINE_MODE || !areCloudWritesAllowed() || !url || typeof url !== 'string') return
   const path = getUserMediaPath(url)
   if (!path) return
   const { error } = await supabase.storage.from(BUCKET_NAME).remove([path])

@@ -46,9 +46,10 @@ import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
 import { clearCachedDesktopEntitlement, evaluateDesktopEntitlement, getOrCreateDesktopDeviceId, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
+import { setCloudWritesAllowed } from './utils/cloudWritePolicy'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
-import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
+import { getLapseResumeRetryDelayMs, persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import { trackEvent } from './utils/analytics'
@@ -251,6 +252,7 @@ function AppInner() {
   // can't race the reconcile by pushing stale pre-merge local state up before
   // it has been merged against whatever landed in the cloud during the lapse.
   const [resumingCloudSyncAfterLapse, setResumingCloudSyncAfterLapse] = useState(false)
+  const [lapseResumeAttempt, setLapseResumeAttempt] = useState(0)
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
   const store = useStore(userId, {
@@ -260,6 +262,15 @@ function AppInner() {
     cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode && !resumingCloudSyncAfterLapse,
   })
   const { importData, finishRemoteLoad, clearData, ensureSampleProject } = store
+
+  // Direct Supabase writes outside useStore (image uploads/deletes, AI
+  // findings, interviews) follow the same rule as the store's sync effects:
+  // no cloud writes in Local Mode, Local-first or an archived account.
+  const cloudWritesAllowed = Boolean(membership.canSyncCloud && !effectiveLocalMode)
+  useEffect(() => {
+    setCloudWritesAllowed(cloudWritesAllowed)
+    return () => setCloudWritesAllowed(true)
+  }, [cloudWritesAllowed])
   const [dataLoading, setDataLoading] = useState(false)
   const [dataLoadError, setDataLoadError] = useState(false)
   const [dataLoadRetryToken, setDataLoadRetryToken] = useState(0)
@@ -490,6 +501,7 @@ function AppInner() {
     // resume ends up failing, instead of leaving the app showing an empty,
     // indistinguishable-from-data-loss state until a manual restart.
     let cancelled = false
+    let retryTimer = null
     setResumingCloudSyncAfterLapse(true)
     lapseResumeClaimed.current = (async () => {
       try {
@@ -515,13 +527,23 @@ function AppInner() {
         // exactly the bug this is fixing. The pending snapshot is also left
         // in place, so restarting the app (which re-runs this effect fresh
         // on mount) gets another chance to reconcile.
-        if (!cancelled) console.error('[YOW] Automatic cloud-sync resume-on-renewal reconcile failed:', error)
+        if (!cancelled) {
+          console.error('[YOW] Automatic cloud-sync resume-on-renewal reconcile failed:', error)
+          // Cold-start friendly: a first launch right after renewal is often
+          // offline or racing the network coming up, so retry a few times
+          // with backoff instead of waiting for the next app restart.
+          const retryDelay = getLapseResumeRetryDelayMs(lapseResumeAttempt)
+          if (retryDelay !== null) retryTimer = setTimeout(() => setLapseResumeAttempt(n => n + 1), retryDelay)
+        }
         return { ok: false }
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desktopApp, userId, membership.isLocalMode, userLocalFirstMode])
+  }, [desktopApp, userId, membership.isLocalMode, userLocalFirstMode, lapseResumeAttempt])
 
   const getResumeCloudSyncPreview = async () => {
     if (!desktopApp || !userId) throw new Error('Sign in to resume cloud sync.')
