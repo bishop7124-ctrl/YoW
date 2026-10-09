@@ -30,3 +30,13 @@ describe('access-change backup prompt', () => {
     expect(screen.queryByText(/ends in 12 days/)).toBeNull()
   })
 })
+
+describe('FreeProjectSelector for lapsed Lifetime hosting', () => {
+  it('says hosting ended and that nothing is deleted, instead of calling it a free plan', () => {
+    const store = { novels: [{ id: 'a', title: 'A' }] }
+    render(<FreeProjectSelector store={store} novels={store.novels} onConfirm={() => {}} hostingLapsed />)
+    expect(screen.getByText('Cloud hosting ended')).toBeTruthy()
+    expect(screen.getByText(/not deleted/)).toBeTruthy()
+    expect(screen.queryByText(/Your free plan includes/)).toBeNull()
+  })
+})

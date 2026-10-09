@@ -889,3 +889,5 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 5. Renew (simulated): set `'cloud_hosting_expires_at', now() + interval '1 year'`. Desktop: sign out/in, wait for Synced.
 6. Expect: scene shows the desktop edit AND Mara's notes show the web edit; nothing lost; a conflict prompt only if the same field was edited on both.
 7. Restore: `update auth.users set raw_app_meta_data = $$<pasted step 0 result>$$::jsonb where email = 'test1@yourownworld.co.uk';` then delete the "Lapse test" project.
+
+- **Result of first owner run (9 Oct, account yourownworld.admin@gmail.com):** same-scene edit on desktop (lapsed) and web, then sign-out/in and renewal: desktop edit lost silently. Root cause and fix in the ROADMAP 8 Oct row. Re-run required on a rebuilt Mac app: repeat steps A-F, this time editing the SAME scene on desktop and web; expected result is a visible conflict with both versions kept, and a different-field edit merging cleanly. Also confirm signing out and back in while still lapsed keeps the desktop edit.

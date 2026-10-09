@@ -98,6 +98,47 @@ export function loadDesktopLapseSnapshot(userId) {
 export function clearDesktopLapseSnapshot(userId) {
   if (!userId) return
   try { removeItem(desktopLapseSnapshotKey(userId)) } catch { /* storage unavailable */ }
+  clearDesktopLapseLocalCopy(userId)
+}
+
+// While hosting is lapsed the desktop app's edits exist only on this device
+// (cloud writes are off), but signing out wipes the store's local project
+// data. Without a copy, those edits vanished at sign-out and, after renewal,
+// the merge saw an empty device and let the web version win silently.
+// Overwritten on every sign-out while lapsed; removed with the lapse snapshot
+// once the resume merge completes.
+const DESKTOP_LAPSE_LOCAL_COPY_PREFIX = 'nf_desktopLapseLocalCopy'
+const desktopLapseLocalCopyKey = userId => `${DESKTOP_LAPSE_LOCAL_COPY_PREFIX}:${userId || 'anonymous'}`
+
+export function saveDesktopLapseLocalCopy(userId, data) {
+  if (!userId || !data) return false
+  try {
+    writeItem(desktopLapseLocalCopyKey(userId), JSON.stringify({ savedAt: Date.now(), data }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function loadDesktopLapseLocalCopy(userId) {
+  if (!userId) return null
+  const parsed = loadValue(desktopLapseLocalCopyKey(userId), null)
+  return parsed?.data ?? null
+}
+
+export function clearDesktopLapseLocalCopy(userId) {
+  if (!userId) return
+  try { removeItem(desktopLapseLocalCopyKey(userId)) } catch { /* storage unavailable */ }
+}
+
+// The store's own snapshot wins whenever it holds projects (it is the newest
+// state, e.g. an in-session lapse then renewal); the saved copy is used only
+// when sign-out emptied the store.
+export function chooseLapseLocalData(storeSnapshot, savedCopy) {
+  const hasProjects = data => Array.isArray(data?.novels) && data.novels.length > 0
+  if (hasProjects(storeSnapshot)) return storeSnapshot
+  if (hasProjects(savedCopy)) return savedCopy
+  return storeSnapshot || savedCopy || {}
 }
 
 // Decides whether a data load (a plain login/refresh, not just the in-session

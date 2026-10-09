@@ -39,6 +39,9 @@ import {
   loadPendingDesktopLapseResumeBase,
   loadStorageMode,
   saveDesktopLapseSnapshot,
+  saveDesktopLapseLocalCopy,
+  loadDesktopLapseLocalCopy,
+  chooseLapseLocalData,
   saveLocalFirstSnapshot,
   saveStorageMode,
 } from './utils/storageMode'
@@ -329,6 +332,8 @@ function AppInner() {
   // a failed resume attempt still leaves the app showing *something* rather
   // than an empty state indistinguishable from real data loss.
   const lapseResumeClaimed = useRef(false)
+  // Set while a desktop account is lapsed, so sign-out can keep its local-only edits.
+  const lapsedDesktopUserRef = useRef(null)
   const localModeNoticeKey = useMemo(
     () => getLocalModeNoticeKey(userId, membership, storageMode),
     [userId, membership, storageMode]
@@ -435,7 +440,7 @@ function AppInner() {
   // lapse and reopened only after renewal, which has no in-session
   // true→false transition for the effect just below to observe at all).
   const reconcileDesktopLapseResume = async (cloudData, pendingBase) => {
-    const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+    const localData = pruneSaveDataToProjects(chooseLapseLocalData(store.getLocalSnapshot?.(), loadDesktopLapseLocalCopy(userId)))
     const cloud = pruneSaveDataToProjects(cloudData)
     const baseData = pruneSaveDataToProjects(pendingBase)
     const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloud, baseData)
@@ -463,8 +468,16 @@ function AppInner() {
     // true on first render. `saveDesktopLapseSnapshot` itself is the actual
     // guard: it no-ops once a snapshot for this lapse already exists, so
     // firing this on every render (or every remount) while lapsed is safe.
-    saveDesktopLapseSnapshot(userId, store.getLocalSnapshot?.())
+    // Skipped while the store is still empty (just after sign-in, before data
+    // loads): an empty base made every later web edit look like a conflict.
+    // The data-load path below captures the base from the loaded cloud data.
+    const snapshotNow = store.getLocalSnapshot?.()
+    if (snapshotNow?.novels?.length) saveDesktopLapseSnapshot(userId, snapshotNow)
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopApp, userId, membership.isLocalMode])
+
+  useEffect(() => {
+    lapsedDesktopUserRef.current = desktopApp && userId && membership.isLocalMode ? userId : null
   }, [desktopApp, userId, membership.isLocalMode])
 
   useEffect(() => {
@@ -962,6 +975,12 @@ function AppInner() {
     if (!user) {
       loadedUid.current = null
       lapseResumeClaimed.current = false
+      // Sign-out wipes local project data; while lapsed that data is the only
+      // copy of the user's edits, so keep it for the next sign-in and renewal merge.
+      if (lapsedDesktopUserRef.current) {
+        saveDesktopLapseLocalCopy(lapsedDesktopUserRef.current, store.getLocalSnapshot?.())
+        lapsedDesktopUserRef.current = null
+      }
       clearData()
       finishRemoteLoad()
       setDataLoadError(false)
@@ -1016,7 +1035,14 @@ function AppInner() {
         // `data` right over the just-completed merge — this path awaits that
         // same claim's outcome first.
         const claimedResume = lapseResumeClaimed.current
-        if (!claimedResume) {
+        const lapseLocalCopy = desktopApp && membership.isLocalMode ? loadDesktopLapseLocalCopy(userId) : null
+        // First lapsed sign-in on this device: the loaded cloud data is the last common state.
+        if (desktopApp && membership.isLocalMode && data?.novels?.length) saveDesktopLapseSnapshot(userId, pruneSaveDataToProjects(data))
+        if (lapseLocalCopy?.novels?.length) {
+          // Still lapsed: this device is the source of truth. Restore the edits
+          // kept at sign-out instead of showing the web copy over them.
+          importData(lapseLocalCopy, { preferLocal: false })
+        } else if (!claimedResume) {
           importData(data)
         } else if (!(await claimedResume).ok) {
           // The claimed resume failed (and, per its own comment, deliberately
@@ -1493,6 +1519,7 @@ function AppInner() {
       <AccessChangeNotice membership={membership} store={store} desktopApp={desktopApp} onManageMembership={() => { setAccountTab('membership'); setAccountOpen(true) }} />
       {showFreeSelector && (
         <FreeProjectSelector
+          hostingLapsed={membership.isLocalMode}
           novels={store.novels}
           store={store}
           onConfirm={handleFreeProjectConfirm}

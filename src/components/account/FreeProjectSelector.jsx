@@ -1,7 +1,7 @@
 import { BackupAllButton } from './AccessChangeNotice'
 import { useState, useEffect, useRef } from 'react'
 
-export default function FreeProjectSelector({ novels, store, onConfirm, busy }) {
+export default function FreeProjectSelector({ novels, store, onConfirm, busy, hostingLapsed = false }) {
   const [selectedId, setSelectedId] = useState(novels[0]?.id ?? null)
   const dialogRef = useRef(null)
   useEffect(() => { dialogRef.current?.focus() }, [])
@@ -36,14 +36,15 @@ export default function FreeProjectSelector({ novels, store, onConfirm, busy }) 
         }}
       >
         <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--accent-text)', marginBottom: 8 }}>
-          Free plan
+          {hostingLapsed ? 'Cloud hosting ended' : 'Free plan'}
         </p>
         <h2 id="free-selector-title" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-main)', marginBottom: 10, lineHeight: 1.2 }}>
           Choose your active project
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
-          Your free plan includes one fully editable project. All others will be view-only.
-          Upgrade at any time to unlock all projects.
+          {hostingLapsed
+            ? 'Your Lifetime licence is unchanged, but Cloud hosting has ended, so editing on the web is limited to one project. Your other projects are not deleted: they stay view-only and exportable on the web, and you can keep editing all of them in the desktop app. Renew Cloud Mode to edit every project on the web again.'
+            : 'Your free plan includes one fully editable project. All others will be view-only. Upgrade at any time to unlock all projects.'}
         </p>
 
         <div
