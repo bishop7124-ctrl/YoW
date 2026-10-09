@@ -646,6 +646,10 @@ test.describe('Priority 8: Finalized draft reader', () => {
     const editor = page.locator('textarea:not([tabindex="-1"])').first()
     await expect(editor).toBeVisible()
     await expect(editor).toBeEditable()
+    // Clicking the preview places the caret where it was clicked a moment after
+    // the textarea mounts; typing before that settles lands the first letters at
+    // position 0. A person cannot click and type within milliseconds, so wait.
+    await expect.poll(() => editor.evaluate(el => el.selectionStart)).toBeGreaterThan(0)
     await editor.type(' Added after finalizing.')
     await expect(editor).toHaveValue(/Added after finalizing\./)
   })
