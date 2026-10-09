@@ -17,6 +17,7 @@
 // darwin-x86_64, darwin-aarch64, linux-x86_64.
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { buildUpdaterManifest, validateUpdaterManifest } from './lib/updaterManifest.mjs'
 
 function parseArgs(argv) {
   const args = { platforms: [] }
@@ -26,13 +27,26 @@ function parseArgs(argv) {
     else if (arg === '--notes') args.notes = argv[++i]
     else if (arg === '--out') args.out = argv[++i]
     else if (arg === '--platform') args.platforms.push(argv[++i])
+    else if (arg === '--allow-partial') args.allowPartial = true
+    else if (arg === '--verify') args.verify = argv[++i]
     else throw new Error(`Unknown argument: ${arg}`)
   }
   return args
 }
 
+function appVersion() {
+  return JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2))
+  if (args.verify) {
+    // Check an already-published latest.json: node scripts/generate-updater-manifest.mjs --verify latest.json
+    const errors = validateUpdaterManifest(JSON.parse(readFileSync(args.verify, 'utf8')), { expectedVersion: appVersion(), repo: 'bishop7124-ctrl/YoW' })
+    if (errors.length) throw new Error(`Updater manifest is not releasable:\n - ${errors.join('\n - ')}`)
+    console.log(`${args.verify} is complete for version ${appVersion()}.`)
+    return
+  }
   if (!args.version) throw new Error('--version is required')
   if (!args.out) throw new Error('--out is required')
   if (args.platforms.length === 0) throw new Error('At least one --platform is required')
@@ -47,12 +61,13 @@ function main() {
     platforms[key] = { signature, url }
   }
 
-  const manifest = {
-    version: args.version,
-    notes: args.notes || '',
-    pub_date: new Date().toISOString(),
-    platforms,
-  }
+  const manifest = buildUpdaterManifest({ version: args.version, notes: args.notes || '', platforms })
+  const errors = validateUpdaterManifest(manifest, {
+    expectedVersion: appVersion(),
+    repo: 'bishop7124-ctrl/YoW',
+    ...(args.allowPartial ? { requiredPlatforms: [] } : {}),
+  })
+  if (errors.length) throw new Error(`Refusing to write an incomplete manifest (use --allow-partial only for a dry run):\n - ${errors.join('\n - ')}`)
 
   writeFileSync(args.out, JSON.stringify(manifest, null, 2))
   console.log(`Wrote ${args.out} for version ${args.version} (${Object.keys(platforms).join(', ')})`)

@@ -6,6 +6,7 @@ import BetaInterestModal from '../account/BetaInterestModal'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
+import UnsignedAppNotice from '../download/UnsignedAppNotice'
 import { usePageMeta } from '../../utils/usePageMeta'
 import './PricingPage.css'
 
@@ -37,6 +38,7 @@ const FAQ = [
   { q: 'What happens after my included Cloud period?', a: `You can renew YOW Cloud for £${HOSTING_RENEWAL_FEE_GBP} per year. If you decline, your Lifetime licence and Founder status remain active and you can keep working locally and offline. Cloud sync and hosted storage fall back to the applicable Free limits until you renew.` },
   { q: 'What happens if I cancel Monthly?', a: 'Your account falls back to Free limits after the paid period ends. Your work is not deleted: you choose one project to keep editable and can continue to view and export retained projects.' },
   { q: 'Can I use the desktop app on Monthly?', a: 'No. Monthly is the complete browser-based plan with Cloud sync. Desktop and offline access are included with Lifetime.' },
+  { q: 'Is the desktop app signed by Apple and Microsoft?', a: 'Not yet. During the beta the desktop app is not notarized by Apple or signed with a Windows code-signing certificate, so macOS (Gatekeeper) and Windows (SmartScreen) show a warning the first time you open it. On Mac choose System Settings → Privacy & Security → Open Anyway; on Windows choose More info → Run anyway. Step-by-step instructions are on the Download page.' },
   { q: 'Does Lifetime guarantee future updates?', a: 'Buy YOW for what it is today. Enjoy what we add tomorrow. Lifetime is permanent product access, not a promise of a particular roadmap or an indefinite schedule of new features.' },
 ]
 
@@ -81,6 +83,7 @@ function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutB
         ] : plan.features).map(feature => <li key={feature}><CheckIcon /><span>{feature}</span></li>)}
       </ul>
       {plan.disclaimer && !founding && <p className="pricing-card-disclaimer">{plan.disclaimer}</p>}
+      {lifetime && <p className="pricing-card-disclaimer">The beta desktop app is not yet signed by Apple or Microsoft, so Mac and Windows show a one-time first-launch warning. See the note below.</p>}
       <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && checkoutBusy} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
         {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
       </button>
@@ -197,6 +200,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         <section className="pricing-cards" aria-label="Pricing plans">
           {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
         </section>
+
+        <UnsignedAppNotice />
 
         <aside className="pricing-first-100" aria-labelledby="first-100-heading">
           <p className="eyebrow">The first 100</p><h2 id="first-100-heading">A permanent little thank-you.</h2>

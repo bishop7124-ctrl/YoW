@@ -19,7 +19,7 @@ async function expectSpaShellRendered(page) {
 }
 
 const staticRoutes = [
-  ['/about/', 'About Your Own World'],
+  ['/about/', 'About Us'],
   ['/ai-overview/', 'AI Writing Assistant for Worldbuilders'],
   ['/worldbuilding-software/', 'Worldbuilding Software for Fantasy Writers'],
   ['/novel-writing-software/', 'Novel Writing Software for Authors'],

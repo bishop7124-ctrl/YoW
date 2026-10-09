@@ -106,3 +106,12 @@ for (const viewport of [
     await expect(modal).toHaveCount(0)
   })
 }
+
+test('pricing page discloses the unsigned desktop app before purchase', async ({ page }) => {
+  await gotoPricing(page)
+  const notice = page.getByRole('note', { name: 'Desktop app signing notice' })
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText('not yet signed by Apple or Microsoft')
+  await expect(notice).toContainText('Open Anyway')
+  await expect(notice).toContainText('Run anyway')
+})

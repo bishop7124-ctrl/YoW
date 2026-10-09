@@ -137,6 +137,10 @@ const FAQ_SECTIONS = [
     summary: 'How Local Mode works, what stays on device, and switching modes.',
     items: [
       {
+        q: 'Is the desktop app signed by Apple and Microsoft?',
+        a: 'Not yet. During the beta the desktop app is not notarized by Apple or signed with a Windows code-signing certificate, so macOS (Gatekeeper) and Windows (SmartScreen) show a warning the first time you open it. On Mac choose System Settings → Privacy & Security → Open Anyway; on Windows choose More info → Run anyway. The Download page has step-by-step instructions once you have Lifetime access.',
+      },
+      {
         q: 'How do I use Local Mode?',
         a: "Local Mode stores your projects on your device instead of the cloud. It activates automatically if your Cloud Mode period lapses, and you can also choose Local-first writing from Account Settings → Membership while Cloud Sync is available. Your data stays on this device, automatic cloud sync pauses, and you can keep writing without relying on an internet connection. To move projects between devices in Local Mode, use Export (ZIP) and Import.",
       },

@@ -65,6 +65,14 @@ describe('create-checkout-session Founding Price selection', () => {
     expect(response.status).toHaveBeenCalledWith(200)
   })
 
+  it('discloses the unsigned desktop app on the Lifetime checkout page', async () => {
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    await handler(req(), res())
+    const params = sessionsCreate.mock.calls[0][0]
+    expect(params.custom_text.submit.message).toMatch(/not yet signed by Apple or Microsoft/)
+    expect(params.custom_text.submit.message.length).toBeLessThanOrEqual(1200)
+  })
+
   it('automatically uses £75 with one Cloud year when all positions are held or claimed', async () => {
     rpc.mockResolvedValueOnce({ data: { eligible: false, reason: 'sold_out' }, error: null })
     const { default: handler } = await import('../../api/create-checkout-session.js')
