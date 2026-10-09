@@ -39,12 +39,17 @@ import {
   loadPendingDesktopLapseResumeBase,
   loadStorageMode,
   saveDesktopLapseSnapshot,
+  saveDesktopLapseLocalCopy,
+  loadDesktopLapseLocalCopy,
+  chooseLapseLocalData,
+  nextLapsedDesktopUser,
   saveLocalFirstSnapshot,
   saveStorageMode,
 } from './utils/storageMode'
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
 import { clearCachedDesktopEntitlement, evaluateDesktopEntitlement, getOrCreateDesktopDeviceId, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
+import { isFreeProjectChoiceValid } from './utils/membership'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
@@ -263,6 +268,7 @@ function AppInner() {
   const [dataLoading, setDataLoading] = useState(false)
   const [dataLoadError, setDataLoadError] = useState(false)
   const [dataLoadRetryToken, setDataLoadRetryToken] = useState(0)
+  const [dataLoadErrorDetail, setDataLoadErrorDetail] = useState('')
   const initialRouteSnapshot = useMemo(() => parseRoute(), [])
   const initialRoute = useRef(initialRouteSnapshot)
   const [section, setSection] = useState(() => initialRouteSnapshot.section)
@@ -328,6 +334,8 @@ function AppInner() {
   // a failed resume attempt still leaves the app showing *something* rather
   // than an empty state indistinguishable from real data loss.
   const lapseResumeClaimed = useRef(false)
+  // Set while a desktop account is lapsed, so sign-out can keep its local-only edits.
+  const lapsedDesktopUserRef = useRef(null)
   const localModeNoticeKey = useMemo(
     () => getLocalModeNoticeKey(userId, membership, storageMode),
     [userId, membership, storageMode]
@@ -434,7 +442,7 @@ function AppInner() {
   // lapse and reopened only after renewal, which has no in-session
   // true→false transition for the effect just below to observe at all).
   const reconcileDesktopLapseResume = async (cloudData, pendingBase) => {
-    const localData = pruneSaveDataToProjects(store.getLocalSnapshot?.() || {})
+    const localData = pruneSaveDataToProjects(chooseLapseLocalData(store.getLocalSnapshot?.(), loadDesktopLapseLocalCopy(userId)))
     const cloud = pruneSaveDataToProjects(cloudData)
     const baseData = pruneSaveDataToProjects(pendingBase)
     const { mergedData, conflicts } = reconcileCloudSyncData(localData, cloud, baseData)
@@ -462,8 +470,16 @@ function AppInner() {
     // true on first render. `saveDesktopLapseSnapshot` itself is the actual
     // guard: it no-ops once a snapshot for this lapse already exists, so
     // firing this on every render (or every remount) while lapsed is safe.
-    saveDesktopLapseSnapshot(userId, store.getLocalSnapshot?.())
+    // Skipped while the store is still empty (just after sign-in, before data
+    // loads): an empty base made every later web edit look like a conflict.
+    // The data-load path below captures the base from the loaded cloud data.
+    const snapshotNow = store.getLocalSnapshot?.()
+    if (snapshotNow?.novels?.length) saveDesktopLapseSnapshot(userId, snapshotNow)
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktopApp, userId, membership.isLocalMode])
+
+  useEffect(() => {
+    lapsedDesktopUserRef.current = nextLapsedDesktopUser(lapsedDesktopUserRef.current, { desktopApp, userId, isLocalMode: membership.isLocalMode })
   }, [desktopApp, userId, membership.isLocalMode])
 
   useEffect(() => {
@@ -593,6 +609,14 @@ function AppInner() {
   // startup. Failures never gate the app — staleness past the grace window and
   // the device cap only drive dismissible toasts.
   const [desktopLicenceStale, setDesktopLicenceStale] = useState(false)
+  // Desktop native save failures (projectExportHelpers dispatches this event);
+  // without a listener a failed export looked identical to a cancelled one.
+  const [exportSaveError, setExportSaveError] = useState(null)
+  useEffect(() => {
+    const onSaveError = event => setExportSaveError(event.detail || { message: 'unknown error' })
+    window.addEventListener('yow-export-save-error', onSaveError)
+    return () => window.removeEventListener('yow-export-save-error', onSaveError)
+  }, [])
   const [desktopDeviceLimit, setDesktopDeviceLimit] = useState(false)
   useEffect(() => {
     if (OFFLINE_MODE || !desktopApp || !userId || !membership.isDesktopEntitled) return
@@ -953,6 +977,12 @@ function AppInner() {
     if (!user) {
       loadedUid.current = null
       lapseResumeClaimed.current = false
+      // Sign-out wipes local project data; while lapsed that data is the only
+      // copy of the user's edits, so keep it for the next sign-in and renewal merge.
+      if (lapsedDesktopUserRef.current) {
+        saveDesktopLapseLocalCopy(lapsedDesktopUserRef.current, store.getLocalSnapshot?.())
+        lapsedDesktopUserRef.current = null
+      }
       clearData()
       finishRemoteLoad()
       setDataLoadError(false)
@@ -1007,7 +1037,14 @@ function AppInner() {
         // `data` right over the just-completed merge — this path awaits that
         // same claim's outcome first.
         const claimedResume = lapseResumeClaimed.current
-        if (!claimedResume) {
+        const lapseLocalCopy = desktopApp && membership.isLocalMode ? loadDesktopLapseLocalCopy(userId) : null
+        // First lapsed sign-in on this device: the loaded cloud data is the last common state.
+        if (desktopApp && membership.isLocalMode && data?.novels?.length) saveDesktopLapseSnapshot(userId, pruneSaveDataToProjects(data))
+        if (lapseLocalCopy?.novels?.length) {
+          // Still lapsed: this device is the source of truth. Restore the edits
+          // kept at sign-out instead of showing the web copy over them.
+          importData(lapseLocalCopy, { preferLocal: false })
+        } else if (!claimedResume) {
           importData(data)
         } else if (!(await claimedResume).ok) {
           // The claimed resume failed (and, per its own comment, deliberately
@@ -1060,6 +1097,7 @@ function AppInner() {
         // run again for the same user on retry.
         loadedUid.current = null
         finishRemoteLoad(false)
+        setDataLoadErrorDetail(String(error?.message || error || 'unknown error').slice(0, 200))
         setDataLoadError(true)
       })
       .finally(() => setDataLoading(false))
@@ -1211,6 +1249,9 @@ function AppInner() {
         <p className="text-[var(--text-main)] font-medium max-w-sm">
           We couldn't load your projects. Nothing has been deleted — this is just a connection hiccup.
         </p>
+        <p className="text-[var(--text-muted)] text-xs max-w-sm break-words">
+          Details: {dataLoadErrorDetail || 'unknown error'} · server: {supabaseHostForDiagnostics()}
+        </p>
         <button
           type="button"
           onClick={() => { setDataLoadError(false); setDataLoadRetryToken(t => t + 1) }}
@@ -1261,7 +1302,10 @@ function AppInner() {
     )
   }
 
-  const showFreeSelector = !desktopApp && membership.usesFreeCloudLimits && !membership.freeProjectId && store.novels.length >= 1
+  // A saved choice that points at a deleted project counts as no choice, otherwise every
+  // remaining project stays view-only with no way to pick one.
+  const freeProjectChoiceIsValid = isFreeProjectChoiceValid(membership.freeProjectId, store.novels)
+  const showFreeSelector = !desktopApp && membership.usesFreeCloudLimits && !freeProjectChoiceIsValid && store.novels.length >= 1
 
   const handleFreeProjectConfirm = async (projectId) => {
     try {
@@ -1353,6 +1397,17 @@ function AppInner() {
             Storage settings
           </button>
           <button type="button" className="membership-toast-link" onClick={() => setLocalStorageWarningDismissed(true)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {exportSaveError && (
+        <div role="alert" className="membership-toast">
+          <span>
+            {exportSaveError.filename ? `"${exportSaveError.filename}" was not saved.` : 'The file was not saved.'}
+            {' '}Nothing was written to your computer. Pick a folder you can write to (for example Documents) and try the export again.
+          </span>
+          <button type="button" className="membership-toast-link" onClick={() => setExportSaveError(null)}>
             Dismiss
           </button>
         </div>
@@ -1469,6 +1524,7 @@ function AppInner() {
       <AccessChangeNotice membership={membership} store={store} desktopApp={desktopApp} onManageMembership={() => { setAccountTab('membership'); setAccountOpen(true) }} />
       {showFreeSelector && (
         <FreeProjectSelector
+          hostingLapsed={membership.isLocalMode}
           novels={store.novels}
           store={store}
           onConfirm={handleFreeProjectConfirm}
@@ -1678,6 +1734,12 @@ function AppInner() {
       {globalOverlays}
     </>
   )
+}
+
+// Public host only (never the key): lets a support screenshot show whether a
+// build was baked with the right Supabase project.
+function supabaseHostForDiagnostics() {
+  try { return new URL(import.meta.env.VITE_SUPABASE_URL).host || 'not configured' } catch { return 'not configured' }
 }
 
 export default function App() {

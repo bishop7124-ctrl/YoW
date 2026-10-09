@@ -152,7 +152,7 @@ test('pricing page: no card looks pre-selected and Lifetime is never called Crea
   // Clicking the card body (its heading, not the CTA button) should not
   // trigger checkout/navigation.
   const urlBefore = page.url()
-  await cards.first().locator('h3').first().click()
+  await cards.first().locator('.pricing-card-title').first().click()
   await page.waitForTimeout(300)
   expect(page.url()).toBe(urlBefore)
 })

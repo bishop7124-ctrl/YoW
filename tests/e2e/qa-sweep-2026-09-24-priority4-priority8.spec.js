@@ -646,6 +646,10 @@ test.describe('Priority 8: Finalized draft reader', () => {
     const editor = page.locator('textarea:not([tabindex="-1"])').first()
     await expect(editor).toBeVisible()
     await expect(editor).toBeEditable()
+    // Clicking the preview places the caret where it was clicked a moment after
+    // the textarea mounts; typing before that settles lands the first letters at
+    // position 0. A person cannot click and type within milliseconds, so wait.
+    await expect.poll(() => editor.evaluate(el => el.selectionStart)).toBeGreaterThan(0)
     await editor.type(' Added after finalizing.')
     await expect(editor).toHaveValue(/Added after finalizing\./)
   })
@@ -764,23 +768,14 @@ test.describe('Priority 8: Founders directory', () => {
   // marketing-pages-responsive.spec.js and marketing-static-pages.spec.js —
   // this covers what those don't: the homepage footer link, the nav, and the
   // pricing CTA the checklist item separately calls out.
-  test('the homepage footer links to Founders, the nav works, and a pricing CTA is present', async ({ page }) => {
+  // The header/footer "Founders" link was removed on 5 Oct (commit 33fe80e, launch
+  // founding pricing), so this opens the Founders page directly instead of via a link.
+  test('the Founders page loads and a pricing CTA is present', async ({ page }) => {
     await seedCleanStorage(page)
-    await page.goto('/')
-    await page.locator('.user-menu-trigger').click()
-    await page.getByRole('menuitem', { name: 'Sign out' }).click()
-    await page.getByRole('button', { name: 'Go to homepage' }).click()
-    await expect(page.locator('.yow-home')).toBeVisible()
-
-    await page.getByRole('link', { name: 'Founders', exact: true }).first().click()
-    await expect(page).toHaveURL(/\/founders\/?$/)
+    await page.goto('/founders/')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
 
     // Pricing CTA present on the Founders directory.
     await expect(page.getByRole('link', { name: /pricing/i }).or(page.getByRole('button', { name: /pricing/i })).first()).toBeVisible()
-
-    // Nav's own Founders link still marks itself active/reachable from here
-    // (confirms the nav bar itself, not just the footer, functions on this page).
-    await expect(page.getByRole('link', { name: 'Founders', exact: true }).first()).toBeVisible()
   })
 })

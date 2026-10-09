@@ -181,6 +181,8 @@ test.describe('cross-project scene isolation under a heavy multi-project account
     const originalRow = page.locator('.ms-rail-scene').nth(0)
     await originalRow.hover()
     await originalRow.getByLabel('Delete scene').click()
+    // Deleting now asks in-app (role=alertdialog), not via window.confirm.
+    await page.getByRole('alertdialog', { name: 'Confirm scene deletion' }).getByRole('button', { name: 'Delete scene' }).click()
     await page.waitForFunction((novelId) => {
       const get = (k) => window.__yowStorageBridge?.getItem(k) ?? localStorage.getItem(k)
       const scenes = JSON.parse(get('nf_scenes') || '[]')

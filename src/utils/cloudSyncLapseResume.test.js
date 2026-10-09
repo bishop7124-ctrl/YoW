@@ -151,4 +151,64 @@ describe('automatic cloud-sync resume-on-renewal reconcile', () => {
     // A later lapse can now capture its own fresh base.
     expect(saveDesktopLapseSnapshot('user-1', { novels: [{ id: 'project-1', title: 'Next lapse' }] })).toBe(true)
   })
+
+  it('surfaces a conflict when the same scene text is edited on desktop and web during the lapse', async () => {
+    const scene = content => ({ id: 'scene-1', novelId: 'project-1', chapterId: 'ch-1', title: 'Scene', content })
+    const base = { novels: [{ id: 'project-1', title: 'Project' }], scenes: [scene('<p>one line</p>')] }
+    const local = { novels: base.novels, scenes: [scene('<p>one line</p><p>desktop test</p>')] }
+    const cloud = { novels: base.novels, scenes: [scene('<p>one line</p><p>web test</p>')] }
+
+    const { reviewedData, conflicts } = await runAutoResume({ base, local, cloud })
+
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0]).toMatchObject({ table: 'scenes', recordId: 'scene-1' })
+    expect(conflicts[0].fields.some(f => f.key === 'content')).toBe(true)
+    // The desktop text must still be present in the kept record, and the web text in the conflict.
+    expect(reviewedData.scenes[0].content).toContain('desktop test')
+    expect(JSON.stringify(conflicts[0].theirs)).toContain('web test')
+  })
+})
+
+describe('lapsed sign-out keeps local-only edits', () => {
+  beforeEach(() => setStorageBackend(createMemoryBackend()))
+
+  it('keeps and reloads the copy saved at sign-out, and clears it with the lapse snapshot', async () => {
+    const { saveDesktopLapseLocalCopy, loadDesktopLapseLocalCopy, chooseLapseLocalData } = await import('./storageMode')
+    const copy = { novels: [{ id: 'p' }], scenes: [{ id: 's', content: '<p>desktop test</p>' }] }
+    expect(saveDesktopLapseLocalCopy('user-1', copy)).toBe(true)
+    expect(loadDesktopLapseLocalCopy('user-1')).toEqual(copy)
+    // Store emptied by sign-out -> the saved copy is the local side of the merge.
+    expect(chooseLapseLocalData({ novels: [] }, copy)).toEqual(copy)
+    // Store already holds projects (in-session lapse/renewal) -> store wins.
+    const live = { novels: [{ id: 'p' }], scenes: [{ id: 's', content: 'newer' }] }
+    expect(chooseLapseLocalData(live, copy)).toEqual(live)
+    clearDesktopLapseSnapshot('user-1')
+    expect(loadDesktopLapseLocalCopy('user-1')).toBeNull()
+  })
+
+  it('does not silently lose the desktop scene edit after sign-out + renewal (the 9 Oct field bug)', async () => {
+    const { chooseLapseLocalData } = await import('./storageMode')
+    const scene = content => ({ id: 'scene-1', novelId: 'project-1', chapterId: 'ch-1', title: 'Scene', content })
+    const novels = [{ id: 'project-1', title: 'Project' }]
+    const base = { novels, scenes: [scene('<p>one</p>')] }
+    const copy = { novels, scenes: [scene('<p>one</p><p>desktop test</p>')] }
+    const cloud = { novels, scenes: [scene('<p>one</p><p>web test</p>')] }
+    const local = chooseLapseLocalData({ novels: [], scenes: [] }, copy)
+    const { reviewedData, conflicts } = await runAutoResume({ base, local, cloud })
+    expect(conflicts).toHaveLength(1)
+    expect(reviewedData.scenes[0].content).toContain('desktop test')
+  })
+
+  it('remembers the lapsed user across the render where sign-out makes userId null (the 9 Oct bug)', async () => {
+    const { nextLapsedDesktopUser } = await import('./storageMode')
+    const lapsed = { desktopApp: true, userId: 'user-1', isLocalMode: true }
+    let marker = nextLapsedDesktopUser(null, lapsed)
+    expect(marker).toBe('user-1')
+    // Sign-out render: userId is null; the sign-out handler must still see the marker.
+    marker = nextLapsedDesktopUser(marker, { desktopApp: true, userId: null, isLocalMode: false })
+    expect(marker).toBe('user-1')
+    // A signed-in, non-lapsed user clears it; web never sets it.
+    expect(nextLapsedDesktopUser('user-1', { desktopApp: true, userId: 'user-1', isLocalMode: false })).toBeNull()
+    expect(nextLapsedDesktopUser(null, { desktopApp: false, userId: 'user-1', isLocalMode: true })).toBeNull()
+  })
 })

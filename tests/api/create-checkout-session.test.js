@@ -117,4 +117,31 @@ describe('create-checkout-session Founding Price selection', () => {
     expect(response.status).toHaveBeenCalledWith(400)
     expect(sessionsCreate).not.toHaveBeenCalled()
   })
+
+  it.each(['hosting_renewal', 'maintenance'])('%s renews Cloud hosting at the GBP 6 yearly price', async plan => {
+    pricesRetrieve.mockImplementation(async id => ({
+      id, active: true, currency: 'gbp', livemode: true, unit_amount: 600, recurring: { interval: 'year' },
+    }))
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    const response = res()
+    await handler(req(plan), response)
+
+    expect(response.status).toHaveBeenCalledWith(200)
+    expect(sessionsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'subscription',
+      line_items: [{ price: 'price_cloud', quantity: 1 }],
+    }))
+  })
+
+  it('refuses hosting renewal if the configured Price is not GBP 6 per year', async () => {
+    pricesRetrieve.mockImplementation(async id => ({
+      id, active: true, currency: 'gbp', livemode: true, unit_amount: 600, recurring: { interval: 'month' },
+    }))
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    const response = res()
+    await handler(req('hosting_renewal'), response)
+
+    expect(sessionsCreate).not.toHaveBeenCalled()
+    expect(response.status).not.toHaveBeenCalledWith(200)
+  })
 })

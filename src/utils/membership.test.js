@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { getMembership, PLAN_STORAGE_BYTES, PROFILE_METADATA_ALLOWLIST, sanitizeProfileMetadata } from './membership'
+import { getMembership, isFreeProjectChoiceValid, PLAN_STORAGE_BYTES, PROFILE_METADATA_ALLOWLIST, sanitizeProfileMetadata } from './membership'
 
 const now = new Date('2026-07-20T12:00:00Z')
 
@@ -401,5 +401,13 @@ describe('launch beta notice', () => {
     user.user_metadata.beta_notice_started_at = '2026-06-20T12:00:00Z'
     expect(getMembership(user).isBetaTester).toBe(true)
     expect(getMembership(beta({ beta_notice_started_at: 'invalid' })).isFree).toBe(true)
+  })
+})
+
+describe('isFreeProjectChoiceValid', () => {
+  it('treats a choice pointing at a deleted project as no choice', () => {
+    expect(isFreeProjectChoiceValid('gone', [{ id: 'a' }, { id: 'b' }])).toBe(false)
+    expect(isFreeProjectChoiceValid(null, [{ id: 'a' }])).toBe(false)
+    expect(isFreeProjectChoiceValid('a', [{ id: 'a' }, { id: 'b' }])).toBe(true)
   })
 })
