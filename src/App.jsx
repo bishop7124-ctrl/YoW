@@ -49,7 +49,7 @@ import {
 import { readItem, writeItem } from './storage/projectStorage'
 import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/tauriVaultAdapter'
 import { clearCachedDesktopEntitlement, evaluateDesktopEntitlement, getOrCreateDesktopDeviceId, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
-import { isFreeProjectChoiceValid } from './utils/membership'
+import { isFreeProjectChoiceValid, withDesktopProjectLimits } from './utils/membership'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
@@ -242,7 +242,8 @@ function AppInner() {
     if (user) { setSignedOut(false); setOpenLoginAfterSignOut(false); prevUserRef.current = user }
   }, [user, authLoading, recoveryMode])
   const userId = user?.uid || user?.id || null
-  const membership = useMembership(user)
+  const rawMembership = useMembership(user)
+  const membership = useMemo(() => withDesktopProjectLimits(rawMembership, desktopApp), [rawMembership, desktopApp])
   const [storageModeState, setStorageModeState] = useState(() => loadStorageModeState(userId))
   const storageMode = storageModeState.userId === (userId || null)
     ? storageModeState.mode
