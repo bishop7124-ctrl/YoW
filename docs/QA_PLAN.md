@@ -891,3 +891,10 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 7. Restore: `update auth.users set raw_app_meta_data = $$<pasted step 0 result>$$::jsonb where email = 'test1@yourownworld.co.uk';` then delete the "Lapse test" project.
 
 - **Result of first owner run (9 Oct, account yourownworld.admin@gmail.com):** same-scene edit on desktop (lapsed) and web, then sign-out/in and renewal: desktop edit lost silently. Root cause and fix in the ROADMAP 8 Oct row. Re-run required on a rebuilt Mac app: repeat steps A-F, this time editing the SAME scene on desktop and web; expected result is a visible conflict with both versions kept, and a different-field edit merging cleanly. Also confirm signing out and back in while still lapsed keeps the desktop edit.
+
+### 2026-10-10 desktop distribution checks (cloud half)
+
+- Automated: `tests/api/updater-manifest.test.js` (7 tests: valid manifest, missing platform, bad/empty signature, non-release URL / wrong tag, version mismatch, required platforms, disclosure present on Pricing/FAQ/Download). Run `node scripts/verify-updater-manifest.mjs latest.json --version X.Y.Z` on every real `latest.json` before attaching it to a release.
+- Windows desktop workflow now publishes `SHA256SUMS.txt` with the installer; Mac already did. Record the hashes in the release notes.
+- Still ⬜ (real devices): clean-machine Mac install via the documented Open Anyway steps, update from the previous release, interrupted/offline update, uninstall leaves vault intact; Windows SmartScreen path; lapse -> web edit -> renewal -> desktop merge on a build containing e1e1981 or newer.
+
