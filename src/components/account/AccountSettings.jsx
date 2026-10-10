@@ -832,13 +832,17 @@ function SyncStatusLine({ syncStatus, localFirstSelected, canSyncCloud, isLocalM
 }
 
 function formatResumeMergeExplanation(pendingModeChange) {
-  const localOnly = pendingModeChange?.mergeStats?.localOnly || 0
-  const cloudOnly = pendingModeChange?.mergeStats?.cloudOnly || 0
-  if (!localOnly && !cloudOnly) return 'Only the fields listed below need a decision.'
+  const stats = pendingModeChange?.mergeStats || {}
+  const localOnly = stats.localOnly || 0
+  const cloudOnly = stats.cloudOnly || 0
+  const keptProjects = stats.keptDeletedProjects || []
+  const lines = ['Nothing on this device is deleted by this merge. Projects and records that exist on only one side are kept. If the same project was edited in both places, edits to different parts are combined; if both changed the same field, you choose which version to keep below.']
   const parts = []
   if (localOnly) parts.push(`${localOnly} ${localOnly === 1 ? 'record exists' : 'records exist'} only on this device`)
   if (cloudOnly) parts.push(`${cloudOnly} ${cloudOnly === 1 ? 'record exists' : 'records exist'} only in cloud`)
-  return `Only the fields listed below need a decision. Other non-conflicting records (${parts.join(' and ')}) will be kept automatically unless you cancel.`
+  if (parts.length) lines.push(`Kept automatically: ${parts.join(' and ')}.`)
+  if (keptProjects.length) lines.push(`Deleted in cloud but kept from this device: ${keptProjects.join(', ')}. They will be uploaded to cloud again; delete them afterwards if you no longer want them.`)
+  return lines.join(' ')
 }
 
 function ExportAllProjectsCard({ store, novels }) {
