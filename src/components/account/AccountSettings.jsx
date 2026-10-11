@@ -831,18 +831,37 @@ function SyncStatusLine({ syncStatus, localFirstSelected, canSyncCloud, isLocalM
   )
 }
 
-function formatResumeMergeExplanation(pendingModeChange) {
+function ResumeMergeExplanation({ pendingModeChange }) {
   const stats = pendingModeChange?.mergeStats || {}
   const localOnly = stats.localOnly || 0
   const cloudOnly = stats.cloudOnly || 0
   const keptProjects = stats.keptDeletedProjects || []
-  const lines = ['Nothing on this device is deleted by this merge. Projects and records that exist on only one side are kept. If the same project was edited in both places, edits to different parts are combined; if both changed the same field, you choose which version to keep below.']
+  const keptCount = stats.keptDeletedInCloud || 0
   const parts = []
   if (localOnly) parts.push(`${localOnly} ${localOnly === 1 ? 'record exists' : 'records exist'} only on this device`)
   if (cloudOnly) parts.push(`${cloudOnly} ${cloudOnly === 1 ? 'record exists' : 'records exist'} only in cloud`)
-  if (parts.length) lines.push(`Kept automatically: ${parts.join(' and ')}.`)
-  if (keptProjects.length) lines.push(`Deleted in cloud but kept from this device: ${keptProjects.join(', ')}. They will be uploaded to cloud again; delete them afterwards if you no longer want them.`)
-  return lines.join(' ')
+  const textStyle = { fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 10px' }
+  return (
+    <div data-testid="resume-merge-explanation" style={{ margin: '-6px 0 14px' }}>
+      {keptCount > 0 && (
+        <div role="note" style={{ border: '1px solid var(--accent, #c0603f)', borderRadius: 8, padding: '10px 12px', margin: '0 0 12px', fontSize: 13, lineHeight: 1.5, color: 'var(--text-main)' }}>
+          <strong>
+            {keptProjects.length
+              ? `${keptProjects.length === 1 ? 'A project was' : `${keptProjects.length} projects were`} deleted in cloud but still ${keptProjects.length === 1 ? 'exists' : 'exist'} on this device`
+              : `${keptCount} ${keptCount === 1 ? 'record was' : 'records were'} deleted in cloud but still ${keptCount === 1 ? 'exists' : 'exist'} on this device`}
+          </strong>
+          {keptProjects.length > 0 && (
+            <ul style={{ margin: '6px 0 6px 18px', padding: 0, listStyle: 'disc' }}>
+              {keptProjects.map(name => <li key={name}>{name}</li>)}
+            </ul>
+          )}
+          <div>They will be kept and uploaded to cloud again. If you no longer want them, finish the merge first, then delete them.</div>
+        </div>
+      )}
+      <p style={textStyle}>Nothing on this device is deleted by this merge. Projects and records that exist on only one side are kept{parts.length ? ` (${parts.join(' and ')})` : ''}.</p>
+      <p style={{ ...textStyle, margin: 0 }}>If the same project was edited in both places, edits to different parts are combined. If both changed the same field, you choose which version to keep below.</p>
+    </div>
+  )
 }
 
 function ExportAllProjectsCard({ store, novels }) {
@@ -1403,9 +1422,7 @@ function StorageConfigurationPanel({
                         <div style={{ fontSize: 13, lineHeight: 1.5 }}>{pendingModeChange.mergedSummary || 'No saved project data found.'}</div>
                       </div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: '-6px 0 14px' }}>
-                      {formatResumeMergeExplanation(pendingModeChange)}
-                    </div>
+                    <ResumeMergeExplanation pendingModeChange={pendingModeChange} />
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
                       {pendingModeChange.conflicts?.length
                         ? `${pendingModeChange.conflicts.length} ${pendingModeChange.conflicts.length === 1 ? 'edit needs' : 'edits need'} a choice. Everything else is already included in the merge.`
