@@ -5,6 +5,7 @@ import { exportAllProjects } from '../../utils/projectExportAll'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
 import { STORAGE_MODES, saveStorageMode } from '../../utils/storageMode'
 import { getStorageQuota } from '../../utils/storageQuota'
+import { getAppVersionLabel } from '../../utils/appVersion'
 import { deriveSyncStatusLine } from '../../utils/syncStatusLine'
 import { canOptimize, optimizeImageToDataUrl } from '../../utils/imageOptimize'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
@@ -3005,6 +3006,7 @@ export default function AccountSettings({
           <div>
             <p className="eyebrow">Account</p>
             <h1 id="account-settings-title">Settings</h1>
+            <p data-testid="app-version" style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{getAppVersionLabel(desktopApp)}</p>
           </div>
           {desktopApp ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
