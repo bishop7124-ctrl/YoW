@@ -87,6 +87,16 @@ describe('Manuscript campaign workflow', () => {
     })
   })
 
+  it('keeps the session prep & recap panel open when its first field gets filled', () => {
+    const { container, rerender } = render(<Manuscript store={baseStore()} userId={null} />)
+    expect(container.querySelector('details.ms-campaign-session-panel').open).toBe(true)
+    const filled = baseStore({
+      chapters: [{ id: 'session-1', novelId: 'campaign-1', actId: 'arc-1', title: 'Session 1', order: 0, sessionPlan: { hooks: 'x' } }],
+    })
+    rerender(<Manuscript store={filled} userId={null} />)
+    expect(container.querySelector('details.ms-campaign-session-panel').open).toBe(true)
+  })
+
   it('collapses both side panels when entering Write mode', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
     render(<Manuscript store={baseStore()} userId={null} />)

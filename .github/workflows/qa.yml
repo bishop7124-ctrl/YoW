@@ -161,6 +161,10 @@ jobs:
             spec: tests/e2e/account-isolation.spec.js
           - name: project-type-labels
             spec: tests/e2e/project-type-labels.spec.js
+          - name: novella-short-story-acceptance
+            spec: tests/e2e/novella-short-story-acceptance.spec.js
+          - name: campaign-acceptance
+            spec: tests/e2e/campaign-acceptance.spec.js
           - name: import-into-existing-project
             spec: tests/e2e/import-into-existing-project.spec.js
           - name: merge-project
