@@ -1,3 +1,4 @@
+import { createMapExportEntries } from './projectExportMaps.js'
 import {
   cleanText, formatDate, sortByOrder, sortByTitle,
   isCampaignProject, isComicProject, sessionExportRows, outlineStoryEventLabel,
@@ -559,6 +560,7 @@ export const createProjectDocxEntries = async (projectData, prefix = '') => {
     const filename = uniqueEntryName(`${prefix}${projectBase}-${sanitizeFilename(section.label, 'section')}.docx`, used)
     entries.push({ name: filename, bytes: new Uint8Array(await blob.arrayBuffer()) })
   }
+  entries.push(...await createMapExportEntries(projectData, `${prefix}Maps/`, name => uniqueEntryName(name, used)))
   return entries
 }
 

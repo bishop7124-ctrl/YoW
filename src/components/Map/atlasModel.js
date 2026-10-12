@@ -33,13 +33,58 @@ export function zoomFromWheel(currentZoom, delta) {
 }
 // The editor only translates/scales its paper. Using its visible bounds also
 // accounts for CSS zoom and avoids browser differences in SVG screen matrices.
+// Grid overlay settings share the saved shape used by the legacy builder and the PDF export:
+// { enabled, type: 'square' | 'hex', size, snapToGrid, scale, opacity, color }.
+// `size` is a square's side, or a hex's corner-to-corner width (radius = size / 2).
+// `atlasOpacity` is the Atlas-only line strength, so older maps keep their look.
+export function normalizeGrid(raw = {}) {
+  const grid = raw && typeof raw === 'object' ? raw : {}
+  const size = Number(grid.size)
+  const strength = Number(grid.atlasOpacity)
+  return {
+    enabled: Boolean(grid.enabled),
+    type: grid.type === 'hex' ? 'hex' : 'square',
+    size: Number.isFinite(size) ? Math.max(10, Math.min(400, Math.round(size))) : 40,
+    snapToGrid: Boolean(grid.snapToGrid),
+    scale: typeof grid.scale === 'string' ? grid.scale.slice(0, 80) : '',
+    atlasOpacity: Number.isFinite(strength) ? Math.max(0.08, Math.min(0.7, strength)) : 0.23,
+  }
+}
+
+// Pointy-top hexes with their centres at (col * width + (odd row ? width / 2 : 0), row * 1.5 * radius).
+export function hexMetrics(size) {
+  const radius = Math.max(5, size / 2)
+  return { radius, width: Math.sqrt(3) * radius, rowHeight: radius * 1.5 }
+}
+
+export function snapToHexCenter(x, y, size) {
+  const { width, rowHeight } = hexMetrics(size)
+  const nearestRow = Math.round(y / rowHeight)
+  let best = null
+  for (let row = nearestRow - 1; row <= nearestRow + 1; row++) {
+    const offset = Math.abs(row % 2) * width / 2
+    const col = Math.round((x - offset) / width)
+    const cx = col * width + offset
+    const cy = row * rowHeight
+    const distance = (cx - x) ** 2 + (cy - y) ** 2
+    if (!best || distance < best.distance) best = { x: cx, y: cy, distance }
+  }
+  return { x: best.x, y: best.y }
+}
+
+// `snap` is 0 (off), a square cell size, or { type: 'hex', size }.
 export function canvasPoint(clientX, clientY, rect, snap = 0) {
   const scale = Math.min(rect.width / WIDTH, rect.height / HEIGHT)
   if (!(scale > 0)) return null
-  const x = (clientX - rect.left - (rect.width - WIDTH * scale) / 2) / scale
-  const y = (clientY - rect.top - (rect.height - HEIGHT * scale) / 2) / scale
-  const quantize = value => snap > 0 ? Math.round(value / snap) * snap : value
-  return { x: Math.max(0, Math.min(WIDTH, quantize(x))), y: Math.max(0, Math.min(HEIGHT, quantize(y))) }
+  let x = (clientX - rect.left - (rect.width - WIDTH * scale) / 2) / scale
+  let y = (clientY - rect.top - (rect.height - HEIGHT * scale) / 2) / scale
+  if (snap && typeof snap === 'object' && snap.type === 'hex') {
+    ({ x, y } = snapToHexCenter(x, y, snap.size))
+  } else if (snap > 0) {
+    x = Math.round(x / snap) * snap
+    y = Math.round(y / snap) * snap
+  }
+  return { x: Math.max(0, Math.min(WIDTH, x)), y: Math.max(0, Math.min(HEIGHT, y)) }
 }
 
 export function inkPath(points, closed = false, straight = false) {
@@ -151,5 +196,5 @@ export function parseAtlas(text) {
   for (const o of data.mapObjects) {
     if (!o || !['shape','water','territory','river','road','wall','stamp','location','label'].includes(o.type) || !finite(o.x) || !finite(o.y) || (o.geometry && (!validPoints(o.geometry.points) || (o.geometry.straightPoints !== undefined && !validPoints(o.geometry.straightPoints))))) throw new Error('This map contains invalid drawing data.')
   }
-  return { width: WIDTH, height: HEIGHT, name: String(data.name || 'Imported map').slice(0, 200), mapType: data.mapType, mapObjects: data.mapObjects.map(o => ({ ...o, id: uid('atlas') })), mapLayers: [], metadata: { ...data.metadata, builder: ATLAS_VERSION, palette: PALETTES[data.metadata?.palette] ? data.metadata.palette : 'paper' } }
+  return { width: WIDTH, height: HEIGHT, name: String(data.name || 'Imported map').slice(0, 200), mapType: data.mapType, mapObjects: data.mapObjects.map(o => ({ ...o, id: uid('atlas') })), mapLayers: [], metadata: { ...data.metadata, ...(data.metadata?.gridSettings ? { gridSettings: { ...data.metadata.gridSettings, ...normalizeGrid(data.metadata.gridSettings) } } : {}), builder: ATLAS_VERSION, palette: PALETTES[data.metadata?.palette] ? data.metadata.palette : 'paper' } }
 }

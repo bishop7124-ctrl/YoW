@@ -390,7 +390,7 @@ body:has([role="dialog"]) .floating-support-link {
   --color-accent-text: #d99a7d;
   --color-accent-secondary: #9db07a;
   --color-accent-contrast: #fffaf4;
-  --color-line: rgba(255, 255, 255, 0.09);
+  --color-line: #253030;
   --color-line-strong: rgba(255, 255, 255, 0.16);
   --bg-main:    #0e1a18;
   --bg-nav:     #132220;
