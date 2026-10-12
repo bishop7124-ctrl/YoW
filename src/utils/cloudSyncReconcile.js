@@ -52,7 +52,11 @@ function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) 
   }
 
   if (!local) return { record: cloud && !jsonEq(cloud, base) ? cloud : null, conflict: null }
-  if (!cloud) return { record: local && !jsonEq(local, base) ? local : null, conflict: null }
+  // Deleted in cloud while this device still has it: keep the device copy. A
+  // resume merge never removes writing that exists on this device; the writer
+  // can delete it deliberately afterwards. (A device-side delete of a record
+  // that is unchanged in cloud still wins above.)
+  if (!cloud) return { record: local, conflict: null }
   if (jsonEq(local, cloud)) return { record: local, conflict: null }
   if (jsonEq(local, base)) return { record: cloud, conflict: null }
   if (jsonEq(cloud, base)) return { record: local, conflict: null }
@@ -99,6 +103,8 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
   const mergeStats = {
     localOnly: 0,
     cloudOnly: 0,
+    keptDeletedInCloud: 0,
+    keptDeletedProjects: [],
   }
 
   Object.entries(TABLE_CONFIG).forEach(([table, config]) => {
@@ -113,6 +119,10 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
       const cloud = cloudMap.get(id)
       if (local && !cloud) mergeStats.localOnly += 1
       if (cloud && !local) mergeStats.cloudOnly += 1
+      if (local && !cloud && baseMap.has(id)) {
+        mergeStats.keptDeletedInCloud += 1
+        if (table === 'novels') mergeStats.keptDeletedProjects.push(labelFor(local))
+      }
       const result = mergeRecord({
         table,
         label: config.label,

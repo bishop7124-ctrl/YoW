@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { usePageMeta } from '../../utils/usePageMeta'
+import { DESKTOP_UNSIGNED_DETAIL } from '../../data/desktopAppDisclosure'
 
 const FAQ_ICONS = {
   pricing: (
@@ -149,8 +150,8 @@ const FAQ_SECTIONS = [
         a: "You can turn Local-first writing on from Account Settings → Membership. While it is on, YOW keeps using the current browser copy and will not pull older cloud data over your local work. When you turn Cloud Sync back on, the current browser copy is uploaded. Export a ZIP backup before changing modes if you want an extra safety copy.",
       },
       {
-        q: 'Why does my computer warn me when I open the desktop app?',
-        a: "The beta desktop app is not yet notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. On Mac, open System Settings, Privacy & Security and click Open Anyway. On Windows, choose More info, then Run anyway. The Download page walks through both step by step. The web app is unaffected.",
+        q: 'Is the desktop app signed or notarized?',
+        a: DESKTOP_UNSIGNED_DETAIL,
       },
       {
         q: 'Is my data encrypted in the desktop app?',

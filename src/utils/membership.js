@@ -371,6 +371,14 @@ export function getMembership(user) {
 }
 
 // A saved free-project choice that points at a deleted project is no choice at all.
+// The one-editable-project limit is a free *cloud* limit. The desktop app keeps
+// full local editing when hosting lapses (Local Mode), and has no picker to
+// choose a project, so a stale web choice must never lock desktop projects.
+export function withDesktopProjectLimits(membership, desktopApp) {
+  if (!desktopApp || !membership?.freeProjectId) return membership
+  return { ...membership, freeProjectId: null }
+}
+
 export function isFreeProjectChoiceValid(freeProjectId, novels = []) {
   return Boolean(freeProjectId) && novels.some(novel => novel?.id === freeProjectId)
 }
