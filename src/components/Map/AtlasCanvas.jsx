@@ -83,7 +83,7 @@ export default function AtlasCanvas({ objects, metadata = {}, mapType, name, sel
     {metadata.baseLayer === 'water' && !metadata.backdrop?.src && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}water)`}/>}
     {objects.filter(o => o.visible !== false).map(o => <MapObject key={o.id} object={o} palette={p} mapType={mapType} selected={o.id === selectedId} onPick={onPick} onPointPick={o.id === selectedId ? onPointPick : undefined} draft={o.id === draftId} organicBorders={metadata.organicBorders !== false} organicStrength={getOrganicStrength(metadata, o.type)}/>)}
     {grid.enabled && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}grid)`} pointerEvents="none"/>}
-    <g pointerEvents="none" stroke={p.ink} fill="none" opacity=".45"><rect x="20" y="20" width="1160" height="760" strokeWidth=".7"/><path d="M1066 100v64m-25-32h50m-25-32-7 29 7-4 7 4Z" fill={p.ink}/></g>
+    <g pointerEvents="none" stroke={p.ink} fill="none" opacity=".45"><path d="M1066 100v64m-25-32h50m-25-32-7 29 7-4 7 4Z" fill={p.ink}/></g>
     <g fill={p.ink} pointerEvents="none" fontFamily="Georgia, serif" textAnchor="middle"><text x="1066" y="89" fontSize="12">N</text>{name && <text x="600" y="746" fontSize="22" letterSpacing="4">{name}</text>}{grid.enabled && <text x="600" y="769" fontSize="11">{grid.scale}</text>}</g>
     {placementPreview && <g data-preview="true" pointerEvents="none" opacity=".65"><MapObject object={placementPreview} palette={p} preview/></g>}
     {children}
