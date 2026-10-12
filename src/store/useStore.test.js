@@ -2527,6 +2527,23 @@ describe('multi-tab structured record sync', () => {
     expect(tabB.result.current.characters.find(c => c.id === 'char-A').notes).toBe('from tab A')
   })
 
+  it('flushPendingSync waits for a cloud save that is already in flight (for example a restored scene version)', async () => {
+    // Regression: Resume Cloud Sync called flushPendingSync, which only flushed debounced saves.
+    // A scene version restored from a conflict is saved straight away (already in flight), so the
+    // resume could overwrite the cloud scene first and then fail its own verification.
+    const hook = renderHook(() => useStore('user-inflight-flush', { cloudSyncEnabled: true }))
+    let finish
+    const slowSave = new Promise(resolve => { finish = resolve })
+    let flushed = false
+    act(() => { hook.result.current.trackSync(slowSave) })
+    const flushing = hook.result.current.flushPendingSync().then(() => { flushed = true })
+    await Promise.resolve()
+    expect(flushed).toBe(false)
+    finish()
+    await flushing
+    expect(flushed).toBe(true)
+  })
+
   it('a pending recordConflicts entry survives a refresh (importData preferring local) instead of being silently wiped', async () => {
     // Regression test: getLocalSnapshot() (the object importData reads from
     // when preferring local data — i.e. every normal boot/refresh) omitted
