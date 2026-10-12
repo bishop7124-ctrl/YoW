@@ -1,5 +1,17 @@
 # YOW Deferred QA Plan
 
+## 2026-10-12 catch-up (9-12 Oct): disclosure, updater-manifest rules, Finalise-draft guard, project-type browser checks
+
+Status: **Automated half done; every real-device and owner step below is still pending.** Run from the cloud session on 12 Oct after the 9-11 Oct rows were found not closed.
+
+- ✅ Unsigned-app disclosure now appears on Pricing (hero line plus FAQ entry) and the FAQ page, in addition to the Download page (macOS Open Anyway, Windows SmartScreen). Checkout itself is off, so there is no checkout screen to label yet; add the same line to the checkout success/confirmation copy when D7/20 Oct checkout work lands.
+- ✅ Updater manifest: `scripts/generate-updater-manifest.mjs` now refuses a version that differs from `src-tauri/tauri.conf.json`, non-https URLs, unknown platform keys, missing or non-base64 signatures, and (with `--require <platform>`) a missing supported platform. Rules are in `scripts/updaterManifest.mjs`; 6 tests in `tests/api/updaterManifest.test.js`. Still ⬜ (needs a real release and Mac): update from a previous release, offline/interrupted update, a deliberately bad signature on a real build, installer hashes and provenance.
+- ✅ 'Finalise draft' on non-novel projects: the overflow-menu action is hidden for Novella/Short Story/campaigns (already in code); new regression test `src/components/Manuscript/ManuscriptTopbar.test.jsx` (2 tests).
+- ✅ Novella and Short Story starter templates only show their own templates (already covered by `manuscriptTemplates.test.js`).
+- ✅ Playwright (Chromium, headless, offline mode): `project-types`, `project-type-labels` (Novella, Short Story, 5E and Tabletop Campaign labels/word targets), `dashboard`, `workspace-loading` (incl. Tabletop Campaign Party tab), `export-formats` (DOCX + PDF), `writing-progress-footer-badge-responsive` (375/430, incl. campaign), `manuscript-writing-mode-side-panel` (desktop/tablet/mobile) and the daily-goal streak edge-case spec all pass (49 tests).
+- ✅ `npm run qa`: 166 files / 1,592 tests, 0 lint errors, build, load check, E2E matrix, API ESM all pass.
+- ⬜ Not claimable from the cloud: the final Mac candidate and clean-machine install/update/uninstall (10 Oct row), the owner's Novella/Short Story and D&D/TTRPG create -> write -> export journeys, real-Mac lapse re-run (8 Oct carry-over), live-account streak check at three widths.
+
 ## 2026-10-06/07 desktop entitlement, device cap and vault privacy (pulled forward to 4 Oct at the owner's request)
 
 Status: **Code and automated checks done 2026-10-04; real-Mac and production steps pending (6 and 7 Oct owner blocks).** Not Passed: the desktop gate needs the packaged-app journey on a real machine.

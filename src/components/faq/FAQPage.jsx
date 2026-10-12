@@ -149,6 +149,10 @@ const FAQ_SECTIONS = [
         a: "You can turn Local-first writing on from Account Settings → Membership. While it is on, YOW keeps using the current browser copy and will not pull older cloud data over your local work. When you turn Cloud Sync back on, the current browser copy is uploaded. Export a ZIP backup before changing modes if you want an extra safety copy.",
       },
       {
+        q: 'Why does my computer warn me when I open the desktop app?',
+        a: "The beta desktop app is not yet notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. On Mac, open System Settings, Privacy & Security and click Open Anyway. On Windows, choose More info, then Run anyway. The Download page walks through both step by step. The web app is unaffected.",
+      },
+      {
         q: 'Is my data encrypted in the desktop app?',
         a: "In desktop Local Mode, your projects live in a local database file on your device. YOW does not separately encrypt that file — its protection comes from your operating system's own disk encryption (FileVault on Mac, BitLocker on Windows), which we recommend keeping enabled. If your device is lost, stolen, or accessed while unlocked, someone with direct file access to it could read your local projects.",
       },

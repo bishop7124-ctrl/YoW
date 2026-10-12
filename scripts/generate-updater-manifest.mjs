@@ -12,11 +12,15 @@
 //     --out latest.json \
 //     --platform windows-x86_64=https://github.com/OWNER/REPO/releases/download/v0.2.0/YOW_0.2.0_x64-setup.exe=src-tauri/target/release/bundle/nsis/YOW_0.2.0_x64-setup.exe.sig
 //
+// Repeat --platform for each target; add --require <key> (repeatable) to fail
+// when a supported platform is missing. The script refuses a version that
+// differs from src-tauri/tauri.conf.json, non-https URLs and bad signatures.
 // Repeat --platform for each target. Valid platform keys (Tauri updater
 // convention): windows-x86_64, windows-i686, windows-aarch64,
 // darwin-x86_64, darwin-aarch64, linux-x86_64.
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { buildManifest, validateManifestInput } from './updaterManifest.mjs'
 
 function parseArgs(argv) {
   const args = { platforms: [] }
@@ -26,6 +30,7 @@ function parseArgs(argv) {
     else if (arg === '--notes') args.notes = argv[++i]
     else if (arg === '--out') args.out = argv[++i]
     else if (arg === '--platform') args.platforms.push(argv[++i])
+    else if (arg === '--require') (args.required ||= []).push(argv[++i])
     else throw new Error(`Unknown argument: ${arg}`)
   }
   return args
@@ -47,12 +52,16 @@ function main() {
     platforms[key] = { signature, url }
   }
 
-  const manifest = {
+  const expectedVersion = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8')).version
+  const errors = validateManifestInput({
     version: args.version,
-    notes: args.notes || '',
-    pub_date: new Date().toISOString(),
     platforms,
-  }
+    expectedVersion,
+    requiredPlatforms: args.required,
+  })
+  if (errors.length) throw new Error(`Refusing to write ${args.out}:\n- ${errors.join('\n- ')}`)
+
+  const manifest = buildManifest({ version: args.version, notes: args.notes, platforms })
 
   writeFileSync(args.out, JSON.stringify(manifest, null, 2))
   console.log(`Wrote ${args.out} for version ${args.version} (${Object.keys(platforms).join(', ')})`)
