@@ -934,4 +934,4 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 - Full gate after the 10-12 Oct merges and this work: `npm run qa` 169 files / 1,623 tests, 0 lint errors, build, load check (243 files), E2E matrix (55 specs) and API ESM all pass.
 - No product defect found by these checks.
 - Not claimable from the cloud: live-Supabase upload with a real account at volume (O08 already owner-passed 6 Oct for storage figure and cap), Comic on a live synced account, the owner's guided Novel and Comic journeys.
-- Still ⬜ (owner eyes): create a disposable Novel and Comic, write, finalise twice, open the reader and switch between both copies, export Word ZIP and PDF; for Comic add a few pages/panels and export.
+- ✅ Owner-reported PASS 13 Oct (no screenshots): create a disposable Novel and Comic, write, finalise twice, open the reader and switch between both copies, export Word ZIP and PDF; for Comic add a few pages/panels and export.
