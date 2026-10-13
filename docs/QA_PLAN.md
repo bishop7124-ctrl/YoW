@@ -935,3 +935,12 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 - No product defect found by these checks.
 - Not claimable from the cloud: live-Supabase upload with a real account at volume (O08 already owner-passed 6 Oct for storage figure and cap), Comic on a live synced account, the owner's guided Novel and Comic journeys.
 - ✅ Owner-reported PASS 13 Oct (no screenshots): create a disposable Novel and Comic, write, finalise twice, open the reader and switch between both copies, export Word ZIP and PDF; for Comic add a few pages/panels and export.
+
+### 2026-10-14 Map Builder acceptance (cloud half)
+
+- Baseline: existing `atlas-builder.spec.js` (9) and `atlas-project-zip-restore.spec.js` (1) pass 10/10 locally (Chromium).
+- New `tests/e2e/atlas-acceptance.spec.js` (CI matrix `atlas-acceptance`; local Chromium pass x2): for each of World, Region, Local and Interior it turns the grid on, edits the scale label, places a symbol, and undo/redo walks the drawing and the grid-label change back and forth. Exports: PNG is a genuine 2400x1600 image (2x of the 1200x800 canvas); SVG contains the grid and objects and none of the editor chrome (selection, handles, previews, drafts). After a reload all four maps keep grid settings and objects; Editable map JSON round-trips the grid and every object into a new map; a whole-project ZIP restores all five maps under a new project with equivalent grid settings and object counts while the originals are untouched.
+- Note: JSON import fills grid defaults (square type, 23% line strength) that older raw maps leave implicit; the restored ZIP copy therefore compares equal only after `normalizeGrid`, which is how the app reads it. Not a defect.
+- Full gate: `npm run qa` 169 files / 1,623 tests, 0 lint errors, build, load check, E2E matrix (56 specs), API ESM pass.
+- No defect found. Not claimable from the cloud: touch/stylus, Safari/Windows browsers, dense-map performance on real hardware, live-cloud cross-device map sync, and the owner's visual judgement of the artwork.
+- Still ⬜ (owner eyes): the guided Map Builder checklist in the 14 Oct row.
