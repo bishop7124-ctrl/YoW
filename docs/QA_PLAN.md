@@ -913,3 +913,7 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 - Windows desktop workflow now publishes `SHA256SUMS.txt` with the installer; Mac already did. Record the hashes in the release notes.
 - Still ⬜ (real devices): clean-machine Mac install via the documented Open Anyway steps, update from the previous release, interrupted/offline update, uninstall leaves vault intact; Windows SmartScreen path; lapse -> web edit -> renewal -> desktop merge on a build containing e1e1981 or newer.
 
+### 2026-10-11 Novella and Short Story acceptance
+
+- Automated: `tests/e2e/novella-short-story-acceptance.spec.js` (create -> write -> reload persistence -> no 'Finalise draft' -> own templates only -> Word ZIP + PDF download), `src/components/Manuscript/ManuscriptTopbar.test.jsx` (Finalise draft only for novel-type), `manuscriptTemplates.test.js`, existing daily-goal streak edge-case and 375/430 px progress-badge specs. Run Playwright in the cloud with `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
+- Still ⬜ (owner eyes): create a Novella and a Short Story on the live site, write a few paragraphs, refresh, export Word and PDF, open the files; check a streak after refresh at phone width.
