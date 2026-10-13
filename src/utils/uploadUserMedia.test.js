@@ -127,6 +127,29 @@ describe('uploadUserMedia', () => {
     expect(url).toBe(`yow-media:${mockState.uploadCalls[0].path}`)
   })
 
+  // Sprint 13 Oct: media lives in Supabase Storage, so total image volume is
+  // bounded only by the plan quota, never by the old 5-10 MB localStorage cap.
+  it('accepts 40 MB of cumulative uploads under the plan quota and blocks the upload that would exceed it', async () => {
+    const MB = 1024 * 1024
+    optimizeImage.mockImplementation(async () => new Blob([new Uint8Array(MB)], { type: 'image/webp' }))
+    let used = 0
+    for (let i = 0; i < 40; i++) {
+      const ref = await uploadUserMedia(new File(['x'], `p${i}.png`), {
+        userId: 'user-1', category: 'comic', currentUsedBytes: used, quotaBytes: 45 * MB,
+      })
+      expect(ref).toMatch(/^yow-media:user-1\/comic\//)
+      used += MB
+    }
+    expect(mockState.uploadCalls).toHaveLength(40)
+    expect(used).toBe(40 * MB)
+    mockState.uploadCalls = []
+    await expect(uploadUserMedia(new File(['x'], 'over.png'), {
+      userId: 'user-1', category: 'comic', currentUsedBytes: 44.5 * MB, quotaBytes: 45 * MB,
+    })).rejects.toThrow()
+    expect(mockState.uploadCalls).toHaveLength(0)
+    optimizeImage.mockImplementation(async () => new Blob(['fake-image-bytes'], { type: 'image/webp' }))
+  })
+
   it('surfaces a Supabase upload error as a thrown Error', async () => {
     mockState.uploadResult = { error: { message: 'bucket not found' } }
     await expect(uploadUserMedia(new File(['x'], 'a.png'), {

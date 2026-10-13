@@ -925,3 +925,13 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 - Watch: `tests/api/ai-proxy.test.js` 'rejects once the durable rate limit is exceeded' failed once in a full parallel run and passed in isolation (twice) and in a full rerun. If it recurs, make the mock queue per-test.
 - Still ⬜ (owner eyes): create one 5E Campaign and one Tabletop Campaign (disposable), add a session with Hooks and Recap, write one encounter, refresh, export Word ZIP and PDF and confirm the prep/recap text is in the files, open Atlas (map) and Party (Character Builder). Own-key DM/GM framing check stays with O07 on 18 Oct.
 
+### 2026-10-13 Novel and Comic acceptance (large project, snapshots, media volume)
+
+- Automated: new `tests/e2e/novel-comic-acceptance.spec.js` (added to the CI matrix as `novel-comic-acceptance`; local Chromium 2/2, run twice).
+  - Novel: three finalised-draft snapshots taken at three different prose states -> three stored (newest first), each frozen at its own prose; the reader's selector lists all three and shows each snapshot's own text; Pages view Previous disabled on the first spread and Next/Previous move; snapshots survive a reload; the working draft stays editable; a Comic project never offers 'Finalise draft'.
+  - Comic: 120 pages / 480 panels survive a reload, all appear in the Word-documents ZIP (`data/comic-pages.json`, `data/comic-panels.json`), and ZIP restore re-imports every one under a new project (ids remapped, original untouched).
+  - Media volume: new `uploadUserMedia.test.js` case: 40 MB of cumulative image uploads succeed under a 45 MB plan quota (no local cap); the upload that would exceed the quota is refused with no upload call.
+- Full gate after the 10-12 Oct merges and this work: `npm run qa` 169 files / 1,623 tests, 0 lint errors, build, load check (243 files), E2E matrix (55 specs) and API ESM all pass.
+- No product defect found by these checks.
+- Not claimable from the cloud: live-Supabase upload with a real account at volume (O08 already owner-passed 6 Oct for storage figure and cap), Comic on a live synced account, the owner's guided Novel and Comic journeys.
+- Still ⬜ (owner eyes): create a disposable Novel and Comic, write, finalise twice, open the reader and switch between both copies, export Word ZIP and PDF; for Comic add a few pages/panels and export.
