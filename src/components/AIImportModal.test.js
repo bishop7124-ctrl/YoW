@@ -112,6 +112,16 @@ describe('populateProject', () => {
     expect(store.calls.comicPages[0].summary).toBe('Once upon a time.')
   })
 
+  it.each(['novel', 'novella', 'short_story', 'dnd_campaign', 'ttrpg_campaign'])('populates a %s project with its scene text and ideas', (type) => {
+    const store = mockStore()
+    populateProject(store, proseData, { acts: true, ideaEntries: true }, type)
+    expect(store.calls.acts).toHaveLength(1)
+    expect(store.calls.scenes).toHaveLength(1)
+    expect(store.calls.scenes[0].content).toBe('Once upon a time.')
+    expect(store.calls.ideas).toHaveLength(1)
+    expect(store.calls.comicPages).toHaveLength(0)
+  })
+
   it('imports idea entries when selected', () => {
     const store = mockStore()
     populateProject(store, proseData, { ideaEntries: true }, 'novel')
