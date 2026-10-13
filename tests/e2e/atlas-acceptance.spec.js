@@ -39,11 +39,22 @@ test('all four map types: grid, undo/redo, 2x PNG, SVG, JSON round trip, reload 
     await dialog.getByRole('button', { name: 'Create map →' }).click()
     await expect(page.getByLabel('Map name', { exact: true })).toHaveValue(name)
 
-    // Grid: interior starts with one on; others get the plain "Show a square grid" toggle.
+    // Grid (any project type, here a Novel): interior starts with one on; others use the Show grid toggle.
     const label = `1 square = ${scale} test`
-    if (scale !== 'Interior') await page.getByLabel('Show a square grid').check()
+    if (scale !== 'Interior') await page.getByLabel('Show grid').check()
     await expect.poll(async () => (await byName(name)).metadata.gridSettings.enabled).toBe(true)
-    const scaleInput = page.getByLabel('Grid scale label').or(page.getByLabel('Distance per square')).first()
+    // Size and line strength are editable by slider and by exact number, and persist.
+    await page.getByLabel('Grid cell size', { exact: true }).fill('80')
+    await expect.poll(async () => (await byName(name)).metadata.gridSettings.size).toBe(80)
+    await page.getByLabel('Grid line strength', { exact: true }).fill('40')
+    await expect.poll(async () => (await byName(name)).metadata.gridSettings.atlasOpacity).toBeCloseTo(0.4, 2)
+    await page.getByLabel('Grid cell size value').fill('64')
+    await page.getByLabel('Grid cell size value').press('Enter')
+    await expect.poll(async () => (await byName(name)).metadata.gridSettings.size).toBe(64)
+    await page.getByLabel('Grid line strength value').fill('15')
+    await page.getByLabel('Grid line strength value').press('Enter')
+    await expect.poll(async () => (await byName(name)).metadata.gridSettings.atlasOpacity).toBeCloseTo(0.15, 2)
+    const scaleInput = page.getByLabel('Grid scale label')
     await scaleInput.fill(label)
     await expect.poll(async () => (await byName(name)).metadata.gridSettings.scale).toBe(label)
 
@@ -97,6 +108,8 @@ test('all four map types: grid, undo/redo, 2x PNG, SVG, JSON round trip, reload 
     const m = original.find(x => x.name === `${scale} Accept`)
     expect(m.metadata.gridSettings.enabled).toBe(true)
     expect(m.metadata.gridSettings.scale).toBe(`1 square = ${scale} test`)
+    expect(m.metadata.gridSettings.size).toBe(64)
+    expect(m.metadata.gridSettings.atlasOpacity).toBeCloseTo(0.15, 2)
     expect(m.mapObjects.length).toBeGreaterThan(0)
   }
 

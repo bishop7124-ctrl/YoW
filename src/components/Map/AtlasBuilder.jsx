@@ -3,7 +3,6 @@ const LegacyMapBuilder = lazy(() => import('./YOWMapBuilder.jsx'))
 import AtlasCanvas, { InkSymbol } from './AtlasCanvas.jsx'
 import { ATLAS_VERSION, SCALES, PALETTES, getOrganicStrength, makeObject, moveObject, newMapData, parseAtlas, canvasPoint, zoomFromWheel, normalizeGrid } from './atlasModel.js'
 import AtlasGridControls from './AtlasGridControls.jsx'
-import { isCampaignProjectType } from '../../utils/projectStats'
 import { uid } from './mapUtils.js'
 import { downloadBlob } from '../../utils/projectExportHelpers.js'
 import { getSymbolGroups } from './atlasSymbols.js'
@@ -167,8 +166,7 @@ function Editor({ map, store, onLibrary }) {
   const metadata = map.metadata || {}
   const selected = objects.find(o => o.id === selectedId)
   const interior = map.mapType === 'interior'
-  // Campaign maps (D&D and TTRPG) can always turn the grid overlay on; other maps keep the controls only once a grid exists (interior maps start with one).
-  const showGridControls = isCampaignProjectType(store.mapProject?.type) || Boolean(metadata.gridSettings?.enabled)
+  // Grid overlay controls are available on every map in every project type.
   const local = map.mapType === 'local'
   const selectedOrganicType = selected && BORDER_CONTROL_TYPES.includes(selected.type) && !selected.properties?.room ? selected.type : null
   const organicVariationType = !interior && (BORDER_CONTROL_TYPES.includes(tool) ? tool : selectedOrganicType)
@@ -452,7 +450,7 @@ function Editor({ map, store, onLibrary }) {
           {['river','road','wall'].includes(tool) && <label>New {tool === 'river' ? 'river' : tool === 'wall' ? 'wall' : 'route'} thickness: {lineWidth}<input aria-label="New line thickness" type="range" min="1" max="40" value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))}/></label>}
           {organicVariationType && <label className="atlas-checkbox"><input type="checkbox" checked={metadata.organicBorders !== false} onChange={e => commit({ ...current, metadata: { ...metadata, organicBorders: e.target.checked } })}/> Organic borders</label>}
           {organicVariationType && metadata.organicBorders !== false && <label>{organicVariationLabel} border variation<input aria-label={`${organicVariationLabel} border variation`} type="range" min="2" max="30" value={getOrganicStrength(metadata, organicVariationType)} onChange={e => commit({ ...current, metadata: { ...metadata, organicStrengthByType: { ...metadata.organicStrengthByType, [organicVariationType]: Number(e.target.value) } } })}/></label>}
-          {showGridControls && <AtlasGridControls grid={metadata.gridSettings} onChange={patch => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, ...patch } } })}/>}
+          <AtlasGridControls grid={metadata.gridSettings} onChange={patch => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, ...patch } } })}/>
         </div>
         {tool === 'stamp' ? <><span className="atlas-eyebrow">MAKE YOUR MARK</span><h2>A few familiar shapes.</h2><p>Click a symbol, then click the map — or drag a symbol straight onto the map.</p><div className="atlas-placement-callout" role="status"><span>Placing</span><svg viewBox="-40 -40 80 80" aria-hidden="true"><InkSymbol kind={symbol}/></svg><strong>{titleCase(symbol)}</strong><small>Esc returns to Select</small></div><label>Symbol size: {symbolSize}<input aria-label="Symbol size" type="range" min="20" max="140" value={symbolSize} onChange={e => setSymbolSize(Number(e.target.value))}/></label><label>Find a symbol<input type="search" value={symbolSearch} onChange={e => setSymbolSearch(e.target.value)} placeholder="Bridge, house, well…"/></label>{symbolGroups.map(group => {
           const matches = group.symbols.filter(s => s.includes(symbolSearch.toLowerCase().trim()))
@@ -469,7 +467,7 @@ function Editor({ map, store, onLibrary }) {
           <div className="atlas-options"><button onClick={duplicate}>Duplicate</button><button onClick={remove}>Delete item</button></div>
           <div className="atlas-options"><button onClick={() => commit({ ...current, mapObjects: [selected,...objects.filter(o => o.id !== selectedId)] })}>Send back</button><button onClick={() => commit({ ...current, mapObjects: [...objects.filter(o => o.id !== selectedId),selected] })}>Bring forward</button></div>
           <button onClick={() => setSelectedId(null)}>Done</button>
-        </> : <><span className="atlas-eyebrow">THE LOOK OF YOUR WORLD</span><h2>Paper & ink.</h2><p>Keep it simple. A coastline, a few landmarks, and a name can tell a whole story.</p><label>Map style<select value={metadata.palette || 'paper'} onChange={e => commit({ ...current, metadata: { ...metadata, palette: e.target.value } })}>{Object.entries(PALETTES).map(([id,p]) => <option value={id} key={id}>{p.name}</option>)}</select></label>{metadata.backdrop?.src && <label>Uploaded image opacity<input aria-label="Uploaded image opacity" type="range" min="10" max="100" value={Math.round((metadata.backdrop.opacity ?? 1) * 100)} onChange={e => commit({ ...current, metadata: { ...metadata, backdrop: { ...metadata.backdrop, opacity: Number(e.target.value) / 100 } } })}/></label>}<label className="atlas-checkbox"><input type="checkbox" checked={Boolean(metadata.gridSettings?.enabled)} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, enabled: e.target.checked } } })}/> Show a square grid</label>{metadata.gridSettings?.enabled && <label>Distance per square<input value={metadata.gridSettings.scale || ''} onChange={e => commit({ ...current, metadata: { ...metadata, gridSettings: { ...metadata.gridSettings, scale: e.target.value } } })}/></label>}
+        </> : <><span className="atlas-eyebrow">THE LOOK OF YOUR WORLD</span><h2>Paper & ink.</h2><p>Keep it simple. A coastline, a few landmarks, and a name can tell a whole story.</p><label>Map style<select value={metadata.palette || 'paper'} onChange={e => commit({ ...current, metadata: { ...metadata, palette: e.target.value } })}>{Object.entries(PALETTES).map(([id,p]) => <option value={id} key={id}>{p.name}</option>)}</select></label>{metadata.backdrop?.src && <label>Uploaded image opacity<input aria-label="Uploaded image opacity" type="range" min="10" max="100" value={Math.round((metadata.backdrop.opacity ?? 1) * 100)} onChange={e => commit({ ...current, metadata: { ...metadata, backdrop: { ...metadata.backdrop, opacity: Number(e.target.value) / 100 } } })}/></label>}
           <div className="atlas-places"><h3>Places on this map</h3>{objects.filter(o => o.properties?.name).length ? objects.filter(o => o.properties?.name).map(o => <button key={o.id} onClick={() => { setSelectedId(o.id); setTool('select') }}><span>⌖ {o.properties.name}</span><small>{o.linkedEntity ? 'Linked' : 'Edit →'}</small></button>) : <p>Choose Place to mark somewhere that matters.</p>}</div>
           <button className="atlas-delete-map" onClick={() => setShowDelete(true)}>Delete map…</button>
         </>}
