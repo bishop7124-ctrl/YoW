@@ -345,6 +345,24 @@ describe('createProjectDocxBlob', () => {
     expect(sessionsXml).toContain('The goblins ambush the party at the ford.')
     expect(zip['Stormrider-Session-Drafts.docx']).toBeUndefined()
   })
+
+  it('exports Tabletop Campaign session prep and recap fields in the Campaign Sessions document', async () => {
+    const data = makeProjectData()
+    data.project = { ...data.project, type: 'tabletop_rpg' }
+    data.chapters = [{
+      ...data.chapters[0],
+      title: 'Session 1',
+      sessionPlan: { hooks: 'Missing caravan at the old bridge' },
+      sessionRecap: { summary: 'The group tracked wagon marks north.', nextHooks: 'Who hired the wolves?' },
+    }]
+    data.scenes = [{ ...data.scenes[0], title: 'Encounter 1', content: 'Wolves circle the camp.' }]
+    const zip = unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(data)).arrayBuffer()))
+    const sessionsXml = strFromU8(unzipSync(zip['Stormrider-Campaign-Sessions.docx'])['word/document.xml'])
+    expect(sessionsXml).toContain('Missing caravan at the old bridge')
+    expect(sessionsXml).toContain('The group tracked wagon marks north.')
+    expect(sessionsXml).toContain('Who hired the wolves?')
+    expect(sessionsXml).toContain('Wolves circle the camp.')
+  })
 })
 
 describe('map files in the Word documents ZIP', () => {

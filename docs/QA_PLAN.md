@@ -917,3 +917,11 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 
 - Automated: `tests/e2e/novella-short-story-acceptance.spec.js` (create -> write -> reload persistence -> no 'Finalise draft' -> own templates only -> Word ZIP + PDF download), `src/components/Manuscript/ManuscriptTopbar.test.jsx` (Finalise draft only for novel-type), `manuscriptTemplates.test.js`, existing daily-goal streak edge-case and 375/430 px progress-badge specs. Run Playwright in the cloud with `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
 - Still ⬜ (owner eyes): create a Novella and a Short Story on the live site, write a few paragraphs, refresh, export Word and PDF, open the files; check a streak after refresh at phone width.
+
+### 2026-10-12 5E Campaign and Tabletop Campaign acceptance
+
+- Automated: `tests/e2e/campaign-acceptance.spec.js` (both types: create -> Sessions/Map navigation -> encounter text -> Hooks + Recap -> flush + reload keeps both -> Word ZIP + PDF download), `ManuscriptCampaignWorkflow.test.jsx` (prep/recap fields; new regression: the panel stays open when its first field is filled), `projectExportDocx.test.js` (5E plan field and Tabletop plan + recap fields land in the Campaign Sessions document), `aiToolPrompts.test.js` (GM-side 5E vs system-neutral Tabletop framing, no live-play/player-portal/collaboration promises), `StoryOutline.test.jsx`, `projectStats.test.js`, `manuscriptTemplates.test.js`.
+- Defect fixed: the Session prep & recap panel collapsed on the first keystroke (open state was derived from the filled-field count).
+- Watch: `tests/api/ai-proxy.test.js` 'rejects once the durable rate limit is exceeded' failed once in a full parallel run and passed in isolation (twice) and in a full rerun. If it recurs, make the mock queue per-test.
+- Still ⬜ (owner eyes): create one 5E Campaign and one Tabletop Campaign (disposable), add a session with Hooks and Recap, write one encounter, refresh, export Word ZIP and PDF and confirm the prep/recap text is in the files, open Atlas (map) and Party (Character Builder). Own-key DM/GM framing check stays with O07 on 18 Oct.
+
