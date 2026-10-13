@@ -171,6 +171,8 @@ jobs:
             spec: tests/e2e/atlas-acceptance.spec.js
           - name: consolidation-acceptance
             spec: tests/e2e/consolidation-acceptance.spec.js
+          - name: relationship-map-organic
+            spec: tests/e2e/relationship-map-organic.spec.js
           - name: import-into-existing-project
             spec: tests/e2e/import-into-existing-project.spec.js
           - name: merge-project
