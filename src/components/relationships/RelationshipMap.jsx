@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CHARACTER_LINK_REL_TYPES, DEFAULT_CHARACTER_LINK_REL_TYPE, getRelType } from '../../constants/relationshipTypes.js'
 import { FACTION_ICONS } from '../../constants/factionIcons'
 import { buildRelationshipGraph, buildRelationshipIndex } from '../../utils/relationshipMap.js'
-import { ALPHA_STOP, createForceState, forceBounds, reheatForce, settleForce, stepForce } from '../../utils/relationshipForce.js'
+import { ALPHA_STOP, createBestLayout, createForceState, forceBounds, reheatForce, settleNewcomers, stepForce } from '../../utils/relationshipForce.js'
+import { clearMapLayout, loadMapLayout, saveMapLayout } from '../../utils/relationshipMapLayout.js'
 import FactionLogo from '../Factions/FactionLogo'
 import { CharacterAvatar as PortraitAvatar } from '../shared/CharacterPortrait'
 
@@ -47,6 +48,9 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
   const suppressClickRef = useRef(false)
   const sizeRef = useRef(null)
   const touchedRef = useRef(false)
+  // True from a project's first render until its remembered pan/zoom has been applied;
+  // until then we must not overwrite the stored view with the default one.
+  const pendingRestoreRef = useRef(false)
   const frameRef = useRef(0)
   const viewAnimRef = useRef(0)
   const simRef = useRef(null)
@@ -65,16 +69,28 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
   }, [graph])
 
   // Build (or extend) the simulation synchronously during render so the first
-  // paint is already a settled, organic layout; known characters keep their
-  // places when the cast or connections change.
+  // paint is already a settled layout. A first visit gets the least-tangled
+  // layout we can find; after that the map comes back exactly as the user left
+  // it, and characters added later are placed without moving the others.
   const simKey = `${projectKey}:${graph.nodes.map(node => node.id).join('|')}:${graph.edges.map(edge => edge.key).join('|')}`
   const simKeyRef = useRef(null)
   if (simKeyRef.current !== simKey) {
     const seeds = new Map()
     const old = simRef.current
     if (old && simKeyRef.current?.startsWith(`${projectKey}:`)) old.ids.forEach((id, i) => seeds.set(id, { x: old.x[i], y: old.y[i] }))
-    const next = createForceState(graph.nodes, graph.edges, seeds)
-    if (seeds.size) reheatForce(next, 0.3); else settleForce(next)
+    else {
+      const present = new Set(graph.nodes.map(node => node.id))
+      const saved = loadMapLayout(projectKey)
+      saved?.nodes.forEach((point, id) => { if (present.has(id)) seeds.set(id, point) })
+      pendingRestoreRef.current = Boolean(saved?.view)
+    }
+    let next
+    if (!seeds.size) next = createBestLayout(graph.nodes, graph.edges)
+    else {
+      next = createForceState(graph.nodes, graph.edges, seeds)
+      if (seeds.size < next.ids.length) settleNewcomers(next, [...seeds.keys()])
+      else next.alpha = 0
+    }
     simRef.current = next
     simKeyRef.current = simKey
   }
@@ -86,6 +102,9 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
   }, [])
   const stopViewAnimation = useCallback(() => { cancelAnimationFrame(viewAnimRef.current) }, [])
   const markTouched = () => { touchedRef.current = true }
+  const persist = useCallback(() => {
+    if (simRef.current) saveMapLayout(projectKey, simRef.current, pendingRestoreRef.current ? undefined : touchedRef.current ? viewRef.current : null, sizeRef.current)
+  }, [projectKey])
   const startPhysics = useCallback(() => {
     if (frameRef.current) return
     const run = () => {
@@ -93,13 +112,20 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
       const active = state && stepForce(state)
       setTick(tick => tick + 1)
       frameRef.current = active || dragRef.current?.moved ? requestAnimationFrame(run) : 0
+      if (!frameRef.current) persist()
     }
     frameRef.current = requestAnimationFrame(run)
-  }, [])
+  }, [persist])
   useEffect(() => {
     if (sim.alpha > ALPHA_STOP) startPhysics()
-  }, [sim, startPhysics])
-  useEffect(() => () => { cancelAnimationFrame(frameRef.current); cancelAnimationFrame(viewAnimRef.current); frameRef.current = 0 }, [])
+    else persist()
+  }, [sim, startPhysics, persist])
+  // Remember pan/zoom a moment after the user stops moving the view.
+  useEffect(() => {
+    const timer = setTimeout(persist, 400)
+    return () => clearTimeout(timer)
+  }, [view, persist])
+  useEffect(() => () => { cancelAnimationFrame(frameRef.current); cancelAnimationFrame(viewAnimRef.current); frameRef.current = 0; persist() }, [persist])
 
   // `getTarget` is re-read every frame so the view keeps tracking a character
   // who is still drifting (neighbours settling after a drag).
@@ -127,6 +153,15 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
     const scale = clamp(Math.min(width / bounds.width, height / bounds.height), .22, 1.15)
     setView({ scale, x: width / 2 - ((bounds.minX + bounds.maxX) / 2) * scale, y: height / 2 - ((bounds.minY + bounds.maxY) / 2) * scale })
   }, [setView, stopViewAnimation])
+  // Throw away the remembered arrangement and lay the cast out afresh.
+  const tidy = useCallback(() => {
+    clearMapLayout(projectKey)
+    simRef.current = createBestLayout(graph.nodes, graph.edges)
+    touchedRef.current = false
+    setTick(tick => tick + 1)
+    fitAll()
+    persist()
+  }, [projectKey, graph, fitAll, persist])
   const centerOn = useCallback(id => {
     const viewport = viewportRef.current
     const state = simRef.current
@@ -157,7 +192,21 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
     zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor)
   }, [zoomAt])
 
-  useEffect(() => { fitAll() }, [fitAll, projectKey])
+  useEffect(() => {
+    const saved = loadMapLayout(projectKey)
+    const viewport = viewportRef.current
+    if (saved?.view && viewport) {
+      const { width, height } = viewportMetrics(viewport)
+      sizeRef.current = { width, height }
+      touchedRef.current = true
+      pendingRestoreRef.current = false
+      setView({ scale: saved.view.scale, x: width / 2 - saved.view.cx * saved.view.scale, y: height / 2 - saved.view.cy * saved.view.scale })
+      return
+    }
+    pendingRestoreRef.current = false
+    touchedRef.current = false
+    fitAll()
+  }, [fitAll, projectKey, setView])
   // Choosing a different character (click or the selector) glides the view onto them.
   useEffect(() => {
     if (previousFocalRef.current && previousFocalRef.current !== focalCharacter.id) centerOn(focalCharacter.id)
@@ -295,6 +344,7 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
         <button aria-label="Zoom relationship map in" title="Zoom in" disabled={view.scale >= 2.5} onClick={() => zoomCenter(1.18)} className="grid h-8 w-8 place-items-center rounded-lg text-base font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)] disabled:opacity-40">+</button>
         <button onClick={() => centerOn(focusedId)} className="h-8 rounded-lg border-l border-[var(--border)] px-2.5 text-[10px] font-semibold text-[var(--text-main)] hover:bg-[var(--bg-hover)]" title="Centre the view on the focused character">Centre</button>
         <button onClick={fitAll} className="h-8 rounded-lg border-l border-[var(--border)] px-2.5 text-[10px] font-semibold text-[var(--text-main)] hover:bg-[var(--bg-hover)]" title="Fit every character and connection in view">Fit all</button>
+        <button onClick={tidy} className="h-8 rounded-lg border-l border-[var(--border)] px-2.5 text-[10px] font-semibold text-[var(--text-main)] hover:bg-[var(--bg-hover)]" title="Re-arrange the whole cast to minimise crossing lines (forgets your custom layout)">Tidy</button>
       </div>
       <div ref={viewportRef} tabIndex={0} role="region" aria-label="Interactive relationship map; drag to pan, use the mouse wheel or plus and minus keys to zoom, and press F to fit all" onKeyDown={handleKeyDown} onPointerDown={beginGesture} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture}
         onScroll={event => { if (event.currentTarget.scrollLeft || event.currentTarget.scrollTop) event.currentTarget.scrollTo(0, 0) }}

@@ -960,3 +960,9 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 - `npm run qa` (tip 0f6261f): 171 files / 1,643 tests, 0 lint errors, build, load check, E2E matrix (58 specs), API ESM all pass.
 - Playwright Chromium (system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE`): `atlas-acceptance`, `atlas-builder` (8), `atlas-project-zip-restore`, `relationship-map-organic` = 12/12.
 - Still ⬜ (owner eyes, after web deploy): Atlas grid size/opacity on a Novel map; Relationship Map drag/centre feel.
+
+### 2026-10-14 Relationship Map: remembered layout and fewer crossings
+- First visit: `createBestLayout` runs several seeded force layouts, keeps the lowest `layoutScore` (link crossings + links through a third character) and hill-climbs it. 24-character, 29-link test cast: score 61 -> 16 in about 80 ms. Deterministic, so an untouched map reopens identically.
+- Return visits: positions and pan/zoom (stored as the map point at the canvas centre) are saved per project in localStorage and restored; new characters settle around the pinned existing ones. **Tidy** clears the memory and re-lays out.
+- Evidence: `relationshipForce.test.js`, `relationshipMapLayout.test.js`, Playwright `relationship-map-organic` (reload restores a dragged character and zoom within 4 px; Tidy moves it). `npm run qa` 171 files / 1,642 tests, 0 lint errors.
+- Still ⬜ (owner eyes, after deploy): open the 24-character test cast, confirm the first view has little line overlap, drag two characters, reload, confirm they stay put; press Tidy.
