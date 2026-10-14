@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_cors.js'
+import { UNSIGNED_APP_CHECKOUT_MESSAGE } from '../src/utils/unsignedAppDisclosure.js'
 
 // Maps plan keys to Stripe price IDs and checkout mode.
 // Each price ID must be set as an env var on Vercel.
@@ -149,6 +150,11 @@ export default async function handler(req, res) {
 
     if (planConfig.mode === 'subscription') {
       sessionParams.subscription_data = { metadata: { user_id: user.id, plan } }
+    }
+
+    if (plan === 'premium_plus_lifetime') {
+      // Pre-purchase disclosure: the desktop beta build is not yet signed.
+      sessionParams.custom_text = { submit: { message: UNSIGNED_APP_CHECKOUT_MESSAGE } }
     }
 
     if (planConfig.mode === 'payment') {

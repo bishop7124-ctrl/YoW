@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { supabase } from '../../supabase'
+import UnsignedAppNotice from './UnsignedAppNotice'
 
 // Desktop app download page (/download). Lifetime, Founder, and temporary beta
 // members only — everyone else sees a sign-in or upgrade prompt. The installer
@@ -225,6 +226,8 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
             Write with a true local project vault on your own device. Exclusive to Lifetime and Founder members.
           </p>
         </section>
+
+        <UnsignedAppNotice style={{ marginTop: 0 }} />
 
         {renderContent()}
 
