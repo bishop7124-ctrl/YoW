@@ -1,5 +1,4 @@
 import { supabase } from '../supabase'
-import { assertCloudWritesAllowed } from './cloudWritePolicy'
 
 // ── Findings (Plot Hole, Lore Conflict, Style Consistency) ────────────────────
 
@@ -16,7 +15,6 @@ export async function loadFindings(userId, projectId, toolType) {
 }
 
 export async function saveFinding(userId, projectId, toolType, finding) {
-  assertCloudWritesAllowed('Saving to your account')
   const row = {
     user_id:     userId,
     project_id:  projectId,
@@ -35,7 +33,6 @@ export async function saveFinding(userId, projectId, toolType, finding) {
 
 export async function saveAllFindings(userId, projectId, toolType, findings) {
   if (!findings?.length) return []
-  assertCloudWritesAllowed('Saving to your account')
   const rows = findings.map(f => ({
     user_id:     userId,
     project_id:  projectId,
@@ -64,7 +61,6 @@ export async function saveAllFindings(userId, projectId, toolType, findings) {
 }
 
 export async function updateFindingStatus(id, status) {
-  assertCloudWritesAllowed('Saving to your account')
   const { error } = await supabase
     .from('ai_findings')
     .update({ status, updated_at: new Date().toISOString() })
@@ -73,7 +69,6 @@ export async function updateFindingStatus(id, status) {
 }
 
 export async function deleteFinding(id) {
-  assertCloudWritesAllowed('Saving to your account')
   const { error } = await supabase.from('ai_findings').delete().eq('id', id)
   if (error) throw error
 }
@@ -118,7 +113,6 @@ export async function loadInterviews(userId, projectId) {
 }
 
 export async function createInterview(userId, projectId, characterId, mode) {
-  assertCloudWritesAllowed('Saving to your account')
   const { data, error } = await supabase
     .from('character_interviews')
     .insert({ user_id: userId, project_id: projectId, character_id: characterId, mode, messages: [], saved_notes: [] })
@@ -129,7 +123,6 @@ export async function createInterview(userId, projectId, characterId, mode) {
 }
 
 export async function updateInterview(id, messages, savedNotes) {
-  assertCloudWritesAllowed('Saving to your account')
   const { error } = await supabase
     .from('character_interviews')
     .update({ messages, saved_notes: savedNotes, updated_at: new Date().toISOString() })
@@ -138,7 +131,6 @@ export async function updateInterview(id, messages, savedNotes) {
 }
 
 export async function deleteInterview(id) {
-  assertCloudWritesAllowed('Saving to your account')
   const { error } = await supabase.from('character_interviews').delete().eq('id', id)
   if (error) throw error
 }
