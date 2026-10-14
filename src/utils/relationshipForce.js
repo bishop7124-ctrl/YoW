@@ -96,3 +96,114 @@ export function forceBounds(state, padding = 60) {
   minX -= padding; maxX += padding; minY -= padding; maxY += padding
   return { minX, maxX, minY, maxY, width: Math.max(maxX - minX, 200), height: Math.max(maxY - minY, 160) }
 }
+
+// ---- first-load layout quality -------------------------------------------
+// A single force run can leave many links crossing. Score a layout by link
+// crossings (plus links that pass through a third character) and keep the best
+// of several deterministic restarts, so the first view is as untangled as the
+// force model can make it. Pure and seeded: the same cast always gives the same map.
+
+const segmentsCross = (ax, ay, bx, by, cx, cy, dx, dy) => {
+  const d1 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  const d2 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax)
+  const d3 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx)
+  const d4 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx)
+  return d1 * d2 < 0 && d3 * d4 < 0
+}
+
+export function layoutScore(state, nodeRadius = 34) {
+  const { x, y, links } = state
+  let crossings = 0
+  for (let i = 0; i < links.length; i += 1) {
+    const [a, b] = links[i]
+    for (let j = i + 1; j < links.length; j += 1) {
+      const [c, d] = links[j]
+      if (a === c || a === d || b === c || b === d) continue
+      if (segmentsCross(x[a], y[a], x[b], y[b], x[c], y[c], x[d], y[d])) crossings += 1
+    }
+  }
+  let throughNode = 0
+  for (const [a, b] of links) {
+    const dx = x[b] - x[a]
+    const dy = y[b] - y[a]
+    const len2 = dx * dx + dy * dy || 1
+    for (let k = 0; k < x.length; k += 1) {
+      if (k === a || k === b) continue
+      const t = ((x[k] - x[a]) * dx + (y[k] - y[a]) * dy) / len2
+      if (t <= 0.05 || t >= 0.95) continue
+      const px = x[a] + t * dx - x[k]
+      const py = y[a] + t * dy - y[k]
+      if (px * px + py * py < nodeRadius * nodeRadius) throughNode += 1
+    }
+  }
+  return crossings + throughNode * 2
+}
+
+const seededRandom = seed => {
+  let s = seed >>> 0 || 1
+  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296 }
+}
+
+// Hill-climb: nudge one character at a time and keep the move only if it lowers
+// the score without crowding anyone. Deterministic (seeded) and bounded.
+export function refineLayout(state, iterations) {
+  const n = state.x.length
+  if (n < 3 || !state.links.length) return state
+  const random = seededRandom(n * 104729 + state.links.length)
+  let score = layoutScore(state)
+  for (let step = 0; step < iterations && score > 0; step += 1) {
+    const i = Math.floor(random() * n)
+    const ox = state.x[i]
+    const oy = state.y[i]
+    const reach = 40 + random() * 220
+    const angle = random() * Math.PI * 2
+    const nx = ox + Math.cos(angle) * reach
+    const ny = oy + Math.sin(angle) * reach
+    let crowded = false
+    for (let k = 0; k < n && !crowded; k += 1) if (k !== i && Math.hypot(state.x[k] - nx, state.y[k] - ny) < MIN_GAP) crowded = true
+    if (crowded) continue
+    state.x[i] = nx; state.y[i] = ny
+    const next = layoutScore(state)
+    if (next < score) score = next
+    else { state.x[i] = ox; state.y[i] = oy }
+  }
+  return state
+}
+
+export function createBestLayout(nodes, edges, { tries } = {}) {
+  const count = nodes.length
+  const attempts = tries ?? (count > 150 ? 1 : count > 80 ? 3 : 14)
+  let best = null
+  let bestScore = Infinity
+  for (let attempt = 0; attempt < attempts && bestScore > 0; attempt += 1) {
+    const state = createForceState(nodes, edges)
+    if (attempt > 0) {
+      // Different starting scatter each try (the first keeps the plain ring seed).
+      const random = seededRandom(attempt * 7919 + count)
+      const radius = Math.max(160, count * 18)
+      for (let i = 0; i < count; i += 1) {
+        const angle = random() * Math.PI * 2
+        const r = radius * (0.35 + random() * 0.65)
+        state.x[i] = Math.cos(angle) * r
+        state.y[i] = Math.sin(angle) * r
+      }
+    }
+    settleForce(state)
+    const score = layoutScore(state)
+    if (score < bestScore) { best = state; bestScore = score }
+  }
+  if (best) refineLayout(best, count > 150 ? 0 : count > 80 ? 800 : 6000)
+  return best || createForceState(nodes, edges)
+}
+
+// Place characters that are new to a saved layout without disturbing the ones
+// already placed: known characters are held still while the newcomers settle.
+export function settleNewcomers(state, knownIds) {
+  const known = new Set(knownIds)
+  state.ids.forEach((id, i) => { if (known.has(id)) state.pinned.set(i, { x: state.x[i], y: state.y[i] }) })
+  state.alpha = 1
+  settleForce(state)
+  state.pinned.clear()
+  state.alpha = 0
+  return state
+}
