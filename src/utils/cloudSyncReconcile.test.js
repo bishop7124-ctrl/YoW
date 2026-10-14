@@ -24,7 +24,7 @@ describe('reconcileCloudSyncData', () => {
     const { mergedData, conflicts, mergeStats } = reconcileCloudSyncData(local, cloud, base, options)
 
     expect(conflicts).toHaveLength(0)
-    expect(mergeStats).toEqual({ localOnly: 1, cloudOnly: 1 })
+    expect(mergeStats).toMatchObject({ localOnly: 1, cloudOnly: 1 })
     expect(mergedData.characters).toEqual([
       { id: 'char-1', novelId: 'project-1', name: 'Local' },
       { id: 'char-local', novelId: 'project-1', name: 'Local only' },
@@ -104,5 +104,18 @@ describe('reconcileCloudSyncData', () => {
       { key: 'pronouns', mine: 'he/him', theirs: 'she/her' },
       { key: 'background', mine: { origin: 'device' }, theirs: { origin: 'cloud' } },
     ])
+  })
+
+  it('keeps a project deleted in cloud and a new cloud project (no silent deletion)', () => {
+    const base = { novels: [{ id: 'old', title: 'lapse test' }], scenes: [{ id: 's1', novelId: 'old', content: 'hi' }] }
+    const local = { ...base }
+    const cloud = { novels: [{ id: 'new', title: 'lapse test 2' }], scenes: [] }
+
+    const { mergedData, conflicts, mergeStats } = reconcileCloudSyncData(local, cloud, base, options)
+
+    expect(conflicts).toHaveLength(0)
+    expect(mergedData.novels.map(n => n.title).sort()).toEqual(['lapse test', 'lapse test 2'])
+    expect(mergedData.scenes).toHaveLength(1)
+    expect(mergeStats.keptDeletedProjects).toEqual(['lapse test'])
   })
 })

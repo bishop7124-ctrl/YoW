@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { unzipSync, strFromU8 } from 'fflate'
 import { createProjectDocxBlob, createProjectDocxZipBlob } from './projectExportDocx.js'
+import { ATLAS_VERSION, newMapData, parseAtlas } from '../components/Map/atlasModel.js'
 
 async function readDocumentXml(blob) {
   const zip = unzipSync(new Uint8Array(await blob.arrayBuffer()))
@@ -343,5 +344,70 @@ describe('createProjectDocxBlob', () => {
     expect(sessionsXml).toContain('Goblins, then an ogre')
     expect(sessionsXml).toContain('The goblins ambush the party at the ford.')
     expect(zip['Stormrider-Session-Drafts.docx']).toBeUndefined()
+  })
+
+  it('exports Tabletop Campaign session prep and recap fields in the Campaign Sessions document', async () => {
+    const data = makeProjectData()
+    data.project = { ...data.project, type: 'tabletop_rpg' }
+    data.chapters = [{
+      ...data.chapters[0],
+      title: 'Session 1',
+      sessionPlan: { hooks: 'Missing caravan at the old bridge' },
+      sessionRecap: { summary: 'The group tracked wagon marks north.', nextHooks: 'Who hired the wolves?' },
+    }]
+    data.scenes = [{ ...data.scenes[0], title: 'Encounter 1', content: 'Wolves circle the camp.' }]
+    const zip = unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(data)).arrayBuffer()))
+    const sessionsXml = strFromU8(unzipSync(zip['Stormrider-Campaign-Sessions.docx'])['word/document.xml'])
+    expect(sessionsXml).toContain('Missing caravan at the old bridge')
+    expect(sessionsXml).toContain('The group tracked wagon marks north.')
+    expect(sessionsXml).toContain('Who hired the wolves?')
+    expect(sessionsXml).toContain('Wolves circle the camp.')
+  })
+})
+
+describe('map files in the Word documents ZIP', () => {
+  const atlasMap = (id, name, grid) => {
+    const data = newMapData('local', false, 'paper')
+    return { id, novelId: 'project-1', name, mapType: 'local', mapPins: [], mapRegions: [], mapLayers: [], mapObjects: data.mapObjects, metadata: { ...data.metadata, gridSettings: { ...data.metadata.gridSettings, ...grid } } }
+  }
+
+  it('adds each Atlas map as SVG and JSON files (PNG too where a canvas exists) under Maps/', async () => {
+    const data = makeProjectData()
+    data.project = { ...data.project, type: 'dnd_campaign' }
+    data.maps = [atlasMap('map-1', 'Harbour Town', { enabled: true, type: 'hex', size: 60 })]
+    const zip = unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(data)).arrayBuffer()))
+    expect(Object.keys(zip)).toEqual(expect.arrayContaining(['Maps/Harbour-Town.svg', 'Maps/Harbour-Town.json']))
+    const svg = strFromU8(zip['Maps/Harbour-Town.svg'])
+    expect(svg.startsWith('<?xml')).toBe(true)
+    expect(svg).toContain('width="2400"')
+    expect(svg).toContain('data-grid-type="hex"')
+    expect(svg).toContain('Harbour Town')
+    const json = strFromU8(zip['Maps/Harbour-Town.json'])
+    expect(JSON.parse(json).format).toBe(ATLAS_VERSION)
+    // The exported JSON is something the Atlas builder can import again, grid included.
+    const imported = parseAtlas(json)
+    expect(imported.name).toBe('Harbour Town')
+    expect(imported.metadata.gridSettings).toMatchObject({ enabled: true, type: 'hex', size: 60 })
+    // Word documents are still there.
+    expect(zip['Stormrider-Overview.docx']).toBeDefined()
+  })
+
+  it('keeps map file names unique and adds no Maps folder when a project has no maps', async () => {
+    const data = makeProjectData()
+    data.maps = [atlasMap('a', 'Same name'), atlasMap('b', 'Same name')]
+    const names = Object.keys(unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(data)).arrayBuffer())))
+    expect(names).toEqual(expect.arrayContaining(['Maps/Same-name.svg', 'Maps/Same-name-2.svg', 'Maps/Same-name.json', 'Maps/Same-name-2.json']))
+    const empty = Object.keys(unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(makeProjectData())).arrayBuffer())))
+    expect(empty.some(name => name.startsWith('Maps/'))).toBe(false)
+  })
+
+  it('explains maps that have no image files instead of skipping them silently', async () => {
+    const data = makeProjectData()
+    data.maps = [{ id: 'old', novelId: 'project-1', name: 'Old canvas map', mapType: 'region', mapObjects: [], metadata: {} }]
+    const zip = unzipSync(new Uint8Array(await (await createProjectDocxZipBlob(data)).arrayBuffer()))
+    const note = strFromU8(zip['Maps/About these maps.txt'])
+    expect(note).toContain('Old canvas map')
+    expect(note).toContain('data/maps.json')
+    expect(zip['Maps/Old-canvas-map.svg']).toBeUndefined()
   })
 })

@@ -8,6 +8,7 @@ import MarketingFooter from '../marketing/MarketingFooter'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { usePageMeta } from '../../utils/usePageMeta'
 import './PricingPage.css'
+import { DESKTOP_UNSIGNED_SHORT, DESKTOP_UNSIGNED_DETAIL } from '../../data/desktopAppDisclosure'
 
 const freePlan = PLANS.find(plan => plan.key === 'free')
 const monthlyPlan = PLANS.find(plan => plan.key === 'premium_monthly')
@@ -36,7 +37,9 @@ const FAQ = [
   { q: 'What is the Founding Price?', a: `The first 100 genuine Lifetime customers pay £${BILLING.foundingLifetimePrice} once, receive permanent Founder status and two included years of YOW Cloud. After those 100 successful purchases, Lifetime is £${BILLING.lifetimePrice} once with one included Cloud year.` },
   { q: 'What happens after my included Cloud period?', a: `You can renew YOW Cloud for £${HOSTING_RENEWAL_FEE_GBP} per year. If you decline, your Lifetime licence and Founder status remain active and you can keep working locally and offline. Cloud sync and hosted storage fall back to the applicable Free limits until you renew.` },
   { q: 'What happens if I cancel Monthly?', a: 'Your account falls back to Free limits after the paid period ends. Your work is not deleted: you choose one project to keep editable and can continue to view and export retained projects.' },
+  { q: 'Is the desktop app signed or notarized?', a: DESKTOP_UNSIGNED_DETAIL },
   { q: 'Can I use the desktop app on Monthly?', a: 'No. Monthly is the complete browser-based plan with Cloud sync. Desktop and offline access are included with Lifetime.' },
+  { q: 'Is the desktop app signed by Apple or Microsoft?', a: 'Not yet. The beta desktop app is not notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. The Download page has the exact one-time steps to open it anyway. The web app is unaffected.' },
   { q: 'Does Lifetime guarantee future updates?', a: 'Buy YOW for what it is today. Enjoy what we add tomorrow. Lifetime is permanent product access, not a promise of a particular roadmap or an indefinite schedule of new features.' },
 ]
 
@@ -80,6 +83,7 @@ function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutB
           '2 years of YOW Cloud included', `Then £${HOSTING_RENEWAL_FEE_GBP}/year optional Cloud`, 'Permanent Founder status and number',
         ] : plan.features).map(feature => <li key={feature}><CheckIcon /><span>{feature}</span></li>)}
       </ul>
+      {lifetime && <p className="pricing-card-disclaimer" data-testid="desktop-unsigned-note">{DESKTOP_UNSIGNED_SHORT}</p>}
       {plan.disclaimer && !founding && <p className="pricing-card-disclaimer">{plan.disclaimer}</p>}
       <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && checkoutBusy} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
         {/* Paid buttons only register interest until checkout opens (private test link today;
@@ -180,7 +184,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           <p className="eyebrow">Simple, honest pricing</p>
           <h1>Own your writing software.</h1>
           <p className="pricing-hero-lead">Lifetime access. One payment.</p>
-          <p className="pricing-hero-copy">Choose Free to begin, Monthly for complete browser access and Cloud sync, or Lifetime for permanent desktop and offline access. Cloud stays a separate, optional service after the included period.</p>
+          <p className="pricing-hero-copy">Choose Free to begin, Monthly for complete browser access and Cloud sync, or Lifetime for permanent desktop and offline access. Cloud stays a separate, optional service after the included period. The beta desktop app is not yet signed by Apple or Microsoft, so your computer shows a one-time warning on first launch (steps on the Download page).</p>
           <div className="pricing-trust-row"><span className="pricing-trust-chip"><CheckIcon /> One editable project free</span><span className="pricing-trust-chip"><CheckIcon /> Cancel Monthly any time</span><span className="pricing-trust-chip"><CheckIcon /> Lifetime works without Cloud</span></div>
           {billingTest ? (
             <aside className="pricing-test-panel" aria-label="Private Stripe test checkout">

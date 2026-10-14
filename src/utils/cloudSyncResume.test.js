@@ -88,6 +88,38 @@ describe('persistReviewedCloudSyncResume', () => {
       scenes: [
         { id: 'scene-1', novelId: 'project-1', title: 'Opening', content: 'desktop manuscript' },
       ],
-    }, { replaceUserData, loadUserData })).rejects.toThrow('Cloud Sync resume did not persist characters char-1.')
+    }, { replaceUserData, loadUserData })).rejects.toThrow('Cloud Sync resume did not persist characters char-1 (differs in: pronouns).')
+  })
+
+  it('ignores key order when checking what the cloud stored', async () => {
+    const replaceUserData = vi.fn(() => Promise.resolve())
+    const loadUserData = vi.fn(() => Promise.resolve({
+      novels: [{ title: 'Project', id: 'project-1' }],
+      scenes: [{ content: 'text', novelId: 'project-1', id: 'scene-1', meta: { b: 2, a: 1 } }],
+      activeNovelId: 'project-1',
+      activeMapByNovel: {},
+    }))
+    await expect(persistReviewedCloudSyncResume('user-1', {
+      novels: [{ id: 'project-1', title: 'Project' }],
+      scenes: [{ id: 'scene-1', novelId: 'project-1', content: 'text', meta: { a: 1, b: 2 } }],
+      activeNovelId: 'project-1',
+    }, { replaceUserData, loadUserData })).resolves.toBeTruthy()
+  })
+
+  it('names the differing scene fields without including their content', async () => {
+    const replaceUserData = vi.fn(() => Promise.resolve())
+    const loadUserData = vi.fn(() => Promise.resolve({
+      novels: [{ id: 'project-1', title: 'Project' }],
+      scenes: [{ id: 'scene-1', novelId: 'project-1', content: 'SECRET MANUSCRIPT', wordCount: 3 }],
+      activeNovelId: 'project-1',
+      activeMapByNovel: {},
+    }))
+    const error = await persistReviewedCloudSyncResume('user-1', {
+      novels: [{ id: 'project-1', title: 'Project' }],
+      scenes: [{ id: 'scene-1', novelId: 'project-1', content: 'other text', wordCount: 2 }],
+      activeNovelId: 'project-1',
+    }, { replaceUserData, loadUserData }).catch(e => e)
+    expect(error.message).toBe('Cloud Sync resume did not persist scenes scene-1 (differs in: content, wordCount).')
+    expect(error.message).not.toContain('SECRET')
   })
 })

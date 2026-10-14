@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { getMembership, isFreeProjectChoiceValid, PLAN_STORAGE_BYTES, PROFILE_METADATA_ALLOWLIST, sanitizeProfileMetadata } from './membership'
+import { getMembership, isFreeProjectChoiceValid, withDesktopProjectLimits, PLAN_STORAGE_BYTES, PROFILE_METADATA_ALLOWLIST, sanitizeProfileMetadata } from './membership'
 
 const now = new Date('2026-07-20T12:00:00Z')
 
@@ -409,5 +409,15 @@ describe('isFreeProjectChoiceValid', () => {
     expect(isFreeProjectChoiceValid('gone', [{ id: 'a' }, { id: 'b' }])).toBe(false)
     expect(isFreeProjectChoiceValid(null, [{ id: 'a' }])).toBe(false)
     expect(isFreeProjectChoiceValid('a', [{ id: 'a' }, { id: 'b' }])).toBe(true)
+  })
+})
+
+describe('withDesktopProjectLimits', () => {
+  it('drops the free one-project limit on desktop only', () => {
+    const m = { freeProjectId: 'p1', usesFreeCloudLimits: true }
+    expect(withDesktopProjectLimits(m, true).freeProjectId).toBeNull()
+    expect(withDesktopProjectLimits(m, false)).toBe(m)
+    const none = { freeProjectId: null }
+    expect(withDesktopProjectLimits(none, true)).toBe(none)
   })
 })

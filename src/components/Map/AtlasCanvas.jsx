@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react'
-import { PALETTES, WIDTH, HEIGHT, getOrganicStrength, inkPath, organicOutline } from './atlasModel.js'
+import { PALETTES, WIDTH, HEIGHT, getOrganicStrength, inkPath, organicOutline, normalizeGrid, hexMetrics } from './atlasModel.js'
 
 import { INK_ARTWORK } from './atlasInkArtwork.js'
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
@@ -51,13 +51,31 @@ function MapObject({ object: o, palette: p, mapType, selected, onPick, onPointPi
   </g>
 }
 
+// One repeating tile of the grid. Square: the cell side is `size`. Hex: pointy-top cells whose centres sit at
+// (col * width + (odd row ? width / 2 : 0), row * 1.5 * radius), the same layout the legacy builder and
+// snap-to-grid use, so a tile is two rows tall and is shifted so a hex centre lands on the origin.
+function GridPattern({ id, grid, ink }) {
+  const common = { fill: 'none', stroke: ink, strokeWidth: grid.type === 'hex' ? '.8' : '.6', opacity: grid.atlasOpacity, strokeLinejoin: 'round' }
+  if (grid.type === 'hex') {
+    const { radius: r, width: w } = hexMetrics(grid.size)
+    const d = [
+      `M0 ${r / 2}L${w / 2} 0L${w} ${r / 2}`,
+      `M0 ${r / 2}V${1.5 * r}M${w} ${r / 2}V${1.5 * r}`,
+      `M0 ${1.5 * r}L${w / 2} ${2 * r}L${w} ${1.5 * r}`,
+      `M${w / 2} ${2 * r}V${3 * r}`,
+    ].join('')
+    return <pattern id={id} x={-w / 2} y={-r} width={w} height={3 * r} patternUnits="userSpaceOnUse" data-grid-type="hex"><path d={d} {...common}/></pattern>
+  }
+  return <pattern id={id} width={grid.size} height={grid.size} patternUnits="userSpaceOnUse" data-grid-type="square"><path d={`M ${grid.size} 0 H 0 V ${grid.size}`} {...common}/></pattern>
+}
+
 export default function AtlasCanvas({ objects, metadata = {}, mapType, name, selectedId, onPick, onPointPick, svgRef, children, placementPreview, draftId, ...events }) {
   const id = useId().replace(/:/g, '')
   const p = PALETTES[metadata.palette] || PALETTES.paper
-  const grid = metadata.gridSettings || {}
+  const grid = normalizeGrid(metadata.gridSettings)
   return <svg ref={svgRef} xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-label={name ? `${name} map canvas` : 'Map preview'} {...events}>
     <defs>
-      <pattern id={`${id}grid`} width={grid.size || 40} height={grid.size || 40} patternUnits="userSpaceOnUse"><path d={`M ${grid.size || 40} 0 H 0 V ${grid.size || 40}`} fill="none" stroke={p.ink} strokeWidth=".6" opacity=".23"/></pattern>
+      <GridPattern id={`${id}grid`} grid={grid} ink={p.ink}/>
       <pattern id={`${id}water`} width="50" height="42" patternUnits="userSpaceOnUse"><path d="M8 22q4-2 8 0t8 0" fill="none" stroke={p.ink} strokeWidth=".6" opacity=".13"/></pattern>
     </defs>
     <rect width={WIDTH} height={HEIGHT} fill={metadata.baseLayer === 'water' ? p.water : p.paper}/>
@@ -65,7 +83,7 @@ export default function AtlasCanvas({ objects, metadata = {}, mapType, name, sel
     {metadata.baseLayer === 'water' && !metadata.backdrop?.src && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}water)`}/>}
     {objects.filter(o => o.visible !== false).map(o => <MapObject key={o.id} object={o} palette={p} mapType={mapType} selected={o.id === selectedId} onPick={onPick} onPointPick={o.id === selectedId ? onPointPick : undefined} draft={o.id === draftId} organicBorders={metadata.organicBorders !== false} organicStrength={getOrganicStrength(metadata, o.type)}/>)}
     {grid.enabled && <rect width={WIDTH} height={HEIGHT} fill={`url(#${id}grid)`} pointerEvents="none"/>}
-    <g pointerEvents="none" stroke={p.ink} fill="none" opacity=".45"><rect x="20" y="20" width="1160" height="760" strokeWidth=".7"/><path d="M1066 100v64m-25-32h50m-25-32-7 29 7-4 7 4Z" fill={p.ink}/></g>
+    <g pointerEvents="none" stroke={p.ink} fill="none" opacity=".45"><path d="M1066 100v64m-25-32h50m-25-32-7 29 7-4 7 4Z" fill={p.ink}/></g>
     <g fill={p.ink} pointerEvents="none" fontFamily="Georgia, serif" textAnchor="middle"><text x="1066" y="89" fontSize="12">N</text>{name && <text x="600" y="746" fontSize="22" letterSpacing="4">{name}</text>}{grid.enabled && <text x="600" y="769" fontSize="11">{grid.scale}</text>}</g>
     {placementPreview && <g data-preview="true" pointerEvents="none" opacity=".65"><MapObject object={placementPreview} palette={p} preview/></g>}
     {children}

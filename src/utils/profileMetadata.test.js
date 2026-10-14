@@ -13,6 +13,11 @@ describe('sanitizeEditableProfileMetadata', () => {
     expect(sanitizeEditableProfileMetadata(profile)).toEqual(profile)
   })
 
+  it('keeps the saved corner-roundness and visual-strength appearance fields', () => {
+    const profile = { theme: 'custom', theme_radius_unit: 14, theme_visual_strength: 1.2, custom_theme_colors: { accent: '#123456' } }
+    expect(sanitizeEditableProfileMetadata(profile)).toEqual(profile)
+  })
+
   it('strips entitlement and administrative metadata from client profile updates', () => {
     expect(sanitizeEditableProfileMetadata({
       full_name: 'Writer',

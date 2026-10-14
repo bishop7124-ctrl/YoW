@@ -8,6 +8,10 @@ import { BILLING } from './src/utils/billingConfig.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Shown in Account Settings so a tester can tell exactly which build they are running.
+const APP_VERSION = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version
+const BUILD_SHA = (process.env.GITHUB_SHA || process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7)
+
 // Routes handled by the React SPA — do not serve static files for these
 const SPA_ROUTES = new Set(['/features', '/features/', '/pricing', '/pricing/', '/faq', '/faq/', '/founders', '/founders/'])
 
@@ -177,6 +181,10 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{js,jsx}', 'tests/api/**/*.test.js'],
+  },
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
+    'import.meta.env.VITE_BUILD_SHA': JSON.stringify(BUILD_SHA),
   },
   plugins: [react(), staticHtmlMiddleware(), stripAnalyticsForDesktop(), generateSpaSeoPages(), localApiMiddleware(mode)],
   build: {

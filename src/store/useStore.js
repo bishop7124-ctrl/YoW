@@ -662,6 +662,10 @@ export function useStore(userId = null, options = {}) {
   // pendingRef counts in-flight pushes so overlapping debounced saves settle into one
   // 'syncing' → 'synced' transition instead of flickering per-entity.
   const syncPendingRef = useRef(0)
+  // Every cloud write handed to trackSync, so flushPendingSync can wait for saves that are
+  // already in flight (for example a scene version just restored from a conflict) and not
+  // only for the debounced ones that have not started yet.
+  const inFlightSyncRef = useRef(new Set())
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', lastSyncedAt: null, lastError: null })
 
   // Total storage usage = uploaded media (DB-authoritative counter, maintained
@@ -731,6 +735,9 @@ export function useStore(userId = null, options = {}) {
   const trackSync = useCallback((promise) => {
     syncPendingRef.current += 1
     setSyncStatus(s => ({ ...s, state: 'syncing' }))
+    inFlightSyncRef.current.add(promise)
+    const forget = () => { inFlightSyncRef.current.delete(promise) }
+    promise.then(forget, forget)
     promise
       .then(() => {
         syncPendingRef.current = Math.max(0, syncPendingRef.current - 1)
@@ -1412,6 +1419,7 @@ export function useStore(userId = null, options = {}) {
     ]
     const settingsFlush = debouncedSaveSettings.flush()
     if (settingsFlush) results.push(settingsFlush)
+    results.push(...inFlightSyncRef.current)
     return Promise.allSettled(results)
   }, [debouncedSaveItems, debouncedSaveScene, debouncedSaveSettings])
 

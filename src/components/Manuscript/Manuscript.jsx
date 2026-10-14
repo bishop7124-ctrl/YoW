@@ -141,6 +141,9 @@ function CampaignSessionWorkflow({ chapter, encounters, labels, projectType, onU
   const detailCount = filledPlan + filledRecap
   const roleLabel = 'GM'
   const groupLabel = projectType === 'dnd_campaign' ? 'party' : 'group'
+  // Open by default for an empty session, then follow the user's own toggling. Deriving `open`
+  // from the filled-field count collapsed the panel under the cursor on the first keystroke.
+  const [open, setOpen] = useState(detailCount === 0)
 
   const updatePlan = (key, value) => onUpdateChapter(chapter.id, {
     sessionPlan: { ...plan, [key]: value },
@@ -150,7 +153,7 @@ function CampaignSessionWorkflow({ chapter, encounters, labels, projectType, onU
   })
 
   return (
-    <details className="ms-campaign-session-panel" open={detailCount === 0}>
+    <details className="ms-campaign-session-panel" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
       <summary>
         <span>
           {labels.level2} prep & recap

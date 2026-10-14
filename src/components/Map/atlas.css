@@ -43,3 +43,5 @@
 .atlas-drawing-settings fieldset+p{margin-top:10px}
 .atlas .atlas-point-handle{cursor:grab}.atlas .atlas-point-handle:active{cursor:grabbing}
 .atlas .atlas-tools b svg{display:block;width:1em;height:1em}
+
+.atlas-grid-controls{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--atlas-line);padding-top:12px}

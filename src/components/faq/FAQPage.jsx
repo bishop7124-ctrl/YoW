@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { usePageMeta } from '../../utils/usePageMeta'
+import { DESKTOP_UNSIGNED_DETAIL } from '../../data/desktopAppDisclosure'
 
 const FAQ_ICONS = {
   pricing: (
@@ -147,6 +148,10 @@ const FAQ_SECTIONS = [
       {
         q: 'Can I switch between Local Mode and Cloud Mode?',
         a: "You can turn Local-first writing on from Account Settings → Membership. While it is on, YOW keeps using the current browser copy and will not pull older cloud data over your local work. When you turn Cloud Sync back on, the current browser copy is uploaded. Export a ZIP backup before changing modes if you want an extra safety copy.",
+      },
+      {
+        q: 'Is the desktop app signed or notarized?',
+        a: DESKTOP_UNSIGNED_DETAIL,
       },
       {
         q: 'Is my data encrypted in the desktop app?',
