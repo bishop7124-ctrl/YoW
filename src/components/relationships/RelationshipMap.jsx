@@ -57,7 +57,11 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
   const previousFocalRef = useRef(null)
   const [view, setViewState] = useState({ scale: 1, x: 0, y: 0 })
   const [, setTick] = useState(0)
-  const graph = useMemo(() => buildRelationshipGraph(index), [index])
+  const [showFamily, setShowFamily] = useState(true)
+  const fullGraph = useMemo(() => buildRelationshipGraph(index), [index])
+  // Family-only edges are hidden when the toggle is off; pairs that also have a
+  // social link keep their line.
+  const graph = useMemo(() => showFamily ? fullGraph : { ...fullGraph, edges: fullGraph.edges.filter(edge => edge.facts.length) }, [fullGraph, showFamily])
   const focalConnections = useMemo(() => new Set(index.connectionsFor(focalCharacter.id).map(connection => connection.character.id)), [index, focalCharacter.id])
   const degrees = useMemo(() => {
     const counts = new Map(graph.nodes.map(node => [node.id, 0]))
@@ -338,6 +342,10 @@ function RelationshipNetworkCanvas({ index, focalCharacter, onFocus, avatar, pro
       <div className="absolute left-3 top-3 z-30 rounded-lg border border-[var(--border)] bg-[var(--bg-nav)]/95 px-2.5 py-1.5 text-[10px] text-[var(--text-muted)] shadow-sm">
         {graph.nodes.length} character{graph.nodes.length === 1 ? '' : 's'} · {graph.edges.length} connection{graph.edges.length === 1 ? '' : 's'}
       </div>
+      <label className="absolute left-3 top-12 z-30 flex cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-nav)]/95 px-2.5 py-1.5 text-[10px] text-[var(--text-muted)] shadow-sm" title="Show or hide family lines (dashed)">
+        <input type="checkbox" checked={showFamily} onChange={event => setShowFamily(event.target.checked)} className="accent-[var(--accent)]" />
+        Family lines
+      </label>
       <div role="group" aria-label="Relationship map zoom" className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-nav)]/95 p-1 shadow-lg">
         <button aria-label="Zoom relationship map out" title="Zoom out" disabled={view.scale <= .22} onClick={() => zoomCenter(1 / 1.18)} className="grid h-8 w-8 place-items-center rounded-lg text-base font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)] disabled:opacity-40">−</button>
         <span aria-live="polite" className="w-10 text-center text-[10px] tabular-nums text-[var(--text-muted)]">{Math.round(view.scale * 100)}%</span>
