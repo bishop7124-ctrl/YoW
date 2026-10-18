@@ -1,6 +1,6 @@
 # AI Launch Owner Checklist
 
-Last updated: 2026-08-29
+Last updated: 2026-10-18
 
 This is the must-do owner checklist before treating YOW's AI integrations as launch-ready. It is not legal advice.
 
@@ -17,16 +17,13 @@ Use throwaway provider keys with low spend limits. Do not use a personal primary
 
 - [ ] Create or choose a paid YOW test account.
 - [ ] Create a tiny test project with one character, one location, one lore entry, and one short scene.
-- [ ] Prepare one test key each for:
-  - [ ] Google Gemini.
+- [ ] Prepare one test key each for the two supported providers (owner decision D5, 2026-09-30; other providers are not tested):
   - [ ] OpenRouter.
-  - [ ] Anthropic.
   - [ ] OpenAI API.
-  - [ ] Groq via OpenAI-compatible base URL: `https://api.groq.com/openai/v1`.
 
 ## 3. Provider Function Tests
 
-Run these checks for every provider above.
+Run these checks for each supported provider above (OpenRouter and OpenAI).
 
 - [ ] Save the provider key in Account Settings -> AI.
 - [ ] Confirm the full key is hidden after saving.
@@ -38,6 +35,8 @@ Run these checks for every provider above.
 - [ ] Confirm AI Chat, manuscript AI, AI Import, Ideas AI expand, AI Tools, and AI Character Simulation return to setup/no-key guidance.
 
 ## 4. Gemini-Specific Compliance Check
+
+**Skipped for launch (D5, 2026-09-30):** Gemini is not advertised and is labelled "Not tested" in the app. Run this section only if Gemini is ever added to the supported list.
 
 - [ ] Select Google Gemini.
 - [ ] Enter a Gemini key but leave the billing confirmation unchecked.

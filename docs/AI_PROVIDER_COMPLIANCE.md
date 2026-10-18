@@ -1,6 +1,6 @@
 # AI Provider Compliance Notes
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-10-18
 
 This is an internal engineering/product note for periodic review. It is not legal advice. Provider terms, model availability, pricing, rate limits, and data practices can change without a YOW code change.
 
@@ -18,6 +18,14 @@ Relevant project context sent to a provider depends on the feature:
 - AI import: uploaded/imported file text needed to structure the project.
 - Plot/lore/style tools: scoped project scan, act/volume review, or focused chapter/issue review, with capped summaries/excerpts.
 - AI Character Simulation: the selected character plus same-project lore, locations, timeline, and relationship context.
+
+## Supported Providers At Launch (owner decision D5, 2026-09-30; D9 follow-on)
+
+YOW advertises and supports exactly two AI providers: **OpenRouter** and **OpenAI**. These are the only providers the owner can access and live-test. Marketing, Help Centre, FAQ and Pricing copy mention no other provider.
+
+- Google AI Studio (Gemini), Anthropic, and the Groq, Mistral and Together OpenAI-compatible endpoints remain in the code so existing saved settings keep working, but they are **not tested or officially supported**. The AI settings picker labels each one "Not tested" and shows an explanatory note when one is selected (`isTestedAiProvider` in `src/utils/aiApi.js`; unit and e2e coverage in `src/utils/aiApi.test.js` and `tests/e2e/unconfigured-ai-account.spec.js`).
+- Arbitrary custom endpoints are not supported (the proxy allow-list and the settings picker reject them).
+- The rows for the not-tested providers below are kept only as engineering notes. Do not reuse them in customer-facing text. Their per-provider terms were last reviewed 2026-08-29 and are not re-reviewed for launch.
 
 ## Providers
 

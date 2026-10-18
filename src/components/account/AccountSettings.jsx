@@ -15,7 +15,7 @@ import StorageCard from './StorageCard'
 import BetaInterestModal from './BetaInterestModal'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
-import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, fetchLiveModels } from '../../utils/aiApi'
+import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, UNTESTED_PROVIDER_LABEL, UNTESTED_PROVIDER_NOTE, isTestedAiProvider, fetchLiveModels } from '../../utils/aiApi'
 import { getAiModelGuidance, getAvailableOpenAiQuickChoices, isOfficialOpenAiEndpoint } from '../../utils/aiModelGuidance'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
 import {
@@ -2042,6 +2042,13 @@ function AISettingsPanel({ userId, membership }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main)' }}>{p.name}</span>
+                    {!isTestedAiProvider(id) && (
+                      <span className="ai-provider-untested" title={UNTESTED_PROVIDER_NOTE} style={{
+                        fontSize: 9, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase',
+                        color: 'var(--text-muted)', padding: '2px 6px',
+                        border: '1px solid var(--border)', borderRadius: 3,
+                      }}>{UNTESTED_PROVIDER_LABEL}</span>
+                    )}
                     {isActive && (
                       <span style={{
                         fontSize: 9, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase',
@@ -2078,6 +2085,7 @@ function AISettingsPanel({ userId, membership }) {
         <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.freeUsage}</p>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 4px' }}>{prov?.billing}</p>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 8px' }}>{prov?.limitations}</p>
+        {!isTestedAiProvider(active, cfg.baseUrl) && <p className="ai-provider-untested-note" role="note" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.55, margin: '0 0 8px' }}>{UNTESTED_PROVIDER_NOTE}</p>}
         <a href={prov?.setupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 800, color: 'var(--accent-text)' }}>Get an API key</a>
         <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.45, margin: '8px 0 0' }}>
           Provider availability, pricing, model access, and limits can change. YOW is not partnered with or endorsed by these providers unless explicitly stated elsewhere.
@@ -2191,7 +2199,7 @@ function AISettingsPanel({ userId, membership }) {
             className="account-appearance-input" style={{ width: '100%' }}>
             {cfg.baseUrl && !NAMED_OPENAI_ENDPOINTS.some(endpoint => endpoint.url === cfg.baseUrl) &&
               <option value={cfg.baseUrl} disabled>Unsupported saved endpoint — choose a provider</option>}
-            {NAMED_OPENAI_ENDPOINTS.map(endpoint => <option key={endpoint.url} value={endpoint.url}>{endpoint.label}</option>)}
+            {NAMED_OPENAI_ENDPOINTS.map(endpoint => <option key={endpoint.url} value={endpoint.url}>{endpoint.tested ? endpoint.label : `${endpoint.label} (${UNTESTED_PROVIDER_LABEL.toLowerCase()})`}</option>)}
           </select>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Choose a named provider and use an API key issued by that provider. Custom endpoints are not supported.</p>
         </div>

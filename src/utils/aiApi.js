@@ -86,7 +86,7 @@ export const PROVIDERS = {
     defaultModel: 'claude-sonnet-4-6',
   },
   openai: {
-    name: 'OpenAI, Groq, Mistral or Together',
+    name: 'OpenAI',
     keyPlaceholder: 'sk-...',
     hasBaseUrl: true,
     setupUrl: 'https://platform.openai.com/api-keys',
@@ -117,13 +117,27 @@ export const PROVIDERS = {
 // re-fetch on every keystroke.
 const modelCatalogCache = new Map() // cacheKey -> models[] | Promise<models[]>
 export const NAMED_OPENAI_ENDPOINTS = [
-  { label: 'OpenAI', url: 'https://api.openai.com/v1' },
-  { label: 'Groq', url: 'https://api.groq.com/openai/v1' },
-  { label: 'Mistral', url: 'https://api.mistral.ai/v1' },
-  { label: 'Together', url: 'https://api.together.xyz/v1' },
+  { label: 'OpenAI', url: 'https://api.openai.com/v1', tested: true },
+  { label: 'Groq', url: 'https://api.groq.com/openai/v1', tested: false },
+  { label: 'Mistral', url: 'https://api.mistral.ai/v1', tested: false },
+  { label: 'Together', url: 'https://api.together.xyz/v1', tested: false },
 ]
+
+// Launch decision D5/D9: only OpenRouter and OpenAI are advertised and tested.
+// Other providers keep working but are labelled so nobody assumes support.
+export const UNTESTED_PROVIDER_LABEL = 'Not tested'
+export const UNTESTED_PROVIDER_NOTE = 'Not tested or officially supported by YOW. It may work, but YOW has not verified it.'
+export function isTestedAiProvider(provider, baseUrl = '') {
+  if (provider === 'openrouter') return true
+  if (provider === 'openai') {
+    const normalized = String(baseUrl || '').trim().replace(/\/+$/, '')
+    if (!normalized) return true
+    return NAMED_OPENAI_ENDPOINTS.some(endpoint => endpoint.tested && endpoint.url === normalized)
+  }
+  return false
+}
 const PROXIED_OPENAI_BASE_URLS = new Set(NAMED_OPENAI_ENDPOINTS.map(endpoint => endpoint.url))
-const UNSUPPORTED_ENDPOINT = 'Custom AI endpoints are not supported. Choose OpenAI, Groq, Mistral or Together in AI Settings.'
+const UNSUPPORTED_ENDPOINT = 'Custom AI endpoints are not supported. Choose a supported provider in AI Settings.'
 
 const aiProxyEndpoint = () => {
   const base = import.meta.env.VITE_DESKTOP_API_BASE_URL

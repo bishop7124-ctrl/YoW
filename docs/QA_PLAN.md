@@ -998,3 +998,23 @@ Owner packet (O10, real devices, about 90 min, report only failures):
 2. Safari and Firefox on Mac at phone-narrow, tablet and full-width window: dashboard, writing, a character, settings. Nothing cut off or unreachable.
 3. Keyboard only (Tab / Shift+Tab / Enter / Esc): create a project, write, open and close a dialog; focus is always visible.
 4. VoiceOver (Cmd+F5): dashboard buttons and the writing area are announced with sensible names.
+
+## 2026-10-18 AI provider acceptance
+
+Automated half (cloud session):
+
+- D5/D9: only OpenRouter and OpenAI are advertised and tested. The AI settings picker labels Google AI Studio, Anthropic, Groq, Mistral and Together "Not tested" (badge, option text, and a note when selected). Custom endpoints are refused by the picker and by the proxy allow-list. `docs/AI_PROVIDER_COMPLIANCE.md` lists exactly OpenRouter and OpenAI as supported.
+- `npm run qa`: 172 files / 1,648 tests, 0 lint errors, build, bundle budget, load check, E2E matrix (59 specs), API ESM (12 routes).
+- Chromium: `unconfigured-ai-account` 9/9 (includes the new provider-label test), AI context selector, AI chat persistence/export and campaign acceptance 7/7. No request leaves the browser to a real provider in these specs.
+
+Owner packet O07 (real keys, about 60 min, never paste keys into chat). Use designated test accounts A and B and disposable projects only:
+
+1. Account A, Settings -> AI: pick OpenRouter, paste your OpenRouter key, Save. The key box should empty and show "saved". Send one AI Chat message. Repeat for OpenAI.
+2. Check the picker: only Google AI Studio and Anthropic (and Groq/Mistral/Together in the OpenAI list) carry "Not tested".
+3. Account A: turn on "Sync AI settings across signed-in devices". Sign in as account B in a second browser: B must show no key. Sign in as A on a second browser: A's key shows as saved.
+4. Context controls: in AI Chat choose one character only, ask about something outside it, confirm the answer does not use unselected material. Check the context size/budget warning appears when you select a lot.
+5. D&D and Tabletop projects: ask the AI to help with session prep; it should answer as a DM/GM aid, not as a novel editor.
+6. Error handling: save a deliberately wrong key, send a message, confirm a clear "API key" message (not a crash), then restore the right key.
+7. Remove the key: AI features return to setup guidance.
+8. Optional DevTools check (Network tab, search `sk-`): the key must not appear in any URL or response.
+
