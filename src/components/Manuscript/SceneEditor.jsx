@@ -4,7 +4,7 @@ import {
   buildScriptBlocks, getScriptElements, getScriptElementLabel, getNextScriptElementAfterEnter,
   getScriptBlockIndexAtOffset, syncScriptBlocks,
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
-  copyTextToClipboard, stripNoteMarkers, NOTE_MARKER_RE,
+  copyTextToClipboard, stripNoteMarkers, NOTE_MARKER_RE, LARGE_SCENE_CHAR_THRESHOLD,
 } from './manuscriptUtils.js'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
@@ -2248,6 +2248,12 @@ const SceneEditorImpl = ({
           )}
         </div>
       </div>
+
+      {localContent.length >= LARGE_SCENE_CHAR_THRESHOLD && (
+        <p className="ms-large-scene-notice" role="status">
+          This scene is very long (about {Math.round(localContent.length / 6000) * 1000} words). Typing in a single scene this long can feel slow in any browser. Splitting it into a few scenes keeps writing smooth; nothing is lost either way, and Copy scene stays reliable.
+        </p>
+      )}
 
       {/* Prose column (620px) + note gutter (188px) — spec §4/§5.3, refined
           per a later note: non-Writing modes and Writing never show a note
