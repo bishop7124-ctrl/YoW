@@ -1018,3 +1018,9 @@ Owner packet O07 (real keys, about 60 min, never paste keys into chat). Use desi
 7. Remove the key: AI features return to setup guidance.
 8. Optional DevTools check (Network tab, search `sk-`): the key must not appear in any URL or response.
 
+### 2026-10-18 Windows desktop acceptance result (owner-reported)
+
+- Real Windows PC, Windows 11 21H2, OS build 22000.2538 (older, low-spec machine; useful worst case, but no newer Windows 11 build tested). Owner reported checklist items 1-4 and 6-10 all passed: SmartScreen Run anyway, WebView2, sign-in on a test account, create/type/autosave/close/reopen, ZIP/DOCX/PDF export, Explorer reveal, external link, updater check, uninstall with vault kept.
+- Item 2/5 (SHA-256 vs `SHA256SUMS.txt`) was skipped by the owner. Not claimed as passed. Optional later: owner can run `Get-FileHash` in PowerShell on the installer and compare.
+- No data-loss, save or export failure, so D4 does not delay launch. Owner-reported, no screenshots.
+
