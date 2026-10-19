@@ -279,6 +279,32 @@ describe('handler — event ledger idempotency', () => {
     expect(updateUserById).not.toHaveBeenCalled()
   })
 
+  it('applies the same event exactly once when Stripe delivers it three times', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_triple', type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_1', status: 'active', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1', items: { data: [{ current_period_end: 123 }] } } },
+    })
+    const duplicateClaim = { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } }
+    const deliver = async (ledgerResult) => {
+      tableResults.length = 0
+      queueResult(ledgerResult)
+      const res = makeRes()
+      await handler(makeReq(), res)
+      return res
+    }
+
+    const responses = [
+      await deliver({ data: null, error: null }), // delivery 1 claims the event
+      await deliver(duplicateClaim),              // delivery 2
+      await deliver(duplicateClaim),              // delivery 3
+    ]
+
+    for (const res of responses) expect(res.status).toHaveBeenCalledWith(200)
+    expect(responses[1].json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
+    expect(responses[2].json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
+    expect(updateUserById).toHaveBeenCalledTimes(1)
+  })
+
   it('releases the ledger claim on handler failure so a real retry can reprocess it', async () => {
     constructEvent.mockReturnValue({
       id: 'evt_fail', type: 'customer.subscription.updated',
