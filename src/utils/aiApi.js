@@ -51,6 +51,7 @@ export const PROVIDERS = {
   },
   openrouter: {
     name: 'OpenRouter',
+    officiallySupported: true,
     keyPlaceholder: 'sk-or-...',
     setupUrl: 'https://openrouter.ai/keys',
     bestFor: 'Trying many model families from one account, including models with large context windows.',
@@ -86,7 +87,8 @@ export const PROVIDERS = {
     defaultModel: 'claude-sonnet-4-6',
   },
   openai: {
-    name: 'OpenAI, Groq, Mistral or Together',
+    name: 'OpenAI',
+    officiallySupported: true,
     keyPlaceholder: 'sk-...',
     hasBaseUrl: true,
     setupUrl: 'https://platform.openai.com/api-keys',

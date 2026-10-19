@@ -1,8 +1,12 @@
 # AI Provider Compliance Notes
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-10-19
 
 This is an internal engineering/product note for periodic review. It is not legal advice. Provider terms, model availability, pricing, rate limits, and data practices can change without a YOW code change.
+
+## Supported Providers at Launch (decisions D5/D9)
+
+Exactly two providers are supported, tested and advertised: **OpenRouter** and **OpenAI**. Every other provider below (Google AI Studio, Anthropic, and the Groq, Mistral and Together endpoints reachable from the OpenAI card) is kept working for users who bring their own key, but is **not tested / not officially supported**: the AI settings picker shows a "Not tested" label on it, and it must not appear in Pricing, FAQ, Features, llms.txt, onboarding or emails. The rows below are engineering reference only, not a promise.
 
 ## Current Integration Summary
 

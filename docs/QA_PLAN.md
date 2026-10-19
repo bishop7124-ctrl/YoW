@@ -966,3 +966,10 @@ Renewal is simulated by moving the date in `app_metadata` (the Stripe webhook pa
 - Return visits: positions and pan/zoom (stored as the map point at the canvas centre) are saved per project in localStorage and restored; new characters settle around the pinned existing ones. **Tidy** clears the memory and re-lays out.
 - Evidence: `relationshipForce.test.js`, `relationshipMapLayout.test.js`, Playwright `relationship-map-organic` (reload restores a dragged character and zoom within 4 px; Tidy moves it). `npm run qa` 171 files / 1,642 tests, 0 lint errors.
 - Still ⬜ (owner eyes, after deploy): open the 24-character test cast, confirm the first view has little line overlap, drag two characters, reload, confirm they stay put; press Tidy.
+
+### 2026-10-19 AI chat persistence and provider scope
+
+- **Full AI chat panel** (not just the bottom bar): `tests/e2e/qa-sweep-2026-09-10-ai-chat-persistence.spec.js` new test sends a message in the panel (offline mock, no provider contacted), asserts it and the reply are stored on the project record, survive a reload, and appear in the "AI Chats" document inside the Word docs ZIP. 3/3 pass in Chromium.
+- **Provider scope (D5/D9):** `PROVIDERS.openai`/`openrouter` carry `officiallySupported`; the Account Settings provider picker shows "Not tested" on the rest; the OpenAI card is named "OpenAI". Unit test in `src/utils/aiApi.test.js`. `docs/AI_PROVIDER_COMPLIANCE.md` lists exactly OpenRouter and OpenAI as supported.
+- **Wider Chromium pass:** export-formats, consolidation-acceptance, campaign-acceptance, unconfigured-ai-account, ai-context-selector: 16/16.
+- **Not claimable from the cloud:** live OpenRouter/OpenAI calls, key isolation across two real accounts, real-provider AI Import for all six types (owner O07). Run Playwright here with `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.

@@ -2042,6 +2042,16 @@ function AISettingsPanel({ userId, membership }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main)' }}>{p.name}</span>
+                    {!p.officiallySupported && (
+                      <span
+                        title="YOW has not tested this provider. It still works with your own key, but it is not officially supported."
+                        style={{
+                          fontSize: 9, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase',
+                          color: 'var(--text-muted)', padding: '2px 6px',
+                          border: '1px solid var(--border)', borderRadius: 3,
+                        }}
+                      >Not tested</span>
+                    )}
                     {isActive && (
                       <span style={{
                         fontSize: 9, fontWeight: 900, letterSpacing: '.07em', textTransform: 'uppercase',

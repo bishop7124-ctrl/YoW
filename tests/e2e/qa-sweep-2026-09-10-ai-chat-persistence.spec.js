@@ -130,3 +130,43 @@ test('AI Chat can choose records, follow the open chapter, and change context af
   await expect(page.getByRole('dialog', { name: 'Chat context' })).toHaveCount(0)
   await expect(contextButton).toContainText('Current Chapter')
 })
+
+// 2026-10-19 Product acceptance: the *full* AI chat panel (not the bottom bar)
+// must also save its chat as a durable project entry that survives a reload
+// and lands in the Word docs ZIP. Offline mock answers; no provider contacted.
+test('a full AI chat panel conversation survives reload and is included in the Word docs ZIP export', async ({ page }) => {
+  test.setTimeout(90_000)
+  const marker = `PANEL_CHAT_QUESTION_${Date.now()}`
+  await createProject(page, { title: `AI Panel Persistence ${Date.now()}` })
+  const projectId = (await readStorage(page, 'nf_novels'))[0].id
+
+  await page.getByTitle('Open AI chat').click()
+  await page.getByRole('button', { name: '+ New chat' }).click()
+  await page.getByRole('button', { name: 'Start Chat' }).click()
+  const input = page.getByPlaceholder(/Ask the AI/)
+  await expect(input).toBeVisible()
+  await input.fill(marker)
+  await input.press('Enter')
+
+  await expect.poll(async () => {
+    const project = (await readStorage(page, 'nf_novels')).find(n => n.id === projectId)
+    const messages = (project?.aiChatSessions || []).flatMap(s => s.messages || [])
+    return messages.some(m => m.content === marker) && messages.some(m => m.role !== 'user' && m.content)
+  }, { timeout: 15_000 }).toBe(true)
+
+  await page.reload()
+  await dismissLaunchPrompts(page)
+  const afterReload = (await readStorage(page, 'nf_novels')).find(n => n.id === projectId)
+  expect((afterReload?.aiChatSessions || []).some(s => (s.messages || []).some(m => m.content === marker))).toBe(true)
+
+  await page.getByRole('button', { name: 'Project settings' }).first().click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Word docs ZIP/ }).click()
+  const download = await downloadPromise
+  const { readFileSync } = await import('node:fs')
+  const { unzipSync: unzipDocx, strFromU8 } = await import('fflate')
+  const zip = unzipSync(new Uint8Array(readFileSync(await download.path())))
+  const entry = Object.keys(zip).find(name => /AI[- ]Chats/i.test(name))
+  expect(entry, `expected an "AI Chats" entry among: ${Object.keys(zip).join(', ')}`).toBeTruthy()
+  expect(strFromU8(unzipDocx(zip[entry])['word/document.xml'])).toContain(marker)
+})

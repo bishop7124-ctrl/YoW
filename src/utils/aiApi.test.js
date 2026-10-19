@@ -153,3 +153,16 @@ describe('buildSystemPrompt HISTORY section', () => {
     expect(prompt).not.toContain('--- HISTORY ---')
   })
 })
+
+describe('launch provider scope (D5/D9)', () => {
+  it('marks exactly OpenRouter and OpenAI as officially supported', async () => {
+    const { PROVIDERS } = await import('./aiApi')
+    const supported = Object.entries(PROVIDERS).filter(([, p]) => p.officiallySupported).map(([id]) => id).sort()
+    expect(supported).toEqual(['openai', 'openrouter'])
+  })
+
+  it('does not advertise other providers in the OpenAI card name', async () => {
+    const { PROVIDERS } = await import('./aiApi')
+    expect(PROVIDERS.openai.name).toBe('OpenAI')
+  })
+})
