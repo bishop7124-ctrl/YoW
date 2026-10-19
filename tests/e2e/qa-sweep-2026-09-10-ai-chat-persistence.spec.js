@@ -163,6 +163,13 @@ test('a streaming AI Chat reply locks the view to the top of the reply instead o
   // While streaming and after it finishes, the top of the new reply stays at the top of the chat area.
   await expect.poll(topOffset, { timeout: 5_000 }).toBeLessThanOrEqual(12)
   await expect(page.locator('.ai-chat-bubble .animate-pulse')).toHaveCount(0, { timeout: 15_000 })
-  expect(await topOffset()).toBeLessThanOrEqual(12)
-  expect(await topOffset()).toBeGreaterThanOrEqual(-2)
+  // Once the reply is finished no blank space is left under it: the whole reply and the
+  // chat bottom are visible, so the latest messages are readable while typing.
+  await expect(page.locator('[data-reply-spacer]')).toHaveCount(0)
+  const gapBelow = await scroller.evaluate((el) => {
+    const messages = el.querySelectorAll('.ai-chat-message')
+    const last = messages[messages.length - 1]
+    return Math.round(el.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom)
+  })
+  expect(gapBelow).toBeLessThanOrEqual(60)
 })
