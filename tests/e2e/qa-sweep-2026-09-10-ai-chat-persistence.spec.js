@@ -130,3 +130,39 @@ test('AI Chat can choose records, follow the open chapter, and change context af
   await expect(page.getByRole('dialog', { name: 'Chat context' })).toHaveCount(0)
   await expect(contextButton).toContainText('Current Chapter')
 })
+
+test('a streaming AI Chat reply locks the view to the top of the reply instead of following it down', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.setViewportSize({ width: 1280, height: 520 })
+  await createProject(page, { title: `AI Reply Anchor ${Date.now()}` })
+  await page.getByTitle('Open AI chat').click()
+  await page.getByRole('button', { name: '+ New chat' }).click()
+  await page.getByRole('button', { name: 'Start Chat' }).click()
+
+  const input = page.getByPlaceholder(/Ask the AI/)
+  const scroller = page.locator('.ai-chat-scroll')
+  const replies = page.locator('.ai-chat-message.is-assistant')
+
+  // Build enough history that the chat scrolls, then watch one more reply.
+  for (let i = 0; i < 4; i += 1) {
+    await input.fill(`Question ${i}`)
+    await input.press('Enter')
+    await expect(replies).toHaveCount(i + 1)
+    await expect(page.locator('.ai-chat-bubble .animate-pulse')).toHaveCount(0, { timeout: 15_000 })
+  }
+
+  const topOffset = async () => scroller.evaluate((el) => {
+    const messages = el.querySelectorAll('.ai-chat-message.is-assistant')
+    const last = messages[messages.length - 1]
+    return Math.round(last.getBoundingClientRect().top - el.getBoundingClientRect().top)
+  })
+
+  await input.fill('Anchor check')
+  await input.press('Enter')
+  await expect(replies).toHaveCount(5)
+  // While streaming and after it finishes, the top of the new reply stays at the top of the chat area.
+  await expect.poll(topOffset, { timeout: 5_000 }).toBeLessThanOrEqual(12)
+  await expect(page.locator('.ai-chat-bubble .animate-pulse')).toHaveCount(0, { timeout: 15_000 })
+  expect(await topOffset()).toBeLessThanOrEqual(12)
+  expect(await topOffset()).toBeGreaterThanOrEqual(-2)
+})

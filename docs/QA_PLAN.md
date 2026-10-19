@@ -1031,3 +1031,8 @@ Owner packet O07 (real keys, about 60 min, never paste keys into chat). Use desi
 - Chromium re-run green: export-formats (DOCX + PDF), project-types, novel-comic-acceptance (4/4); AI chat persistence/export, AI context selector and campaign acceptance were green on 18 Oct and unchanged.
 - Still owner-pending: O07 (real OpenRouter/OpenAI keys) and the O10 desktop part.
 
+### 2026-10-19 O07 result and AI reply scroll change
+
+- O07 (owner-reported, no screenshots): OpenRouter and OpenAI keys saved and used; "Not tested" labels correct; account B saw no key from A; A's synced key present; context selection respected; D&D/Tabletop framing correct; wrong-key error clear; key removal returned setup guidance. All passed.
+- Owner request: AI Chat replies lock to the top of the reply while streaming. Implemented in `src/components/ai/AIPanel.jsx`; e2e "a streaming AI Chat reply locks the view to the top of the reply" in `qa-sweep-2026-09-10-ai-chat-persistence.spec.js` (3/3 Chromium). Note: the offline mock reply is short, so the e2e proves the top alignment and that it is held after the reply ends; a long real reply on the live site is the owner re-check after deploy (send a message that produces a long answer: the first lines should be at the top and stay put while it writes).
+
