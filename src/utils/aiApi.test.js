@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSystemPrompt, friendlyErrorMessage, getHistoryContextEntries } from './aiApi'
+import { NAMED_OPENAI_ENDPOINTS, PROVIDERS, buildSystemPrompt, friendlyErrorMessage, getHistoryContextEntries, isTestedAiProvider } from './aiApi'
 
 describe('friendlyErrorMessage', () => {
   it('flags a 401 as an invalid/unauthorized API key and points to Settings', () => {
@@ -151,5 +151,25 @@ describe('buildSystemPrompt HISTORY section', () => {
     }
     const prompt = buildSystemPrompt({}, {}, store, '')
     expect(prompt).not.toContain('--- HISTORY ---')
+  })
+})
+
+describe('advertised AI providers (launch decision D5/D9)', () => {
+  it('treats only OpenRouter and the official OpenAI endpoint as tested', () => {
+    expect(isTestedAiProvider('openrouter')).toBe(true)
+    expect(isTestedAiProvider('openai')).toBe(true)
+    expect(isTestedAiProvider('openai', 'https://api.openai.com/v1')).toBe(true)
+    expect(isTestedAiProvider('openai', 'https://api.openai.com/v1/')).toBe(true)
+    expect(isTestedAiProvider('openai', 'https://api.groq.com/openai/v1')).toBe(false)
+    expect(isTestedAiProvider('openai', 'https://api.mistral.ai/v1')).toBe(false)
+    expect(isTestedAiProvider('openai', 'https://api.together.xyz/v1')).toBe(false)
+    expect(isTestedAiProvider('openai', 'https://example.com/v1')).toBe(false)
+    expect(isTestedAiProvider('google')).toBe(false)
+    expect(isTestedAiProvider('anthropic')).toBe(false)
+  })
+
+  it('flags every named endpoint other than OpenAI as untested and names the OpenAI card plainly', () => {
+    expect(NAMED_OPENAI_ENDPOINTS.filter(endpoint => endpoint.tested).map(endpoint => endpoint.label)).toEqual(['OpenAI'])
+    expect(PROVIDERS.openai.name).toBe('OpenAI')
   })
 })

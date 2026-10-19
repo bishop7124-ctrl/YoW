@@ -89,6 +89,33 @@ test('Account Settings -> AI shows an empty, unsaved key field', async ({ page }
   expect(calls).toEqual([])
 })
 
+test('Account Settings -> AI labels every provider except OpenRouter and OpenAI as not tested (D5/D9)', async ({ page }) => {
+  const calls = await guardAgainstRealAiRequests(page)
+  await createProject(page, { title: 'AI Provider Labels' })
+
+  await page.locator('.user-menu-trigger').click()
+  await page.getByRole('menuitem', { name: 'Account settings' }).click()
+  await page.getByRole('tab', { name: 'AI' }).or(page.getByRole('button', { name: 'AI', exact: true })).first().click()
+  await expect(page.getByRole('heading', { name: 'Model & API keys' })).toBeVisible()
+
+  const card = (name) => page.getByRole('button', { name: new RegExp(`^${name}`) })
+  await expect(card('OpenRouter').locator('.ai-provider-untested')).toHaveCount(0)
+  await expect(card('OpenAI').locator('.ai-provider-untested')).toHaveCount(0)
+  await expect(card('Google AI Studio').locator('.ai-provider-untested')).toHaveText('Not tested')
+  await expect(card('Anthropic').locator('.ai-provider-untested')).toHaveText('Not tested')
+
+  await card('Anthropic').click()
+  await expect(page.locator('.ai-provider-untested-note')).toContainText('Not tested or officially supported')
+  await card('OpenAI').click()
+  await expect(page.locator('.ai-provider-untested-note')).toHaveCount(0)
+  await expect(page.locator('#named-ai-provider option', { hasText: 'Groq (not tested)' })).toHaveCount(1)
+  await expect(page.locator('#named-ai-provider option', { hasText: 'OpenAI' }).first()).not.toContainText('not tested')
+  await page.locator('#named-ai-provider').selectOption('https://api.groq.com/openai/v1')
+  await expect(page.locator('.ai-provider-untested-note')).toContainText('Not tested or officially supported')
+
+  expect(calls).toEqual([])
+})
+
 test('bottom AI Assistant bar shows setup guidance instead of attempting a request', async ({ page }) => {
   const calls = await guardAgainstRealAiRequests(page)
   await createProject(page, { title: 'AI No-Key Test' })

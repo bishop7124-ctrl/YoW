@@ -289,7 +289,7 @@ const FEATURE_MATRIX = [
         comic: true,
         ttrpg: true,
         dnd: true,
-        note: 'You link your own account from a provider like OpenRouter, Google AI, Anthropic, or ChatGPT, right from Account Settings. You pay that provider directly for what you use — YOW never marks up or resells AI usage.',
+        note: 'You link your own account from OpenRouter or OpenAI, right from Account Settings. You pay that provider directly for what you use — YOW never marks up or resells AI usage.',
       },
     ],
   },

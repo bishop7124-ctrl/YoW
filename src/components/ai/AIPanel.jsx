@@ -231,7 +231,7 @@ function Message({ msg, onRequestSave, onRetry, streaming }) {
   const canRetry = !isUser && msg.error && !!onRetry
 
   return (
-    <div className={`ai-chat-message flex ${isUser ? 'justify-end is-user' : 'justify-start is-assistant'} mb-3 group/message`}>
+    <div data-message-id={msg.id} className={`ai-chat-message flex ${isUser ? 'justify-end is-user' : 'justify-start is-assistant'} mb-3 group/message`}>
       <div className={`max-w-[88%] min-w-0 ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
         <div className={`ai-chat-bubble w-full px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
           isUser
@@ -385,6 +385,8 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const bottomRef      = useRef(null)
   const scrollRef       = useRef(null)
   const isNearBottomRef = useRef(true)
+  const [anchorSpacer, setAnchorSpacer] = useState(0)
+  const anchorReplyIdRef = useRef(null)
   const abortRef       = useRef(false)
   const inputRef       = useRef(null)
   const categoryInputRef = useRef(null)
@@ -446,18 +448,45 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
   }
 
-  // New message appended (user sends, or a reply starts/finishes) — smooth-scroll once.
+  // New message appended — smooth-scroll to the bottom once, unless it is an AI
+  // reply that is starting to stream: that case is anchored to the top of the
+  // reply below so the reader can start reading while it is written.
+  const replyStartingRef = useRef(false)
+  replyStartingRef.current = messages[messages.length - 1]?.streaming === true
   useEffect(() => {
+    if (replyStartingRef.current) return
     if (isNearBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
-  // Streaming text growing — re-running scrollIntoView({ smooth }) on every one of
-  // these (previously on every chunk) restarted the scroll animation dozens of
-  // times a second, which is what made the reply feel jumpy as it typed out.
-  // An instant jump keeps it pinned to the bottom without the repeated animation.
+  // A reply starts streaming: lock the view to the top of that reply and stay
+  // there instead of following the text down. The spacer gives the scroll area
+  // room to put a short, just-started reply at the top; it stays until the
+  // session changes so nothing jumps when the reply finishes.
+  const liveMessageId = liveMessage?.id
+  const alignToReply = useCallback((id) => {
+    const el = scrollRef.current
+    const target = el?.querySelector(`[data-message-id="${id}"]`)
+    if (!target) return
+    const delta = target.getBoundingClientRect().top - el.getBoundingClientRect().top
+    if (Math.abs(delta) > 1) el.scrollTop += delta
+  }, [])
   useEffect(() => {
-    if (liveMessage && isNearBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-  }, [liveMessage?.content])
+    if (!liveMessageId) return
+    const el = scrollRef.current
+    if (!el) return
+    anchorReplyIdRef.current = liveMessageId
+    setAnchorSpacer(el.clientHeight)
+    isNearBottomRef.current = false
+    const frame = requestAnimationFrame(() => alignToReply(liveMessageId))
+    return () => cancelAnimationFrame(frame)
+  }, [liveMessageId, alignToReply])
+  // Content around the reply can shift while it streams (the reply grows, usage
+  // lines appear), so keep the reply top pinned until the reader scrolls themselves.
+  useEffect(() => {
+    if (anchorReplyIdRef.current && anchorReplyIdRef.current === liveMessageId) alignToReply(liveMessageId)
+  }, [liveMessage?.content, liveMessageId, alignToReply])
+  const releaseReplyAnchor = () => { anchorReplyIdRef.current = null }
+  useEffect(() => { setAnchorSpacer(0) }, [session.id])
 
   useEffect(() => { inputRef.current?.focus() }, [session.id])
   useEffect(() => { resizeInput() }, [input, session.id, resizeInput])
@@ -815,7 +844,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         </button>
       </div>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
+      <div ref={scrollRef} onScroll={handleScroll} onWheel={releaseReplyAnchor} onTouchMove={releaseReplyAnchor} onPointerDown={releaseReplyAnchor} onKeyDown={releaseReplyAnchor} className="ai-chat-scroll flex-1 overflow-y-auto px-3 py-3">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-3">
             <AIStar size={28} className="text-[var(--accent)] opacity-70" />
@@ -839,6 +868,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
           </div>
         )}
         {displayMessages.map(msg => <Message key={msg.id} msg={msg} onRequestSave={requestSave} onRetry={retry} streaming={streaming} />)}
+        {anchorSpacer > 0 && <div aria-hidden="true" style={{ height: anchorSpacer }} />}
         <div ref={bottomRef} />
       </div>
 
