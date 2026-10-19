@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
 import { PROJECT_TYPES, getProjectType, DEFAULT_TYPE } from '../constants/projectTypes'
+import { prepareImportSections, notesToIdeas, sessionPartOf, parseComicPanels, dropHistoryDuplicatesOfTimeline } from '../utils/importStructure'
 import { AI_CONFIG_REQUIRED_TEXT, AI_UPGRADE_REQUIRED_TEXT, AiConfigRequiredNotice, AiSettingsLink, AiUpgradeRequiredNotice } from './ai/AiConfigRequired'
 import {
   assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter,
@@ -211,6 +212,7 @@ Return ONLY a valid JSON object (no markdown fences, no explanation) with this s
 Rules:
 - Set project.type to the best fit for the source material: "novel" (long-form prose fiction), "novella" (medium-length prose, roughly 15k-50k words), "short_story" (short prose), "dnd_campaign" (fifth-edition / 5E campaign prep — sessions, encounters, monsters, GM/party notes), "tabletop_rpg" (system-neutral tabletop campaign material for any other or unspecified game system), "comic" (comic or graphic novel script — issues, pages, panels). When unsure, use "novel".
 - The "acts" hierarchy is a generic three-level structure. For campaign types treat level 1 as story arcs, level 2 as sessions, and level 3 as encounters. For comic treat level 1 as volumes, level 2 as issues, and level 3 as pages. For prose use acts/parts, chapters/sections, and scenes.
+- Do not repeat timeline events in "worldHistory": timeline events are mirrored into World History automatically, so use "worldHistory" only for eras or background that is not already a timeline event
 - Only include arrays that have actual content — omit empty ones entirely
 - ALWAYS extract characters, locations, lore, and world-building elements regardless of content type
 - Be exhaustive, not selective, with "characters": include every distinctly named or titled individual who appears on the page — not only protagonists/antagonists. Minor, background, and single-scene characters count too (e.g. a servant, a court official, a named animal, "the Executioner", "the Cook") as long as they're identified by a proper name or a distinct role/title. Do not cap the list to a handful of the most prominent figures.
@@ -527,20 +529,41 @@ function tryParseArray(str) {
 // Merge two synopsis sources + extractive fallback into the acts structure.
 // idxMap  = {index → synopsis} from the dedicated synopsis call (most accurate)
 // titleMap = {normalisedTitle → synopsis} from the structure call (first ~7k words only)
-function buildActs(sections, idxMap, titleMap) {
-  return [{
-    title: 'Act 1',
-    synopsis: '',
-    chapters: sections.map((s, i) => {
-      const titleKey = (s.title || '').toLowerCase().trim()
-      const synopsis = idxMap[i] || titleMap[titleKey] || extractSynopsis(s.content)
-      return {
-        title: s.title || `Chapter ${i + 1}`,
-        synopsis,
-        scenes: [{ title: s.title || `Chapter ${i + 1}`, synopsis, content: s.content }],
+export function buildActs(sections, idxMap, titleMap) {
+  const acts = []
+  const actByPart = new Map()
+  const sessionChapters = new Map() // session key -> chapter, so prep and recap share one session
+  const actFor = (part) => {
+    const key = part || ''
+    if (!actByPart.has(key)) {
+      const act = { title: part || `Act ${acts.length + 1}`, synopsis: '', chapters: [] }
+      actByPart.set(key, act)
+      acts.push(act)
+    }
+    return actByPart.get(key)
+  }
+  sections.forEach((s, i) => {
+    const titleKey = (s.title || '').toLowerCase().trim()
+    const synopsis = idxMap[i] || titleMap[titleKey] || extractSynopsis(s.content)
+    const act = actFor(s.part)
+    const session = sessionPartOf(s.title)
+    if (session) {
+      const mapKey = `${s.part || ''}|${session.key}`
+      let chapter = sessionChapters.get(mapKey)
+      if (!chapter) {
+        chapter = { title: session.rest || s.title, synopsis, scenes: [] }
+        sessionChapters.set(mapKey, chapter)
+        act.chapters.push(chapter)
+      } else if (session.rest && session.rest.length > chapter.title.length) {
+        chapter.title = session.rest
       }
-    }),
-  }]
+      chapter.scenes.push({ title: `Session ${session.kind}`, synopsis, content: s.content })
+      return
+    }
+    const title = s.title || `Chapter ${i + 1}`
+    act.chapters.push({ title, synopsis, scenes: [{ title, synopsis, content: s.content }] })
+  })
+  return acts.length ? acts : [{ title: 'Act 1', synopsis: '', chapters: [] }]
 }
 
 // Rename generated fallback titles ("Act 1", "Chapter 3") to the structure nouns
@@ -587,7 +610,8 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
       store.addLoreEntry({ title: e.title || '', category: e.category || '', content: e.content || '' })
   }
   if (sel.worldHistory) {
-    for (const h of data.worldHistory || [])
+    const history = sel.timeline ? dropHistoryDuplicatesOfTimeline(data.worldHistory, data.timeline) : (data.worldHistory || [])
+    for (const h of history)
       store.addHistoryEntry({ title: h.title || '', era: h.era || '', dateRange: h.dateRange || '', content: h.content || '' })
   }
   if (sel.timeline) {
@@ -611,10 +635,22 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
           if (typeKey === 'comic') {
             // Comic projects plan in pages, not prose scenes — the Pages workspace
             // never shows scene records, so imported text must land on a page.
-            store.addComicPage(newChap.id, {
+            const text = (scene.content || '').trim()
+            const { intro, panels } = parseComicPanels(text)
+            const page = store.addComicPage(newChap.id, {
               title: scene.title || structure.level3,
-              summary: (scene.content || '').trim() || scene.synopsis || '',
+              summary: panels.length ? (intro || scene.synopsis || '') : (text || scene.synopsis || ''),
             })
+            if (page?.id) {
+              for (const panel of panels) {
+                store.addComicPanel(page.id, {
+                  description: panel.description,
+                  dialogue: panel.dialogue,
+                  captions: panel.captions,
+                  sfx: panel.sfx,
+                })
+              }
+            }
           } else {
             const newScene = store.addScene(newChap.id, scene.title || structure.level3)
             if (newScene && (scene.synopsis || scene.content))
@@ -1385,8 +1421,15 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     abortRef.current = false
 
     // Parse the full manuscript client-side right now — synchronous, no token limit
+    // Reference sections (Characters, Locations, ...) and title pages are not
+    // story chapters: they are kept as Ideas so nothing is lost. Parts group chapters into acts.
     const allSections = []
-    for (const { content } of files) allSections.push(...parseManuscriptSections(content))
+    const importNotes = []
+    for (const { content } of files) {
+      const { sections, notes } = prepareImportSections(content, parseManuscriptSections(content))
+      allSections.push(...sections)
+      importNotes.push(...notes)
+    }
 
     // Two AI calls run in parallel:
     //   Call A — full structure extraction (characters, lore, locations, etc.)
@@ -1431,6 +1474,8 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
 
         structureData.acts = buildActs(allSections, idxMap, titleMap)
       }
+
+      if (importNotes.length) structureData.ideaEntries = [...(structureData.ideaEntries || []), ...notesToIdeas(importNotes)]
 
       setParsed(structureData)
       const initialSel = {}
