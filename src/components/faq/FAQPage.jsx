@@ -95,7 +95,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: 'What does "connect your own AI provider" mean?',
-        a: 'On a paid plan, you add an API key from a supported provider such as OpenRouter, Anthropic, Google AI, or another compatible service. A consumer ChatGPT Plus or Claude Pro subscription does not automatically include API access. You pay the provider directly for usage, and YOW does not add a markup. The Free plan does not include AI features.',
+        a: 'On a paid plan, you add an API key from OpenRouter or OpenAI. A consumer chatbot subscription (such as ChatGPT Plus) does not automatically include API access. You pay the provider directly for usage, and YOW does not add a markup. The Free plan does not include AI features.',
       },
       {
         q: 'Do the AI tools know about my specific world?',
@@ -171,7 +171,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: 'Does YOW work on mobile?',
-        a: 'YOW runs in modern mobile browsers for writing, planning, and reviewing your project. Existing maps can be viewed on phones; map editing is supported on tablets and desktops.',
+        a: 'YOW is designed as a desktop experience and works best on a laptop or desktop computer, in a browser or the desktop app. It may open in a phone or tablet browser, but phone and tablet use is not tested or officially supported at launch.',
       },
       {
         q: 'Can I import an existing manuscript?',

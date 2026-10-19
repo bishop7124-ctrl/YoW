@@ -7,7 +7,6 @@ AI errors usually relate to access, provider configuration, model availability, 
 1. Confirm the account includes **AI Tools**.
 2. Open **Account Settings → AI** and check the active provider, model and **Connected** state.
 3. If the key is invalid or expired, paste a replacement and save.
-4. For Google Gemini, complete the displayed billing confirmation when required.
 5. Check the provider account for billing credit, usage limits, outages or model access.
 6. Choose a current model from the live catalogue or enter a valid model ID.
 7. Retry a small, clear request.

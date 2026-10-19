@@ -26,10 +26,10 @@ test('public copy reflects AI, map, player-view, and vault decisions', async ({ 
 
   await page.goto('/faq/')
   await page.getByRole('button', { name: 'What does "connect your own AI provider" mean?' }).click()
-  await expect(page.getByText(/A consumer ChatGPT Plus or Claude Pro subscription does not automatically include API access/)).toBeVisible()
+  await expect(page.getByText(/A consumer chatbot subscription \(such as ChatGPT Plus\) does not automatically include API access/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Does YOW work on mobile?' }).click()
-  await expect(page.getByText(/Existing maps can be viewed on phones; map editing is supported on tablets and desktops/)).toBeVisible()
+  await expect(page.getByText(/designed as a desktop experience.*not tested or officially supported at launch/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Is my data encrypted in the desktop app?' }).click()
   await expect(page.getByText(/YOW does not separately encrypt that file/)).toBeVisible()

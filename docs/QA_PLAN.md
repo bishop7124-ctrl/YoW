@@ -1070,3 +1070,8 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - Not evidenced: the structure fixes have not been re-imported on the deployed site against a real model. Owner re-test of files 1, 4 and 6 after the next deploy is listed above and stays as a follow-up, not a gate.
 - Not run by owner decision: AI Import of the Novella, Short Story and Tabletop files.
 
+### 2026-10-19 Early start on 20 Oct: AI provider copy and mobile promise
+
+- Public copy now names only OpenRouter and OpenAI (FAQ, Features, `/ai-overview/`, Help Centre). Verify after deploy: open /faq/, /features/ and /ai-overview/ and search the page for Gemini, Anthropic, Groq, Mistral, Together: none should appear.
+- FAQ 'Does YOW work on mobile?' now says desktop-first and that phone/tablet use is not officially supported (decision D12). Covered by `tests/e2e/marketing-promises.spec.js`.
+

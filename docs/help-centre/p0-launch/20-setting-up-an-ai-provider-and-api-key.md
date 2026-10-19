@@ -6,7 +6,7 @@ YOW’s AI features use a provider and model you choose. You supply the provider
 
 1. Open the account menu and select **Account Settings**.
 2. Select the **AI** tab.
-3. Choose an **AI provider**.
+3. Choose **OpenRouter** or **OpenAI**. Other providers listed in the app are labelled "Not tested" and are not officially supported.
 4. Paste the API key created in that provider’s own developer or API dashboard.
 5. Search for or enter a supported model ID.
 6. Review any provider-specific acknowledgement shown by YOW.
@@ -17,7 +17,7 @@ YOW’s AI features use a provider and model you choose. You supply the provider
 
 ## The why: bring your own provider
 
-A consumer ChatGPT Plus, Claude Pro or similar subscription does not automatically include API access. API keys come from the provider’s developer service and may require separate billing.
+A consumer chatbot subscription (such as ChatGPT Plus) does not automatically include API access. API keys come from the provider’s developer service and may require separate billing.
 
 YOW does not add a markup to provider usage. The selected provider’s pricing, limits, retention, regional terms and acceptable-use rules still apply.
 
@@ -30,8 +30,6 @@ AI Tools are not included on Free. Paid or eligible Beta access is required, alo
 ### Keys and models
 
 Saved keys are hidden in the form. Paste a new key only when replacing the saved one. Model catalogues can change, so use the current choices shown by YOW and the provider rather than relying on an old model list.
-
-For Gemini, YOW may require confirmation that billing is enabled where Google’s terms require paid services, including relevant UK, EEA and Swiss use.
 
 Never place an API key in a support request, screenshot, project record or shared document.
 
