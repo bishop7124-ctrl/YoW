@@ -459,9 +459,9 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   }, [messages.length])
 
   // A reply starts streaming: lock the view to the top of that reply and stay
-  // there instead of following the text down. The spacer gives the scroll area
-  // room to put a short, just-started reply at the top; it stays until the
-  // session changes so nothing jumps when the reply finishes.
+  // there instead of following the text down. A spacer below the chat gives the
+  // scroll area just enough room to put a short, just-started reply at the top;
+  // it shrinks to nothing as the reply grows and is removed when the reply ends.
   const liveMessageId = liveMessage?.id
   const alignToReply = useCallback((id) => {
     const el = scrollRef.current
@@ -470,23 +470,34 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     const delta = target.getBoundingClientRect().top - el.getBoundingClientRect().top
     if (Math.abs(delta) > 1) el.scrollTop += delta
   }, [])
-  useEffect(() => {
-    if (!liveMessageId) return
+  const sizeReplySpacer = useCallback((id) => {
     const el = scrollRef.current
-    if (!el) return
+    const target = el?.querySelector(`[data-message-id="${id}"]`)
+    if (!target) return
+    const current = el.querySelector('[data-reply-spacer]')?.offsetHeight || 0
+    const replyTop = target.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+    const needed = Math.max(0, Math.ceil(el.clientHeight - (el.scrollHeight - current - replyTop)))
+    if (Math.abs(needed - current) > 1) setAnchorSpacer(needed)
+  }, [])
+  useEffect(() => {
+    if (!liveMessageId) {
+      anchorReplyIdRef.current = null
+      setAnchorSpacer(0)
+      return
+    }
     anchorReplyIdRef.current = liveMessageId
-    setAnchorSpacer(el.clientHeight)
     isNearBottomRef.current = false
-    const frame = requestAnimationFrame(() => alignToReply(liveMessageId))
+    const frame = requestAnimationFrame(() => { sizeReplySpacer(liveMessageId); alignToReply(liveMessageId) })
     return () => cancelAnimationFrame(frame)
-  }, [liveMessageId, alignToReply])
+  }, [liveMessageId, alignToReply, sizeReplySpacer])
   // Content around the reply can shift while it streams (the reply grows, usage
   // lines appear), so keep the reply top pinned until the reader scrolls themselves.
   useEffect(() => {
-    if (anchorReplyIdRef.current && anchorReplyIdRef.current === liveMessageId) alignToReply(liveMessageId)
-  }, [liveMessage?.content, liveMessageId, alignToReply])
+    if (!liveMessageId || anchorReplyIdRef.current !== liveMessageId) return
+    sizeReplySpacer(liveMessageId)
+    alignToReply(liveMessageId)
+  }, [liveMessage?.content, anchorSpacer, liveMessageId, alignToReply, sizeReplySpacer])
   const releaseReplyAnchor = () => { anchorReplyIdRef.current = null }
-  useEffect(() => { setAnchorSpacer(0) }, [session.id])
 
   useEffect(() => { inputRef.current?.focus() }, [session.id])
   useEffect(() => { resizeInput() }, [input, session.id, resizeInput])
@@ -868,7 +879,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
           </div>
         )}
         {displayMessages.map(msg => <Message key={msg.id} msg={msg} onRequestSave={requestSave} onRetry={retry} streaming={streaming} />)}
-        {anchorSpacer > 0 && <div aria-hidden="true" style={{ height: anchorSpacer }} />}
+        {anchorSpacer > 0 && <div data-reply-spacer aria-hidden="true" style={{ height: anchorSpacer }} />}
         <div ref={bottomRef} />
       </div>
 
