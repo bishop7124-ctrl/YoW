@@ -1064,3 +1064,9 @@ Owner steps: Library -> Import -> AI Import; drop one file; set "Create as" to t
 Fixes for the findings on files 1, 4 and 6 (see the three result sections above): reference sections saved as Ideas ('Imported notes: ...') instead of chapters/sessions/pages; Part/Book/Act/Volume headings become acts; Session Prep + Session Recap merge into one session (two scenes); comic 'Panel N:' lines become panel records (description, dialogue with speaker, captions, sound effects), unparsed page text stays in the page summary; World History entries that restate timeline events are dropped. Automated: `src/utils/importStructure.test.js` (15 tests on the real fixture files in `tests/fixtures/ai-import/`), `npm run qa` 173 files / 1,662 tests, 0 lint errors.
 Owner re-test (after the web deploy, about 15 min, test account): re-import `1-novel-The-Salt-Lantern.md` as Novel, `4-dnd-campaign-The-Hollow-Crown.md` as 5E Campaign and `6-comic-Neon-Saints.md` as Comic (Library -> Import -> AI Import). Expect: Novel has 3 Parts (2/2/1 chapters) and no Characters/Locations chapters; the campaign has one 'Session 1 - The Empty Tomb' with Prep and Recap; the comic has pages 1-4 with 3/3/1/2 panels. The removed sections should appear under Ideas as 'Imported notes: ...'.
 
+### 2026-10-19 Owner sign-off
+
+- Owner asked for the 19 Oct work (AI Import, saved AI chat export, O07) to be marked passed, and the Project-type gate with it. Recorded as owner sign-off, owner-reported, no screenshots.
+- Not evidenced: the structure fixes have not been re-imported on the deployed site against a real model. Owner re-test of files 1, 4 and 6 after the next deploy is listed above and stays as a follow-up, not a gate.
+- Not run by owner decision: AI Import of the Novella, Short Story and Tabletop files.
+
