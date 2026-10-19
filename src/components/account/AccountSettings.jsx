@@ -108,6 +108,18 @@ const loadSavedPresets = () => {
   catch { return [] }
 }
 
+const getAccountPresets = (user) => {
+  const remote = user?.user_metadata?.saved_theme_presets
+  return Array.isArray(remote) ? remote.filter(p => p && p.id && p.swatches) : []
+}
+
+// Union by id, keeping `base` order and appending anything only `extra` has,
+// so presets saved on another device show up without losing local ones.
+const mergePresets = (base, extra) => {
+  const seen = new Set(base.map(p => p.id))
+  return [...base, ...extra.filter(p => !seen.has(p.id))]
+}
+
 const isFiniteNumber = (value) => Number.isFinite(Number(value))
 
 const getAccountTheme = (user) => normalizeThemeChoice(user?.user_metadata?.theme || DEFAULT_THEME)
@@ -1532,7 +1544,7 @@ function AppearancePanel({ user, updateProfile }) {
   const [fontChoice, setFontChoice] = useState(() => localStorage.getItem('nf-font') || 'system')
   const [customColors, setCustomColors] = useState(() => getAccountCustomColors(user))
   const [themeTuning, setThemeTuning] = useState(() => getAccountThemeTuning(user))
-  const [savedPresets, setSavedPresets] = useState(loadSavedPresets)
+  const [savedPresets, setSavedPresets] = useState(() => mergePresets(getAccountPresets(user), loadSavedPresets()))
   const [savePresetName, setSavePresetName] = useState('')
   const [profileSaved, setProfileSaved] = useState(false)
 
@@ -1569,6 +1581,26 @@ function AppearancePanel({ user, updateProfile }) {
     localStorage.setItem('nf-saved-presets', JSON.stringify(savedPresets))
   }, [savedPresets])
 
+  // Presets saved on another device arrive with the account profile.
+  const remotePresets = user?.user_metadata?.saved_theme_presets
+  useEffect(() => {
+    const remote = getAccountPresets(user)
+    if (remote.length === 0) return
+    setSavedPresets(prev => {
+      const merged = mergePresets(prev, remote)
+      return merged.length === prev.length ? prev : merged
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, remotePresets])
+
+  // Local first, then best-effort push to the account so other devices get it.
+  const commitPresets = (next) => {
+    setSavedPresets(next)
+    updateProfile({ saved_theme_presets: next }).catch(() => {
+      // Still saved on this device; it syncs with the next successful change.
+    })
+  }
+
   useEffect(() => {
     const appliedTheme = applyThemeToDocument(theme, customColors)
     applyThemeTuning(themeTuning, getThemeColors(appliedTheme, customColors))
@@ -1602,7 +1634,7 @@ function AppearancePanel({ user, updateProfile }) {
   const handleSavePreset = () => {
     const name = savePresetName.trim()
     if (!name) return
-    setSavedPresets(prev => [...prev, {
+    commitPresets([...savedPresets, {
       id: `saved-${Date.now()}`,
       label: name,
       swatches: { ...effectiveColors },
@@ -1612,18 +1644,16 @@ function AppearancePanel({ user, updateProfile }) {
   }
 
   const handleDeletePreset = (id) => {
-    setSavedPresets(prev => prev.filter(p => p.id !== id))
+    commitPresets(savedPresets.filter(p => p.id !== id))
   }
 
   const handleMovePreset = (id, dir) => {
-    setSavedPresets(prev => {
-      const idx = prev.findIndex(p => p.id === id)
-      const newIdx = idx + dir
-      if (newIdx < 0 || newIdx >= prev.length) return prev
-      const next = [...prev]
-      ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
-      return next
-    })
+    const idx = savedPresets.findIndex(p => p.id === id)
+    const newIdx = idx + dir
+    if (idx < 0 || newIdx < 0 || newIdx >= savedPresets.length) return
+    const next = [...savedPresets]
+    ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
+    commitPresets(next)
   }
 
   const saveAppearanceToProfile = async () => {

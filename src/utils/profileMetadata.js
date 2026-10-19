@@ -14,6 +14,7 @@ export const EDITABLE_PROFILE_METADATA_KEYS = new Set([
   'theme_radius_unit',
   'theme_visual_strength',
   'tour_progress',
+  'saved_theme_presets',
   'free_project_id',
 ])
 

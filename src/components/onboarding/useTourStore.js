@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 
 const KEY = 'yow_onboarding'
 // Flags worth remembering across browsers/devices via the account itself
@@ -19,29 +19,35 @@ function save(data) {
 // here. `onPersist(nextState)`: called with the full local state whenever a
 // durable flag changes, so the caller can push it back to the account.
 export function useTourStore({ remoteFlags, onPersist } = {}) {
-  const [state, setState] = useState(load)
-  const hydratedFromRemote = useRef(false)
-
-  useEffect(() => {
-    if (!remoteFlags || hydratedFromRemote.current) return
-    hydratedFromRemote.current = true
-    setState(prev => {
-      let changed = false
-      const next = { ...prev }
-      for (const key of Object.keys(remoteFlags)) {
-        if (remoteFlags[key] && !next[key]) { next[key] = true; changed = true }
+  const [localState, setState] = useState(load)
+  // Fold the account's durable flags into what the rest of the app sees on
+  // every render (not in an effect): child components decide whether to
+  // auto-start a tour in their own mount effects, which run before any
+  // parent effect, so an effect-based hydration lets tours flash on a new
+  // device. A local value (including an explicit `false` from resetTour)
+  // always wins over the remote one.
+  const state = useMemo(() => {
+    if (!remoteFlags) return localState
+    let next = localState
+    for (const key of Object.keys(remoteFlags)) {
+      if (remoteFlags[key] && isDurable(key) && next[key] === undefined) {
+        if (next === localState) next = { ...localState }
+        next[key] = true
       }
-      if (!changed) return prev
-      save(next)
-      return next
-    })
-  }, [remoteFlags])
+    }
+    return next
+  }, [localState, remoteFlags])
+
+  const remoteRef = useRef(remoteFlags)
+  useEffect(() => { remoteRef.current = remoteFlags }, [remoteFlags])
 
   const set = useCallback((key, value) => {
     setState(prev => {
       const next = { ...prev, [key]: value }
       save(next)
-      if (isDurable(key)) onPersist?.(next)
+      // The account copy is replaced wholesale, so carry the remote flags
+      // this browser hasn't seen locally or they'd be wiped.
+      if (isDurable(key)) onPersist?.({ ...remoteRef.current, ...next })
       return next
     })
   }, [onPersist])
