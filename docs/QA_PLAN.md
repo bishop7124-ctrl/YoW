@@ -1079,4 +1079,4 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 
 - Owner report: after the reply scroll-lock deploy (PR #259) the chat had a large blank area at the bottom, hiding the latest messages while typing. Cause: the spacer that lets a short reply sit at the top was a full viewport tall and kept until the chat changed.
 - Fix (`AIPanel.jsx`): the spacer is now sized to exactly what the reply needs, shrinks to zero as the reply grows (so long replies never have it), and is removed when the reply finishes. e2e `a streaming AI Chat reply locks the view...` now also asserts no spacer remains and the last message sits at the chat bottom. Needs a web deploy; owner re-check: send a short question, then a long one; no big blank area should remain under the latest reply.
-
+- **Deployed 19 Oct:** PR #260 merged to main (b739936) after all 65 CI checks passed; Vercel production deploy follows automatically.
