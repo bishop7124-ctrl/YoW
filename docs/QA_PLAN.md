@@ -1024,3 +1024,10 @@ Owner packet O07 (real keys, about 60 min, never paste keys into chat). Use desi
 - Item 2/5 (SHA-256 vs `SHA256SUMS.txt`) was skipped by the owner. Not claimed as passed. Optional later: owner can run `Get-FileHash` in PowerShell on the installer and compare.
 - No data-loss, save or export failure, so D4 does not delay launch. Owner-reported, no screenshots.
 
+### 2026-10-19 Decisions and re-run
+
+- D12 (owner, 19 Oct): mobile and tablet are not a launch requirement; real-iPhone and phone/tablet-width testing is parked until after launch. O10 now covers desktop Safari/Firefox, keyboard-only and VoiceOver only. Existing 375/768 automated smoke specs stay in CI.
+- D6 (owner, 19 Oct): launch 1 Nov (quiet) / 2 Nov (public); emergency fallback Sat 7 Nov only if something unrepairable fails.
+- Chromium re-run green: export-formats (DOCX + PDF), project-types, novel-comic-acceptance (4/4); AI chat persistence/export, AI context selector and campaign acceptance were green on 18 Oct and unchanged.
+- Still owner-pending: O07 (real OpenRouter/OpenAI keys) and the O10 desktop part.
+
