@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import LegalModal from './LegalModal'
+import { GRACE_DAYS, FREE_INACTIVITY_MONTHS } from '../../utils/cloudLifecycle'
 
 afterEach(cleanup)
 describe('Legal dialog keyboard access', () => {
@@ -32,5 +33,17 @@ describe('Legal dialog keyboard access', () => {
     expect(screen.getByRole('switch', { name: 'Analytics' })).toBeTruthy()
     view.rerender(<LegalModal page="terms" onClose={() => {}} />)
     expect(document.activeElement).toBe(screen.getByRole('dialog'))
+  })
+  it('states the cloud-expiry and inactivity rules the lifecycle engine enforces', () => {
+    const privacy = render(<LegalModal page="privacy" onClose={() => {}} />)
+    const privacyText = screen.getByRole('dialog').textContent
+    expect(privacyText).toContain(`${FREE_INACTIVITY_MONTHS} months`)
+    expect(privacyText).toContain(`${GRACE_DAYS}-day grace period`)
+    expect(privacyText).not.toContain('within 30 days')
+    privacy.unmount()
+    render(<LegalModal page="terms" onClose={() => {}} />)
+    const termsText = screen.getByRole('dialog').textContent
+    expect(termsText).toContain(`${GRACE_DAYS}-day grace period`)
+    expect(termsText).toContain('archived rather than deleted')
   })
 })

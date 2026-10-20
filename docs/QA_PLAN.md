@@ -1080,3 +1080,11 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - Owner report: after the reply scroll-lock deploy (PR #259) the chat had a large blank area at the bottom, hiding the latest messages while typing. Cause: the spacer that lets a short reply sit at the top was a full viewport tall and kept until the chat changed.
 - Fix (`AIPanel.jsx`): the spacer is now sized to exactly what the reply needs, shrinks to zero as the reply grows (so long replies never have it), and is removed when the reply finishes. e2e `a streaming AI Chat reply locks the view...` now also asserts no spacer remains and the last message sits at the chat bottom. Needs a web deploy; owner re-check: send a short question, then a long one; no big blank area should remain under the latest reply.
 
+
+### 2026-10-20 Legal and promise reconciliation (cloud half)
+
+- Price/quota matrix (Monthly GBP 10, Founding Lifetime GBP 50 first 100, Standard Lifetime GBP 75, renewal GBP 6/year, Free 250 MB) checked across Pricing, FAQ, Terms, Privacy, static pages and `llms.txt`. A repo search for the retired amounts (99, 150, 179, 199, 299, 300, 399, 499, 12) in `src/`, `public/` and `api/` returns nothing.
+- Fixed in `LegalModal.jsx`: account deletion wording now matches the immediate in-app delete (was 'within 30 days'); Terms and Privacy now state the 90-day grace, archive-not-delete for lapsed Lifetime Cloud and 18-month Free inactivity deletion with notices and export available throughout; Privacy email list covers billing and lifecycle notices. `public/beta-disclaimer/` gains the 30-day 'When beta ends' notice.
+- New required check: `src/components/legal/LegalModal.test.jsx` ties the legal wording to `GRACE_DAYS` and `FREE_INACTIVITY_MONTHS` so the promise cannot drift from the lifecycle engine.
+- Evidence: `npm run qa` 173 files / 1,664 tests, 0 lint errors, build, budget, load check, E2E matrix, API ESM; `marketing-static-pages` + `marketing-promises` 19/19 Chromium.
+- Owner, after the web deploy: open Privacy and Terms from the site footer and confirm the new lifecycle wording reads correctly; approve the final promises (Legal and promise gate stays open until then).

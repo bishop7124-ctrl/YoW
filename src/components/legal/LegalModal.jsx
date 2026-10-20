@@ -42,7 +42,7 @@ const CONTENT = {
           <Ul>
             <Li>To operate Your Own World and sync your projects across devices.</Li>
             <Li>To manage your account and subscription.</Li>
-            <Li>To send transactional emails (account confirmation, password reset).</Li>
+            <Li>To send transactional and service emails (account confirmation, password reset, billing receipts, and notices about Cloud expiry or long-term account inactivity).</Li>
           </Ul>
           <P>We do <Accent>not</Accent> sell your data, share it with advertisers, or use it to train YOW-owned AI models.</P>
         </Section>
@@ -55,8 +55,9 @@ const CONTENT = {
         <Section title="Your rights">
           <Ul>
             <Li>Access, correct, or delete your data via Account Settings at any time.</Li>
-            <Li>Request a full data export — email <Accent>support@yourownworld.co.uk</Accent>.</Li>
-            <Li>Close your account at any time; your data will be deleted within 30 days.</Li>
+            <Li>Export your work at any time from Account Settings, or email <Accent>support@yourownworld.co.uk</Accent> if you need help.</Li>
+            <Li>Delete your account at any time from Account Settings. Your projects and account data are then permanently removed and cannot be recovered, so download your backups first. Stripe keeps its own payment records as the law requires.</Li>
+            <Li>Free accounts with no sign-in for 18 months receive email notices over a 90-day grace period and are deleted only if nobody responds; export stays available throughout.</Li>
           </Ul>
         </Section>
         <Section title="Data storage">
@@ -97,7 +98,7 @@ const CONTENT = {
             <Li>If Lifetime cloud hosting lapses, your lifetime licence remains active and you can continue in desktop Local Mode, import backups, and export your work. Web cloud access falls back to the Free one-project, 250 MB allowance unless Cloud Mode is renewed.</Li>
             <Li>The first 100 successful Lifetime purchases include two years of Cloud and permanent Founder status. Later Lifetime purchases include one Cloud year. After the included period, Cloud is optional at the price shown before renewal; Lifetime app access continues without it.</Li>
             <Li>A failed Monthly payment moves the account to Free access. Download all project backups and choose the project to keep editable; if stored data exceeds 250 MB, reduce cloud storage or restore a paid plan. Selecting an editable project does not delete other projects.</Li>
-            <Li>If optional Cloud Mode renewal is not paid, download your backups or renew Cloud Mode. Lifetime desktop Local Mode remains available.</Li>
+            <Li>If optional Cloud Mode renewal is not paid, you receive email notices before and after the end date and a 90-day grace period to download your backups or renew. After the grace period your cloud copy is archived rather than deleted, and export stays available throughout. Lifetime desktop Local Mode remains available.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>
             <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. Sales are final, including partial billing periods, except where mandatory consumer rights require a refund or another remedy.</Li>
           </Ul>
