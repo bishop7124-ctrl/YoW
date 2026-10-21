@@ -1080,3 +1080,10 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - Owner report: after the reply scroll-lock deploy (PR #259) the chat had a large blank area at the bottom, hiding the latest messages while typing. Cause: the spacer that lets a short reply sit at the top was a full viewport tall and kept until the chat changed.
 - Fix (`AIPanel.jsx`): the spacer is now sized to exactly what the reply needs, shrinks to zero as the reply grows (so long replies never have it), and is removed when the reply finishes. e2e `a streaming AI Chat reply locks the view...` now also asserts no spacer remains and the last message sits at the chat bottom. Needs a web deploy; owner re-check: send a short question, then a long one; no big blank area should remain under the latest reply.
 
+
+### 2026-10-21 Stripe audit, launch switch and runbook (cloud run)
+
+- ✅ Launch switch `VITE_CHECKOUT_LAUNCHED` (default off): `src/utils/checkoutLaunch.test.js`; default behaviour unchanged (`tests/e2e/pricing-page.spec.js`, `marketing-promises.spec.js` Chromium 7/7). `npm run qa`: 174 files / 1,664 tests, 0 lint errors, build, load check, E2E matrix, 12 API imports pass.
+- ✅ Stale-price repo search (GBP 99/299/150/179/199/399/499 and matching pence): none in `src/`, `public/`, `api/`. Server-side Price validation proves the configured Stripe objects match GBP 10/50/75/6.
+- ✅ Webhook idempotency, async payment, refund and Founder-race tests: `tests/api/stripe-webhook.test.js` and `create-checkout-session.test.js` pass (44 with env-example and the new unit test).
+- 🟡 Required before the Payment gate: with launched=true on a preview/test deploy, run the Pricing and renewal buttons in Stripe test mode on 22 Oct; owner confirms Stripe Dashboard shows exactly one enabled test endpoint targeting `/api/stripe-webhook` and no Supabase function endpoint; three-times replay from Stripe's "Resend" on a disposable event.

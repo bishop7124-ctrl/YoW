@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../supabase'
 import { createProjectZipBlob, downloadBlob, getProjectExportFilename } from '../../utils/projectExport'
 import { exportAllProjects } from '../../utils/projectExportAll'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS, getMembership } from '../../utils/membership'
@@ -13,6 +14,7 @@ import { UserMediaImage } from '../shared/UserMedia'
 import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import BetaInterestModal from './BetaInterestModal'
+import { isCheckoutLaunched } from '../../utils/checkoutLaunch'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, UNTESTED_PROVIDER_LABEL, UNTESTED_PROVIDER_NOTE, isTestedAiProvider, fetchLiveModels } from '../../utils/aiApi'
@@ -80,17 +82,37 @@ const CUSTOM_COLOR_FIELDS = [
 export function MaintenancePayButton({ style }) {
   const { user, refreshUser } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const [renewError, setRenewError] = useState('')
+  const launched = isCheckoutLaunched()
+  const renewNow = async () => {
+    try {
+      setRenewError('')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Please sign in again, then retry.')
+      const response = await fetch(import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL || '/api/create-checkout-session', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: 'hosting_renewal' }),
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok || !body.url) throw new Error(body.error || `Checkout could not be opened. (${response.status})`)
+      await navigateToExternalUrl(body.url)
+    } catch (error) {
+      setRenewError(error.message || 'Checkout could not be opened.')
+    }
+  }
   return (
     <div style={style}>
       <button
-        onClick={() => setModalOpen(true)}
+        onClick={launched ? renewNow : () => setModalOpen(true)}
         style={{
           padding: '8px 18px', borderRadius: 7, background: '#f59e0b', color: '#000',
           fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
         }}
       >
-        Register interest in Cloud Mode renewal
+        {launched ? `Renew Cloud Mode (£${HOSTING_RENEWAL_FEE_GBP}/year)` : 'Register interest in Cloud Mode renewal'}
       </button>
+      {renewError && <p role="alert" style={{ margin: '6px 0 0', fontSize: 12, color: '#f87171' }}>{renewError}</p>}
       <BetaInterestModal
         open={modalOpen}
         user={user}
@@ -2438,7 +2460,7 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
               onClick={() => onSelect(plan.key)}
               disabled={anyBusy}
             >
-              {busy ? 'Opening...' : 'Register interest'}
+              {busy ? 'Opening...' : isCheckoutLaunched() ? 'Choose plan' : 'Register interest'}
             </button>
           )}
       </div>
@@ -2987,7 +3009,7 @@ export default function AccountSettings({
     // planKey = null opens the customer portal for Stripe-backed accounts or,
     // after confirmation, downgrades a manually granted plan with no Stripe
     // customer. Paid-plan selections still use the beta-interest flow below.
-    if (planKey) {
+    if (planKey && !isCheckoutLaunched()) {
       setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
       return
     }

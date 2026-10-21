@@ -50,6 +50,14 @@ Status: the earlier live-flow acceptance no longer covers the pricing model appr
 
 Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid plans are coming soon" interest form (added 2026-08-08). Deferred QA, whenever the user wants it: on production with a signed-in Free account, click each paid-plan CTA from Pricing and Account Settings, submit the form, confirm `yourownworld.admin@gmail.com` receives it, confirm Supabase metadata updates to `subscription_plan: beta_tester`, confirm unlimited projects/AI tools/desktop entitlement unlock. Also submit from signed-out Pricing and confirm it emails interest without claiming account access. Requires `FEEDBACK_EMAIL`, `FEEDBACK_EMAIL_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_URL`/`VITE_SUPABASE_URL` set in Vercel. Before real paid launch: either remove this flow or migrate its beta testers into whichever paid/manual entitlement process is chosen.
 
+### 4. Launch switch and test-mode secrets runbook (prepared 2026-10-21; names only, never values)
+
+**Launch switch (built 21 Oct, OFF by default).** Real checkout buttons are controlled by one Vercel variable, `VITE_CHECKOUT_LAUNCHED`. Unset or anything other than `true`: every paid button on Pricing and Account Settings registers interest exactly as today. `true` (then redeploy, because it is a build-time value): Pricing, Account Settings plan buttons and the Cloud renewal button open real Stripe Checkout (`/api/create-checkout-session`); the interest form is no longer reachable from them. The private `billing_test` link is unaffected. Pair it with `YOW_BETA_ENROLLMENT_CLOSED=true` so the old interest endpoint stops granting Beta (decision D7). Do NOT set it before the Payment gate passes; the owner performs this on launch day only.
+
+**Test-mode secrets (already set by the owner 5 Oct, all must be the same Stripe mode):** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PREMIUM_MONTHLY`, `STRIPE_PRICE_ID_FOUNDING_LIFETIME`, `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME`, `STRIPE_PRICE_ID_MAINTENANCE`. The server refuses a Price whose amount/currency/interval is wrong (GBP 10/month, 50 Founding, 75 Standard, 6/year), so a mixed or mis-priced swap fails closed.
+
+**Return-to-live (one pass, owner, launch week):** in Vercel, replace the six variables above with their live-mode equivalents (live Prices are different objects), create the live webhook in Stripe pointing at `https://www.yourownworld.co.uk/api/stripe-webhook` with the same event list as test, paste its signing secret into `STRIPE_WEBHOOK_SECRET`, redeploy, confirm the Stripe Dashboard shows exactly one enabled live endpoint and none targeting a Supabase function, then (and only then) set `VITE_CHECKOUT_LAUNCHED=true` and redeploy. Rollback: unset `VITE_CHECKOUT_LAUNCHED`, redeploy.
+
 ## Payment gate (moved from docs/ROADMAP.md's Launch Readiness Gate table)
 
 | Gate | Required Outcome | Status |
