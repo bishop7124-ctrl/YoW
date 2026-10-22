@@ -16,6 +16,11 @@ const mockState = vi.hoisted(() => ({
   embeddedUploadShouldFail: false,
   mediaDeleteCalls: [],
   mediaDeleteShouldFail: false,
+  // Simulates the project's max-rows response cap (Supabase default 1000).
+  rowCap: Infinity,
+  // Simulates rows that exist (count) but are never actually delivered.
+  undeliverableAfter: null,
+  pageRequests: [],
 }))
 
 vi.mock('./uploadUserMedia', () => ({
@@ -38,12 +43,19 @@ vi.mock('../supabase', () => ({
       return Promise.resolve({ data: mockState.rpcData, error: mockState.rpcError })
     }),
     from: vi.fn((table) => ({
-      select: vi.fn((columns) => {
+      select: vi.fn((columns, options) => {
         mockState.selects.push({ table, columns })
-        const nextResult = () => {
+        const nextResult = (range) => {
           const queue = mockState.errorQueues[table]
           if (queue?.length) return { data: null, error: queue.shift() }
-          return { data: mockState.tables[table] || [], error: null }
+          const all = mockState.tables[table] || []
+          const from = range ? range[0] : 0
+          const requested = range ? range[1] - range[0] + 1 : all.length
+          let deliverable = all
+          if (mockState.undeliverableAfter != null) deliverable = all.slice(0, mockState.undeliverableAfter)
+          const page = deliverable.slice(from, from + Math.min(requested, mockState.rowCap))
+          if (range) mockState.pageRequests.push({ table, from, size: page.length })
+          return { data: page, error: null, count: options?.count ? all.length : null }
         }
         return {
           eq: vi.fn(() => {
@@ -56,7 +68,13 @@ vi.mock('../supabase', () => ({
                 }),
               }
             }
-            return Promise.resolve(nextResult())
+            let range = null
+            const builder = {
+              order: vi.fn(() => builder),
+              range: vi.fn((a, b) => { range = [a, b]; return builder }),
+              then: (resolve, reject) => Promise.resolve(nextResult(range)).then(resolve, reject),
+            }
+            return builder
           }),
         }
       }),
@@ -91,6 +109,38 @@ describe('loadUserData', () => {
     mockState.selects = []
     mockState.upserts = []
     mockState.errorQueues = {}
+    mockState.rowCap = Infinity
+    mockState.undeliverableAfter = null
+    mockState.pageRequests = []
+  })
+
+  it('loads every row of a table larger than the response cap (audit YOW-06)', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.rowCap = 1000
+    mockState.tables.scenes = Array.from({ length: 2300 }, (_, i) => ({
+      scene_id: `scene-${i}`,
+      data: { id: `scene-${i}`, novelId: 'novel-1', content: `Prose ${i}` },
+      revision: 1,
+    }))
+
+    const data = await loadUserData('user-1')
+
+    expect(data.scenes).toHaveLength(2300)
+    expect(new Set(data.scenes.map(scene => scene.id)).size).toBe(2300)
+    expect(Object.keys(data._sceneRevisions)).toHaveLength(2300)
+    expect(mockState.pageRequests.filter(call => call.table === 'scenes').length).toBeGreaterThan(1)
+  })
+
+  it('refuses to hydrate when the server reports more rows than it delivered (audit YOW-06)', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.undeliverableAfter = 1000
+    mockState.tables.scenes = Array.from({ length: 1500 }, (_, i) => ({
+      scene_id: `scene-${i}`,
+      data: { id: `scene-${i}` },
+      revision: 1,
+    }))
+
+    await expect(loadUserData('user-1')).rejects.toThrow(/scenes/)
   })
 
   it('uses persisted updated_at timestamps instead of load time for freshness', async () => {

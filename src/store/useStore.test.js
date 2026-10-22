@@ -3558,3 +3558,174 @@ describe('lapsed hosting (Local Mode) makes no cloud writes', () => {
     }
   })
 })
+
+// Audit YOW-02: a failed collection save must stay pending (and retry), and an unrelated
+// success must never turn an unresolved failure into "synced".
+describe('failed collection saves stay pending (audit YOW-02)', () => {
+  const owner = 'user-yow02'
+  // Testing Library does not auto-unmount here, and a still-mounted hook from an earlier test keeps
+  // retrying against the shared mocks, so every hook is unmounted explicitly.
+  const mounted = []
+  const setup = async () => {
+    const hook = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    act(() => { hook.result.current.finishRemoteLoad(true) })
+    act(() => { hook.result.current.addNovel({ title: 'Book', type: 'novel' }) })
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('synced'), { timeout: 4000 })
+    await new Promise(r => setTimeout(r, 2200))
+    vi.mocked(mergeItems).mockClear()
+    mounted.push(hook)
+    return hook
+  }
+  // Fails only the next characters push (table-scoped, so stray pushes from other collections
+  // (and this owner only) cannot consume the failure).
+  const failCharactersOnce = () => {
+    let armed = true
+    vi.mocked(mergeItems).mockImplementation(async (table, ownerId) => {
+      if (table === 'characters' && ownerId === owner && armed) { armed = false; throw new Error('offline') }
+      return { results: [], fallback: false }
+    })
+  }
+  const savesFor = table => vi.mocked(mergeItems).mock.calls.filter(call => call[0] === table && call[1] === owner)
+
+  beforeEach(() => {
+    vi.mocked(upsertItems).mockReset()
+    vi.mocked(upsertItems).mockResolvedValue({})
+  })
+  afterEach(() => {
+    mounted.splice(0).forEach(hook => hook.unmount())
+    vi.mocked(mergeItems).mockImplementation(async (table, ownerId, items) => { await upsertItems(table, ownerId, items); return { results: [], fallback: false } })
+  })
+
+  it('sends a record whose earlier save failed again with the next edit to the same collection', async () => {
+    const hook = await setup()
+    failCharactersOnce()
+    act(() => { hook.result.current.saveCharacter({ name: 'Failed Hero' }) })
+    await waitFor(() => expect(savesFor('characters').length).toBeGreaterThan(0), { timeout: 4000 })
+    const failedId = hook.result.current.characters.find(c => c.name === 'Failed Hero').id
+
+    vi.mocked(mergeItems).mockClear()
+    act(() => { hook.result.current.saveCharacter({ name: 'Second Hero' }) })
+    await waitFor(() => expect(savesFor('characters').length).toBeGreaterThan(0), { timeout: 4000 })
+    const sentIds = savesFor('characters').flatMap(call => call[2].map(item => item.id))
+    expect(sentIds).toContain(failedId)
+  }, 20000)
+
+  it('retries a failed save automatically, without another edit', async () => {
+    const hook = await setup()
+    failCharactersOnce()
+    act(() => { hook.result.current.saveCharacter({ name: 'Retried Hero' }) })
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('error'), { timeout: 4000 })
+    const failedCalls = savesFor('characters').length
+
+    await waitFor(() => expect(savesFor('characters').length).toBeGreaterThan(failedCalls), { timeout: 8000 })
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('synced'), { timeout: 4000 })
+  }, 20000)
+
+  it('does not report synced when an unrelated save succeeds while another collection is still failing', async () => {
+    const hook = await setup()
+    vi.mocked(mergeItems).mockImplementation(async (table, ownerId) => {
+      if (table === 'characters' && ownerId === owner) throw new Error('characters unreachable')
+      return { results: [], fallback: false }
+    })
+    act(() => { hook.result.current.saveCharacter({ name: 'Stuck Hero' }) })
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('error'), { timeout: 4000 })
+
+    act(() => { hook.result.current.saveLocation({ name: 'Fine Place' }) })
+    await waitFor(() => expect(savesFor('locations').length).toBeGreaterThan(0), { timeout: 4000 })
+    await new Promise(r => setTimeout(r, 200))
+
+    expect(hook.result.current.syncStatus.state).toBe('error')
+    expect(hook.result.current.syncStatus.lastError).toBe('characters unreachable')
+  }, 20000)
+})
+
+// Audit YOW-04: login recovery must decide record by record from what is actually unacknowledged,
+// not from a 30-minute timestamp window, and must not republish untouched or stale records.
+describe('login recovery reconciles per record (audit YOW-04)', () => {
+  const owner = 'user-yow04'
+  const NOW = () => Date.now()
+  const mounted = []
+  const seedLocal = ({ localWriteAgoMs, characters, scenes = [], dirty }) => {
+    localStorage.setItem('nf_localOwner', owner)
+    localStorage.setItem('nf_localWriteAt', String(NOW() - localWriteAgoMs))
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n1', title: 'Book', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n1'))
+    localStorage.setItem('nf_characters', JSON.stringify(characters))
+    if (scenes.length) localStorage.setItem('nf_scenes', JSON.stringify(scenes))
+    if (dirty) localStorage.setItem(`nf_dirtyRecords:${owner}`, JSON.stringify(dirty))
+  }
+  const cloudData = (extra = {}) => ({
+    _savedAt: NOW() - 24 * 60 * 60 * 1000,
+    novels: [{ id: 'n1', title: 'Book', type: 'novel' }],
+    activeNovelId: 'n1',
+    characters: [],
+    scenes: [],
+    _sceneRevisions: {},
+    _sceneRevisionSupported: true,
+    ...extra,
+  })
+  const mount = () => {
+    const hook = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    mounted.push(hook)
+    return hook
+  }
+  const pushedTo = (table) => vi.mocked(mergeItems).mock.calls.filter(call => call[0] === table && call[1] === owner)
+
+  beforeEach(() => {
+    vi.mocked(mergeItems).mockClear()
+    vi.mocked(upsertItems).mockClear()
+    vi.mocked(saveSceneDoc).mockClear()
+  })
+  afterEach(() => { mounted.splice(0).forEach(hook => hook.unmount()) })
+
+  it('keeps an unsynced edit made long ago over the older cloud copy, keeps the cloud version for review, and pushes it', async () => {
+    seedLocal({
+      localWriteAgoMs: 31 * 60 * 1000,
+      characters: [{ id: 'c1', novelId: 'n1', name: 'Edited offline' }],
+      dirty: { characters: { c1: {} } },
+    })
+    const { result } = mount()
+    act(() => { result.current.importData(cloudData({ characters: [{ id: 'c1', novelId: 'n1', name: 'Old cloud copy' }] })) })
+
+    expect(result.current.characters.find(c => c.id === 'c1').name).toBe('Edited offline')
+    expect(result.current.recordConflicts.some(conflict => conflict.recordId === 'c1' && conflict.theirs?.name === 'Old cloud copy')).toBe(true)
+    await waitFor(() => expect(pushedTo('characters').length).toBeGreaterThan(0), { timeout: 5000 })
+    expect(pushedTo('characters')[0][2].map(item => item.id)).toEqual(['c1'])
+  }, 15000)
+
+  it('does not override newer cloud data or republish a stale record that was never edited locally', async () => {
+    seedLocal({
+      localWriteAgoMs: 60 * 1000,
+      characters: [{ id: 'c1', novelId: 'n1', name: 'Stale local copy' }, { id: 'c-gone', novelId: 'n1', name: 'Deleted elsewhere' }],
+      dirty: {},
+    })
+    const { result } = mount()
+    act(() => { result.current.importData(cloudData({ _savedAt: NOW() - 10 * 60 * 1000, characters: [{ id: 'c1', novelId: 'n1', name: 'Newer cloud copy' }] })) })
+
+    expect(result.current.characters.map(c => c.name)).toEqual(['Newer cloud copy'])
+    await new Promise(r => setTimeout(r, 3000))
+    expect(pushedTo('characters')).toEqual([])
+    expect(vi.mocked(upsertItems).mock.calls.filter(call => call[0] === 'characters' && call[1] === owner)).toEqual([])
+  }, 15000)
+
+  it('saves an unsynced scene against the revision it was based on, so a scene that moved on is preserved, not overwritten', async () => {
+    seedLocal({
+      localWriteAgoMs: 2 * 24 * 60 * 60 * 1000,
+      characters: [],
+      scenes: [{ id: 's1', novelId: 'n1', title: 'Scene', content: 'my offline prose' }],
+      dirty: { scenes: { s1: { baseRevision: 3 } } },
+    })
+    const { result } = mount()
+    act(() => {
+      result.current.importData(cloudData({
+        scenes: [{ id: 's1', novelId: 'n1', title: 'Scene', content: 'prose from another device' }],
+        _sceneRevisions: { s1: 5 },
+      }))
+    })
+
+    expect(result.current.scenes.find(s => s.id === 's1').content).toBe('my offline prose')
+    await waitFor(() => expect(vi.mocked(saveSceneDoc)).toHaveBeenCalled(), { timeout: 5000 })
+    const [, , options] = vi.mocked(saveSceneDoc).mock.calls[0]
+    expect(options.expectedRevision).toBe(3)
+  }, 15000)
+})

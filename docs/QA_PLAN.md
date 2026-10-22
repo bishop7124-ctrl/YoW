@@ -4,6 +4,8 @@
 
 Automated regression tests pass (see ROADMAP 2026-10-22). Still to run in a real browser with a test account (`reference_test_account`): (1) edit a character and a scene, go offline (DevTools), sign out, sign back in online as the same account: edits must reappear (merged, or shown as conflicts if cloud differs). (2) Sign in as a different account straight after step 1's sign-out: none of the first account's data may appear. (3) Expire the session mid-edit (revoke refresh token) and confirm the same-account recovery. (4) YOW-05: throttle the network (DevTools slow 3G), sign in as account A, sign out and sign in as B before A's load finishes: only B's data may appear, with no error banner or loading flicker. Not yet run.
 
+YOW-02/04/06 real-browser checks (not yet run): (5) DevTools offline, edit a character and a scene, wait: status must read Sync error (not Synced); go online: it must retry by itself and read Synced. (6) Edit offline, close the tab, reopen online 1+ hour later: the edit must be kept, with the cloud version listed under conflicts if it differed. (7) Edit the same scene on a second device before step 6's reopen: both versions must survive (conflict copy). (8) Against a test Supabase with 1,200+ scenes: every scene loads, and an artificially failed page shows the retry screen.
+
 ## 2026-10-12 catch-up (9-12 Oct): disclosure, updater-manifest rules, Finalise-draft guard, project-type browser checks
 
 Status: **Automated half done; every real-device and owner step below is still pending.** Run from the cloud session on 12 Oct after the 9-11 Oct rows were found not closed.

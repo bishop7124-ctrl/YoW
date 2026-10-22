@@ -1,4 +1,4 @@
-const TABLE_CONFIG = {
+export const TABLE_CONFIG = {
   novels: { key: 'novels', label: 'Project' },
   series_items: { key: 'series', label: 'Series' },
   characters: { key: 'characters', label: 'Character' },
@@ -158,7 +158,7 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
   return { mergedData, conflicts, mergedCount, mergeStats }
 }
 
-function conflictFields(mine, theirs) {
+export function conflictFields(mine, theirs) {
   const keys = new Set([...Object.keys(mine || {}), ...Object.keys(theirs || {})])
   const fields = []
   keys.forEach(key => {

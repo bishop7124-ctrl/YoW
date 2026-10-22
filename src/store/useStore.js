@@ -23,6 +23,8 @@ import {
   hasCorruptLocalData,
   readFailedWriteKeys,
 } from '../storage/writeDurability'
+import { TABLE_CONFIG } from '../utils/cloudSyncReconcile'
+import { loadDirtyRecords, setDirtyTable, overlayDirtyRecords } from '../utils/dirtyRecords'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
 import { deleteUserMedia, getUserMediaPath } from '../utils/uploadUserMedia'
@@ -666,6 +668,10 @@ export function useStore(userId = null, options = {}) {
   // already in flight (for example a scene version just restored from a conflict) and not
   // only for the debounced ones that have not started yet.
   const inFlightSyncRef = useRef(new Set())
+  // Unresolved failures by operation key. A failure clears only when the SAME operation later
+  // succeeds, so an unrelated successful save can never turn a pending failure into "synced"
+  // (audit YOW-02). Writes handed to trackSync without a key share the single 'untracked' key.
+  const failedSyncRef = useRef(new Map())
   const [syncStatus, setSyncStatus] = useState({ state: 'idle', lastSyncedAt: null, lastError: null })
 
   // Total storage usage = uploaded media (DB-authoritative counter, maintained
@@ -732,7 +738,7 @@ export function useStore(userId = null, options = {}) {
     const interval = setInterval(check, 4000)
     return () => clearInterval(interval)
   }, [])
-  const trackSync = useCallback((promise) => {
+  const trackSync = useCallback((promise, key = 'untracked') => {
     syncPendingRef.current += 1
     setSyncStatus(s => ({ ...s, state: 'syncing' }))
     inFlightSyncRef.current.add(promise)
@@ -741,19 +747,22 @@ export function useStore(userId = null, options = {}) {
     promise
       .then(() => {
         syncPendingRef.current = Math.max(0, syncPendingRef.current - 1)
+        failedSyncRef.current.delete(key)
+        const stillFailed = failedSyncRef.current.size > 0
         setSyncStatus(() => ({
-          state: syncPendingRef.current > 0 ? 'syncing' : 'synced',
+          state: syncPendingRef.current > 0 ? 'syncing' : (stillFailed ? 'error' : 'synced'),
           lastSyncedAt: Date.now(),
-          lastError: null,
+          lastError: stillFailed ? [...failedSyncRef.current.values()][0] : null,
         }))
       })
       .catch(err => {
         console.error(err)
         syncPendingRef.current = Math.max(0, syncPendingRef.current - 1)
+        failedSyncRef.current.set(key, err?.message || 'Sync failed')
         setSyncStatus(s => ({
           state: syncPendingRef.current > 0 ? 'syncing' : 'error',
           lastSyncedAt: s.lastSyncedAt,
-          lastError: err?.message || 'Sync failed',
+          lastError: [...failedSyncRef.current.values()][0],
         }))
       })
     return promise
@@ -819,6 +828,7 @@ export function useStore(userId = null, options = {}) {
     remoteReady.current = false
     importing.current = true
     syncPendingRef.current = 0
+    failedSyncRef.current = new Map()
     setSyncStatus({ state: 'idle', lastSyncedAt: null, lastError: null })
     clearProjectLocalStorage((scenesRef.current || []).map(s => s?.id))
     clearProjectRefs({
@@ -1222,25 +1232,119 @@ export function useStore(userId = null, options = {}) {
   // the time this debounced callback runs, this tab's own commitLocal has
   // already overwritten localStorage with its own edit, so it's too late to
   // tell what the other tab had written.)
+  //
+  // lastSyncedByTableRef is the ACKNOWLEDGED base: a record only enters it after the cloud accepted
+  // that version, so a failed save leaves the record "changed" and it is sent again (audit YOW-02).
+  // Failures retry on their own with backoff, and on coming back online.
+  const itemSyncRef = useRef({ latest: new Map(), inFlight: new Map(), attempts: new Map(), timers: new Map() })
   const debouncedSaveItems = useMemo(
-    () => createKeyedDebounce((table, ownerId, items) => {
-      const prevMap = lastSyncedByTableRef.current[table] || new Map()
-      const changed = items.filter(item => prevMap.get(item.id) !== item)
-      lastSyncedByTableRef.current[table] = new Map(items.map(item => [item.id, item]))
-      if (!changed.length) return
-      // The version this tab last loaded or saved is the base for a per-field three-way merge in the
-      // database, so a record another browser edited meanwhile keeps that browser's changes instead
-      // of being overwritten by this tab's whole record (see mergeItems in utils/firestoreSync.js).
-      const baseById = new Map()
-      changed.forEach(item => { if (prevMap.has(item.id)) baseById.set(item.id, prevMap.get(item.id)) })
-      trackSync(
-        mergeItems(table, ownerId, changed, baseById).then(({ results }) => {
+    () => {
+      const state = itemSyncRef.current
+      const sendChanges = (table) => {
+        const latest = state.latest.get(table)
+        if (!latest) return undefined
+        const { ownerId, items } = latest
+        const prevMap = lastSyncedByTableRef.current[table] || new Map()
+        const changed = items.filter(item => prevMap.get(item.id) !== item)
+        if (!changed.length) {
+          const present = new Set(items.map(item => item.id))
+          const pruned = new Map([...prevMap].filter(([id]) => present.has(id)))
+          if (pruned.size !== prevMap.size) lastSyncedByTableRef.current[table] = pruned
+          return undefined
+        }
+        // The version this tab last loaded or saved is the base for a per-field three-way merge in the
+        // database, so a record another browser edited meanwhile keeps that browser's changes instead
+        // of being overwritten by this tab's whole record (see mergeItems in utils/firestoreSync.js).
+        const baseById = new Map()
+        changed.forEach(item => { if (prevMap.has(item.id)) baseById.set(item.id, prevMap.get(item.id)) })
+        const attempt = mergeItems(table, ownerId, changed, baseById).then(({ results }) => {
+          const stillThere = new Set((state.latest.get(table)?.items || items).map(item => item.id))
+          const acknowledged = new Map(lastSyncedByTableRef.current[table] || [])
+          changed.forEach(item => acknowledged.set(item.id, item))
+          for (const id of [...acknowledged.keys()]) if (!stillThere.has(id)) acknowledged.delete(id)
+          lastSyncedByTableRef.current[table] = acknowledged
           if (results.length) applyMergedRecordsRef.current?.(table, results)
+          recomputeDirty(table)
         })
-      ).catch(() => {})
-    }, 2000),
+        const settled = trackSync(attempt, `items:${table}`).then(
+          () => {
+            state.attempts.delete(table)
+            clearTimeout(state.timers.get(table))
+            state.timers.delete(table)
+          },
+          () => scheduleRetry(table),
+        ).then(() => { if (state.inFlight.get(table) === settled) state.inFlight.delete(table) })
+        state.inFlight.set(table, settled)
+        return settled
+      }
+      // Never two overlapping sends for one table: the second would use a base the first has not
+      // acknowledged yet. A send that arrives while one is in flight waits for it, then sends the
+      // latest state.
+      const sendWhenIdle = (table) => {
+        const busy = state.inFlight.get(table)
+        if (!busy) return sendChanges(table)
+        const queued = busy.then(() => sendChanges(table))
+        state.inFlight.set(table, queued)
+        queued.then(() => { if (state.inFlight.get(table) === queued) state.inFlight.delete(table) })
+        return queued
+      }
+      function scheduleRetry(table) {
+        const attemptNumber = state.attempts.get(table) || 0
+        state.attempts.set(table, attemptNumber + 1)
+        clearTimeout(state.timers.get(table))
+        const delay = Math.min(60000, 2500 * 2 ** attemptNumber)
+        state.timers.set(table, setTimeout(() => {
+          state.timers.delete(table)
+          sendWhenIdle(table)
+        }, delay))
+      }
+      state.retryAllNow = () => {
+        for (const table of [...state.timers.keys()]) {
+          clearTimeout(state.timers.get(table))
+          state.timers.delete(table)
+          sendWhenIdle(table)
+        }
+      }
+      // The dirty list (records not yet acknowledged by the cloud) is persisted on every change, not
+      // only when a push is sent, so it survives closing the tab before the debounce fires (YOW-04).
+      function recomputeDirty(table) {
+        const latest = state.latest.get(table)
+        if (!latest?.ownerId) return
+        const acknowledged = lastSyncedByTableRef.current[table] || new Map()
+        const entries = {}
+        latest.items.forEach(item => { if (acknowledged.get(item.id) !== item) entries[item.id] = {} })
+        setDirtyTable(latest.ownerId, table, entries)
+      }
+      const debounced = createKeyedDebounce((table) => sendWhenIdle(table), 2000)
+      const track = (table, ownerId, items) => {
+        state.latest.set(table, { ownerId, items })
+        recomputeDirty(table)
+        return debounced(table, ownerId, items)
+      }
+      track.cancel = debounced.cancel
+      track.flushAll = debounced.flushAll
+      return track
+    },
     [trackSync]
   )
+  // Pending retries belong to one signed-in account; drop them when it changes, and retry at once
+  // when the browser reports it is back online.
+  useEffect(() => {
+    const state = itemSyncRef.current
+    const sceneState = sceneSyncRef.current
+    const online = () => { state.retryAllNow?.(); sceneState.retryAllNow?.() }
+    window.addEventListener('online', online)
+    return () => {
+      window.removeEventListener('online', online)
+      for (const syncState of [state, sceneState]) {
+        syncState.timers.forEach(timer => clearTimeout(timer))
+        syncState.timers.clear()
+        syncState.attempts.clear()
+        syncState.latest.clear()
+      }
+      sceneState.edits.clear()
+    }
+  }, [userId, canSyncCloud])
 
   // Table -> { setter, ref, storageKey } for the entity collections covered by
   // CLOUD_TABLE_CONFIG, used to apply a recordConflicts resolution back onto
@@ -1401,8 +1505,72 @@ export function useStore(userId = null, options = {}) {
 
   // Debounced, serialized cloud save for individual scenes (1s delay). The
   // server atomically rejects a stale revision instead of last-write-wins.
+  //
+  // Like entity collections, a failed scene save stays dirty (persisted with the cloud revision it was
+  // based on), keeps the sync status in error, and retries by itself (audit YOW-02/04).
+  const sceneSyncRef = useRef({ latest: new Map(), edits: new Map(), attempts: new Map(), timers: new Map() })
   const debouncedSaveScene = useMemo(
-    () => createKeyedDebounce((sceneId, uidValue, scene) => trackSync(saveSceneWithoutClobbering(sceneId, uidValue, scene)).catch(() => {}), 1000),
+    () => {
+      const state = sceneSyncRef.current
+      const markDirty = (sceneId, uidValue) => {
+        const entries = { ...(loadDirtyRecords(uidValue)?.scenes || {}) }
+        if (!entries[sceneId]) entries[sceneId] = { baseRevision: sceneCloudRevisionRef.current.get(sceneId) ?? 0 }
+        setDirtyTable(uidValue, 'scenes', entries)
+      }
+      const clearDirty = (sceneId, uidValue) => {
+        const entries = { ...(loadDirtyRecords(uidValue)?.scenes || {}) }
+        if (!(sceneId in entries)) return
+        delete entries[sceneId]
+        setDirtyTable(uidValue, 'scenes', entries)
+      }
+      const forget = (sceneId) => {
+        clearTimeout(state.timers.get(sceneId))
+        state.timers.delete(sceneId)
+        state.attempts.delete(sceneId)
+        state.latest.delete(sceneId)
+        state.edits.delete(sceneId)
+      }
+      const send = (sceneId) => {
+        const latest = state.latest.get(sceneId)
+        if (!latest) return undefined
+        const { uidValue, scene } = latest
+        const editAtSend = state.edits.get(sceneId)
+        const attempt = saveSceneWithoutClobbering(sceneId, uidValue, scene).then(() => {
+          state.attempts.delete(sceneId)
+          clearTimeout(state.timers.get(sceneId))
+          state.timers.delete(sceneId)
+          if (state.edits.get(sceneId) === editAtSend) clearDirty(sceneId, uidValue)
+        })
+        return trackSync(attempt, `scene:${sceneId}`).catch(() => {
+          const attemptNumber = state.attempts.get(sceneId) || 0
+          state.attempts.set(sceneId, attemptNumber + 1)
+          clearTimeout(state.timers.get(sceneId))
+          state.timers.set(sceneId, setTimeout(() => { state.timers.delete(sceneId); send(sceneId) }, Math.min(60000, 2500 * 2 ** attemptNumber)))
+        })
+      }
+      state.retryAllNow = () => {
+        for (const sceneId of [...state.timers.keys()]) {
+          clearTimeout(state.timers.get(sceneId))
+          state.timers.delete(sceneId)
+          send(sceneId)
+        }
+      }
+      const debounced = createKeyedDebounce((sceneId) => send(sceneId), 1000)
+      const track = (sceneId, uidValue, scene) => {
+        state.latest.set(sceneId, { uidValue, scene })
+        state.edits.set(sceneId, (state.edits.get(sceneId) || 0) + 1)
+        markDirty(sceneId, uidValue)
+        return debounced(sceneId, uidValue, scene)
+      }
+      track.cancel = (sceneId) => {
+        const uidValue = state.latest.get(sceneId)?.uidValue
+        debounced.cancel(sceneId)
+        forget(sceneId)
+        if (uidValue) clearDirty(sceneId, uidValue)
+      }
+      track.flushAll = debounced.flushAll
+      return track
+    },
     [saveSceneWithoutClobbering, trackSync]
   )
 
@@ -1496,12 +1664,24 @@ export function useStore(userId = null, options = {}) {
     // never the rest of the account. A failed-write marker can override local
     // freshness only when the cloud copy actually contains project data.
     const cloudHasAnyData = Array.isArray(data?.novels) && data.novels.length > 0
-    const shouldPreferLocal = options.preferLocal !== false
+    // Once this device tracks which records the cloud has not acknowledged (dirty records), recovery
+    // decides record by record: the cloud copy is shown, with only this device's unacknowledged
+    // records laid over it (audit YOW-04). That replaces the 30-minute timestamp window, which lost
+    // older unsynced edits and republished the whole snapshot, stale records included. The window
+    // stays only for a device that has never tracked (first run after this change).
+    const dirtyRecords = options.preferLocal !== false && ownerMatchesCurrentUser && canSyncCloud
+      ? loadDirtyRecords(userId)
+      : null
+    const reconciledRecovery = dirtyRecords && Object.keys(dirtyRecords).length
+      ? overlayDirtyRecords(data, getLocalSnapshot(), dirtyRecords)
+      : null
+    const shouldPreferLocal = !dirtyRecords
+      && options.preferLocal !== false
       && ownerMatchesCurrentUser
       && localWriteAt > remoteSavedAt
       && localWriteIsRecent
       && (!hasLocalWriteFailed() || !cloudHasAnyData)
-    const sourceData = shouldPreferLocal ? getLocalSnapshot() : data
+    const sourceData = shouldPreferLocal ? getLocalSnapshot() : (reconciledRecovery?.data ?? data)
     const sourceProjectIds = new Set((sourceData.novels ?? []).map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
       ? freeProjectId
@@ -1610,7 +1790,10 @@ export function useStore(userId = null, options = {}) {
     // A cloud load carries no recordConflicts, and wiping them here is what made a "changed in another
     // tab" warning vanish on refresh and take the other side's version with it. Keep this browser's own
     // unresolved conflicts when they belong to this account.
-    setRecordConflicts(sourceData.recordConflicts ?? (ownerMatchesCurrentUser ? load('nf_recordConflicts', []) : []))
+    setRecordConflicts([
+      ...(sourceData.recordConflicts ?? (ownerMatchesCurrentUser ? load('nf_recordConflicts', []) : [])),
+      ...(reconciledRecovery?.conflicts ?? []),
+    ])
     if (!shouldPreferLocal && canSyncCloud && resolvedActiveNovelId !== (data.activeNovelId ?? null)) {
       trackSync(saveUserSettings(userId, {
         activeNovelId: resolvedActiveNovelId,
@@ -1625,25 +1808,56 @@ export function useStore(userId = null, options = {}) {
     // the first real edit after login only pushes that one changed record
     // instead of re-diffing against an empty map and pushing the whole
     // collection again (see debouncedSaveItems).
+    // Records laid over the cloud copy by recovery are deliberately NOT acknowledged here: they stay
+    // "changed" against this baseline, so the normal save path pushes them (and keeps retrying).
+    const acknowledgedSource = reconciledRecovery ? data : sourceData
     lastSyncedByTableRef.current = {
-      novels: new Map(nextNovels.map(item => [item.id, item])),
-      series_items: new Map((sourceData.series ?? []).map(item => [item.id, item])),
-      characters: new Map((sourceData.characters ?? []).map(item => [item.id, item])),
-      factions: new Map((sourceData.factions ?? []).map(item => [item.id, item])),
-      locations: new Map((sourceData.locations ?? []).map(item => [item.id, item])),
-      timeline_events: new Map(rawTimeline.map(item => [item.id, item])),
-      world_history: new Map(rawHistory.map(item => [item.id, item])),
-      acts: new Map((sourceData.acts ?? []).map(item => [item.id, item])),
-      chapters: new Map((sourceData.chapters ?? []).map(item => [item.id, item])),
-      lore_entries: new Map((sourceData.loreEntries ?? []).map(item => [item.id, item])),
-      idea_entries: new Map((sourceData.ideaEntries ?? []).map(item => [item.id, item])),
-      maps_data: new Map((sourceData.maps ?? []).map(item => [item.id, item])),
-      whiteboards_data: new Map((sourceData.whiteboards ?? []).map(item => [item.id, item])),
-      story_schedule: new Map((sourceData.storySchedule ?? []).map(item => [item.id, item])),
-      rpg_characters: new Map(healedRpgCharacters.map(item => [item.id, item])),
-      comic_pages: new Map((sourceData.comicPages ?? []).map(item => [item.id, item])),
-      comic_panels: new Map((sourceData.comicPanels ?? []).map(item => [item.id, item])),
-      eras: new Map((sourceData.eras ?? []).map(item => [item.id, item])),
+      novels: new Map((reconciledRecovery ? (data.novels ?? []) : nextNovels).map(item => [item.id, item])),
+      series_items: new Map((acknowledgedSource.series ?? []).map(item => [item.id, item])),
+      characters: new Map((acknowledgedSource.characters ?? []).map(item => [item.id, item])),
+      factions: new Map((acknowledgedSource.factions ?? []).map(item => [item.id, item])),
+      locations: new Map((acknowledgedSource.locations ?? []).map(item => [item.id, item])),
+      timeline_events: new Map((reconciledRecovery ? (data.timeline ?? []) : rawTimeline).map(item => [item.id, item])),
+      world_history: new Map((reconciledRecovery ? (data.worldHistory ?? []) : rawHistory).map(item => [item.id, item])),
+      acts: new Map((acknowledgedSource.acts ?? []).map(item => [item.id, item])),
+      chapters: new Map((acknowledgedSource.chapters ?? []).map(item => [item.id, item])),
+      lore_entries: new Map((acknowledgedSource.loreEntries ?? []).map(item => [item.id, item])),
+      idea_entries: new Map((acknowledgedSource.ideaEntries ?? []).map(item => [item.id, item])),
+      maps_data: new Map((acknowledgedSource.maps ?? []).map(item => [item.id, item])),
+      whiteboards_data: new Map((acknowledgedSource.whiteboards ?? []).map(item => [item.id, item])),
+      story_schedule: new Map((acknowledgedSource.storySchedule ?? []).map(item => [item.id, item])),
+      rpg_characters: new Map((reconciledRecovery ? (data.rpgCharacters ?? []) : healedRpgCharacters).map(item => [item.id, item])),
+      comic_pages: new Map((acknowledgedSource.comicPages ?? []).map(item => [item.id, item])),
+      comic_panels: new Map((acknowledgedSource.comicPanels ?? []).map(item => [item.id, item])),
+      eras: new Map((acknowledgedSource.eras ?? []).map(item => [item.id, item])),
+    }
+    if (canSyncCloud && userId) {
+      if (reconciledRecovery) {
+        // Only what recovery actually has to send stays dirty; stale entries must not outlive this
+        // reconciliation or they would later let an out-of-date local record win.
+        const stillDirty = {}
+        Object.entries(reconciledRecovery.pushes).forEach(([table, ids]) => {
+          stillDirty[table] = Object.fromEntries(ids.map(id => [id, dirtyRecords[table]?.[id] || {}]))
+        })
+        Object.keys(dirtyRecords).forEach(table => setDirtyTable(userId, table, stillDirty[table] || {}))
+        Object.entries(reconciledRecovery.pushes).forEach(([table, ids]) => {
+          const key = TABLE_CONFIG[table]?.key
+          const items = sourceData[key] ?? []
+          if (table === 'scenes') {
+            ids.forEach(id => {
+              const scene = items.find(item => item.id === id)
+              if (!scene) return
+              sceneCloudRevisionRef.current.set(id, Number(stillDirty.scenes[id]?.baseRevision ?? sceneCloudRevisionRef.current.get(id) ?? 0))
+              debouncedSaveScene(id, userId, scene)
+            })
+          } else {
+            debouncedSaveItems(table, userId, items)
+          }
+        })
+      } else if (loadDirtyRecords(userId) === null) {
+        // Start tracking on this device. Until now recovery fell back to the timestamp heuristic.
+        setDirtyTable(userId, '_tracking', {})
+      }
     }
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
@@ -1653,7 +1867,7 @@ export function useStore(userId = null, options = {}) {
         trackSync(upsertItems('rpg_characters', userId, healedRpgCharacterChanges)).catch(() => {})
       }
     }, 500)
-  }, [userId, canSyncCloud, freeProjectId, trackSync])
+  }, [userId, canSyncCloud, freeProjectId, trackSync, debouncedSaveItems, debouncedSaveScene])
 
   useEffect(() => {
     if (!freeProjectId || !novels.some(novel => novel.id === freeProjectId)) return

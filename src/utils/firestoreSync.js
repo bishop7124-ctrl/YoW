@@ -178,10 +178,46 @@ async function withRetry(queryFn, attempts = 3, delayMs = 300) {
   let result
   for (let i = 0; i < attempts; i++) {
     result = await queryFn()
-    if (!result.error) return result
+    // A missing scene `revision` column is a known schema state handled by the
+    // caller's legacy fallback, not a transient blip worth retrying.
+    if (!result.error || isMissingSceneRevisionError(result.error)) return result
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs * (i + 1)))
   }
   return result
+}
+
+// Rows per request. The server also enforces its own max-rows cap per response
+// (Supabase default 1000, configurable per project); a single unpaginated select
+// silently returned only that many rows and the rest of the account looked like
+// it did not exist (audit YOW-06). Each table is therefore read in ordered pages
+// and the total is checked against the server's exact row count, so a short or
+// capped response becomes a load error instead of a quietly incomplete workspace.
+const LOAD_PAGE_SIZE = 500
+
+async function fetchAllRows(table, columns, idCol, userId) {
+  const rows = []
+  let expected = null
+  for (let from = 0; ; from += LOAD_PAGE_SIZE) {
+    const page = await withRetry(() => supabase
+      .from(table)
+      .select(columns, { count: 'exact' })
+      .eq('user_id', userId)
+      .order(idCol)
+      .range(from, from + LOAD_PAGE_SIZE - 1))
+    if (page.error) return { data: null, error: page.error }
+    const pageRows = page.data ?? []
+    if (typeof page.count === 'number') expected = page.count
+    rows.push(...pageRows)
+    if (expected !== null) {
+      if (rows.length >= expected) break
+      if (pageRows.length === 0) {
+        return { data: null, error: { message: `incomplete response: received ${rows.length} of ${expected} rows` } }
+      }
+    } else if (pageRows.length < LOAD_PAGE_SIZE) {
+      break
+    }
+  }
+  return { data: rows, error: null }
 }
 
 // Load all user data from normalized tables on login
@@ -194,16 +230,16 @@ export async function loadUserData(userId) {
       // scenes uses scene_id as the id column (legacy schema)
       const idCol = table === 'scenes' ? 'scene_id' : 'id'
       const columns = table === 'scenes' ? `${idCol}, data, revision` : `${idCol}, data, updated_at`
-      return withRetry(async () => {
-        const response = await supabase.from(table).select(columns).eq('user_id', userId)
+      return (async () => {
+        const response = await fetchAllRows(table, columns, idCol, userId)
         if (table !== 'scenes' || !isMissingSceneRevisionError(response.error)) return response
         // Deployment-safe compatibility: the UI may reach a database before
         // the optimistic-concurrency migration. Loading must still work, but
         // mark the capability absent so writes are never silently downgraded
         // to the unsafe last-write-wins path.
-        const legacy = await supabase.from('scenes').select(`${idCol}, data`).eq('user_id', userId)
+        const legacy = await fetchAllRows('scenes', `${idCol}, data`, idCol, userId)
         return { ...legacy, _sceneRevisionSupported: false }
-      })
+      })()
     }),
   ])
 
