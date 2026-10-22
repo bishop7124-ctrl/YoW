@@ -23,6 +23,7 @@ import {
   hasCorruptLocalData,
   readFailedWriteKeys,
 } from '../storage/writeDurability'
+import { OFFLINE_MODE } from '../utils/offlineMock'
 import { TABLE_CONFIG } from '../utils/cloudSyncReconcile'
 import { addPendingDelete, removePendingDelete, loadPendingDeletes, withoutPendingDeletes } from '../utils/pendingDeletes'
 import { loadDirtyRecords, setDirtyTable, overlayDirtyRecords } from '../utils/dirtyRecords'
@@ -1737,7 +1738,9 @@ export function useStore(userId = null, options = {}) {
     // records laid over it (audit YOW-04). That replaces the 30-minute timestamp window, which lost
     // older unsynced edits and republished the whole snapshot, stale records included. The window
     // stays only for a device that has never tracked (first run after this change).
-    const dirtyRecords = options.preferLocal !== false && ownerMatchesCurrentUser && canSyncCloud
+    // Offline development mode has no real cloud: nothing is ever acknowledged, so the local copy is the
+    // only copy and the older rule applies.
+    const dirtyRecords = options.preferLocal !== false && ownerMatchesCurrentUser && canSyncCloud && !OFFLINE_MODE
       ? loadDirtyRecords(userId)
       : null
     const reconciledRecovery = dirtyRecords && Object.keys(dirtyRecords).length
@@ -1899,7 +1902,7 @@ export function useStore(userId = null, options = {}) {
       comic_panels: new Map((acknowledgedSource.comicPanels ?? []).map(item => [item.id, item])),
       eras: new Map((acknowledgedSource.eras ?? []).map(item => [item.id, item])),
     }
-    if (canSyncCloud && userId) {
+    if (canSyncCloud && userId && !OFFLINE_MODE) {
       if (reconciledRecovery) {
         // Only what recovery actually has to send stays dirty; stale entries must not outlive this
         // reconciliation or they would later let an out-of-date local record win.
