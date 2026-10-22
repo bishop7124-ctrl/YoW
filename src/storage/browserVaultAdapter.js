@@ -113,7 +113,10 @@ function runWriteTransaction(db, write) {
     transaction.oncomplete = () => resolve()
     transaction.onabort = () => reject(transaction.error || new Error('IndexedDB write transaction aborted.'))
     transaction.onerror = () => reject(transaction.error || new Error('IndexedDB write transaction failed.'))
-    write(transaction.objectStore(STORE_NAME))
+    // A failed request normally aborts the transaction too, but reject on it directly as well so the
+    // failure is reported even if the transaction event never fires.
+    const request = write(transaction.objectStore(STORE_NAME))
+    if (request) request.onerror = () => reject(request.error)
   })
 }
 
