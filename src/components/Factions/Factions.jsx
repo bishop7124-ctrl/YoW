@@ -2,7 +2,6 @@ import { useState } from 'react'
 import Modal from '../shared/Modal'
 import FactionLogo from './FactionLogo'
 import LogoEditorModal from './LogoEditorModal'
-import { deleteUserMedia } from '../../utils/uploadUserMedia'
 
 const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-base text-[var(--text-main)] focus:border-[var(--accent)] outline-none transition-colors'
 const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-1.5'
@@ -45,8 +44,9 @@ export default function Factions({ store, initialEntryId = null }) {
 
   const handleSave = (e) => {
     e.preventDefault()
-    const previousLogoImage = editTarget?.logo?.image
-    if (previousLogoImage && previousLogoImage !== form.logo?.image) deleteUserMedia(previousLogoImage).catch(console.error)
+    // The replaced logo is removed by the store only after this save succeeds (and only if no other
+    // record uses it); deleting it here first left the faction pointing at a deleted image whenever
+    // the save was refused.
     const faction = saveFaction(form, editTarget?.id)
     store.refreshStorageUsedBytes?.().catch(console.error)
     if (!faction) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost

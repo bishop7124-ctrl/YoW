@@ -394,9 +394,10 @@ function ProjectSettings({ store, onClose }) {
         currentUsedBytes: store.storageUsedBytes,
         quotaBytes: store.storageQuotaBytes,
       })
-      store.updateNovel(store.activeNovelId, { coverPhoto: photo })
+      const updated = store.updateNovel(store.activeNovelId, { coverPhoto: photo })
       store.refreshStorageUsedBytes().catch(console.error)
-      deleteUserMedia(previousCoverPhoto).catch(console.error)
+      // A refused update keeps the old cover; the freshly uploaded file is the one to discard.
+      deleteUserMedia(updated ? previousCoverPhoto : photo).catch(console.error)
     } catch (error) {
       setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }
@@ -415,9 +416,9 @@ function ProjectSettings({ store, onClose }) {
         currentUsedBytes: store.storageUsedBytes,
         quotaBytes: store.storageQuotaBytes,
       })
-      store.updateNovel(store.activeNovelId, { bannerImage: photo })
+      const updated = store.updateNovel(store.activeNovelId, { bannerImage: photo })
       store.refreshStorageUsedBytes().catch(console.error)
-      deleteUserMedia(previousBannerImage).catch(console.error)
+      deleteUserMedia(updated ? previousBannerImage : photo).catch(console.error)
     } catch (error) {
       setBannerError(error instanceof Error ? error.message : 'Could not use that image.')
     }

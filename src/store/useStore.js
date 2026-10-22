@@ -24,6 +24,7 @@ import {
   readFailedWriteKeys,
 } from '../storage/writeDurability'
 import { TABLE_CONFIG } from '../utils/cloudSyncReconcile'
+import { addPendingDelete, removePendingDelete, loadPendingDeletes, withoutPendingDeletes } from '../utils/pendingDeletes'
 import { loadDirtyRecords, setDirtyTable, overlayDirtyRecords } from '../utils/dirtyRecords'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
@@ -1332,7 +1333,16 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => {
     const state = itemSyncRef.current
     const sceneState = sceneSyncRef.current
-    const online = () => { state.retryAllNow?.(); sceneState.retryAllNow?.() }
+    const deleteState = deleteSyncRef.current
+    const online = () => {
+      state.retryAllNow?.(); sceneState.retryAllNow?.()
+      deleteState.timers.forEach((timer, entryKey) => {
+        clearTimeout(timer)
+        deleteState.timers.delete(entryKey)
+        const [table, ...rest] = entryKey.split(':')
+        deleteState.retryNow?.(table, rest.join(':'))
+      })
+    }
     window.addEventListener('online', online)
     return () => {
       window.removeEventListener('online', online)
@@ -1343,6 +1353,10 @@ export function useStore(userId = null, options = {}) {
         syncState.latest.clear()
       }
       sceneState.edits.clear()
+      deleteState.timers.forEach(timer => clearTimeout(timer))
+      deleteState.timers.clear()
+      deleteState.attempts.clear()
+      deleteState.running.clear()
     }
   }, [userId, canSyncCloud])
 
@@ -1574,6 +1588,53 @@ export function useStore(userId = null, options = {}) {
     [saveSceneWithoutClobbering, trackSync]
   )
 
+  // Cloud deletes (audit YOW-07). Each delete is remembered on this device until the cloud confirms it,
+  // retried with backoff and when the browser is back online, run after any in-flight save of the same
+  // table (so that save cannot recreate the row), and reported through the sync status. Login hides
+  // pending-deleted records from the loaded data so a failed delete never resurrects a record.
+  const deleteSyncRef = useRef({ timers: new Map(), attempts: new Map(), running: new Set() })
+  const runPendingDelete = useCallback((table, id) => {
+    const state = deleteSyncRef.current
+    const entryKey = `${table}:${id}`
+    if (state.running.has(entryKey) || !userId) return Promise.resolve()
+    state.running.add(entryKey)
+    const attempt = () => {
+      let operation
+      try {
+        operation = Promise.resolve(table === 'scenes' ? deleteSceneDoc(userId, id) : deleteItem(table, userId, id))
+      } catch (error) {
+        operation = Promise.reject(error)
+      }
+      return trackSync(operation, `delete:${entryKey}`).then(
+        () => {
+          removePendingDelete(userId, table, id)
+          state.attempts.delete(entryKey)
+          state.running.delete(entryKey)
+        },
+        () => {
+          state.running.delete(entryKey)
+          const attemptNumber = state.attempts.get(entryKey) || 0
+          state.attempts.set(entryKey, attemptNumber + 1)
+          clearTimeout(state.timers.get(entryKey))
+          state.timers.set(entryKey, setTimeout(() => {
+            state.timers.delete(entryKey)
+            runPendingDelete(table, id)
+          }, Math.min(60000, 2500 * 2 ** attemptNumber)))
+        },
+      )
+    }
+    const busy = table === 'scenes'
+      ? sceneSaveQueueRef.current.get(id)
+      : itemSyncRef.current.inFlight.get(table)
+    return busy ? busy.then(attempt, attempt) : attempt()
+  }, [userId, trackSync])
+  deleteSyncRef.current.retryNow = runPendingDelete
+  const cloudDelete = useCallback((table, id) => {
+    if (!canSyncCloud || !userId || id == null) return Promise.resolve()
+    addPendingDelete(userId, table, id)
+    return runPendingDelete(table, id)
+  }, [canSyncCloud, userId, runPendingDelete])
+
   // Immediately sends any debounced cloud writes that are still waiting out
   // their delay. Must be awaited before sign-out: once the Supabase session
   // is revoked, these same requests would go out unauthenticated and be
@@ -1643,6 +1704,9 @@ export function useStore(userId = null, options = {}) {
     const localOwner = loadLocalOwner()
     const remoteSavedAt = Number(data?._savedAt || 0) || 0
     const ownerMatchesCurrentUser = Boolean(userId && localOwner === userId)
+    // Records this device already deleted must not return from a cloud copy that still has them.
+    const pendingDeletes = canSyncCloud && userId && ownerMatchesCurrentUser ? loadPendingDeletes(userId) : []
+    if (pendingDeletes.length) data = withoutPendingDeletes(data, pendingDeletes)
     // nf_localWriteAt advances on every commitLocal call regardless of which
     // key it was for, so a healthy small write (e.g. acts) can make a stale,
     // quota-failed nf_scenes snapshot look "fresher than the cloud." If any
@@ -1859,6 +1923,7 @@ export function useStore(userId = null, options = {}) {
         setDirtyTable(userId, '_tracking', {})
       }
     }
+    pendingDeletes.forEach(({ table, id }) => { runPendingDelete(table, id) })
     // Allow effects to settle before re-enabling Firestore saves
     setTimeout(() => {
       importing.current = false
@@ -1867,7 +1932,7 @@ export function useStore(userId = null, options = {}) {
         trackSync(upsertItems('rpg_characters', userId, healedRpgCharacterChanges)).catch(() => {})
       }
     }, 500)
-  }, [userId, canSyncCloud, freeProjectId, trackSync, debouncedSaveItems, debouncedSaveScene])
+  }, [userId, canSyncCloud, freeProjectId, trackSync, debouncedSaveItems, debouncedSaveScene, runPendingDelete])
 
   useEffect(() => {
     if (!freeProjectId || !novels.some(novel => novel.id === freeProjectId)) return
@@ -2586,15 +2651,15 @@ export function useStore(userId = null, options = {}) {
     const sceneSet = new Set(sceneIds)
     sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
     if (canSyncCloud) {
-      deleteItem('acts', userId, id).catch(console.error)
-      chapterIds.forEach(cId => deleteItem('chapters', userId, cId).catch(console.error))
+      cloudDelete('acts', id)
+      chapterIds.forEach(cId => cloudDelete('chapters', cId))
     }
     commitLocal(actsRef, setActs, 'nf_acts', prev => prev.filter(a => !(a.id === id && a.novelId === projectId)))
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.novelId === projectId && chapterSet.has(c.id))))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
         const keep = !(s.novelId === projectId && sceneSet.has(s.id))
-        if (!keep && canSyncCloud) deleteSceneDoc(userId, s.id).catch(console.error)
+        if (!keep && canSyncCloud) cloudDelete('scenes', s.id)
         return keep
       })
     })
@@ -2612,12 +2677,12 @@ export function useStore(userId = null, options = {}) {
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && s.chapterId === id).map(s => s.id)
     const sceneSet = new Set(sceneIds)
     sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
-    if (canSyncCloud) deleteItem('chapters', userId, id).catch(console.error)
+    if (canSyncCloud) cloudDelete('chapters', id)
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.id === id && c.novelId === projectId)))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
       return prev.filter(s => {
         const keep = !(s.novelId === projectId && sceneSet.has(s.id))
-        if (!keep && canSyncCloud) deleteSceneDoc(userId, s.id).catch(console.error)
+        if (!keep && canSyncCloud) cloudDelete('scenes', s.id)
         return keep
       })
     })
@@ -2647,7 +2712,7 @@ export function useStore(userId = null, options = {}) {
       ...character,
       journey: clearJourneyLinks(character.journey, { sceneIds: [id] }),
     } : character))
-    if (canSyncCloud) deleteSceneDoc(userId, id).catch(console.error)
+    if (canSyncCloud) cloudDelete('scenes', id)
     if (selectedSceneId === id) setSelectedSceneId(null)
     if (writingSceneId === id) setWritingSceneId(null)
     return true
@@ -2748,9 +2813,9 @@ export function useStore(userId = null, options = {}) {
     }))
 
     if (canSyncCloud) {
-      currentActIds.forEach(actId => deleteItem('acts', userId, actId).catch(console.error))
-      currentChapterIds.forEach(chapterId => deleteItem('chapters', userId, chapterId).catch(console.error))
-      currentSceneIds.forEach(sceneId => deleteSceneDoc(userId, sceneId).catch(console.error))
+      currentActIds.forEach(actId => cloudDelete('acts', actId))
+      currentChapterIds.forEach(chapterId => cloudDelete('chapters', chapterId))
+      currentSceneIds.forEach(sceneId => cloudDelete('scenes', sceneId))
       if (nextActs.length) trackSync(upsertItems('acts', userId, nextActs)).catch(console.error)
       if (nextChapters.length) trackSync(upsertItems('chapters', userId, nextChapters)).catch(console.error)
       if (nextScenes.length) trackSync(upsertItems('scenes', userId, nextScenes)).catch(console.error)
@@ -2845,7 +2910,7 @@ export function useStore(userId = null, options = {}) {
     debouncedSaveScene.cancel(conflictId)
     clearSceneVersions(conflictId)
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => s.id !== conflictId))
-    if (canSyncCloud) deleteSceneDoc(userId, conflictId).catch(console.error)
+    if (canSyncCloud) cloudDelete('scenes', conflictId)
   }
 
   const cleanupUnreferencedMedia = (urls, overrides = {}) => {
@@ -2953,7 +3018,7 @@ export function useStore(userId = null, options = {}) {
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true // An inherited hide retains the source and its links/media.
     cleanupUnreferencedMedia(beforeDelete.filter(c => deletedSet.has(c.id)).map(c => c.image))
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('characters', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('characters', dId))
     const removeLinks = (entry, field, matches = value => deletedSet.has(value)) => Array.isArray(entry[field]) && entry[field].some(matches)
       ? { ...entry, [field]: entry[field].filter(value => !matches(value)) }
       : entry
@@ -2998,7 +3063,7 @@ export function useStore(userId = null, options = {}) {
   const deleteRpgCharacter = (id) => {
     const projectId = currentActiveProjectId()
     if (!projectId || !rpgCharactersRef.current.some(character => character.id === id && character.novelId === projectId)) return false
-    if (canSyncCloud) deleteItem('rpg_characters', userId, id).catch(console.error)
+    if (canSyncCloud) cloudDelete('rpg_characters', id)
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.filter(c => c.id !== id))
     return true
   }
@@ -3047,7 +3112,7 @@ export function useStore(userId = null, options = {}) {
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
     cleanupUnreferencedMedia(beforeDelete.filter(f => deletedSet.has(f.id)).map(f => f.logo?.image), { factions: factionsRef.current })
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('factions', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('factions', dId))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
       deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
     ))
@@ -3077,7 +3142,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(locationsRef.current.map(location => location.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('locations', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('locations', dId))
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => ({
         ...entry,
@@ -3200,7 +3265,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(timelineRef.current.map(event => event.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('timeline_events', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('timeline_events', dId))
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => deletedSet.has(h.timelineEventId) ? { ...h, timelineEventId: null } : h))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
@@ -3237,7 +3302,7 @@ export function useStore(userId = null, options = {}) {
   const deleteScheduleEvent = (id) => {
     if (!activeNovelId || activeNovelIdRef.current !== activeNovelId) return false
     if (!storyScheduleRef.current.some(event => event.id === id && event.novelId === activeNovelId)) return false
-    if (canSyncCloud) deleteItem('story_schedule', userId, id).catch(console.error)
+    if (canSyncCloud) cloudDelete('story_schedule', id)
     commitLocal(storyScheduleRef, setStorySchedule, 'nf_storySchedule', prev => prev.filter(e => e.id !== id))
     return true
   }
@@ -3297,7 +3362,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(worldHistoryRef.current.map(entry => entry.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('world_history', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('world_history', dId))
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => deletedSet.has(e.worldHistoryEntryId) ? { ...e, worldHistoryEntryId: null } : e))
     return true
   }
@@ -3330,7 +3395,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(loreEntriesRef.current.map(entry => entry.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true // Current-project hide: keep earlier links/cloud rows.
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('lore_entries', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('lore_entries', dId))
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => Array.isArray(entry.loreIds) && entry.loreIds.some(loreId => deletedSet.has(loreId))
         ? { ...entry, loreIds: entry.loreIds.filter(loreId => !deletedSet.has(loreId)) }
@@ -3400,7 +3465,7 @@ export function useStore(userId = null, options = {}) {
     const remainingIds = new Set(ideaEntriesRef.current.map(entry => entry.id))
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
-    if (canSyncCloud) [...deletedSet].forEach(dId => deleteItem('idea_entries', userId, dId).catch(console.error))
+    if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('idea_entries', dId))
     commitLocal(ideaEntriesRef, setIdeaEntries, 'nf_ideaEntries', prev => prev.map(entry => Array.isArray(entry.linkedIdeas) && entry.linkedIdeas.some(linkedId => deletedSet.has(linkedId))
       ? { ...entry, linkedIdeas: entry.linkedIdeas.filter(linkedId => !deletedSet.has(linkedId)) } : entry))
     return true
@@ -3467,7 +3532,7 @@ export function useStore(userId = null, options = {}) {
   const deleteMap = (mapId) => {
     const projectId = currentActiveProjectId()
     if (!projectId || !mapsRef.current.some(map => map.id === mapId && map.novelId === projectId)) return false
-    if (canSyncCloud) deleteItem('maps_data', userId, mapId).catch(console.error)
+    if (canSyncCloud) cloudDelete('maps_data', mapId)
     commitLocal(mapsRef, setMaps, 'nf_maps', prev => prev.filter(m => m.id !== mapId))
     if (activeMapByNovelRef.current[projectId] === mapId) {
       const nextMap = mapsRef.current.find(map => map.novelId === projectId)
@@ -3577,8 +3642,8 @@ export function useStore(userId = null, options = {}) {
     if (!projectId || !comicPagesRef.current.some(page => page.id === pageId && page.novelId === projectId)) return false
     const panelIds = comicPanelsRef.current.filter(panel => panel.pageId === pageId && panel.novelId === projectId).map(panel => panel.id)
     if (canSyncCloud) {
-      deleteItem('comic_pages', userId, pageId).catch(console.error)
-      panelIds.forEach(id => deleteItem('comic_panels', userId, id).catch(console.error))
+      cloudDelete('comic_pages', pageId)
+      panelIds.forEach(id => cloudDelete('comic_panels', id))
     }
     commitLocal(comicPagesRef, setComicPages, 'nf_comicPages', prev => prev.filter(p => p.id !== pageId))
     const panelIdSet = new Set(panelIds)
@@ -3662,7 +3727,7 @@ export function useStore(userId = null, options = {}) {
   const deleteComicPanel = (panelId) => {
     const projectId = currentActiveProjectId()
     if (!projectId || !comicPanelsRef.current.some(panel => panel.id === panelId && panel.novelId === projectId)) return false
-    if (canSyncCloud) deleteItem('comic_panels', userId, panelId).catch(console.error)
+    if (canSyncCloud) cloudDelete('comic_panels', panelId)
     commitLocal(comicPanelsRef, setComicPanels, 'nf_comicPanels', prev => prev.filter(p => p.id !== panelId))
     return true
   }
@@ -3837,7 +3902,7 @@ export function useStore(userId = null, options = {}) {
   const deleteEra = (id) => {
     const projectId = currentActiveProjectId()
     if (!projectId || !erasRef.current.some(era => era.id === id && era.novelId === projectId)) return false
-    if (canSyncCloud) deleteItem('eras', userId, id).catch(console.error)
+    if (canSyncCloud) cloudDelete('eras', id)
     commitLocal(erasRef, setEras, 'nf_eras', prev => prev.filter(e => e.id !== id))
     // clear era reference from timeline entries
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev =>
@@ -3861,7 +3926,7 @@ export function useStore(userId = null, options = {}) {
     const existing = series.find(item => item.id === id)
     if (!existing) return false
     deleteMediaUrls([existing.coverPhoto])
-    if (canSyncCloud) deleteItem('series_items', userId, id).catch(console.error)
+    if (canSyncCloud) cloudDelete('series_items', id)
     setSeries(prev => prev.filter(s => s.id !== id))
     setNovels(prev => prev.map(n => n.seriesId === id ? { ...n, seriesId: null } : n))
     return true

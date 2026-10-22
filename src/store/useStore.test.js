@@ -3729,3 +3729,82 @@ describe('login recovery reconciles per record (audit YOW-04)', () => {
     expect(options.expectedRevision).toBe(3)
   }, 15000)
 })
+
+// Audit YOW-07: cloud deletes must not be forgotten when they fail, must not race an in-flight
+// save of the same table, and a record deleted on this device must not come back at login.
+describe('cloud deletes stay pending until confirmed (audit YOW-07)', () => {
+  const owner = 'user-yow07'
+  const mounted = []
+  const deletesFor = (table) => vi.mocked(deleteItem).mock.calls.filter(call => call[0] === table && call[1] === owner)
+
+  beforeEach(() => {
+    vi.mocked(deleteItem).mockReset()
+    vi.mocked(deleteItem).mockResolvedValue({})
+    vi.mocked(mergeItems).mockClear()
+  })
+  afterEach(() => {
+    mounted.splice(0).forEach(hook => hook.unmount())
+    vi.mocked(mergeItems).mockImplementation(async (table, ownerId, items) => { await upsertItems(table, ownerId, items); return { results: [], fallback: false } })
+  })
+
+  const setup = async () => {
+    const hook = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    mounted.push(hook)
+    act(() => { hook.result.current.finishRemoteLoad(true) })
+    act(() => { hook.result.current.addNovel({ title: 'Book', type: 'novel' }) })
+    act(() => { hook.result.current.saveCharacter({ name: 'Doomed' }) })
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('synced'), { timeout: 5000 })
+    return hook
+  }
+
+  it('keeps a failed delete, reports the error, retries it, and forgets it once the cloud confirms', async () => {
+    const hook = await setup()
+    const { loadPendingDeletes } = await import('../utils/pendingDeletes.js')
+    const id = hook.result.current.characters.find(c => c.name === 'Doomed').id
+    vi.mocked(deleteItem).mockRejectedValueOnce(new Error('offline'))
+
+    act(() => { hook.result.current.deleteCharacter(id) })
+
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('error'), { timeout: 4000 })
+    expect(loadPendingDeletes(owner).some(entry => entry.table === 'characters' && entry.id === id)).toBe(true)
+    await waitFor(() => expect(deletesFor('characters').length).toBeGreaterThanOrEqual(2), { timeout: 8000 })
+    await waitFor(() => expect(loadPendingDeletes(owner)).toEqual([]), { timeout: 4000 })
+    await waitFor(() => expect(hook.result.current.syncStatus.state).toBe('synced'), { timeout: 4000 })
+  }, 30000)
+
+  it('waits for an in-flight save of the same table before deleting, so the save cannot recreate the row', async () => {
+    const hook = await setup()
+    let releaseSave
+    vi.mocked(mergeItems).mockImplementation((table, ownerId) => table === 'characters' && ownerId === owner
+      ? new Promise(resolve => { releaseSave = () => resolve({ results: [], fallback: false }) })
+      : Promise.resolve({ results: [], fallback: false }))
+    const id = hook.result.current.characters.find(c => c.name === 'Doomed').id
+    act(() => { hook.result.current.saveCharacter({ name: 'Doomed edited' }, id) })
+    await waitFor(() => expect(releaseSave).toBeTypeOf('function'), { timeout: 5000 })
+
+    act(() => { hook.result.current.deleteCharacter(id) })
+    await new Promise(r => setTimeout(r, 300))
+    expect(deletesFor('characters')).toEqual([])
+
+    await act(async () => { releaseSave() })
+    await waitFor(() => expect(deletesFor('characters').length).toBe(1), { timeout: 4000 })
+  }, 30000)
+
+  it('does not bring a record deleted on this device back from the cloud at login, and retries its delete', async () => {
+    localStorage.setItem('nf_localOwner', owner)
+    localStorage.setItem(`nf_pendingDeletes:${owner}`, JSON.stringify([{ table: 'characters', id: 'c-gone', at: Date.now() }]))
+    const hook = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    mounted.push(hook)
+    act(() => {
+      hook.result.current.importData({
+        _savedAt: Date.now() - 1000,
+        activeNovelId: 'n1',
+        novels: [{ id: 'n1', title: 'Book', type: 'novel' }],
+        characters: [{ id: 'c-gone', novelId: 'n1', name: 'Deleted earlier' }, { id: 'c-keep', novelId: 'n1', name: 'Kept' }],
+      })
+    })
+
+    expect(hook.result.current.characters.map(c => c.name)).toEqual(['Kept'])
+    await waitFor(() => expect(deletesFor('characters').map(call => call[2])).toContain('c-gone'), { timeout: 4000 })
+  }, 15000)
+})

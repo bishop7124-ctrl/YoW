@@ -1288,8 +1288,9 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
 
   const handleSaveSeries = (id, data, assignedProjectIds) => {
     const previousCoverPhoto = editingSeries?.coverPhoto
-    if (previousCoverPhoto && previousCoverPhoto !== data.coverPhoto) deleteUserMedia(previousCoverPhoto).catch(console.error)
-    store.updateSeries(id, data)
+    const updatedSeries = store.updateSeries(id, data)
+    // Only drop the old cover once the new one is actually saved.
+    if (updatedSeries && previousCoverPhoto && previousCoverPhoto !== data.coverPhoto) deleteUserMedia(previousCoverPhoto).catch(console.error)
     store.allProjectStats.forEach(s => {
       const inSeries = s.project.seriesId === id
       const shouldBe = assignedProjectIds.has(s.project.id)
@@ -1309,8 +1310,9 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
 
   const handleSaveProject = (id, data) => {
     const previousCoverPhoto = editingProject?.coverPhoto
-    if (previousCoverPhoto && previousCoverPhoto !== data.coverPhoto) deleteUserMedia(previousCoverPhoto).catch(console.error)
-    store.updateNovel(id, data)
+    const updatedProject = store.updateNovel(id, data)
+    // Only drop the old cover once the new one is actually saved.
+    if (updatedProject && previousCoverPhoto && previousCoverPhoto !== data.coverPhoto) deleteUserMedia(previousCoverPhoto).catch(console.error)
     store.refreshStorageUsedBytes().catch(console.error)
     setEditingProject(null)
   }

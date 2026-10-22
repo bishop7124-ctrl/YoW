@@ -394,15 +394,13 @@ export async function mergeItems(table, userId, items, baseById = new Map()) {
   return { results, fallback: false }
 }
 
-// Delete a single item row by id
+// Delete a single item row by id. Throws when the database reports an error (rather than only
+// logging) so the caller can keep the delete pending and retry it (audit YOW-07).
 export async function deleteItem(table, userId, itemId) {
   if (OFFLINE_MODE || !itemId) return
-  if (table === 'scenes') {
-    await supabase.from('scenes').delete().eq('user_id', userId).eq('scene_id', itemId)
-    return
-  }
+  if (table === 'scenes') return deleteSceneDoc(userId, itemId)
   const { error } = await supabase.from(table).delete().eq('user_id', userId).eq('id', itemId)
-  if (error) console.error(`[sync] delete error for ${table}:`, error)
+  throwIfSupabaseError(error, `delete error for ${table}`)
 }
 
 // Deletes a project and every normalized child row in one database
@@ -510,13 +508,23 @@ export async function saveSceneDoc(userId, scene, { expectedRevision } = {}) {
 
 export async function deleteSceneDoc(userId, sceneId) {
   if (OFFLINE_MODE) return
-  await supabase.from('scenes').delete().eq('user_id', userId).eq('scene_id', sceneId)
+  const { error } = await supabase.from('scenes').delete().eq('user_id', userId).eq('scene_id', sceneId)
+  throwIfSupabaseError(error, 'scene delete error')
 }
 
 // Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
   if (OFFLINE_MODE || !userId) return
   await deleteAllUserMedia(userId)
-  const { error } = await supabase.rpc('delete_user')
-  throwIfSupabaseError(error, 'atomic account delete error')
+  // Stored media cannot be restored once removed, and the database delete cannot share a transaction
+  // with Storage. So the account delete is retried before giving up, and a final failure tells the user
+  // plainly that the deletion is unfinished and safe to run again (nothing here is re-created or lost
+  // by repeating it) (audit YOW-15).
+  let error = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 400 * attempt))
+    ;({ error } = await supabase.rpc('delete_user'))
+    if (!error) return
+  }
+  throw new Error(`Your account deletion did not finish (${error.message || 'unknown error'}). Your stored images were already removed; run "Delete account" again to complete it.`)
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockState = vi.hoisted(() => ({
   tables: {},
@@ -18,6 +18,7 @@ const mockState = vi.hoisted(() => ({
   mediaDeleteShouldFail: false,
   // Simulates the project's max-rows response cap (Supabase default 1000).
   rowCap: Infinity,
+  deleteError: null,
   // Simulates rows that exist (count) but are never actually delivered.
   undeliverableAfter: null,
   pageRequests: [],
@@ -90,11 +91,12 @@ vi.mock('../supabase', () => ({
         const builder = {
           eq: vi.fn((col, val) => { filters.push([col, val]); return builder }),
           then: (resolve) => {
+            if (mockState.deleteError) { resolve({ data: null, error: mockState.deleteError }); return }
             const rows = mockState.tables[table] || []
             mockState.tables[table] = rows.filter(
               row => !filters.every(([col, val]) => row[col] === val)
             )
-            resolve({ data: null, error: null })
+            resolve({ data: null, error: mockState.deleteError })
           },
         }
         return builder
@@ -428,6 +430,14 @@ describe('atomic destructive deletes', () => {
     expect(mockState.rpcCalls).toEqual([{ name: 'delete_user', args: undefined }])
   })
 
+  it('retries a failed account delete and reports an unfinished deletion plainly (audit YOW-15)', async () => {
+    const { deleteAllUserData } = await import('./firestoreSync.js')
+    mockState.rpcError = { message: 'connection reset' }
+    await expect(deleteAllUserData('user-1')).rejects.toThrow(/did not finish.*run "Delete account" again/)
+    expect(mockState.rpcCalls.filter(call => call.name === 'delete_user')).toHaveLength(3)
+    mockState.rpcError = null
+  })
+
   it('does not start the account transaction when Storage cleanup fails', async () => {
     const { deleteAllUserData } = await import('./firestoreSync.js')
     mockState.mediaDeleteShouldFail = true
@@ -506,5 +516,28 @@ describe('mergeItems (cross-browser safe record saves)', () => {
     await mergeItems('scenes', 'user-1', [{ id: 's1', novelId: 'n1' }], new Map([['s1', { id: 's1' }]]))
     expect(mockState.rpcCalls).toEqual([])
     expect(mockState.upserts[0].table).toBe('scenes')
+  })
+})
+
+describe('cloud deletes report failures (audit YOW-07)', () => {
+  beforeEach(() => { mockState.deleteError = null })
+  afterEach(() => { mockState.deleteError = null })
+
+  it('deleteItem throws when the database refuses, so the caller can retry', async () => {
+    const { deleteItem } = await import('./firestoreSync.js')
+    mockState.deleteError = { message: 'permission denied' }
+    await expect(deleteItem('characters', 'user-1', 'c1')).rejects.toThrow(/permission denied/)
+  })
+
+  it('deleteSceneDoc throws when the database refuses', async () => {
+    const { deleteSceneDoc } = await import('./firestoreSync.js')
+    mockState.deleteError = { message: 'network down' }
+    await expect(deleteSceneDoc('user-1', 's1')).rejects.toThrow(/network down/)
+  })
+
+  it('both resolve when the delete succeeds', async () => {
+    const { deleteItem, deleteSceneDoc } = await import('./firestoreSync.js')
+    await expect(deleteItem('characters', 'user-1', 'c1')).resolves.toBeUndefined()
+    await expect(deleteSceneDoc('user-1', 's1')).resolves.toBeUndefined()
   })
 })

@@ -1354,9 +1354,9 @@ export default function SeriesDashboard({
         currentUsedBytes: store.storageUsedBytes,
         quotaBytes: store.storageQuotaBytes,
       })
-      store.updateSeries(seriesId, { coverPhoto })
+      const updated = store.updateSeries(seriesId, { coverPhoto })
       store.refreshStorageUsedBytes().catch(console.error)
-      deleteUserMedia(previousCoverPhoto).catch(console.error)
+      deleteUserMedia(updated ? previousCoverPhoto : coverPhoto).catch(console.error)
     } catch (error) {
       setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }
