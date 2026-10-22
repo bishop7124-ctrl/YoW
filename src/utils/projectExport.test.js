@@ -231,7 +231,8 @@ describe('timeline chronology exports', () => {
   it('uses ranges and precise dates in the visible PDF drawing commands', async () => {
     const raw = await (await createProjectPdfBlob(data)).text()
     const drawn = [...raw.matchAll(/\((.*?)\) Tj/g)].map(match => match[1]).join('\n')
-    expect(drawn).toContain('-10 - 0')
+    // The en dash is drawn as its WinAnsi code (octal \226) now, not flattened to a hyphen.
+    expect(drawn).toContain('-10 \\226 0')
     expect(drawn).toContain('Year 12, First Month')
     expect(drawn).toContain('3 BCE')
   })

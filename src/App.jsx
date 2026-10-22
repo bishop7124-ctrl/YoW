@@ -627,6 +627,13 @@ function AppInner() {
     window.addEventListener('yow-export-save-error', onSaveError)
     return () => window.removeEventListener('yow-export-save-error', onSaveError)
   }, [])
+  // The PDF's built-in fonts cannot draw every character; the export reports which ones it replaced.
+  const [exportWarning, setExportWarning] = useState(null)
+  useEffect(() => {
+    const onWarning = event => setExportWarning(event.detail || null)
+    window.addEventListener('yow-export-warning', onWarning)
+    return () => window.removeEventListener('yow-export-warning', onWarning)
+  }, [])
   const [desktopDeviceLimit, setDesktopDeviceLimit] = useState(false)
   useEffect(() => {
     if (OFFLINE_MODE || !desktopApp || !userId || !membership.isDesktopEntitled) return
@@ -1465,6 +1472,17 @@ function AppInner() {
             {' '}Nothing was written to your computer. Pick a folder you can write to (for example Documents) and try the export again.
           </span>
           <button type="button" className="membership-toast-link" onClick={() => setExportSaveError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {exportWarning && (
+        <div role="alert" className="membership-toast">
+          <span>
+            This PDF cannot show some characters ({(exportWarning.characters || []).join(' ')}); they appear as "?".
+            {' '}Your writing is not changed. Use the Word (.docx) or full backup (.zip) export to keep every character.
+          </span>
+          <button type="button" className="membership-toast-link" onClick={() => setExportWarning(null)}>
             Dismiss
           </button>
         </div>

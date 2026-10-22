@@ -59,11 +59,15 @@ export const downloadBlob = (blob, filename) => {
   return Promise.resolve(filename)
 }
 
+// Manuscript prose is plain text, so a literal `<door opens>` or `1 < 2` is the writer's own words and
+// must survive. Only recognised HTML tags are removed (audit YOW-08); anything else stays.
+const HTML_TAG_PATTERN = /<\/?(?:p|div|span|strong|b|em|i|u|s|a|ul|ol|li|h[1-6]|blockquote|img|hr|table|thead|tbody|tr|td|th|font|sub|sup|code|pre|small|mark|section|article|header|footer|nav|main|aside|figure|figcaption|label|button|input|form|select|option|textarea|iframe|object|embed|svg|canvas|video|audio|script|style|link|meta|noscript|center|strike|del|ins|cite|abbr|dl|dt|dd|caption|colgroup|col)\b[^>]*>/gi
+
 export const stripHtml = (value = '') =>
   String(value)
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
+    .replace(HTML_TAG_PATTERN, '')
     .replace(/\r\n/g, '\n')
     .trim()
 

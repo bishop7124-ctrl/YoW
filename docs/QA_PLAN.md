@@ -6,6 +6,8 @@ Automated regression tests pass (see ROADMAP 2026-10-22). Still to run in a real
 
 YOW-02/04/06 real-browser checks (not yet run): (5) DevTools offline, edit a character and a scene, wait: status must read Sync error (not Synced); go online: it must retry by itself and read Synced. (6) Edit offline, close the tab, reopen online 1+ hour later: the edit must be kept, with the cloud version listed under conflicts if it differed. (7) Edit the same scene on a second device before step 6's reopen: both versions must survive (conflict copy). (8) Against a test Supabase with 1,200+ scenes: every scene loads, and an artificially failed page shows the retry screen.
 
+YOW-08 real-file checks (not yet run): export a project containing accents (café, Zoë, São Paulo), curly quotes, em dashes, a literal `<door opens>`, and a line of Cyrillic/Chinese/Arabic to PDF, DOCX and ZIP; open the PDF in Preview and Acrobat. Accents/punctuation must read correctly, the non-Latin line shows `?` plus the warning toast, and DOCX/ZIP keep every character.
+
 ## 2026-10-12 catch-up (9-12 Oct): disclosure, updater-manifest rules, Finalise-draft guard, project-type browser checks
 
 Status: **Automated half done; every real-device and owner step below is still pending.** Run from the cloud session on 12 Oct after the 9-11 Oct rows were found not closed.

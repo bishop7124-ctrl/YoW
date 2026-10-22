@@ -708,16 +708,47 @@ const hexToRgb = (hex) => {
 
 const pdfColor = (hex, mode = 'rg') => `${hexToRgb(hex).map(value => value.toFixed(3)).join(' ')} ${mode}`
 
-const pdfText = (value = '') =>
-  String(value)
-    .normalize('NFKD')
-    .replace(/[^\x20-\x7E\n]/g, char => {
-      if (char === '—' || char === '–') return '-'
-      if (char === '’' || char === '‘') return "'"
-      if (char === '“' || char === '”') return '"'
-      return ''
-    })
-    .replace(/[\\()]/g, '\\$&')
+// The PDF uses the built-in Helvetica fonts, which can only draw the WinAnsi (Windows-1252) character
+// set: English, Western European accents, and common punctuation. Those characters are written as
+// octal escapes so the bytes match the declared /WinAnsiEncoding. Anything else cannot be drawn: it is
+// replaced with a visible "?" (never silently dropped) and reported through `unsupportedPdfCharacters`
+// so the export can warn the writer (audit YOW-08). A DOCX or ZIP export carries every character.
+const WIN_ANSI_EXTRA = new Map([
+  ['€', 0x80], ['‚', 0x82], ['ƒ', 0x83], ['„', 0x84], ['…', 0x85], ['†', 0x86], ['‡', 0x87], ['ˆ', 0x88],
+  ['‰', 0x89], ['Š', 0x8A], ['‹', 0x8B], ['Œ', 0x8C], ['Ž', 0x8E], ['‘', 0x91], ['’', 0x92], ['“', 0x93],
+  ['”', 0x94], ['•', 0x95], ['–', 0x96], ['—', 0x97], ['˜', 0x98], ['™', 0x99], ['š', 0x9A], ['›', 0x9B],
+  ['œ', 0x9C], ['ž', 0x9E], ['Ÿ', 0x9F],
+])
+const INVISIBLE_CHARACTERS = /[\u200B-\u200F\u2060\uFEFF\u00AD]/
+const unsupportedPdfCharacters = new Set()
+
+const winAnsiCode = (char) => {
+  const code = char.codePointAt(0)
+  if (code >= 0xA0 && code <= 0xFF) return code
+  return WIN_ANSI_EXTRA.get(char) ?? null
+}
+const octal = (code) => `\\${code.toString(8).padStart(3, '0')}`
+
+const pdfText = (value = '') => {
+  let output = ''
+  for (const char of String(value).normalize('NFC')) {
+    if (char === '\n') { output += char; continue }
+    if (char === '\r' || char === '\t') { output += ' '; continue }
+    const code = char.codePointAt(0)
+    if (code >= 0x20 && code <= 0x7E) {
+      output += /[\\()]/.test(char) ? `\\${char}` : char
+      continue
+    }
+    const winAnsi = winAnsiCode(char)
+    if (winAnsi !== null) { output += octal(winAnsi); continue }
+    if (INVISIBLE_CHARACTERS.test(char)) continue
+    unsupportedPdfCharacters.add(char)
+    // An accent-stripped base letter reads better than "?", but it is still not the writer's text.
+    const base = char.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    output += /^[\x20-\x7E]$/.test(base) ? base : '?'
+  }
+  return output
+}
 
 export const measureText = (text, size, tracking = 0) => {
   const value = String(text || '')
@@ -1358,9 +1389,9 @@ export const createPdfBytes = (pageContents, title) => {
   }
 
   write('%PDF-1.4\n')
-  addObject(1, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
-  addObject(2, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>')
-  addObject(3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>')
+  addObject(1, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>')
+  addObject(2, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>')
+  addObject(3, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>')
   const pagesId = 4
   const plannedPages = []
   let nextId = 5
@@ -1622,13 +1653,23 @@ const createProjectPdfPages = (projectData, theme) => {
 export const createProjectPdfBlob = async (projectData, options = {}) => {
   const theme = getExportPdfTheme(options.themeId)
   const preparedData = await prepareProjectPdfData(projectData)
+  // Page building and byte writing below are synchronous, so the collector cannot interleave with
+  // another export.
+  unsupportedPdfCharacters.clear()
   const pages = createProjectPdfPages(preparedData, theme)
   const bytes = createPdfBytes(pages, preparedData.project?.title || getProjectExportLabel(preparedData.project))
-  return new Blob([bytes], { type: 'application/pdf' })
+  const blob = new Blob([bytes], { type: 'application/pdf' })
+  blob.unsupportedCharacters = [...unsupportedPdfCharacters]
+  return blob
 }
 
 export const downloadProjectPdf = async (projectData, options = {}) => {
   const blob = await createProjectPdfBlob(projectData, options)
+  if (blob.unsupportedCharacters.length && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('yow-export-warning', {
+      detail: { format: 'pdf', characters: blob.unsupportedCharacters.slice(0, 12) },
+    }))
+  }
   downloadBlob(blob, getProjectPdfFilename(projectData.project))
 }
 
