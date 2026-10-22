@@ -61,7 +61,18 @@ async function upsertUserProfile(supabaseAdmin, userId, patch = {}) {
 // computed additively from the previous value), so replaying this for the
 // same or an older event is a harmless no-op/overwrite-with-same-data.
 // --------------------------------------------------------------------------
+export function isCloudRenewalSubscription(subscription) {
+  const plan = subscription?.metadata?.plan
+  return plan === 'maintenance' || plan === 'hosting_renewal'
+}
+
 async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbackUserId) {
+  // The GBP 6 Cloud renewal is not a membership: it only extends
+  // maintenance_expires_at (via invoice.paid). Letting its subscription events
+  // write membership fields would overwrite a Lifetime user's plan, and
+  // cancelling it would revoke access.
+  if (isCloudRenewalSubscription(subscription)) return
+
   const userId = subscription.metadata?.user_id
     || (typeof subscription.latest_invoice !== 'string'
           ? subscription.latest_invoice?.metadata?.user_id
@@ -421,9 +432,17 @@ export default async function handler(req, res) {
 
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-      case 'customer.subscription.deleted':
-        await updateSubscriptionMembership(supabaseAdmin, event.data.object)
+      case 'customer.subscription.deleted': {
+        const eventSub = event.data.object
+        if (isCloudRenewalSubscription(eventSub)) break
+        // Stripe does not guarantee delivery order, so the payload may be older
+        // than state already applied (a late 'active' after 'canceled' would
+        // re-grant access). Always apply the subscription's current state.
+        const currentSub = await stripe.subscriptions.retrieve(eventSub.id, { expand: ['latest_invoice'] })
+        currentSub.metadata = { ...eventSub.metadata, ...currentSub.metadata }
+        await updateSubscriptionMembership(supabaseAdmin, currentSub)
         break
+      }
 
       case 'charge.dispute.closed': {
         const dispute = event.data.object

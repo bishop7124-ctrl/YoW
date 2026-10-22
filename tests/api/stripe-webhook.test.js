@@ -243,6 +243,12 @@ describe('handler — event ledger idempotency', () => {
     constructEvent.mockReset()
     subscriptionsRetrieve.mockReset()
     paymentIntentsRetrieve.mockReset()
+    // Subscription events apply Stripe's current state, not the event payload.
+    subscriptionsRetrieve.mockReset()
+    subscriptionsRetrieve.mockImplementation(async (id) => ({
+      id, status: 'active', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1',
+      items: { data: [{ current_period_end: 123 }] },
+    }))
 
     vi.resetModules()
     const mod = await import('../../api/stripe-webhook.js')
@@ -662,5 +668,120 @@ describe('handler — one-time purchase payment-state handling', () => {
 
     expect(res.status).toHaveBeenCalledWith(200)
     expect(updateUserById).not.toHaveBeenCalled()
+  })
+})
+
+
+// ─── out-of-order delivery and Cloud renewal isolation (22 Oct sprint) ───────
+
+describe('handler — subscription events: ordering and renewal isolation', () => {
+  let handler
+
+  beforeEach(async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_stub'
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'stub-service-key'
+
+    vi.clearAllMocks()
+    from.mockImplementation((table) => makeBuilder(table))
+    rpc.mockResolvedValue({ data: true, error: null })
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
+    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    tableResults.length = 0
+    fromCalls.length = 0
+    constructEvent.mockReset()
+    subscriptionsRetrieve.mockReset()
+
+    vi.resetModules()
+    const mod = await import('../../api/stripe-webhook.js')
+    handler = mod.default
+  })
+
+  const sub = (overrides) => ({
+    id: 'sub_1', status: 'active', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1',
+    items: { data: [{ current_period_end: 123 }] }, ...overrides,
+  })
+
+  it('a late-delivered older "active" event cannot re-grant access after the subscription was cancelled', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_stale_active', type: 'customer.subscription.updated', data: { object: sub({ status: 'active' }) },
+    })
+    subscriptionsRetrieve.mockResolvedValue(sub({ status: 'canceled', items: { data: [] }, ended_at: 456 }))
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    const metadata = updateUserById.mock.calls[0][1].app_metadata
+    expect(metadata.subscription_status).toBe('canceled')
+    expect(metadata.access_revoked_at).toBeTruthy()
+  })
+
+  it('applies cancel then reactivate delivered in reverse order to the same final state', async () => {
+    const final = sub({ status: 'active' })
+    subscriptionsRetrieve.mockResolvedValue(final)
+    const events = [
+      { id: 'evt_reactivated', type: 'customer.subscription.updated', data: { object: sub({ status: 'active' }) } },
+      { id: 'evt_cancelled', type: 'customer.subscription.updated', data: { object: sub({ status: 'canceled' }) } },
+    ]
+    for (const event of events) {
+      constructEvent.mockReturnValue(event)
+      tableResults.length = 0
+      queueResult({ data: null, error: null })
+      await handler(makeReq(), makeRes())
+    }
+    for (const call of updateUserById.mock.calls) {
+      expect(call[1].app_metadata.subscription_status).toBe('active')
+      expect(call[1].app_metadata.access_revoked_at).toBeNull()
+    }
+  })
+
+  it.each(['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'])(
+    'GBP 6 Cloud renewal %s never rewrites the Lifetime membership',
+    async (type) => {
+      constructEvent.mockReturnValue({
+        id: `evt_renewal_${type}`, type,
+        data: { object: sub({ status: type.endsWith('deleted') ? 'canceled' : 'active', metadata: { user_id: 'user-1', plan: 'hosting_renewal' } }) },
+      })
+      queueResult({ data: null, error: null })
+
+      const res = makeRes()
+      await handler(makeReq(), res)
+
+      expect(res.status).toHaveBeenCalledWith(200)
+      expect(updateUserById).not.toHaveBeenCalled()
+    },
+  )
+
+  it('a failed GBP 6 renewal payment does not touch membership or extend Cloud access', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_renewal_failed', type: 'invoice.payment_failed',
+      data: { object: { id: 'in_1', subscription: 'sub_maint_1', metadata: {} } },
+    })
+    subscriptionsRetrieve.mockResolvedValue(sub({ id: 'sub_maint_1', status: 'past_due', metadata: { user_id: 'user-1', plan: 'maintenance' } }))
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('a failed monthly payment records past_due and revokes access', async () => {
+    constructEvent.mockReturnValue({
+      id: 'evt_monthly_failed', type: 'invoice.payment_failed',
+      data: { object: { id: 'in_2', subscription: 'sub_1', metadata: {} } },
+    })
+    subscriptionsRetrieve.mockResolvedValue(sub({ status: 'past_due' }))
+    queueResult({ data: null, error: null })
+
+    await handler(makeReq(), makeRes())
+
+    const metadata = updateUserById.mock.calls[0][1].app_metadata
+    expect(metadata.subscription_status).toBe('past_due')
+    expect(metadata.access_revoked_at).toBeTruthy()
   })
 })
