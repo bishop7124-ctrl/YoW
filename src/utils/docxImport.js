@@ -1,4 +1,3 @@
-import { unzipSync } from 'fflate'
 import { assertArchiveInputSizeOk, assertUnzippedResultOk, makeZipEntryRatioFilter, assertArchiveNestingDepthOk } from './archiveImportLimits'
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -394,6 +393,8 @@ export async function parseDocxToStructure(file) {
   assertArchiveNestingDepthOk(0, label)
   const uint8 = new Uint8Array(buffer)
 
+  // Loaded on demand so the zip reader is not part of the first download.
+  const { unzipSync } = await import('fflate')
   let files
   try {
     const ratioFilter = makeZipEntryRatioFilter(label)

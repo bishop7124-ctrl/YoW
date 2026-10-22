@@ -20,7 +20,10 @@ export default function Factions({ store, initialEntryId = null }) {
 
   const activeFaction = factions.find(f => f.id === selectedFactionId)
   const factionMembers = characters.filter(c => c.factionId === selectedFactionId)
-  const memberCount = (f) => characters.filter(c => c.factionId === f.id).length
+  // One pass over the characters instead of a scan per faction per comparison.
+  const memberCounts = new Map()
+  characters.forEach(c => { if (c.factionId != null) memberCounts.set(c.factionId, (memberCounts.get(c.factionId) || 0) + 1) })
+  const memberCount = (f) => memberCounts.get(f.id) || 0
   const sortedFactions = [...factions].sort((a, b) => {
     if (sortBy === 'name-asc') return a.name.localeCompare(b.name)
     if (sortBy === 'name-desc') return b.name.localeCompare(a.name)

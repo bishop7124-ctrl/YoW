@@ -1,3 +1,4 @@
+import { saveSceneVersion } from '../../utils/sceneVersions'
 import { useMemo, useEffect, useRef, useCallback } from 'react'
 import { readItem, writeItem } from '../../storage/projectStorage'
 
@@ -219,9 +220,7 @@ function runPersistSceneDraft(scene, content) {
     const lastSnapshot = lastVersionSnapshotAt.get(scene.id) || 0
     if (now - lastSnapshot >= VERSION_SNAPSHOT_THROTTLE_MS) {
       lastVersionSnapshotAt.set(scene.id, now)
-      import('../../utils/sceneVersions').then(m => {
-        m.saveSceneVersion({ ...scene, content })
-      }).catch(() => {})
+      try { saveSceneVersion({ ...scene, content }) } catch { /* history is best effort */ }
     }
     return raw
   } catch (error) {
