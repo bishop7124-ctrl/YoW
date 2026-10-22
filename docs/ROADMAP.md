@@ -22,6 +22,26 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-10-22 Codex technical audit (RED) and remediation tracking
+
+Status: **Audit received; remediation in progress. Launch verdict RED until the data-persistence, export and entitlement blockers below are closed.** Source: `YOW_TECHNICAL_AUDIT.md` (Codex/Atlas, commit `a7c48d7`, 22 findings, 11 reproduced probes; no remote exploit or cross-tenant leak found; existing suite passed 1,642 tests while probes still reproduced failures). Close a finding only with linked change + test evidence. Payment findings (09, 10) are tracked in `docs/PAYMENT_ROADMAP.md` per the payment-roadmap rule. Audit's suggested order: 01+03, 05, 02+04+06, 08, 09/10.
+
+| ID | Finding | Status |
+| --- | --- | --- |
+| YOW-01 | IndexedDB single-record writes acknowledged before the transaction commits | **Fixed 2026-10-22** — `putEntry`/`deleteEntry` settle on transaction completion/abort; regression test aborts after request success |
+| YOW-03 | Sign-out can wipe the only copy of unsynced edits | **Fixed in code 2026-10-22** — see below; real browser offline sign-out journey still to run (QA_PLAN) |
+| YOW-02 | Failed collection saves skipped on retry; "synced" shown after unrelated success | Open (next, with 04/06: durable per-record outbox) |
+| YOW-04 | Login recovery picks local vs cloud by 30-minute window and bypasses revision guards | Open |
+| YOW-05 | Late account load can apply after account switch | **Fixed in code 2026-10-22** — `createAccountLoadGuard` (`src/utils/accountLoadGuard.js`): every continuation of `loadUserData` in `App.jsx` (import, recovery merge, lapse-resume awaits, catch, finally) is dropped if the account signed out or changed; same-account effect re-runs keep their token. Guard has unit tests; the delayed-A-then-B browser journey is still to run (QA_PLAN) |
+| YOW-06 | Account load accepts truncated (1,000-row) responses | Open |
+| YOW-07 | Deletes swallow errors / non-transactional structural delete | Open |
+| YOW-08 | PDF drops non-ASCII text; readable export strips literal `<…>` | Open |
+| YOW-09, 10 | Webhook acknowledges unapplied payment; Cloud renewal overwrites Lifetime | Open — `docs/PAYMENT_ROADMAP.md` |
+| YOW-11 | Uncertain final lifecycle email satisfies the destructive-action gate | Open — must be fixed before any lifecycle switch is enabled |
+| YOW-12–22 | P2 items (import validation, archive limits, scene-history scope, media ordering, dependency advisories, AI limiting, analytics wording, contracts, bundle size, recovery evidence, import fidelity) and YOW-21 operational recovery evidence (P1) | Open |
+
+YOW-03 implementation: `runSyncFlush()` now returns `{ confirmed }` (false on timeout, rejected flush or any rejected write). When sign-out is unconfirmed, or the store was `syncing`/`error` or had a failed local write when the session ended (covers expired sessions), `App.jsx` saves an account-scoped `nf_unsyncedRecovery:<userId>` copy before `clearData()`. It is only ever read for the same account; on that account's next load it is three-way merged with cloud with no base (device-only and cloud-only records kept, differing records become visible conflicts, nothing silently overwritten), persisted, then cleared; a failed merge keeps the copy. Known gap: the recovery copy stays in the local browser profile until merged (disclose; see YOW-14). Verification: new regression tests for 01 and 03 (adapter abort, flush confirmation, recovery-copy storage, AuthContext flag) and the 05 guard; full Vitest 173 files / 1,655 tests, zero lint errors.
+
 ### 2026-10-06 map image upload
 
 Status: **Implemented in code; focused tests pass; live browser check deferred to the 2026-10-14 Map Builder acceptance pass (see `docs/QA_PLAN.md`).** Atlas library's "Import map or image" now also accepts PNG/JPEG/WebP: the image is uploaded to private `user-media` storage (category `maps`, quota-checked, resized to 2400 px) and becomes the backdrop of a new blank Region map (`metadata.backdrop`), with an opacity slider in the sidebar. Backdrops are included in PNG/SVG exports. Next action: verify upload, reopen, opacity and PNG export in the browser.

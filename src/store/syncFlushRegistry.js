@@ -11,18 +11,45 @@ export function unregisterSyncFlush(fn) {
   if (flushFn === fn) flushFn = null
 }
 
-// Best-effort: if no store has registered (e.g. offline mode, or signing out
-// before the store ever mounted), resolve immediately rather than block.
 // Bounded by a timeout so a slow/offline network can't hang sign-out — the
-// user should never feel like clicking "Sign out" got stuck.
+// user should never feel like clicking "Sign out" got stuck. The result says
+// whether every pending cloud write was actually confirmed: a timeout, a
+// rejected flush or a rejected write all mean the cloud may NOT have the
+// latest edits, and the caller must keep a local recovery copy.
+// With no store registered (offline mode, or signing out before the store
+// mounted) there is nothing pending, so it is confirmed.
 const FLUSH_TIMEOUT_MS = 4000
 
 export async function runSyncFlush() {
-  if (!flushFn) return
+  if (!flushFn) return { confirmed: true }
+  const timedOut = Symbol('timeout')
+  let timer
   try {
-    await Promise.race([
+    const outcome = await Promise.race([
       flushFn(),
-      new Promise(resolve => setTimeout(resolve, FLUSH_TIMEOUT_MS)),
+      new Promise(resolve => { timer = setTimeout(() => resolve(timedOut), FLUSH_TIMEOUT_MS) }),
     ])
-  } catch { /* best effort — sign-out must not hang on a sync failure */ }
+    if (outcome === timedOut) return { confirmed: false }
+    const anyRejected = Array.isArray(outcome) && outcome.some(result => result?.status === 'rejected')
+    return { confirmed: !anyRejected }
+  } catch {
+    return { confirmed: false }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Set by sign-out when its flush was not confirmed; read once by the store
+// owner when it clears local data, so the unsynced edits are kept as an
+// account-scoped recovery copy instead of being wiped.
+let unsyncedSignOut = false
+
+export function markUnsyncedSignOut() {
+  unsyncedSignOut = true
+}
+
+export function consumeUnsyncedSignOut() {
+  const value = unsyncedSignOut
+  unsyncedSignOut = false
+  return value
 }

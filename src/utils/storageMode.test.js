@@ -3,14 +3,17 @@ import { createMemoryBackend, resetStorageBackend, setStorageBackend } from '../
 import {
   STORAGE_MODES,
   clearDesktopLapseSnapshot,
+  clearUnsyncedRecoveryCopy,
   isLocalFirstMode,
   loadDesktopLapseSnapshot,
   loadLocalFirstSnapshot,
   loadPendingDesktopLapseResumeBase,
   loadStorageMode,
+  loadUnsyncedRecoveryCopy,
   saveDesktopLapseSnapshot,
   saveLocalFirstSnapshot,
   saveStorageMode,
+  saveUnsyncedRecoveryCopy,
 } from './storageMode'
 
 // The test environment runs under Node (no `window`), so the storage
@@ -147,5 +150,23 @@ describe('loadPendingDesktopLapseResumeBase', () => {
       isLocalMode: false,
       userLocalFirstMode: false,
     })).toBeNull()
+  })
+})
+
+describe('unsynced recovery copy (audit YOW-03)', () => {
+  const copy = { novels: [{ id: 'n1' }], scenes: [{ id: 's1', content: 'latest words' }] }
+
+  it('keeps each account\'s copy separate and never returns it to another account', () => {
+    expect(saveUnsyncedRecoveryCopy('user-a', copy)).toBe(true)
+    expect(loadUnsyncedRecoveryCopy('user-a')).toEqual(copy)
+    expect(loadUnsyncedRecoveryCopy('user-b')).toBeNull()
+  })
+
+  it('refuses to save an empty or ownerless snapshot, and clears on request', () => {
+    expect(saveUnsyncedRecoveryCopy(null, copy)).toBe(false)
+    expect(saveUnsyncedRecoveryCopy('user-a', { novels: [] })).toBe(false)
+    saveUnsyncedRecoveryCopy('user-a', copy)
+    clearUnsyncedRecoveryCopy('user-a')
+    expect(loadUnsyncedRecoveryCopy('user-a')).toBeNull()
   })
 })

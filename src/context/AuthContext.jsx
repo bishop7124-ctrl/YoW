@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { OFFLINE_MODE, OFFLINE_USER } from '../utils/offlineMock'
 import { deleteAllUserData } from '../utils/firestoreSync'
-import { runSyncFlush } from '../store/syncFlushRegistry'
+import { runSyncFlush, markUnsyncedSignOut } from '../store/syncFlushRegistry'
 import { clearAiSettings, clearAiSettingsForOtherUser } from '../utils/aiSettings'
 import { trackEvent, identifyUser } from '../utils/analytics'
 import { isDesktopAppRuntime } from '../utils/runtime'
@@ -250,7 +250,8 @@ export function AuthProvider({ children }) {
         // moment ago) while the session is still valid — once signed out,
         // the store wipes its local cache and the same writes would go out
         // unauthenticated and be silently dropped, losing the edit for good.
-        await runSyncFlush()
+        const flushResult = await runSyncFlush()
+        if (flushResult?.confirmed === false) markUnsyncedSignOut()
         clearAiSettings()
         if (!isDesktopAppRuntime()) clearLastWebActivity()
         const { error } = await supabase.auth.signOut().catch(() => ({ error: true }))

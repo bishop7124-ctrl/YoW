@@ -153,6 +153,38 @@ describe('browser vault adapter', () => {
     resetStorageBackend()
   })
 
+  it('does not acknowledge an ordinary write whose transaction aborts after the request succeeded (audit YOW-01)', async () => {
+    const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
+    const { resetStorageBackend, writeItem } = await import('./projectStorage.js')
+    const { hasLocalWriteFailed, clearLocalWriteFailed } = await import('./writeDurability.js')
+    const onWriteError = vi.fn()
+    const backend = await initializeIndexedDbStorage({ onWriteError, retry: { attempts: 1 } })
+
+    // Abort the transaction in the same tick the put request reports success:
+    // the request "succeeded" but nothing is ever committed.
+    const realPut = IDBObjectStore.prototype.put
+    const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (...args) {
+      const request = realPut.apply(this, args)
+      const transaction = this.transaction
+      request.addEventListener('success', () => transaction.abort())
+      return request
+    })
+
+    writeItem('nf_yow01_abort', 'unsaved')
+    await backend.flush()
+    putSpy.mockRestore()
+
+    expect(onWriteError).toHaveBeenCalled()
+    expect(hasLocalWriteFailed()).toBe(true)
+
+    // And the value genuinely is not in the database after a restart.
+    resetStorageBackend()
+    const reopened = await initializeIndexedDbStorage()
+    expect(reopened.getItem('nf_yow01_abort')).toBeNull()
+    clearLocalWriteFailed('nf_yow01_abort')
+    resetStorageBackend()
+  })
+
   it('blocks navigation via beforeunload when a local write has failed and not recovered', async () => {
     const { initializeIndexedDbStorage } = await import('./browserVaultAdapter.js')
     const { resetStorageBackend, writeItem } = await import('./projectStorage.js')

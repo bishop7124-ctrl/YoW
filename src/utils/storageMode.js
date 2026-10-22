@@ -131,6 +131,35 @@ export function clearDesktopLapseLocalCopy(userId) {
   try { removeItem(desktopLapseLocalCopyKey(userId)) } catch { /* storage unavailable */ }
 }
 
+// Account-scoped copy of local edits that Cloud never confirmed at sign-out
+// (offline, timeout, failed write, expired session). Sign-out wipes the store's
+// local project data, so without this the unsynced edit could be the only copy
+// and be destroyed. Only ever read back for the same account; removed once it
+// has been reconciled into the cloud copy.
+const UNSYNCED_RECOVERY_PREFIX = 'nf_unsyncedRecovery'
+const unsyncedRecoveryKey = userId => `${UNSYNCED_RECOVERY_PREFIX}:${userId}`
+
+export function saveUnsyncedRecoveryCopy(userId, data) {
+  if (!userId || !Array.isArray(data?.novels) || data.novels.length === 0) return false
+  try {
+    writeItem(unsyncedRecoveryKey(userId), JSON.stringify({ savedAt: Date.now(), data }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function loadUnsyncedRecoveryCopy(userId) {
+  if (!userId) return null
+  const parsed = loadValue(unsyncedRecoveryKey(userId), null)
+  return parsed?.data ?? null
+}
+
+export function clearUnsyncedRecoveryCopy(userId) {
+  if (!userId) return
+  try { removeItem(unsyncedRecoveryKey(userId)) } catch { /* storage unavailable */ }
+}
+
 // The store's own snapshot wins whenever it holds projects (it is the newest
 // state, e.g. an in-session lapse then renewal); the saved copy is used only
 // when sign-out emptied the store.

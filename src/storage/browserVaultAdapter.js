@@ -71,13 +71,6 @@ export function isIndexedDbAvailable() {
   return Boolean(getIndexedDb())
 }
 
-function promisifyRequest(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
-
 function openDatabase() {
   const indexedDbApi = getIndexedDb()
   if (!indexedDbApi) return Promise.reject(new Error('indexedDB unavailable'))
@@ -111,14 +104,25 @@ function readAllEntries(db) {
   })
 }
 
+// Settles on the transaction, not the request: a request can report success
+// and the transaction still abort (quota, eviction, a closing connection), in
+// which case nothing was stored and the write must not be acknowledged.
+function runWriteTransaction(db, write) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite')
+    transaction.oncomplete = () => resolve()
+    transaction.onabort = () => reject(transaction.error || new Error('IndexedDB write transaction aborted.'))
+    transaction.onerror = () => reject(transaction.error || new Error('IndexedDB write transaction failed.'))
+    write(transaction.objectStore(STORE_NAME))
+  })
+}
+
 function putEntry(db, key, value) {
-  const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME)
-  return promisifyRequest(store.put(value, key))
+  return runWriteTransaction(db, store => store.put(value, key))
 }
 
 function deleteEntry(db, key) {
-  const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME)
-  return promisifyRequest(store.delete(key))
+  return runWriteTransaction(db, store => store.delete(key))
 }
 
 function replaceEntries(db, entriesToSet, keysToRemove) {

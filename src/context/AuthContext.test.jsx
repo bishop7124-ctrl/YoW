@@ -6,6 +6,7 @@ import { WEB_IDLE_LOGOUT_MS, WEB_LAST_ACTIVITY_KEY } from '../utils/sessionActiv
 import { supabase } from '../supabase'
 import { trackEvent } from '../utils/analytics'
 import { deleteAllUserData } from '../utils/firestoreSync'
+import { runSyncFlush, markUnsyncedSignOut } from '../store/syncFlushRegistry'
 
 const mocks = vi.hoisted(() => ({
   desktop: false,
@@ -48,7 +49,8 @@ vi.mock('../utils/firestoreSync', () => ({
 }))
 
 vi.mock('../store/syncFlushRegistry', () => ({
-  runSyncFlush: vi.fn(() => Promise.resolve()),
+  runSyncFlush: vi.fn(() => Promise.resolve({ confirmed: true })),
+  markUnsyncedSignOut: vi.fn(),
 }))
 
 vi.mock('../utils/aiSettings', () => ({
@@ -62,7 +64,7 @@ vi.mock('../utils/analytics', () => ({
 }))
 
 function Probe() {
-  const { user, recoveryMode, signIn, updateProfile, clearRecoveryMode, deleteAccount } = useAuth()
+  const { user, recoveryMode, signIn, signOut, updateProfile, clearRecoveryMode, deleteAccount } = useAuth()
   return (
     <>
       <div data-testid="user-id">{user?.id || 'signed-out'}</div>
@@ -70,6 +72,7 @@ function Probe() {
       <button type="button" onClick={() => signIn('writer@example.com', 'password')}>Sign in</button>
       <button type="button" onClick={clearRecoveryMode}>Finish recovery</button>
       <button type="button" onClick={deleteAccount}>Delete account</button>
+      <button type="button" onClick={signOut}>Sign out</button>
       <button type="button" onClick={() => updateProfile({
         full_name: 'Writer',
         subscription_plan: 'founder',
@@ -244,5 +247,20 @@ describe('AuthProvider session policy', () => {
     expect(localStorage.getItem('nf_lastActiveProject:other-user')).not.toBeNull()
     expect(supabase.auth.signOut).toHaveBeenCalled()
     expect(screen.getByTestId('user-id').textContent).toBe('signed-out')
+  })
+
+  it('flags sign-out for local recovery when the cloud flush was not confirmed (audit YOW-03)', async () => {
+    const user = { id: 'user-so', email: 'writer@example.com' }
+    localStorage.setItem('sb-test-auth-token', JSON.stringify({ user, expires_at: Math.floor(Date.now() / 1000) + 3600 }))
+    render(<AuthProvider><Probe /></AuthProvider>)
+    await waitFor(() => expect(screen.getByTestId('user-id').textContent).toBe('user-so'))
+
+    runSyncFlush.mockResolvedValueOnce({ confirmed: false })
+    await act(async () => { screen.getByRole('button', { name: 'Sign out' }).click() })
+    expect(markUnsyncedSignOut).toHaveBeenCalledTimes(1)
+
+    vi.mocked(markUnsyncedSignOut).mockClear()
+    await act(async () => { screen.getByRole('button', { name: 'Sign out' }).click() })
+    expect(markUnsyncedSignOut).not.toHaveBeenCalled()
   })
 })

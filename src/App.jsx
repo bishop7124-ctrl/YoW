@@ -42,6 +42,9 @@ import {
   saveDesktopLapseLocalCopy,
   loadDesktopLapseLocalCopy,
   chooseLapseLocalData,
+  saveUnsyncedRecoveryCopy,
+  loadUnsyncedRecoveryCopy,
+  clearUnsyncedRecoveryCopy,
   nextLapsedDesktopUser,
   saveLocalFirstSnapshot,
   saveStorageMode,
@@ -54,6 +57,9 @@ import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
 import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
+import { createAccountLoadGuard } from './utils/accountLoadGuard'
+import { consumeUnsyncedSignOut } from './store/syncFlushRegistry'
+import { hasLocalWriteFailed } from './storage/writeDurability'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import { trackEvent } from './utils/analytics'
@@ -337,6 +343,9 @@ function AppInner() {
   const lapseResumeClaimed = useRef(false)
   // Set while a desktop account is lapsed, so sign-out can keep its local-only edits.
   const lapsedDesktopUserRef = useRef(null)
+  const lastSignedInUserIdRef = useRef(null)
+  const accountLoadGuard = useRef(createAccountLoadGuard())
+  const lastSyncStateRef = useRef('idle')
   const localModeNoticeKey = useMemo(
     () => getLocalModeNoticeKey(userId, membership, storageMode),
     [userId, membership, storageMode]
@@ -974,8 +983,11 @@ function AppInner() {
     user?.user_metadata?.theme_visual_strength,
   ])
 
+  useEffect(() => { lastSyncStateRef.current = store.syncStatus?.state || 'idle' }, [store.syncStatus?.state])
+
   useEffect(() => {
     if (!user) {
+      accountLoadGuard.current.invalidate()
       loadedUid.current = null
       lapseResumeClaimed.current = false
       // Sign-out wipes local project data; while lapsed that data is the only
@@ -984,11 +996,27 @@ function AppInner() {
         saveDesktopLapseLocalCopy(lapsedDesktopUserRef.current, store.getLocalSnapshot?.())
         lapsedDesktopUserRef.current = null
       }
+      // Cloud never confirmed the latest edits (offline/timed-out/failed sign-out
+      // flush, or a session that expired mid-save): this local copy may be the
+      // only one, so keep it for this account's next sign-in before wiping it.
+      const previousUserId = lastSignedInUserIdRef.current
+      if (previousUserId) {
+        const flushUnconfirmed = consumeUnsyncedSignOut()
+        const syncState = lastSyncStateRef.current
+        if (flushUnconfirmed || syncState === 'error' || syncState === 'syncing' || hasLocalWriteFailed()) {
+          saveUnsyncedRecoveryCopy(previousUserId, store.getLocalSnapshot?.())
+        }
+        lastSignedInUserIdRef.current = null
+      }
       clearData()
       finishRemoteLoad()
       setDataLoadError(false)
       return
     }
+    lastSignedInUserIdRef.current = userId
+    // A load that settles after sign-out or an account switch must change nothing.
+    const loadToken = accountLoadGuard.current.begin(userId)
+    const isStaleLoad = () => !accountLoadGuard.current.isCurrent(loadToken)
 
     const loadKey = `${userId}:${userLocalFirstMode ? 'local-first' : 'cloud-sync'}`
     if (loadedUid.current === loadKey) return
@@ -1019,6 +1047,7 @@ function AppInner() {
     setDataLoading(!hasLocalResumeData)
     loadUserData(userId)
       .then(async data => {
+        if (isStaleLoad()) return
         // `importData`'s own local-trust window only covers a brief same-
         // session reload/network hiccup (see its comment in useStore.js) —
         // it is not sized for a multi-day desktop hosting lapse, so a local
@@ -1037,17 +1066,42 @@ function AppInner() {
         // the latter case would silently re-apply this fetch's unmerged
         // `data` right over the just-completed merge — this path awaits that
         // same claim's outcome first.
+        // Edits kept at an earlier sign-out that Cloud never confirmed. With no
+        // common base the three-way merge keeps device-only records, keeps
+        // cloud-only records, and turns any record that differs into a visible
+        // conflict, so neither side is silently overwritten.
+        const unsyncedCopy = loadUnsyncedRecoveryCopy(userId)
+        if (unsyncedCopy?.novels?.length) {
+          try {
+            const { mergedData, conflicts } = reconcileCloudSyncData(
+              pruneSaveDataToProjects(unsyncedCopy),
+              pruneSaveDataToProjects(data),
+              {},
+            )
+            const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
+            clearUnsyncedRecoveryCopy(userId)
+            if (isStaleLoad()) return
+            importData(reviewedData, { preferLocal: false })
+            store.addRecordConflicts?.(conflicts || [])
+            return
+          } catch (error) {
+            // Keep the copy for the next attempt; never drop it on a failed merge.
+            console.error('[YOW] Could not merge unsynced recovery copy:', error)
+          }
+        }
         const claimedResume = lapseResumeClaimed.current
         const lapseLocalCopy = desktopApp && membership.isLocalMode ? loadDesktopLapseLocalCopy(userId) : null
         // First lapsed sign-in on this device: the loaded cloud data is the last common state.
         if (desktopApp && membership.isLocalMode && data?.novels?.length) saveDesktopLapseSnapshot(userId, pruneSaveDataToProjects(data))
+        const claimedOk = !lapseLocalCopy?.novels?.length && claimedResume ? (await claimedResume).ok : true
+        if (isStaleLoad()) return
         if (lapseLocalCopy?.novels?.length) {
           // Still lapsed: this device is the source of truth. Restore the edits
           // kept at sign-out instead of showing the web copy over them.
           importData(lapseLocalCopy, { preferLocal: false })
         } else if (!claimedResume) {
           importData(data)
-        } else if (!(await claimedResume).ok) {
+        } else if (!claimedOk) {
           // The claimed resume failed (and, per its own comment, deliberately
           // left the lapse snapshot in place rather than clear it) — a plain
           // `importData(data)` here would just reintroduce the exact bug
@@ -1069,6 +1123,7 @@ function AppInner() {
           } else {
             try {
               const { reviewedData, conflicts } = await reconcileDesktopLapseResume(data, retryBase)
+              if (isStaleLoad()) return
               // Also undoes the claimed attempt's own failure path leaving
               // cloud sync paused (see its comment) — this retry just fully
               // recovered it.
@@ -1091,6 +1146,7 @@ function AppInner() {
       })
       .catch(error => {
         console.error(error)
+        if (isStaleLoad()) return
         // Never let a failed fetch fall through to rendering the store's
         // still-default-empty state as if it were a real (possibly genuinely
         // empty) project — that's indistinguishable from actual data loss to
@@ -1101,7 +1157,7 @@ function AppInner() {
         setDataLoadErrorDetail(String(error?.message || error || 'unknown error').slice(0, 200))
         setDataLoadError(true)
       })
-      .finally(() => setDataLoading(false))
+      .finally(() => { if (!isStaleLoad()) setDataLoading(false) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userId, userLocalFirstMode, importData, finishRemoteLoad, clearData, dataLoadRetryToken])
 
