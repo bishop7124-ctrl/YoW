@@ -54,3 +54,9 @@ Every finding that can be fixed in code has been fixed, each with tests written 
 1. Apply the two migrations (QA_PLAN section A).
 2. Run the real-browser checks (section C) and the restore/rollback exercise (section B).
 3. Decide: PDF export for Cyrillic/Greek/Chinese/Arabic (today `?` plus a warning); Tailwind 3 → 4 (clears the last 7 dev-only advisories).
+
+## Final results
+
+- Unit/integration: 182 files / 1,762 tests pass (was 171 / 1,642). Lint 0 errors, `npm run typecheck` clean, production build and bundle budget pass, all 12 API routes import.
+- Full Playwright run on the final code: 393 of 394 passed. The one failure (a theme accessibility check on Nocturne Grove) passed on the original code and on the final code in two re-runs, so it is a flaky test, not a regression. An earlier run also caught two real regressions from this work (offline-mode local data; storage-quota failure reporting); both fixed.
+- Independent review: found real problems (false scene conflicts after refresh, pending deletes acting on a restored record or the wrong account, stale unsynced markers, stuck error status, scene deleted elsewhere retrying forever, webhook claim release). All fixed and committed.
