@@ -147,3 +147,36 @@ describe('nested-archive depth guard does not regress the one real nested case (
     expect(result.characters).toEqual([{ name: 'Alice', role: '', bio: '' }])
   })
 })
+
+describe('native import validates the project graph (audit YOW-12)', () => {
+  it('rejects a backup with duplicate ids instead of silently merging the records', async () => {
+    const buffer = makeYowZipBuffer({}, { project: { id: 'p1' }, characters: [{ id: 'c1', name: 'A' }, { id: 'c1', name: 'B' }] })
+    await expect(tryReadYowZip(fakeFile('dup.zip', buffer))).rejects.toThrow(/more than once.*Nothing was imported/s)
+  })
+
+  it('rejects a backup whose links point outside the file', async () => {
+    const buffer = makeYowZipBuffer({}, { project: { id: 'p1' }, chapters: [{ id: 'ch1', actId: 'missing' }] })
+    await expect(tryReadYowZip(fakeFile('orphan.zip', buffer))).rejects.toThrow(/not in the file/)
+  })
+
+  it('rejects a legacy PDF payload that is structurally broken, rather than treating it as "not a YOW PDF"', async () => {
+    const payload = JSON.stringify({ project: { id: 'p1' }, scenes: [{ id: 's1' }, { id: 's1' }] })
+    const pdf = new TextEncoder().encode(`%PDF-1.4\n%%YOW-DATA-BEGIN%%${payload}%%YOW-DATA-END%%`)
+    await expect(tryReadYowPdf(fakeFile('dup.pdf', pdf.buffer))).rejects.toThrow(/more than once/)
+  })
+})
+
+describe('PDF import refuses files it cannot read reliably (audit YOW-22)', () => {
+  const pdfFile = (name, body) => fakeFile(name, new TextEncoder().encode(body).buffer)
+
+  it('rejects a PDF whose text streams are compressed and not made by YOW, instead of importing a fragment', async () => {
+    const body = '%PDF-1.7\n1 0 obj << /Filter /FlateDecode /Length 10 >> stream\nxxxxxxxx\nendstream\nBT (Only a title) Tj ET\n%%EOF'
+    await expect(processFiles([pdfFile('scan.pdf', body)])).rejects.toThrow(/not made by YOW.*\.docx/s)
+  })
+
+  it('still reads a PDF written by YOW itself', async () => {
+    const body = '%PDF-1.4\n/Producer (Your Own World)\nBT /F1 12 Tf (Chapter one text) Tj ET\n%%EOF'
+    const result = await processFiles([pdfFile('mine.pdf', body)])
+    expect(result[0].content).toContain('Chapter one text')
+  })
+})

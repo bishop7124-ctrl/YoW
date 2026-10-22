@@ -229,6 +229,16 @@ export default function DocxImportModal({ onClose, onImport, hasExistingContent 
                 </div>
               </div>
 
+              {parsedActs.fidelityNotes?.length > 0 && (
+                <div role="note" className="ms-import-notes" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.75rem 0' }}>
+                  <strong>Not brought across from this file:</strong>
+                  <ul style={{ margin: '0.25rem 0 0 1.1rem' }}>
+                    {parsedActs.fidelityNotes.map(note => <li key={note}>{note}</li>)}
+                  </ul>
+                  <span>Keep the original file; nothing in it is changed or deleted.</span>
+                </div>
+              )}
+
               {/* Tree */}
               <div className="ms-import-tree">
                 <StructurePreview acts={parsedActs} />

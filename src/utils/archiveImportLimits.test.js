@@ -10,6 +10,7 @@ import {
   MAX_PDF_INPUT_BYTES,
   MAX_PDF_RESTORE_MARKER_BYTES,
   assertArchiveInputSizeOk,
+  exceedsArchiveImportLimits,
   assertUnzippedResultOk,
   assertZipEntryCompressionRatioOk,
   makeZipEntryRatioFilter,
@@ -239,5 +240,38 @@ describe('assertPdfRestoreMarkerSizeOk', () => {
     } catch (err) {
       expect(err.isArchiveLimitError).toBe(true)
     }
+  })
+})
+
+describe('cumulative limits are enforced before any entry is inflated (audit YOW-13)', () => {
+  const entry = (name, originalSize) => ({ name, size: originalSize, originalSize })
+
+  it('stops inflating once the declared entry count passes the cap', () => {
+    const filter = makeZipEntryRatioFilter('"many.zip"')
+    let inflated = 0
+    for (let i = 0; i < MAX_ARCHIVE_FILE_COUNT + 10; i += 1) if (filter(entry(`f${i}`, 10))) inflated += 1
+    expect(inflated).toBe(MAX_ARCHIVE_FILE_COUNT)
+    expect(() => filter.check()).toThrow(/too many files/)
+  })
+
+  it('stops inflating once the declared total size passes the cap, even though no single entry is large', () => {
+    const filter = makeZipEntryRatioFilter('"big.zip"')
+    const chunk = 100 * 1024 * 1024
+    const results = Array.from({ length: 12 }, (_, i) => filter(entry(`part${i}`, chunk)))
+    expect(results.filter(Boolean).length).toBe(Math.floor(MAX_ARCHIVE_UNCOMPRESSED_BYTES / chunk))
+    expect(() => filter.check()).toThrow(/too large once decompressed/)
+  })
+
+  it('does not trip on an archive inside the limits', () => {
+    const filter = makeZipEntryRatioFilter('"fine.zip"')
+    for (let i = 0; i < 50; i += 1) expect(filter(entry(`f${i}`, 5000))).toBe(true)
+    expect(() => filter.check()).not.toThrow()
+  })
+
+  it('tells the exporter when its own archive would be refused by the importer', () => {
+    expect(exceedsArchiveImportLimits({ inputBytes: 1000, fileCount: 20, uncompressedBytes: 1000 })).toBeNull()
+    expect(exceedsArchiveImportLimits({ inputBytes: MAX_ARCHIVE_INPUT_BYTES + 1, fileCount: 20, uncompressedBytes: 1 })).toMatch(/500MB/)
+    expect(exceedsArchiveImportLimits({ inputBytes: 1, fileCount: MAX_ARCHIVE_FILE_COUNT + 1, uncompressedBytes: 1 })).toMatch(/files/)
+    expect(exceedsArchiveImportLimits({ inputBytes: 1, fileCount: 1, uncompressedBytes: MAX_ARCHIVE_UNCOMPRESSED_BYTES + 1 })).toMatch(/1024MB/)
   })
 })

@@ -282,10 +282,22 @@ export function assertZipEntryCompressionRatioOk(entryInfo, label = 'This archiv
  */
 export function makeZipEntryRatioFilter(label = 'This archive') {
   let violation = null
+  // The central directory declares every entry's size up front, so entry count and total size can be
+  // refused before the first entry is inflated, not only after the whole archive already was (YOW-13).
+  let entryCount = 0
+  let declaredTotal = 0
   const filter = (entryInfo) => {
     if (violation) return false
     try {
       assertZipEntryCompressionRatioOk(entryInfo, label)
+      entryCount += 1
+      if (typeof entryInfo?.originalSize === 'number') declaredTotal += entryInfo.originalSize
+      if (entryCount > MAX_ARCHIVE_FILE_COUNT) {
+        throw makeArchiveLimitError(`${label} contains too many files to import safely (more than ${MAX_ARCHIVE_FILE_COUNT} entries).`)
+      }
+      if (declaredTotal > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
+        throw makeArchiveLimitError(`${label} is too large once decompressed to import safely (max ${formatMb(MAX_ARCHIVE_UNCOMPRESSED_BYTES)}).`)
+      }
       return true
     } catch (err) {
       violation = err
@@ -294,4 +306,16 @@ export function makeZipEntryRatioFilter(label = 'This archive') {
   }
   filter.check = () => { if (violation) throw violation }
   return filter
+}
+
+/**
+ * Whether an archive the app is about to EXPORT would be refused by its own importer. A backup that
+ * cannot be restored is the worst failure, so the exporter warns (it still saves the file, which is
+ * complete and can be read by other tools). Returns a plain-language reason, or null when it fits.
+ */
+export function exceedsArchiveImportLimits({ inputBytes = 0, fileCount = 0, uncompressedBytes = 0 } = {}) {
+  if (inputBytes > MAX_ARCHIVE_INPUT_BYTES) return `the file is larger than YOW can import back (${formatMb(MAX_ARCHIVE_INPUT_BYTES)})`
+  if (fileCount > MAX_ARCHIVE_FILE_COUNT) return `it holds more files than YOW can import back (${MAX_ARCHIVE_FILE_COUNT})`
+  if (uncompressedBytes > MAX_ARCHIVE_UNCOMPRESSED_BYTES) return `its contents are larger than YOW can import back (${formatMb(MAX_ARCHIVE_UNCOMPRESSED_BYTES)})`
+  return null
 }

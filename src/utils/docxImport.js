@@ -417,7 +417,27 @@ export async function parseDocxToStructure(file) {
 
   const xmlStr = new TextDecoder().decode(docEntry)
   const paragraphs = parseParagraphs(xmlStr)
-  return buildStructureFromParagraphs(paragraphs)
+  const acts = buildStructureFromParagraphs(paragraphs)
+  // Not enumerable, so the structure still behaves as a plain list of acts everywhere it is used.
+  Object.defineProperty(acts, 'fidelityNotes', { value: describeUnimportedDocxFeatures(xmlStr, files), enumerable: false })
+  return acts
+}
+
+// What a Word file contains that this importer deliberately does not bring across (audit YOW-22):
+// the import keeps headings, paragraphs and italics only. Shown in the preview so a lossy import is
+// never mistaken for a faithful copy.
+export function describeUnimportedDocxFeatures(documentXml, files = {}) {
+  const notes = []
+  if (/<w:tbl[\s>]/.test(documentXml)) notes.push('Tables are not imported (their text may appear as plain paragraphs).')
+  if (files['word/comments.xml'] && /<w:comment[\s>]/.test(new TextDecoder().decode(files['word/comments.xml']))) {
+    notes.push('Comments are not imported.')
+  }
+  if (/<w:(ins|del)[\s>]/.test(documentXml)) notes.push('Tracked changes are flattened; deleted text and suggestions are not kept as changes.')
+  if (files['word/footnotes.xml'] && /<w:footnote [^>]*w:id="[1-9]/.test(new TextDecoder().decode(files['word/footnotes.xml']))) {
+    notes.push('Footnotes and endnotes are not imported.')
+  }
+  if (/<w:(drawing|pict)[\s>/]/.test(documentXml)) notes.push('Images and drawings are not imported.')
+  return notes
 }
 
 export function countImportStats(acts) {

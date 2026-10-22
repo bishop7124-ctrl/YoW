@@ -308,3 +308,33 @@ describe('docx import defends against heading styles mis-applied to body text', 
     bodyParagraphs.forEach(p => expect(sceneText).toContain(p))
   })
 })
+
+describe('docx import tells the writer what it did not bring across (audit YOW-22)', () => {
+  const makeDocx = async (documentXmlBody, extraFiles = {}) => {
+    const { zipSync, strToU8 } = await import('fflate')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${documentXmlBody}</w:body></w:document>`
+    const files = { 'word/document.xml': strToU8(xml), ...Object.fromEntries(Object.entries(extraFiles).map(([k, v]) => [k, strToU8(v)])) }
+    const zipped = zipSync(files)
+    return { name: 'draft.docx', arrayBuffer: async () => zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength) }
+  }
+  const para = text => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`
+
+  it('reports nothing for a plain document', async () => {
+    const acts = await parseDocxToStructure(await makeDocx(para('Just prose.')))
+    expect(acts.fidelityNotes).toEqual([])
+  })
+
+  it('flags tables, comments, tracked changes, footnotes and images that are not imported', async () => {
+    const body = `${para('Prose')}<w:tbl><w:tr><w:tc>${para('cell')}</w:tc></w:tr></w:tbl><w:p><w:ins w:id="1"><w:r><w:t>added</w:t></w:r></w:ins></w:p><w:p><w:r><w:drawing/></w:r></w:p>`
+    const acts = await parseDocxToStructure(await makeDocx(body, {
+      'word/comments.xml': '<w:comments><w:comment w:id="0"/></w:comments>',
+      'word/footnotes.xml': '<w:footnotes><w:footnote w:id="2"><w:p><w:r><w:t>a real footnote</w:t></w:r></w:p></w:footnote></w:footnotes>',
+    }))
+    const notes = acts.fidelityNotes.join(' | ')
+    expect(notes).toMatch(/table/i)
+    expect(notes).toMatch(/comment/i)
+    expect(notes).toMatch(/tracked/i)
+    expect(notes).toMatch(/footnote/i)
+    expect(notes).toMatch(/image/i)
+  })
+})

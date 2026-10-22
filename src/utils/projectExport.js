@@ -10,6 +10,7 @@ export {
 
 import { isComicProject, YOW_EXPORT_SCHEMA_VERSION } from './projectExportHelpers.js'
 import { buildZipBlob, encodeTextFile } from './zipUtils.js'
+import { exceedsArchiveImportLimits } from './archiveImportLimits.js'
 import { getSignedUserMediaUrl, getUserMediaPath } from './uploadUserMedia.js'
 
 export {
@@ -140,5 +141,19 @@ export const createProjectZipBlob = async (projectData, options = {}) => {
     ] : []),
   ]
 
-  return buildZipBlob(files)
+  const blob = buildZipBlob(files)
+  // The importer refuses archives past its safety limits. Tell the writer now rather than letting a
+  // backup they cannot restore look like a normal one (audit YOW-13).
+  const importLimitReason = exceedsArchiveImportLimits({
+    inputBytes: blob.size,
+    fileCount: files.length,
+    uncompressedBytes: files.reduce((sum, file) => sum + (file.bytes?.length || 0), 0),
+  })
+  if (importLimitReason) {
+    blob.importLimitWarning = importLimitReason
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('yow-export-warning', { detail: { format: 'zip-size', reason: importLimitReason } }))
+    }
+  }
+  return blob
 }

@@ -1,3 +1,4 @@
+import { assertValidProjectImport } from '../utils/projectImportValidation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../utils/aiSettings'
@@ -91,11 +92,16 @@ export async function tryReadYowZip(file) {
         ))
         return
       }
+      let projectData
       try {
-        resolve(JSON.parse(new TextDecoder().decode(files['project-data.json'])))
+        projectData = JSON.parse(new TextDecoder().decode(files['project-data.json']))
       } catch (parseErr) {
         reject(new Error(`"${file.name}" looks like a YOW backup, but its project data is corrupted and could not be read. Try a different export.`, { cause: parseErr }))
+        return
       }
+      // The manifest only identifies the file; check the data itself before anything is imported.
+      try { assertValidProjectImport(projectData, `"${file.name}"`) } catch (invalid) { reject(invalid); return }
+      resolve(projectData)
     })
   })
 }
@@ -113,12 +119,14 @@ export async function tryReadYowPdf(file) {
     const markerStart = begin + '%%YOW-DATA-BEGIN%%'.length
     assertPdfRestoreMarkerSizeOk(end - markerStart, `"${file.name}"`)
     const json = raw.slice(markerStart, end).trim()
-    return JSON.parse(json)
+    const projectData = JSON.parse(json)
+    assertValidProjectImport(projectData, `"${file.name}"`)
+    return projectData
   } catch (err) {
     // A limit-exceeded guard must abort with a clear, specific error rather
     // than being swallowed into "not a YOW export PDF" like an ordinary
     // parse failure (a genuinely corrupt/foreign PDF) is below.
-    if (err?.isArchiveLimitError) throw err
+    if (err?.isArchiveLimitError || err?.isImportValidationError) throw err
     return null
   }
 }
@@ -130,6 +138,12 @@ async function readPdfFile(file) {
   const buffer = await file.arrayBuffer()
   assertPdfInputSizeOk(buffer.byteLength, `"${file.name}"`)
   const raw = new TextDecoder('latin1').decode(buffer)
+  // This reader only understands the plain text streams YOW's own PDF export writes. A PDF from another
+  // app usually compresses its text, and the few uncompressed fragments it still has (titles, page
+  // numbers) would import as if they were the whole document, so refuse it plainly (audit YOW-22).
+  if (/\/FlateDecode/.test(raw) && !/\/Producer \(Your Own World\)/.test(raw)) {
+    throw new Error(`"${file.name}" was not made by YOW, and its text cannot be read reliably from a PDF. Export it from the original app as a Word (.docx) or plain text file and import that instead.`)
+  }
   const parts = []
   const btRe = /BT([\s\S]*?)ET/g
   let bt
@@ -1663,6 +1677,7 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
                   <>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>Drop files here or click to browse</p>
                     <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>.txt · .md · .docx · .pdf · .zip (YOW or compatible project archive)</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Only a YOW .zip backup restores a project exactly. Word, text and PDF files import their text only; PDFs must come from YOW. Your original file is never changed.</p>
                   </>
                 )}
               </div>

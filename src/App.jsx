@@ -1479,8 +1479,9 @@ function AppInner() {
       {exportWarning && (
         <div role="alert" className="membership-toast">
           <span>
-            This PDF cannot show some characters ({(exportWarning.characters || []).join(' ')}); they appear as "?".
-            {' '}Your writing is not changed. Use the Word (.docx) or full backup (.zip) export to keep every character.
+            {exportWarning.format === 'zip-size'
+              ? `This backup was saved, but ${exportWarning.reason}, so it cannot be restored directly. Export the project in smaller parts (for example, remove large images) or keep this file as a read-only copy.`
+              : `This PDF cannot show some characters (${(exportWarning.characters || []).join(' ')}); they appear as "?". Your writing is not changed. Use the Word (.docx) or full backup (.zip) export to keep every character.`}
           </span>
           <button type="button" className="membership-toast-link" onClick={() => setExportWarning(null)}>
             Dismiss
