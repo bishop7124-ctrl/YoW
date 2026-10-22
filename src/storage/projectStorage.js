@@ -145,6 +145,11 @@ export function listKeys(prefix) {
 // tell the difference and let the user know something didn't load cleanly,
 // rather than the account quietly looking emptier than it should.
 
+/**
+ * @param {string} key
+ * @param {any} [def]
+ * @returns {any}
+ */
 export function loadValue(key, def = null) {
   let raw
   try {

@@ -62,7 +62,8 @@ export function validateProjectImportData(data) {
 export function assertValidProjectImport(data, label = 'This file') {
   const { valid, errors } = validateProjectImportData(data)
   if (valid) return
-  const error = new Error(`${label} looks like a YOW backup but cannot be imported safely: ${errors.join('; ')}. Nothing was imported. Try a fresh export from the original project.`)
-  error.isImportValidationError = true
-  throw error
+  throw Object.assign(
+    new Error(`${label} looks like a YOW backup but cannot be imported safely: ${errors.join('; ')}. Nothing was imported. Try a fresh export from the original project.`),
+    { isImportValidationError: true },
+  )
 }

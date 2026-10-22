@@ -132,9 +132,7 @@ export function assertArchiveInputSizeOk(byteLength, label = 'This file') {
 // limit-exceeded rejection apart from a generic parse failure and make sure
 // it still propagates as a user-facing error instead of being swallowed.
 function makeArchiveLimitError(message) {
-  const err = new Error(message)
-  err.isArchiveLimitError = true
-  return err
+  return Object.assign(new Error(message), { isArchiveLimitError: true })
 }
 
 // ── Nested-archive recursion depth cap ──────────────────────────────────

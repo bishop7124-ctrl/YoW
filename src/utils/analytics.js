@@ -2,13 +2,14 @@
 // Keeps event names in one place and no-ops safely if gtag isn't ready
 // (offline mode, ad blockers, SSR-ish edge cases).
 
-function gtagAvailable() {
-  return typeof window !== 'undefined' && typeof window.gtag === 'function'
+function getGtag() {
+  return typeof window !== 'undefined' && typeof window.gtag === 'function' ? window.gtag : null
 }
 
 export function trackEvent(name, params = {}) {
-  if (!gtagAvailable()) return
-  window.gtag('event', name, params)
+  const gtag = getGtag()
+  if (!gtag) return
+  gtag('event', name, params)
 }
 
 // Analytics is anonymous: the privacy policy says usage data is never linked to a person's identity, and an
@@ -16,6 +17,7 @@ export function trackEvent(name, params = {}) {
 // security and privacy win over analytics). So no account id is ever sent. The function remains so
 // sign-in and sign-out can still clear any identifier a previous version of the app set in this browser.
 export function identifyUser() {
-  if (!gtagAvailable()) return
-  window.gtag('set', { user_id: null })
+  const gtag = getGtag()
+  if (!gtag) return
+  gtag('set', { user_id: null })
 }

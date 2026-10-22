@@ -94,6 +94,12 @@ function mergeRecord({ table, label, id, base, local, cloud, now, conflictId }) 
   }
 }
 
+/**
+ * @param {any} [localData]
+ * @param {any} [cloudData]
+ * @param {any} [baseData]
+ * @param {{ now?: number, conflictId?: () => string }} [options]
+ */
 export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData = {}, options = {}) {
   const now = options.now || Date.now()
   const conflictId = options.conflictId || (() => Math.random().toString(36).slice(2) + Date.now().toString(36))
@@ -104,7 +110,7 @@ export function reconcileCloudSyncData(localData = {}, cloudData = {}, baseData 
     localOnly: 0,
     cloudOnly: 0,
     keptDeletedInCloud: 0,
-    keptDeletedProjects: [],
+    keptDeletedProjects: /** @type {string[]} */ ([]),
   }
 
   Object.entries(TABLE_CONFIG).forEach(([table, config]) => {

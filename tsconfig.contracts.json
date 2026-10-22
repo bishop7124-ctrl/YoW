@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "noImplicitAny": false
+  },
+  "include": [
+    "src/utils/dirtyRecords.js",
+    "src/utils/pendingDeletes.js",
+    "src/utils/accountLoadGuard.js",
+    "src/utils/projectImportValidation.js",
+    "src/utils/archiveImportLimits.js",
+    "src/store/syncFlushRegistry.js",
+    "src/utils/analytics.js",
+    "src/types/globals.d.ts"
+  ]
+}
