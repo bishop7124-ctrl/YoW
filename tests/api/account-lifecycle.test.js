@@ -291,7 +291,7 @@ vi.mock('@supabase/supabase-js', () => ({
       select: () => ({ in: () => eventRows() }),
       insert: (...a) => insertSpy(...a),
       upsert: (...a) => upsertSpy(...a),
-      update: (...a) => { updateRowSpy(...a); return { eq: () => ({ error: null }) } },
+      update: (...a) => { updateRowSpy(...a); const chain = { eq: () => chain, error: null }; return chain },
       delete: () => {
         const chain = { eq: (...a) => { deleteSpy(...a); return chain } }
         return chain
@@ -587,6 +587,80 @@ describe('run-account-lifecycle send + archive (gated)', () => {
     process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
     const body = await run({ archive: '1' })
     expect(body.archive).toMatchObject({ archived: 0 })
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  // Audit YOW-11: only an email Resend ACCEPTED opens the destructive gate.
+  it('records the notice as pending before sending and accepted once Resend takes it', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    await run({ send: '1' })
+    expect(insertSpy.mock.calls[0][0]).toMatchObject({ delivery_status: 'pending' })
+    expect(updateRowSpy.mock.calls.at(-1)[0]).toMatchObject({ delivery_status: 'accepted' })
+  })
+
+  it('marks the notice unknown when the network outcome is uncertain', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('a')] }, error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    fetchMock.mockRejectedValueOnce(new Error('socket hang up'))
+    await run({ send: '1' })
+    expect(updateRowSpy.mock.calls.at(-1)[0]).toMatchObject({ delivery_status: 'unknown' })
+  })
+
+  it('does not archive on a final notice whose delivery is unknown or still pending', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed('unk'), lapsed('pend')] }, error: null })
+    eventRows.mockResolvedValue({ data: [
+      { user_id: 'unk', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(8), delivery_status: 'unknown' },
+      { user_id: 'pend', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(8), delivery_status: 'pending' },
+    ], error: null })
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    const body = await run({ archive: '1' })
+    expect(body.archiveDecisions).toEqual([])
+    expect(body.archive).toMatchObject({ archived: 0 })
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not delete a Free account on an unconfirmed final notice', async () => {
+    listUsers.mockResolvedValue({ data: { users: [inactive('free', 100)] }, error: null })
+    eventRows.mockResolvedValue({ data: FREE_READY('free').map((row) => row.event_key === 'inactive_83' ? { ...row, delivery_status: 'unknown' } : row), error: null })
+    process.env.ACCOUNT_LIFECYCLE_DELETE_FREE = 'true'
+    const body = await run({ delete: '1' })
+    expect(body.deleteDecisions).toEqual([])
+    expect(deleteUserSpy).not.toHaveBeenCalled()
+  })
+
+  it('still archives once the final notice is recorded as accepted', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed('ok')] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: 'ok', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(8), delivery_status: 'accepted' }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    const body = await run({ archive: '1' })
+    expect(body.archive).toMatchObject({ archived: 1 })
+  })
+
+  it('retries an unconfirmed final notice after a day instead of waiting forever', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed('retry')] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: 'retry', track: 'hosting_lapsed', event_key: 'grace_83', created_at: ago(2), delivery_status: 'unknown', anchor_at: lapsed('retry').app_metadata.cloud_hosting_expires_at }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    const body = await run({ send: '1', archive: '1' })
+    expect(body.emails).toMatchObject({ sent: 1 })
+    expect(deleteSpy.mock.calls.map((c) => c[1])).toContain('retry')
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not retry an unconfirmed final notice sooner than a day, and still blocks archiving', async () => {
+    listUsers.mockResolvedValue({ data: { users: [lapsed('wait')] }, error: null })
+    eventRows.mockResolvedValue({ data: [{ user_id: 'wait', track: 'hosting_lapsed', event_key: 'grace_83', created_at: new Date(T0 - 3600_000).toISOString(), delivery_status: 'unknown' }], error: null })
+    process.env.ACCOUNT_LIFECYCLE_SEND_EMAILS = 'true'
+    process.env.ACCOUNT_LIFECYCLE_ARCHIVE = 'true'
+    process.env.RESEND_API_KEY = 're_test'
+    insertSpy.mockResolvedValue({ error: { code: '23505' } }) // the existing row still owns the key
+    const body = await run({ send: '1', archive: '1' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(body.emails.alreadyRecorded).toBe(1)
     expect(updateSpy).not.toHaveBeenCalled()
   })
 

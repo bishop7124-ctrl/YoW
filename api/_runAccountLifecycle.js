@@ -39,6 +39,9 @@ const MEDIA_BUCKET = 'user-media'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RESEND_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS = 'Your Own World <hello@yourownworld.co.uk>'
+const FINAL_NOTICE_RETRY_MS = 24 * 60 * 60 * 1000
+const isAcceptedRow = (row) => row.delivery_status == null || row.delivery_status === 'accepted'
+
 const UNIQUE_VIOLATION = '23505'
 
 const settingOn = (name) => ['true', '1'].includes(String(process.env[name] || '').trim().toLowerCase())
@@ -85,6 +88,17 @@ async function removeUserMedia(supabase, userId) {
   return paths.length
 }
 
+// Best effort: a row that stays 'pending' is treated exactly like 'unknown' (it never opens the gate).
+async function setDeliveryStatus(supabase, item, status) {
+  const { error } = await supabase
+    .from('account_lifecycle_events')
+    .update({ delivery_status: status })
+    .eq('user_id', item.user.id)
+    .eq('track', item.track)
+    .eq('event_key', item.noticeKey)
+  if (error) console.error('[run-account-lifecycle] could not record delivery status', item.user.id, item.noticeKey, error.message)
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -126,7 +140,7 @@ export default async function handler(req, res) {
     if (ids.length > 0) {
       const { data, error } = await supabase
         .from('account_lifecycle_events')
-        .select('user_id, track, event_key, created_at, anchor_at')
+        .select('*')
         .in('user_id', ids)
       if (error) throw error
       for (const row of data || []) {
@@ -153,11 +167,21 @@ export default async function handler(req, res) {
       const freshRows = ledgerRows.filter((r) => !isStale(r))
       const staleKeys = ledgerRows.filter(isStale).map((r) => r.event_key)
       const freshRow = (eventKey) => freshRows.find((r) => r.event_key === eventKey)
+      // Only a final notice that Resend ACCEPTED opens the archive/delete gate (audit YOW-11). A row
+      // left 'pending' or 'unknown' (crash, timeout, uncertain network outcome) still blocks a duplicate
+      // of ordinary notices, but for the final notice it holds the irreversible step and, after a day,
+      // is re-sent. Rows from before delivery_status existed count as accepted.
+      const finalKey = finalNoticeKeyFor(track)
+      const unconfirmedFinal = freshRows.find((r) => r.event_key === finalKey && !isAcceptedRow(r))
+      if (unconfirmedFinal) {
+        report.unconfirmedFinalNotices = (report.unconfirmedFinalNotices || 0) + 1
+        if (now.getTime() - new Date(unconfirmedFinal.created_at).getTime() >= FINAL_NOTICE_RETRY_MS) staleKeys.push(finalKey)
+      }
       const classification = classifyLifecycle({
         track,
         anchor,
         now,
-        sentNoticeKeys: freshRows.map((r) => r.event_key),
+        sentNoticeKeys: freshRows.filter((r) => r.event_key !== finalKey || isAcceptedRow(r)).map((r) => r.event_key),
         archivedAt: track === 'hosting_lapsed' && isArchiveStampCurrent(user.app_metadata?.cloud_archived_at, anchor)
           ? user.app_metadata.cloud_archived_at
           : null,
@@ -229,6 +253,7 @@ export default async function handler(req, res) {
           track: item.track,
           event_key: item.noticeKey,
           anchor_at: item.anchor ? new Date(item.anchor).toISOString() : null,
+          delivery_status: 'pending',
         }
         // A row for this key left over from an earlier, finished cycle would block this notice
         // (primary key), so clear just that one first.
@@ -263,6 +288,7 @@ export default async function handler(req, res) {
           })
           if (emailRes.ok) {
             result.sent += 1
+            await setDeliveryStatus(supabase, item, 'accepted')
           } else {
             // Resend refused it, so nothing went out: free the ledger row so tomorrow retries.
             console.error('[run-account-lifecycle] Resend rejected', item.user.id, item.noticeKey, emailRes.status)
@@ -279,6 +305,7 @@ export default async function handler(req, res) {
           // (a possibly-missed notice is safer than a duplicate; the final-notice gate blocks archive).
           console.error('[run-account-lifecycle] send outcome unknown', item.user.id, item.noticeKey, sendError?.message)
           result.uncertain += 1
+          await setDeliveryStatus(supabase, item, 'unknown')
         }
       }
       body.emails = { ...result, maxPerRun: MAX_EMAILS_PER_RUN }

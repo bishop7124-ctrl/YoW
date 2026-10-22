@@ -664,3 +664,220 @@ describe('handler — one-time purchase payment-state handling', () => {
     expect(updateUserById).not.toHaveBeenCalled()
   })
 })
+
+// ─── audit YOW-09 / YOW-10 ────────────────────────────────────────────────────
+
+describe('handler — fulfilment is only acknowledged once it is really applied (audit YOW-09)', () => {
+  let handler
+
+  beforeEach(async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_stub'
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'stub-service-key'
+    vi.clearAllMocks()
+    from.mockImplementation((table) => makeBuilder(table))
+    rpc.mockResolvedValue({ data: true, error: null })
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
+    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    tableResults.length = 0
+    fromCalls.length = 0
+    constructEvent.mockReset()
+    subscriptionsRetrieve.mockReset()
+    vi.resetModules()
+    handler = (await import('../../api/stripe-webhook.js')).default
+  })
+
+  const lifetimeSession = {
+    id: 'cs_life', mode: 'payment', payment_status: 'paid', livemode: false,
+    metadata: { user_id: 'user-1', plan: 'premium_plus_lifetime' }, customer: 'cus_1', payment_intent: 'pi_1',
+  }
+  const lifetimeEvent = id => ({ id, type: 'checkout.session.completed', data: { object: lifetimeSession } })
+
+  it('returns 500 and releases the claim when the entitlement write comes back with an error', async () => {
+    constructEvent.mockReturnValue(lifetimeEvent('evt_write_fail'))
+    queueResult({ data: null, error: null })
+    updateUserById.mockResolvedValue({ data: null, error: { message: 'auth admin unavailable' } })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(fromCalls.some(c => c.table === 'stripe_processed_events' && c.method === 'delete')).toBe(true)
+  })
+
+  it('returns 500 when the account lookup fails instead of writing over an empty profile', async () => {
+    constructEvent.mockReturnValue(lifetimeEvent('evt_read_fail'))
+    queueResult({ data: null, error: null })
+    getUserById.mockResolvedValue({ data: null, error: { message: 'lookup failed' } })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('marks the ledger row done only after fulfilment succeeded', async () => {
+    constructEvent.mockReturnValue(lifetimeEvent('evt_done'))
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    const done = fromCalls.find(c => c.table === 'stripe_processed_events' && c.method === 'update')
+    expect(done?.args[0]).toMatchObject({ status: 'done' })
+  })
+
+  const duplicate = { data: null, error: { code: '23505', message: 'duplicate key' } }
+
+  it('takes over an event whose earlier worker died mid-fulfilment (stale processing claim)', async () => {
+    constructEvent.mockReturnValue(lifetimeEvent('evt_crashed'))
+    queueResult(duplicate)
+    queueResult({ data: { status: 'processing', claimed_at: new Date(Date.now() - 20 * 60 * 1000).toISOString() }, error: null })
+    queueResult({ data: [{ id: 'evt_crashed' }], error: null }) // compare-and-set takeover
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(updateUserById).toHaveBeenCalled()
+  })
+
+  it('asks Stripe to retry later while another worker still holds a fresh claim, without fulfilling twice', async () => {
+    constructEvent.mockReturnValue(lifetimeEvent('evt_inflight'))
+    queueResult(duplicate)
+    queueResult({ data: { status: 'processing', claimed_at: new Date().toISOString() }, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(503)
+    expect(updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('treats a completed ledger row as a harmless duplicate', async () => {
+    constructEvent.mockReturnValue(lifetimeEvent('evt_finished'))
+    queueResult(duplicate)
+    queueResult({ data: { status: 'done', claimed_at: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
+    expect(updateUserById).not.toHaveBeenCalled()
+  })
+
+  it('does not extend Cloud twice when a crashed invoice.paid is reprocessed', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { maintenance_expires_at: '2030-01-01T00:00:00.000Z', maintenance_last_invoice_id: 'in_replayed' } } }, error: null })
+    subscriptionsRetrieve.mockResolvedValue({ id: 'sub_maint', metadata: { user_id: 'user-1', plan: 'maintenance' } })
+    constructEvent.mockReturnValue({ id: 'evt_inv_replay', type: 'invoice.paid', data: { object: { id: 'in_replayed', subscription: 'sub_maint', metadata: {} } } })
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(metadataWritesFor('user-1').filter(m => 'maintenance_expires_at' in m)).toHaveLength(0)
+  })
+})
+
+describe('handler — subscriptions never overwrite a Lifetime licence (audit YOW-10)', () => {
+  let handler
+
+  beforeEach(async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_stub'
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'stub-service-key'
+    vi.clearAllMocks()
+    from.mockImplementation((table) => makeBuilder(table))
+    rpc.mockResolvedValue({ data: true, error: null })
+    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    tableResults.length = 0
+    fromCalls.length = 0
+    constructEvent.mockReset()
+    subscriptionsRetrieve.mockReset()
+    vi.resetModules()
+    handler = (await import('../../api/stripe-webhook.js')).default
+  })
+
+  const lifetimeMeta = { subscription_plan: 'premium_plus_lifetime', subscription_status: 'active', lifetime_purchased_at: '2026-10-01T00:00:00.000Z', hosting_included_until: '2027-10-01T00:00:00.000Z' }
+  const subscriptionEvent = (type, sub) => ({ id: `evt_${type}_${sub.id}`, type, data: { object: sub } })
+
+  it('a Cloud-renewal subscription update leaves the Lifetime plan alone', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { ...lifetimeMeta } } }, error: null })
+    const sub = { id: 'sub_cloud', status: 'active', metadata: { user_id: 'user-1', plan: 'maintenance' }, customer: 'cus_1', items: { data: [{ current_period_end: 2000000000 }] } }
+    subscriptionsRetrieve.mockResolvedValue(sub)
+    constructEvent.mockReturnValue(subscriptionEvent('customer.subscription.updated', sub))
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    for (const write of metadataWritesFor('user-1')) {
+      expect(write.subscription_plan).toBe('premium_plus_lifetime')
+      expect(write.subscription_status).toBe('active')
+    }
+  })
+
+  it('cancelling a Cloud-renewal subscription does not revoke or downgrade the Lifetime licence', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { ...lifetimeMeta } } }, error: null })
+    const sub = { id: 'sub_cloud', status: 'canceled', metadata: { user_id: 'user-1', plan: 'hosting_renewal' }, customer: 'cus_1', items: { data: [] } }
+    subscriptionsRetrieve.mockResolvedValue(sub)
+    constructEvent.mockReturnValue(subscriptionEvent('customer.subscription.deleted', sub))
+    queueResult({ data: null, error: null })
+
+    await handler(makeReq(), makeRes())
+
+    for (const write of metadataWritesFor('user-1')) {
+      expect(write.subscription_plan).toBe('premium_plus_lifetime')
+      expect(write.subscription_status).toBe('active')
+      expect(write.access_revoked_at ?? null).toBeNull()
+    }
+  })
+
+  it('a leftover Monthly subscription ending after the user bought Lifetime does not downgrade them', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { ...lifetimeMeta } } }, error: null })
+    const sub = { id: 'sub_monthly', status: 'canceled', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1', items: { data: [] } }
+    subscriptionsRetrieve.mockResolvedValue(sub)
+    constructEvent.mockReturnValue(subscriptionEvent('customer.subscription.deleted', sub))
+    queueResult({ data: null, error: null })
+
+    await handler(makeReq(), makeRes())
+
+    for (const write of metadataWritesFor('user-1')) {
+      expect(write.subscription_plan).toBe('premium_plus_lifetime')
+      expect(write.subscription_status).toBe('active')
+    }
+  })
+
+  it('uses the subscription\'s current state from Stripe, not a stale or reordered event snapshot', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
+    const stale = { id: 'sub_m', status: 'active', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1', items: { data: [{ current_period_end: 100 }] } }
+    subscriptionsRetrieve.mockResolvedValue({ ...stale, status: 'canceled' })
+    constructEvent.mockReturnValue(subscriptionEvent('customer.subscription.updated', stale))
+    queueResult({ data: null, error: null })
+
+    await handler(makeReq(), makeRes())
+
+    expect(metadataWritesFor('user-1')[0].subscription_status).toBe('canceled')
+  })
+
+  it('still handles a deleted subscription that Stripe can no longer retrieve', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
+    const gone = { id: 'sub_gone', status: 'canceled', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1', items: { data: [] } }
+    subscriptionsRetrieve.mockRejectedValue(Object.assign(new Error('No such subscription'), { code: 'resource_missing' }))
+    constructEvent.mockReturnValue(subscriptionEvent('customer.subscription.deleted', gone))
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    expect(metadataWritesFor('user-1')[0].subscription_status).toBe('canceled')
+  })
+})

@@ -14,6 +14,37 @@ function getRawBody(req) {
   })
 }
 
+const LIFETIME_PLANS = new Set(['premium_plus_lifetime', 'founder'])
+const CLOUD_RENEWAL_PLANS = new Set(['maintenance', 'hosting_renewal'])
+
+// Every Supabase call that changes what a paying customer can do must fail the handler when it reports
+// an error, so the event is retried instead of being acknowledged with nothing applied (audit YOW-09).
+async function loadAppMetadata(supabaseAdmin, userId) {
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId)
+  if (error || !data?.user) throw new Error(`could not load account ${userId}: ${error?.message || 'not found'}`)
+  return data.user.app_metadata || {}
+}
+
+async function writeAppMetadata(supabaseAdmin, userId, appMetadata) {
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { app_metadata: appMetadata })
+  if (error) throw new Error(`could not update entitlement for ${userId}: ${error.message}`)
+}
+
+const holdsLifetimeLicence = (metadata = {}) =>
+  LIFETIME_PLANS.has(metadata.subscription_plan) || Boolean(metadata.lifetime_purchased_at)
+
+// The subscription as Stripe holds it now. Event payloads can arrive late or out of order, and Stripe
+// does not guarantee ordering, so an event snapshot must never overwrite newer state.
+async function retrieveCurrentSubscription(stripe, subscription) {
+  try {
+    const fresh = await stripe.subscriptions.retrieve(subscription.id, { expand: ['latest_invoice'] })
+    return fresh ? { ...fresh, metadata: { ...subscription.metadata, ...fresh.metadata } } : subscription
+  } catch (error) {
+    if (error?.code === 'resource_missing' || error?.statusCode === 404) return subscription
+    throw error
+  }
+}
+
 export function getCurrentPeriodEnd(subscription) {
   const ends = subscription.items.data
     .map(item => item.current_period_end)
@@ -49,9 +80,7 @@ async function upsertUserProfile(supabaseAdmin, userId, patch = {}) {
       { user_id: userId, ...patch, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     )
-  if (error) {
-    console.warn('[stripe-webhook] user_profiles upsert failed:', error.message)
-  }
+  if (error) throw new Error(`user_profiles upsert failed: ${error.message}`)
 }
 
 // --------------------------------------------------------------------------
@@ -79,8 +108,21 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
 
   const plan = subscription.metadata?.plan || 'premium_monthly'
 
-  const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
-  const existing = data?.user?.app_metadata || {}
+  const existing = await loadAppMetadata(supabaseAdmin, userId)
+
+  // A Cloud-renewal subscription is its own entitlement (see extendMaintenance); it never changes the
+  // account's plan. A Monthly subscription that outlives a Lifetime purchase must not downgrade it
+  // either. Both are only recorded alongside, so no licence is ever overwritten (audit YOW-10).
+  if (CLOUD_RENEWAL_PLANS.has(plan) || (holdsLifetimeLicence(existing) && !LIFETIME_PLANS.has(plan))) {
+    const prefix = CLOUD_RENEWAL_PLANS.has(plan) ? 'cloud_renewal' : 'monthly'
+    await writeAppMetadata(supabaseAdmin, userId, {
+      ...existing,
+      [`${prefix}_subscription_id`]: subscription.id,
+      [`${prefix}_subscription_status`]: subscription.status,
+    })
+    await upsertUserProfile(supabaseAdmin, userId, {})
+    return
+  }
 
   // Single write for the whole app_metadata object — the admin API replaces
   // app_metadata wholesale rather than merging, so every field that should
@@ -90,9 +132,7 @@ async function updateSubscriptionMembership(supabaseAdmin, subscription, fallbac
   // this flag gates real product behavior (which project stays editable), so
   // it must be server-controlled like every other entitlement field. See
   // docs/YOW_CODE_AUDIT_2026-09-01.md P0-01.
-  await supabaseAdmin.auth.admin.updateUserById(userId, {
-    app_metadata: buildSubscriptionAppMetadata(existing, subscription, customerId, plan),
-  })
+  await writeAppMetadata(supabaseAdmin, userId, buildSubscriptionAppMetadata(existing, subscription, customerId, plan))
 
   // Ensure a user_profiles row exists for storage tracking.
   await upsertUserProfile(supabaseAdmin, userId, {})
@@ -150,8 +190,7 @@ async function activateLifetimePlan(supabaseAdmin, session) {
     ? session.customer
     : session.customer?.id
 
-  const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
-  const existing = data?.user?.app_metadata || {}
+  const existing = await loadAppMetadata(supabaseAdmin, userId)
 
   const purchasedAt = existing.lifetime_purchased_at || new Date().toISOString()
   // New Lifetime purchases include one year of Cloud. Historical Founder-plan
@@ -164,8 +203,7 @@ async function activateLifetimePlan(supabaseAdmin, session) {
     ? null
     : new Date(new Date(purchasedAt).getTime() + HOSTING_INCLUDED_YEARS * 365 * 24 * 60 * 60 * 1000).toISOString()
 
-  await supabaseAdmin.auth.admin.updateUserById(userId, {
-    app_metadata: {
+  await writeAppMetadata(supabaseAdmin, userId, {
       ...existing,
       stripe_customer_id:      customerId,
       subscription_status:     'active',
@@ -179,7 +217,6 @@ async function activateLifetimePlan(supabaseAdmin, session) {
         founder_number: founderAward.founder_number || existing.founder_number || null,
         founder_awarded_at: founderAward.founder_awarded_at || existing.founder_awarded_at || new Date().toISOString(),
       } : {}),
-    },
   })
 
   if (legacyFounderOverflow) {
@@ -225,20 +262,23 @@ async function releaseFounderReservation(supabaseAdmin, session) {
 // the corresponding first invoice.paid both fired for the same purchase,
 // extending maintenance by 2 years for one payment).
 // --------------------------------------------------------------------------
-async function extendMaintenance(supabaseAdmin, userId) {
+async function extendMaintenance(supabaseAdmin, userId, invoiceId) {
   if (!userId) {
     console.warn('[stripe-webhook] Missing user_id for maintenance extension')
     return
   }
-  const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
-  const existing = data?.user?.app_metadata || {}
+  const existing = await loadAppMetadata(supabaseAdmin, userId)
+  // A reprocessed event (after a worker died between applying and recording it) must not extend twice.
+  if (invoiceId && existing.maintenance_last_invoice_id === invoiceId) return
   const currentExpiry = existing.maintenance_expires_at
     ? new Date(existing.maintenance_expires_at)
     : new Date()
   const base = currentExpiry > new Date() ? currentExpiry : new Date()
   const newExpiry = new Date(base.getTime() + 365 * 24 * 60 * 60 * 1000)
-  await supabaseAdmin.auth.admin.updateUserById(userId, {
-    app_metadata: { ...existing, maintenance_expires_at: newExpiry.toISOString() },
+  await writeAppMetadata(supabaseAdmin, userId, {
+    ...existing,
+    maintenance_expires_at: newExpiry.toISOString(),
+    ...(invoiceId ? { maintenance_last_invoice_id: invoiceId } : {}),
   })
 }
 
@@ -283,6 +323,48 @@ async function releaseFounderSlotForCharge(stripe, supabaseAdmin, charge) {
 }
 
 // --------------------------------------------------------------------------
+// Event ledger claim (see handler). Resolves to 'claimed' | 'duplicate' | 'in_progress' | 'error'.
+// Tolerates a database that has not had the status/claimed_at migration yet by falling back to the
+// original claim-only behaviour.
+// --------------------------------------------------------------------------
+const CLAIM_LEASE_MS = 5 * 60 * 1000
+const isMissingColumnError = (error) =>
+  error?.code === '42703' || error?.code === 'PGRST204' || /column .* (does not exist|of relation)|could not find .* column/i.test(error?.message || '')
+
+async function claimEvent(supabaseAdmin, event) {
+  const now = new Date().toISOString()
+  let { error } = await supabaseAdmin
+    .from('stripe_processed_events')
+    .insert({ id: event.id, type: event.type, status: 'processing', claimed_at: now })
+  if (error && isMissingColumnError(error)) {
+    ;({ error } = await supabaseAdmin.from('stripe_processed_events').insert({ id: event.id, type: event.type }))
+  }
+  if (!error) return 'claimed'
+  if (error.code !== '23505') {
+    console.error('[stripe-webhook] failed to claim event ledger row:', error.message)
+    return 'error'
+  }
+
+  const { data } = await supabaseAdmin.from('stripe_processed_events').select('status, claimed_at').eq('id', event.id)
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row || row.status !== 'processing') return 'duplicate'
+  const claimedAt = Date.parse(row.claimed_at)
+  if (Number.isFinite(claimedAt) && Date.now() - claimedAt < CLAIM_LEASE_MS) return 'in_progress'
+
+  const { data: taken, error: takeoverError } = await supabaseAdmin
+    .from('stripe_processed_events')
+    .update({ claimed_at: now, status: 'processing' })
+    .eq('id', event.id)
+    .eq('claimed_at', row.claimed_at)
+    .select('id')
+  if (takeoverError) {
+    console.error('[stripe-webhook] failed to take over stale event claim:', takeoverError.message)
+    return 'error'
+  }
+  return Array.isArray(taken) && taken.length ? 'claimed' : 'in_progress'
+}
+
+// --------------------------------------------------------------------------
 // Webhook handler
 // --------------------------------------------------------------------------
 export default async function handler(req, res) {
@@ -310,21 +392,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid signature' })
   }
 
-  // Claim this event id before doing any fulfillment work. A unique-key
-  // violation means it's already been processed (an earlier delivery, or a
-  // concurrent retry landing at the same instant) — skip straight to 200 so
-  // Stripe stops retrying, without applying fulfillment a second time. This
-  // is the fix for audit P0-05: there was previously no ledger at all, so a
-  // Stripe retry of any event could re-apply its side effects.
-  const { error: claimError } = await supabaseAdmin
-    .from('stripe_processed_events')
-    .insert({ id: event.id, type: event.type })
-  if (claimError) {
-    if (claimError.code === '23505') {
-      console.log('[stripe-webhook] duplicate event, already processed:', event.id, event.type)
-      return res.status(200).json({ received: true, duplicate: true })
-    }
-    console.error('[stripe-webhook] failed to claim event ledger row:', claimError.message)
+  // Claim this event id before doing any fulfillment work. A unique-key violation means another
+  // delivery already holds it: if that one finished the event is a duplicate (200), if it is still
+  // inside its lease Stripe is asked to retry later (503), and if its worker died mid-fulfilment the
+  // stale claim is taken over so the payment is not stranded (audit YOW-09; P0-05 added the ledger).
+  const claim = await claimEvent(supabaseAdmin, event)
+  if (claim === 'duplicate') {
+    console.log('[stripe-webhook] duplicate event, already processed:', event.id, event.type)
+    return res.status(200).json({ received: true, duplicate: true })
+  }
+  if (claim === 'in_progress') {
+    return res.status(503).json({ error: 'Event is being processed' })
+  }
+  if (claim === 'error') {
     return res.status(500).json({ error: 'Internal server error' })
   }
 
@@ -408,7 +488,7 @@ export default async function handler(req, res) {
           const userId = latestSub.metadata?.user_id
             || invoice.metadata?.user_id
             || invoice.parent?.subscription_details?.metadata?.user_id
-          await extendMaintenance(supabaseAdmin, userId)
+          await extendMaintenance(supabaseAdmin, userId, invoice.id)
           break
         }
 
@@ -422,7 +502,7 @@ export default async function handler(req, res) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        await updateSubscriptionMembership(supabaseAdmin, event.data.object)
+        await updateSubscriptionMembership(supabaseAdmin, await retrieveCurrentSubscription(stripe, event.data.object))
         break
 
       case 'charge.dispute.closed': {
@@ -453,6 +533,14 @@ export default async function handler(req, res) {
     // it server-side above, where it's already captured for debugging.
     return res.status(500).json({ error: 'Internal server error' })
   }
+
+  const { error: doneError } = await supabaseAdmin
+    .from('stripe_processed_events')
+    .update({ status: 'done', completed_at: new Date().toISOString() })
+    .eq('id', event.id)
+  // Not fatal: the work is applied. An unmarked row is re-run after its lease, and every fulfilment
+  // step above is idempotent.
+  if (doneError) console.error('[stripe-webhook] failed to mark event done:', doneError.message)
 
   return res.status(200).json({ received: true })
 }
