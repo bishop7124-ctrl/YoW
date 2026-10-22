@@ -122,6 +122,10 @@ const clearProjectLocalStorage = (sceneIds = []) => {
     })
     contentKeys.forEach(key => removeItem(key))
     trackedChangesKeys.forEach(key => removeItem(key))
+    // Local scene history holds earlier copies of the prose. It is device-only (never synced and not in
+    // exports), so on sign-out it must not stay readable in this browser profile (audit YOW-14).
+    listKeys('nf_scene_versions:').forEach(key => removeItem(key))
+    removeItem('nf_scene_versions')
   } catch { /* Best effort only; state setters will also overwrite these keys. */ }
 }
 const clearProjectRefs = (refs) => {

@@ -11,10 +11,11 @@ export function trackEvent(name, params = {}) {
   window.gtag('event', name, params)
 }
 
-// Ties subsequent GA4 events to a stable, non-PII id (the Supabase user id)
-// so a specific signup's journey can be inspected in GA4's User Explorer
-// report, not just aggregate counts.
-export function identifyUser(userId) {
-  if (!gtagAvailable() || !userId) return
-  window.gtag('set', { user_id: userId })
+// Analytics is anonymous: the privacy policy says usage data is never linked to a person's identity, and an
+// account id would make every event traceable to an account (audit YOW-18, and the project's rule that
+// security and privacy win over analytics). So no account id is ever sent. The function remains so
+// sign-in and sign-out can still clear any identifier a previous version of the app set in this browser.
+export function identifyUser() {
+  if (!gtagAvailable()) return
+  window.gtag('set', { user_id: null })
 }

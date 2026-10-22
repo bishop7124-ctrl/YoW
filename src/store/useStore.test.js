@@ -3808,3 +3808,18 @@ describe('cloud deletes stay pending until confirmed (audit YOW-07)', () => {
     await waitFor(() => expect(deletesFor('characters').map(call => call[2])).toContain('c-gone'), { timeout: 4000 })
   }, 15000)
 })
+
+describe('sign-out clears local scene history (audit YOW-14)', () => {
+  it('removes every scene version snapshot so prose history does not outlive the session on a shared browser', () => {
+    localStorage.setItem('nf_scene_versions:scene-a', JSON.stringify([{ id: 'v1', content: 'old prose A' }]))
+    localStorage.setItem('nf_scene_versions:scene-b', JSON.stringify([{ id: 'v2', content: 'old prose B' }]))
+    localStorage.setItem('nf_scene_versions', JSON.stringify([{ sceneId: 'scene-c', content: 'legacy blob' }]))
+    const { result } = renderHook(() => useStore(null))
+
+    act(() => { result.current.clearData() })
+
+    expect(localStorage.getItem('nf_scene_versions:scene-a')).toBeNull()
+    expect(localStorage.getItem('nf_scene_versions:scene-b')).toBeNull()
+    expect(localStorage.getItem('nf_scene_versions')).toBeNull()
+  })
+})
