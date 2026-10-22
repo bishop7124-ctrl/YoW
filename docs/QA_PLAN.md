@@ -1087,3 +1087,5 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - ✅ Stale-price repo search (GBP 99/299/150/179/199/399/499 and matching pence): none in `src/`, `public/`, `api/`. Server-side Price validation proves the configured Stripe objects match GBP 10/50/75/6.
 - ✅ Webhook idempotency, async payment, refund and Founder-race tests: `tests/api/stripe-webhook.test.js` and `create-checkout-session.test.js` pass (44 with env-example and the new unit test).
 - 🟡 Required before the Payment gate: with launched=true on a preview/test deploy, run the Pricing and renewal buttons in Stripe test mode on 22 Oct; owner confirms Stripe Dashboard shows exactly one enabled test endpoint targeting `/api/stripe-webhook` and no Supabase function endpoint; three-times replay from Stripe's "Resend" on a disposable event.
+
+- ✅ 2026-10-22 Search Console (O11): `https://www.yourownworld.co.uk/sitemap.xml` submitted in the Domain property; status Success, last read 22 Oct, 15 pages discovered (matches the 15 `<loc>` entries in `public/sitemap.xml`). Owner screenshot.
