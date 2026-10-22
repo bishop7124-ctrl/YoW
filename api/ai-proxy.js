@@ -30,6 +30,12 @@ const MAX_OUTPUT_TOKENS = 8192
 // tune without a code change if real usage patterns need it.
 const RATE_LIMIT_MAX = Number(process.env.AI_PROXY_RATE_LIMIT_MAX) || 30
 const RATE_LIMIT_WINDOW_MINUTES = Number(process.env.AI_PROXY_RATE_LIMIT_WINDOW_MINUTES) || 10
+// A provider that never answers must not hold a function open indefinitely, and a closed browser tab
+// must stop the upstream call it started (audit YOW-17).
+const UPSTREAM_TIMEOUT_MS = Number(process.env.AI_PROXY_UPSTREAM_TIMEOUT_MS) || 5 * 60 * 1000
+// Streams one account may hold open at once on one server instance.
+const MAX_CONCURRENT_STREAMS = Number(process.env.AI_PROXY_MAX_CONCURRENT_STREAMS) || 4
+const activeStreams = new Map()
 
 function sendCors(req, res) {
   applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
@@ -72,6 +78,8 @@ function redactSensitiveText(value = '') {
 async function readJsonSafe(response) {
   try { return await response.json() } catch { return null }
 }
+
+const upstreamFetch = (signal, url, init = {}) => fetch(url, { ...init, signal })
 
 async function proxyJson(res, upstream) {
   const data = await readJsonSafe(upstream)
@@ -140,30 +148,36 @@ async function maybeCleanupRateLimitLog(supabase) {
   await supabase.from('ai_proxy_requests').delete().lt('created_at', cutoff).then(() => {}, () => {})
 }
 
-// Note: this is check-then-insert, not atomic — two requests from the same
-// user arriving concurrently can both read a count under the limit before
-// either has inserted, letting a tight burst exceed RATE_LIMIT_MAX by
-// roughly the number of in-flight requests. Accepted tradeoff for a simple,
-// durable log-table implementation; an atomic Postgres RPC (row lock or
-// upsert-and-check) would close this if real abuse patterns ever need it.
+// Admission is insert-then-count: each request records itself first, then counts the log. Requests that
+// arrive together therefore all see each other, so a burst can never get past the limit (it can only be
+// refused slightly early), unlike the earlier check-then-insert order where every request in a burst
+// read the same stale count (audit YOW-17).
 async function checkAndRecordRateLimit(supabase, userId) {
   await maybeCleanupRateLimitLog(supabase)
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString()
+  const { data: insertedRows, error: insertError } = await supabase.from('ai_proxy_requests').insert({ user_id: userId }).select('id')
+  const recorded = Array.isArray(insertedRows) ? insertedRows[0] : insertedRows
+  // Fail open on a rate-limit infrastructure error (e.g. table unreachable) rather than blocking every
+  // legitimate AI request on a durability blip. Auth, entitlement, the concurrent-stream cap and the
+  // upstream deadline still bound what one account can do either way.
+  if (insertError) {
+    console.error('[ai-proxy] rate limit record failed', insertError?.code || 'unknown')
+    return { allowed: true }
+  }
   const { count, error: countError } = await supabase
     .from('ai_proxy_requests')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
     .gte('created_at', windowStart)
-  // Fail open on a rate-limit infrastructure error (e.g. table unreachable)
-  // rather than blocking every legitimate AI request on a durability blip —
-  // auth + entitlement checks still gate access either way.
   if (countError) {
     console.error('[ai-proxy] rate limit check failed', countError?.code || 'unknown')
     return { allowed: true }
   }
-  if ((count || 0) >= RATE_LIMIT_MAX) return { allowed: false }
-  const { error: insertError } = await supabase.from('ai_proxy_requests').insert({ user_id: userId })
-  if (insertError) console.error('[ai-proxy] rate limit record failed', insertError?.code || 'unknown')
+  if ((count || 0) > RATE_LIMIT_MAX) {
+    // A refused request should not eat into the allowance of the next window.
+    if (recorded?.id != null) await supabase.from('ai_proxy_requests').delete().eq('id', recorded.id).then(() => {}, () => {})
+    return { allowed: false }
+  }
   return { allowed: true }
 }
 
@@ -175,22 +189,22 @@ export function clampMaxTokens(value) {
 
 // ── Provider calls ───────────────────────────────────────────────────────────
 
-async function handleModels(req, res, body) {
+async function handleModels(req, res, body, signal) {
   const { provider, apiKey, baseUrl } = body
   if (provider === 'openrouter') {
-    const upstream = await fetch('https://openrouter.ai/api/v1/models')
+    const upstream = await upstreamFetch(signal, 'https://openrouter.ai/api/v1/models')
     return proxyJson(res, upstream)
   }
   if (!apiKey) return res.status(400).json({ error: { code: 400, message: 'An API key is required.' } })
 
   if (provider === 'google') {
-    const upstream = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
+    const upstream = await upstreamFetch(signal, 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
       headers: { 'x-goog-api-key': apiKey },
     })
     return proxyJson(res, upstream)
   }
   if (provider === 'anthropic') {
-    const upstream = await fetch('https://api.anthropic.com/v1/models?limit=1000', {
+    const upstream = await upstreamFetch(signal, 'https://api.anthropic.com/v1/models?limit=1000', {
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
@@ -203,7 +217,7 @@ async function handleModels(req, res, body) {
     if (!ALLOWED_OPENAI_BASE_URLS.has(normalized)) {
       return res.status(400).json({ error: { code: 400, message: 'This OpenAI-compatible base URL is not available through the YOW proxy.' } })
     }
-    const upstream = await fetch(`${normalized}/models`, {
+    const upstream = await upstreamFetch(signal, `${normalized}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
     return proxyJson(res, upstream)
@@ -218,7 +232,7 @@ function anthropicSystemPrompt(systemPrompt, cacheControl) {
   return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }]
 }
 
-async function handleStream(req, res, body) {
+async function handleStream(req, res, body, signal) {
   const { provider, apiKey, model, baseUrl, systemPrompt, messages = [], jsonMode, cacheControl } = body
   const maxTokens = clampMaxTokens(body.maxTokens)
   if (!apiKey) return res.status(400).json({ error: { code: 400, message: 'An API key is required.' } })
@@ -235,7 +249,7 @@ async function handleStream(req, res, body) {
     const payload = { contents, generationConfig }
     if (systemPrompt) payload.systemInstruction = { parts: [{ text: String(systemPrompt) }] }
 
-    upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+    upstream = await upstreamFetch(signal, `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -244,7 +258,7 @@ async function handleStream(req, res, body) {
       body: JSON.stringify(payload),
     })
   } else if (provider === 'anthropic') {
-    upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    upstream = await upstreamFetch(signal, 'https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -260,7 +274,7 @@ async function handleStream(req, res, body) {
     if (provider === 'openai' && !ALLOWED_OPENAI_BASE_URLS.has(normalized)) {
       return res.status(400).json({ error: { code: 400, message: 'This OpenAI-compatible base URL is not available through the YOW proxy.' } })
     }
-    upstream = await fetch(`${normalized}/chat/completions`, {
+    upstream = await upstreamFetch(signal, `${normalized}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -305,11 +319,38 @@ export default async function handler(req, res) {
     const body = req.body || {}
     if (!PROVIDER_IDS.has(body.provider)) return res.status(400).json({ error: { code: 400, message: 'Unknown AI provider.' } })
     if (byteLength(body) > MAX_BODY_BYTES) return res.status(413).json({ error: { code: 413, message: 'AI request is too large.' } })
-    if (body.action === 'models') return handleModels(req, res, body)
-    if (body.action === 'stream') return handleStream(req, res, body)
-    return res.status(400).json({ error: { code: 400, message: 'Unknown AI proxy action.' } })
+    if (body.action !== 'models' && body.action !== 'stream') return res.status(400).json({ error: { code: 400, message: 'Unknown AI proxy action.' } })
+
+    if ((activeStreams.get(user.id) || 0) >= MAX_CONCURRENT_STREAMS) {
+      res.setHeader('Retry-After', '15')
+      return res.status(429).json({ error: { code: 429, message: 'Too many AI requests are already running — wait for one to finish and try again.' } })
+    }
+    activeStreams.set(user.id, (activeStreams.get(user.id) || 0) + 1)
+
+    // One signal ends the provider call on either a deadline or the browser going away.
+    const controller = new AbortController()
+    let timedOut = false
+    const timer = setTimeout(() => { timedOut = true; controller.abort() }, UPSTREAM_TIMEOUT_MS)
+    res.on?.('close', () => { if (!res.writableFinished) controller.abort() })
+    try {
+      if (body.action === 'models') return await handleModels(req, res, body, controller.signal)
+      return await handleStream(req, res, body, controller.signal)
+    } catch (error) {
+      if (timedOut) {
+        console.error('[ai-proxy] provider call timed out')
+        if (!res.headersSent) return res.status(504).json({ error: { code: 504, message: 'The AI provider took too long to answer. Try again.' } })
+        return undefined
+      }
+      throw error
+    } finally {
+      clearTimeout(timer)
+      const remaining = (activeStreams.get(user.id) || 1) - 1
+      if (remaining > 0) activeStreams.set(user.id, remaining)
+      else activeStreams.delete(user.id)
+    }
   } catch (error) {
     console.error('[ai-proxy]', error?.name || 'Error', error?.message || 'AI proxy failed')
+    if (res.headersSent) return undefined
     return res.status(502).json({ error: { code: 502, message: 'YOW could not reach the selected AI provider.' } })
   }
 }
