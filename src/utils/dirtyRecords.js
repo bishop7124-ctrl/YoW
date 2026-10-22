@@ -28,7 +28,16 @@ export function setDirtyTable(owner, table, entries) {
   try { writeItem(dirtyKey(owner), JSON.stringify(next)) } catch { /* a failed local write is reported by the storage layer */ }
 }
 
-const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+// Cloud JSONB storage does not keep object key order, so records are compared by value, not by the
+// order their keys happen to be written in.
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => [key, canonical(value[key])]))
+  }
+  return value
+}
+const sameJson = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
 
 // Builds the data to show on login: the cloud copy, with this device's dirty records laid over it.
 // Records that are NOT dirty always come from the cloud (so records deleted or updated elsewhere are

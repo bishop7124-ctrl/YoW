@@ -774,6 +774,19 @@ export function useStore(userId = null, options = {}) {
     return promise
   }, [])
 
+  // Marks an operation's earlier failure as no longer relevant (its record or scene was deleted, or there
+  // is nothing left to send) so the status cannot stay on "error" for something that no longer exists.
+  const resolveSyncFailure = useCallback((key) => {
+    if (!failedSyncRef.current.delete(key)) return
+    if (syncPendingRef.current > 0) return
+    const stillFailed = failedSyncRef.current.size > 0
+    setSyncStatus(s => ({
+      state: stillFailed ? 'error' : 'synced',
+      lastSyncedAt: s.lastSyncedAt,
+      lastError: stillFailed ? [...failedSyncRef.current.values()][0] : null,
+    }))
+  }, [])
+
   const getCurrentSnapshot = useCallback(() => ({
     novels,
     characters,
@@ -1242,6 +1255,16 @@ export function useStore(userId = null, options = {}) {
   // lastSyncedByTableRef is the ACKNOWLEDGED base: a record only enters it after the cloud accepted
   // that version, so a failed save leaves the record "changed" and it is sent again (audit YOW-02).
   // Failures retry on their own with backoff, and on coming back online.
+  const activeUserRef = useRef(userId)
+  activeUserRef.current = userId
+  // A record saved again after its delete was queued (for example a restored manuscript copy that reuses
+  // ids) is no longer pending deletion.
+  const forgetRestoredDeletes = (owner, table, ids) => {
+    const pending = loadPendingDeletes(owner).filter(entry => entry.table === table)
+    if (!pending.length) return
+    const present = new Set(ids)
+    pending.forEach(entry => { if (present.has(entry.id)) removePendingDelete(owner, table, entry.id) })
+  }
   const itemSyncRef = useRef({ latest: new Map(), inFlight: new Map(), attempts: new Map(), timers: new Map() })
   const debouncedSaveItems = useMemo(
     () => {
@@ -1256,6 +1279,7 @@ export function useStore(userId = null, options = {}) {
           const present = new Set(items.map(item => item.id))
           const pruned = new Map([...prevMap].filter(([id]) => present.has(id)))
           if (pruned.size !== prevMap.size) lastSyncedByTableRef.current[table] = pruned
+          resolveSyncFailure(`items:${table}`)
           return undefined
         }
         // The version this tab last loaded or saved is the base for a per-field three-way merge in the
@@ -1264,6 +1288,8 @@ export function useStore(userId = null, options = {}) {
         const baseById = new Map()
         changed.forEach(item => { if (prevMap.has(item.id)) baseById.set(item.id, prevMap.get(item.id)) })
         const attempt = mergeItems(table, ownerId, changed, baseById).then(({ results }) => {
+          // Results for an account that is no longer the signed-in one must not touch this workspace.
+          if (activeUserRef.current !== ownerId) return
           const stillThere = new Set((state.latest.get(table)?.items || items).map(item => item.id))
           const acknowledged = new Map(lastSyncedByTableRef.current[table] || [])
           changed.forEach(item => acknowledged.set(item.id, item))
@@ -1324,6 +1350,7 @@ export function useStore(userId = null, options = {}) {
       const debounced = createKeyedDebounce((table) => sendWhenIdle(table), 2000)
       const track = (table, ownerId, items) => {
         state.latest.set(table, { ownerId, items })
+        forgetRestoredDeletes(ownerId, table, items.map(item => item.id))
         recomputeDirty(table)
         return debounced(table, ownerId, items)
       }
@@ -1331,7 +1358,7 @@ export function useStore(userId = null, options = {}) {
       track.flushAll = debounced.flushAll
       return track
     },
-    [trackSync]
+    [trackSync, resolveSyncFailure]
   )
   // Pending retries belong to one signed-in account; drop them when it changes, and retry at once
   // when the browser reports it is back online.
@@ -1495,7 +1522,15 @@ export function useStore(userId = null, options = {}) {
       }
 
       const remoteScene = result.remoteScene
+      if (!remoteScene?.id && result.reason === 'missing') {
+        // The scene was deleted elsewhere while this device still holds edits to it. Keep the writing:
+        // save it again as a new cloud row rather than retrying a stale revision forever.
+        const recreated = await saveSceneDoc(uidValue, scene)
+        sceneCloudRevisionRef.current.set(sceneId, Number(recreated?.revision ?? 1))
+        return recreated
+      }
       if (!remoteScene?.id) throw new Error('Scene changed elsewhere, but the current cloud copy could not be recovered.')
+      if (activeUserRef.current !== uidValue) return result // the account changed while this saved
       const conflictCopy = createSceneConflictCopy(scene)
       sceneCloudRevisionRef.current.set(sceneId, Number(result.revision || 0))
       commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
@@ -1533,7 +1568,16 @@ export function useStore(userId = null, options = {}) {
       const state = sceneSyncRef.current
       const markDirty = (sceneId, uidValue) => {
         const entries = { ...(loadDirtyRecords(uidValue)?.scenes || {}) }
-        if (!entries[sceneId]) entries[sceneId] = { baseRevision: sceneCloudRevisionRef.current.get(sceneId) ?? 0 }
+        if (entries[sceneId]) return // already tracked: no rewrite per keystroke
+        entries[sceneId] = { baseRevision: sceneCloudRevisionRef.current.get(sceneId) ?? 0 }
+        setDirtyTable(uidValue, 'scenes', entries)
+      }
+      // A save that succeeded while newer edits were still arriving moves the scene's base to the
+      // revision just written, so a later recovery is not judged against an out-of-date revision.
+      const refreshBase = (sceneId, uidValue) => {
+        const entries = { ...(loadDirtyRecords(uidValue)?.scenes || {}) }
+        if (!entries[sceneId]) return
+        entries[sceneId] = { ...entries[sceneId], baseRevision: sceneCloudRevisionRef.current.get(sceneId) ?? entries[sceneId].baseRevision }
         setDirtyTable(uidValue, 'scenes', entries)
       }
       const clearDirty = (sceneId, uidValue) => {
@@ -1548,6 +1592,7 @@ export function useStore(userId = null, options = {}) {
         state.attempts.delete(sceneId)
         state.latest.delete(sceneId)
         state.edits.delete(sceneId)
+        resolveSyncFailure(`scene:${sceneId}`)
       }
       const send = (sceneId) => {
         const latest = state.latest.get(sceneId)
@@ -1559,6 +1604,7 @@ export function useStore(userId = null, options = {}) {
           clearTimeout(state.timers.get(sceneId))
           state.timers.delete(sceneId)
           if (state.edits.get(sceneId) === editAtSend) clearDirty(sceneId, uidValue)
+          else refreshBase(sceneId, uidValue)
         })
         return trackSync(attempt, `scene:${sceneId}`).catch(() => {
           const attemptNumber = state.attempts.get(sceneId) || 0
@@ -1578,6 +1624,7 @@ export function useStore(userId = null, options = {}) {
       const track = (sceneId, uidValue, scene) => {
         state.latest.set(sceneId, { uidValue, scene })
         state.edits.set(sceneId, (state.edits.get(sceneId) || 0) + 1)
+        forgetRestoredDeletes(uidValue, 'scenes', [sceneId])
         markDirty(sceneId, uidValue)
         return debounced(sceneId, uidValue, scene)
       }
@@ -1590,7 +1637,7 @@ export function useStore(userId = null, options = {}) {
       track.flushAll = debounced.flushAll
       return track
     },
-    [saveSceneWithoutClobbering, trackSync]
+    [saveSceneWithoutClobbering, trackSync, resolveSyncFailure]
   )
 
   // Cloud deletes (audit YOW-07). Each delete is remembered on this device until the cloud confirms it,
@@ -1604,6 +1651,13 @@ export function useStore(userId = null, options = {}) {
     if (state.running.has(entryKey) || !userId) return Promise.resolve()
     state.running.add(entryKey)
     const attempt = () => {
+      // Abandon (without confirming) when the account changed, and skip when the record was saved again
+      // after the delete was queued: a stale retry must neither pretend to have deleted another
+      // account's row nor remove a record the writer has since restored.
+      if (activeUserRef.current !== userId || !loadPendingDeletes(userId).some(entry => entry.table === table && entry.id === id)) {
+        state.running.delete(entryKey)
+        return Promise.resolve()
+      }
       let operation
       try {
         operation = Promise.resolve(table === 'scenes' ? deleteSceneDoc(userId, id) : deleteItem(table, userId, id))
@@ -1612,12 +1666,14 @@ export function useStore(userId = null, options = {}) {
       }
       return trackSync(operation, `delete:${entryKey}`).then(
         () => {
+          state.running.delete(entryKey)
+          if (activeUserRef.current !== userId) return
           removePendingDelete(userId, table, id)
           state.attempts.delete(entryKey)
-          state.running.delete(entryKey)
         },
         () => {
           state.running.delete(entryKey)
+          if (activeUserRef.current !== userId) return
           const attemptNumber = state.attempts.get(entryKey) || 0
           state.attempts.set(entryKey, attemptNumber + 1)
           clearTimeout(state.timers.get(entryKey))
@@ -1925,9 +1981,16 @@ export function useStore(userId = null, options = {}) {
             debouncedSaveItems(table, userId, items)
           }
         })
-      } else if (loadDirtyRecords(userId) === null) {
-        // Start tracking on this device. Until now recovery fell back to the timestamp heuristic.
-        setDirtyTable(userId, '_tracking', {})
+      } else {
+        const existingDirty = loadDirtyRecords(userId)
+        if (existingDirty === null) {
+          // Start tracking on this device. Until now recovery fell back to the timestamp heuristic.
+          setDirtyTable(userId, '_tracking', {})
+        } else if (options.preferLocal === false) {
+          // This import is the new baseline (restore, resume, project import), so earlier
+          // "unacknowledged" entries describe a state that no longer exists.
+          Object.keys(existingDirty).forEach(table => setDirtyTable(userId, table, {}))
+        }
       }
     }
     pendingDeletes.forEach(({ table, id }) => { runPendingDelete(table, id) })

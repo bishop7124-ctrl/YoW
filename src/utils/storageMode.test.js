@@ -10,6 +10,7 @@ import {
   loadPendingDesktopLapseResumeBase,
   loadStorageMode,
   loadUnsyncedRecoveryCopy,
+  loadUnsyncedRecoveryDirty,
   saveDesktopLapseSnapshot,
   saveLocalFirstSnapshot,
   saveStorageMode,
@@ -168,5 +169,12 @@ describe('unsynced recovery copy (audit YOW-03)', () => {
     saveUnsyncedRecoveryCopy('user-a', copy)
     clearUnsyncedRecoveryCopy('user-a')
     expect(loadUnsyncedRecoveryCopy('user-a')).toBeNull()
+  })
+
+  it('keeps which records were unacknowledged alongside the copy', () => {
+    saveUnsyncedRecoveryCopy('user-a', copy, { characters: { c1: {} } })
+    expect(loadUnsyncedRecoveryDirty('user-a')).toEqual({ characters: { c1: {} } })
+    saveUnsyncedRecoveryCopy('user-b', copy)
+    expect(loadUnsyncedRecoveryDirty('user-b')).toBeNull()
   })
 })

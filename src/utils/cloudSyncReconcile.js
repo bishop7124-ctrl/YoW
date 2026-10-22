@@ -21,7 +21,15 @@ export const TABLE_CONFIG = {
 }
 
 const IGNORED_FIELDS = new Set(['lastModified', 'updatedAt', 'wordHistory'])
-const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => [key, canonical(value[key])]))
+  }
+  return value
+}
+// By value, not key order: cloud JSONB storage does not preserve key order.
+const jsonEq = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
 const labelFor = item => item?.name || item?.title || 'Untitled'
 
 function byId(items = []) {

@@ -44,6 +44,7 @@ import {
   chooseLapseLocalData,
   saveUnsyncedRecoveryCopy,
   loadUnsyncedRecoveryCopy,
+  loadUnsyncedRecoveryDirty,
   clearUnsyncedRecoveryCopy,
   nextLapsedDesktopUser,
   saveLocalFirstSnapshot,
@@ -57,6 +58,7 @@ import { checkForDesktopUpdate } from './utils/desktopUpdater'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { reconcileCloudSyncData } from './utils/cloudSyncReconcile'
 import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
+import { loadDirtyRecords, overlayDirtyRecords } from './utils/dirtyRecords'
 import { createAccountLoadGuard } from './utils/accountLoadGuard'
 import { consumeUnsyncedSignOut } from './store/syncFlushRegistry'
 import { hasLocalWriteFailed } from './storage/writeDurability'
@@ -1011,7 +1013,7 @@ function AppInner() {
         const flushUnconfirmed = consumeUnsyncedSignOut()
         const syncState = lastSyncStateRef.current
         if (flushUnconfirmed || syncState === 'error' || syncState === 'syncing' || hasLocalWriteFailed()) {
-          saveUnsyncedRecoveryCopy(previousUserId, store.getLocalSnapshot?.())
+          saveUnsyncedRecoveryCopy(previousUserId, store.getLocalSnapshot?.(), loadDirtyRecords(previousUserId))
         }
         lastSignedInUserIdRef.current = null
       }
@@ -1080,11 +1082,22 @@ function AppInner() {
         const unsyncedCopy = loadUnsyncedRecoveryCopy(userId)
         if (unsyncedCopy?.novels?.length) {
           try {
-            const { mergedData, conflicts } = reconcileCloudSyncData(
-              pruneSaveDataToProjects(unsyncedCopy),
-              pruneSaveDataToProjects(data),
-              {},
-            )
+            // When the copy knows which records were unacknowledged, only those override the cloud (the
+            // rest of the copy is stale by definition); otherwise fall back to the no-base merge.
+            const unsyncedDirty = loadUnsyncedRecoveryDirty(userId)
+            let mergedData
+            let conflicts
+            if (unsyncedDirty) {
+              const overlaid = overlayDirtyRecords(pruneSaveDataToProjects(data), pruneSaveDataToProjects(unsyncedCopy), unsyncedDirty)
+              mergedData = overlaid.data
+              conflicts = overlaid.conflicts
+            } else {
+              ;({ mergedData, conflicts } = reconcileCloudSyncData(
+                pruneSaveDataToProjects(unsyncedCopy),
+                pruneSaveDataToProjects(data),
+                {},
+              ))
+            }
             const reviewedData = await persistReviewedCloudSyncResume(userId, mergedData, { trackSync: store.trackSync })
             clearUnsyncedRecoveryCopy(userId)
             if (isStaleLoad()) return

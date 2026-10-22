@@ -139,14 +139,21 @@ export function clearDesktopLapseLocalCopy(userId) {
 const UNSYNCED_RECOVERY_PREFIX = 'nf_unsyncedRecovery'
 const unsyncedRecoveryKey = userId => `${UNSYNCED_RECOVERY_PREFIX}:${userId}`
 
-export function saveUnsyncedRecoveryCopy(userId, data) {
+export function saveUnsyncedRecoveryCopy(userId, data, dirtyRecords = null) {
   if (!userId || !Array.isArray(data?.novels) || data.novels.length === 0) return false
   try {
-    writeItem(unsyncedRecoveryKey(userId), JSON.stringify({ savedAt: Date.now(), data }))
+    writeItem(unsyncedRecoveryKey(userId), JSON.stringify({ savedAt: Date.now(), data, dirty: dirtyRecords }))
     return true
   } catch {
     return false
   }
+}
+
+// Which records the cloud had not acknowledged when the copy was taken (null when unknown).
+export function loadUnsyncedRecoveryDirty(userId) {
+  if (!userId) return null
+  const dirty = loadValue(unsyncedRecoveryKey(userId), null)?.dirty
+  return dirty && typeof dirty === 'object' && Object.keys(dirty).length ? dirty : null
 }
 
 export function loadUnsyncedRecoveryCopy(userId) {

@@ -65,6 +65,14 @@ describe('overlayDirtyRecords', () => {
     expect(conflicts).toEqual([])
   })
 
+  it('treats records with the same content as equal whatever order their keys are in (cloud JSONB reorders keys)', () => {
+    const local = { id: 'c1', name: 'Same', notes: { b: 1, a: 2 } }
+    const cloud = { notes: { a: 2, b: 1 }, name: 'Same', id: 'c1' }
+    const { pushes, conflicts } = overlayDirtyRecords({ characters: [cloud] }, { characters: [local] }, { characters: { c1: {} } }, opts)
+    expect(pushes).toEqual({})
+    expect(conflicts).toEqual([])
+  })
+
   it('ignores a dirty id whose record no longer exists locally', () => {
     const cloud = { characters: [{ id: 'c1', name: 'Cloud' }] }
     const { data, pushes } = overlayDirtyRecords(cloud, { characters: [] }, { characters: { c1: {} } }, opts)

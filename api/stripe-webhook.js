@@ -324,7 +324,7 @@ async function releaseFounderSlotForCharge(stripe, supabaseAdmin, charge) {
 }
 
 // --------------------------------------------------------------------------
-// Event ledger claim (see handler). Resolves to 'claimed' | 'duplicate' | 'in_progress' | 'error'.
+// Event ledger claim (see handler). Resolves to { status: 'claimed' | 'duplicate' | 'in_progress' | 'error', claimedAt? }.
 // Tolerates a database that has not had the status/claimed_at migration yet by falling back to the
 // original claim-only behaviour.
 // --------------------------------------------------------------------------
@@ -337,20 +337,24 @@ async function claimEvent(supabaseAdmin, event) {
   let { error } = await supabaseAdmin
     .from('stripe_processed_events')
     .insert({ id: event.id, type: event.type, status: 'processing', claimed_at: now })
+  let legacySchema = false
   if (error && isMissingColumnError(error)) {
+    legacySchema = true
     ;({ error } = await supabaseAdmin.from('stripe_processed_events').insert({ id: event.id, type: event.type }))
   }
-  if (!error) return 'claimed'
+  // claimedAt identifies THIS worker's claim, so releasing it after a failure cannot delete the claim of
+  // a worker that took the event over after this one's lease expired.
+  if (!error) return { status: 'claimed', claimedAt: legacySchema ? null : now }
   if (error.code !== '23505') {
     console.error('[stripe-webhook] failed to claim event ledger row:', error.message)
-    return 'error'
+    return { status: 'error' }
   }
 
   const { data } = await supabaseAdmin.from('stripe_processed_events').select('status, claimed_at').eq('id', event.id)
   const row = Array.isArray(data) ? data[0] : data
-  if (!row || row.status !== 'processing') return 'duplicate'
+  if (!row || row.status !== 'processing') return { status: 'duplicate' }
   const claimedAt = Date.parse(row.claimed_at)
-  if (Number.isFinite(claimedAt) && Date.now() - claimedAt < CLAIM_LEASE_MS) return 'in_progress'
+  if (Number.isFinite(claimedAt) && Date.now() - claimedAt < CLAIM_LEASE_MS) return { status: 'in_progress' }
 
   const { data: taken, error: takeoverError } = await supabaseAdmin
     .from('stripe_processed_events')
@@ -360,9 +364,9 @@ async function claimEvent(supabaseAdmin, event) {
     .select('id')
   if (takeoverError) {
     console.error('[stripe-webhook] failed to take over stale event claim:', takeoverError.message)
-    return 'error'
+    return { status: 'error' }
   }
-  return Array.isArray(taken) && taken.length ? 'claimed' : 'in_progress'
+  return Array.isArray(taken) && taken.length ? { status: 'claimed', claimedAt: now } : { status: 'in_progress' }
 }
 
 // --------------------------------------------------------------------------
@@ -398,14 +402,14 @@ export default async function handler(req, res) {
   // inside its lease Stripe is asked to retry later (503), and if its worker died mid-fulfilment the
   // stale claim is taken over so the payment is not stranded (audit YOW-09; P0-05 added the ledger).
   const claim = await claimEvent(supabaseAdmin, event)
-  if (claim === 'duplicate') {
+  if (claim.status === 'duplicate') {
     console.log('[stripe-webhook] duplicate event, already processed:', event.id, event.type)
     return res.status(200).json({ received: true, duplicate: true })
   }
-  if (claim === 'in_progress') {
+  if (claim.status === 'in_progress') {
     return res.status(503).json({ error: 'Event is being processed' })
   }
-  if (claim === 'error') {
+  if (claim.status === 'error') {
     return res.status(500).json({ error: 'Internal server error' })
   }
 
@@ -528,7 +532,9 @@ export default async function handler(req, res) {
     // Release the claim so a legitimate Stripe retry can actually reprocess
     // this event — otherwise a transient failure here would permanently
     // mark a never-applied event as done and silently drop the fulfillment.
-    const { error: releaseError } = await supabaseAdmin.from('stripe_processed_events').delete().eq('id', event.id)
+    let release = supabaseAdmin.from('stripe_processed_events').delete().eq('id', event.id)
+    if (claim.claimedAt) release = release.eq('claimed_at', claim.claimedAt)
+    const { error: releaseError } = await release
     if (releaseError) console.error('[stripe-webhook] failed to release event ledger row after error:', releaseError.message)
     // Never forward raw exception detail to the client (audit P0-05) — log
     // it server-side above, where it's already captured for debugging.

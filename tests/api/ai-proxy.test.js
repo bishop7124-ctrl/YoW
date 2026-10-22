@@ -52,12 +52,15 @@ describe('ai-proxy handler', () => {
     from.mockClear()
     tableResults.length = 0
     vi.resetModules()
+    // The proxy trims its rate-limit log on ~2% of requests; that extra query would consume a queued result.
+    vi.spyOn(Math, 'random').mockReturnValue(0.99)
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })))
     const mod = await import('../../api/ai-proxy.js')
     handler = mod.default
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
