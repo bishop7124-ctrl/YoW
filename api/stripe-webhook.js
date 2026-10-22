@@ -232,10 +232,13 @@ async function extendMaintenance(supabaseAdmin, userId) {
   }
   const { data } = await supabaseAdmin.auth.admin.getUserById(userId)
   const existing = data?.user?.app_metadata || {}
-  const currentExpiry = existing.maintenance_expires_at
-    ? new Date(existing.maintenance_expires_at)
-    : new Date()
-  const base = currentExpiry > new Date() ? currentExpiry : new Date()
+  // Renew from the later of the paid-until date and the included hosting period,
+  // so renewing early never shortens Cloud time the customer already has.
+  const now = new Date()
+  const base = [existing.maintenance_expires_at, existing.cloud_hosting_expires_at, existing.hosting_included_until]
+    .map(value => (value ? new Date(value) : null))
+    .filter(date => date && !Number.isNaN(date.getTime()) && date > now)
+    .reduce((latest, date) => (date > latest ? date : latest), now)
   const newExpiry = new Date(base.getTime() + 365 * 24 * 60 * 60 * 1000)
   await supabaseAdmin.auth.admin.updateUserById(userId, {
     app_metadata: { ...existing, maintenance_expires_at: newExpiry.toISOString() },

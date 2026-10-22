@@ -67,6 +67,22 @@ describe('membership plan limits', () => {
     expect(membership.maintenanceExpiresAt.toISOString()).toBe('2028-01-01T00:00:00.000Z')
   })
 
+  it('an early renewal never shows less Cloud time than the included period still gives', () => {
+    const inOneYear = new Date(Date.now() + 365 * 86400000).toISOString()
+    const inTwoYears = new Date(Date.now() + 730 * 86400000).toISOString()
+    const membership = getMembership(makeUser({
+      app_metadata: {
+        subscription_plan: 'premium_plus_lifetime',
+        subscription_status: 'active',
+        lifetime_purchased_at: new Date().toISOString(),
+        hosting_included_until: inTwoYears,
+        maintenance_expires_at: inOneYear,
+      },
+    }))
+    expect(membership.isLocalMode).toBe(false)
+    expect(membership.maintenanceExpiresAt.toISOString()).toBe(inTwoYears)
+  })
+
   it('does not let Founder recognition bypass Cloud expiry', () => {
     const membership = getMembership(makeUser({
       app_metadata: {

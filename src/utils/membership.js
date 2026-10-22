@@ -271,9 +271,10 @@ export function getMembership(user) {
       || dateFrom(user?.app_metadata?.maintenance_expires_at)
 
     if (paidUntil && paidUntil > now) {
-      // Renewal actively paid
-      maintenanceExpiresAt = paidUntil
-      const msRemaining = paidUntil.getTime() - now.getTime()
+      // Renewal actively paid; never show less time than the included period still gives
+      const coveredUntil = includedHostingEnds > paidUntil ? includedHostingEnds : paidUntil
+      maintenanceExpiresAt = coveredUntil
+      const msRemaining = coveredUntil.getTime() - now.getTime()
       maintenanceDaysRemaining = Math.ceil(msRemaining / DAY_MS)
       maintenanceWarning = maintenanceDaysRemaining <= HOSTING_RENEWAL_WARNING_DAYS
     } else if (now < includedHostingEnds) {

@@ -1089,3 +1089,5 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - 🟡 Required before the Payment gate: with launched=true on a preview/test deploy, run the Pricing and renewal buttons in Stripe test mode on 22 Oct; owner confirms Stripe Dashboard shows exactly one enabled test endpoint targeting `/api/stripe-webhook` and no Supabase function endpoint; three-times replay from Stripe's "Resend" on a disposable event.
 
 - ✅ 2026-10-22 Search Console (O11): `https://www.yourownworld.co.uk/sitemap.xml` submitted in the Domain property; status Success, last read 22 Oct, 15 pages discovered (matches the 15 `<loc>` entries in `public/sitemap.xml`). Owner screenshot.
+
+- ✅ 2026-10-22 GBP 6 renewal, owner test: Stripe payment succeeded. Fixed early-renewal shortening (`api/stripe-webhook.js` `extendMaintenance`, `src/utils/membership.js`) with two regression tests, and added a Lifetime 'Cloud hosting until' Membership row. 🟡 After deploy, re-run the renewal on a Lifetime test account and confirm the new row and date; Supabase `maintenance_expires_at` check still owner-pending.

@@ -386,6 +386,24 @@ describe('handler — maintenance extension is not double-applied', () => {
     expect(writes[0]).toHaveProperty('maintenance_expires_at')
   })
 
+  it('renewing early extends from the included hosting date, never shortening it', async () => {
+    const includedUntil = new Date(Date.now() + 730 * 86400000)
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { hosting_included_until: includedUntil.toISOString() } } }, error: null })
+    subscriptionsRetrieve.mockResolvedValue({ id: 'sub_maint', metadata: { user_id: 'user-1', plan: 'maintenance' } })
+    constructEvent.mockReturnValue({
+      id: 'evt_invoice_early', type: 'invoice.paid',
+      data: { object: { id: 'in_early', subscription: 'sub_maint', metadata: {} } },
+    })
+    queueResult({ data: null, error: null })
+
+    const res = makeRes()
+    await handler(makeReq(), res)
+
+    expect(res.status).toHaveBeenCalledWith(200)
+    const [write] = metadataWritesFor('user-1')
+    expect(new Date(write.maintenance_expires_at).getTime()).toBe(includedUntil.getTime() + 365 * 86400000)
+  })
+
   it('checkout.session.completed + invoice.paid together (the real purchase flow) extend maintenance only once total', async () => {
     // First: checkout.session.completed — a no-op for maintenance.
     constructEvent.mockReturnValueOnce({
