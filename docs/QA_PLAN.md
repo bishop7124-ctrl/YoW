@@ -1,5 +1,29 @@
 # YOW Deferred QA Plan
 
+## 2026-10-22 audit follow-up: what only the owner can do (YOW-21 and the real-environment checks)
+
+All code-addressable audit findings are fixed and covered by automated tests (see `docs/ROADMAP.md`). These steps need your accounts or a real browser; do them in this order and record the date and result next to each.
+
+**A. Apply the three migrations (Supabase SQL editor or `supabase db push`; they are additive and idempotent):**
+1. `20261022120000_stripe_event_lease.sql` (payment webhook lease; the webhook works without it).
+2. `20261022121000_account_lifecycle_delivery_status.sql` (needed before ANY lifecycle switch is turned on).
+Then confirm in the Table Editor that `stripe_processed_events` has `status`, `claimed_at`, `completed_at` and `account_lifecycle_events` has `delivery_status`.
+
+**B. Recovery evidence (YOW-21), without opening customer rows:**
+1. Supabase Dashboard → Project Settings → Database → Backups: write down the plan, retention days and whether Point-in-Time Recovery is on.
+2. Supabase Storage objects are NOT in database backups. Decide and write down where the `user-media` files are copied (or accept that they are not) and who can restore them.
+3. In a SEPARATE test project, create two synthetic accounts with a multilingual manuscript, a map and an image; export a ZIP for each; delete the data; restore from the ZIP; confirm text, images and relationships match and account B cannot see account A.
+4. Write down how long step 3 took (recovery time) and how much recent work could have been lost (recovery point). Decide whether that is acceptable.
+5. Redeploy-rollback: in Vercel, note which previous deployment you would promote, and confirm the database migrations above do not break it (they are additive).
+6. Alerts: in Vercel → Logs, create alerts for the strings `[stripe-webhook] Handler error`, `[stripe-webhook] failed to claim`, `[run-account-lifecycle]` errors and `[ai-proxy]` errors, sent to your email.
+7. GitHub → Settings → Branches: require the `QA` workflow to pass before merging to `main` and disallow bypass for direct pushes.
+
+**C. Real-browser checks (each also listed in the dated sections below):** offline sign-out and same-account recovery; different account straight after sign-out; slow-network account switch; offline edit then online retry; edit made long ago then login; same scene edited on two devices; delete while offline then reload; replace a logo/cover with storage full; export with accents, quotes, dashes, `<door opens>` and non-Latin text; Word import of a file with tables and comments.
+
+**D. Payment test-mode rehearsal additions:** see the 2026-10-22 section of `docs/PAYMENT_ROADMAP.md`.
+
+**E. Decisions only you can make:** (1) PDF export of Cyrillic/Greek/Chinese/Arabic: today it prints `?` and warns, pointing to Word/ZIP; embedding a Unicode font is possible for Cyrillic/Greek but is a large asset and does not cover Chinese/Arabic. (2) Tailwind 3 → 4 migration to clear the last 7 dev-only `npm audit` entries (a styling migration touching the whole UI).
+
 ## 2026-10-22 audit YOW-01 / YOW-03 (deferred real-browser checks)
 
 Automated regression tests pass (see ROADMAP 2026-10-22). Still to run in a real browser with a test account (`reference_test_account`): (1) edit a character and a scene, go offline (DevTools), sign out, sign back in online as the same account: edits must reappear (merged, or shown as conflicts if cloud differs). (2) Sign in as a different account straight after step 1's sign-out: none of the first account's data may appear. (3) Expire the session mid-edit (revoke refresh token) and confirm the same-account recovery. (4) YOW-05: throttle the network (DevTools slow 3G), sign in as account A, sign out and sign in as B before A's load finishes: only B's data may appear, with no error banner or loading flicker. Not yet run.

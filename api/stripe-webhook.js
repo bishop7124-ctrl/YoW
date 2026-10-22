@@ -30,8 +30,9 @@ async function writeAppMetadata(supabaseAdmin, userId, appMetadata) {
   if (error) throw new Error(`could not update entitlement for ${userId}: ${error.message}`)
 }
 
-const holdsLifetimeLicence = (metadata = {}) =>
-  LIFETIME_PLANS.has(metadata.subscription_plan) || Boolean(metadata.lifetime_purchased_at)
+// Judged by the plan the account holds NOW. A refunded Founder purchase clears subscription_plan but
+// keeps lifetime_purchased_at, and that account must still be able to subscribe to Monthly.
+const holdsLifetimeLicence = (metadata = {}) => LIFETIME_PLANS.has(metadata.subscription_plan)
 
 // The subscription as Stripe holds it now. Event payloads can arrive late or out of order, and Stripe
 // does not guarantee ordering, so an event snapshot must never overwrite newer state.

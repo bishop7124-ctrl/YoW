@@ -855,6 +855,20 @@ describe('handler — subscriptions never overwrite a Lifetime licence (audit YO
     }
   })
 
+  it('lets an account whose Lifetime purchase was refunded subscribe to Monthly again', async () => {
+    getUserById.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: null, subscription_status: 'none', lifetime_purchased_at: '2026-10-01T00:00:00.000Z', access_revoked_at: '2026-10-10T00:00:00.000Z' } } }, error: null })
+    const sub = { id: 'sub_again', status: 'active', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1', items: { data: [{ current_period_end: 2000000000 }] } }
+    subscriptionsRetrieve.mockResolvedValue(sub)
+    constructEvent.mockReturnValue(subscriptionEvent('customer.subscription.created', sub))
+    queueResult({ data: null, error: null })
+
+    await handler(makeReq(), makeRes())
+
+    const write = metadataWritesFor('user-1')[0]
+    expect(write.subscription_plan).toBe('premium_monthly')
+    expect(write.subscription_status).toBe('active')
+  })
+
   it('uses the subscription\'s current state from Stripe, not a stale or reordered event snapshot', async () => {
     getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
     const stale = { id: 'sub_m', status: 'active', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, customer: 'cus_1', items: { data: [{ current_period_end: 100 }] } }

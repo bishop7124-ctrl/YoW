@@ -8,6 +8,10 @@ This is the dedicated planning/tracking document for everything gated on real St
 
 In progress as of 2026-10-05. Stripe test products, production-environment test credentials and the production test webhook have been configured by the owner. An unlisted, no-index direct-link pricing page now exposes the real Stripe test Checkout to signed-in disposable YOW accounts while the normal public pricing page continues to use the interest flow.
 
+## 2026-10-22 audit fixes (YOW-09 / YOW-10)
+
+Webhook fulfilment is now durable (errors fail the handler and release the claim; `processing`/`done` ledger with a 5-minute lease; Cloud extension idempotent per invoice) and a Cloud-renewal or leftover Monthly subscription can no longer overwrite a Lifetime licence. Before the next test-mode rehearsal: apply `supabase/migrations/20261022120000_stripe_event_lease.sql` (the webhook works without it, falling back to claim-only), then add to the rehearsal: (a) a Lifetime purchase followed by a Cloud-renewal subscription, confirming the plan stays Lifetime and only `maintenance_expires_at` moves; (b) cancelling the Cloud renewal and confirming Lifetime access is unchanged; (c) forcing a webhook failure and confirming Stripe's retry then applies it once.
+
 ## What's parked here
 
 ### 1. Stripe Dashboard price alignment (reopened 2026-10-05)
