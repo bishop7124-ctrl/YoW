@@ -28,6 +28,7 @@ import AIStar from '../ai/AIStar'
 import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 import { isDesktopAppRuntime } from '../../utils/runtime'
 import { navigateToExternalUrl } from '../../utils/externalLinks'
+import { isCheckoutLive } from '../../utils/checkoutLaunch'
 import { loadValue, writeItem } from '../../storage/projectStorage'
 import {
   createDesktopVaultSnapshot,
@@ -78,27 +79,49 @@ const CUSTOM_COLOR_FIELDS = [
 ]
 
 export function MaintenancePayButton({ style }) {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, getAccessToken } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const checkoutLive = isCheckoutLive()
+  const startRenewal = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const result = await requestBillingResult(billingEndpoints.checkout, await getAccessToken(), {
+        userId: user.id, email: user.email, plan: 'hosting_renewal', currency: 'gbp',
+      })
+      const outcome = await navigateToExternalUrl(result.url)
+      if (outcome === 'failed') setError('Your browser could not be opened. Please try again, or sign in at www.yourownworld.co.uk to renew.')
+    } catch (renewalError) {
+      setError(renewalError.message || 'Renewal could not be opened right now.')
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <div style={style}>
       <button
-        onClick={() => setModalOpen(true)}
+        onClick={checkoutLive ? startRenewal : () => setModalOpen(true)}
+        disabled={busy}
         style={{
           padding: '8px 18px', borderRadius: 7, background: '#f59e0b', color: '#000',
           fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
         }}
       >
-        Register interest in Cloud Mode renewal
+        {checkoutLive ? (busy ? 'Opening Stripe…' : 'Renew Cloud Mode (£6/year)') : 'Register interest in Cloud Mode renewal'}
       </button>
-      <BetaInterestModal
-        open={modalOpen}
-        user={user}
-        planKey="hosting_renewal"
-        planLabel="Cloud Mode renewal"
-        onClose={() => setModalOpen(false)}
-        onGranted={refreshUser}
-      />
+      {error && <p role="alert" style={{ fontSize: 12, color: '#f87171', margin: '6px 0 0' }}>{error}</p>}
+      {!checkoutLive && (
+        <BetaInterestModal
+          open={modalOpen}
+          user={user}
+          planKey="hosting_renewal"
+          planLabel="Cloud Mode renewal"
+          onClose={() => setModalOpen(false)}
+          onGranted={refreshUser}
+        />
+      )}
     </div>
   )
 }
@@ -2305,7 +2328,7 @@ function AISettingsPanel({ userId, membership }) {
 const formatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
 const billingEndpoints = {
-  checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL,
+  checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL || '/api/create-checkout-session',
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL || '/api/create-customer-portal',
 }
 
@@ -2986,8 +3009,9 @@ export default function AccountSettings({
   const openBilling = async (planKey) => {
     // planKey = null opens the customer portal for Stripe-backed accounts or,
     // after confirmation, downgrades a manually granted plan with no Stripe
-    // customer. Paid-plan selections still use the beta-interest flow below.
-    if (planKey) {
+    // customer. Paid-plan selections use the beta-interest flow below until the
+    // launch switch (VITE_CHECKOUT_LIVE) opens real Stripe checkout.
+    if (planKey && !isCheckoutLive()) {
       setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
       return
     }

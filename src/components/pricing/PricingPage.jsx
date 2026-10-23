@@ -7,6 +7,7 @@ import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { usePageMeta } from '../../utils/usePageMeta'
+import { isCheckoutLive } from '../../utils/checkoutLaunch'
 import './PricingPage.css'
 import { DESKTOP_UNSIGNED_SHORT, DESKTOP_UNSIGNED_DETAIL } from '../../data/desktopAppDisclosure'
 
@@ -87,7 +88,8 @@ function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutB
       {plan.disclaimer && !founding && <p className="pricing-card-disclaimer">{plan.disclaimer}</p>}
       <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && checkoutBusy} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
         {/* Paid buttons only register interest until checkout opens (private test link today;
-            launch day switches the behaviour in selectPaidPlan and this label together). */}
+            launch day switches the behaviour in selectPaidPlan and this label together via
+            VITE_CHECKOUT_LIVE, see utils/checkoutLaunch.js). */}
         {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : !checkoutOpen ? 'Register interest' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
       </button>
       {free && <p className="pricing-card-caption">No card required</p>}
@@ -106,6 +108,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const [checkoutPlan, setCheckoutPlan] = useState(null)
   const [checkoutError, setCheckoutError] = useState('')
   const billingTest = isPrivateBillingTestLink()
+  const checkoutLive = isCheckoutLive()
   // Stripe test mode deliberately exercises the Founding checkout without
   // consuming or depending on the live Founder inventory.
   const foundingAvailable = billingTest || (Number.isInteger(availability?.remaining) && availability.remaining > 0)
@@ -138,7 +141,9 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   const startTestCheckout = async plan => {
     if (!user) {
-      setCheckoutError('Sign in to a disposable YOW test account first, then open this private link again.')
+      setCheckoutError(billingTest
+        ? 'Sign in to a disposable YOW test account first, then open this private link again.'
+        : 'Create a free account or sign in first, then choose your plan again.')
       onSignIn?.()
       return
     }
@@ -147,7 +152,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
     setCheckoutError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) throw new Error('Your sign-in has expired. Please sign in again, then reopen this link.')
+      if (!session?.access_token) throw new Error('Your sign-in has expired. Please sign in again, then choose your plan again.')
       const response = await fetch(CHECKOUT_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -167,6 +172,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   const selectPaidPlan = key => {
     if (billingTest) startTestCheckout(key === 'premium_plus_lifetime' ? 'founding_lifetime_test' : key)
+    else if (checkoutLive) startTestCheckout(key)
     else setInterestPlan(PLANS.find(item => item.key === key))
   }
 
@@ -195,13 +201,18 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               </button>
               {checkoutError && <p className="pricing-test-error" role="alert">{checkoutError}</p>}
             </aside>
+          ) : checkoutLive ? (
+            <>
+              <p className="pricing-availability-note">Free is available now. Paid plans are checked out securely with Stripe.</p>
+              {checkoutError && <p className="pricing-test-error" role="alert">{checkoutError}</p>}
+            </>
           ) : (
             <p className="pricing-availability-note">Free is available now. Paid checkout remains closed while billing is being tested; paid buttons register interest and never create a charge.</p>
           )}
         </section>
 
         <section className="pricing-cards" aria-label="Pricing plans">
-          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} checkoutOpen={billingTest} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
+          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} checkoutOpen={billingTest || checkoutLive} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
         </section>
 
         <aside className="pricing-first-100" aria-labelledby="first-100-heading">

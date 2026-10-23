@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import BetaInterestModal from '../account/BetaInterestModal'
+import { isCheckoutLive } from '../../utils/checkoutLaunch'
 
 // BETA: remove this entire file and its usages in App.jsx when out of beta
 const STORAGE_KEY = 'yow_beta_acknowledged'
@@ -82,6 +83,8 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
   const [visible, setVisible] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [interestOpen, setInterestOpen] = useState(false)
+  // Once checkout is live, Beta enrolment is closed: no free-access offer.
+  const betaOpen = !isCheckoutLive()
 
   useEffect(() => {
     if (!localStorage.getItem(STORAGE_KEY)) setVisible(true)
@@ -112,10 +115,12 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
                 change, break, or behave unexpectedly. Your feedback during this period helps shape
                 the product.
               </p>
-              <p style={s.text}>
-                Want in? Beta spots can be claimed by registering your interest for a paid plan
-                and you'll get full access to every feature at no cost until launch.
-              </p>
+              {betaOpen && (
+                <p style={s.text}>
+                  Want in? Beta spots can be claimed by registering your interest for a paid plan
+                  and you'll get full access to every feature at no cost until launch.
+                </p>
+              )}
               {!expanded && (
                 <button style={s.expandBtn} onClick={() => setExpanded(true)}>
                   What does beta mean for me?
@@ -145,9 +150,11 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
               <button style={s.dismissBtn} onClick={accept}>
                 Got it, let me in
               </button>
-              <button style={s.acceptBtn} onClick={openInterest}>
-                Register interest and sign up
-              </button>
+              {betaOpen && (
+                <button style={s.acceptBtn} onClick={openInterest}>
+                  Register interest and sign up
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -12,6 +12,10 @@ In progress as of 2026-10-05. Stripe test products, production-environment test 
 
 Webhook fulfilment is now durable (errors fail the handler and release the claim; `processing`/`done` ledger with a 5-minute lease; Cloud extension idempotent per invoice) and a Cloud-renewal or leftover Monthly subscription can no longer overwrite a Lifetime licence. Before the next test-mode rehearsal: apply `supabase/migrations/20261022120000_stripe_event_lease.sql` (the webhook works without it, falling back to claim-only), then add to the rehearsal: (a) a Lifetime purchase followed by a Cloud-renewal subscription, confirming the plan stays Lifetime and only `maintenance_expires_at` moves; (b) cancelling the Cloud renewal and confirming Lifetime access is unchanged; (c) forcing a webhook failure and confirming Stripe's retry then applies it once.
 
+## 2026-10-23 launch switch
+
+Real checkout is now behind the build-time switch `VITE_CHECKOUT_LIVE` (off by default; paid buttons still only register interest). The return-to-live runbook, activation order and undo steps are in `docs/QA_PLAN.md` ("2026-10-23 Launch switch, Beta close and return-to-live runbook"). Live Dashboard review is owner overflow O12; the test-mode journeys from checklist steps 9, 11-13 still have no recorded result.
+
 ## What's parked here
 
 ### 1. Stripe Dashboard price alignment (reopened 2026-10-05)
