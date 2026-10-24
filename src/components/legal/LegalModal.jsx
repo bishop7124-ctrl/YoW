@@ -100,6 +100,7 @@ const CONTENT = {
             <Li>If optional Cloud Mode renewal is not paid, download your backups or renew Cloud Mode. Lifetime desktop Local Mode remains available.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>
             <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. Sales are final, including partial billing periods, except where mandatory consumer rights require a refund or another remedy.</Li>
+            <Li>YOW gives you immediate access to digital content when you pay. By purchasing you ask for immediate access and acknowledge that your 14-day right to cancel under consumer law ends once access begins. This does not affect your statutory rights if the service is faulty or not as described.</Li>
           </Ul>
         </Section>
         <Section title="Support and Founder status">
