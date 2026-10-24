@@ -24,6 +24,16 @@ const req = (plan = 'premium_plus_lifetime') => ({
 })
 const res = () => ({ setHeader: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn(), end: vi.fn() })
 
+// A Lifetime account in the last 30 days of its Cloud period: the only kind that may buy a renewal.
+const dueLifetimeUser = () => ({
+  id: 'user-1', email: 'writer@example.test', created_at: '2024-01-01T00:00:00Z',
+  app_metadata: {
+    subscription_plan: 'premium_plus_lifetime', subscription_status: 'active',
+    lifetime_purchased_at: '2024-02-01T00:00:00Z',
+    hosting_included_until: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+})
+
 describe('create-checkout-session Founding Price selection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -122,6 +132,7 @@ describe('create-checkout-session Founding Price selection', () => {
     pricesRetrieve.mockImplementation(async id => ({
       id, active: true, currency: 'gbp', livemode: true, unit_amount: 600, recurring: { interval: 'year' },
     }))
+    getUser.mockResolvedValue({ data: { user: dueLifetimeUser() }, error: null })
     const { default: handler } = await import('../../api/create-checkout-session.js')
     const response = res()
     await handler(req(plan), response)
@@ -137,11 +148,85 @@ describe('create-checkout-session Founding Price selection', () => {
     pricesRetrieve.mockImplementation(async id => ({
       id, active: true, currency: 'gbp', livemode: true, unit_amount: 600, recurring: { interval: 'month' },
     }))
+    getUser.mockResolvedValue({ data: { user: dueLifetimeUser() }, error: null })
     const { default: handler } = await import('../../api/create-checkout-session.js')
     const response = res()
     await handler(req('hosting_renewal'), response)
 
     expect(sessionsCreate).not.toHaveBeenCalled()
     expect(response.status).not.toHaveBeenCalledWith(200)
+  })
+})
+
+describe('create-checkout-session Cloud renewal is only sold when it is due', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const lifetimeUser = (extra = {}) => ({
+    id: 'user-1', email: 'writer@example.test', created_at: '2024-01-01T00:00:00Z',
+    app_metadata: {
+      subscription_plan: 'premium_plus_lifetime', subscription_status: 'active',
+      lifetime_purchased_at: new Date(Date.now() - 30 * DAY).toISOString(),
+      hosting_included_until: new Date(Date.now() + 700 * DAY).toISOString(),
+      ...extra,
+    },
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_ANON_KEY = 'anon'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
+    process.env.STRIPE_PRICE_ID_MAINTENANCE = 'price_cloud'
+    pricesRetrieve.mockImplementation(async id => ({
+      id, active: true, currency: 'gbp', livemode: false, unit_amount: 600, recurring: { interval: 'year' },
+    }))
+    sessionsCreate.mockResolvedValue({ id: 'cs_cloud', url: 'https://checkout.test/cs_cloud' })
+  })
+
+  const attempt = async (user, plan = 'hosting_renewal') => {
+    getUser.mockResolvedValue({ data: { user }, error: null })
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    const response = res()
+    await handler(req(plan), response)
+    return response
+  }
+
+  it('refuses a renewal while the included Cloud period still has months left (no paying years ahead)', async () => {
+    const response = await attempt(lifetimeUser())
+    expect(response.status).toHaveBeenCalledWith(409)
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'renewal_not_due' }))
+    expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+
+  it('refuses a renewal for an account that is not Lifetime', async () => {
+    const response = await attempt({ id: 'user-2', email: 'x@example.test', created_at: '2020-01-01T00:00:00Z', app_metadata: {} })
+    expect(response.status).toHaveBeenCalledWith(409)
+    expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+
+  it('allows a renewal in the last 30 days of the Cloud period', async () => {
+    const response = await attempt(lifetimeUser({ hosting_included_until: new Date(Date.now() + 20 * DAY).toISOString() }))
+    expect(response.status).not.toHaveBeenCalledWith(409)
+    expect(sessionsCreate).toHaveBeenCalled()
+  })
+
+  it('allows a renewal once the Cloud period has lapsed', async () => {
+    const response = await attempt(lifetimeUser({ hosting_included_until: new Date(Date.now() - 10 * DAY).toISOString() }))
+    expect(sessionsCreate).toHaveBeenCalled()
+    expect(response.status).not.toHaveBeenCalledWith(409)
+  })
+
+  it('refuses a second renewal while one is already set to renew automatically', async () => {
+    const response = await attempt(lifetimeUser({
+      hosting_included_until: new Date(Date.now() + 10 * DAY).toISOString(),
+      cloud_renewal_subscription_status: 'active',
+    }))
+    expect(response.status).toHaveBeenCalledWith(409)
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'already_renewing' }))
+  })
+
+  it('works for the legacy maintenance plan key too', async () => {
+    const response = await attempt(lifetimeUser(), 'maintenance')
+    expect(response.status).toHaveBeenCalledWith(409)
   })
 })

@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_cors.js'
+import { getMembership, HOSTING_RENEWAL_WARNING_DAYS } from '../src/utils/membership.js'
 
 // Maps plan keys to Stripe price IDs and checkout mode.
 // Each price ID must be set as an env var on Vercel.
@@ -53,6 +54,26 @@ export default async function handler(req, res) {
     const plan = forceFoundingTest ? 'premium_plus_lifetime' : requestedPlan
     const planConfig = PLAN_CONFIG[plan]
     if (!planConfig) return res.status(400).json({ error: `Unknown plan: ${plan}` })
+
+    // Cloud renewal is sold only when it is due: to a Lifetime account in the last 30 days of its Cloud
+    // period (or after it ended), and never twice, so nobody pays years ahead.
+    if (plan === 'maintenance' || plan === 'hosting_renewal') {
+      const membership = getMembership({ ...user, user_metadata: {} })
+      if (!membership.isLifetime) {
+        return res.status(409).json({ error: 'Cloud renewal is only available with a Lifetime licence.', code: 'renewal_not_due' })
+      }
+      if (user.app_metadata?.cloud_renewal_subscription_status === 'active') {
+        return res.status(409).json({ error: 'Your Cloud renewal is already set up and renews automatically.', code: 'already_renewing' })
+      }
+      const due = membership.isMaintenanceLapsed
+        || (membership.maintenanceDaysRemaining != null && membership.maintenanceDaysRemaining <= HOSTING_RENEWAL_WARNING_DAYS)
+      if (!due) {
+        return res.status(409).json({
+          error: `Your Cloud period runs until ${membership.maintenanceExpiresAt?.toISOString().slice(0, 10) || 'later'}. Renewal opens ${HOSTING_RENEWAL_WARNING_DAYS} days before then.`,
+          code: 'renewal_not_due',
+        })
+      }
+    }
 
     // Prevent double-purchase: if the user already holds this plan, block the checkout.
     const existingPlan = user.app_metadata?.subscription_plan

@@ -12,6 +12,18 @@ In progress as of 2026-10-05. Stripe test products, production-environment test 
 
 Webhook fulfilment is now durable (errors fail the handler and release the claim; `processing`/`done` ledger with a 5-minute lease; Cloud extension idempotent per invoice) and a Cloud-renewal or leftover Monthly subscription can no longer overwrite a Lifetime licence. Before the next test-mode rehearsal: apply `supabase/migrations/20261022120000_stripe_event_lease.sql` (the webhook works without it, falling back to claim-only), then add to the rehearsal: (a) a Lifetime purchase followed by a Cloud-renewal subscription, confirming the plan stays Lifetime and only `maintenance_expires_at` moves; (b) cancelling the Cloud renewal and confirming Lifetime access is unchanged; (c) forcing a webhook failure and confirming Stripe's retry then applies it once.
 
+### Cloud renewal is sold only when due (2026-10-24, owner decision)
+
+Cloud renewal (£6/year) cannot be bought years ahead. `api/create-checkout-session.js` refuses it (HTTP 409) unless the account is Lifetime and its Cloud period ends within 30 days or has ended, and refuses a second one while a renewal is already active. A renewal adds one year after the later of the last renewal, the included period's end, and today. To test it on a throwaway Lifetime account, move its Cloud end into the window in Supabase SQL editor (throwaway accounts only):
+
+```sql
+update auth.users
+set raw_app_meta_data = jsonb_set(raw_app_meta_data, '{hosting_included_until}', to_jsonb((now() + interval '10 days')::text))
+where email = 'THROWAWAY-EMAIL';
+```
+
+Then the private test page's "Test £6/year Cloud renewal" button works, and afterwards the Cloud end should be about one year and ten days out.
+
 ## What's parked here
 
 ### 1. Stripe Dashboard price alignment (reopened 2026-10-05)
