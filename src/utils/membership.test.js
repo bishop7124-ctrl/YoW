@@ -20,6 +20,33 @@ const makeUser = (overrides = {}) => ({
   ...overrides,
 })
 
+describe('Lifetime Cloud end date (renewal never shortens the included period)', () => {
+  const lifetime = (extra = {}) => makeUser({
+    app_metadata: {
+      subscription_plan: 'premium_plus_lifetime',
+      subscription_status: 'active',
+      lifetime_purchased_at: '2026-07-01T00:00:00Z',
+      hosting_included_until: '2028-07-01T00:00:00Z',
+      ...extra,
+    },
+  })
+
+  it('exposes the included Cloud end date so the account page can show it', () => {
+    const membership = getMembership(lifetime())
+    expect(membership.maintenanceExpiresAt.toISOString()).toBe('2028-07-01T00:00:00.000Z')
+  })
+
+  it('keeps the later date when a renewal was paid that ends before the included period does', () => {
+    const membership = getMembership(lifetime({ maintenance_expires_at: '2027-07-20T00:00:00Z' }))
+    expect(membership.maintenanceExpiresAt.toISOString()).toBe('2028-07-01T00:00:00.000Z')
+  })
+
+  it('uses the renewal date once it runs past the included period', () => {
+    const membership = getMembership(lifetime({ maintenance_expires_at: '2029-07-01T00:00:00Z' }))
+    expect(membership.maintenanceExpiresAt.toISOString()).toBe('2029-07-01T00:00:00.000Z')
+  })
+})
+
 describe('membership plan limits', () => {
   it('uses a 250 MB quota for Free cloud accounts', () => {
     const membership = getMembership(makeUser())

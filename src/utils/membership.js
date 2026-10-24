@@ -271,9 +271,10 @@ export function getMembership(user) {
       || dateFrom(user?.app_metadata?.maintenance_expires_at)
 
     if (paidUntil && paidUntil > now) {
-      // Renewal actively paid
-      maintenanceExpiresAt = paidUntil
-      const msRemaining = paidUntil.getTime() - now.getTime()
+      // Renewal actively paid. It adds to the included period, so the Cloud end date is whichever is later.
+      const cloudEnds = paidUntil > includedHostingEnds ? paidUntil : includedHostingEnds
+      maintenanceExpiresAt = cloudEnds
+      const msRemaining = cloudEnds.getTime() - now.getTime()
       maintenanceDaysRemaining = Math.ceil(msRemaining / DAY_MS)
       maintenanceWarning = maintenanceDaysRemaining <= HOSTING_RENEWAL_WARNING_DAYS
     } else if (now < includedHostingEnds) {

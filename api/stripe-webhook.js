@@ -259,10 +259,12 @@ async function extendMaintenance(supabaseAdmin, userId, invoiceId) {
   const existing = await loadAppMetadata(supabaseAdmin, userId)
   // A reprocessed event (after a worker died between applying and recording it) must not extend twice.
   if (invoiceId && existing.maintenance_last_invoice_id === invoiceId) return
-  const currentExpiry = existing.maintenance_expires_at
-    ? new Date(existing.maintenance_expires_at)
-    : new Date()
-  const base = currentExpiry > new Date() ? currentExpiry : new Date()
+  // A renewal adds a year after the later of: the last renewal, the included Cloud period, and today.
+  // (Starting from today alone would make an early renewal end before the included period does.)
+  const candidates = [existing.maintenance_expires_at, existing.hosting_included_until]
+    .map(value => (value ? new Date(value) : null))
+    .filter(date => date && !Number.isNaN(date.getTime()))
+  const base = new Date(Math.max(Date.now(), ...candidates.map(date => date.getTime())))
   const newExpiry = new Date(base.getTime() + 365 * 24 * 60 * 60 * 1000)
   await writeAppMetadata(supabaseAdmin, userId, existing, {
     ...existing,

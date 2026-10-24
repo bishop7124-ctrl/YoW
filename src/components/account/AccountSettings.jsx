@@ -3230,7 +3230,13 @@ export default function AccountSettings({
                   </div>
                   <div>
                     <span>Cloud hosting</span>
-                    <strong>{membership.isLegacyFounderPlan ? 'Cloud Mode included (legacy plan)' : membership.isLocalMode ? 'Free cloud fallback' : 'Cloud Mode included'}</strong>
+                    <strong>{membership.isLegacyFounderPlan
+                      ? 'Cloud Mode included (legacy plan)'
+                      : membership.isLocalMode
+                        ? 'Free cloud fallback'
+                        : membership.maintenanceExpiresAt
+                          ? `Cloud Mode included until ${formatter.format(membership.maintenanceExpiresAt)}`
+                          : 'Cloud Mode included'}</strong>
                   </div>
                   {membership.isFounder && (
                     <div>
