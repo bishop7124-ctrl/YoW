@@ -1071,7 +1071,9 @@ function AppInner() {
         if (unsyncedCopy?.novels?.length && !lapseResumeClaimed.current && !(desktopApp && membership.isLocalMode)) {
           // Current dirty markers reflect acknowledgements from earlier attempts;
           // the archive's original markers must not replay already-saved edits.
-          const recoveryDirty = loadDirtyRecords(userId) ?? loadUnsyncedRecoveryDirty(userId)
+          // Offline development mode has no cloud to acknowledge anything, so every archived record is
+          // still unacknowledged whatever the markers say.
+          const recoveryDirty = (OFFLINE_MODE ? null : loadDirtyRecords(userId) ?? loadUnsyncedRecoveryDirty(userId))
             ?? Object.fromEntries(Object.entries(TABLE_CONFIG).map(([table, config]) => [
               table, Object.fromEntries((unsyncedCopy[config.key] || []).map(item => [item.id, {}])),
             ]))

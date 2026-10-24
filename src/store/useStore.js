@@ -852,6 +852,11 @@ export function useStore(userId = null, options = {}) {
       } else {
         await replaceItemsAtomically({}, purgeKeys)
       }
+      // The purge removed every scene content key, so the write caches must forget what they thought was
+      // already on disk; otherwise restoring the same scene (same id, same text) skips the rewrite and the
+      // prose is missing from storage.
+      lastWrittenSceneContentByIdRef.current.clear()
+      knownSceneContentIdsRef.current.clear()
       if (previousUserId.current === userId) {
         // Signed-out effects must not repopulate the purged project keys.
         persistenceBlocked.current = !userId
