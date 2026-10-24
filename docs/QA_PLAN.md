@@ -1,5 +1,14 @@
 # YOW Deferred QA Plan
 
+## 2026-10-24 buffer-day automated gate (head 09bb43d)
+
+Evidence: `npm run qa` passed (0 lint errors, typecheck, 182 files / 1,762 tests, build, bundle budget, load check, e2e matrix 59 specs, 12 API routes). `npx playwright test` (Chromium, local dev server in offline mode): 394/394 passed. Rust not re-run (no `src-tauri` change since 10 Oct). Cloud-session note: the pre-installed Chromium is revision 1243 while the repo's Playwright expects 1228; a symlink `chromium_headless_shell-1228 -> -1243` under `/opt/pw-browsers` makes it run, and the dev server must be started detached (`setsid`) or it dies mid-run.
+
+New required checks before 1 Nov (not yet built or run):
+1. Real-checkout launch switch plus checkout-disable switch: with the switch off, Pricing and Account Settings paid buttons never create a Stripe session (server returns a refusal, not just a hidden button); with it on, Monthly / Founding / Standard Lifetime / Cloud renewal open Checkout. Both states covered by API and e2e tests; rehearsed on 30 Oct.
+2. Removal of the 'coming soon' interest flow and its automatic Beta entitlement when checkout opens (D7), with existing testers keeping access.
+3. Stripe test-mode re-run on the post-audit webhook (PAYMENT_ROADMAP 2026-10-22 steps a-c) before the live configuration review.
+
 ## 2026-10-22 audit follow-up: what only the owner can do (YOW-21 and the real-environment checks)
 
 All code-addressable audit findings are fixed and covered by automated tests (see `docs/ROADMAP.md`). These steps need your accounts or a real browser; do them in this order and record the date and result next to each.
