@@ -101,6 +101,12 @@ export const SaveIndicator = ({ state }) => {
       <span className="ms-save-label">Save failed — retrying</span>
     </span>
   )
+  if (state === 'cloud-error') return (
+    <span className="ms-save-indicator is-error" title="Cloud sync failed. Keep this device's copy until sync succeeds.">
+      <span className="ms-save-dot" />
+      <span className="ms-save-label">Cloud sync failed — retrying</span>
+    </span>
+  )
   if (state === 'saved') return (
     <span className="ms-save-indicator is-saved" title="All changes saved">
       <span className="ms-save-dot" />

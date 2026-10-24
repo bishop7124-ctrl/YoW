@@ -38,8 +38,8 @@ export function validateProjectImportData(data) {
     items.forEach((item, index) => {
       if (!isPlainObject(item)) { fail(`"${name}" entry ${index + 1} is not a record`); return }
       if (!hasId(item.id)) { fail(`"${name}" entry ${index + 1} has no id`); return }
-      if (seen.has(item.id)) { fail(`"${name}" contains the id "${item.id}" more than once`); return }
-      seen.add(item.id)
+      if (seen.has(String(item.id))) { fail(`"${name}" contains the id "${item.id}" more than once`); return }
+      seen.add(String(item.id))
     })
     idSets[name] = seen
   }
@@ -52,7 +52,7 @@ export function validateProjectImportData(data) {
     for (const item of items) {
       const reference = item?.[field]
       if (reference === undefined || reference === null || reference === '') continue
-      if (!targets.has(reference)) fail(`"${collection}" record "${item.id}" points at ${targetLabel} "${reference}", which is not in the file`)
+      if (!targets.has(String(reference))) fail(`"${collection}" record "${item.id}" points at ${targetLabel} "${reference}", which is not in the file`)
     }
   }
 

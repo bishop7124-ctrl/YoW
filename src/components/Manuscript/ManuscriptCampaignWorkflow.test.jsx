@@ -217,3 +217,13 @@ describe('Manuscript campaign workflow', () => {
     }
   })
 })
+
+it('shows cloud failures in the rendered manuscript until that failure clears', () => {
+  const { rerender } = render(<Manuscript store={baseStore({ syncStatus: { state: 'syncing' } })} userId="u" />)
+  expect(screen.getByText('Saving')).toBeTruthy()
+  rerender(<Manuscript store={baseStore({ syncStatus: { state: 'error' } })} userId="u" />)
+  expect(screen.getByText('Cloud sync failed — retrying')).toBeTruthy()
+  expect(screen.queryByText('Saved')).toBeNull()
+  rerender(<Manuscript store={baseStore({ syncStatus: { state: 'synced' } })} userId="u" />)
+  expect(screen.getByText('Saved')).toBeTruthy()
+})

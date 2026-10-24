@@ -36,13 +36,11 @@ describe('isMissingStripeCustomerError', () => {
 // be exercised end to end without real credentials or network calls.
 
 const getUser = vi.fn()
-const updateUserById = vi.fn()
+const billingWrite = vi.fn()
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    auth: {
-      getUser,
-      admin: { updateUserById },
-    },
+    auth: { getUser },
+    rpc: (_name, args) => billingWrite(args.p_user_id, { app_metadata: args.p_next }).then(result => ({ data: !result.error, error: result.error })),
   }),
 }))
 
@@ -78,8 +76,8 @@ describe('create-customer-portal handler', () => {
     process.env.SITE_URL = 'https://app.example.com'
 
     getUser.mockReset()
-    updateUserById.mockReset()
-    updateUserById.mockResolvedValue({ data: {}, error: null })
+    billingWrite.mockReset()
+    billingWrite.mockResolvedValue({ data: {}, error: null })
     billingPortalSessionsCreate.mockReset()
     subscriptionsRetrieve.mockReset()
 
@@ -111,7 +109,7 @@ describe('create-customer-portal handler', () => {
     })
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith({ url: 'https://billing.stripe.com/session/abc' })
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('refreshes a scheduled cancellation directly from Stripe', async () => {
@@ -131,7 +129,7 @@ describe('create-customer-portal handler', () => {
     const res = makeRes()
     await handler(makeReq({ body: { action: 'sync_status' } }), res)
 
-    expect(updateUserById).toHaveBeenCalledWith('user-sync', {
+    expect(billingWrite).toHaveBeenCalledWith('user-sync', {
       app_metadata: expect.objectContaining({
         subscription_cancel_at_period_end: true,
         subscription_current_period_end: 1791244800,
@@ -153,7 +151,7 @@ describe('create-customer-portal handler', () => {
     await handler(makeReq(), res)
 
     expect(billingPortalSessionsCreate).not.toHaveBeenCalled()
-    expect(updateUserById).toHaveBeenCalledWith('user-2', expect.objectContaining({
+    expect(billingWrite).toHaveBeenCalledWith('user-2', expect.objectContaining({
       app_metadata: expect.objectContaining({ subscription_status: 'none', subscription_plan: null }),
     }))
     expect(res.status).toHaveBeenCalledWith(200)
@@ -169,11 +167,11 @@ describe('create-customer-portal handler', () => {
     const res = makeRes()
     await handler(makeReq(), res)
 
-    expect(updateUserById).toHaveBeenCalledWith('user-3', {
+    expect(billingWrite).toHaveBeenCalledWith('user-3', {
       app_metadata: expect.objectContaining({ subscription_status: 'none', subscription_plan: null }),
     })
     // was_monthly should only be set for a former Monthly plan, not Founder.
-    expect(updateUserById).toHaveBeenCalledTimes(1)
+    expect(billingWrite).toHaveBeenCalledTimes(1)
     expect(res.json).toHaveBeenCalledWith({ downgraded: true })
   })
 
@@ -188,8 +186,8 @@ describe('create-customer-portal handler', () => {
 
     // A single server-controlled app_metadata update — not a client-writable
     // user_metadata flag or two separate calls that could partially fail.
-    expect(updateUserById).toHaveBeenCalledTimes(1)
-    expect(updateUserById).toHaveBeenCalledWith('user-4', {
+    expect(billingWrite).toHaveBeenCalledTimes(1)
+    expect(billingWrite).toHaveBeenCalledWith('user-4', {
       app_metadata: expect.objectContaining({ subscription_status: 'none', subscription_plan: null, was_monthly: true }),
     })
   })
@@ -207,7 +205,7 @@ describe('create-customer-portal handler', () => {
     await handler(makeReq(), res)
 
     expect(billingPortalSessionsCreate).toHaveBeenCalled()
-    expect(updateUserById).toHaveBeenCalledWith('user-5', expect.objectContaining({
+    expect(billingWrite).toHaveBeenCalledWith('user-5', expect.objectContaining({
       app_metadata: expect.objectContaining({ subscription_status: 'none', subscription_plan: null }),
     }))
     expect(res.status).toHaveBeenCalledWith(200)
@@ -241,7 +239,7 @@ describe('create-customer-portal handler', () => {
     // Must NOT touch the account's plan — a real subscriber's entitlement is
     // never silently destroyed just because Stripe temporarily/erroneously
     // can't find the customer.
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
     expect(res.status).toHaveBeenCalledWith(409)
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ error: expect.stringContaining('contact support') })
@@ -258,7 +256,7 @@ describe('create-customer-portal handler', () => {
     const res = makeRes()
     await handler(makeReq(), res)
 
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
     expect(res.status).toHaveBeenCalledWith(500)
   })
 
@@ -272,7 +270,7 @@ describe('create-customer-portal handler', () => {
     const res = makeRes()
     await handler(makeReq(), res)
 
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
     expect(res.json).toHaveBeenCalledWith({ url: 'https://billing.stripe.com/session/lifetime' })
   })
 })

@@ -1,3 +1,4 @@
+import { readPdfFile } from '../utils/pdfLiteralString.js'
 import { assertValidProjectImport } from '../utils/projectImportValidation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { streamMessage, PROVIDERS } from '../utils/aiApi'
@@ -129,36 +130,6 @@ export async function tryReadYowPdf(file) {
     if (err?.isArchiveLimitError || err?.isImportValidationError) throw err
     return null
   }
-}
-
-// Extract plain text from a YOW visual PDF (uncompressed content streams).
-// Decodes as latin-1 (lossless byte↔char), then extracts (text) Tj operators
-// from BT...ET blocks — the exact format YOW's hand-crafted PDF generator produces.
-async function readPdfFile(file) {
-  const buffer = await file.arrayBuffer()
-  assertPdfInputSizeOk(buffer.byteLength, `"${file.name}"`)
-  const raw = new TextDecoder('latin1').decode(buffer)
-  // This reader only understands the plain text streams YOW's own PDF export writes. A PDF from another
-  // app usually compresses its text, and the few uncompressed fragments it still has (titles, page
-  // numbers) would import as if they were the whole document, so refuse it plainly (audit YOW-22).
-  if (/\/FlateDecode/.test(raw) && !/\/Producer \(Your Own World\)/.test(raw)) {
-    throw new Error(`"${file.name}" was not made by YOW, and its text cannot be read reliably from a PDF. Export it from the original app as a Word (.docx) or plain text file and import that instead.`)
-  }
-  const parts = []
-  const btRe = /BT([\s\S]*?)ET/g
-  let bt
-  while ((bt = btRe.exec(raw)) !== null) {
-    const tjRe = /\(((?:[^\\()]|\\[\s\S])*)\)\s*Tj/g
-    let tj
-    while ((tj = tjRe.exec(bt[1])) !== null) {
-      const s = tj[1]
-        .replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\\\/g, '\\').replace(/\\([()])/g, '$1')
-      if (s.trim()) parts.push(s.trim())
-    }
-  }
-  const content = parts.join('\n').replace(/\n{3,}/g, '\n\n').trim()
-  if (!content) throw new Error(`Could not extract text from "${file.name}". Try a YOW .zip export for lossless import.`)
-  return { name: file.name, content }
 }
 
 // Extract plain text from a .docx file (OOXML — ZIP of XML files).

@@ -1345,7 +1345,6 @@ export default function SeriesDashboard({
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
-    const previousCoverPhoto = series.coverPhoto
     try {
       setCoverError('')
       const coverPhoto = await uploadUserMedia(file, {
@@ -1356,7 +1355,7 @@ export default function SeriesDashboard({
       })
       const updated = store.updateSeries(seriesId, { coverPhoto })
       store.refreshStorageUsedBytes().catch(console.error)
-      deleteUserMedia(updated ? previousCoverPhoto : coverPhoto).catch(console.error)
+      if (!updated) deleteUserMedia(coverPhoto).catch(console.error)
     } catch (error) {
       setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }

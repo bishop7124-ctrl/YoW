@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   createProject, dismissLaunchPrompts, readStorage,
-  seedCleanStorage, waitForStorage, waitForStorageHydrated,
+  seedCleanStorage, waitForStorage, waitForStorageHydrated, writeInDefaultScene, readScenesWithContent,
 } from './helpers.js'
 
 // Re-verification (2026-09-17, QA/autonomous session) of the docs/ROADMAP.md
@@ -76,4 +76,36 @@ test.describe('project deletion persists across sign-out and sign-in', () => {
     const novels = await readStorage(page, 'nf_novels')
     expect(novels.some(n => n.title === title)).toBe(false)
   })
+
+  test('failed sign-out archive preserves prose and login retry resumes after storage recovers', async ({ page }) => {
+    const prose = `Unconfirmed offline prose ${Date.now()}`
+    await createProject(page, { title: 'Archive retry regression' })
+    await writeInDefaultScene(page, prose)
+    await page.evaluate(async () => {
+      await window.__yowStorageBridge.flush()
+      const { getStorageBackend } = await import('/src/storage/projectStorage.js')
+      const backend = getStorageBackend()
+      const original = backend.replaceItems
+      window.__restoreArchiveWrites = () => { backend.replaceItems = original }
+      backend.replaceItems = () => Promise.reject(new Error('Injected archive transaction abort'))
+    })
+    await page.locator('.user-menu-trigger').click()
+    await page.getByRole('menuitem', { name: 'Sign out' }).click()
+    await expect(page.getByRole('heading', { name: "You've been signed out" })).toBeVisible()
+    expect((await readScenesWithContent(page)).some(s => s.content === prose)).toBe(true)
+    await page.getByRole('button', { name: 'Log in again' }).click()
+    await page.getByPlaceholder('Email').fill('qa-relogin@example.com')
+    await page.getByPlaceholder('Password').fill('not-a-real-password')
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible()
+    expect((await readScenesWithContent(page)).some(s => s.content === prose)).toBe(true)
+    await page.evaluate(() => window.__restoreArchiveWrites())
+    await page.getByRole('button', { name: 'Try again', exact: true }).click()
+    await dismissLaunchPrompts(page)
+    await expect.poll(async () => (await readScenesWithContent(page)).some(s => s.content === prose)).toBe(true)
+    const archived = await readStorage(page, 'nf_unsyncedRecovery:offline-dev-user')
+    expect(archived.data.scenes.some(s => s.content === prose)).toBe(true)
+    await expect(page.getByRole('button', { name: 'Try again', exact: true })).toHaveCount(0)
+  })
+
 })

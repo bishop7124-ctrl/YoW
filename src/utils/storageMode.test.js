@@ -154,27 +154,27 @@ describe('loadPendingDesktopLapseResumeBase', () => {
   })
 })
 
-describe('unsynced recovery copy (audit YOW-03)', () => {
+describe('unsynced recovery copy (audit YOW-03)', async () => {
   const copy = { novels: [{ id: 'n1' }], scenes: [{ id: 's1', content: 'latest words' }] }
 
-  it('keeps each account\'s copy separate and never returns it to another account', () => {
-    expect(saveUnsyncedRecoveryCopy('user-a', copy)).toBe(true)
+  it('keeps each account\'s copy separate and never returns it to another account', async () => {
+    expect(await saveUnsyncedRecoveryCopy('user-a', copy)).toBe(true)
     expect(loadUnsyncedRecoveryCopy('user-a')).toEqual(copy)
     expect(loadUnsyncedRecoveryCopy('user-b')).toBeNull()
   })
 
-  it('refuses to save an empty or ownerless snapshot, and clears on request', () => {
-    expect(saveUnsyncedRecoveryCopy(null, copy)).toBe(false)
-    expect(saveUnsyncedRecoveryCopy('user-a', { novels: [] })).toBe(false)
-    saveUnsyncedRecoveryCopy('user-a', copy)
+  it('refuses to save an empty or ownerless snapshot, and clears on request', async () => {
+    expect(await saveUnsyncedRecoveryCopy(null, copy)).toBe(false)
+    expect(await saveUnsyncedRecoveryCopy('user-a', { novels: [] })).toBe(false)
+    await saveUnsyncedRecoveryCopy('user-a', copy)
     clearUnsyncedRecoveryCopy('user-a')
     expect(loadUnsyncedRecoveryCopy('user-a')).toBeNull()
   })
 
-  it('keeps which records were unacknowledged alongside the copy', () => {
-    saveUnsyncedRecoveryCopy('user-a', copy, { characters: { c1: {} } })
+  it('keeps which records were unacknowledged alongside the copy', async () => {
+    await saveUnsyncedRecoveryCopy('user-a', copy, { characters: { c1: {} } })
     expect(loadUnsyncedRecoveryDirty('user-a')).toEqual({ characters: { c1: {} } })
-    saveUnsyncedRecoveryCopy('user-b', copy)
+    await saveUnsyncedRecoveryCopy('user-b', copy)
     expect(loadUnsyncedRecoveryDirty('user-b')).toBeNull()
   })
 })

@@ -515,6 +515,11 @@ export async function deleteSceneDoc(userId, sceneId) {
 // Wipe everything for a user (account deletion)
 export async function deleteAllUserData(userId) {
   if (OFFLINE_MODE || !userId) return
+  // Persist deletion intent before touching Storage. A failed preparation leaves
+  // both database records and files intact; later failures retain a resumable
+  // journal entry. Repeating Delete account continues the same operation.
+  const { error: prepareError } = await supabase.rpc('prepare_account_deletion')
+  throwIfSupabaseError(prepareError, 'Could not begin account deletion; no images were removed')
   await deleteAllUserMedia(userId)
   // Stored media cannot be restored once removed, and the database delete cannot share a transaction
   // with Storage. So the account delete is retried before giving up, and a final failure tells the user
@@ -523,7 +528,7 @@ export async function deleteAllUserData(userId) {
   let error = null
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 400 * attempt))
-    ;({ error } = await supabase.rpc('delete_user'))
+    ;({ error } = await supabase.rpc('complete_account_deletion'))
     if (!error) return
   }
   throw new Error(`Your account deletion did not finish (${error.message || 'unknown error'}). Your stored images were already removed; run "Delete account" again to complete it.`)

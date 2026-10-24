@@ -1,3 +1,4 @@
+import { readPdfFile } from './pdfLiteralString.js'
 import { describe, expect, it } from 'vitest'
 import { cleanText, stripHtml, wordCount } from './projectExportHelpers.js'
 import { createProjectPdfBlob } from './projectExportPdf.js'
@@ -53,4 +54,11 @@ describe('readable export text fidelity (audit YOW-08)', () => {
     expect(drawn).toContain('??????')
     expect(blob.unsupportedCharacters).toEqual(expect.arrayContaining(['П', '你', 'م']))
   })
+})
+
+it('reimports the real visual PDF with WinAnsi punctuation and literal backslashes intact', async () => {
+  const prose = 'A café — “quoted” … 5€ (notes) and a literal \\n.'
+  const blob = await createProjectPdfBlob(projectWith(prose))
+  const imported = await readPdfFile({ name: 'roundtrip.pdf', arrayBuffer: () => blob.arrayBuffer() })
+  expect(imported.content).toContain(prose)
 })

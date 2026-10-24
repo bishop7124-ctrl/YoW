@@ -1,13 +1,23 @@
 # YOW Deferred QA Plan
 
+## 2026-10-23 review fixes: local evidence and remaining real-environment checks
+
+Completed locally: 182 Vitest files / 1,773 tests; 15 distinct Chromium tests across autosave, data safety and real sign-out/sign-in (including injected archive-transaction failure and successful retry); SQL migration execution against synthetic PostgreSQL/PGlite data. These do not substitute for live Supabase or native SQLite-vault evidence. Full details and reproducible commands: `AUDIT_FIX_HANDOVER_2026-10-23.md`.
+
+Required before closing the related launch findings:
+1. Use two synthetic staging accounts. Edit A offline, let the session expire, sign into B while A's request is delayed, then return to A. Confirm B never sees A's content, A's prose survives, and a rejected archive blocks loading until retry succeeds.
+2. On two devices, edit the same scene from revision 3 and revision 5; recover the older offline copy. Confirm the cloud main scene remains revision 5 and both versions are available as conflicts. Repeat after a failed save and a second sign-out. Confirm old archives do not replay acknowledged edits or duplicate conflict copies.
+3. Repeat archive failure/retry and local-first/lapsed sign-out on the packaged desktop SQLite vault. Confirm the archive and active-key purge commit together; kill/relaunch around the transaction boundary.
+4. In staging, apply the additive account-deletion-journal migration. Begin deletion with the prepare RPC unavailable: no media may be removed. Then fail Storage midway and fail the complete RPC after Storage succeeds. Retry from Account Settings; the same journal row must complete and the auth row must disappear. Older deployed clients retain their existing `delete_user` RPC during rollout. No automated background completion is implemented.
+5. Replace a cover, faction logo, portrait and comic image while cloud saving fails. The old object must remain. Retained media continues to count toward quota: automatic reclamation needs a server-side reference scan and retention window, and is deliberately not implemented in this patch.
+
+Payment verification is tracked only in `PAYMENT_ROADMAP.md`.
+
 ## 2026-10-22 audit follow-up: what only the owner can do (YOW-21 and the real-environment checks)
 
-All code-addressable audit findings are fixed and covered by automated tests (see `docs/ROADMAP.md`). These steps need your accounts or a real browser; do them in this order and record the date and result next to each.
+The 23 October review reopened code defects; see the current status in `docs/ROADMAP.md` and implementation evidence in `docs/AUDIT_FIX_HANDOVER_2026-10-23.md`. The checks below remain unverified unless explicitly recorded.
 
-**A. Apply the three migrations (Supabase SQL editor or `supabase db push`; they are additive and idempotent):**
-1. `20261022120000_stripe_event_lease.sql` (payment webhook lease; the webhook works without it).
-2. `20261022121000_account_lifecycle_delivery_status.sql` (needed before ANY lifecycle switch is turned on).
-Then confirm in the Table Editor that `stripe_processed_events` has `status`, `claimed_at`, `completed_at` and `account_lifecycle_events` has `delivery_status`.
+**A. Non-payment migration prerequisites:** apply `20261022121000_account_lifecycle_delivery_status.sql` before enabling any lifecycle switch; apply `20261023121000_account_deletion_journal.sql` before deploying the new account-deletion client. Payment migrations and rehearsal belong exclusively in `PAYMENT_ROADMAP.md`.
 
 **B. Recovery evidence (YOW-21), without opening customer rows:**
 1. Supabase Dashboard → Project Settings → Database → Backups: write down the plan, retention days and whether Point-in-Time Recovery is on.
@@ -15,7 +25,7 @@ Then confirm in the Table Editor that `stripe_processed_events` has `status`, `c
 3. In a SEPARATE test project, create two synthetic accounts with a multilingual manuscript, a map and an image; export a ZIP for each; delete the data; restore from the ZIP; confirm text, images and relationships match and account B cannot see account A.
 4. Write down how long step 3 took (recovery time) and how much recent work could have been lost (recovery point). Decide whether that is acceptable.
 5. Redeploy-rollback: in Vercel, note which previous deployment you would promote, and confirm the database migrations above do not break it (they are additive).
-6. Alerts: in Vercel → Logs, create alerts for the strings `[stripe-webhook] Handler error`, `[stripe-webhook] failed to claim`, `[run-account-lifecycle]` errors and `[ai-proxy]` errors, sent to your email.
+6. Alerts: in Vercel → Logs, create alerts for lifecycle and AI-proxy errors (payment monitoring is in PAYMENT_ROADMAP), sent to your email.
 7. GitHub → Settings → Branches: require the `QA` workflow to pass before merging to `main` and disallow bypass for direct pushes.
 
 **C. Real-browser checks (each also listed in the dated sections below):** offline sign-out and same-account recovery; different account straight after sign-out; slow-network account switch; offline edit then online retry; edit made long ago then login; same scene edited on two devices; delete while offline then reload; replace a logo/cover with storage full; export with accents, quotes, dashes, `<door opens>` and non-Latin text; Word import of a file with tables and comments.

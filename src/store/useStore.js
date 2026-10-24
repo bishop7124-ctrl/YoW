@@ -1,3 +1,5 @@
+import { wasAccountDeleted, deletedAccountStorageKeys } from '../utils/accountLocalCleanup'
+import { createAccountStorageQueue } from '../storage/accountStorageQueue'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { upsertItems, mergeItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
@@ -10,8 +12,8 @@ import { getScheduleCalendar, normalizeScheduleEvent, prepareScheduleEvent } fro
 import { normalizeOutlineItem, outlinePatch, outlineText, sortOutlineItems } from '../utils/outlineDisplay.js'
 import { CHARACTER_LINK_REL_TYPES, isCharacterLinkRelType } from '../constants/relationshipTypes.js'
 import { chronicleContentPatch, chronicleLinkId, relinkChronicleRecords } from '../utils/chronicleLinks'
-import { STORAGE_MODES, loadStorageMode, saveLocalFirstSnapshot } from '../utils/storageMode'
-import { listKeys, loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
+import { saveUnsyncedRecoveryCopy } from '../utils/storageMode'
+import { replaceItemsAtomically, listKeys, loadValue, readItem, writeItem, removeItem } from '../storage/projectStorage'
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersions } from '../utils/sceneVersions'
@@ -29,7 +31,6 @@ import { addPendingDelete, removePendingDelete, loadPendingDeletes, withoutPendi
 import { loadDirtyRecords, setDirtyTable, overlayDirtyRecords } from '../utils/dirtyRecords'
 import { registerSyncFlush, unregisterSyncFlush } from './syncFlushRegistry'
 import { normalizeRpgCharacter } from '../components/characterbuilder/rpgData'
-import { deleteUserMedia, getUserMediaPath } from '../utils/uploadUserMedia'
 import lastEmberDemoProject from '../data/theLastEmberDemoProject.json'
 import { buildTheLastEmberMap, isUpgradeableLastEmberMap } from '../data/theLastEmberMap.js'
 
@@ -187,20 +188,6 @@ const save = (key, val) => {
   }
 }
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
-// Best-effort Storage cleanup for uploaded images (cover photos, portraits,
-// faction logos) belonging to a record that's being deleted. A failed delete
-// here must never block the record's own deletion — just log and continue,
-// matching this file's other best-effort local-storage patterns.
-const deleteMediaUrls = (urls) => {
-  const seen = new Set()
-  const deletions = []
-  urls.forEach(url => {
-    if (!url || seen.has(url)) return
-    seen.add(url)
-    deletions.push(deleteUserMedia(url))
-  })
-  return Promise.allSettled(deletions)
-}
 const countWords = value => {
   if (!value || typeof value !== 'string') return 0
   return value.trim().match(/\S+/g)?.length || 0
@@ -664,7 +651,10 @@ export function useStore(userId = null, options = {}) {
   const projectImportDepthRef = useRef(0)
   const projectImportSceneIdsRef = useRef(new Set())
   const remoteReady = useRef(!userId)
-  const previousUserId = useRef(userId)
+  const previousUserId = useRef(loadLocalOwner() || userId)
+  const accountStorageTransition = useRef(createAccountStorageQueue())
+  const persistenceBlocked = useRef(false)
+  const waitForAccountStorage = useCallback(() => accountStorageTransition.current.flush(), [])
 
   // Cloud sync status — surfaced to the desktop Storage settings UI (last synced/syncing/error).
   // pendingRef counts in-flight pushes so overlapping debounced saves settle into one
@@ -840,16 +830,36 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => {
     if (previousUserId.current === userId) return
     const previous = previousUserId.current
-    if (previous && loadStorageMode(previous) === STORAGE_MODES.LOCAL_FIRST) {
-      saveLocalFirstSnapshot(previous, getCurrentSnapshot())
-    }
     previousUserId.current = userId
     remoteReady.current = false
     importing.current = true
     syncPendingRef.current = 0
     failedSyncRef.current = new Map()
     setSyncStatus({ state: 'idle', lastSyncedAt: null, lastError: null })
-    clearProjectLocalStorage((scenesRef.current || []).map(s => s?.id))
+    // Hide the old account immediately, but do not erase its only durable copy
+    // until the account-scoped archive commits. App awaits this barrier before
+    // loading another account, and persistence effects are disabled meanwhile.
+    persistenceBlocked.current = true
+    const snapshot = loadLocalOwner() === previous
+      ? (getCurrentSnapshot().novels?.length ? getCurrentSnapshot() : getLocalSnapshot()) : {}
+    const dirty = loadDirtyRecords(previous)
+    const purgeKeys = [...PROJECT_STORAGE_KEYS, ...listKeys('nf_scene_content:'),
+      ...listKeys('nf_scene_tracked_changes:'), ...listKeys('nf_scene_versions:'), 'nf_scene_versions',
+      ...(wasAccountDeleted(previous) ? deletedAccountStorageKeys(previous) : [])]
+    const transition = accountStorageTransition.current.enqueue(async () => {
+      if (previous && snapshot.novels?.length && !wasAccountDeleted(previous)) {
+        await saveUnsyncedRecoveryCopy(previous, snapshot, dirty, purgeKeys)
+      } else {
+        await replaceItemsAtomically({}, purgeKeys)
+      }
+      if (previousUserId.current === userId) {
+        // Signed-out effects must not repopulate the purged project keys.
+        persistenceBlocked.current = !userId
+        clearLocalWriteFailed('nf_accountTransition')
+        if (userId) markLocalOwner(userId)
+      }
+    })
+    transition.catch(() => markLocalWriteFailed('nf_accountTransition'))
     clearProjectRefs({
       novelsRef,
       charactersRef,
@@ -892,12 +902,11 @@ export function useStore(userId = null, options = {}) {
     setRpgCharacters([])
     setComicPages([])
     setComicPanels([])
+    setEras([])
+    setRecordConflicts([])
     setCurrentYear(0)
     setActiveNovelId(null)
-    if (userId) {
-      markLocalOwner(userId)
-      return
-    }
+    if (userId) return
     if (!previous) {
       importing.current = false
       remoteReady.current = true
@@ -962,6 +971,7 @@ export function useStore(userId = null, options = {}) {
   }, [])
 
   const commitLocal = useCallback((ref, setter, key, updater) => {
+    if (persistenceBlocked.current) return null
     const prevLocal = ref.current
     const rawNext = typeof updater === 'function' ? updater(prevLocal) : updater
     // True no-op — every element unchanged by reference, which `.map()`
@@ -1190,18 +1200,19 @@ export function useStore(userId = null, options = {}) {
   }, [selectActiveNovel, focusDashboardProject])
 
   // localStorage persistence
-  useEffect(() => { novelsRef.current = novels; save('nf_novels', novels) }, [novels])
-  useEffect(() => { activeNovelIdRef.current = activeNovelId; save('nf_activeNovel', activeNovelId) }, [activeNovelId])
-  useEffect(() => { charactersRef.current = characters; save('nf_characters', characters) }, [characters])
-  useEffect(() => { factionsRef.current = factions; save('nf_factions', factions) }, [factions])
-  useEffect(() => { locationsRef.current = locations; save('nf_locations', locations) }, [locations])
-  useEffect(() => { timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
-  useEffect(() => { worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
-  useEffect(() => { erasRef.current = eras; save('nf_eras', eras) }, [eras])
-  useEffect(() => { currentYearRef.current = currentYear; save('nf_currentYear', currentYear) }, [currentYear])
-  useEffect(() => { actsRef.current = acts; save('nf_acts', acts) }, [acts])
-  useEffect(() => { chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
+  useEffect(() => { if (persistenceBlocked.current) return; novelsRef.current = novels; save('nf_novels', novels) }, [novels])
+  useEffect(() => { if (persistenceBlocked.current) return; activeNovelIdRef.current = activeNovelId; save('nf_activeNovel', activeNovelId) }, [activeNovelId])
+  useEffect(() => { if (persistenceBlocked.current) return; charactersRef.current = characters; save('nf_characters', characters) }, [characters])
+  useEffect(() => { if (persistenceBlocked.current) return; factionsRef.current = factions; save('nf_factions', factions) }, [factions])
+  useEffect(() => { if (persistenceBlocked.current) return; locationsRef.current = locations; save('nf_locations', locations) }, [locations])
+  useEffect(() => { if (persistenceBlocked.current) return; timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
+  useEffect(() => { if (persistenceBlocked.current) return; worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
+  useEffect(() => { if (persistenceBlocked.current) return; erasRef.current = eras; save('nf_eras', eras) }, [eras])
+  useEffect(() => { if (persistenceBlocked.current) return; currentYearRef.current = currentYear; save('nf_currentYear', currentYear) }, [currentYear])
+  useEffect(() => { if (persistenceBlocked.current) return; actsRef.current = acts; save('nf_acts', acts) }, [acts])
+  useEffect(() => { if (persistenceBlocked.current) return; chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
   useEffect(() => {
+    if (persistenceBlocked.current) return
     scenesRef.current = scenes
     // Skip the save() entirely when commitLocal already persisted this exact
     // array reference moments ago (the hot path during typing) — see
@@ -1228,17 +1239,17 @@ export function useStore(userId = null, options = {}) {
     // as needed rather than assumed already correct on disk.
     save('nf_scenes', splitScenesForStorage(scenes, [], lastWrittenSceneContentByIdRef.current, knownSceneContentIdsRef.current))
   }, [scenes])
-  useEffect(() => { loreEntriesRef.current = loreEntries; save('nf_loreEntries', loreEntries) }, [loreEntries])
-  useEffect(() => { ideaEntriesRef.current = ideaEntries; save('nf_ideaEntries', ideaEntries) }, [ideaEntries])
-  useEffect(() => { mapsRef.current = maps; save('nf_maps', maps) }, [maps])
-  useEffect(() => { activeMapByNovelRef.current = activeMapByNovel; save('nf_activeMapByNovel', activeMapByNovel) }, [activeMapByNovel])
-  useEffect(() => { whiteboardsRef.current = whiteboards; save('nf_whiteboards', whiteboards) }, [whiteboards])
-  useEffect(() => { save('nf_series', series) }, [series])
-  useEffect(() => { storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
-  useEffect(() => { rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
-  useEffect(() => { comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
-  useEffect(() => { comicPanelsRef.current = comicPanels; save('nf_comicPanels', comicPanels) }, [comicPanels])
-  useEffect(() => { save('nf_recordConflicts', recordConflicts) }, [recordConflicts])
+  useEffect(() => { if (persistenceBlocked.current) return; loreEntriesRef.current = loreEntries; save('nf_loreEntries', loreEntries) }, [loreEntries])
+  useEffect(() => { if (persistenceBlocked.current) return; ideaEntriesRef.current = ideaEntries; save('nf_ideaEntries', ideaEntries) }, [ideaEntries])
+  useEffect(() => { if (persistenceBlocked.current) return; mapsRef.current = maps; save('nf_maps', maps) }, [maps])
+  useEffect(() => { if (persistenceBlocked.current) return; activeMapByNovelRef.current = activeMapByNovel; save('nf_activeMapByNovel', activeMapByNovel) }, [activeMapByNovel])
+  useEffect(() => { if (persistenceBlocked.current) return; whiteboardsRef.current = whiteboards; save('nf_whiteboards', whiteboards) }, [whiteboards])
+  useEffect(() => { if (persistenceBlocked.current) return; save('nf_series', series) }, [series])
+  useEffect(() => { if (persistenceBlocked.current) return; storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
+  useEffect(() => { if (persistenceBlocked.current) return; rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
+  useEffect(() => { if (persistenceBlocked.current) return; comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
+  useEffect(() => { if (persistenceBlocked.current) return; comicPanelsRef.current = comicPanels; save('nf_comicPanels', comicPanels) }, [comicPanels])
+  useEffect(() => { if (persistenceBlocked.current) return; save('nf_recordConflicts', recordConflicts) }, [recordConflicts])
 
   // Debounced per-entity save — key is the table name. Diffs `items` against
   // the last snapshot this tab actually pushed for `table` (lastSyncedByTableRef)
@@ -1759,6 +1770,7 @@ export function useStore(userId = null, options = {}) {
 
   // Bulk import from Firestore after login
   const importData = useCallback((data, options = {}) => {
+    if (persistenceBlocked.current) throw new Error('Local account recovery has not committed. Retry after storage is available.')
     importing.current = true
     remoteReady.current = false
     const localWriteAt = loadLocalWriteAt()
@@ -1796,11 +1808,11 @@ export function useStore(userId = null, options = {}) {
     // stays only for a device that has never tracked (first run after this change).
     // Offline development mode has no real cloud: nothing is ever acknowledged, so the local copy is the
     // only copy and the older rule applies.
-    const dirtyRecords = options.preferLocal !== false && ownerMatchesCurrentUser && canSyncCloud && !OFFLINE_MODE
+    const dirtyRecords = options.recoveryDirty ?? (options.preferLocal !== false && ownerMatchesCurrentUser && canSyncCloud && !OFFLINE_MODE
       ? loadDirtyRecords(userId)
-      : null
+      : null)
     const reconciledRecovery = dirtyRecords && Object.keys(dirtyRecords).length
-      ? overlayDirtyRecords(data, getLocalSnapshot(), dirtyRecords)
+      ? overlayDirtyRecords(data, options.recoveryData ?? getLocalSnapshot(), dirtyRecords)
       : null
     const shouldPreferLocal = !dirtyRecords
       && options.preferLocal !== false
@@ -1878,10 +1890,14 @@ export function useStore(userId = null, options = {}) {
       // restore the user has done through the app).
       const localScenes = options.preserveLocalSceneConflicts === false
         ? []
-        : hydrateScenesFromStorage(load('nf_scenes', []))
+        : [...hydrateScenesFromStorage(load('nf_scenes', [])), ...(options.recoveryData?.scenes || [])]
       const importedIds = new Set(importedScenes.map(s => s.id))
-      const missingLocalConflicts = (Array.isArray(localScenes) ? localScenes : [])
-        .filter(s => s.conflictOf && !importedIds.has(s.id))
+      const missingLocalConflicts = []
+      for (const scene of (Array.isArray(localScenes) ? localScenes : [])) {
+        if (!scene.conflictOf || importedIds.has(scene.id)) continue
+        importedIds.add(scene.id)
+        missingLocalConflicts.push(scene)
+      }
       return missingLocalConflicts.length ? [...importedScenes, ...missingLocalConflicts] : importedScenes
     })())
     sceneCloudRevisionRef.current = new Map(Object.entries(data._sceneRevisions ?? sourceData._sceneRevisions ?? {}))
@@ -1918,7 +1934,7 @@ export function useStore(userId = null, options = {}) {
     // tab" warning vanish on refresh and take the other side's version with it. Keep this browser's own
     // unresolved conflicts when they belong to this account.
     setRecordConflicts([
-      ...(sourceData.recordConflicts ?? (ownerMatchesCurrentUser ? load('nf_recordConflicts', []) : [])),
+      ...(sourceData.recordConflicts ?? options.recoveryData?.recordConflicts ?? (ownerMatchesCurrentUser ? load('nf_recordConflicts', []) : [])),
       ...(reconciledRecovery?.conflicts ?? []),
     ])
     if (!shouldPreferLocal && canSyncCloud && resolvedActiveNovelId !== (data.activeNovelId ?? null)) {
@@ -1974,7 +1990,7 @@ export function useStore(userId = null, options = {}) {
             ids.forEach(id => {
               const scene = items.find(item => item.id === id)
               if (!scene) return
-              sceneCloudRevisionRef.current.set(id, Number(stillDirty.scenes[id]?.baseRevision ?? sceneCloudRevisionRef.current.get(id) ?? 0))
+              sceneCloudRevisionRef.current.set(id, Number(stillDirty.scenes[id]?.baseRevision ?? 0))
               debouncedSaveScene(id, userId, scene)
             })
           } else {
@@ -2013,6 +2029,7 @@ export function useStore(userId = null, options = {}) {
   }, [freeProjectId, novels, selectActiveNovel, focusDashboardProject])
 
   const finishRemoteLoad = useCallback((allowSaves = true) => {
+    if (persistenceBlocked.current) return
     importing.current = false
     remoteReady.current = allowSaves
   }, [])
@@ -2060,10 +2077,10 @@ export function useStore(userId = null, options = {}) {
   }, [importData, userId, canSyncCloud, trackSync, freeProjectId])
 
   // Clear all local state on sign-out
-  const clearData = useCallback(() => {
+  const clearData = useCallback((options = {}) => {
     importing.current = true
     remoteReady.current = false
-    clearProjectLocalStorage((scenesRef.current || []).map(s => s?.id))
+    if (!options.preserveStorage && !persistenceBlocked.current) clearProjectLocalStorage((scenesRef.current || []).map(s => s?.id))
     clearProjectRefs({
       novelsRef,
       charactersRef,
@@ -2983,26 +3000,11 @@ export function useStore(userId = null, options = {}) {
     if (canSyncCloud) cloudDelete('scenes', conflictId)
   }
 
-  const cleanupUnreferencedMedia = (urls, overrides = {}) => {
-    const candidates = urls.filter(Boolean)
-    if (!candidates.length) return Promise.resolve([])
-    const referenced = new Set()
-    const mediaKey = value => {
-      try { return getUserMediaPath(value) || value } catch { return value }
-    }
-    const collect = value => {
-      if (typeof value === 'string') referenced.add(mediaKey(value))
-      else if (value && typeof value === 'object') Object.values(value).forEach(collect)
-    }
-    // Save/delete update refs synchronously; the render snapshot may still
-    // contain the old character. Keep media used by any other saved record.
-    collect({ ...getCurrentSnapshot(), characters: charactersRef.current, ...overrides })
-    const cleanup = deleteMediaUrls(candidates.filter(url => !referenced.has(mediaKey(url))))
-    // Storage updates its authoritative counter in the same operation as
-    // object deletion. Refresh after cleanup settles so replacement/removal
-    // cannot leave Account Settings showing the pre-cleanup figure.
-    cleanup.then(() => refreshStorageUsedBytes().catch(console.error))
-    return cleanup
+  const cleanupUnreferencedMedia = () => {
+    // A local save/delete acknowledgement does not prove every cloud reference
+    // was durably replaced. Retain previously referenced media for now; server
+    // garbage collection needs a reference scan and retention window.
+    return Promise.resolve([])
   }
   const saveCharacter = (data, id) => {
     if (!id && storageExceededCheck()) { return null }
@@ -3995,7 +3997,7 @@ export function useStore(userId = null, options = {}) {
   const deleteSeries = (id) => {
     const existing = series.find(item => item.id === id)
     if (!existing) return false
-    deleteMediaUrls([existing.coverPhoto])
+    cleanupUnreferencedMedia([existing.coverPhoto])
     if (canSyncCloud) cloudDelete('series_items', id)
     setSeries(prev => prev.filter(s => s.id !== id))
     setNovels(prev => prev.map(n => n.seriesId === id ? { ...n, seriesId: null } : n))
@@ -4603,7 +4605,7 @@ export function useStore(userId = null, options = {}) {
     comicPanels: novelComicPanels,
     addComicPage, updateComicPage, deleteComicPage, reorderComicPage, duplicateComicPage,
     addComicPanel, updateComicPanel, deleteComicPanel, reorderComicPanel,
-    importData, replaceData, clearData, finishRemoteLoad,
+    importData, replaceData, clearData, finishRemoteLoad, waitForAccountStorage,
     beginProjectImport, endProjectImport, restoreProjectSnapshot,
     getLocalSnapshot: getCurrentSnapshot,
     syncStatus, trackSync, flushPendingSync,

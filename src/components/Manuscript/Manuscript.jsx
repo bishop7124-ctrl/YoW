@@ -629,7 +629,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     const settledLocalWrite = wasLocalWritePendingRef.current
     wasLocalWritePendingRef.current = false
     if (!syncStatus) { if (settledLocalWrite) setSaveState('saved'); return }
-    setSaveState(syncStatus.state === 'syncing' ? 'saving' : 'saved')
+    setSaveState(syncStatus.state === 'error' ? 'cloud-error' : syncStatus.state === 'syncing' ? 'saving' : 'saved')
   }, [syncStatus, localStorageWarning, pendingLocalWrites])
 
   const handleReplaceInScene = useCallback((sceneId, newContent) => {

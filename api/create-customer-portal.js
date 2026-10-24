@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_cors.js'
-import { buildSubscriptionAppMetadata } from './stripe-webhook.js'
+import { buildSubscriptionAppMetadata, writeAppMetadata } from './stripe-webhook.js'
 
 // Vercel API route — replaces supabase/functions/create-customer-portal
 // Called by AccountSettings.jsx when a paid user clicks
@@ -57,8 +57,7 @@ export async function downgradeToFreeLocally(supabaseAdmin, user) {
     },
   }
 
-  const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, attributes)
-  if (error) throw error
+  await writeAppMetadata(supabaseAdmin, user.id, existingApp, attributes.app_metadata)
 
   return { downgraded: true }
 }
@@ -98,8 +97,7 @@ export default async function handler(req, res) {
 
       const plan = subscription.metadata?.plan || user.app_metadata?.subscription_plan || 'premium_monthly'
       const appMetadata = buildSubscriptionAppMetadata(user.app_metadata || {}, subscription, customerId, plan)
-      const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, { app_metadata: appMetadata })
-      if (updateError) throw updateError
+      await writeAppMetadata(supabase, user.id, user.app_metadata || {}, appMetadata)
       return res.status(200).json({
         synced: true,
         cancelAtPeriodEnd: appMetadata.subscription_cancel_at_period_end === true,

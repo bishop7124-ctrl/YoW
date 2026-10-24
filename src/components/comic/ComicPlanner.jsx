@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
+import { uploadUserMedia } from '../../utils/uploadUserMedia'
 import { UserMediaImage } from '../shared/UserMedia'
 import './ComicPlanner.css'
 
@@ -48,7 +48,6 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
         }
         onPdf(file)
       } else if (file.type.startsWith('image/')) {
-        const previous = value
         const url = await uploadUserMedia(file, {
           userId: store?.userId,
           category,
@@ -59,7 +58,6 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
         })
         onImage(url)
         store?.refreshStorageUsedBytes().catch(console.error)
-        if (previous) deleteUserMedia(previous).catch(console.error)
       } else {
         setError('Please upload an image (PNG, JPG, WebP, GIF) or a PDF.')
       }
@@ -68,7 +66,7 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
     } finally {
       setLoading(false)
     }
-  }, [onImage, onPdf, store, category, value])
+  }, [onImage, onPdf, store, category])
 
   const handleChange = (e) => {
     handleFile(e.target.files?.[0])
@@ -81,7 +79,6 @@ function ImageUpload({ label = 'Reference', value, sessionPdf, onImage, onPdf, o
   }
 
   const handleRemove = () => {
-    if (value) deleteUserMedia(value).catch(console.error)
     onRemove()
     store?.refreshStorageUsedBytes().catch(console.error)
   }

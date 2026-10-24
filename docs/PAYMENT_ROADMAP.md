@@ -59,3 +59,19 @@ Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid pl
 | Gate | Required Outcome | Status |
 | --- | --- | --- |
 | Payment gate | Test/live QA passes for Monthly, Founding Lifetime reservation/finalization, Standard Lifetime, and £6 Cloud renewal; live keys/prices/webhooks are reviewed before checkout is enabled. | Reopened 2026-10-05 for the new pricing model; code is prepared, Dashboard configuration and live/test rehearsal remain parked here. |
+
+## 23 October independent review remediation
+
+**Implemented and locally verified on `codex/audit-remediation`; not deployed.** REVIEW-03: a duplicate is acknowledged only after a successful ledger read proves `done`; missing rows, unknown status, lookup errors and missing schema return retryable errors. Completion is scoped to the worker claim timestamp. REVIEW-04: webhook and customer-portal writes use service-role-only `apply_billing_metadata`, which locks `auth.users` and compares the whole metadata object before replacing it. A stale Monthly decision returns false/HTTP 500; Stripe retries and reevaluates against Lifetime. Cloud renewals and leftover Monthly status refreshes preserve the Lifetime licence. Renewal invoice IDs are recorded transactionally, so replay after a later invoice cannot add another year.
+
+Evidence: API tests include a Monthly handler paused across a completed Lifetime handler, followed by a successful safe retry; actual SQL is executed by `scripts/check-audit-migrations.mjs` in temporary PostgreSQL/PGlite. See `AUDIT_FIX_HANDOVER_2026-10-23.md` for commands and limitations.
+
+Deployment / test-mode instructions (not performed):
+1. Confirm/apply `20261022120000_stripe_event_lease.sql`, then apply `20261023120000_atomic_billing_metadata.sql`. Verify the RPC is callable only by `service_role`, and clients cannot access `billing_applied_invoices`. The new webhook deliberately has **no unsafe legacy-schema fallback**.
+2. Deploy webhook and customer-portal changes together. Keep the additive tables/functions on rollback; older code still works but restores the reviewed race, so do not treat rollback as a fix.
+3. On a synthetic Stripe test account, interleave a Monthly event with a Lifetime purchase, then retry the Monthly event; confirm Lifetime remains. Exercise the portal's `sync_status` while purchasing Lifetime too.
+4. Replay renewal invoice A, then B, then A. Confirm exactly two annual extensions. Existing historical renewals have only the former `maintenance_last_invoice_id`; older invoice IDs are not automatically backfilled. Reconcile historical invoice IDs before manually replaying older production events.
+5. Inject ledger lookup and completion failures; expect retryable HTTP status, no premature duplicate acknowledgement, and eventual completion. Verify migration-missing deployment also fails closed.
+6. Observe webhook error/retry rates and verify new JWT/session metadata exposes the correct licence after refresh. PGlite does not test PostgREST schema-cache refresh, Supabase Auth JWT propagation, or simultaneous Vercel workers.
+
+Other admin metadata writers (including lifecycle tooling and manual SQL) are outside this payment race regression; avoid stale whole-object writes there. The existing broader payment rehearsal remains required. No live events, credentials or customer data were used.

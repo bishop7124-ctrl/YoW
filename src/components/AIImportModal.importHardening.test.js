@@ -180,3 +180,8 @@ describe('PDF import refuses files it cannot read reliably (audit YOW-22)', () =
     expect(result[0].content).toContain('Chapter one text')
   })
 })
+
+it('rejects numeric/string IDs that collapse onto one importer map key before returning native data', async () => {
+  const buffer = makeYowZipBuffer({}, { project: { id: 'p1' }, characters: [{ id: 1 }, { id: '1' }] })
+  await expect(tryReadYowZip(fakeFile('collision.zip', buffer))).rejects.toThrow(/more than once/)
+})

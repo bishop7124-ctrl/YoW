@@ -28,13 +28,20 @@ const from = vi.fn((table) => makeBuilder(table))
 
 const rpc = vi.fn(() => Promise.resolve({ data: true, error: null }))
 const getUserById = vi.fn(() => Promise.resolve({ data: { user: { app_metadata: {} } }, error: null }))
-const updateUserById = vi.fn(() => Promise.resolve({ data: { user: {} }, error: null }))
+const billingWrite = vi.fn(() => Promise.resolve({ data: { user: {} }, error: null }))
+const billingRpc = vi.fn(args => billingWrite(args.p_user_id, { app_metadata: args.p_next }).then(result => ({
+  data: result.error ? null : true, error: result.error,
+})))
+
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from,
-    rpc,
-    auth: { admin: { getUserById, updateUserById } },
+    rpc: (name, args) => {
+      if (name !== 'apply_billing_metadata') return rpc(name, args)
+      return billingRpc(args)
+    },
+    auth: { admin: { getUserById } },
   }),
 }))
 
@@ -73,9 +80,9 @@ function makeRes() {
   return { status: vi.fn().mockReturnThis(), json: vi.fn() }
 }
 
-/** Metadata updates the mock recorded for a given user_id via updateUserById. */
+/** Metadata updates the mock recorded for a given user_id via billingWrite. */
 function metadataWritesFor(userId) {
-  return updateUserById.mock.calls
+  return billingWrite.mock.calls
     .filter(([id]) => id === userId)
     .map(([, patch]) => patch.app_metadata)
     .filter(Boolean)
@@ -237,7 +244,7 @@ describe('handler — event ledger idempotency', () => {
     from.mockImplementation((table) => makeBuilder(table))
     rpc.mockResolvedValue({ data: true, error: null })
     getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
-    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    billingWrite.mockResolvedValue({ data: { user: {} }, error: null })
     tableResults.length = 0
     fromCalls.length = 0
     constructEvent.mockReset()
@@ -260,7 +267,7 @@ describe('handler — event ledger idempotency', () => {
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(updateUserById).toHaveBeenCalledWith('user-1', expect.objectContaining({ app_metadata: expect.objectContaining({ subscription_status: 'active' }) }))
+    expect(billingWrite).toHaveBeenCalledWith('user-1', expect.objectContaining({ app_metadata: expect.objectContaining({ subscription_status: 'active' }) }))
   })
 
   it('skips fulfillment entirely on a duplicate event id (Stripe retry)', async () => {
@@ -270,13 +277,14 @@ describe('handler — event ledger idempotency', () => {
     })
     // Ledger insert reports a unique-constraint violation — already claimed.
     queueResult({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } })
+    queueResult({ data: { status: 'done' }, error: null })
 
     const res = makeRes()
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('applies the same event exactly once when Stripe delivers it three times', async () => {
@@ -288,6 +296,7 @@ describe('handler — event ledger idempotency', () => {
     const deliver = async (ledgerResult) => {
       tableResults.length = 0
       queueResult(ledgerResult)
+      if (ledgerResult.error) queueResult({ data: { status: 'done' }, error: null })
       const res = makeRes()
       await handler(makeReq(), res)
       return res
@@ -302,7 +311,7 @@ describe('handler — event ledger idempotency', () => {
     for (const res of responses) expect(res.status).toHaveBeenCalledWith(200)
     expect(responses[1].json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
     expect(responses[2].json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
-    expect(updateUserById).toHaveBeenCalledTimes(1)
+    expect(billingWrite).toHaveBeenCalledTimes(1)
   })
 
   it('releases the ledger claim on handler failure so a real retry can reprocess it', async () => {
@@ -340,7 +349,7 @@ describe('handler — maintenance extension is not double-applied', () => {
     from.mockImplementation((table) => makeBuilder(table))
     rpc.mockResolvedValue({ data: true, error: null })
     getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
-    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    billingWrite.mockResolvedValue({ data: { user: {} }, error: null })
     tableResults.length = 0
     fromCalls.length = 0
     constructEvent.mockReset()
@@ -362,7 +371,7 @@ describe('handler — maintenance extension is not double-applied', () => {
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
     expect(subscriptionsRetrieve).not.toHaveBeenCalled()
   })
 
@@ -432,7 +441,7 @@ describe('handler — Founder slot allocation', () => {
     vi.clearAllMocks()
     from.mockImplementation((table) => makeBuilder(table))
     getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
-    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    billingWrite.mockResolvedValue({ data: { user: {} }, error: null })
     tableResults.length = 0
     fromCalls.length = 0
     constructEvent.mockReset()
@@ -555,13 +564,13 @@ describe('handler — Founder slot allocation', () => {
     const res = makeRes()
     await handler(makeReq(), res)
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
     expect(rpc).not.toHaveBeenCalled()
   })
 
   it('retries a failed revocation instead of releasing a still-active slot', async () => {
     getUserById.mockResolvedValue({ data: { user: { app_metadata: { subscription_plan: 'founder' } } }, error: null })
-    updateUserById.mockResolvedValueOnce({ error: new Error('Temporary auth failure') })
+    billingWrite.mockResolvedValueOnce({ error: new Error('Temporary auth failure') })
     constructEvent.mockReturnValue({ id: 'evt_retry_refund', type: 'charge.refunded', data: { object: { id: 'ch_retry', refunded: true, metadata: { user_id: 'user-3', plan: 'founder' } } } })
     const res = makeRes()
     await handler(makeReq(), res)
@@ -578,7 +587,7 @@ describe('handler — Founder slot allocation', () => {
     await handler(makeReq(), res)
     expect(res.status).toHaveBeenCalledWith(200)
     if (status === 'lost') expect(rpc).toHaveBeenCalledWith('release_founder_slot', { p_user_id: 'user-3' })
-    else expect(updateUserById).not.toHaveBeenCalled()
+    else expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('does not release a slot on a partial refund', async () => {
@@ -611,7 +620,7 @@ describe('handler — one-time purchase payment-state handling', () => {
     from.mockImplementation((table) => makeBuilder(table))
     rpc.mockResolvedValue({ data: true, error: null })
     getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
-    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    billingWrite.mockResolvedValue({ data: { user: {} }, error: null })
     tableResults.length = 0
     fromCalls.length = 0
     constructEvent.mockReset()
@@ -632,7 +641,7 @@ describe('handler — one-time purchase payment-state handling', () => {
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('fulfills once a delayed payment method clears via async_payment_succeeded', async () => {
@@ -661,7 +670,7 @@ describe('handler — one-time purchase payment-state handling', () => {
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 })
 
@@ -679,7 +688,7 @@ describe('handler — fulfilment is only acknowledged once it is really applied 
     from.mockImplementation((table) => makeBuilder(table))
     rpc.mockResolvedValue({ data: true, error: null })
     getUserById.mockResolvedValue({ data: { user: { app_metadata: {} } }, error: null })
-    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    billingWrite.mockResolvedValue({ data: { user: {} }, error: null })
     tableResults.length = 0
     fromCalls.length = 0
     constructEvent.mockReset()
@@ -697,7 +706,7 @@ describe('handler — fulfilment is only acknowledged once it is really applied 
   it('returns 500 and releases the claim when the entitlement write comes back with an error', async () => {
     constructEvent.mockReturnValue(lifetimeEvent('evt_write_fail'))
     queueResult({ data: null, error: null })
-    updateUserById.mockResolvedValue({ data: null, error: { message: 'auth admin unavailable' } })
+    billingWrite.mockResolvedValue({ data: null, error: { message: 'auth admin unavailable' } })
 
     const res = makeRes()
     await handler(makeReq(), res)
@@ -715,7 +724,7 @@ describe('handler — fulfilment is only acknowledged once it is really applied 
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(500)
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('marks the ledger row done only after fulfilment succeeded', async () => {
@@ -742,7 +751,7 @@ describe('handler — fulfilment is only acknowledged once it is really applied 
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(200)
-    expect(updateUserById).toHaveBeenCalled()
+    expect(billingWrite).toHaveBeenCalled()
   })
 
   it('asks Stripe to retry later while another worker still holds a fresh claim, without fulfilling twice', async () => {
@@ -754,7 +763,21 @@ describe('handler — fulfilment is only acknowledged once it is really applied 
     await handler(makeReq(), res)
 
     expect(res.status).toHaveBeenCalledWith(503)
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { data: null, error: { message: 'database unavailable' } },
+    { data: null, error: null },
+    { data: { status: 'unknown' }, error: null },
+  ])('retries an uncertain duplicate claim instead of acknowledging it: %j', async lookup => {
+    constructEvent.mockReturnValue({ id: 'evt_uncertain', type: 'customer.subscription.updated', data: { object: {} } })
+    queueResult(duplicate)
+    queueResult(lookup)
+    const res = makeRes()
+    await handler(makeReq(), res)
+    expect(res.status).toHaveBeenCalledWith(500)
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('treats a completed ledger row as a harmless duplicate', async () => {
@@ -767,7 +790,7 @@ describe('handler — fulfilment is only acknowledged once it is really applied 
 
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ duplicate: true }))
-    expect(updateUserById).not.toHaveBeenCalled()
+    expect(billingWrite).not.toHaveBeenCalled()
   })
 
   it('does not extend Cloud twice when a crashed invoice.paid is reprocessed', async () => {
@@ -795,7 +818,7 @@ describe('handler — subscriptions never overwrite a Lifetime licence (audit YO
     vi.clearAllMocks()
     from.mockImplementation((table) => makeBuilder(table))
     rpc.mockResolvedValue({ data: true, error: null })
-    updateUserById.mockResolvedValue({ data: { user: {} }, error: null })
+    billingWrite.mockResolvedValue({ data: { user: {} }, error: null })
     tableResults.length = 0
     fromCalls.length = 0
     constructEvent.mockReset()
@@ -893,5 +916,53 @@ describe('handler — subscriptions never overwrite a Lifetime licence (audit YO
 
     expect(res.status).toHaveBeenCalledWith(200)
     expect(metadataWritesFor('user-1')[0].subscription_status).toBe('canceled')
+  })
+})
+
+
+describe('concurrent entitlement events (REVIEW-04)', () => {
+  it('retries a Monthly write paused across a Lifetime purchase and preserves Lifetime on retry', async () => {
+    tableResults.length = 0
+    let metadata = {}
+    let resumeMonthly
+    let monthlyPaused
+    const paused = new Promise(resolve => { monthlyPaused = resolve })
+    const resume = new Promise(resolve => { resumeMonthly = resolve })
+    getUserById.mockImplementation(async () => ({ data: { user: { app_metadata: structuredClone(metadata) } }, error: null }))
+    let firstMonthly = true
+    billingRpc.mockImplementation(async ({ p_expected, p_next }) => {
+      if (firstMonthly && p_next.subscription_plan === 'premium_monthly') {
+        firstMonthly = false
+        monthlyPaused()
+        await resume
+      }
+      // Contract implemented under an auth.users row lock in the migration.
+      if (JSON.stringify(p_expected) !== JSON.stringify(metadata)) return { data: false, error: null }
+      metadata = structuredClone(p_next)
+      return { data: true, error: null }
+    })
+    const sub = { id: 'sub_old', status: 'active', customer: 'cus_1', metadata: { user_id: 'user-1', plan: 'premium_monthly' }, items: { data: [] } }
+    subscriptionsRetrieve.mockResolvedValue(sub)
+    const monthly = { id: 'evt_monthly_race', type: 'customer.subscription.updated', data: { object: sub } }
+    const lifetime = { id: 'evt_lifetime_race', type: 'checkout.session.completed', data: { object: {
+      id: 'cs_lifetime', mode: 'payment', payment_status: 'paid', customer: 'cus_1',
+      metadata: { user_id: 'user-1', plan: 'premium_plus_lifetime' },
+    } } }
+    constructEvent.mockReturnValueOnce(monthly).mockReturnValueOnce(lifetime).mockReturnValueOnce(monthly)
+    const { default: handler } = await import('../../api/stripe-webhook.js')
+    const monthlyResponse = makeRes()
+    const pendingMonthly = handler(makeReq(), monthlyResponse)
+    await paused
+    const lifetimeResponse = makeRes()
+    await handler(makeReq(), lifetimeResponse)
+    expect(lifetimeResponse.status).toHaveBeenCalledWith(200)
+    resumeMonthly()
+    await pendingMonthly
+    expect(monthlyResponse.status).toHaveBeenCalledWith(500)
+    expect(metadata.subscription_plan).toBe('premium_plus_lifetime')
+    const retried = makeRes()
+    await handler(makeReq(), retried)
+    expect(retried.status).toHaveBeenCalledWith(200)
+    expect(metadata).toMatchObject({ subscription_plan: 'premium_plus_lifetime', monthly_subscription_id: 'sub_old' })
   })
 })

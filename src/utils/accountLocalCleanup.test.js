@@ -7,6 +7,9 @@ describe('clearDeletedAccountMarkers', () => {
 
   it('clears only the deleted account markers through the active storage backend', () => {
     const backend = createMemoryBackend({
+      'nf_unsyncedRecovery:user-delete': 'private prose',
+      'nf_localFirstSnapshot:user-delete': 'private prose',
+      'nf_unsyncedRecovery:other-user': 'keep prose',
       'nf_lastActiveProject:user-delete': '{"projectId":"deleted-project"}',
       'nf_sampleProjectSeeded:the-last-ember-v3:user-delete': '1',
       'nf_sampleProjectMapSeeded:atlas-layout-v4:user-delete': '1',
@@ -16,6 +19,9 @@ describe('clearDeletedAccountMarkers', () => {
 
     clearDeletedAccountMarkers('user-delete')
 
+    expect(backend.getItem('nf_unsyncedRecovery:user-delete')).toBeNull()
+    expect(backend.getItem('nf_localFirstSnapshot:user-delete')).toBeNull()
+    expect(backend.getItem('nf_unsyncedRecovery:other-user')).toBe('keep prose')
     expect(backend.getItem('nf_lastActiveProject:user-delete')).toBeNull()
     expect(backend.getItem('nf_sampleProjectSeeded:the-last-ember-v3:user-delete')).toBeNull()
     expect(backend.getItem('nf_sampleProjectMapSeeded:atlas-layout-v4:user-delete')).toBeNull()

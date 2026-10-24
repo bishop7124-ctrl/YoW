@@ -51,6 +51,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     ]
     const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
     const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     // resetStorageBackend + a fresh initializeIndexedDbStorage() call simulates
@@ -59,6 +60,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     act(() => { tabA.result.current.saveCharacter({ name: 'Alice', notes: 'edited by tab A' }, 'char-A') })
@@ -92,11 +94,13 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
 
     await initializeIndexedDbStorage()
     const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     // Tab B deletes char-B and its own cross-tab BroadcastChannel bridge
@@ -118,12 +122,14 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
 
     await initializeIndexedDbStorage()
     const tabA = renderHook(() => useStore('user-scene-multitab', { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
     const sceneId = tabA.result.current.scenes[0].id
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore('user-scene-multitab', { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({
       novels: tabA.result.current.novels,
       acts: tabA.result.current.acts,
@@ -149,12 +155,14 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
 
     await initializeIndexedDbStorage()
     const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
     const sceneId = tabA.result.current.scenes[0].id
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({
       novels: tabA.result.current.novels,
       acts: tabA.result.current.acts,
@@ -177,10 +185,12 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabARefreshed = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabARefreshed.result.current.waitForAccountStorage() })
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabBRefreshed = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabBRefreshed.result.current.waitForAccountStorage() })
 
     for (const tab of [tabARefreshed, tabBRefreshed]) {
       const mainScene = tab.result.current.scenes.find(s => s.id === sceneId)
@@ -207,6 +217,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
 
     await initializeIndexedDbStorage()
     const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
     const sceneId = tabA.result.current.scenes[0].id
     act(() => { tabA.result.current.finishRemoteLoad(true) })
@@ -214,6 +225,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({
       novels: tabA.result.current.novels,
       acts: tabA.result.current.acts,
@@ -235,6 +247,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const refreshed = renderHook(() => useStore(owner, { cloudSyncEnabled: true }))
+    await act(async () => { await refreshed.result.current.waitForAccountStorage() })
     const staleCloudScenes = [{ ...tabA.result.current.scenes[0], id: sceneId }] // original, pre-edit content
     act(() => { refreshed.result.current.importData({
       novels: tabA.result.current.novels,
@@ -256,6 +269,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
 
     await initializeIndexedDbStorage()
     const tabA = renderHook(() => useStore('user-scene-multitab-2', { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
     const chapterId = tabA.result.current.chapters[0].id
     const sceneOneId = tabA.result.current.scenes[0].id
@@ -265,6 +279,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore('user-scene-multitab-2', { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({
       novels: tabA.result.current.novels,
       acts: tabA.result.current.acts,
@@ -288,12 +303,14 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
 
     await initializeIndexedDbStorage()
     const tabA = renderHook(() => useStore('user-scene-fields', { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.addNovel({ title: 'Two Tabs', type: 'novel' }) })
     const sceneId = tabA.result.current.scenes[0].id
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore('user-scene-fields', { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({
       novels: tabA.result.current.novels,
       acts: tabA.result.current.acts,
@@ -329,11 +346,13 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     ]
     const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
     const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     // Tab A deletes char-B. The BroadcastChannel bridge updates Tab B's
@@ -353,6 +372,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabC = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabC.result.current.waitForAccountStorage() })
     expect(tabC.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
     expect(tabC.result.current.characters.find(c => c.id === 'char-A')?.notes).toBe('edited by tab B')
   })
@@ -369,11 +389,13 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     ]
     const novels = [{ id: 'novel-1', title: 'World', type: 'novel' }]
     const tabA = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabA.result.current.waitForAccountStorage() })
     act(() => { tabA.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabB = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabB.result.current.waitForAccountStorage() })
     act(() => { tabB.result.current.importData({ novels, characters: seed, _savedAt: 1 }) })
 
     // Tab A deletes char-B; Tab B's mounted state doesn't learn about it.
@@ -390,6 +412,7 @@ describe('multi-tab sync against the real IndexedDB-backed browser adapter', () 
     resetStorageBackend()
     await initializeIndexedDbStorage()
     const tabC = renderHook(() => useStore(owner, { cloudSyncEnabled: false }))
+    await act(async () => { await tabC.result.current.waitForAccountStorage() })
     expect(tabC.result.current.characters.some(c => c.id === 'char-B')).toBe(false)
   })
 })

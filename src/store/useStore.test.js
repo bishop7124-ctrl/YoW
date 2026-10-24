@@ -1,3 +1,4 @@
+import { clearDeletedAccountMarkers } from '../utils/accountLocalCleanup.js'
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
@@ -319,7 +320,7 @@ describe('ownership guard', () => {
     expect(result.current.novels).toEqual(novels)
   })
 
-  it('purges every per-scene prose and tracked-change key when the account changes, including orphaned keys', () => {
+  it('purges every per-scene prose and tracked-change key when the account changes, including orphaned keys', async () => {
     const backend = createMemoryBackend({
       nf_localOwner: 'user-a',
       nf_novels: JSON.stringify([{ id: 'novel-a', title: 'Private A', type: 'novel' }]),
@@ -339,7 +340,8 @@ describe('ownership guard', () => {
     )
     expect(result.current.novels).toEqual([expect.objectContaining({ title: 'Private A' })])
 
-    act(() => rerender({ userId: 'user-b' }))
+    await act(async () => { rerender({ userId: 'user-b' }) })
+    await act(async () => { await result.current.waitForAccountStorage() })
 
     expect(result.current.novels).toEqual([])
     expect(backend.getItem('nf_scene_content:loaded-scene')).toBeNull()
@@ -355,7 +357,7 @@ describe('ownership guard', () => {
 // ─── Local-first sign-out safety ────────────────────────────────────────────
 
 describe('Local-first sign-out safety', () => {
-  it('snapshots live local work before clearing the signed-out store', () => {
+  it('snapshots live local work before clearing the signed-out store', async () => {
     saveStorageMode('user-local', STORAGE_MODES.LOCAL_FIRST)
 
     const { result, rerender } = renderHook(
@@ -371,7 +373,8 @@ describe('Local-first sign-out safety', () => {
       result.current.saveCharacter({ name: 'Saved Person', novelId: draftId })
     })
 
-    rerender({ userId: null })
+    await act(async () => { rerender({ userId: null }) })
+    await act(async () => { await result.current.waitForAccountStorage() })
 
     const snapshot = loadLocalFirstSnapshot('user-local')
     expect(snapshot.novels).toHaveLength(1)
@@ -455,7 +458,7 @@ describe('novel CRUD', () => {
     expect(stored.find(n => n.id === 'other-2').title).toBe('Other Project')
   })
 
-  it('deleteNovel cleans up uploaded Storage images for the novel and its characters/factions', async () => {
+  it('deleteNovel retains uploaded media until cloud reference cleanup can be proven safe', async () => {
     vi.mocked(deleteUserMedia).mockClear()
     const { result } = renderHook(() => useStore(null))
 
@@ -466,13 +469,7 @@ describe('novel CRUD', () => {
 
     await act(async () => { await result.current.deleteNovel(id) })
 
-    const deletedUrls = vi.mocked(deleteUserMedia).mock.calls.map(call => call[0])
-    expect(deletedUrls).toEqual(expect.arrayContaining([
-      'https://x/storage/v1/object/public/user-media/u1/covers/a.webp',
-      'https://x/storage/v1/object/public/user-media/u1/banners/b.webp',
-      'https://x/storage/v1/object/public/user-media/u1/characters/c.webp',
-      'https://x/storage/v1/object/public/user-media/u1/factions/f.webp',
-    ]))
+    expect(deleteUserMedia).not.toHaveBeenCalled()
   })
 
   it('deleteNovel preserves media that a restored project still references', async () => {
@@ -1552,7 +1549,7 @@ describe('remaining workspace integrity boundaries', () => {
     act(() => { expect(result.current.deleteFaction('f', { scope: 'all' })).toBe(true) })
     expect(JSON.parse(localStorage.getItem('nf_characters'))[0].factionId).toBe('')
     expect(JSON.parse(localStorage.getItem('nf_rpg_characters'))[0].factionIds).toEqual(['kept'])
-    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:u/factions/guild.webp')
+    expect(deleteUserMedia).not.toHaveBeenCalled()
     expect(result.current.deleteFaction('missing')).toBe(false)
   })
 
@@ -2020,7 +2017,7 @@ describe('character CRUD', () => {
     expect(deleteUserMedia).not.toHaveBeenCalled()
   })
 
-  it('only deletes a replaced portrait after a successful save and when no saved record still uses it', () => {
+  it('retains replaced portraits even after synchronous local saves succeed', () => {
     const { result } = renderHook(() => useStore(null))
     act(() => { result.current.addNovel({ title: 'World', type: 'novel' }) })
     let first, second
@@ -2033,7 +2030,7 @@ describe('character CRUD', () => {
     act(() => { result.current.saveCharacter({ image: '' }, first) })
     expect(deleteUserMedia).not.toHaveBeenCalled()
     act(() => { result.current.saveCharacter({ image: '' }, second) })
-    expect(deleteUserMedia).toHaveBeenCalledExactlyOnceWith(image)
+    expect(deleteUserMedia).not.toHaveBeenCalled()
   })
 
   it('retains portraits used by another entity even when private and legacy references differ', () => {
@@ -2047,9 +2044,8 @@ describe('character CRUD', () => {
     expect(deleteUserMedia).not.toHaveBeenCalled()
   })
 
-  it('refreshes authoritative storage usage after replacement cleanup settles', async () => {
-    let finishDelete
-    vi.mocked(deleteUserMedia).mockImplementationOnce(() => new Promise(resolve => { finishDelete = resolve }))
+  it('does not claim storage was reclaimed by a synchronous portrait replacement', async () => {
+    vi.mocked(deleteUserMedia).mockClear()
     vi.mocked(getUserStorageUsage).mockClear()
     const { result } = renderHook(() => useStore('user-1'))
     await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(1))
@@ -2058,11 +2054,10 @@ describe('character CRUD', () => {
     act(() => { result.current.saveCharacter({ name: 'Frodo', image: 'yow-media:user-1/characters/old.webp' }) })
     act(() => { result.current.saveCharacter({ image: 'yow-media:user-1/characters/new.webp' }, result.current.characters[0].id) })
 
-    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:user-1/characters/old.webp')
+    expect(deleteUserMedia).not.toHaveBeenCalled()
     expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
 
-    await act(async () => { finishDelete() })
-    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(2))
+    expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
   })
 
   it('cleans affected references on physical deletion without rewriting unrelated records or missing targets', () => {
@@ -2160,7 +2155,7 @@ describe('character CRUD', () => {
     expect(JSON.parse(localStorage.getItem('nf_characters')).find(character => character.id === ids[1]).familyLinks).toEqual([unrelated])
   })
 
-  it('deleteCharacter cleans up the character\'s uploaded Storage portrait', () => {
+  it('deleteCharacter retains the character\'s portrait until cloud reference cleanup is safe', () => {
     vi.mocked(deleteUserMedia).mockClear()
     const { result } = renderHook(() => useStore(null))
 
@@ -2170,12 +2165,11 @@ describe('character CRUD', () => {
 
     act(() => { result.current.deleteCharacter(frodoId) })
 
-    expect(deleteUserMedia).toHaveBeenCalledWith('https://x/storage/v1/object/public/user-media/u1/characters/frodo.webp')
+    expect(deleteUserMedia).not.toHaveBeenCalled()
   })
 
-  it('refreshes authoritative storage usage after replacement cleanup settles', async () => {
-    let finishDelete
-    vi.mocked(deleteUserMedia).mockImplementationOnce(() => new Promise(resolve => { finishDelete = resolve }))
+  it('does not claim storage was reclaimed by a synchronous portrait replacement', async () => {
+    vi.mocked(deleteUserMedia).mockClear()
     vi.mocked(getUserStorageUsage).mockClear()
     const { result } = renderHook(() => useStore('user-1'))
     await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(1))
@@ -2184,11 +2178,10 @@ describe('character CRUD', () => {
     act(() => { result.current.saveCharacter({ name: 'Frodo', image: 'yow-media:user-1/characters/old.webp' }) })
     act(() => { result.current.saveCharacter({ image: 'yow-media:user-1/characters/new.webp' }, result.current.characters[0].id) })
 
-    expect(deleteUserMedia).toHaveBeenCalledWith('yow-media:user-1/characters/old.webp')
+    expect(deleteUserMedia).not.toHaveBeenCalled()
     expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
 
-    await act(async () => { finishDelete() })
-    await waitFor(() => expect(getUserStorageUsage).toHaveBeenCalledTimes(2))
+    expect(getUserStorageUsage).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -3822,4 +3815,98 @@ describe('sign-out clears local scene history (audit YOW-14)', () => {
     expect(localStorage.getItem('nf_scene_versions:scene-b')).toBeNull()
     expect(localStorage.getItem('nf_scene_versions')).toBeNull()
   })
+})
+
+// REVIEW-01/02: use the real store and delayed/failing durable backend, not
+// just the overlay helper. No live account or real network is involved.
+describe('durable account transition and archived recovery', () => {
+  it('keeps durable prose intact when archival fails and blocks the next account import', async () => {
+    const backend = createMemoryBackend({
+      nf_localOwner: 'account-a', nf_novels: JSON.stringify([{ id: 'n', title: 'Private', type: 'novel' }]),
+      nf_scenes: JSON.stringify([{ id: 's', novelId: 'n' }]), 'nf_scene_content:s': 'Only copy',
+    })
+    const replace = backend.replaceItems
+    backend.replaceItems = vi.fn().mockRejectedValue(new Error('transaction aborted'))
+    setStorageBackend(backend)
+    const hook = renderHook(({ owner }) => useStore(owner), { initialProps: { owner: 'account-a' } })
+    await act(async () => { hook.rerender({ owner: 'account-b' }) })
+    await expect(hook.result.current.waitForAccountStorage()).rejects.toThrow('transaction aborted')
+    expect(hook.result.current.novels).toEqual([])
+    expect(backend.getItem('nf_scene_content:s')).toBe('Only copy')
+    expect(backend.getItem('nf_localOwner')).toBe('account-a')
+    expect(() => hook.result.current.importData({ novels: [{ id: 'b' }] })).toThrow(/recovery has not committed/)
+    backend.replaceItems = replace
+    // Retry remains explicit; the failed archive was not silently skipped.
+    await act(async () => { await hook.result.current.waitForAccountStorage() })
+    expect(JSON.parse(backend.getItem('nf_unsyncedRecovery:account-a')).data.scenes[0].content).toBe('Only copy')
+    expect(backend.getItem('nf_localOwner')).toBe('account-b')
+    hook.unmount()
+  })
+
+  it('waits for archive commit before clearing prose and never archives A under B during a rapid switch', async () => {
+    const backend = createMemoryBackend({
+      nf_localOwner: 'account-a', nf_novels: JSON.stringify([{ id: 'n', title: 'Private', type: 'novel' }]),
+      nf_scenes: JSON.stringify([{ id: 's', novelId: 'n' }]), 'nf_scene_content:s': 'Only copy',
+    })
+    const replace = backend.replaceItems
+    let commit
+    backend.replaceItems = vi.fn().mockImplementationOnce((entries, removed) => new Promise(resolve => {
+      commit = () => { replace(entries, removed); resolve() }
+    })).mockImplementation(replace)
+    setStorageBackend(backend)
+    const hook = renderHook(({ owner }) => useStore(owner), { initialProps: { owner: 'account-a' } })
+    await act(async () => { hook.rerender({ owner: 'account-b' }) })
+    expect(backend.getItem('nf_scene_content:s')).toBe('Only copy')
+    expect(hook.result.current.novels).toEqual([])
+    await act(async () => { hook.rerender({ owner: 'account-c' }) })
+    await act(async () => { commit(); await hook.result.current.waitForAccountStorage() })
+    expect(backend.getItem('nf_scene_content:s')).toBeNull()
+    expect(JSON.parse(backend.getItem('nf_unsyncedRecovery:account-a')).data.scenes[0].content).toBe('Only copy')
+    expect(backend.getItem('nf_unsyncedRecovery:account-b')).toBeNull()
+    expect(backend.getItem('nf_localOwner')).toBe('account-c')
+    hook.unmount()
+  })
+
+  it('restores an archived scene via revision checks and preserves both sides of a real conflict', async () => {
+    vi.mocked(replaceUserData).mockClear()
+    vi.mocked(saveSceneDoc).mockReset()
+    const remote = { id: 's', novelId: 'n', title: 'Scene', content: 'Cloud revision five' }
+    vi.mocked(saveSceneDoc).mockResolvedValueOnce({ saved: false, revision: 5, remoteScene: remote })
+      .mockResolvedValue({ saved: true, revision: 1 })
+    const hook = renderHook(() => useStore('account-a', { cloudSyncEnabled: true }))
+    act(() => hook.result.current.importData({
+      novels: [{ id: 'n', title: 'Book', type: 'novel' }], scenes: [remote], _sceneRevisions: { s: 5 },
+    }, {
+      recoveryData: { scenes: [{ ...remote, content: 'Offline revision three' }] },
+      recoveryDirty: { scenes: { s: { baseRevision: 3 } } },
+    }))
+    await act(async () => { await hook.result.current.flushPendingSync() })
+    expect(saveSceneDoc.mock.calls[0][2]).toEqual({ expectedRevision: 3 })
+    expect(replaceUserData).not.toHaveBeenCalled()
+    expect(hook.result.current.scenes.find(s => s.id === 's').content).toBe('Cloud revision five')
+    expect(hook.result.current.sceneConflicts.some(s => s.conflictOf === 's' && s.content === 'Offline revision three')).toBe(true)
+    const preserved = hook.result.current.sceneConflicts[0]
+    act(() => hook.result.current.importData({
+      novels: [{ id: 'n', title: 'Book', type: 'novel' }], scenes: [remote], _sceneRevisions: { s: 5 },
+    }, { recoveryData: { scenes: [preserved] }, recoveryDirty: {} }))
+    // The same conflict may be on disk AND in the retained archive.
+    expect(hook.result.current.sceneConflicts.map(s => s.id)).toEqual([preserved.id])
+    hook.unmount()
+  })
+})
+
+it('does not recreate an account recovery archive after confirmed account deletion', async () => {
+  const owner = 'deleted-account-archive-test'
+  const backend = createMemoryBackend({ nf_localOwner: owner,
+    nf_novels: JSON.stringify([{ id: 'n', title: 'Delete me', type: 'novel' }]),
+    ['nf_unsyncedRecovery:' + owner]: JSON.stringify({ data: { novels: [{ id: 'old' }] } }),
+  })
+  setStorageBackend(backend)
+  const hook = renderHook(({ userId }) => useStore(userId), { initialProps: { userId: owner } })
+  clearDeletedAccountMarkers(owner)
+  await act(async () => { hook.rerender({ userId: null }) })
+  await act(async () => { await hook.result.current.waitForAccountStorage() })
+  expect(backend.getItem('nf_unsyncedRecovery:' + owner)).toBeNull()
+  expect(backend.getItem('nf_novels')).toBeNull()
+  hook.unmount()
 })

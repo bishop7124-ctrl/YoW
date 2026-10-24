@@ -1,4 +1,4 @@
-import { loadValue, readItem, removeItem, writeItem } from '../storage/projectStorage'
+import { replaceItemsAtomically, loadValue, readItem, removeItem, writeItem } from '../storage/projectStorage'
 
 const STORAGE_MODE_PREFIX = 'nf_storageMode'
 const LOCAL_FIRST_SNAPSHOT_PREFIX = 'nf_localFirstSnapshot'
@@ -139,21 +139,25 @@ export function clearDesktopLapseLocalCopy(userId) {
 const UNSYNCED_RECOVERY_PREFIX = 'nf_unsyncedRecovery'
 const unsyncedRecoveryKey = userId => `${UNSYNCED_RECOVERY_PREFIX}:${userId}`
 
-export function saveUnsyncedRecoveryCopy(userId, data, dirtyRecords = null) {
+export async function saveUnsyncedRecoveryCopy(userId, data, dirtyRecords = null, keysToRemove = []) {
   if (!userId || !Array.isArray(data?.novels) || data.novels.length === 0) return false
-  try {
-    writeItem(unsyncedRecoveryKey(userId), JSON.stringify({ savedAt: Date.now(), data, dirty: dirtyRecords }))
-    return true
-  } catch {
-    return false
-  }
+  // The archive and purge are one durable transaction. A rejected transaction
+  // preserves the original keys; callers must keep new-account writes blocked.
+  const savedAt = Date.now()
+  const entries = { [unsyncedRecoveryKey(userId)]: JSON.stringify({ savedAt, data, dirty: dirtyRecords }) }
+  // Local-first and lapsed desktop loaders have their own entry points. Commit
+  // their resume copies in the same transaction as the recovery archive/purge.
+  if (loadStorageMode(userId) === STORAGE_MODES.LOCAL_FIRST) entries[snapshotKey(userId)] = JSON.stringify({ savedAt, data })
+  if (loadDesktopLapseSnapshot(userId)) entries[desktopLapseLocalCopyKey(userId)] = JSON.stringify({ savedAt, data })
+  await replaceItemsAtomically(entries, keysToRemove)
+  return true
 }
 
 // Which records the cloud had not acknowledged when the copy was taken (null when unknown).
 export function loadUnsyncedRecoveryDirty(userId) {
   if (!userId) return null
   const dirty = loadValue(unsyncedRecoveryKey(userId), null)?.dirty
-  return dirty && typeof dirty === 'object' && Object.keys(dirty).length ? dirty : null
+  return dirty && typeof dirty === 'object' ? dirty : null
 }
 
 export function loadUnsyncedRecoveryCopy(userId) {

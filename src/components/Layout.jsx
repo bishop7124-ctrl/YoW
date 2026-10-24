@@ -385,7 +385,6 @@ function ProjectSettings({ store, onClose }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
-    const previousCoverPhoto = novel?.coverPhoto
     try {
       setCoverError('')
       const photo = await uploadUserMedia(file, {
@@ -397,7 +396,7 @@ function ProjectSettings({ store, onClose }) {
       const updated = store.updateNovel(store.activeNovelId, { coverPhoto: photo })
       store.refreshStorageUsedBytes().catch(console.error)
       // A refused update keeps the old cover; the freshly uploaded file is the one to discard.
-      deleteUserMedia(updated ? previousCoverPhoto : photo).catch(console.error)
+      if (!updated) deleteUserMedia(photo).catch(console.error)
     } catch (error) {
       setCoverError(error instanceof Error ? error.message : 'Could not use that image.')
     }
@@ -407,7 +406,6 @@ function ProjectSettings({ store, onClose }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !file.type.startsWith('image/')) return
-    const previousBannerImage = novel?.bannerImage
     try {
       setBannerError('')
       const photo = await uploadUserMedia(file, {
@@ -418,7 +416,7 @@ function ProjectSettings({ store, onClose }) {
       })
       const updated = store.updateNovel(store.activeNovelId, { bannerImage: photo })
       store.refreshStorageUsedBytes().catch(console.error)
-      deleteUserMedia(updated ? previousBannerImage : photo).catch(console.error)
+      if (!updated) deleteUserMedia(photo).catch(console.error)
     } catch (error) {
       setBannerError(error instanceof Error ? error.message : 'Could not use that image.')
     }

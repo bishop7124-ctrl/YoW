@@ -423,18 +423,19 @@ describe('atomic destructive deletes', () => {
       .rejects.toThrow(/atomic project delete error: injected project failure/)
   })
 
-  it('deletes an account through the single transactional delete_user RPC', async () => {
+  it('deletes an account through the prepared transactional account deletion RPC', async () => {
     const { deleteAllUserData } = await import('./firestoreSync.js')
     await deleteAllUserData('user-1')
     expect(mockState.mediaDeleteCalls).toEqual(['user-1'])
-    expect(mockState.rpcCalls).toEqual([{ name: 'delete_user', args: undefined }])
+    expect(mockState.rpcCalls).toEqual([{ name: 'prepare_account_deletion', args: undefined }, { name: 'complete_account_deletion', args: undefined }])
   })
 
-  it('retries a failed account delete and reports an unfinished deletion plainly (audit YOW-15)', async () => {
+  it('does not remove media if durable deletion preparation fails', async () => {
     const { deleteAllUserData } = await import('./firestoreSync.js')
     mockState.rpcError = { message: 'connection reset' }
-    await expect(deleteAllUserData('user-1')).rejects.toThrow(/did not finish.*run "Delete account" again/)
-    expect(mockState.rpcCalls.filter(call => call.name === 'delete_user')).toHaveLength(3)
+    await expect(deleteAllUserData('user-1')).rejects.toThrow(/no images were removed/)
+    expect(mockState.rpcCalls.filter(call => call.name === 'complete_account_deletion')).toHaveLength(0)
+    expect(mockState.mediaDeleteCalls).toEqual([])
     mockState.rpcError = null
   })
 
@@ -442,7 +443,7 @@ describe('atomic destructive deletes', () => {
     const { deleteAllUserData } = await import('./firestoreSync.js')
     mockState.mediaDeleteShouldFail = true
     await expect(deleteAllUserData('user-1')).rejects.toThrow('media cleanup failed')
-    expect(mockState.rpcCalls).toEqual([])
+    expect(mockState.rpcCalls).toEqual([{ name: 'prepare_account_deletion', args: undefined }])
   })
 })
 
