@@ -206,6 +206,27 @@ Historical launch triage decision (2026-07-04; map freeze superseded by the 2026
 
 Paid-launch owner decisions (2026-09-02): external solicitor/legal review is recommended but **not required** for launch. The Legal and promise gate requires complete, accurate, owner-approved customer terms and disclosures; it does not require third-party professional sign-off. The macOS and Windows desktop packages will remain **unsigned at paid launch** until an owner-defined revenue threshold can cover OS-level signing/notarization costs. Paid launch therefore requires accurate pre-purchase disclosure plus clean-machine verification of the documented Gatekeeper/SmartScreen install steps, package hashes/provenance, and the already-implemented cryptographically signed Tauri updater — not Apple notarization or Windows publisher signing. OS-level signing becomes a post-threshold operational upgrade rather than a launch blocker.
 
+### 2026-10-25 launch-safety status check and PR #262
+
+Status: **Launch verdict stays RED.** Document review only (this ROADMAP and `docs/PAYMENT_ROADMAP.md`); no tests were run and nothing was checked live. Gate statuses above are unchanged by this entry.
+
+What remains before a safe launch (7 days to the 1 Nov quiet launch / 2 Nov public):
+
+1. **Audit remediation not deployed.** Code is on `codex/audit-remediation`, locally tested only. Needed: apply `20261022120000_stripe_event_lease`, `20261022121000_account_lifecycle_delivery_status`, `20261023120000_atomic_billing_metadata` and the additive account-deletion media migration; run the real-browser and two-device checks in `docs/QA_PLAN.md`; exercise backup/restore including Storage objects (YOW-21).
+2. **Payments untested end to end.** Pricing: Monthly £10, Founding Lifetime £50, Standard Lifetime £75, Cloud renewal £6/year (sold only when due). Still needed: full Stripe test-mode rehearsal (including the new race/replay cases), live-mode review of keys/prices/webhooks, then checkout on and beta-interest entitlements removed or migrated as the last step. Tracked in `docs/PAYMENT_ROADMAP.md`.
+3. **Beta activation not rehearsed.** Launch needs `YOW_BETA_ENROLLMENT_CLOSED=true` and the same notice timestamp stamped on existing beta accounts.
+4. **Legal and promise gate unreconciled.** Terms/Privacy need owner final approval; unsigned-desktop install disclosure needs clean-machine verification.
+5. **Desktop.** Clean-machine acceptance and a signed multi-platform updater manifest outstanding; Windows run is owner-side.
+6. **Sprint rows 20-24 Oct** (payments, legal, release; decision D6) were not verified in this check.
+
+Known open limits, not blockers unless the owner decides otherwise: PDF cannot draw non-Latin scripts (prints `?` with a warning); 7 dev-only Tailwind 3 build-chain advisories; automatic reclamation of account-deletion media not built; no real-device 150k-word benchmarks.
+
+Remaining schedule: 26-28 Oct buffer/repair, security rerun, data-safety matrix rerun, pre-freeze gate review; 29 Oct RC freeze and go/no-go; 30-31 Oct rehearsal, backups, rollback and checkout-disable tests.
+
+**PR #262 merged into `main` 2026-10-25 (squash `a63e2e2`, owner request):** fixes stale £9.99/£74.99 structured data (now £10/£75) and the Cloud-years description; adds "Can I get a refund?" to the pricing FAQ (no refunds; statutory rights unaffected); adds a Terms line that immediate access ends the 14-day right to cancel; shows the sales-final/immediate-access notice above the checkout pay button (test added).
+- **Open owner action (Legal and promise gate):** confirm the exact wording of the new Terms 14-day-cancellation line. It is live in the repo but was flagged "owner to confirm" in the PR.
+- **CI note:** merged with one red check, `Smoke / performance-acceptance` (`tests/e2e/performance-acceptance.spec.js:52`, "an 80k+ word novel opens, scrolls and takes typing without long freezes"), which failed on retry. The PR is copy-only so it is probably unrelated, but that is unconfirmed, and only 30 of 65 check runs were reviewed (29 passed). **Next action:** check whether this test is also red on `main`; if so, treat it as a Performance gate regression and repair it in the 26-27 Oct buffer days.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
