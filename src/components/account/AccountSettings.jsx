@@ -28,6 +28,7 @@ import AIStar from '../ai/AIStar'
 import { AiUpgradeRequiredNotice } from '../ai/AiConfigRequired'
 import { isDesktopAppRuntime } from '../../utils/runtime'
 import { navigateToExternalUrl } from '../../utils/externalLinks'
+import { useCheckoutOpen } from '../../utils/checkoutStatus'
 import { loadValue, writeItem } from '../../storage/projectStorage'
 import {
   createDesktopVaultSnapshot,
@@ -78,8 +79,42 @@ const CUSTOM_COLOR_FIELDS = [
 ]
 
 export function MaintenancePayButton({ style }) {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, getAccessToken } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const checkoutOpen = useCheckoutOpen()
+  const [renewError, setRenewError] = useState('')
+  const [renewBusy, setRenewBusy] = useState(false)
+  // Once checkout is open the renewal is a real £6/year purchase (the server only sells it when it is due).
+  const renewNow = async () => {
+    setRenewBusy(true)
+    setRenewError('')
+    try {
+      const result = await requestBillingResult(billingEndpoints.checkout, await getAccessToken(), { plan: 'hosting_renewal' })
+      const outcome = await navigateToExternalUrl(result.url)
+      if (outcome === 'failed') setRenewError('Your browser could not be opened. Please try again.')
+    } catch (error) {
+      setRenewError(error.message || 'Renewal could not be opened right now.')
+    } finally {
+      setRenewBusy(false)
+    }
+  }
+  if (checkoutOpen) {
+    return (
+      <div style={style}>
+        <button
+          onClick={renewNow}
+          disabled={renewBusy}
+          style={{
+            padding: '8px 18px', borderRadius: 7, background: '#f59e0b', color: '#000',
+            fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
+          }}
+        >
+          {renewBusy ? 'Opening Stripe…' : 'Renew Cloud Mode (£6/year)'}
+        </button>
+        {renewError && <p role="alert" style={{ marginTop: 8, fontSize: 12 }}>{renewError}</p>}
+      </div>
+    )
+  }
   return (
     <div style={style}>
       <button
@@ -2305,7 +2340,7 @@ function AISettingsPanel({ userId, membership }) {
 const formatter = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
 const billingEndpoints = {
-  checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL,
+  checkout: import.meta.env.VITE_CREATE_CHECKOUT_SESSION_URL || '/api/create-checkout-session',
   portal: import.meta.env.VITE_CUSTOMER_PORTAL_URL || '/api/create-customer-portal',
 }
 
@@ -2930,6 +2965,7 @@ export default function AccountSettings({
   const [billingError, setBillingError] = useState('')
   const [billingMessage, setBillingMessage] = useState('')
   const [betaInterestPlan, setBetaInterestPlan] = useState(null)
+  const checkoutOpen = useCheckoutOpen()
   const [fallbackTab, setFallbackTab] = useState('profile')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const billingStatusSyncRef = useRef('')
@@ -2987,7 +3023,7 @@ export default function AccountSettings({
     // planKey = null opens the customer portal for Stripe-backed accounts or,
     // after confirmation, downgrades a manually granted plan with no Stripe
     // customer. Paid-plan selections still use the beta-interest flow below.
-    if (planKey) {
+    if (planKey && !checkoutOpen) {
       setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
       return
     }

@@ -106,3 +106,22 @@ for (const viewport of [
     await expect(modal).toHaveCount(0)
   })
 }
+
+test('launch switch off: paid buttons register interest and no checkout request is made', async ({ page }) => {
+  let checkoutCalls = 0
+  await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 10, held: 0, remaining: 90, checkoutOpen: false } }))
+  await page.route('**/api/create-checkout-session', route => { checkoutCalls += 1; route.fulfill({ status: 403, json: { code: 'checkout_closed' } }) })
+  await gotoPricing(page)
+  const monthly = page.getByRole('article', { name: 'Monthly plan — £10' })
+  await expect(monthly.getByRole('button', { name: 'Register interest' })).toBeVisible()
+  expect(checkoutCalls).toBe(0)
+})
+
+test('launch switch on: paid buttons say Choose and the interest-only wording is gone', async ({ page }) => {
+  await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 10, held: 0, remaining: 90, checkoutOpen: true } }))
+  await gotoPricing(page)
+  const monthly = page.getByRole('article', { name: 'Monthly plan — £10' })
+  await expect(monthly.getByRole('button', { name: 'Choose Monthly' })).toBeVisible()
+  await expect(page.getByText('Paid checkout remains closed')).toHaveCount(0)
+  await expect(page.getByText('Register interest')).toHaveCount(0)
+})

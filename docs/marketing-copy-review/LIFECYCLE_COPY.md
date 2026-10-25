@@ -113,3 +113,38 @@ Every tour statement should name what exists now, avoid “players can see/disco
 - Account deletion in `AccountSettings.jsx`: deletion scope and finality
 
 These sources must be reviewed together. A banner cannot cure a specific false paid promise elsewhere.
+
+
+## Launch email to existing Beta testers (draft, 25 Oct 2026 — owner to edit and approve; nothing is sent)
+
+Send from support@yourownworld.co.uk, on launch day, after the Beta notice date has been stamped (so the end date below is true). Dates assume the notice starts 1 Nov 2026 09:00 UTC; change both if the stamp time changes.
+
+**Subject:** YOW is launching: what happens to your Beta access
+
+Hi {{first_name or "there"}},
+
+Thank you for testing Your Own World. Your feedback shaped what it is today, and I wanted you to hear this from me first: YOW is launching, and the Beta is closing.
+
+**What this means for you**
+- You keep full web access to YOW, with every feature, until **1 December 2026**. Nothing changes for you today.
+- Desktop app downloads are not part of the Beta notice period; they come with Lifetime.
+- On 1 December your account moves to the Free plan unless you upgrade. Free keeps one project editable. Your other projects are not deleted: you can still open them, read them and export them.
+
+**Plans**
+- **Free**: one editable project, no card needed.
+- **Monthly, £10**: complete browser access with Cloud sync. Cancel any time.
+- **Lifetime, £75 once**: permanent desktop and offline access, with a year of YOW Cloud included.
+- **Founding Lifetime, £50 once** (first 100 customers only): everything in Lifetime, two years of Cloud included, and permanent Founder status.
+- Cloud after the included period is an optional £6 a year.
+
+Every purchase has a 14-day cooling-off period: email support@yourownworld.co.uk within 14 days of buying for a full refund. After 14 days there are no refunds.
+
+**Before 1 December**
+1. Download a backup of your projects (Account Settings, then export) so you have a copy you control.
+2. If you want to keep editing everything, pick a plan at www.yourownworld.co.uk/pricing/.
+
+If anything looks wrong, or you have a question, just reply to this email. I read every one.
+
+Thank you again,
+Morgan
+Your Own World

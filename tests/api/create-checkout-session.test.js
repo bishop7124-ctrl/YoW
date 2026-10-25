@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const pricesRetrieve = vi.fn()
 const sessionsCreate = vi.fn()
@@ -253,5 +253,51 @@ describe('create-checkout-session shows the 14-day cooling-off terms before paym
     expect(message).toMatch(/full refund/i)
     expect(message).toMatch(/no refunds/i)
     expect(message.length).toBeLessThanOrEqual(1200)
+  })
+})
+
+describe('create-checkout-session launch switch (YOW_CHECKOUT_OPEN)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_ANON_KEY = 'anon'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
+    process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY = 'price_monthly'
+    pricesRetrieve.mockResolvedValue({ id: 'price_monthly', active: true, currency: 'gbp', livemode: true, unit_amount: 1000, recurring: { interval: 'month' } })
+    sessionsCreate.mockResolvedValue({ id: 'cs_l', url: 'https://checkout.test/cs_l' })
+    getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'w@example.test', app_metadata: {} } }, error: null })
+  })
+  afterEach(() => { delete process.env.YOW_CHECKOUT_OPEN })
+
+  it('refuses live-key checkout until the switch is on, without touching Stripe', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_stub'
+    delete process.env.YOW_CHECKOUT_OPEN
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    const response = res()
+    await handler(req('premium_monthly'), response)
+    expect(response.status).toHaveBeenCalledWith(403)
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'checkout_closed' }))
+    expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+
+  it('opens live-key checkout once YOW_CHECKOUT_OPEN is exactly true, and closes again when it is not', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_stub'
+    process.env.YOW_CHECKOUT_OPEN = 'true'
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    await handler(req('premium_monthly'), res())
+    expect(sessionsCreate).toHaveBeenCalledTimes(1)
+    process.env.YOW_CHECKOUT_OPEN = 'false'
+    const response = res()
+    await handler(req('premium_monthly'), response)
+    expect(response.status).toHaveBeenCalledWith(403)
+    expect(sessionsCreate).toHaveBeenCalledTimes(1)
+  })
+
+  it('never blocks test-mode keys (private QA page)', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
+    const { isCheckoutAllowed } = await import('../../api/create-checkout-session.js')
+    expect(isCheckoutAllowed({ STRIPE_SECRET_KEY: 'sk_test_x' })).toBe(true)
+    expect(isCheckoutAllowed({ STRIPE_SECRET_KEY: 'sk_live_x' })).toBe(false)
+    expect(isCheckoutAllowed({ STRIPE_SECRET_KEY: 'sk_live_x', YOW_CHECKOUT_OPEN: 'true' })).toBe(true)
   })
 })

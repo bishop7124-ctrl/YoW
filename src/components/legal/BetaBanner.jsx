@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import BetaInterestModal from '../account/BetaInterestModal'
+import { useCheckoutOpen } from '../../utils/checkoutStatus'
 
 // BETA: remove this entire file and its usages in App.jsx when out of beta
 const STORAGE_KEY = 'yow_beta_acknowledged'
@@ -82,6 +83,8 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
   const [visible, setVisible] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [interestOpen, setInterestOpen] = useState(false)
+  // Launch switch: once real checkout is open the beta disclaimer is retired for everyone.
+  const launched = useCheckoutOpen()
 
   useEffect(() => {
     if (!localStorage.getItem(STORAGE_KEY)) setVisible(true)
@@ -96,6 +99,8 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
     accept()
     setInterestOpen(true)
   }
+
+  if (launched) return null
 
   return (
     <>

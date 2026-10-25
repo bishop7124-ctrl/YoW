@@ -9,8 +9,12 @@ import { applyCors } from './_cors.js'
  * included as temporary holds so the public offer cannot oversell the cap.
  *
  * Response shape:
- *   { total: number, taken: number, remaining: number }
+ *   { total: number, taken: number, remaining: number, checkoutOpen: boolean }
+ *
+ * `checkoutOpen` is the launch switch (env YOW_CHECKOUT_OPEN=true): the site shows real checkout only when it is true.
  */
+const checkoutOpen = () => process.env.YOW_CHECKOUT_OPEN === 'true'
+
 export default async function handler(req, res) {
   applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'content-type' })
   // Availability controls a real price, so never serve a stale positive count.
@@ -30,12 +34,12 @@ export default async function handler(req, res) {
     if (error) {
       console.error('[get-founder-slots] RPC error:', error.message)
       // Return a safe fallback rather than a hard error — the UI can handle null gracefully.
-      return res.status(200).json({ total: null, taken: null, remaining: null })
+      return res.status(200).json({ total: null, taken: null, remaining: null, checkoutOpen: checkoutOpen() })
     }
 
-    return res.status(200).json(data)
+    return res.status(200).json({ ...(data && typeof data === 'object' ? data : {}), checkoutOpen: checkoutOpen() })
   } catch (err) {
     console.error('[get-founder-slots]', err)
-    return res.status(200).json({ total: null, taken: null, remaining: null })
+    return res.status(200).json({ total: null, taken: null, remaining: null, checkoutOpen: checkoutOpen() })
   }
 }

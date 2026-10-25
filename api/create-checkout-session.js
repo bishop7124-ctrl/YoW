@@ -24,11 +24,20 @@ function validatePrice(price, { amount, interval }, label) {
   }
 }
 
+// Launch switch. Real (live-mode) checkout stays closed until YOW_CHECKOUT_OPEN=true, so live Stripe keys can be
+// installed ahead of launch without anyone being able to pay; test-mode keys are never blocked (private QA page).
+// Setting it back to anything else is the checkout-disable switch.
+export function isCheckoutAllowed(env = process.env) {
+  return env.YOW_CHECKOUT_OPEN === 'true' || String(env.STRIPE_SECRET_KEY || '').startsWith('sk_test_')
+}
+
 export default async function handler(req, res) {
   applyCors(req, res, { methods: 'POST, OPTIONS', headers: 'authorization, content-type' })
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  if (!isCheckoutAllowed()) return res.status(403).json({ error: 'Checkout is not open yet.', code: 'checkout_closed' })
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BILLING } from '../../utils/billingConfig'
+import { useCheckoutOpen } from '../../utils/checkoutStatus'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS } from '../../utils/membership'
 import { supabase } from '../../supabase'
 import BetaInterestModal from '../account/BetaInterestModal'
@@ -40,7 +41,7 @@ const FAQ = [
   { q: 'What happens if I cancel Monthly?', a: 'Your account falls back to Free limits after the paid period ends. Your work is not deleted: you choose one project to keep editable and can continue to view and export retained projects.' },
   { q: 'Is the desktop app signed or notarized?', a: DESKTOP_UNSIGNED_DETAIL },
   { q: 'Can I use the desktop app on Monthly?', a: 'No. Monthly is the complete browser-based plan with Cloud sync. Desktop and offline access are included with Lifetime.' },
-  { q: 'Is the desktop app signed by Apple or Microsoft?', a: 'Not yet. The beta desktop app is not notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. The Download page has the exact one-time steps to open it anyway. The web app is unaffected.' },
+  { q: 'Is the desktop app signed by Apple or Microsoft?', a: 'Not yet. The desktop app is not notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. The Download page has the exact one-time steps to open it anyway. The web app is unaffected.' },
   { q: 'Does Lifetime guarantee future updates?', a: 'Buy YOW for what it is today. Enjoy what we add tomorrow. Lifetime is permanent product access, not a promise of a particular roadmap or an indefinite schedule of new features.' },
 ]
 
@@ -107,6 +108,8 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const [checkoutPlan, setCheckoutPlan] = useState(null)
   const [checkoutError, setCheckoutError] = useState('')
   const billingTest = isPrivateBillingTestLink()
+  // The server-side launch switch (YOW_CHECKOUT_OPEN): real checkout for everyone once launch day flips it.
+  const liveCheckout = useCheckoutOpen()
   // Stripe test mode deliberately exercises the Founding checkout without
   // consuming or depending on the live Founder inventory.
   const foundingAvailable = billingTest || (Number.isInteger(availability?.remaining) && availability.remaining > 0)
@@ -139,7 +142,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   const startTestCheckout = async plan => {
     if (!user) {
-      setCheckoutError('Sign in to a disposable YOW test account first, then open this private link again.')
+      setCheckoutError(billingTest ? 'Sign in to a disposable YOW test account first, then open this private link again.' : 'Sign in or create a free account first, then choose your plan again.')
       onSignIn?.()
       return
     }
@@ -168,6 +171,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
   const selectPaidPlan = key => {
     if (billingTest) startTestCheckout(key === 'premium_plus_lifetime' ? 'founding_lifetime_test' : key)
+    else if (liveCheckout) startTestCheckout(key)
     else setInterestPlan(PLANS.find(item => item.key === key))
   }
 
@@ -196,13 +200,15 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
               </button>
               {checkoutError && <p className="pricing-test-error" role="alert">{checkoutError}</p>}
             </aside>
+          ) : liveCheckout ? (
+            checkoutError ? <p className="pricing-test-error" role="alert">{checkoutError}</p> : null
           ) : (
             <p className="pricing-availability-note">Free is available now. Paid checkout remains closed while billing is being tested; paid buttons register interest and never create a charge.</p>
           )}
         </section>
 
         <section className="pricing-cards" aria-label="Pricing plans">
-          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} checkoutOpen={billingTest} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
+          {DISPLAY_PLANS.map(plan => <PricingCard key={plan.key} plan={plan} foundingAvailable={foundingAvailable} checkoutBusy={!!checkoutPlan} checkoutOpen={billingTest || liveCheckout} onSelect={selectPaidPlan} onFreeStart={onGetStarted} />)}
         </section>
 
         <aside className="pricing-first-100" aria-labelledby="first-100-heading">

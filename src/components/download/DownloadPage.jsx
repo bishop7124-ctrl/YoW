@@ -169,7 +169,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
               First launch on macOS — one-time step
             </p>
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              This beta build isn't yet notarized with Apple, so macOS blocks the first launch — sometimes silently.
+              This build isn't yet notarized with Apple, so macOS blocks the first launch — sometimes silently.
               If YOW doesn't open, that's the block, not a broken download.
             </p>
             <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8, listStyle: 'decimal' }}>
@@ -192,7 +192,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
               First launch on Windows — one-time step
             </p>
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              This beta build isn't yet signed with a Windows code-signing certificate, so SmartScreen shows a
+              This build isn't yet signed with a Windows code-signing certificate, so SmartScreen shows a
               warning on the installer. That's the warning, not a broken download.
             </p>
             <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8, listStyle: 'decimal' }}>

@@ -206,6 +206,20 @@ Historical launch triage decision (2026-07-04; map freeze superseded by the 2026
 
 Paid-launch owner decisions (2026-09-02): external solicitor/legal review is recommended but **not required** for launch. The Legal and promise gate requires complete, accurate, owner-approved customer terms and disclosures; it does not require third-party professional sign-off. The macOS and Windows desktop packages will remain **unsigned at paid launch** until an owner-defined revenue threshold can cover OS-level signing/notarization costs. Paid launch therefore requires accurate pre-purchase disclosure plus clean-machine verification of the documented Gatekeeper/SmartScreen install steps, package hashes/provenance, and the already-implemented cryptographically signed Tauri updater — not Apple notarization or Windows publisher signing. OS-level signing becomes a post-threshold operational upgrade rather than a launch blocker.
 
+### Launch-day runbook (prepared 2026-10-25; code and scripts only, nothing has been switched on)
+
+Two switches and one database step. All were prepared and tested from a cloud session; none touches production until the owner runs it.
+
+1. **Live Stripe set up first (separate session):** live keys, live prices and the live webhook installed in Vercel. While `YOW_CHECKOUT_OPEN` is unset, `api/create-checkout-session.js` refuses every live-key checkout (HTTP 403 `checkout_closed`), so installing live keys cannot let anyone pay early. Test-mode keys are never blocked.
+2. **Back up Supabase** (Dashboard, Database, Backups) immediately before the next step.
+3. **Close Beta enrolment and start the notice:** set `YOW_BETA_ENROLLMENT_CLOSED=true` in Vercel, then in the Supabase SQL editor run `scripts/launch/stamp-beta-notice.sql` block by block (preview, stamp, verify). Undo: `scripts/launch/undo-beta-notice.sql`. Proven on a scratch Postgres by `scripts/launch/check-launch-sql.mjs` (stamps only unpaid, unstamped Beta testers; idempotent; undo restores).
+4. **Open checkout:** set `YOW_CHECKOUT_OPEN=true` in Vercel and redeploy. This one switch makes the pricing page and Account Settings open real Stripe checkout instead of "Register interest", turns the £6 Cloud renewal button into a real purchase (the server still only sells it in the last 30 days), and retires the beta disclaimer pop-up. `/api/get-founder-slots` reports the switch as `checkoutOpen`.
+5. **Checkout-disable switch:** delete `YOW_CHECKOUT_OPEN` (or set it to anything but `true`) and redeploy. Live-key checkout is refused again and the site goes back to "Register interest".
+6. **Email** the existing Beta testers using the draft in `docs/marketing-copy-review/LIFECYCLE_COPY.md` ("Launch email to existing Beta testers"), after step 3 so the end date is true.
+7. Check the live site (O15) and make one real purchase and refund yourself on an account you do not mind.
+
+Not done by this runbook: desktop rebuilds, the Terms/Privacy read-through, and the Stripe dashboard review (O12) — the first is a build step, the others belong to the live-Stripe session or the owner.
+
 ### 2026-10-25 launch-safety status check and PR #262
 
 Status: **Launch verdict stays RED.** Document review only (this ROADMAP and `docs/PAYMENT_ROADMAP.md`); no tests were run and nothing was checked live. Gate statuses above are unchanged by this entry.

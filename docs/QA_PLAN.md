@@ -8,6 +8,8 @@ Owner-reported 25 Oct (no screenshots): all four recent migrations (202610221200
 
 **Owner decision 25 Oct:** the 29 Oct 60-minute smoke test (item 9) is waived and recorded as done on owner attestation (the owner has run the customer journey hundreds of times). Launch path is now: deploy the frozen build, update Terms/Privacy and rebuild the desktop apps, switch on billing, close Beta. The 30 Oct rehearsal is cut to a backup and a rollback/checkout-off check.
 
+**Launch switch added 25 Oct:** `YOW_CHECKOUT_OPEN` (see the Launch-day runbook in `docs/ROADMAP.md`). New automated checks: live-key checkout refused while closed and allowed only when exactly `true` (`tests/api/create-checkout-session.test.js`), `checkoutOpen` reported by `tests/api/get-founder-slots.test.js`, `src/utils/checkoutStatus.test.jsx`, two pricing e2e tests, and `scripts/launch/check-launch-sql.mjs` for the Beta stamp/undo SQL. Required once live Stripe is installed: with `YOW_CHECKOUT_OPEN` unset, confirm a live-key checkout request returns 403; after opening, make one real purchase and refund it.
+
 Still required, in priority order (R = owner/real environment, A = automated, done by the agent):
 1. R - Audit real-environment checks (section "2026-10-23 review fixes" below), five items: offline sign-out with two accounts; two devices editing one scene; packaged-desktop archive failure/retry; account-deletion journal in staging; media kept when a save fails.
 2. R - YOW-21 backup and restore including Storage objects (restore a backup into a scratch project and open a real account in it); YOW-01/03 real-browser offline sign-out journey.
