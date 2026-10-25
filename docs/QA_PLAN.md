@@ -6,6 +6,8 @@ Owner-reported 25 Oct (no screenshots): all four recent migrations (202610221200
 
 **Owner update later on 25 Oct (owner-reported, no screenshots):** items 1, 2, 3 and 5 below were already done and all passed or were fixed; the 22-23 Oct Stripe extras were part of the passed rehearsal; real-model AI Import is done. Keyboard-only/VoiceOver (item 6, O10, not a hard gate) has not been done; owner decided to launch without it and treat it as post-launch feedback. Items 1, 2, 3 and 5 are therefore closed on owner attestation.
 
+**Owner decision 25 Oct:** the 29 Oct 60-minute smoke test (item 9) is waived and recorded as done on owner attestation (the owner has run the customer journey hundreds of times). Launch path is now: deploy the frozen build, update Terms/Privacy and rebuild the desktop apps, switch on billing, close Beta. The 30 Oct rehearsal is cut to a backup and a rollback/checkout-off check.
+
 Still required, in priority order (R = owner/real environment, A = automated, done by the agent):
 1. R - Audit real-environment checks (section "2026-10-23 review fixes" below), five items: offline sign-out with two accounts; two devices editing one scene; packaged-desktop archive failure/retry; account-deletion journal in staging; media kept when a save fails.
 2. R - YOW-21 backup and restore including Storage objects (restore a backup into a scratch project and open a real account in it); YOW-01/03 real-browser offline sign-out journey.
