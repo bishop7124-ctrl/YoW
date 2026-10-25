@@ -163,6 +163,13 @@ export default async function handler(req, res) {
         ...(lifetimeOffer ? { lifetime_offer: lifetimeOffer, lifetime_cloud_years: String(lifetimeCloudYears) } : {}),
         ...(founderReservationId ? { founder_reservation_id: founderReservationId } : {}),
       },
+      // Shown above the pay button. Digital content that starts immediately is sold as final: the buyer
+      // asks for immediate access and acknowledges that this ends the 14-day right to cancel.
+      custom_text: {
+        submit: {
+          message: 'All sales are final. By paying you ask for immediate access to YOW and accept that your 14-day right to cancel ends once access begins. Subscriptions can be cancelled at any time and stop at the end of the paid period. Your statutory rights are not affected.',
+        },
+      },
       success_url: `${siteUrl}/?billing=success`,
       cancel_url:  `${siteUrl}/?billing=cancelled`,
       expires_at: checkoutExpiresAt,

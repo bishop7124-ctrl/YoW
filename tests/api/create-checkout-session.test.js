@@ -230,3 +230,28 @@ describe('create-checkout-session Cloud renewal is only sold when it is due', ()
     expect(response.status).toHaveBeenCalledWith(409)
   })
 })
+
+describe('create-checkout-session shows the sales-final terms before payment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
+    process.env.SUPABASE_URL = 'https://stub.supabase.co'
+    process.env.SUPABASE_ANON_KEY = 'anon'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
+    process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY = 'price_monthly'
+    pricesRetrieve.mockResolvedValue({ id: 'price_monthly', active: true, currency: 'gbp', livemode: false, unit_amount: 1000, recurring: { interval: 'month' } })
+    sessionsCreate.mockResolvedValue({ id: 'cs_m', url: 'https://checkout.test/cs_m' })
+    getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'w@example.test', app_metadata: {} } }, error: null })
+  })
+
+  it('tells the buyer the sale is final and that immediate access ends the 14-day right to cancel', async () => {
+    const { default: handler } = await import('../../api/create-checkout-session.js')
+    await handler(req('premium_monthly'), res())
+    const params = sessionsCreate.mock.calls[0][0]
+    const message = params.custom_text?.submit?.message || ''
+    expect(message).toMatch(/final/i)
+    expect(message).toMatch(/14.day/)
+    expect(message).toMatch(/immediate/i)
+    expect(message.length).toBeLessThanOrEqual(1200)
+  })
+})

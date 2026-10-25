@@ -31,7 +31,7 @@ const BETA_TESTER_PLAN = {
 // Legacy Supabase plan keys mapped to the current key used for display and quotas.
 // The raw key stays in `subscriptionPlan` — it identifies live entitlements, never rename it.
 const LEGACY_PLAN_KEY_ALIASES = {
-  premium_lifetime: 'premium_plus_lifetime', // £149 Lifetime Launch plan
+  premium_lifetime: 'premium_plus_lifetime', // legacy key, now the £75 Lifetime plan
 }
 
 // Storage quotas in bytes per plan key.
