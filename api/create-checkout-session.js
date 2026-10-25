@@ -163,11 +163,10 @@ export default async function handler(req, res) {
         ...(lifetimeOffer ? { lifetime_offer: lifetimeOffer, lifetime_cloud_years: String(lifetimeCloudYears) } : {}),
         ...(founderReservationId ? { founder_reservation_id: founderReservationId } : {}),
       },
-      // Shown above the pay button. Digital content that starts immediately is sold as final: the buyer
-      // asks for immediate access and acknowledges that this ends the 14-day right to cancel.
+      // Shown above the pay button: a 14-day cooling-off period with a full refund, none after it.
       custom_text: {
         submit: {
-          message: 'All sales are final. By paying you ask for immediate access to YOW and accept that your 14-day right to cancel ends once access begins. Subscriptions can be cancelled at any time and stop at the end of the paid period. Your statutory rights are not affected.',
+          message: 'You can cancel within 14 days of purchase for a full refund (email support@yourownworld.co.uk); after 14 days there are no refunds. Subscriptions can be cancelled at any time and stop at the end of the paid period. Your statutory rights are not affected.',
         },
       },
       success_url: `${siteUrl}/?billing=success`,

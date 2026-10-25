@@ -1,5 +1,22 @@
 # YOW Deferred QA Plan
 
+## 2026-10-25 remaining tests before launch (owner-confirmed state at the top)
+
+Owner-reported 25 Oct (no screenshots): all four recent migrations (20261022120000, 20261022121000, 20261023120000, 20261023121000) are applied in production; the Stripe test-mode rehearsal passed. **Refund policy decided 25 Oct:** 14-day cooling-off with a full refund on any purchase, no refunds after 14 days (Terms, pricing FAQ and the checkout pay-button text were changed to match; the earlier "all sales are final" wording is gone). Live-mode Stripe work (live keys, prices, webhook, O12, checkout switch, removing the "coming soon" flow) is handled in a separate session.
+
+Still required, in priority order (R = owner/real environment, A = automated, done by the agent):
+1. R - Audit real-environment checks (section "2026-10-23 review fixes" below), five items: offline sign-out with two accounts; two devices editing one scene; packaged-desktop archive failure/retry; account-deletion journal in staging; media kept when a save fails.
+2. R - YOW-21 backup and restore including Storage objects (restore a backup into a scratch project and open a real account in it); YOW-01/03 real-browser offline sign-out journey.
+3. R - Confirm the 22-23 Oct Stripe test additions were part of the passed rehearsal: Lifetime then Cloud renewal keeps Lifetime; cancel renewal leaves Lifetime; forced webhook failure retried once; invoice replay A, B, A gives two extensions; refund within 14 days removes access cleanly; Cloud renewal only sellable in the last 30 days.
+4. R - Desktop: clean-machine Mac and Windows installs (Gatekeeper/SmartScreen steps, export, updater, uninstall) on the final build, and the multi-platform updater manifest check.
+5. R - Real-model AI Import for all six project types with the owner's own key (open since 19 Oct).
+6. R - Desktop browsers: Safari and Firefox at desktop width, keyboard-only and VoiceOver (O10). Phone/tablet is parked (D12).
+7. R - Terms and Privacy final read-through (the 14-day wording is now written; owner to read it once in the app).
+8. A+R - Beta activation rehearsal on a copy/preview deployment: set YOW_BETA_ENROLLMENT_CLOSED=true, stamp beta_notice_started_at, confirm existing testers keep access and exports, new sign-ups cannot join Beta. (Production switch happens on launch day; part of the live session.)
+9. R - 29 Oct 60-minute customer smoke test and go/no-go; 30 Oct rehearsal with backups, rollback and checkout-disable switch, checkout off.
+10. R - 1 Nov after deploy (O15): headers, www redirect, one Founder slot display; O11 Search Console.
+11. A - 26 Oct security rerun on everything changed since 1 Oct; 27 Oct data-safety/auth/export matrix; 29 Oct full automated gate on the frozen release candidate.
+
 ## 2026-10-25 buffer-day full automated gate (cloud session)
 
 Run on the 24 Oct tip: `npm run qa` exit 0 (182 files / 1,783 tests, 0 lint errors, typecheck, build, bundle budget 553.2 KB gzip, load check, E2E matrix, API ESM); Playwright Chromium 395 tests (391 first pass, the other 4 pass on their own: load-induced timeouts with 3 workers); `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` clean. One real defect found and fixed: the YOW PDF reader lost dashes, curly quotes, ellipsis and euro on import when the Node `TextDecoder('windows-1252')` returned raw C1 characters (`src/utils/pdfLiteralString.js`, explicit table; commit 7518594). Required checks added: (1) run the Playwright suite with `--workers=2` or fewer on small machines, because the 80k-word performance spec and the 375px marketing spec time out under load; (2) the PDF export -> import round trip with `— “quotes” … €` must stay in `projectExportTextFidelity.test.js`. Still real-environment only: the five numbered checks in the 23 Oct section below and the Stripe rehearsal in `PAYMENT_ROADMAP.md`.

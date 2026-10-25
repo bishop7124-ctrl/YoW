@@ -99,8 +99,8 @@ const CONTENT = {
             <Li>A failed Monthly payment moves the account to Free access. Download all project backups and choose the project to keep editable; if stored data exceeds 250 MB, reduce cloud storage or restore a paid plan. Selecting an editable project does not delete other projects.</Li>
             <Li>If optional Cloud Mode renewal is not paid, download your backups or renew Cloud Mode. Lifetime desktop Local Mode remains available.</Li>
             <Li>Billing is processed by Stripe. We never store payment details.</Li>
-            <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. Sales are final, including partial billing periods, except where mandatory consumer rights require a refund or another remedy.</Li>
-            <Li>YOW gives you immediate access to digital content when you pay. By purchasing you ask for immediate access and acknowledge that your 14-day right to cancel under consumer law ends once access begins. This does not affect your statutory rights if the service is faulty or not as described.</Li>
+            <Li>You may cancel at any time from Account Settings. Access continues until the current billing period ends. You can cancel any purchase within 14 days of buying it for a full refund (see below); after 14 days there are no refunds, including for partial billing periods, except where mandatory consumer rights require a refund or another remedy.</Li>
+            <Li>Cooling-off period: you have 14 days from the date of purchase to cancel any purchase (Monthly, Founding Lifetime, Standard Lifetime or Cloud renewal) and receive a full refund; email support@yourownworld.co.uk to ask. After those 14 days, purchases are not refundable. This does not affect your statutory rights if the service is faulty or not as described.</Li>
           </Ul>
         </Section>
         <Section title="Support and Founder status">

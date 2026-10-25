@@ -231,7 +231,7 @@ describe('create-checkout-session Cloud renewal is only sold when it is due', ()
   })
 })
 
-describe('create-checkout-session shows the sales-final terms before payment', () => {
+describe('create-checkout-session shows the 14-day cooling-off terms before payment', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.STRIPE_SECRET_KEY = 'sk_test_stub'
@@ -244,14 +244,14 @@ describe('create-checkout-session shows the sales-final terms before payment', (
     getUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'w@example.test', app_metadata: {} } }, error: null })
   })
 
-  it('tells the buyer the sale is final and that immediate access ends the 14-day right to cancel', async () => {
+  it('tells the buyer they can cancel within 14 days for a full refund and that there are no refunds after', async () => {
     const { default: handler } = await import('../../api/create-checkout-session.js')
     await handler(req('premium_monthly'), res())
     const params = sessionsCreate.mock.calls[0][0]
     const message = params.custom_text?.submit?.message || ''
-    expect(message).toMatch(/final/i)
-    expect(message).toMatch(/14.day/)
-    expect(message).toMatch(/immediate/i)
+    expect(message).toMatch(/14 days/)
+    expect(message).toMatch(/full refund/i)
+    expect(message).toMatch(/no refunds/i)
     expect(message.length).toBeLessThanOrEqual(1200)
   })
 })
