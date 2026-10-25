@@ -4,6 +4,8 @@
 
 Owner-reported 25 Oct (no screenshots): all four recent migrations (20261022120000, 20261022121000, 20261023120000, 20261023121000) are applied in production; the Stripe test-mode rehearsal passed. **Refund policy decided 25 Oct:** 14-day cooling-off with a full refund on any purchase, no refunds after 14 days (Terms, pricing FAQ and the checkout pay-button text were changed to match; the earlier "all sales are final" wording is gone). Live-mode Stripe work (live keys, prices, webhook, O12, checkout switch, removing the "coming soon" flow) is handled in a separate session.
 
+**Owner update later on 25 Oct (owner-reported, no screenshots):** items 1, 2, 3 and 5 below were already done and all passed or were fixed; the 22-23 Oct Stripe extras were part of the passed rehearsal; real-model AI Import is done. Keyboard-only/VoiceOver (item 6, O10, not a hard gate) has not been done; owner decided to launch without it and treat it as post-launch feedback. Items 1, 2, 3 and 5 are therefore closed on owner attestation.
+
 Still required, in priority order (R = owner/real environment, A = automated, done by the agent):
 1. R - Audit real-environment checks (section "2026-10-23 review fixes" below), five items: offline sign-out with two accounts; two devices editing one scene; packaged-desktop archive failure/retry; account-deletion journal in staging; media kept when a save fails.
 2. R - YOW-21 backup and restore including Storage objects (restore a backup into a scratch project and open a real account in it); YOW-01/03 real-browser offline sign-out journey.
