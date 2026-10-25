@@ -1,5 +1,9 @@
 # YOW Deferred QA Plan
 
+## 2026-10-25 buffer-day full automated gate (cloud session)
+
+Run on the 24 Oct tip: `npm run qa` exit 0 (182 files / 1,783 tests, 0 lint errors, typecheck, build, bundle budget 553.2 KB gzip, load check, E2E matrix, API ESM); Playwright Chromium 395 tests (391 first pass, the other 4 pass on their own: load-induced timeouts with 3 workers); `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` clean. One real defect found and fixed: the YOW PDF reader lost dashes, curly quotes, ellipsis and euro on import when the Node `TextDecoder('windows-1252')` returned raw C1 characters (`src/utils/pdfLiteralString.js`, explicit table; commit 7518594). Required checks added: (1) run the Playwright suite with `--workers=2` or fewer on small machines, because the 80k-word performance spec and the 375px marketing spec time out under load; (2) the PDF export -> import round trip with `— “quotes” … €` must stay in `projectExportTextFidelity.test.js`. Still real-environment only: the five numbered checks in the 23 Oct section below and the Stripe rehearsal in `PAYMENT_ROADMAP.md`.
+
 ## 2026-10-23 review fixes: local evidence and remaining real-environment checks
 
 Completed locally: 182 Vitest files / 1,773 tests; 15 distinct Chromium tests across autosave, data safety and real sign-out/sign-in (including injected archive-transaction failure and successful retry); SQL migration execution against synthetic PostgreSQL/PGlite data. These do not substitute for live Supabase or native SQLite-vault evidence. Full details and reproducible commands: `AUDIT_FIX_HANDOVER_2026-10-23.md`.
