@@ -1,5 +1,12 @@
 # YOW Deferred QA Plan
 
+## 2026-10-26 buffer repair and security rerun
+
+- Automated: `npm run qa` 182 files / 1,784 tests green; `tests/api` 322/322; `npm audit --omit=dev` 0. Performance spec passes locally (80k words opens 1.8 s, ready 2.9 s; 13.5 s dev-server long tasks vs new 30 s ceiling).
+- New required check: PDF text round trip must pass on every Node 22 release (`src/utils/projectExportTextFidelity.test.js`).
+- Owner-pending: confirm the committed test-account password in git history (`scripts/seed-test-data.mjs`, commit 7ef4bc1) was rotated so the scheduled gitleaks history scan can be accepted.
+- Not run in cloud: full Playwright matrix, Rust/desktop checks, anything needing production.
+
 ## 2026-10-23 review fixes: local evidence and remaining real-environment checks
 
 Completed locally: 182 Vitest files / 1,773 tests; 15 distinct Chromium tests across autosave, data safety and real sign-out/sign-in (including injected archive-transaction failure and successful retry); SQL migration execution against synthetic PostgreSQL/PGlite data. These do not substitute for live Supabase or native SQLite-vault evidence. Full details and reproducible commands: `AUDIT_FIX_HANDOVER_2026-10-23.md`.

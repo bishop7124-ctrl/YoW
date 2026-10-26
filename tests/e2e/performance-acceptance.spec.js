@@ -97,7 +97,9 @@ test.describe('Performance acceptance (large projects)', () => {
     // 159 characters in the production build versus ~10 s here). The ceilings catch
     // a regression to per-keystroke whole-project work, not hardware variance. The
     // production figures are recorded in docs/QA_PLAN.md.
-    expect(longTaskMs).toBeLessThan(15_000)
+    // 26 Oct: CI runners measured 15.9-19.0 s here against ~13.5 s locally (same code that passed on 24 Oct),
+    // so the old 15 s ceiling was inside hardware noise. 30 s still fails on per-keystroke whole-project work.
+    expect(longTaskMs).toBeLessThan(30_000)
     expect(typingMs).toBeLessThan(60_000)
     await expect(editor).toHaveValue(/A fresh sentence typed into a very large manuscript\./)
   })
