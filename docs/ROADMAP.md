@@ -206,6 +206,15 @@ Historical launch triage decision (2026-07-04; map freeze superseded by the 2026
 
 Paid-launch owner decisions (2026-09-02): external solicitor/legal review is recommended but **not required** for launch. The Legal and promise gate requires complete, accurate, owner-approved customer terms and disclosures; it does not require third-party professional sign-off. The macOS and Windows desktop packages will remain **unsigned at paid launch** until an owner-defined revenue threshold can cover OS-level signing/notarization costs. Paid launch therefore requires accurate pre-purchase disclosure plus clean-machine verification of the documented Gatekeeper/SmartScreen install steps, package hashes/provenance, and the already-implemented cryptographically signed Tauri updater — not Apple notarization or Windows publisher signing. OS-level signing becomes a post-threshold operational upgrade rather than a launch blocker.
 
+### 2026-10-27 buffer-day automated gate rerun (Claude daily run)
+
+Status: **Automated gate green after one fix; launch verdict stays RED on the unchanged real-world items above.** Run on a Linux cloud sandbox (no production credentials, no Mac/Windows/iPhone), against `main` + this branch.
+
+- **Fix:** `src/utils/pdfLiteralString.js` decoded PDF WinAnsi bytes with `TextDecoder('windows-1252')`; on this runtime that returned empty strings for 0x80-0x9F, so em dashes, curly quotes, `…` and `€` vanished on PDF re-import (`projectExportTextFidelity.test.js`, 1 failure). It now uses an explicit table, so behaviour no longer depends on the runtime's decoder.
+- **Evidence:** `npm run qa` exit 0 (lint 0 errors, typecheck, 182 Vitest files / 1,784 tests, build, bundle budget entry 553.4 KB gzip, load, e2e-matrix, API ESM). Full Chromium Playwright suite: 394 of 395 passed (23.2 min). The one failure (`qa-sweep-2026-09-16-batch2` "Indent first line" desktop) passed 2/2 on isolated re-run: load flake, not reproduced. `npm audit --omit=dev`: 0 vulnerabilities. Secret-pattern scan of the repo: no live keys.
+- **25 Oct red check resolved as unconfirmed-flaky:** `performance-acceptance` passed here (80k-word novel opens in 1.96 s; dev-server typing 13.2 s in long tasks against a 15 s ceiling). The ceiling is a dev-build regression guard and the margin is thin on slow runners, so CI can go red on it from hardware variance. Production-build figure (52 ms) is unchanged. Not loosened; watch it.
+- **Not done / owner-side:** live Supabase and two-device checks, Stripe rehearsal, owner approval of Terms line, Windows/clean-machine desktop run. 26 Oct security rerun was not recorded; only the dependency and secret scans were repeated today.
+
 ### 2026-10-25 launch-safety status check and PR #262
 
 Status: **Launch verdict stays RED.** Document review only (this ROADMAP and `docs/PAYMENT_ROADMAP.md`); no tests were run and nothing was checked live. Gate statuses above are unchanged by this entry.

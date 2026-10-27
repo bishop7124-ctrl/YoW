@@ -1,5 +1,9 @@
 # YOW Deferred QA Plan
 
+## 2026-10-27 automated rerun
+
+`npm run qa` green (182 files / 1,784 tests); Chromium Playwright 394/395, the one miss passed on isolated re-run. Added regression guard: PDF re-import must keep WinAnsi punctuation (`projectExportTextFidelity.test.js`) independent of the runtime's TextDecoder. Live-environment checks below remain unrun.
+
 ## 2026-10-23 review fixes: local evidence and remaining real-environment checks
 
 Completed locally: 182 Vitest files / 1,773 tests; 15 distinct Chromium tests across autosave, data safety and real sign-out/sign-in (including injected archive-transaction failure and successful retry); SQL migration execution against synthetic PostgreSQL/PGlite data. These do not substitute for live Supabase or native SQLite-vault evidence. Full details and reproducible commands: `AUDIT_FIX_HANDOVER_2026-10-23.md`.
