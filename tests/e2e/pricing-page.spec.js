@@ -106,3 +106,40 @@ for (const viewport of [
     await expect(modal).toHaveCount(0)
   })
 }
+
+test('paid buttons register interest while the checkout launch switch is closed', async ({ page }) => {
+  await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37, checkoutOpen: false } }))
+  await gotoPricing(page)
+
+  await expect(page.getByText('Paid checkout remains closed while billing is being tested')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Register interest' })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: /Choose (Monthly|Lifetime)/ })).toHaveCount(0)
+})
+
+test('paid buttons offer real checkout once the launch switch is open, and never the interest form', async ({ page }) => {
+  let interestEndpointCalled = false
+  let checkoutEndpointCalled = false
+  await page.route('**/api/register-paid-interest', route => { interestEndpointCalled = true; route.abort() })
+  await page.route('**/api/create-checkout-session', route => { checkoutEndpointCalled = true; route.abort() })
+  await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37, checkoutOpen: true } }))
+  await gotoPricing(page)
+
+  await expect(page.getByText('Paid checkout remains closed while billing is being tested')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Register interest' })).toHaveCount(0)
+  const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
+  await expect(monthlyCard.getByRole('button', { name: 'Choose Monthly' })).toBeVisible()
+  await expect(page.getByRole('article', { name: /Lifetime plan — £50/ }).getByRole('button', { name: 'Choose Lifetime' })).toBeVisible()
+
+  // Without a valid session it asks the visitor to sign in instead of opening the interest form or calling Stripe.
+  await monthlyCard.getByRole('button', { name: 'Choose Monthly' }).click()
+  await expect(page.getByRole('alert')).toContainText(/sign in/i)
+  await expect(page.getByRole('dialog', { name: 'Paid plans are coming soon' })).toHaveCount(0)
+  expect(interestEndpointCalled).toBe(false)
+  expect(checkoutEndpointCalled).toBe(false)
+})
+
+test('checkout stays closed when the availability request fails', async ({ page }) => {
+  await page.route('**/api/get-founder-slots', route => route.abort())
+  await gotoPricing(page)
+  await expect(page.getByRole('button', { name: 'Register interest' })).toHaveCount(2)
+})

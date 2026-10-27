@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_cors.js'
+import { checkoutAllowed } from './_checkoutSwitch.js'
 import { getMembership, HOSTING_RENEWAL_WARNING_DAYS } from '../src/utils/membership.js'
 
 // Maps plan keys to Stripe price IDs and checkout mode.
@@ -29,6 +30,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  // Real-money checkout stays closed until the owner sets CHECKOUT_OPEN=true (see _checkoutSwitch.js).
+  if (!checkoutAllowed()) {
+    return res.status(403).json({ error: 'Paid checkout is not open yet.', code: 'checkout_closed' })
+  }
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)

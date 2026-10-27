@@ -72,6 +72,45 @@ Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid pl
 | --- | --- | --- |
 | Payment gate | Test/live QA passes for Monthly, Founding Lifetime reservation/finalization, Standard Lifetime, and £6 Cloud renewal; live keys/prices/webhooks are reviewed before checkout is enabled. | Reopened 2026-10-05 for the new pricing model; code is prepared, Dashboard configuration and live/test rehearsal remain parked here. |
 
+## Go-live runbook: checkout launch switch and Vercel environment swap (added 2026-10-27)
+
+**Launch switch (built 27 Oct, not yet deployed).** `CHECKOUT_OPEN` (Vercel, server-side) decides whether real-money checkout exists. It is closed unless it is exactly `true`. While closed: the Pricing page and Account Settings paid buttons and the Cloud-renewal button show the register-interest flow, and `/api/create-checkout-session` refuses any request made with a live Stripe key (HTTP 403, `checkout_closed`, before it reads the account or calls Stripe). Test-mode keys (`sk_test_`) keep working for the private billing test link whatever the switch says. The pages read the switch from `/api/get-founder-slots` (`checkoutOpen`), so no rebuild is needed to open or close checkout; only a Vercel redeploy after changing the variable. Code: `api/_checkoutSwitch.js`, `src/utils/checkoutAvailability.js`; tests: `tests/api/checkout-launch-switch.test.js`, `src/utils/checkoutAvailability.test.js`, three cases in `tests/e2e/pricing-page.spec.js`.
+
+**Order matters.** Deploy this code first, while Vercel still has test keys. Only then swap keys, otherwise live keys would sit behind an API with no switch.
+
+### Stripe Dashboard (switch the Dashboard to **Live mode**; none of this carries over from test mode)
+
+1. Products and Prices (GBP): Monthly £10 / month; Founding Lifetime £50 one-off; Standard Lifetime £75 one-off; Cloud renewal £6 / year. The API checks amount, currency and interval and refuses a Price that does not match. Copy the four `price_...` IDs.
+2. Developers → Webhooks → Add endpoint: `https://www.yourownworld.co.uk/api/stripe-webhook` (the Vercel route, never the old Supabase function). Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `charge.refunded`, `charge.dispute.closed`. Copy the signing secret (`whsec_...`). It differs from the test one.
+3. Settings → Billing → Customer portal: configure it in **Live mode** too (cancel subscription, update payment method). The portal settings are separate from test mode, and "Manage subscription" fails without them.
+4. Developers → API keys: reveal or create the live secret key (`sk_live_...`).
+
+### Vercel environment variables (Production only; names only, never paste values into chat or git)
+
+| Variable | Change |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | test `sk_test_...` → live `sk_live_...` |
+| `STRIPE_PRICE_ID_PREMIUM_MONTHLY` | test price → live Monthly £10 |
+| `STRIPE_PRICE_ID_FOUNDING_LIFETIME` | test price → live Founding £50 |
+| `STRIPE_PRICE_ID_PREMIUM_PLUS_LIFETIME` | test price → live Standard £75 |
+| `STRIPE_PRICE_ID_MAINTENANCE` | test price → live Cloud £6/year |
+| `STRIPE_WEBHOOK_SECRET` | test `whsec_...` → live endpoint secret |
+| `STRIPE_PRICE_ID` | legacy fallback: delete it, or set it to the live Monthly price. It must never hold a test price |
+| `CHECKOUT_OPEN` | **leave unset** for the swap; set to `true` only at step 6 below |
+| Unchanged | `SITE_URL`, `SUPABASE_*`, `VITE_CREATE_CHECKOUT_SESSION_URL`, `VITE_CUSTOMER_PORTAL_URL`, `VITE_GET_FOUNDER_SLOTS_URL`, `VITE_REGISTER_PAID_INTEREST_URL`. Make sure none of the Stripe values above is set with a `VITE_` prefix |
+
+Every Stripe value must be from the same mode. Changing a Vercel variable only takes effect after a redeploy.
+
+### Sequence
+
+1. Merge and deploy this code (test keys still in place). Confirm Pricing still shows "Register interest" and the private test link still works.
+2. Stripe live setup (the four Dashboard steps above).
+3. Vercel: swap the Stripe variables, leave `CHECKOUT_OPEN` unset, redeploy.
+4. Prove it is closed. `curl -s -X POST https://www.yourownworld.co.uk/api/create-checkout-session -H 'content-type: application/json' -d '{}'` must answer `{"error":"Paid checkout is not open yet.","code":"checkout_closed"}` (HTTP 403). `curl -s https://www.yourownworld.co.uk/api/get-founder-slots` must show `"checkoutOpen":false`. In the Stripe live webhook page, "Send test webhook" must return 2xx.
+5. Live configuration review without a purchase (checklist step 14): Dashboard is in Live mode, four Prices match, the endpoint targets the Vercel route and no old Supabase endpoint is enabled, the portal is configured.
+6. Open checkout: set `CHECKOUT_OPEN=true`, redeploy, confirm `get-founder-slots` shows `"checkoutOpen":true`, then make one real purchase and a refund yourself (**a real Founding purchase takes one of the 100 places; check how a refund affects the count before choosing which plan to buy**).
+7. Close again (rollback): delete `CHECKOUT_OPEN` (or set it to anything but `true`) and redeploy; or Vercel Instant Rollback to the previous deployment. Closing stops new checkouts only; existing customers keep what they paid for.
+
 ## 23 October independent review remediation
 
 **Implemented and locally verified on `codex/audit-remediation`; not deployed.** REVIEW-03: a duplicate is acknowledged only after a successful ledger read proves `done`; missing rows, unknown status, lookup errors and missing schema return retryable errors. Completion is scoped to the worker claim timestamp. REVIEW-04: webhook and customer-portal writes use service-role-only `apply_billing_metadata`, which locks `auth.users` and compares the whole metadata object before replacing it. A stale Monthly decision returns false/HTTP 500; Stripe retries and reevaluates against Lifetime. Cloud renewals and leftover Monthly status refreshes preserve the Lifetime licence. Renewal invoice IDs are recorded transactionally, so replay after a later invoice cannot add another year.

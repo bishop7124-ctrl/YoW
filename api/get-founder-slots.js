@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { applyCors } from './_cors.js'
+import { isCheckoutOpen } from './_checkoutSwitch.js'
 
 /**
  * GET /api/get-founder-slots
@@ -9,7 +10,9 @@ import { applyCors } from './_cors.js'
  * included as temporary holds so the public offer cannot oversell the cap.
  *
  * Response shape:
- *   { total: number, taken: number, remaining: number }
+ *   { total: number, taken: number, remaining: number, checkoutOpen: boolean }
+ * checkoutOpen mirrors the CHECKOUT_OPEN launch switch so the pages know whether to show
+ * real checkout or the register-interest form.
  */
 export default async function handler(req, res) {
   applyCors(req, res, { methods: 'GET, OPTIONS', headers: 'content-type' })
@@ -18,6 +21,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET')  return res.status(405).json({ error: 'Method not allowed' })
+
+  const checkoutOpen = isCheckoutOpen()
 
   try {
     const supabase = createClient(
@@ -30,12 +35,12 @@ export default async function handler(req, res) {
     if (error) {
       console.error('[get-founder-slots] RPC error:', error.message)
       // Return a safe fallback rather than a hard error — the UI can handle null gracefully.
-      return res.status(200).json({ total: null, taken: null, remaining: null })
+      return res.status(200).json({ total: null, taken: null, remaining: null, checkoutOpen })
     }
 
-    return res.status(200).json(data)
+    return res.status(200).json({ ...(data || {}), checkoutOpen })
   } catch (err) {
     console.error('[get-founder-slots]', err)
-    return res.status(200).json({ total: null, taken: null, remaining: null })
+    return res.status(200).json({ total: null, taken: null, remaining: null, checkoutOpen })
   }
 }
