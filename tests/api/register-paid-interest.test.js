@@ -138,3 +138,13 @@ describe('beta enrollment restrictions', () => {
     expect(canGrantBetaAccess(user({}), {})).toBe(true)
   })
 })
+
+describe('beta sign-ups are closed', () => {
+  it('refuses every submission without emailing or granting beta access', async () => {
+    const { default: handler } = await import('../../api/register-paid-interest.js')
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn(), end: vi.fn() }
+    await handler({ method: 'POST', headers: {}, body: { email: 'a@example.com' } }, res)
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'beta_closed' }))
+  })
+})

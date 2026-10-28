@@ -46,3 +46,17 @@ c9f2e7d8fb5fe5d406213d708baf0e5d076839fb:scripts/seed-test-data.mjs:hardcoded-pa
 # the client-exposed VITE_SUPABASE_ANON_KEY env var. Verified 2026-09-03 by
 # decoding the JWT and comparing against current source.
 eaaac5b6ba2937865eb37a9c3971e2e95ebb0cd7:src/supabase.js:jwt:32
+
+# Added 2026-10-28 with the owner's approval. Same historical findings as the
+# entries above, seen under other commit ids by the scheduled full-history scan.
+# - PricingPage.jsx PRIVATE_BILLING_TEST_KEY: client-side switch for the Stripe
+#   test link, not an access secret (the server refuses live checkout while
+#   CHECKOUT_OPEN is not "true").
+# - qa-checklist / qa-outstanding-checklist: localStorage key names.
+# - seed-test-data.mjs: rotated test password and the public anon key.
+1e9144ddd4fbb8786c4cb3f8d56e4b9b948033b5:src/components/pricing/PricingPage.jsx:generic-api-key:16
+39bc7b74468b1940e5b09d8c634551bc46ad15cd:docs/qa-checklist.html:generic-api-key:967
+39bc7b74468b1940e5b09d8c634551bc46ad15cd:docs/qa-outstanding-checklist.html:generic-api-key:1256
+39bc7b74468b1940e5b09d8c634551bc46ad15cd:docs/qa-outstanding-checklist.html:generic-api-key:1257
+7ef4bc1aaa12d4528b6d98c3465d37413e10e066:scripts/seed-test-data.mjs:hardcoded-password-assignment:1389
+7ef4bc1aaa12d4528b6d98c3465d37413e10e066:scripts/seed-test-data.mjs:jwt:9

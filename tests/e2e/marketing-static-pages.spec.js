@@ -29,7 +29,7 @@ const staticRoutes = [
   ['/family-tree-builder/', 'Family Tree Builder for Writers'],
   ['/map-builder-for-writers/', 'Map Builder for Writers'],
   ['/lore-management/', 'Lore Management Software'],
-  ['/beta-disclaimer/', 'Beta Disclaimer'],
+  ['/beta-disclaimer/', 'Launch Notice'],
 ]
 
 for (const [path, expectedTitleFragment] of staticRoutes) {

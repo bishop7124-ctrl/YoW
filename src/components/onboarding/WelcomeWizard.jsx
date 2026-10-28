@@ -1,6 +1,6 @@
 import { useDialogFocus } from '../../utils/useDialogFocus'
 import { useEffect, useRef, useState } from 'react'
-import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType, getProjectTypeStage } from '../../constants/projectTypes'
+import { PROJECT_TYPES, DEFAULT_TYPE, getProjectType } from '../../constants/projectTypes'
 import { trackEvent } from '../../utils/analytics'
 
 const TYPE_OPTIONS = Object.entries(PROJECT_TYPES).map(([id, cfg]) => ({ id, ...cfg }))
@@ -129,7 +129,6 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
             </div>
             <div className="wizard-type-grid">
               {TYPE_OPTIONS.map(t => {
-                const stage = getProjectTypeStage(t.id)
                 const icon = TYPE_ICONS[t.id] || { emoji: '📖', color: '#a78bfa' }
                 const selected = type === t.id
                 return (
@@ -143,7 +142,6 @@ export default function WelcomeWizard({ store, onOpenProject, onStartSample, onS
                   >
                     <span className="wizard-type-emoji">{icon.emoji}</span>
                     <span className="wizard-type-label">{t.label}</span>
-                    {stage.stage === 'beta' && <span className="wizard-type-beta">Beta</span>}
                     <span className="wizard-type-desc">{t.description}</span>
                   </button>
                 )

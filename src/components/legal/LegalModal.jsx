@@ -152,24 +152,25 @@ const CONTENT = {
     ),
   },
   beta: {
-    title: 'Beta Disclaimer',
-    sub: 'Beta service notice',
+    title: 'Launch Notice',
+    sub: 'Service notice',
     body: (
       <>
-        <Section title="Beta status">
-          <P>Your Own World is currently provided as a <Accent>beta service</Accent>. Features, interface details, pricing, limits, and availability may change as we improve the platform.</P>
+        <Section title="Service status">
+          <P><Accent>Beta is closing - live launch from 2 November 2026.</Accent> Beta is closed to new sign-ups; paid access opens on 2 November 2026.</P>
+          <P>Until then, Your Own World is provided as an <Accent>early-access service</Accent>. Features, interface details, pricing, limits, and availability may change as we improve the platform.</P>
         </Section>
         <Section title="Service availability">
-          <P>During beta, some features may be incomplete, experimental, temporarily unavailable, or changed without prior notice. We work to keep the Service stable, but beta access is provided without a guarantee of uninterrupted operation.</P>
+          <P>Until launch, some features may be incomplete, experimental, temporarily unavailable, or changed without prior notice. We work to keep the Service stable, but early access is provided without a guarantee of uninterrupted operation.</P>
         </Section>
         <Section title="Your content">
-          <P>Your creative work remains yours. We take reasonable steps to protect and preserve project data, but you should keep your own backup exports of important writing while the platform is in beta.</P>
+          <P>Your creative work remains yours. We take reasonable steps to protect and preserve project data, but you should keep your own backup exports of important writing until launch and afterwards.</P>
         </Section>
         <Section title="AI and experimental tools">
           <P>AI-assisted and experimental features may produce inaccurate, incomplete, or unexpected results. You are responsible for reviewing, editing, and deciding how to use any generated or suggested content.</P>
         </Section>
         <Section title="Feedback">
-          <P>Beta feedback helps shape the product. By sending feedback, bug reports, or feature ideas, you allow us to use that feedback to improve Your Own World without creating any obligation to compensate you or implement a specific request.</P>
+          <P>Feedback helps shape the product. By sending feedback, bug reports, or feature ideas, you allow us to use that feedback to improve Your Own World without creating any obligation to compensate you or implement a specific request.</P>
         </Section>
       </>
     ),
@@ -211,7 +212,7 @@ const LEGAL_LABELS = {
   privacy: 'Privacy Policy',
   terms: 'Terms of Service',
   ethics: 'Ethics Statement',
-  beta: 'Beta Disclaimer',
+  beta: 'Launch Notice',
   cookies: 'Cookie Policy',
 }
 

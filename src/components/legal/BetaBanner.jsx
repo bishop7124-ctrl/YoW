@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import BetaInterestModal from '../account/BetaInterestModal'
+import { BETA_CLOSING_NOTICE, PAID_ACCESS_SOON_LABEL, greyedPaidButtonStyle } from '../../constants/launch'
 
 // BETA: remove this entire file and its usages in App.jsx when out of beta
 const STORAGE_KEY = 'yow_beta_acknowledged'
@@ -78,10 +78,9 @@ const s = {
   },
 }
 
-export default function BetaBanner({ user, onGetStarted, onGranted }) {
+export default function BetaBanner() {
   const [visible, setVisible] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const [interestOpen, setInterestOpen] = useState(false)
 
   useEffect(() => {
     if (!localStorage.getItem(STORAGE_KEY)) setVisible(true)
@@ -92,11 +91,6 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
     setVisible(false)
   }
 
-  const openInterest = () => {
-    accept()
-    setInterestOpen(true)
-  }
-
   return (
     <>
       {visible && (
@@ -104,17 +98,16 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
           <div style={s.card} role="dialog" aria-modal="true" aria-label="Beta disclaimer">
             <div style={s.header}>
               <span style={s.badge}>Beta</span>
-              <span style={s.title}>You're using an early version</span>
+              <span style={s.title}>Beta is closing</span>
             </div>
             <div style={s.body}>
               <p style={s.text}>
-                YOW is currently in beta. Features are being actively developed and some things may
-                change, break, or behave unexpectedly. Your feedback during this period helps shape
-                the product.
+                {BETA_CLOSING_NOTICE} Until then YOW is still in beta: features are being finished and
+                some things may change, break, or behave unexpectedly. Your feedback helps shape the product.
               </p>
               <p style={s.text}>
-                Want in? Beta spots can be claimed by registering your interest for a paid plan
-                and you'll get full access to every feature at no cost until launch.
+                Beta is closed to new sign-ups. Paid plans open on 2 November 2026; you can start free
+                at any time.
               </p>
               {!expanded && (
                 <button style={s.expandBtn} onClick={() => setExpanded(true)}>
@@ -145,20 +138,13 @@ export default function BetaBanner({ user, onGetStarted, onGranted }) {
               <button style={s.dismissBtn} onClick={accept}>
                 Got it, let me in
               </button>
-              <button style={s.acceptBtn} onClick={openInterest}>
-                Register interest and sign up
+              <button style={{ ...s.acceptBtn, ...greyedPaidButtonStyle }} disabled>
+                {PAID_ACCESS_SOON_LABEL}
               </button>
             </div>
           </div>
         </div>
       )}
-      <BetaInterestModal
-        open={interestOpen}
-        user={user}
-        onClose={() => setInterestOpen(false)}
-        onGranted={onGranted}
-        onCreateAccount={!user ? (email) => { setInterestOpen(false); onGetStarted?.(email) } : undefined}
-      />
     </>
   )
 }

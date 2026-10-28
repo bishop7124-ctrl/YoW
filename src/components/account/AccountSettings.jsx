@@ -12,7 +12,7 @@ import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { UserMediaImage } from '../shared/UserMedia'
 import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
-import BetaInterestModal from './BetaInterestModal'
+import { PAID_ACCESS_SOON_LABEL, greyedPaidButtonStyle } from '../../constants/launch'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, UNTESTED_PROVIDER_LABEL, UNTESTED_PROVIDER_NOTE, isTestedAiProvider, fetchLiveModels } from '../../utils/aiApi'
@@ -79,8 +79,7 @@ const CUSTOM_COLOR_FIELDS = [
 ]
 
 export function MaintenancePayButton({ style }) {
-  const { user, refreshUser, getAccessToken } = useAuth()
-  const [modalOpen, setModalOpen] = useState(false)
+  const { user, getAccessToken } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const checkoutOpen = isCheckoutOpen(usePublicAvailability())
@@ -104,24 +103,17 @@ export function MaintenancePayButton({ style }) {
   return (
     <div style={style}>
       <button
-        disabled={busy}
-        onClick={checkoutOpen ? startRenewal : () => setModalOpen(true)}
+        disabled={busy || !checkoutOpen}
+        onClick={startRenewal}
         style={{
           padding: '8px 18px', borderRadius: 7, background: '#f59e0b', color: '#000',
           fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
+          ...(checkoutOpen ? null : greyedPaidButtonStyle),
         }}
       >
-        {checkoutOpen ? (busy ? 'Opening Stripe…' : `Renew Cloud Mode (£${HOSTING_RENEWAL_FEE_GBP}/year)`) : 'Register interest in Cloud Mode renewal'}
+        {checkoutOpen ? (busy ? 'Opening Stripe…' : `Renew Cloud Mode (£${HOSTING_RENEWAL_FEE_GBP}/year)`) : PAID_ACCESS_SOON_LABEL}
       </button>
       {error && <p role="alert" style={{ margin: '6px 0 0', fontSize: 12, color: '#f87171' }}>{error}</p>}
-      <BetaInterestModal
-        open={modalOpen}
-        user={user}
-        planKey="hosting_renewal"
-        planLabel="Cloud Mode renewal"
-        onClose={() => setModalOpen(false)}
-        onGranted={refreshUser}
-      />
     </div>
   )
 }
@@ -2382,6 +2374,7 @@ function PlanBadge({ membership }) {
 }
 
 function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
+  const checkoutOpen = isCheckoutOpen(usePublicAvailability())
   const isCurrent = membership.activePlanKey === plan.key
     || (membership.isTrialActive && plan.key === 'free') // treat "free" as base during trial
 
@@ -2457,11 +2450,11 @@ function PlanCard({ plan, membership, onSelect, busy, anyBusy }) {
             <button
               type="button"
               className="account-secondary-button"
-              style={{ fontSize: 12, padding: '0 12px', minHeight: 32 }}
               onClick={() => onSelect(plan.key)}
-              disabled={anyBusy}
+              disabled={anyBusy || !checkoutOpen}
+              style={{ fontSize: 12, padding: '0 12px', minHeight: 32, ...(checkoutOpen ? null : greyedPaidButtonStyle) }}
             >
-              {busy ? 'Opening...' : 'Register interest'}
+              {busy ? 'Opening...' : checkoutOpen ? 'Choose plan' : PAID_ACCESS_SOON_LABEL}
             </button>
           )}
       </div>
@@ -2952,7 +2945,6 @@ export default function AccountSettings({
   const [billingBusy, setBillingBusy] = useState('')
   const [billingError, setBillingError] = useState('')
   const [billingMessage, setBillingMessage] = useState('')
-  const [betaInterestPlan, setBetaInterestPlan] = useState(null)
   const checkoutOpen = isCheckoutOpen(usePublicAvailability())
   const [fallbackTab, setFallbackTab] = useState('profile')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -3010,12 +3002,9 @@ export default function AccountSettings({
   const openBilling = async (planKey) => {
     // planKey = null opens the customer portal for Stripe-backed accounts or,
     // after confirmation, downgrades a manually granted plan with no Stripe
-    // customer. Paid-plan selections use the beta-interest flow until the
-    // CHECKOUT_OPEN launch switch opens real checkout.
-    if (planKey && !checkoutOpen) {
-      setBetaInterestPlan(PLANS.find(plan => plan.key === planKey) || { key: planKey, label: 'Paid plan' })
-      return
-    }
+    // customer. Paid-plan selections do nothing until the
+    // CHECKOUT_OPEN launch switch opens real checkout (beta sign-ups are closed).
+    if (planKey && !checkoutOpen) return
 
     const endpoint = planKey ? billingEndpoints.checkout : billingEndpoints.portal
     if (!endpoint) {
@@ -3470,17 +3459,6 @@ export default function AccountSettings({
           onClose={() => setDeleteModalOpen(false)}
         />
       )}
-      <BetaInterestModal
-        open={!!betaInterestPlan}
-        user={user}
-        planKey={betaInterestPlan?.key}
-        planLabel={betaInterestPlan?.label}
-        onClose={() => setBetaInterestPlan(null)}
-        onGranted={async (result) => {
-          setBillingMessage(result?.betaTester ? 'Beta tester access is active. Full product access is unlocked during beta.' : 'Your interest is registered. Your membership has not changed.')
-          await refreshUser()
-        }}
-      />
     </div>
   )
 }

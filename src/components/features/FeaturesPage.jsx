@@ -332,7 +332,7 @@ const FEATURE_MATRIX = [
 // card still reads as the same dark surface (see the card render below).
 const COLS = [
   { id: 'prose',  label: 'Prose Fiction',        sub: 'Novel · Novella · Short Story', color: '#C87855' }, // muted terracotta
-  { id: 'comic',  label: 'Comic / Graphic Novel', sub: 'Beta',                          color: '#B96762', badge: 'Beta' }, // dusty rose
+  { id: 'comic',  label: 'Comic / Graphic Novel', sub: 'Panels, pages and issues',      color: '#B96762' }, // dusty rose
   { id: 'ttrpg',  label: 'Tabletop Campaign',     sub: 'System-neutral',               color: '#7FA47C' }, // muted sage
   { id: 'dnd',    label: '5E Campaign',            sub: 'Fifth-edition compatible',               color: '#C29A52' }, // antique ochre
 ]
@@ -410,7 +410,6 @@ const UNIQUE_CALLOUTS = [
   {
     type: 'Comic / Graphic Novel',
     color: COLS.find(c => c.id === 'comic').color,
-    badge: 'Beta',
     items: [
       'Volume → Issue → Page structure purpose-built for sequential art',
       'Page-level status tracking (Draft / Revised / Final per page)',

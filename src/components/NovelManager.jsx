@@ -1449,7 +1449,6 @@ export default function NovelManager({ store, user, onOpenProject, onOpenSeries,
         <div className="library-top-bar-left">
           <div className="library-brand-cluster">
             <span className="library-brand-logo"><YOWLogo /></span>
-            <span className="beta-watermark" aria-label="Beta">Beta</span>
           </div>
           {!store.readOnly && !membership?.freeProjectId && (
             <div className="library-action-cluster">

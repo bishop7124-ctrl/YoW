@@ -1122,3 +1122,9 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - Owner report: after the reply scroll-lock deploy (PR #259) the chat had a large blank area at the bottom, hiding the latest messages while typing. Cause: the spacer that lets a short reply sit at the top was a full viewport tall and kept until the chat changed.
 - Fix (`AIPanel.jsx`): the spacer is now sized to exactly what the reply needs, shrinks to zero as the reply grows (so long replies never have it), and is removed when the reply finishes. e2e `a streaming AI Chat reply locks the view...` now also asserts no spacer remains and the last message sits at the chat bottom. Needs a web deploy; owner re-check: send a short question, then a long one; no big blank area should remain under the latest reply.
 
+
+## 2026-10-28 pre-freeze check (daily routine)
+
+- Local: lint, 1,797/1,798 unit tests, build, bundle budget, load check, e2e matrix and api ESM check run. The single failing test (`projectExportTextFidelity` WinAnsi PDF reimport) fails only in the cloud sandbox because its Node decodes `windows-1252` 0x80-0x9F as control characters; passes in CI (run 970). Do not treat it as a product bug; if it ever fails in CI, reopen.
+- Required: scheduled `Secret scan` on `main` must be green before freeze. It fails on six historical gitleaks fingerprints (see ROADMAP "2026-10-28 pre-freeze gate review"); needs the owner to approve adding them to `.gitleaksignore`, or rewriting history.
+- Required before RC1 freeze: LAUNCH_CHECKLIST T-7 migrations applied and ticked; O12 and O13 recorded; T-6/T-5 results recorded.

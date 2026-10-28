@@ -507,10 +507,10 @@ function ProjectSettings({ store, onClose }) {
               <div className="project-settings-section-heading">
                 <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Project Details</p>
                 <span
-                  className={`project-settings-type-chip${settingsProjectStage.stage === 'beta' ? ' is-beta' : ''}`}
+                  className="project-settings-type-chip"
                   title={settingsProjectStage.note}
                 >
-                  {settingsProjectStage.stage === 'beta' ? `${settingsProjectType.label} · ${settingsProjectStage.label}` : settingsProjectType.label}
+                  {settingsProjectType.label}
                 </span>
               </div>
 
@@ -920,10 +920,7 @@ export default function Layout({
   localModeBubble,
 }) {
   const projectTypeCfg = getProjectType(store.activeNovel?.type)
-  const projectTypeStage = getProjectTypeStage(store.activeNovel?.type)
-  const projectTypeLabel = projectTypeStage.stage === 'beta'
-    ? `${projectTypeCfg.label} · ${projectTypeStage.label}`
-    : projectTypeCfg.label
+  const projectTypeLabel = projectTypeCfg.label
   const enabledSectionIds = new Set(getEnabledSections(store.activeNovel))
   const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || enabledSectionIds.has(s.id))
   const isFreePlan = membership?.isFree
