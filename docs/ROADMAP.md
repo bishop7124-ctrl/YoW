@@ -247,7 +247,7 @@ Still open before freeze (all need the owner; none can be done from the cloud):
 4. Legal and promise gate: owner still to confirm the Terms 14-day-cancellation wording and give final Terms/Privacy approval.
 5. Desktop: signed-updater manifest / Windows SHA-256 comparison skipped; O10 desktop Safari/Firefox/VoiceOver not started.
 
-**Owner update 2026-10-28 (evening, owner-reported, no screenshots):** the four T-7 migrations are applied in production; `YOW_BETA_ENROLLMENT_CLOSED` exists in Vercel (O13 confirmed, not enabled); the Terms 14-day-cancellation wording is approved; Supabase backups are now on; Stripe is believed ready (O12 not yet evidenced: the test-mode journeys in `docs/PAYMENT_ROADMAP.md` have no recorded result). Checkout stays off. Next: secret-scan decision, T-5 real-browser checks against the migrated build, guided Stripe test-mode run, then 30 Oct rehearsal.
+**Owner update 2026-10-28 (evening, owner-reported, no screenshots):** the four T-7 migrations are applied in production; `YOW_BETA_ENROLLMENT_CLOSED` exists in Vercel (O13 confirmed, not enabled); the Terms 14-day-cancellation wording is approved; Supabase backups are now on; Stripe test-mode journeys all passed (owner-reported, recorded as Passed in `docs/PAYMENT_ROADMAP.md`); no live-mode test done yet, so O12's live readiness review is still open. Checkout stays off. Next: secret-scan decision, T-5 real-browser checks against the migrated build, guided Stripe test-mode run, then 30 Oct rehearsal.
 
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 

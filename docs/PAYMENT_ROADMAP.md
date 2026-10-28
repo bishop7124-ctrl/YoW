@@ -70,7 +70,7 @@ Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid pl
 
 | Gate | Required Outcome | Status |
 | --- | --- | --- |
-| Payment gate | Test/live QA passes for Monthly, Founding Lifetime reservation/finalization, Standard Lifetime, and £6 Cloud renewal; live keys/prices/webhooks are reviewed before checkout is enabled. | Reopened 2026-10-05 for the new pricing model; code is prepared, Dashboard configuration and live/test rehearsal remain parked here. |
+| Payment gate | Test/live QA passes for Monthly, Founding Lifetime reservation/finalization, Standard Lifetime, and £6 Cloud renewal; live keys/prices/webhooks are reviewed before checkout is enabled. | Reopened 2026-10-05 for the new pricing model; code is prepared, Dashboard configuration and live/test rehearsal remain parked here. **Update 2026-10-28:** owner reports the Stripe test-mode journeys (Monthly, Lifetime, Founder, renewal, cancel/failure, refund) were completed and passed (owner-reported, no screenshots or saved evidence). **Test-mode QA: Passed on owner sign-off.** Live-mode review and a controlled live test are NOT done; checkout stays off (`CHECKOUT_OPEN` unset) until they are. |
 
 ## Go-live runbook: checkout launch switch and Vercel environment swap (added 2026-10-27)
 
