@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BILLING } from '../../utils/billingConfig'
 import { HOSTING_RENEWAL_FEE_GBP, PLANS } from '../../utils/membership'
 import { supabase } from '../../supabase'
-import BetaInterestModal from '../account/BetaInterestModal'
+import { PAID_ACCESS_SOON_LABEL, greyedPaidButtonStyle } from '../../constants/launch'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
@@ -87,10 +87,10 @@ function PricingCard({ plan, foundingAvailable, onSelect, onFreeStart, checkoutB
       </ul>
       {lifetime && <p className="pricing-card-disclaimer" data-testid="desktop-unsigned-note">{DESKTOP_UNSIGNED_SHORT}</p>}
       {plan.disclaimer && !founding && <p className="pricing-card-disclaimer">{plan.disclaimer}</p>}
-      <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && checkoutBusy} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
-        {/* Paid buttons only register interest until checkout opens (the private test link, or the
-            CHECKOUT_OPEN launch switch); selectPaidPlan and this label change together. */}
-        {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : !checkoutOpen ? 'Register interest' : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
+      <button type="button" className={`pricing-card-cta${plan.highlight ? ' pricing-card-cta--solid' : ''}`} disabled={!free && (checkoutBusy || !checkoutOpen)} style={!free && !checkoutOpen ? greyedPaidButtonStyle : undefined} onClick={free ? onFreeStart : () => onSelect(plan.key)}>
+        {/* Paid buttons are greyed out until checkout opens (the private test link, or the
+            CHECKOUT_OPEN launch switch); beta interest sign-ups are closed. */}
+        {!free && checkoutBusy ? 'Opening Stripe…' : free ? 'Start for free' : !checkoutOpen ? PAID_ACCESS_SOON_LABEL : lifetime ? 'Choose Lifetime' : 'Choose Monthly'}
       </button>
       {free && <p className="pricing-card-caption">No card required</p>}
     </article>
@@ -102,7 +102,6 @@ function FaqItem({ item, open, onToggle }) {
 }
 
 export default function PricingPage({ onGetStarted, onSignIn, user }) {
-  const [interestPlan, setInterestPlan] = useState(null)
   const [openFaq, setOpenFaq] = useState(null)
   const availability = usePublicAvailability()
   const [checkoutPlan, setCheckoutPlan] = useState(null)
@@ -165,7 +164,6 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   const selectPaidPlan = key => {
     if (billingTest) startCheckout(key === 'premium_plus_lifetime' ? 'founding_lifetime_test' : key)
     else if (launchOpen) startCheckout(key)
-    else setInterestPlan(PLANS.find(item => item.key === key))
   }
 
   useEffect(() => {
@@ -196,7 +194,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           ) : launchOpen ? (
             checkoutError && <p className="pricing-test-error" role="alert">{checkoutError}</p>
           ) : (
-            <p className="pricing-availability-note">Free is available now. Paid checkout remains closed while billing is being tested; paid buttons register interest and never create a charge.</p>
+            <p className="pricing-availability-note">Free is available now. Beta is closing - live launch from 2 November 2026. Paid access opens then; the paid buttons stay greyed out until it does.</p>
           )}
         </section>
 
@@ -218,7 +216,6 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
         <section className="pricing-final-cta"><h2>Your world is waiting.</h2><p>Start free. Upgrade when the way you work makes it worthwhile.</p><button type="button" className="btn btn-primary" onClick={onGetStarted}>Get started free</button></section>
       </main>
       <MarketingFooter />
-      <BetaInterestModal open={!!interestPlan} user={user} planKey={interestPlan?.key} planLabel={interestPlan?.label} onClose={() => setInterestPlan(null)} onCreateAccount={!user ? () => { setInterestPlan(null); onGetStarted?.() } : undefined} />
     </div>
   )
 }

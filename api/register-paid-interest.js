@@ -91,6 +91,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  // Beta and interest sign-ups closed on 2026-10-28; paid access opens at the public launch.
+  // Nothing below runs: no email, no beta grant. Remove this route after launch.
+  return res.status(403).json({ error: 'Beta sign-ups are closed. Paid access opens on 2 November 2026.', code: 'beta_closed' })
+
+  // eslint-disable-next-line no-unreachable
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim()
   if (await isRateLimited(ip)) return res.status(429).json({ error: 'Too many submissions. Please try again later.' })
 

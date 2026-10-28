@@ -40,12 +40,7 @@ test('comparison table lists Free, Monthly and Lifetime only', async ({ page }) 
   await expect(table.getByRole('columnheader', { name: 'Founder' })).toHaveCount(0)
 })
 
-test('Register interest pins the selected plan, requires a valid email, and closes cleanly', async ({ page }) => {
-  // vite.config.mjs wires `/api/register-paid-interest` to the real handler
-  // (api/register-paid-interest.js) even in this offline dev server — it
-  // isn't a 404 or a no-op here. Guard against ever actually calling it: this
-  // test only wants to exercise client-side required-field validation, never
-  // a real (env-var-dependent, rate-limited) submission.
+test('paid buttons are greyed out and open no interest form while beta is closed', async ({ page }) => {
   let interestEndpointCalled = false
   await page.route('**/api/register-paid-interest', route => {
     interestEndpointCalled = true
@@ -55,29 +50,12 @@ test('Register interest pins the selected plan, requires a valid email, and clos
   await gotoPricing(page)
 
   const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
-  await monthlyCard.getByRole('button', { name: 'Register interest' }).click()
-
-  const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
-  await expect(modal).toBeVisible()
-  // A plan was pinned by the card clicked, so the generic plan picker
-  // (shown only when no plan is pinned) should not appear.
-  await expect(modal.getByText('Which plan are you interested in?')).toHaveCount(0)
-  await expect(modal.getByText(/Monthly is ready/)).toBeVisible()
-
-  // Email is required (native HTML5 validation via type="email" required) —
-  // submitting empty should not advance past the form. The field comes
-  // pre-filled with this suite's fixed offline-mode user's email
-  // ('dev@localhost', itself a valid HTML5 email), so it must be cleared
-  // first or this test would silently pass client validation instead of
-  // exercising the "required" check it's named for.
-  await modal.getByLabel('Email').fill('')
-  await modal.getByRole('button', { name: 'Register interest' }).click()
-  await expect(modal.getByLabel('Email')).toBeVisible()
-  await expect(modal.getByText('Registering...')).toHaveCount(0)
+  const button = monthlyCard.getByRole('button', { name: 'Paid access coming 2nd November' })
+  await expect(button).toBeVisible()
+  await expect(button).toBeDisabled()
+  await button.click({ force: true })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(interestEndpointCalled).toBe(false)
-
-  await modal.getByRole('button', { name: 'Close beta access modal' }).click()
-  await expect(modal).toHaveCount(0)
 })
 
 for (const viewport of [
@@ -99,20 +77,16 @@ for (const viewport of [
     await expect(table).toBeVisible()
 
     const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £75/ })
-    await lifetimeCard.getByRole('button', { name: 'Register interest' }).click()
-    const modal = page.getByRole('dialog', { name: 'Paid plans are coming soon' })
-    await expect(modal).toBeVisible()
-    await modal.getByRole('button', { name: 'Close beta access modal' }).click()
-    await expect(modal).toHaveCount(0)
+    await expect(lifetimeCard.getByRole('button', { name: 'Paid access coming 2nd November' })).toBeDisabled()
   })
 }
 
-test('paid buttons register interest while the checkout launch switch is closed', async ({ page }) => {
+test('paid buttons are greyed out while the checkout launch switch is closed', async ({ page }) => {
   await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37, checkoutOpen: false } }))
   await gotoPricing(page)
 
-  await expect(page.getByText('Paid checkout remains closed while billing is being tested')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Register interest' })).toHaveCount(2)
+  await expect(page.getByText('Beta is closing - live launch from 2 November 2026.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(2)
   await expect(page.getByRole('button', { name: /Choose (Monthly|Lifetime)/ })).toHaveCount(0)
 })
 
@@ -124,8 +98,8 @@ test('paid buttons offer real checkout once the launch switch is open, and never
   await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37, checkoutOpen: true } }))
   await gotoPricing(page)
 
-  await expect(page.getByText('Paid checkout remains closed while billing is being tested')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Register interest' })).toHaveCount(0)
+  await expect(page.getByText('Beta is closing - live launch from 2 November 2026.')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(0)
   const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
   await expect(monthlyCard.getByRole('button', { name: 'Choose Monthly' })).toBeVisible()
   await expect(page.getByRole('article', { name: /Lifetime plan — £50/ }).getByRole('button', { name: 'Choose Lifetime' })).toBeVisible()
@@ -141,5 +115,5 @@ test('paid buttons offer real checkout once the launch switch is open, and never
 test('checkout stays closed when the availability request fails', async ({ page }) => {
   await page.route('**/api/get-founder-slots', route => route.abort())
   await gotoPricing(page)
-  await expect(page.getByRole('button', { name: 'Register interest' })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(2)
 })

@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test'
 test('pricing presents paid plans as interest-only launch terms', async ({ page }) => {
   await page.goto('/pricing/')
 
-  await expect(page.getByText('Free is available now. Paid checkout remains closed while billing is being tested; paid buttons register interest and never create a charge.')).toBeVisible()
-  await expect(page.locator('.pricing-card').getByRole('button', { name: 'Register interest' })).toHaveCount(2)
+  await expect(page.getByText('Free is available now. Beta is closing - live launch from 2 November 2026. Paid access opens then; the paid buttons stay greyed out until it does.')).toBeVisible()
+  await expect(page.locator('.pricing-card').getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(2)
   await expect(page.getByText(/slots remaining/i)).toHaveCount(0)
 
   const paidAvailability = await page.locator('#ld-pricing-page').evaluate(node => {
