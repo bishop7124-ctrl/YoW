@@ -41,7 +41,7 @@ const FAQ = [
   { q: 'What happens if I cancel Monthly?', a: 'Your account falls back to Free limits after the paid period ends. Your work is not deleted: you choose one project to keep editable and can continue to view and export retained projects.' },
   { q: 'Is the desktop app signed or notarized?', a: DESKTOP_UNSIGNED_DETAIL },
   { q: 'Can I use the desktop app on Monthly?', a: 'No. Monthly is the complete browser-based plan with Cloud sync. Desktop and offline access are included with Lifetime.' },
-  { q: 'Is the desktop app signed by Apple or Microsoft?', a: 'Not yet. The beta desktop app is not notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. The Download page has the exact one-time steps to open it anyway. The web app is unaffected.' },
+  { q: 'Is the desktop app signed by Apple or Microsoft?', a: 'Not yet. The current desktop build is not notarized by Apple or signed with a Windows code-signing certificate, so macOS Gatekeeper and Windows SmartScreen show a warning the first time you open it. The Download page has the exact one-time steps to open it anyway. The web app is unaffected.' },
   { q: 'Does Lifetime guarantee future updates?', a: 'Buy YOW for what it is today. Enjoy what we add tomorrow. Lifetime is permanent product access, not a promise of a particular roadmap or an indefinite schedule of new features.' },
 ]
 

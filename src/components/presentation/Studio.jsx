@@ -99,7 +99,6 @@ export function StudioFrame({
           ><YOWLogo /></div>
           <div className="studio-brand-mobile-label" aria-hidden="true">
             <span>YOW</span>
-            <span className="beta-watermark">Beta</span>
           </div>
           <div className="studio-brand-text">
             <div className="studio-brand-name-stack" aria-label="Your Own World">
@@ -107,7 +106,6 @@ export function StudioFrame({
               <span><strong>O</strong>wn</span>
               <span><strong>W</strong>orld</span>
             </div>
-            <span className="beta-watermark" aria-label="Beta">Beta</span>
             <span className="studio-brand-sep">·</span>
             <h1>{projectTitle}</h1>
             {projectType && (

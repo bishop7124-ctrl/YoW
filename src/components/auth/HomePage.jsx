@@ -699,7 +699,6 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
                 onClick={() => setActiveProjectType(pt.id)}
               >
                 <span>{pt.label}</span>
-                {pt.beta && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', background: 'var(--accent)', color: '#fff', borderRadius: 4, padding: '1px 5px', marginLeft: 5, verticalAlign: 'middle' }}>Beta</span>}
               </button>
             ))}
           </div>
@@ -707,11 +706,6 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
           {currentProject && (
             <div className="yow-project-panel" role="tabpanel">
               <div className="yow-project-panel-left">
-                {currentProject.beta && (
-                  <p style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, marginBottom: 8 }}>
-                    Beta — core features available; full QA in progress.
-                  </p>
-                )}
                 <p className="yow-project-tagline">{currentProject.tagline}</p>
                 <p className="yow-project-desc">{currentProject.description}</p>
                 <div className="yow-project-emphasis">
@@ -945,7 +939,7 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
               <button type="button" onClick={() => onOpenLegal('privacy')}  className="yow-footer-link">Privacy</button>
               <button type="button" onClick={() => onOpenLegal('terms')}    className="yow-footer-link">Terms</button>
               <button type="button" onClick={() => onOpenLegal('ethics')}   className="yow-footer-link">Ethics</button>
-              <button type="button" onClick={() => onOpenLegal('beta')}     className="yow-footer-link">Beta</button>
+              <button type="button" onClick={() => onOpenLegal('beta')}     className="yow-footer-link">Launch notice</button>
               <button type="button" onClick={() => onOpenLegal('cookies')}  className="yow-footer-link">Cookies</button>
             </>
           )}

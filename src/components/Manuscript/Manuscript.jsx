@@ -455,10 +455,10 @@ export default function Manuscript({ store, userId, membership = null }) {
 
   const workspaceLabel = projectTypeConfig.workspaceLabel || 'Manuscript'
   const importTitle = isScriptProject
-    ? 'Import a .docx draft into script beta'
+    ? 'Import a .docx draft into the script'
     : `Import a .docx ${workspaceLabel.toLowerCase()}`
   const exportTitle = isScriptProject
-    ? 'Export readable beta script as .docx'
+    ? 'Export readable script as .docx'
     : `Export ${workspaceLabel.toLowerCase()} as .docx`
   const exportButtonLabel = isScriptProject ? 'Export Script' : 'Export'
   const finalizedDrafts = useMemo(
@@ -1315,11 +1315,6 @@ export default function Manuscript({ store, userId, membership = null }) {
           fullscreen={fullscreen}
           onToggleFullscreen={toggleFullscreen}
           zoomControl={<ManuscriptZoomControl pageZoom={pageZoom} onPageZoomChange={handlePageZoomChange} />}
-          scriptBetaBadge={isScriptProject && (
-            <span className="ms-toolbar-badge" title="Readable script export is available; industry formatting is still in progress.">
-              Script beta
-            </span>
-          )}
           overflowItemTitles={{ import: importTitle, export: exportTitle }}
           trackedChangeCount={pendingReviewScenes.length}
           isNovelProject={isNovelProject}

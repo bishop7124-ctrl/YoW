@@ -126,7 +126,7 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
     ['privacy', 'Privacy'],
     ['terms', 'Terms'],
     ['ethics', 'AI ethics'],
-    ['beta', 'Beta notice'],
+    ['beta', 'Launch notice'],
     ['cookies', 'Cookie settings'],
   ]
 

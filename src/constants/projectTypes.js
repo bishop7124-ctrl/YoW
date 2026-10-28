@@ -182,7 +182,7 @@ export const RETIRED_PROJECT_TYPES = {
   play: {
     label: 'Play',
     description: 'Stage play or theatrical script',
-    workflowSummary: 'Stage-script beta with acts, scenes, beats, and dialogue-first drafting.',
+    workflowSummary: 'Stage-script drafting with acts, scenes, beats, and dialogue-first drafting.',
     structure: { level1: 'Act', level2: 'Scene', level3: 'Beat' },
     storyEventIndicators: [
       { id: 'opening_tableau', label: 'Opening tableau', color: '#38bdf8' },
@@ -201,7 +201,7 @@ export const RETIRED_PROJECT_TYPES = {
   screenplay: {
     label: 'Screenplay',
     description: 'Feature film or short film script',
-    workflowSummary: 'Screenplay beta with acts, sequences, scenes, and script element controls.',
+    workflowSummary: 'Screenplay drafting with acts, sequences, scenes, and script element controls.',
     structure: { level1: 'Act', level2: 'Sequence', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'opening_image', label: 'Opening image', color: '#38bdf8' },
@@ -220,7 +220,7 @@ export const RETIRED_PROJECT_TYPES = {
   tv_show: {
     label: 'TV Series',
     description: 'Multi-episode television series',
-    workflowSummary: 'Episode beta with season, pilot, episode, and act-level structure.',
+    workflowSummary: 'Episode drafting with season, pilot, episode, and act-level structure.',
     structure: { level1: 'Season', level2: 'Episode', level3: 'Act' },
     storyEventIndicators: [
       { id: 'pilot_hook', label: 'Pilot hook', color: '#38bdf8' },
@@ -239,7 +239,7 @@ export const RETIRED_PROJECT_TYPES = {
   video_game: {
     label: 'Video Game',
     description: 'Interactive narrative or game world',
-    workflowSummary: 'Game narrative beta for worlds, factions, missions, and story progression.',
+    workflowSummary: 'Game narrative drafting for worlds, factions, missions, and story progression.',
     structure: { level1: 'Act', level2: 'Chapter', level3: 'Scene' },
     storyEventIndicators: [
       { id: 'tutorial_hook', label: 'Tutorial hook', color: '#38bdf8' },

@@ -3,7 +3,7 @@ import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { supabase } from '../../supabase'
 
-// Desktop app download page (/download). Lifetime, Founder, and temporary beta
+// Desktop app download page (/download). Lifetime, Founder, and temporary-access
 // members only — everyone else sees a sign-in or upgrade prompt. The installer
 // links are fetched from the entitlement-gated API, never embedded in the bundle.
 
@@ -122,7 +122,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
         <StatusPanel
           title="Your builds are being prepared"
           body={membership?.isBetaTester
-            ? "Your beta access includes the desktop app. The installers aren't available for download just yet — check back here soon."
+            ? "Your access includes the desktop app. The installers aren't available for download just yet — check back here soon."
             : "Your Lifetime licence includes the desktop app. The installers aren't available for download just yet — check back here soon."}
         >
           <a href="mailto:support@yourownworld.co.uk" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
@@ -169,7 +169,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
               First launch on macOS — one-time step
             </p>
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              This beta build isn't yet notarized with Apple, so macOS blocks the first launch — sometimes silently.
+              The current build isn't yet notarized with Apple, so macOS blocks the first launch — sometimes silently.
               If YOW doesn't open, that's the block, not a broken download.
             </p>
             <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8, listStyle: 'decimal' }}>
@@ -192,7 +192,7 @@ export default function DownloadPage({ user, membership, authLoading, onLogin, o
               First launch on Windows — one-time step
             </p>
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              This beta build isn't yet signed with a Windows code-signing certificate, so SmartScreen shows a
+              The current build isn't yet signed with a Windows code-signing certificate, so SmartScreen shows a
               warning on the installer. That's the warning, not a broken download.
             </p>
             <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8, listStyle: 'decimal' }}>
