@@ -247,6 +247,8 @@ Still open before freeze (all need the owner; none can be done from the cloud):
 4. Legal and promise gate: owner still to confirm the Terms 14-day-cancellation wording and give final Terms/Privacy approval.
 5. Desktop: signed-updater manifest / Windows SHA-256 comparison skipped; O10 desktop Safari/Firefox/VoiceOver not started.
 
+**Owner update 2026-10-28 (evening, owner-reported, no screenshots):** the four T-7 migrations are applied in production; `YOW_BETA_ENROLLMENT_CLOSED` exists in Vercel (O13 confirmed, not enabled); the Terms 14-day-cancellation wording is approved; Supabase backups are now on; Stripe is believed ready (O12 not yet evidenced: the test-mode journeys in `docs/PAYMENT_ROADMAP.md` have no recorded result). Checkout stays off. Next: secret-scan decision, T-5 real-browser checks against the migrated build, guided Stripe test-mode run, then 30 Oct rehearsal.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
