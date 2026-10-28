@@ -231,6 +231,22 @@ Remaining schedule: 26-28 Oct buffer/repair, security rerun, data-safety matrix 
 - **Open owner action (Legal and promise gate):** confirm the exact wording of the new Terms 14-day-cancellation line. It is live in the repo but was flagged "owner to confirm" in the PR.
 - **CI note:** merged with one red check, `Smoke / performance-acceptance` (`tests/e2e/performance-acceptance.spec.js:52`, "an 80k+ word novel opens, scrolls and takes typing without long freezes"), which failed on retry. The PR is copy-only so it is probably unrelated, but that is unconfirmed, and only 30 of 65 check runs were reviewed (29 passed). **Next action:** check whether this test is also red on `main`; if so, treat it as a Performance gate regression and repair it in the 26-27 Oct buffer days.
 
+### 2026-10-28 pre-freeze gate review (buffer day)
+
+Status: **Launch verdict stays RED — not ready to freeze RC1 on 29 Oct until the owner items below are closed.** Run by the daily routine in the cloud sandbox; nothing was checked live.
+
+Automated evidence (merged `main` at `1612ff8`):
+- `npm run qa` pieces: lint 0 errors; unit tests **1,797 pass / 1 fail** (1,798); production build OK; bundle budget passed (entry 553.6 KB gzip, JS 927.9 KB, CSS 82.4 KB); load check 253 files; e2e matrix 59/59 specs covered; api ESM 12/12. The one failure (`src/utils/projectExportTextFidelity.test.js`, WinAnsi PDF reimport) is a **sandbox defect, not a repo bug**: this container's Node returns control characters for `TextDecoder('windows-1252')` bytes 0x80-0x9F. CI runners (Node 22) pass it (QA run 970 on `0cecef9` green). Playwright was not re-run here; CI is the source (run 970 green, including `Smoke / performance-acceptance`, which closes the 25 Oct open question: it is not red on `main`).
+- Main CI: push run 970 green. Run 971 (HEAD `1612ff8`, docs-only) was **cancelled**, so HEAD has no completed run; the next push re-runs it.
+- **Scheduled QA runs 963/966/968 on `main` are red on one job only: `Secret scan`** (gitleaks full-history scan, `leaks found: 6`, all historical: `PricingPage.jsx` `PRIVATE_BILLING_TEST_KEY` (a client-side switch for the Stripe test link, not an access secret; the server refuses live checkout while `CHECKOUT_OPEN` is not `true`), localStorage key names in `docs/qa-*.html`, and the rotated test password / public anon key in `scripts/seed-test-data.mjs`). Push/PR scans are green. The fix is six more fingerprint lines in `.gitleaksignore` (the same finding under other commit ids). The routine was **blocked from editing `.gitleaksignore`** (treated as a CI bypass), so this needs the owner's explicit say-so (see handoff). No real secret was found.
+
+Still open before freeze (all need the owner; none can be done from the cloud):
+1. `docs/LAUNCH_CHECKLIST.md` T-7 migrations (four) are all unticked: not confirmed applied in production. Hard prerequisite for the audit-remediation code.
+2. O12 (Stripe/Vercel live readiness) and O13 (Beta-close setting) are due today and are marked Not started.
+3. T-6 safety nets (alerts, branch protection, backups recorded after the Supabase Pro upgrade), T-5 real-browser data-safety checks, and the Stripe test-mode rehearsal (`docs/PAYMENT_ROADMAP.md`) have no recorded results.
+4. Legal and promise gate: owner still to confirm the Terms 14-day-cancellation wording and give final Terms/Privacy approval.
+5. Desktop: signed-updater manifest / Windows SHA-256 comparison skipped; O10 desktop Safari/Firefox/VoiceOver not started.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
