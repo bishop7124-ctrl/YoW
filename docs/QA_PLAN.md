@@ -1128,3 +1128,7 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 - Local: lint, 1,797/1,798 unit tests, build, bundle budget, load check, e2e matrix and api ESM check run. The single failing test (`projectExportTextFidelity` WinAnsi PDF reimport) fails only in the cloud sandbox because its Node decodes `windows-1252` 0x80-0x9F as control characters; passes in CI (run 970). Do not treat it as a product bug; if it ever fails in CI, reopen.
 - Required: scheduled `Secret scan` on `main` must be green before freeze. It fails on six historical gitleaks fingerprints (see ROADMAP "2026-10-28 pre-freeze gate review"); needs the owner to approve adding them to `.gitleaksignore`, or rewriting history.
 - Required before RC1 freeze: LAUNCH_CHECKLIST T-7 migrations applied and ticked; O12 and O13 recorded; T-6/T-5 results recorded.
+
+### 2026-10-29 RC1 freeze automated check
+
+Candidate `7084940`: CI QA run 974 green; local lint 0 errors, unit tests 1,798/1,799 (the one failure is the known sandbox-only `windows-1252` decoder defect, CI passes), build, bundle budget (entry 551.7 KB gzip), load check, e2e matrix 59/59 and api ESM 12/12 pass. Required before 1 Nov: next scheduled QA run shows `Secret scan` green; rerun full gate on any launch-blocker repair. See `docs/ROADMAP.md` "2026-10-29 RC1 freeze review".

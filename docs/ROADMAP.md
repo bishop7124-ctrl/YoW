@@ -255,6 +255,18 @@ Still open before freeze (all need the owner; none can be done from the cloud):
 
 **All other "Beta" wording removed (owner request 2026-10-28):** the Beta watermark beside the logo, per-project-type Beta tags and the Script/Comic beta labels, "beta build" wording on Download/Pricing (now "The current build isn't yet notarized/signed"), and the Beta Disclaimer (renamed Launch Notice in footers, menus, modal and `/beta-disclaimer/`; URL kept so links and the sitemap still work). Only the "Beta is closing - live launch from 2 November 2026" notices remain, plus the status labels shown to existing beta testers inside Account Settings (Beta tester / Cloud Mode during beta / Beta notice), which describe their own access and notice period. Help Centre articles and the launch email still say Beta (not shipped in the app).
 
+### 2026-10-29 RC1 freeze review and go/no-go (Payments & release day)
+
+Status: **In progress — RC1 candidate is `7084940` (`main`); verdict CONDITIONAL NO-GO: automated side green, but live-Stripe steps and the owner 60-minute customer smoke test are still pending, so the formal go/no-go is not given today.** Run by the daily routine in the cloud sandbox; nothing was checked live.
+
+Automated evidence on `7084940` (merged `main`, nothing newer on origin):
+- CI: QA push run **974 green** (includes the full Playwright matrix, Rust desktop job and secret scan; the gitleaks allowlist merged in #263 clears the red scheduled `Secret scan` of runs 963/966/968/972, to be confirmed by the next scheduled run).
+- Local re-run in the sandbox: lint 0 errors (133 warnings); unit tests **1,798 pass / 1 fail** (1,799), the same known sandbox-only Node `windows-1252` defect in `projectExportTextFidelity.test.js` (CI Node 22 passes); production build OK; bundle budget passed (entry 551.7 KB gzip, JS 926.0 KB, CSS 82.4 KB); load check 253 files; e2e matrix 59/59; api ESM 12/12. Playwright not re-run here (CI is the source).
+
+Gate view for the freeze: Project-type, Data safety, Export ownership, Marketing = Passed. Legal/promise: Terms 14-day wording approved 28 Oct (owner-reported); formal Terms/Privacy final approval still to record. Payment: Stripe test-mode journeys passed (owner-reported); **live setup, closed-state proof, live config review and the single controlled purchase/refund are not done** (`docs/PAYMENT_ROADMAP.md` runbook steps 2-6). Responsive/Performance: real-device checks (O10) still owner-side. Desktop: signed-updater manifest / Windows hash comparison still open; unsigned-desktop disclosure stays.
+
+Single next action for RC1: owner does Stripe live setup and key swap with `CHECKOUT_OPEN` unset, then the closed-state curl proof (runbook steps 2-4). Do not set `CHECKOUT_OPEN=true` before 1 Nov. Freeze rule from now: only launch-blocker repairs go to `main`.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
