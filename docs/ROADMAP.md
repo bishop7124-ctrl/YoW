@@ -265,6 +265,8 @@ Automated evidence on `7084940` (merged `main`, nothing newer on origin):
 
 Gate view for the freeze: Project-type, Data safety, Export ownership, Marketing = Passed. Legal/promise: Terms 14-day wording approved 28 Oct (owner-reported); formal Terms/Privacy final approval still to record. Payment: Stripe test-mode journeys passed (owner-reported); **live setup, closed-state proof, live config review and the single controlled purchase/refund are not done** (`docs/PAYMENT_ROADMAP.md` runbook steps 2-6). Responsive/Performance: real-device checks (O10) still owner-side. Desktop: signed-updater manifest / Windows hash comparison still open; unsigned-desktop disclosure stays.
 
+**Owner update 2026-10-29 (evening, owner-reported):** 60-minute customer smoke test done, public Pricing check done, Stripe live setup done. **Independently verified from the sandbox 29 Oct:** production `/api/get-founder-slots` returns `checkoutOpen:false` (100 of 100 Founder places remaining) and `POST /api/create-checkout-session` returns HTTP 403 `checkout_closed`, so the closed state is proven with live keys/setup in place. Still open: live config review (runbook step 5), 30 Oct rehearsal incl. rollback/checkout-disable test, then opening checkout (`CHECKOUT_OPEN=true` + redeploy; the greyed buttons re-enable from the same switch, no code change) planned for 1 Nov quiet release, single real purchase and refund.
+
 Single next action for RC1: owner does Stripe live setup and key swap with `CHECKOUT_OPEN` unset, then the closed-state curl proof (runbook steps 2-4). Do not set `CHECKOUT_OPEN=true` before 1 Nov. Freeze rule from now: only launch-blocker repairs go to `main`.
 
 ### Sprint alignment — 1 Oct to 2 Nov 2026
